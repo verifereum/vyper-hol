@@ -19,7 +19,7 @@ Ancestors
   targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
-  exprSimSource
+  exprSimSource evalNoHalt
   targetPlaceSimDefs
   stmtSimProps gasOutcome gasStorage gasSummary gasSummaryCompose gasContext gasExemptCert
   vyperStorageFootprint vyperStorageTrace
@@ -42,7 +42,6 @@ Ancestors
 Libs
   pairLib
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_post_index_frame:
   target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
   expr_post H ctx func cenv cx e es1 sm sn t es2 v ix u /\
@@ -77,22 +76,7 @@ Proof
       `aid < sm.cs_next_id` by decide_tac >> metis_tac[]) >>
   irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >> simp[]
 QED
-*)
-Theorem target_post_index_frame:
-  target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
-  expr_post H ctx func cenv cx e es1 sm sn t es2 v ix u /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  place_readable cx es2 pv /\
-  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
-  sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
-  target_post H ctx func cenv cx es sa sn s0 es2 pv vt rb u
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_sim:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   eval_base_place cx bt es = (INL pv,es1) /\
@@ -113,21 +97,7 @@ Proof
   gvs[expr_sim_case_def, expr_vv_case_def, int_calls_expr_def] >>
   metis_tac[]
 QED
-*)
-Theorem target_subscript_index_sim:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  eval_base_place cx bt es = (INL pv,es1) /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) ==>
-  expr_sim ctx func cenv cx ty e es1 /\
-  expr_vv_sim ctx func cenv cx ty e es1
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_frame[local]:
   storage_trace_frame (bind (eval_expr cx e) (read_result cx)) /\
   storage_trace_frame (bind (bind (eval_expr cx e) (read_result cx))
@@ -139,16 +109,7 @@ Proof
   simp[] >> irule storage_trace_frame_bind_all >>
   simp[storage_trace_frame_extend_place]
 QED
-*)
-Theorem target_subscript_index_frame[local]:
-  storage_trace_frame (bind (eval_expr cx e) (read_result cx)) /\
-  storage_trace_frame (bind (bind (eval_expr cx e) (read_result cx))
-    (\key. extend_place cx pv (ValueSubscript key)))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_valid_prefix[local]:
   gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks res ee r /\
@@ -157,17 +118,7 @@ Theorem target_subscript_index_valid_prefix[local]:
 Proof
   metis_tac[gas_marked_exec_valid_prefix, target_subscript_index_frame]
 QED
-*)
-Theorem target_subscript_index_valid_prefix[local]:
-  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es,s0) marks res ee r /\
-  valid_horizon cx st0 H ee.storage_trace ==>
-  valid_horizon cx st0 H es.storage_trace
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_base_valid_prefix[local]:
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
     (es,s0) marks res mid r /\
@@ -176,21 +127,11 @@ Theorem target_subscript_base_valid_prefix[local]:
 Proof
   metis_tac[gas_marked_exec_valid_prefix, evaluate_storage_trace_frame]
 QED
-*)
-Theorem target_subscript_base_valid_prefix[local]:
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) marks res mid r /\
-  valid_horizon cx st0 H mid.storage_trace ==>
-  valid_horizon cx st0 H es.storage_trace
-Proof
-  cheat
-QED
 
 (* The counted index keeps the original source computation and error post.
    Readability is a source preservation premise, supplied separately by the
    local no-Pop or unrestricted storage readability boundary. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
-Theorem target_index_outcome:
+Theorem target_index_outcome_halt:
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
      target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
      stmt_state_rel H ctx func cenv cx es s0) /\
@@ -213,7 +154,7 @@ Theorem target_index_outcome:
        expr_post H ctx func cenv cx e es1 sm sn t ee v ix u /\
        u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r))
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
@@ -242,11 +183,12 @@ Proof
       drule_all target_post_index_frame >> simp[])
   >- (qexists `marks` >> disj2_tac >> disj1_tac >>
       qexistsl [`res`, `es_end`, `r`] >> simp[] >> disj2_tac >>
-      rpt strip_tac >> qpat_x_assum `!H. _ ==> expr_exit _ _` irule >>
-      qexists_tac `H` >> fs[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _` (qspec_then `H` mp_tac) >>
+      simp[halt_exit_def, halt_rel_def, accounts_rel_def]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
-*)
+
 Theorem target_index_outcome:
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
      target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
@@ -272,10 +214,9 @@ Theorem target_index_outcome:
        u.vs_inst_idx = LENGTH sn.cs_current_insts)
     (\H res ee r. expr_exit res r)
 Proof
-  cheat
+  ACCEPT_TAC (Q.INST [`keep_halt` |-> `F`] target_index_outcome_halt |> SRULE [])
 QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_base_exempt_cert:
   gas_exempt_cert memory tops (ctx, func)
     (ignore_bind (eval_base_place cx bt) (return ()))
@@ -288,19 +229,7 @@ Proof
   rewrite_tac[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
 QED
-*)
-Theorem target_subscript_base_exempt_cert:
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind (eval_base_place cx bt) (return ()))
-    (es, s0) marks (err, ee) (leaf, sf) ==>
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind (eval_base_place cx (SubscriptTarget bt e)) (return ()))
-    (es, s0) marks (err, ee) (leaf, sf)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_exempt_cert:
   gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
     (es, s0) left (INL pv) mid (OK t) /\
@@ -319,23 +248,9 @@ Proof
   pure_once_rewrite_tac[bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc]
 QED
-*)
-Theorem target_subscript_index_exempt_cert:
-  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
-    (es, s0) left (INL pv) mid (OK t) /\
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (mid with gas_obs := [], t) right (err, ee) (leaf, sf) ==>
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind (eval_base_place cx (SubscriptTarget bt e)) (return ()))
-    (es, s0) (left ++ right) (err, ee) (leaf, sf)
-Proof
-  cheat
-QED
 
 (* Full-target admissibility projects to the base: every base exception
    propagates unchanged, and every base success is in target_res_ok. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_base_admissible:
   gas_admissible (eval_base_place cx (SubscriptTarget bt e))
     target_res_ok es ==>
@@ -347,16 +262,7 @@ Proof
   once_rewrite_tac[evaluate_def] >> simp[bind_def] >>
   disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >> simp[]
 QED
-*)
-Theorem target_subscript_base_admissible:
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e))
-    target_res_ok es ==>
-  gas_admissible (eval_base_place cx bt) target_res_ok es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_admissible:
   gas_admissible (eval_base_place cx (SubscriptTarget bt e))
     target_res_ok es /\
@@ -374,21 +280,9 @@ Proof
   disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >>
   gvs[bind_def, target_res_ok_def, expr_res_ok_def]
 QED
-*)
-Theorem target_subscript_index_admissible:
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e))
-    target_res_ok es /\
-  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
-    (es, s0) marks (INL pv) mid (OK t) ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx))
-    expr_res_ok (mid with gas_obs := [])
-Proof
-  cheat
-QED
 
 (* Internal-call defaults use the existing finally_set_scopes boundary
    from vyperScopePreservation; body cleanup additionally unlocks. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_unlock_scopes:
   unlock_if_nr cx nr is_view es = (res, ee) ==> ee.scopes = es.scopes
 Proof
@@ -397,14 +291,7 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
   metis_tac[release_nonreentrant_lock_scopes]
 QED
-*)
-Theorem target_subscript_unlock_scopes:
-  unlock_if_nr cx nr is_view es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_call_cleanup_scopes:
   finally_unless_halt (finally f (pop_function prev))
     (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
@@ -424,20 +311,12 @@ Proof
   Cases_on `gr` >> simp[] >> rw[] >>
   imp_res_tac target_subscript_unlock_scopes >> gvs[]
 QED
-*)
-Theorem target_subscript_call_cleanup_scopes:
-  finally_unless_halt (finally f (pop_function prev))
-    (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
-Proof
-  cheat
-QED
 
 val trace_scopes_tac =
   rpt (qpat_x_assum `_ = _ with storage_trace := _`
     (fn th => assume_tac (SIMP_RULE (srw_ss()) []
       (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_scopes_mutual[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
@@ -619,34 +498,7 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   strip_tac >> metis_tac[]
 QED
-*)
-Theorem target_subscript_nopop_scopes_mutual[local]:
-  (!cx:evaluation_context. !s:stmt. T) /\
-  (!cx:evaluation_context. !ss:stmt list. T) /\
-  (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
-  (!cx e st res st'.
-    ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
-    eval_expr cx e st = (res,st') ==> st'.scopes = st.scopes) /\
-  (!cx es st res st'.
-    ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) es /\
-    eval_exprs cx es st = (res,st') ==> st'.scopes = st.scopes) /\
-  (!cx bt st res st'.
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
-    eval_base_place cx bt st = (res,st') ==> st'.scopes = st.scopes) /\
-  (!cx bt st res st'.
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
-    eval_target_place cx bt st = (res,st') ==> st'.scopes = st.scopes) /\
-  (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx es st res st'.
-    ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) es /\
-    eval_expr_results cx es st = (res,st') ==> st'.scopes = st.scopes)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume target_subscript_nopop_scopes_mutual[CreateTarget]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
@@ -666,9 +518,7 @@ Resume target_subscript_nopop_scopes_mutual[CreateTarget]:
   >> rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac)
   >> gvs[]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume target_subscript_nopop_scopes_mutual[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!s t s1 ts t1 s2 tup t2 s3 t3 s4 vs t4 s5 prev t5 s6 t6. _` kall_tac >>
@@ -699,88 +549,44 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   imp_res_tac acquire_nonreentrant_lock_scopes >>
   gvs[]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise target_subscript_nopop_scopes_mutual
-*)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_expr_scopes:
   ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
   eval_expr cx e es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 5 target_subscript_nopop_scopes_mutual]
 QED
-*)
-Theorem target_subscript_nopop_expr_scopes:
-  ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
-  eval_expr cx e es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_exprs_scopes:
   ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
   eval_exprs cx xs es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 6 target_subscript_nopop_scopes_mutual]
 QED
-*)
-Theorem target_subscript_nopop_exprs_scopes:
-  ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
-  eval_exprs cx xs es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_base_scopes:
   ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
   eval_base_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 7 target_subscript_nopop_scopes_mutual]
 QED
-*)
-Theorem target_subscript_nopop_base_scopes:
-  ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
-  eval_base_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_target_scopes:
   ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
   eval_target_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 8 target_subscript_nopop_scopes_mutual]
 QED
-*)
-Theorem target_subscript_nopop_target_scopes:
-  ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
-  eval_target_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_nopop_results_scopes:
   ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
   eval_expr_results cx xs es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 11 target_subscript_nopop_scopes_mutual]
 QED
-*)
-Theorem target_subscript_nopop_results_scopes:
-  ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
-  eval_expr_results cx xs es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_local_base_live:
   !bt cx es pv ee id.
     target_root bt = NameTarget id /\
@@ -810,20 +616,7 @@ Proof
   >> drule_all extend_place_memory_live >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
-*)
-Theorem target_subscript_local_base_live:
-  !bt cx es pv ee id.
-    target_root bt = NameTarget id /\
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
-    eval_base_place cx bt es = (INL pv,ee) ==>
-    ?path entry v. pv = PlaceR (MemoryPlace id path) /\
-      lookup_scopes id ee.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL v
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_local_index_live:
   target_root bt = NameTarget id /\
   ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e) /\
@@ -839,20 +632,7 @@ Proof
   drule_all target_subscript_nopop_expr_scopes >> strip_tac >>
   imp_res_tac read_result_state >> gvs[] >> metis_tac[]
 QED
-*)
-Theorem target_subscript_local_index_live:
-  target_root bt = NameTarget id /\
-  ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e) /\
-  eval_base_place cx bt es = (INL pv,mid) /\
-  bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
-  ?path entry v. pv = PlaceR (MemoryPlace id path) /\
-    lookup_scopes id ee.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL v
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_pure_index_live:
   EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
   eval_base_place cx bt es = (INL pv,mid) /\
@@ -878,20 +658,7 @@ Proof
     (fn th => once_rewrite_tac[th]) >>
   simp[]
 QED
-*)
-Theorem target_subscript_pure_index_live:
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
-  eval_base_place cx bt es = (INL pv,mid) /\
-  bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
-  mid = es with storage_trace := mid.storage_trace /\
-  ee = es with storage_trace := ee.storage_trace /\
-  !st0 H. valid_horizon cx st0 H mid.storage_trace ==>
-    nested_pop_result_live H cx ee pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_readable_trace[local,simp]:
   place_readable cx (es with storage_trace := tr) pv <=> place_readable cx es pv
 Proof
@@ -902,14 +669,7 @@ Proof
   Cases_on `lookup_scopes s es.scopes` >> simp[return_def, raise_def] >>
   Cases_on `read_memory_path x l` >> simp[return_def, raise_def]
 QED
-*)
-Theorem target_subscript_readable_trace[local,simp]:
-  place_readable cx (es with storage_trace := tr) pv <=> place_readable cx es pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_base_exception:
   gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
     (es, s0) marks (INR exc) fin r ==>
@@ -920,18 +680,7 @@ Proof
   strip_tac >> once_rewrite_tac[evaluate_def] >>
   irule gas_marked_exec_bind_exception >> simp[]
 QED
-*)
-Theorem target_subscript_base_exception:
-  gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
-    (es, s0) marks (INR exc) fin r ==>
-  gas_marked_exec memory (ctx, func)
-    (eval_base_place cx (SubscriptTarget bt e))
-    (es, s0) marks (INR exc) fin r
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_extend_gas_obs:
   !cx pv key es gs.
     extend_place cx pv (ValueSubscript key) (es with gas_obs := gs) =
@@ -995,17 +744,7 @@ Proof
   simp[return_def, raise_def, ignore_bind_def, bind_def,
        record_storage_event_def]
 QED
-*)
-Theorem target_subscript_extend_gas_obs:
-  !cx pv key es gs.
-    extend_place cx pv (ValueSubscript key) (es with gas_obs := gs) =
-      (FST (extend_place cx pv (ValueSubscript key) es),
-       SND (extend_place cx pv (ValueSubscript key) es) with gas_obs := gs)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_extend_summary_normal:
   extend_place cx pv (ValueSubscript key) es = (INL pv',es') /\
   gas_marked_path memory ctx func s 0 (OK u) /\
@@ -1017,18 +756,7 @@ Proof
   qexistsl [`INL pv'`, `es'`, `OK u`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs]
 QED
-*)
-Theorem target_subscript_extend_summary_normal:
-  extend_place cx pv (ValueSubscript key) es = (INL pv',es') /\
-  gas_marked_path memory ctx func s 0 (OK u) /\
-  Q (INL pv') (es' with gas_obs := []) u ==>
-  gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-    (es,s) Q (\res ee r. expr_exit res r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_extend_summary_error:
   extend_place cx pv (ValueSubscript key) es = (INR err,es') /\
   gas_marked_path memory ctx func s 0 r /\
@@ -1041,25 +769,14 @@ Proof
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
   disj2_tac >> gvs[oneline expr_exit_def, AllCaseEqs()]
 QED
-*)
-Theorem target_subscript_extend_summary_error:
-  extend_place cx pv (ValueSubscript key) es = (INR err,es') /\
-  gas_marked_path memory ctx func s 0 r /\
-  exit_result r /\ expr_exit (INR err) r ==>
-  gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-    (es,s) Q (\res ee r. expr_exit res r)
-Proof
-  cheat
-QED
 
 (* A successful index is followed by a no-observation place extension.
    The continuation summary retains the exact source extension computation. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
-Theorem target_subscript_index_bind_outcome:
+Theorem target_subscript_index_bind_outcome_halt:
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (mid,t)
     (\H res ee u. ?key. res = INL key /\ P H key ee u)
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r)) /\
   (!right key ee u.
     gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (mid,t) right (INL key) ee (OK u) /\
@@ -1067,11 +784,11 @@ Theorem target_subscript_index_bind_outcome:
        P H key (ee with gas_obs := []) u) ==>
     gas_outcome memory (cx_tops cx) (ctx,func) cx st0
       (extend_place cx pv (ValueSubscript key))
-      (ee with gas_obs := [],u) Q (\H res ee r. expr_exit res r)) ==>
+      (ee with gas_obs := [],u) Q (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r))) ==>
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
-    (mid,t) Q (\H res ee r. expr_exit res r)
+    (mid,t) Q (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r))
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ (bind _ _) _ _ _`
@@ -1123,7 +840,7 @@ Proof
           simp[GSYM ignore_bind_def] >> metis_tac[]) >>
       `?exc. res = INR exc` by
         (Cases_on `res` >> simp[] >>
-         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
            (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
          simp[expr_exit_def]) >>
       rewrite_tac[gas_outcome_def] >>
@@ -1132,8 +849,8 @@ Proof
       gvs[] >> qexistsl [`INR exc`, `fin`, `r`] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       disj2_tac >> simp[] >> rpt strip_tac >>
-      qpat_x_assum `!H. _ ==> expr_exit _ _` drule >>
-      simp[oneline expr_exit_def]) >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _` (qspec_then `H` mp_tac) >>
+      simp[oneline expr_exit_def, halt_exit_def]) >>
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists `right` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -1141,7 +858,7 @@ Proof
   irule gas_exempt_cert_error_value >>
   simp[GSYM ignore_bind_def]
 QED
-*)
+
 Theorem target_subscript_index_bind_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (mid,t)
@@ -1160,10 +877,9 @@ Theorem target_subscript_index_bind_outcome:
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid,t) Q (\H res ee r. expr_exit res r)
 Proof
-  cheat
+  ACCEPT_TAC (Q.INST [`keep_halt` |-> `F`] target_subscript_index_bind_outcome_halt |> SRULE [])
 QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_eval_split[local]:
   eval_base_place cx (SubscriptTarget bt e) =
   bind (eval_base_place cx bt)
@@ -1173,21 +889,11 @@ Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
   rewrite_tac[GSYM bind_assoc]
 QED
-*)
-Theorem target_subscript_eval_split[local]:
-  eval_base_place cx (SubscriptTarget bt e) =
-  bind (eval_base_place cx bt)
-    (\pv. bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
-Theorem target_subscript_bind_outcome:
+Theorem target_subscript_bind_outcome_halt:
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0 (eval_base_place cx bt) (es,s0)
     (\H res ee t. ?pv. res = INL pv /\ P H pv ee t)
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r)) /\
   (!left pv mid t.
     gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
       (es,s0) left (INL pv) mid (OK t) /\
@@ -1198,11 +904,11 @@ Theorem target_subscript_bind_outcome:
         (\key. extend_place cx pv (ValueSubscript key)))
       (mid with gas_obs := [],t)
       Q
-      (\H res ee r. expr_exit res r)) ==>
+      (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r))) ==>
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0
     (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
     Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ (keep_halt ==> halt_exit H cx ee res r))
 Proof
   strip_tac >> rewrite_tac[target_subscript_eval_split] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ (eval_base_place _ _) _ _ _`
@@ -1254,7 +960,7 @@ Proof
           simp[GSYM ignore_bind_def] >> metis_tac[]) >>
       `?exc. res = INR exc` by
         (Cases_on `res` >> simp[] >>
-         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
            (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
          simp[expr_exit_def]) >>
       rewrite_tac[gas_outcome_def] >>
@@ -1263,8 +969,8 @@ Proof
       gvs[] >> qexistsl [`INR exc`, `fin`, `r`] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       disj2_tac >> simp[] >> rpt strip_tac >>
-      qpat_x_assum `!H. _ ==> expr_exit _ _` drule >>
-      simp[oneline expr_exit_def]) >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _` (qspec_then `H` mp_tac) >>
+      simp[oneline expr_exit_def, halt_exit_def]) >>
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists `left` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -1272,7 +978,7 @@ Proof
   irule gas_exempt_cert_error_result >>
   simp[GSYM ignore_bind_def]
 QED
-*)
+
 Theorem target_subscript_bind_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0 (eval_base_place cx bt) (es,s0)
     (\H res ee t. ?pv. res = INL pv /\ P H pv ee t)
@@ -1293,25 +999,16 @@ Theorem target_subscript_bind_outcome:
     Q
     (\H res ee r. expr_exit res r)
 Proof
-  cheat
+  ACCEPT_TAC (Q.INST [`keep_halt` |-> `F`] target_subscript_bind_outcome_halt |> SRULE [])
 QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_pre_gas_obs[simp]:
   target_pre cenv cx env bt (es with gas_obs := gs) <=>
   target_pre cenv cx env bt es
 Proof
   simp[target_pre_def]
 QED
-*)
-Theorem target_subscript_pre_gas_obs[simp]:
-  target_pre cenv cx env bt (es with gas_obs := gs) <=>
-  target_pre cenv cx env bt es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_base_source:
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) ==>
@@ -1321,18 +1018,7 @@ Theorem target_subscript_marked_base_source:
 Proof
   simp[gas_marked_exec_def]
 QED
-*)
-Theorem target_subscript_marked_base_source:
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) ==>
-  !tail. eval_base_place cx bt
-    (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ tail) =
-      (INL pv, mid with gas_obs := tail)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_index_sim:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -1349,22 +1035,7 @@ Proof
   irule target_subscript_index_sim >> goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`env`, `nocalls`] >> simp[] >> first_assum ACCEPT_TAC
 QED
-*)
-Theorem target_subscript_marked_index_sim:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) ==>
-  expr_sim ctx func cenv cx ty e (mid with gas_obs := []) /\
-  expr_vv_sim ctx func cenv cx ty e (mid with gas_obs := [])
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_base_inv:
   target_pre cenv cx env bt es /\
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
@@ -1375,17 +1046,7 @@ Proof
   disch_then (qspec_then `[]` assume_tac) >>
   irule eval_base_place_sim_inv >> goal_assum (drule_at Any) >> simp[]
 QED
-*)
-Theorem target_subscript_marked_base_inv:
-  target_pre cenv cx env bt es /\
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) ==>
-  expr_sim_inv cenv cx env (mid with gas_obs := [])
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_base_domains:
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) ==>
@@ -1395,16 +1056,7 @@ Proof
   disch_then (qspec_then `[]` mp_tac) >>
   disch_then (mp_tac o MATCH_MP eval_base_place_preserves_scopes_dom) >> simp[]
 QED
-*)
-Theorem target_subscript_marked_base_domains:
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) ==>
-  MAP FDOM es.scopes = MAP FDOM mid.scopes
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_base_nonhalted:
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) ==> ~t.vs_halted
@@ -1413,15 +1065,7 @@ Proof
   drule gas_marked_path_exec >> strip_tac >>
   metis_tac[gas_path_normal]
 QED
-*)
-Theorem target_subscript_marked_base_nonhalted:
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) ==> ~t.vs_halted
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_readable_gas_obs[simp]:
   place_readable cx (es with gas_obs := gs) pv <=> place_readable cx es pv
 Proof
@@ -1432,14 +1076,7 @@ Proof
   Cases_on `lookup_scopes s es.scopes` >> simp[return_def, raise_def] >>
   Cases_on `read_memory_path x l` >> simp[return_def, raise_def]
 QED
-*)
-Theorem target_subscript_readable_gas_obs[simp]:
-  place_readable cx (es with gas_obs := gs) pv <=> place_readable cx es pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_storage_index_readable:
   target_root bt = TopLevelNameTarget nsid /\
   eval_base_place cx bt es = (INL pv,mid) ==>
@@ -1450,16 +1087,7 @@ Proof
   drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
   simp[place_access_target_root]
 QED
-*)
-Theorem target_subscript_storage_index_readable:
-  target_root bt = TopLevelNameTarget nsid /\
-  eval_base_place cx bt es = (INL pv,mid) ==>
-  place_readable cx fin pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_readable:
   (!id. target_root bt = NameTarget id ==>
     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
@@ -1482,21 +1110,7 @@ Proof
   irule target_subscript_storage_index_readable >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED
-*)
-Theorem target_subscript_index_readable:
-  (!id. target_root bt = NameTarget id ==>
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  place_readable cx (mid with gas_obs := []) pv ==>
-  !gs v ee. bind (eval_expr cx e) (read_result cx)
-    (mid with gas_obs := gs) = (INL v,ee) ==>
-    place_readable cx ee pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_index_readable:
   (!nsid. target_root bt = TopLevelNameTarget nsid ==>
     EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
@@ -1511,23 +1125,7 @@ Theorem target_subscript_marked_index_readable:
 Proof
   metis_tac[target_subscript_index_readable]
 QED
-*)
-Theorem target_subscript_marked_index_readable:
-  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-  (!id. target_root bt = NameTarget id ==>
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
-  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  place_readable cx (mid with gas_obs := []) pv ==>
-  !gs v ee. bind (eval_expr cx e) (read_result cx)
-    (mid with gas_obs := gs) = (INL v,ee) ==>
-    place_readable cx ee pv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_typed_base_not_label:
   expr_sim_inv cenv cx env es /\
   type_place_target env bt = SOME bvt /\
@@ -1557,17 +1155,7 @@ Proof
   imp_res_tac (cj 1 subscript_pop_not_label) >>
   imp_res_tac (cj 2 subscript_pop_not_label) >> gvs[]
 QED
-*)
-Theorem target_subscript_typed_base_not_label:
-  expr_sim_inv cenv cx env es /\
-  type_place_target env bt = SOME bvt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) ==>
-  !l. FST rb <> Label l
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_source_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
@@ -1577,16 +1165,7 @@ Proof
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_eval) >>
   simp[]
 QED
-*)
-Theorem target_subscript_index_source_diagnostic:
-  expr_body_pre cenv cx env e s /\
-  bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
-  expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value key)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_index_runtime_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
@@ -1597,17 +1176,7 @@ Proof
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
   drule read_result_state >> strip_tac >> gvs[] >> metis_tac[]
 QED
-*)
-Theorem target_subscript_index_runtime_diagnostic:
-  expr_body_pre cenv cx env e s /\
-  bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
-  ?itv. evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
-    value_has_type itv key
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_memory_array_ready:
   expr_sim_inv cenv cx env es /\
   target_post H ctx func cenv cx es0 sa sn s0 es
@@ -1629,20 +1198,7 @@ Proof
       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   gvs[place_ptr_rel_def]
 QED
-*)
-Theorem target_subscript_memory_array_ready:
-  expr_sim_inv cenv cx env es /\
-  target_post H ctx func cenv cx es0 sa sn s0 es
-    (PlaceR (MemoryPlace id path)) bvt rb s /\
-  subscript_vtype bvt ity = SOME vt /\
-  lookup_scopes id es.scopes = SOME entry /\
-  evaluate_subscripts entry.type entry.value path = INL v ==>
-  ?av. v = ArrayV av
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_post_gas_obs[local]:
   target_post H ctx func cenv cx es0 sa sb s0 (es with gas_obs := gs) pv vt op u <=>
   target_post H ctx func cenv cx es0 sa sb s0 es pv vt op u
@@ -1655,20 +1211,12 @@ Proof
     simp[locals_kept_def, popped_kept_def] >>
   simp[target_post_def, stmt_state_rel_start_gas_obs]
 QED
-*)
-Theorem target_subscript_post_gas_obs[local]:
-  target_post H ctx func cenv cx es0 sa sb s0 (es with gas_obs := gs) pv vt op u <=>
-  target_post H ctx func cenv cx es0 sa sb s0 es pv vt op u
-Proof
-  cheat
-QED
 
 (* The place extension after the index, from (es,s).  Its end trace either
    leaves the storage domain (a bad-storage outcome) or has the horizon
    H0 = storage_trace_horizon of its end trace, at which the counted path
    is taken once (target_subscript_typed_normal_horizons) and transported
    to every horizon valid there. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_typed_outcome[local]:
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
@@ -1703,7 +1251,7 @@ Theorem target_subscript_typed_outcome[local]:
       target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res es' r. expr_exit res r)
+    (\H res es' r. expr_exit res r /\ halt_exit H cx es' res r)
 Proof
   strip_tac >>
   Cases_on `extend_place cx pv (ValueSubscript key) es` >>
@@ -1742,56 +1290,18 @@ Proof
      (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
         w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)` by
     metis_tac[] >>
+  `y <> HaltException` by
+    (strip_tac >> gvs[] >> drule extend_place_nh >> simp[]) >>
   drule_all target_subscript_typed_error >>
   disch_then (CONJUNCTS_THEN2 strip_assume_tac kall_tac) >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INR y`, `es'`, `r`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
   qpat_x_assum `expr_exit (INR _) _` mp_tac >>
-  Cases_on `r` >> simp[oneline expr_exit_def, exit_result_def, AllCaseEqs()] >>
+  Cases_on `r` >> simp[oneline expr_exit_def, exit_result_def, halt_exit_def, AllCaseEqs()] >>
   BasicProvers.every_case_tac >> simp[]
 QED
-*)
-Theorem target_subscript_typed_outcome[local]:
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
-     expr_post H ctx func cenv cx e ee sm sn t es key ix s) /\
-  (!H tr slot tv. valid_horizon cx st0 H es.storage_trace /\
-     pv = PlaceR (StoragePlace tr slot tv) ==>
-     storage_read_live H tr (get_storage cx es tr) slot tv) /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  well_formed_vtype (get_tenv cx) vt /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
-  expr_sim_inv cenv cx env es /\
-  (!id path. pv = PlaceR (MemoryPlace id path) ==>
-    ?entry av. lookup_scopes id es.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
-  (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    w2n slot + type_slot_size tv <= dimword(:256) /\
-    (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
-       w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sa /\
-  sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id /\
-  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
-  (!x. ix = Var x ==> not_fresh_at sn x) /\
-  (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
-  (!x. FST op = Var x ==> not_fresh_at sb x) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (extend_place cx pv (ValueSubscript key)) (es,s)
-    (\H res es' u. ?pv'. res = INL pv' /\
-      target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res es' r. expr_exit res r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_source_readiness[local]:
   target_pre cenv cx env bt es0 /\
   expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env fin /\
@@ -1829,30 +1339,7 @@ Proof
   `storage_well_formed_on cx fin (FST H)` by fs[target_post_def] >>
   drule_all eval_base_place_storage_ready >> simp[]
 QED
-*)
-Theorem target_subscript_source_readiness[local]:
-  target_pre cenv cx env bt es0 /\
-  expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env fin /\
-  (!id. target_root bt = NameTarget id ==>
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
-  eval_base_place cx bt es = (INL pv,mid) /\
-  bind (eval_expr cx e) (read_result cx) mid = (res,fin) /\
-  target_post H ctx func cenv cx es0 sa sn s0 fin pv bvt rb s /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  valid_horizon cx st0 H mid.storage_trace ==>
-  (!id path. pv = PlaceR (MemoryPlace id path) ==>
-    ?entry av. lookup_scopes id fin.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
-  (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    storage_read_live H tr (get_storage cx fin tr) slot tv /\
-    w2n slot + type_slot_size tv <= dimword(:256) /\
-    (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
-       w2n (lookup_storage slot (get_storage cx fin tr)) <= cnt))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_suffix_var:
   target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
   !x. FST op = Var x ==> not_fresh_at sb x
@@ -1866,15 +1353,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
   metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]
 QED
-*)
-Theorem target_subscript_suffix_var:
-  target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
-  !x. FST op = Var x ==> not_fresh_at sb x
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_vtype_well_formed:
   !tenv base_vt idx_ty result_vt.
     well_formed_vtype tenv base_vt /\
@@ -1890,17 +1369,7 @@ Proof
       Cases_on `evaluate_type tenv t'` >> gvs[]) >>
   gvs[]
 QED
-*)
-Theorem target_subscript_vtype_well_formed:
-  !tenv base_vt idx_ty result_vt.
-    well_formed_vtype tenv base_vt /\
-    subscript_vtype base_vt idx_ty = SOME result_vt ==>
-    well_formed_vtype tenv result_vt
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_target_well_formed[local]:
   !bt env cx st vt. env_consistent env cx st /\
     type_place_target env bt = SOME vt ==> well_formed_vtype env.type_defs vt
@@ -1925,15 +1394,7 @@ Proof
   gvs[well_formed_vtype_def, well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
   drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
 QED
-*)
-Theorem target_subscript_target_well_formed[local]:
-  !bt env cx st vt. env_consistent env cx st /\
-    type_place_target env bt = SOME vt ==> well_formed_vtype env.type_defs vt
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_pre_result_well_formed:
   target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
   well_formed_vtype (get_tenv cx) vt
@@ -1943,15 +1404,7 @@ Proof
   drule_all target_subscript_target_well_formed >>
   fs[env_consistent_def, env_context_consistent_def]
 QED
-*)
-Theorem target_subscript_pre_result_well_formed:
-  target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
-  well_formed_vtype (get_tenv cx) vt
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_marked_nonhalted:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res mid (OK t) ==>
   ~t.vs_halted
@@ -1959,15 +1412,7 @@ Proof
   simp[gas_marked_exec_def] >> strip_tac >>
   drule gas_marked_path_exec >> strip_tac >> metis_tac[gas_path_normal]
 QED
-*)
-Theorem target_subscript_marked_nonhalted:
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res mid (OK t) ==>
-  ~t.vs_halted
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -2005,7 +1450,7 @@ Theorem target_subscript_continuation:
       target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
@@ -2051,10 +1496,10 @@ Proof
       expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
       u.vs_current_bb = sn.cs_current_bb /\
       u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
-    (irule target_index_outcome >> goal_assum (drule_at Any) >>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
+    (irule (Q.INST [`keep_halt` |-> `T`] target_index_outcome_halt |> SRULE []) >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
-  irule target_subscript_index_bind_outcome >>
+  irule (Q.INST [`keep_halt` |-> `T`] target_subscript_index_bind_outcome_halt |> SRULE []) >>
   qexists `\H key ee u.
     target_post H ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
     expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
@@ -2156,49 +1601,13 @@ Proof
   simp[] >> reverse conj_tac >- metis_tac[] >>
   irule lower_compile_expr_not_label >>
   goal_assum (drule_at (Pat `lower_value`)) >>
-  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
-QED
-*)
-Theorem target_subscript_continuation:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  ((!id. target_root bt = NameTarget id ==>
-     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) \/
-   (?id. !gs key ee.
-     bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) = (INL key,ee) ==>
-     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
-       lookup_scopes id ee.scopes = SOME entry /\
-       evaluate_subscripts entry.type entry.value path = INL v)) /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  (!H. valid_horizon cx st0 H mid.storage_trace ==>
-     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-     stmt_state_rel H ctx func cenv cx es s0) /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\H res ee u. ?pv'. res = INL pv' /\
-      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
-Proof
-  cheat
+  qexists_tac `env` >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    (qpat_x_assum `expr_sim_inv _ _ env _`
+       (strip_assume_tac o REWRITE_RULE[expr_sim_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  simp[] >> fs[expr_body_pre_def]
 QED
 
 (* target_subscript_continuation for a local root whose indices may
@@ -2207,7 +1616,6 @@ QED
    pop that leaves the base's element in place.  The local's memory still
    holds the place (locals_kept, local_ptrs_rel), so the base's pointer
    reads what the source reads. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_local_live_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -2244,59 +1652,17 @@ Theorem target_subscript_local_live_continuation:
       target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
   disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   disch_then irule >> simp[] >> metis_tac[]
 QED
-*)
-Theorem target_subscript_local_live_continuation:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  target_root bt = NameTarget id /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  (!H. valid_horizon cx st0 H mid.storage_trace ==>
-     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-     stmt_state_rel H ctx func cenv cx es s0) /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  (!gs key ee. bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
-     (INL key,ee) ==>
-     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
-       lookup_scopes id ee.scopes = SOME entry /\
-       evaluate_subscripts entry.type entry.value path = INL v) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\H res ee u. ?pv'. res = INL pv' /\
-      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
-Proof
-  cheat
-QED
 
 (* target_subscript_continuation for a local root whose indices may
    pop: every successful run of the index leaves the base's place live
    (local_subscript_index_live). *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_local_pop_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -2328,7 +1694,7 @@ Theorem target_subscript_local_pop_continuation:
       target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!gs key ee.
@@ -2346,42 +1712,6 @@ Proof
        `ee`] mp_tac local_subscript_index_live >>
      impl_tac >- fs[target_pre_def] >> simp[]) >>
   drule_all target_subscript_local_live_continuation >> simp[]
-QED
-*)
-Theorem target_subscript_local_pop_continuation:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  target_root bt = NameTarget id /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  (!H. valid_horizon cx st0 H mid.storage_trace ==>
-     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-     stmt_state_rel H ctx func cenv cx es s0) /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\H res ee u. ?pv'. res = INL pv' /\
-      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
-Proof
-  cheat
 QED
 
 (* An element of an array or a mapping, with no local ancestor pop:
@@ -2411,7 +1741,6 @@ QED
    Given those, the element's place is at the base's pointer plus the
    element's offset (mem_step_offset) for a local, and at the element's
    slot for storage. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_shared_case:
   !nocalls ctx func cenv cx bt e.
     target_case nocalls ctx func cenv cx bt /\
@@ -2441,13 +1770,13 @@ Proof
       target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>
      impl_tac >- fs[int_calls_expr_def] >>
      disch_then irule >> simp[]) >>
-  irule target_subscript_bind_outcome >>
+  irule (Q.INST [`keep_halt` |-> `T`] target_subscript_bind_outcome_halt |> SRULE []) >>
   qexists `\H pv ee t. target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
@@ -2478,25 +1807,10 @@ Proof
   qexistsl [`bt`, `bvt`, `env`, `ix`, `left`, `nocalls`, `rb`, `sm`, `sn`] >>
   simp[] >> first_assum ACCEPT_TAC
 QED
-*)
-Theorem target_subscript_shared_case:
-  !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    (!id. target_root bt = NameTarget id ==>
-          ~supported_target_exists (\x. ?ty t. x = Pop ty t)
-             (SubscriptTarget bt e)) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  cheat
-QED
 
 (* A pop in a local target's index (x[len(y.pop()) - 1] = v): the index
    leaves the base's place live (local_subscript_index_live), so the
    local's memory still holds it. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem target_subscript_local_pop_case:
   !nocalls ctx func cenv cx bt e id.
     target_case nocalls ctx func cenv cx bt /\
@@ -2525,13 +1839,13 @@ Proof
       target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>
      impl_tac >- fs[int_calls_expr_def] >>
      disch_then irule >> simp[]) >>
-  irule target_subscript_bind_outcome >>
+  irule (Q.INST [`keep_halt` |-> `T`] target_subscript_bind_outcome_halt |> SRULE []) >>
   qexists `\H pv ee t. target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
@@ -2561,17 +1875,4 @@ Proof
   rpt conj_tac >- fs[] >- fs[] >>
   qexistsl [`bt`, `bvt`, `env`, `id`, `ix`, `left`, `nocalls`, `rb`, `sm`, `sn`] >>
   simp[] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem target_subscript_local_pop_case:
-  !nocalls ctx func cenv cx bt e id.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    target_root bt = NameTarget id /\
-    supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  cheat
 QED

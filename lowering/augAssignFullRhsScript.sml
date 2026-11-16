@@ -47,7 +47,10 @@ Theorem augassign_rhs_invoke_full:
        ptr_buf_ok cenv e op G t) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt r. ?ex. res = INR ex /\
-       !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r)
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
+      halt_exit H cx ee (INR ex) r /\
+      (ctx_has_dalloca ctx ==> !s.
+        (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
@@ -64,7 +67,9 @@ Proof
   simp[expr_sim_full_def] >> disch_then drule_all >> disch_tac >>
   irule gas_outcome_full_post_mono >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >> rpt strip_tac >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `res` >> fs[expr_exit_def] >>
-  simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  simp[stmt_exit_ptr_def, halt_exit_def] >>
+  fs[halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED

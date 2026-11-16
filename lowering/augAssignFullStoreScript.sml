@@ -76,7 +76,8 @@ QED
 
 Theorem storage_emit_static_origin_ptr:
   emit_void (if tr then TSTORE else SSTORE) [dst;value] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -95,9 +96,15 @@ Proof
   `get_instruction bb s.vs_inst_idx = SOME i` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `i`]) >>
   `ptr_inst_ok D lo 0 ctx func G tn i s` by
-    (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[] >>
-     simp[Abbr `i`] >> irule clean_storage_ptr_inst_ok >> simp[]) >>
+    (Cases_on `tr` >>
+     simp[Abbr `i`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, fixed_source_write_range_def] >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
+       instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
+     rpt strip_tac >> gvs[]) >>
   irule exit_inst_origin_ptr >>
   simp[exit_result_def] >> qexists_tac `i` >> Cases_on `tr` >>
   simp[Abbr `i`, mk_inst_def, step_inst_non_invoke, step_inst_base_def,

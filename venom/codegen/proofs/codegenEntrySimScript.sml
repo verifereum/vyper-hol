@@ -257,21 +257,6 @@ QED
 
 (* entry_asm_state meets the entry relation of the first function, with no
    return address and nothing below the (empty) parameter block. *)
-Theorem entry_fn_entry_state_rel[local]:
-  initial_ctx_rel cp prog ctx vs es /\
-  ctx.ctx_functions = fe :: rest /\
-  get_params (HD fe.fn_blocks).bb_instructions = [] /\
-  fn_entry_label fe = SOME lbl ==>
-  fn_entry_state_rel cp fe
-    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-    (entry_asm_state vs es) ra []
-Proof
-  rw[initial_ctx_rel_def] >>
-  gvs[initial_state_rel_def, stack_params_rel_def, initial_codegen_state_rel_def,
-      fn_entry_label_def, entry_block_def, LENGTH_NIL_SYM] >>
-  simp[fn_entry_state_rel_def, entry_asm_state_def, fn_has_retpc_def,
-       shared_state_rel_def, venom_asm_terminal_rel_def]
-QED
 
 (* Why it should hold: run_context runs the entry function (the first
    function: initial_ctx_rel and the planner's layout put its region at
@@ -283,6 +268,90 @@ QED
    an empty stack), the memory relation and the shared fields.  The
    remaining gen_fn_simulation premises come from codegen_context_obligations,
    codegen_reachability_package and initial_ctx_rel's label agreement. *)
+
+Theorem entry_fn_entry_state_rel_tail:
+  initial_ctx_rel_tail tail cp prog ctx vs es /\
+  ctx.ctx_functions = fe :: rest /\
+  get_params (HD fe.fn_blocks).bb_instructions = [] /\
+  fn_entry_label fe = SOME lbl ==>
+  fn_entry_state_rel cp fe
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+    (entry_asm_state vs es) ra []
+Proof
+  rw[initial_ctx_rel_tail_def, initial_ctx_rel_def] >>
+  gvs[initial_state_rel_def, stack_params_rel_def, initial_codegen_state_rel_def,
+      fn_entry_label_def, entry_block_def, LENGTH_NIL_SYM] >>
+  simp[fn_entry_state_rel_def, entry_asm_state_def, fn_has_retpc_def,
+       shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
+
+Theorem codegen_entry_asm_sim_tail:
+  !fuel rpolicy unit cp prog Inv vs es tail.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel_tail tail cp prog unit.cu_context vs es
+    ==>
+    (!ret vs'. run_context fuel unit.cu_context vs <> IntRet ret vs') /\
+    (!vs'. run_context fuel unit.cu_context vs = Halt vs' ==>
+       ?n a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+         prog n (entry_asm_state vs es) = AsmHalt a' /\
+         venom_asm_terminal_rel vs' a') /\
+    (!a vs'. run_context fuel unit.cu_context vs = Abort a vs' ==>
+       ?n a'.
+         ((a = Revert_abort /\
+           asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+             prog n (entry_asm_state vs es) = AsmRevert a') \/
+          (a = ExHalt_abort /\
+           asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+             prog n (entry_asm_state vs es) = AsmFault a')) /\
+         venom_asm_terminal_rel vs' a')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_selection >> strip_tac >>
+  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
+    by simp[lookup_function_def, FIND_thm] >>
+  `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)`
+    by metis_tac[codegen_entry_no_returns] >>
+  conj_tac
+  >- (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >> gvs[]) >>
+  `run_context fuel unit.cu_context vs =
+   run_blocks fuel unit.cu_context fe
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)`
+    by simp[run_context_def, run_function_def, lookup_function_def, FIND_thm] >>
+  `0 < LENGTH cp.cp_regions`
+    by metis_tac[context_region_leading_label, listTheory.LENGTH,
+                 prim_recTheory.LESS_0, listTheory.EL] >>
+  `?r rs. cp.cp_regions = r :: rs` by (Cases_on `cp.cp_regions` >> gvs[]) >>
+  `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
+    by (irule codegen_entry_reachable >>
+        gvs[codegen_context_obligations_def]) >>
+  mp_tac codegen_invoke_targets_retpc >> impl_tac >- simp[] >> strip_tac >>
+  `!l. FLOOKUP vs.vs_labels l =
+       OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
+    by gvs[initial_ctx_rel_tail_def, initial_ctx_rel_def] >>
+  `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
+    by metis_tac[codegen_assembly_first_region] >>
+  `fn_entry_state_rel cp fe
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+     (entry_asm_state vs es) 0w []`
+    by (irule entry_fn_entry_state_rel_tail >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
+                   `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`,
+                   `0`, `r`, `fe`,
+                   `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                               vs_inst_idx := 0 |>`,
+                   `entry_asm_state vs es`, `Inv`, `0w`, `0`, `[]`]
+            gen_fn_simulation) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      simp[entry_asm_state_def, fn_has_retpc_def]) >>
+  strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  res_tac >> metis_tac[]
+QED
+
 Theorem codegen_entry_asm_sim:
   !fuel rpolicy unit cp prog Inv vs es.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -307,46 +376,8 @@ Theorem codegen_entry_asm_sim:
          (entry_asm_state vs es) = AsmFault as')) /\
          venom_asm_terminal_rel vs' as')
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all codegen_entry_selection >> strip_tac >>
-  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
-    by simp[lookup_function_def, FIND_thm] >>
-  `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)`
-    by metis_tac[codegen_entry_no_returns] >>
-  conj_tac
-  >- (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
-      gvs[]) >>
-  `run_context fuel unit.cu_context vs =
-   run_blocks fuel unit.cu_context fe
-     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)`
-    by simp[run_context_def, run_function_def, lookup_function_def, FIND_thm] >>
-  `0 < LENGTH cp.cp_regions`
-    by metis_tac[context_region_leading_label, listTheory.LENGTH,
-                 prim_recTheory.LESS_0, listTheory.EL] >>
-  `?r rs. cp.cp_regions = r :: rs` by (Cases_on `cp.cp_regions` >> gvs[]) >>
-  `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
-    by (irule codegen_entry_reachable >>
-        gvs[codegen_context_obligations_def]) >>
-  mp_tac codegen_invoke_targets_retpc >> impl_tac >- simp[] >> strip_tac >>
-  `!l. FLOOKUP vs.vs_labels l =
-       OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
-    by gvs[initial_ctx_rel_def] >>
-  `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
-    by metis_tac[codegen_assembly_first_region] >>
-  `fn_entry_state_rel cp fe
-     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-     (entry_asm_state vs es) 0w []`
-    by (irule entry_fn_entry_state_rel >> metis_tac[]) >>
-  mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
-                   `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`,
-                   `0`, `r`, `fe`,
-                   `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                               vs_inst_idx := 0 |>`,
-                   `entry_asm_state vs es`, `Inv`, `0w`, `0`, `[]`]
-            gen_fn_simulation) >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      simp[entry_asm_state_def, fn_has_retpc_def]) >>
-  strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  res_tac >> metis_tac[]
+  rpt gen_tac >>
+  mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cp`, `prog`, `Inv`, `vs`, `es`, `[]`]
+    codegen_entry_asm_sim_tail) >>
+  simp[initial_ctx_rel_tail_nil]
 QED

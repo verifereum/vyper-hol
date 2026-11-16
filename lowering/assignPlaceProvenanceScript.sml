@@ -14,7 +14,7 @@ Theorem nonbytes_expr_val_at_memory_separation:
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   expr_val_at cenv cx sty sa sb ee v op s /\ eval_operand op s = SOME sw /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
-  stmt_state_rel ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
   write_place cx p v ee = (INL (),ff) ==>
   type_memory_size stv = 0 \/
   w2n sw + type_memory_size stv <= w2n w \/
