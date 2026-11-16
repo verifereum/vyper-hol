@@ -8,7 +8,9 @@ Ancestors
   exprLoweringProps vyperScopePreservation tuplePlaceStep
   assignEffectfulIndexSnapshotFrame tuplePlaceSnapshot loweringPosts
   vyperTypeArgFits exprSimHyps compileEnv rich_list fragExec
-  abiTupleProps loweringHalt venomState
+  abiTupleProps loweringHalt venomState vyperStorageFootprint
+  vyperStoragePlaceObserved vyperStoragePlaceProvenance
+Libs horizonTypeLib
 
 Theorem bytes_store_size_effect[local]:
   is_bytestring_type dty /\ is_bytestring_type sty /\
@@ -59,8 +61,12 @@ QED
 Theorem assign_effectful_snapshot_bytes_store_ready:
   loc = LocMemory /\ is_bytestring_type dty /\
   is_bytestring_type (lowered_value_type cenv e) /\
-  target_post ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
-    (dst,SOME loc,SOME (ValPT dty)) s /\
+  (?H. valid_horizon cx st0 H mid.storage_trace) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+      (dst,SOME loc,SOME (ValPT dty)) s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ val_wf stv v /\
@@ -83,7 +89,7 @@ Theorem assign_effectful_snapshot_bytes_store_ready:
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv st /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv st /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id mid.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -101,23 +107,32 @@ Theorem assign_effectful_snapshot_bytes_store_ready:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func cenv cx ff z /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff z) /\
     (!x. not_fresh_at st x ==> lookup_var x z = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b) /\
     ~z.vs_halted /\ z.vs_current_bb = sf.cs_current_bb /\
     z.vs_inst_idx = LENGTH sf.cs_current_insts /\
     alloca_frame cenv mid st s cenv ff z
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `target_post H0 ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+     (dst,SOME loc,SOME (ValPT dty)) s` by metis_tac[] >>
+  `storage_place_region cx p` by
+    (Cases_on `p` >> fs[target_post_def, place_ptr_rel_def,
+      storage_place_region_def] >> Cases_on `b` >> fs[slot_loc_def]) >>
   `~is_word_type dty /\ ~is_word_type (lowered_value_type cenv e)` by
-    metis_tac[bytestring_type_not_word] >> gvs[] >>
+    metis_tac[bytestring_type_not_word] >> fs[] >>
   `eval_operand (vv_operand snap) s = SOME sw` by
     metis_tac[tuple_place_target_operand] >>
   `val_in_memory stv v (w2n sw) s.vs_memory` by
     metis_tac[assign_effectful_target_snapshot_value, arithmeticTheory.ADD_COMM] >>
-  `stmt_state_rel ctx func cenv cx mid s /\
+  `stmt_state_rel H0 ctx func cenv cx mid s /\
    place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
-   (!x. dst = Var x ==> not_fresh_at st x)` by gvs[target_post_def] >>
+   (!x. dst = Var x ==> not_fresh_at st x)` by
+    (fs[target_post_def] >> metis_tac[]) >>
   `!x. vv_operand snap = Var x ==> not_fresh_at st x` by
     metis_tac[not_fresh_at_mono] >>
   `?aid sz. aid < st.cs_next_id /\
@@ -150,10 +165,11 @@ Resume assign_effectful_snapshot_bytes_store_ready[staging]:
   `cs_extends st sn` by metis_tac[cs_extends_trans] >>
   `fn_has_code st sn func /\ fn_has_code sn sf func` by metis_tac[fn_has_code_split] >>
   `type_memory_size stv < dimword (:256)` by decide_tac >>
-  drule_at (Pat `compile_alloc_buffer _ _ = _`) tuple_place_staging_positive >>
+  drule_at (Pat `compile_alloc_buffer _ _ = _`)
+    (horizonTypeLib.at_horizon_named "H" tuple_place_staging_positive) >>
   disch_then (drule_at (Pat `compile_copy_memory _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ s.vs_memory`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sz'`, `w2n sw`] mp_tac) >>
   simp[] >>
   impl_tac >- (disj2_tac >> qexists_tac `aid'` >> simp[]) >>
@@ -245,7 +261,9 @@ Resume assign_effectful_snapshot_bytes_store_ready[protected]:
   suspend "finish"
 QED
 Resume assign_effectful_snapshot_bytes_store_ready[finish]:
-  `stmt_state_rel ctx func cenv cx ff z` by
+  `LENGTH r.vs_memory <= LENGTH z.vs_memory` by
+    (drule typed_copy_effect_length >> simp[] >> decide_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx ff z` by
     (irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
@@ -260,15 +278,47 @@ Resume assign_effectful_snapshot_bytes_store_ready[finish]:
      `w2n tw + type_memory_size stv <= ob \/ ob+ol <= w2n tw` by
        (irule abi_builtin_allocate_separate >>
         qexistsl_tac [`sep_id`, `s`, `st.cs_next_id`] >> simp[] >>
-        qpat_x_assum `stmt_state_rel ctx func cenv cx mid s` mp_tac >>
+        qpat_x_assum `stmt_state_rel H0 ctx func cenv cx mid s` mp_tac >>
         simp[stmt_state_rel_def]) >> decide_tac) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (drule typed_copy_effect_record >>
+     disch_then (mp_tac o Q.AP_TERM
+       `\q. (q.vs_accounts,q.vs_transient,q.vs_requests,q.vs_call_ctx)`) >>
+     qpat_assum `_ = r` (mp_tac o Q.AP_TERM
+       `\q. (q.vs_accounts,q.vs_transient,q.vs_requests,q.vs_call_ctx)`) >>
+     qpat_assum `_ = s` (mp_tac o Q.AP_TERM
+       `\q. (q.vs_accounts,q.vs_transient,q.vs_requests,q.vs_call_ctx)`) >> simp[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ff z` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     `stmt_state_rel HH ctx func cenv cx mid s` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+          (qspec_then `HH` (drule_then strip_assume_tac)) >>
+        fs[target_post_def]) >>
+     `r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+      r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx` by
+       (qpat_assum `_ = s` (mp_tac o Q.AP_TERM
+         `\q. (q.vs_accounts,q.vs_transient,q.vs_requests,q.vs_call_ctx)`) >> simp[]) >>
+     `stmt_state_rel HH ctx func cenv cx mid r` by
+       (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+          stmt_state_rel_fields_transport) >> simp[] >>
+        conj_tac >- (qexists_tac `s` >> simp[]) >>
+        qexists_tac `H0` >> simp[]) >>
+     irule memory_place_write_stmt_state >>
+     goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `evaluate_type _ dty = _`)) >>
+     goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+     qexistsl_tac [`dtv`, `r`, `st`] >> simp[] >>
+     rpt conj_tac >> gvs[]) >>
   qexists_tac `z` >> simp[] >>
   `MAP FDOM mid.scopes = MAP FDOM ff.scopes` by metis_tac[write_place_scopes_dom] >>
-  irule tuple_place_store_alloca_frame >> simp[] >>
+  irule (horizonTypeLib.at_horizon_named "H" tuple_place_store_alloca_frame) >> simp[] >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >> simp[] >>
   goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
   simp[] >> rpt strip_tac >>
   (irule staging_copy_protected_bytes >>
   goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
