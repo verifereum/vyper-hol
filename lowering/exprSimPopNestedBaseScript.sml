@@ -1317,7 +1317,7 @@ Resume pop_nested_storage_sim[summary]:
   rename1 `expr_exit (INR exc) tr0` >>
   qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  disj2_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume pop_nested_storage_sim[normal]:
