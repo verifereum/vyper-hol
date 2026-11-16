@@ -160,11 +160,25 @@ Resume abi_encode_word_stage_origin[history]:
 QED
 
 Resume abi_encode_word_stage_origin[state]:
-  FAIL_TAC "state"
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func ce cx ee t` by metis_tac[] >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+  irule literal_mstore_state_rel >>
+  simp[] >>
+  qexistsl_tac [`w2n a`,
+    `mk_inst sm.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString sm.cs_next_var)]`,
+    `32`] >>
+  simp[mk_inst_def] >> fs[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Resume abi_encode_word_stage_origin[ghost]:
-  FAIL_TAC "ghost"
+  rpt strip_tac >>
+  `ghost_inv_at D lo ret ce cx ee G' tn' t` by
+    (irule alloc_buffer_ghost_inv_at >>
+     rpt (first_assum (irule_at Any)) >> simp[] >>
+     FAIL_TAC "return pointer reservation diagnostic") >>
+  FAIL_TAC "store ghost"
 QED
 
 Resume abi_encode_word_stage_origin[kept]:
