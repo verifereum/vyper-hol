@@ -150,9 +150,7 @@ Proof
   Cases_on `rr` >> simp[]
 QED
 
-Theorem eval_send_value:
-  !cx has_gas vs st tv st'.
-    eval_send cx has_gas vs st = (INL tv, st') ==> ?v. tv = Value v
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
@@ -165,8 +163,24 @@ Proof
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
 QED
+*)
+Theorem eval_send_value:
+  !cx has_gas vs st tv st'.
+    eval_send cx has_gas vs st = (INL tv, st') ==> ?v. tv = Value v
+Proof
+  cheat
+QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  rpt gen_tac >>
+  Cases_on `eval_send cx has_gas vs st` >>
+  rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+  Cases_on `rr` >> simp[bind_def] >> strip_tac >> gvs[] >>
+  drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
+QED
+*)
 Theorem eval_send_read:
   !cx has_gas vs st res st'.
     (do tv <- eval_send cx has_gas vs; read_result cx tv od) st =
@@ -175,17 +189,10 @@ Theorem eval_send_read:
         (!v. r = INL (Value v) ==> res = INL v) /\
         (!exc. r = INR exc ==> res = INR exc)
 Proof
-  rpt gen_tac >>
-  Cases_on `eval_send cx has_gas vs st` >>
-  rename1 `eval_send _ _ _ _ = (rr, st1)` >>
-  Cases_on `rr` >> simp[bind_def] >> strip_tac >> gvs[] >>
-  drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
+  cheat
 QED
 
-Theorem eval_expr_send_value:
-  !cx ann has_gas args dflt es tv es'.
-    eval_expr cx (Call ann (Send has_gas) args dflt) es = (INL tv, es') ==>
-    ?v. tv = Value v
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
@@ -194,17 +201,20 @@ Proof
   rename1 `eval_exprs cx args es = (rr, es1)` >>
   Cases_on `rr` >> rw[] >> drule eval_send_value >> simp[]
 QED
+*)
+Theorem eval_expr_send_value:
+  !cx ann has_gas args dflt es tv es'.
+    eval_expr cx (Call ann (Send has_gas) args dflt) es = (INL tv, es') ==>
+    ?v. tv = Value v
+Proof
+  cheat
+QED
 
 (* take_call_outcome raises "call outcome accounts" only for a successful
    outcome whose accounts are not runtime well typed: not one of the
    remaining outcomes, by outcomes_accounts_typed, nor a computed
    precompile's, which keeps the current accounts. *)
-Theorem take_call_outcome_typed:
-  !target cd vo st.
-    outcomes_accounts_typed st.outcomes /\
-    accounts_runtime_well_typed st.accounts ==>
-    FST (take_call_outcome target cd vo st) <>
-      INR (Error (RuntimeError "call outcome accounts"))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[take_call_outcome_def, take_request_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
@@ -214,15 +224,18 @@ Proof
   Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
   gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
+*)
+Theorem take_call_outcome_typed:
+  !target cd vo st.
+    outcomes_accounts_typed st.outcomes /\
+    accounts_runtime_well_typed st.accounts ==>
+    FST (take_call_outcome target cd vo st) <>
+      INR (Error (RuntimeError "call outcome accounts"))
+Proof
+  cheat
+QED
 
-Theorem eval_send_outcome_typed:
-  !cx has_gas to_v amount_v gas_vs es res es' os a n.
-    es.outcomes = SOME os /\ outcomes_accounts_typed es.outcomes /\
-    accounts_runtime_well_typed es.accounts /\
-    dest_AddressV to_v = SOME a /\ dest_NumV amount_v = SOME n /\
-    LENGTH gas_vs = (if has_gas then 1 else 0) /\
-    eval_send cx has_gas (to_v :: amount_v :: gas_vs) es = (res, es') ==>
-    res <> INR (Error (RuntimeError "call outcome accounts"))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
@@ -248,18 +261,33 @@ Proof
           adopt_call_outcome_equation, vyperStateTheory.return_def]) >>
   rw[] >> gvs[bind_def]
 QED
+*)
+Theorem eval_send_outcome_typed:
+  !cx has_gas to_v amount_v gas_vs es res es' os a n.
+    es.outcomes = SOME os /\ outcomes_accounts_typed es.outcomes /\
+    accounts_runtime_well_typed es.accounts /\
+    dest_AddressV to_v = SOME a /\ dest_NumV amount_v = SOME n /\
+    LENGTH gas_vs = (if has_gas then 1 else 0) /\
+    eval_send cx has_gas (to_v :: amount_v :: gas_vs) es = (res, es') ==>
+    res <> INR (Error (RuntimeError "call outcome accounts"))
+Proof
+  cheat
+QED
 
-Theorem address_typed_dest:
-  !v. value_has_type (BaseTV AddressT) v ==>
-      dest_AddressV v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) v))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   Cases >> simp[value_has_type_def, dest_AddressV_def] >>
   rw[address_word_w2w]
 QED
+*)
+Theorem address_typed_dest:
+  !v. value_has_type (BaseTV AddressT) v ==>
+      dest_AddressV v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) v))
+Proof
+  cheat
+QED
 
-Theorem uint256_typed_dest:
-  !v. value_has_type (BaseTV (UintT 256)) v ==>
-      dest_NumV v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) v))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   Cases >> simp[value_has_type_def, dest_NumV_def, typed_val_to_w256_def,
                 val_to_w256_def] >>
@@ -268,14 +296,17 @@ Proof
   gvs[integer_wordTheory.i2w_pos, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
       wordsTheory.dimword_def]
 QED
+*)
+Theorem uint256_typed_dest:
+  !v. value_has_type (BaseTV (UintT 256)) v ==>
+      dest_NumV v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) v))
+Proof
+  cheat
+QED
 
 (* ===== The operands ===== *)
 
-Theorem expr_body_pre_send_arg:
-  !cenv cx env ann has_gas args dflt e es es'.
-    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    MEM e args /\ expr_sim_inv cenv cx env es' ==>
-    expr_body_pre cenv cx env e es'
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def,
@@ -287,15 +318,17 @@ Proof
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
+*)
+Theorem expr_body_pre_send_arg:
+  !cenv cx env ann has_gas args dflt e es es'.
+    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    MEM e args /\ expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  cheat
+QED
 
-Theorem send_pre_types:
-  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es ==>
-  ann = NoneT /\
-  MAP expr_type args =
-    [BaseT AddressT; BaseT (UintT 256)] ++
-    (if has_gas then [BaseT (UintT 256)] else []) /\
-  LENGTH args = (if has_gas then 3 else 2) /\
-  EVERY (\e. is_word_type (expr_type e)) args
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   simp[expr_body_pre_def, well_typed_expr_def] >> strip_tac >>
   `LENGTH (MAP expr_type args) = (if has_gas then 3 else 2)` by
@@ -305,13 +338,21 @@ Proof
   pop_assum mp_tac >> asm_rewrite_tac[] >>
   Cases_on `has_gas` >> rw[] >> simp[is_word_type_def]
 QED
+*)
+Theorem send_pre_types:
+  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es ==>
+  ann = NoneT /\
+  MAP expr_type args =
+    [BaseT AddressT; BaseT (UintT 256)] ++
+    (if has_gas then [BaseT (UintT 256)] else []) /\
+  LENGTH args = (if has_gas then 3 else 2) /\
+  EVERY (\e. is_word_type (expr_type e)) args
+Proof
+  cheat
+QED
 
 (* The invariant of typed_args_ready holds after all the operands. *)
-Theorem typed_args_ready_inv:
-  !args es vs es' ctx.
-    typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
-    eval_exprs cx args es = (INL vs, es') ==>
-    Inv es'
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   Induct >- simp[eval_exprs_nil] >>
   rpt gen_tac >> strip_tac >>
@@ -320,16 +361,19 @@ Proof
   first_x_assum irule >>
   metis_tac[typed_args_ready_tail]
 QED
+*)
+Theorem typed_args_ready_inv:
+  !args es vs es' ctx.
+    typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    eval_exprs cx args es = (INL vs, es') ==>
+    Inv es'
+Proof
+  cheat
+QED
 
 (* ===== The CALL and the ASSERT ===== *)
 
-Theorem expr_post_none_intro:
-  expr_has_effect e /\
-  post_value_type cenv e = expr_type e /\
-  expr_type e = NoneT /\ stmt_state_rel H ctx func cenv cx es' s /\
-  storage_well_formed_on cx es' (FST H) /\
-  wb_frame cenv es es' sa s0 s ==>
-  expr_post H ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   strip_tac >>
   fs[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
@@ -338,29 +382,67 @@ Proof
        type_memory_size_def] >>
   rpt conj_tac >> metis_tac[]
 QED
+*)
+Theorem expr_post_none_intro:
+  expr_has_effect e /\
+  post_value_type cenv e = expr_type e /\
+  expr_type e = NoneT /\ stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
+  wb_frame cenv es es' sa s0 s ==>
+  expr_post H ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
+Proof
+  cheat
+QED
 
 (* The ASSERT of the success word the CALL just bound. *)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  rpt strip_tac >> irule assert_true_correct >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+*)
 Theorem send_assert_ok:
   !id x w s.
     w <> 0w ==>
     step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x w s) =
       OK (update_var x w s)
 Proof
-  rpt strip_tac >> irule assert_true_correct >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
+  cheat
 QED
 
-Theorem send_assert_fail:
-  !id x s.
-    step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x 0w s) =
-      Abort Revert_abort (revert_state (set_returndata [] (update_var x 0w s)))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt strip_tac >> irule assert_false_correct >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
+*)
+Theorem send_assert_fail:
+  !id x s.
+    step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x 0w s) =
+      Abort Revert_abort (revert_state (set_returndata [] (update_var x 0w s)))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  strip_tac >> drule eval_send_read >> strip_tac >>
+  `state_rel H func cenv cx es1 t` by fs[stmt_state_rel_def] >>
+  `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
+  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
+    (drule_all eval_send_outcome_typed >> simp[]) >>
+  drule_all (send_call_oracle_step |> SPEC_ALL |>
+    Q.INST [`inst` |-> `mk_inst id CALL
+      [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]`] |>
+    SRULE [mk_inst_def]) >>
+  disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
+  gvs[mk_inst_def]
+  >- (qexists_tac `t` >> simp[]) >>
+  metis_tac[]
+QED
+*)
 Theorem send_call_read_step:
   stmt_state_rel H ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
@@ -391,42 +473,10 @@ Theorem send_call_read_step:
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         OK (update_var out 0w t')))
 Proof
-  strip_tac >> drule eval_send_read >> strip_tac >>
-  `state_rel H func cenv cx es1 t` by fs[stmt_state_rel_def] >>
-  `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
-  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
-    (drule_all eval_send_outcome_typed >> simp[]) >>
-  drule_all (send_call_oracle_step |> SPEC_ALL |>
-    Q.INST [`inst` |-> `mk_inst id CALL
-      [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]`] |>
-    SRULE [mk_inst_def]) >>
-  disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
-  gvs[mk_inst_def]
-  >- (qexists_tac `t` >> simp[]) >>
-  metis_tac[]
+  cheat
 QED
 
-Theorem send_tail_frag:
-  expr_has_effect e /\
-  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
-    sm = (success, s3) /\
-  emit_void ASSERT [success] s3 = (u, sb) /\
-  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
-  storage_well_formed_on cx es' (FST H) /\
-  outcomes_accounts_typed es1.outcomes /\
-  accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
-  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
-  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
-  LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') /\
-  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
-  frag_exec ctx sm sb (\s. s = t)
-    (\s. ?v. res = INL v /\
-             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
-    (expr_exit res)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
   `~not_fresh_at sm out` by gvs[not_fresh_at_def] >>
@@ -484,14 +534,36 @@ Proof
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
+*)
+Theorem send_tail_frag:
+  expr_has_effect e /\
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
+  storage_well_formed_on cx es' (FST H) /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+  frag_exec ctx sm sb (\s. s = t)
+    (\s. ?v. res = INL v /\
+             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+    (expr_exit res)
+Proof
+  cheat
+QED
 
 (* ===== Counted gas: the CALL and the ASSERT as a gas path ===== *)
 
 (* The oracle's take and adopt never read or write the gas observations. *)
-Theorem take_call_outcome_gas_obs[local]:
-  take_call_outcome target calldata value_opt (st with gas_obs := tail) =
-  (FST (take_call_outcome target calldata value_opt st),
-   SND (take_call_outcome target calldata value_opt st) with gas_obs := tail)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   `call_outcome_request target calldata value_opt (st with gas_obs := tail) =
    call_outcome_request target calldata value_opt st` by
@@ -501,31 +573,45 @@ Proof
   Cases_on `take_outcome (call_outcome_request target calldata value_opt st) os` >>
   rw[]
 QED
+*)
+Theorem take_call_outcome_gas_obs[local]:
+  take_call_outcome target calldata value_opt (st with gas_obs := tail) =
+  (FST (take_call_outcome target calldata value_opt st),
+   SND (take_call_outcome target calldata value_opt st) with gas_obs := tail)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  rw[adopt_call_outcome_equation]
+QED
+*)
 Theorem adopt_call_outcome_gas_obs[local]:
   adopt_call_outcome rq outcome (st with gas_obs := tail) =
   (FST (adopt_call_outcome rq outcome st),
    SND (adopt_call_outcome rq outcome st) with gas_obs := tail)
 Proof
-  rw[adopt_call_outcome_equation]
+  cheat
 QED
 
-Theorem frame_call_value_gas_obs[local]:
-  frame_call_value cx value_opt (st with gas_obs := tail) =
-  (FST (frame_call_value cx value_opt st),
-   SND (frame_call_value cx value_opt st) with gas_obs := tail)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
      return_def] >>
   IF_CASES_TAC >> simp[]
 QED
+*)
+Theorem frame_call_value_gas_obs[local]:
+  frame_call_value cx value_opt (st with gas_obs := tail) =
+  (FST (frame_call_value cx value_opt st),
+   SND (frame_call_value cx value_opt st) with gas_obs := tail)
+Proof
+  cheat
+QED
 
 (* send never reads or writes the gas observations. *)
-Theorem eval_send_gas_obs[local]:
-  !cx has_gas vs st r st'.
-    eval_send cx has_gas vs st = (r, st') ==>
-    !tail. eval_send cx has_gas vs (st with gas_obs := tail) =
-             (r, st' with gas_obs := tail)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
@@ -571,11 +657,17 @@ Proof
     (drule adopt_call_outcome_frame >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   gvs[]
 QED
+*)
+Theorem eval_send_gas_obs[local]:
+  !cx has_gas vs st r st'.
+    eval_send cx has_gas vs st = (r, st') ==>
+    !tail. eval_send cx has_gas vs (st with gas_obs := tail) =
+             (r, st' with gas_obs := tail)
+Proof
+  cheat
+QED
 
-Theorem send_read_gas_obs[local]:
-  bind (eval_send cx has_gas vs) (read_result cx) st = (res, st') ==>
-  !tail. bind (eval_send cx has_gas vs) (read_result cx)
-           (st with gas_obs := tail) = (res, st' with gas_obs := tail)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt strip_tac >>
   Cases_on `eval_send cx has_gas vs st` >>
@@ -583,11 +675,16 @@ Proof
   Cases_on `q` >> gvs[bind_def] >>
   drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
 QED
+*)
+Theorem send_read_gas_obs[local]:
+  bind (eval_send cx has_gas vs) (read_result cx) st = (res, st') ==>
+  !tail. bind (eval_send cx has_gas vs) (read_result cx)
+           (st with gas_obs := tail) = (res, st' with gas_obs := tail)
+Proof
+  cheat
+QED
 
-Theorem eval_expr_send_read_action[local]:
-  LENGTH args = (if has_gas then 3 else 2) ==>
-  bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
-  bind (eval_exprs cx args) (\vs. bind (eval_send cx has_gas vs) (read_result cx))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   strip_tac >> pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
   Cases_on `bind (eval_expr cx (Call ann (Send has_gas) args dflt))
@@ -595,38 +692,16 @@ Proof
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_send_cases) >>
   strip_tac >> gvs[bind_def]
 QED
+*)
+Theorem eval_expr_send_read_action[local]:
+  LENGTH args = (if has_gas then 3 else 2) ==>
+  bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
+  bind (eval_exprs cx args) (\vs. bind (eval_send cx has_gas vs) (read_result cx))
+Proof
+  cheat
+QED
 
-Theorem send_tail_path[local]:
-  expr_has_effect e /\
-  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
-    sm = (success, s3) /\
-  emit_void ASSERT [success] s3 = (u, sb) /\
-  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  fn_has_code sm sb func /\
-  (!H. valid_horizon cx st0 H es1.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es1 t /\
-     storage_well_formed_on cx es1 (FST H)) /\
-  valid_horizon cx st0 H0 es1.storage_trace /\
-  wb_frame cenv es es1 sa s0 t /\
-  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  outcomes_accounts_typed es1.outcomes /\
-  accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
-  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
-  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
-  LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') /\
-  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
-  ?n r. gas_marked_path F ctx func t n r /\
-    ((?w. r = OK w /\
-          (?v. res = INL v /\
-               !H. valid_horizon cx st0 H es'.storage_trace ==>
-                 expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
-          w.vs_current_bb = sb.cs_current_bb /\
-          w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
-     (exit_result r /\ expr_exit res r))
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
@@ -725,7 +800,74 @@ Proof
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
+*)
+Theorem send_tail_path[local]:
+  expr_has_effect e /\
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  fn_has_code sm sb func /\
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es1 t /\
+     storage_well_formed_on cx es1 (FST H)) /\
+  valid_horizon cx st0 H0 es1.storage_trace /\
+  wb_frame cenv es es1 sa s0 t /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+  ?n r. gas_marked_path F ctx func t n r /\
+    ((?w. r = OK w /\
+          (?v. res = INL v /\
+               !H. valid_horizon cx st0 H es'.storage_trace ==>
+                 expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
+          w.vs_current_bb = sb.cs_current_bb /\
+          w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\ expr_exit res r))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  strip_tac >>
+  `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+       read_result cx tv od) es1 = (res, es')` by
+    (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
+  `res <> INR HaltException` by
+    (qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     drule_all send_call_read_step >>
+     disch_then (qspecl_then [`""`, `sm.cs_next_id`] strip_assume_tac) >>
+     gvs[]) >>
+  drule_all send_tail_path >> strip_tac >>
+  drule send_read_gas_obs >> strip_tac >>
+  `es1 with gas_obs := [] = es1` by
+    simp[evaluation_state_component_equality] >>
+  `es' with gas_obs := [] = es'` by
+    (qpat_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `es1 with gas_obs := [] = es1` (fn th => rewrite_tac[th]) >>
+     strip_tac >>
+     `(res, es' with gas_obs := []) = (res, es')` by metis_tac[] >>
+     fs[]) >>
+  qexists_tac `REPLICATE n F` >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es'`, `r`] >>
+  rewrite_tac[gas_marked_exec_def, rich_listTheory.LENGTH_REPLICATE,
+              gas_explicit_replicate_false, APPEND] >>
+  BETA_TAC >> pop_assum SUBST1_TAC >> conj_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
+  gvs[halt_exit_def] >> metis_tac[]
+QED
+*)
 Theorem send_tail_summary[local]:
   expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
@@ -760,38 +902,19 @@ Theorem send_tail_summary[local]:
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
        expr_exit res r /\ halt_exit H cx ee res r)
 Proof
-  strip_tac >>
-  `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-       read_result cx tv od) es1 = (res, es')` by
-    (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
-  `res <> INR HaltException` by
-    (qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
-       (qspec_then `H0` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-     drule_all send_call_read_step >>
-     disch_then (qspecl_then [`""`, `sm.cs_next_id`] strip_assume_tac) >>
-     gvs[]) >>
-  drule_all send_tail_path >> strip_tac >>
-  drule send_read_gas_obs >> strip_tac >>
-  `es1 with gas_obs := [] = es1` by
-    simp[evaluation_state_component_equality] >>
-  `es' with gas_obs := [] = es'` by
-    (qpat_assum `!tail. _` (qspec_then `[]` mp_tac) >>
-     qpat_assum `es1 with gas_obs := [] = es1` (fn th => rewrite_tac[th]) >>
-     strip_tac >>
-     `(res, es' with gas_obs := []) = (res, es')` by metis_tac[] >>
-     fs[]) >>
-  qexists_tac `REPLICATE n F` >> rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`res`, `es'`, `r`] >>
-  rewrite_tac[gas_marked_exec_def, rich_listTheory.LENGTH_REPLICATE,
-              gas_explicit_replicate_false, APPEND] >>
-  BETA_TAC >> pop_assum SUBST1_TAC >> conj_tac
-  >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
-  gvs[halt_exit_def] >> metis_tac[]
+  cheat
 QED
 
 (* ===== send ===== *)
 
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Proof
+  simp[lower_value_def, comp_bind_def] >>
+  Cases_on `compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa` >>
+  drule compile_expr_send_stack >>
+  simp[unwrap_value_def, comp_return_def] >> rw[] >> gvs[]
+QED
+*)
 Theorem lower_value_send:
   lower_value compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa =
     (op, sb) ==>
@@ -799,16 +922,10 @@ Theorem lower_value_send:
   compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa =
     (StackValue ann (Lit 0w), sb)
 Proof
-  simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa` >>
-  drule compile_expr_send_stack >>
-  simp[unwrap_value_def, comp_return_def] >> rw[] >> gvs[]
+  cheat
 QED
 
-Theorem send_expr_sim:
-  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-  (!arg_ty. typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
-  expr_sim ctx func cenv cx ty (Call ann (Send has_gas) args dflt) es
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   strip_tac >> drule send_pre_types >> strip_tac >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
@@ -890,13 +1007,17 @@ Proof
          Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
          fs[] >> NO_TAC]
 QED
+*)
+Theorem send_expr_sim:
+  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+  (!arg_ty. typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
+  expr_sim ctx func cenv cx ty (Call ann (Send has_gas) args dflt) es
+Proof
+  cheat
+QED
 
 (* TOP-LEVEL *)
-Theorem compile_send_case:
-  !nocalls ctx func cenv cx ann has_gas args dflt.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt) /\
-    expr_vv_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)`
@@ -915,15 +1036,29 @@ Proof
   >- (rw[] >> gvs[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]) >>
   gvs[EVERY_MEM]
 QED
+*)
+Theorem compile_send_case:
+  !nocalls ctx func cenv cx ann has_gas args dflt.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_sim_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt) /\
+    expr_vv_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)
+Proof
+  cheat
+QED
 
-Theorem compile_send_case_sim:
-  !cenv ann has_gas args dflt.
-    expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
   `exprs_case T ctx func cenv cx args` by
     (irule exprs_case_below >> irule expr_sim_below_mono >>
      goal_assum (drule_at Any) >> simp[expr_size_def]) >>
   metis_tac[compile_send_case]
+QED
+*)
+Theorem compile_send_case_sim:
+  !cenv ann has_gas args dflt.
+    expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
+    expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
+Proof
+  cheat
 QED

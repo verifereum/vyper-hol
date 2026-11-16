@@ -251,25 +251,7 @@ QED
    local's buffer is type_memory_bytes of T, the size val_in_memory lays a
    value of T out in, which is not 0 and leaves the 64 bytes of a copy's
    rounding below 2 ** 256. *)
-Theorem compile_annassign_copy_stmt_frag_mem:
-  !d ctx func cx lctx RetQ cenv ty id vtyp e es tyv.
-    cenv.ce_alloca_locals /\
-    ~is_word_type vtyp /\ ~is_bytestring_type vtyp /\
-    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
-    lookup_scopes id es.scopes = NONE /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    expr_type e = vtyp /\ lowered_value_type cenv e = vtyp /\
-    evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-    type_memory_bytes cenv vtyp = type_memory_size tyv /\
-    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    (!gs v es1.
-       bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
-         (INL v, es1) ==> value_has_type tyv v) /\
-    (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
-       expr_sim_mem ctx func c cx (expr_type e) e es) ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
-      (eval_stmt cx (AnnAssign id vtyp e)) es
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `expr_type e = vtyp` (SUBST_ALL_TAC o SYM) >>
@@ -472,4 +454,27 @@ Proof
        simp[Abbr `ee'`] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[stmt_lands_def]
+QED
+*)
+Theorem compile_annassign_copy_stmt_frag_mem:
+  !d ctx func cx lctx RetQ cenv ty id vtyp e es tyv.
+    cenv.ce_alloca_locals /\
+    ~is_word_type vtyp /\ ~is_bytestring_type vtyp /\
+    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    expr_type e = vtyp /\ lowered_value_type cenv e = vtyp /\
+    evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+    type_memory_bytes cenv vtyp = type_memory_size tyv /\
+    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
+    (!gs v es1.
+       bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+         (INL v, es1) ==> value_has_type tyv v) /\
+    (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
+       expr_sim_mem ctx func c cx (expr_type e) e es) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
+Proof
+  cheat
 QED

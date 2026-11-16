@@ -181,7 +181,7 @@ Proof
   `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
      dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >>
-     gvs[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >>
+     gvs[ctx_has_dalloca_def, dalloca_no_wrap_def, listTheory.EXISTS_MEM] >>
      metis_tac[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_full_def] >> disch_then drule_all >>

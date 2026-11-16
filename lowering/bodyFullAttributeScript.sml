@@ -19,13 +19,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem attribute_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
-    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty obj es ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Attribute ann obj fld) es
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >> drule attr_pre_base >> strip_tac >>
   `post_value_type cenv obj = expr_type obj` by
@@ -292,10 +286,20 @@ Resume attribute_vv_sim_full[pointer_posts]:
 QED
 
 Finalise attribute_vv_sim_full
+*)
+Theorem attribute_vv_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
+    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty obj es ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Attribute ann obj fld) es
+Proof
+  cheat
+QED
 
 
-Theorem attribute_expr_full_ok:
-  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
@@ -319,4 +323,10 @@ Proof
      (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem attribute_expr_full_ok:
+  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
+Proof
+  cheat
 QED

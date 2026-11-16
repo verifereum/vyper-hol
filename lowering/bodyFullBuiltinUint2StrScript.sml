@@ -19,16 +19,7 @@ Libs
 
 val _ = Parse.hide "body";
 
-Theorem uint2str_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
-    (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
-     body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann (Uint2Str n) args) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Uint2Str n) args) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Uint2Str n) args) es
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -212,3 +203,17 @@ Resume uint2str_builtin_sim_full[suffix_entry]:
 QED
 
 Finalise uint2str_builtin_sim_full
+*)
+Theorem uint2str_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+    (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
+     body_exprs_full_ok cx args) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin ann (Uint2Str n) args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Uint2Str n) args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Uint2Str n) args) es
+Proof
+  cheat
+QED

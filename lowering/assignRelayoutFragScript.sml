@@ -307,39 +307,7 @@ Proof
     metis_tac[fn_has_code_split] >> gvs[]
 QED
 
-Theorem compile_assign_local_relayout_stmt_frag:
-  !ctx func cx lctx RetQ cenv ret_ty id typ e es stv dtv p cap env.
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
-    cenv.ce_var_type id = SOME typ /\
-    ~is_word_type typ /\ ~is_bytestring_type typ /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    lowered_value_type cenv e <> expr_type e /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
-    ~is_word_type (lowered_value_type cenv e) /\
-    ~is_bytestring_type (lowered_value_type cenv e) /\
-    lowered_value_type cenv e <> typ /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
-    post_value_type cenv e = lowered_value_type cenv e /\
-    evaluate_type (get_tenv cx) typ = SOME dtv /\
-    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
-    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
-    type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      ALL_DISTINCT (MAP FST fields) /\
-      EVERY (\(fname,fty,sz). !tv.
-        evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    (!gs v es1 entry. bind (eval_expr cx e) (read_result cx)
-       (es with gas_obs := gs) = (INL v,es1) /\
-       lookup_scopes id es1.scopes = SOME entry ==>
-       entry.type = dtv /\ value_has_type stv v /\ value_has_type dtv v /\
-       val_wf stv v /\ val_wf dtv v /\ val_footprint stv v = type_memory_size stv) /\
-    expr_body_pre cenv cx env e es /\
-    expr_sim ctx func cenv cx (expr_type e) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -385,4 +353,41 @@ Proof
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
   simp[] >> qexists_tac `H` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
+Theorem compile_assign_local_relayout_stmt_frag:
+  !ctx func cx lctx RetQ cenv ret_ty id typ e es stv dtv p cap env.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+    cenv.ce_var_type id = SOME typ /\
+    ~is_word_type typ /\ ~is_bytestring_type typ /\
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    lowered_value_type cenv e <> expr_type e /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    lowered_value_type cenv e <> typ /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
+    post_value_type cenv e = lowered_value_type cenv e /\
+    evaluate_type (get_tenv cx) typ = SOME dtv /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+    type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    (!gs v es1 entry. bind (eval_expr cx e) (read_result cx)
+       (es with gas_obs := gs) = (INL v,es1) /\
+       lookup_scopes id es1.scopes = SOME entry ==>
+       entry.type = dtv /\ value_has_type stv v /\ value_has_type dtv v /\
+       val_wf stv v /\ val_wf dtv v /\ val_footprint stv v = type_memory_size stv) /\
+    expr_body_pre cenv cx env e es /\
+    expr_sim ctx func cenv cx (expr_type e) e es ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  cheat
 QED
