@@ -48,6 +48,17 @@ Proof
   rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[]
 QED
 
+Theorem alloc_origin_fields[local]:
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
+  t.vs_allocas = (abi_builtin_allocate_state id n s).vs_allocas /\
+  t.vs_alloca_next = (abi_builtin_allocate_state id n s).vs_alloca_next
+Proof
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
+  strip_tac >> gvs[AllCaseEqs(), abi_builtin_allocate_state_def,
+                   update_var_def, wordsTheory.w2n_n2w]
+QED
+
 Theorem abi_encode_alloc_origin_exact:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -86,7 +97,9 @@ Theorem abi_encode_alloc_origin_exact:
     (!x. not_fresh_at sa x ==>
          lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
          op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    FLOOKUP G' q = SOME (w2n w,n)
+    FLOOKUP G' q = SOME (w2n w,n) /\
+    t.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id n s).vs_allocas /\
+    t.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id n s).vs_alloca_next
 Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
@@ -97,6 +110,7 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) s = OK t` by
     (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs()]) >>
+  drule_all alloc_origin_fields >> disch_then (mk_asm "alloc_fields") >>
   drule_all ifexp_alloca_step_exact_provenance >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   `w = n2w b /\ w2n w = b` by
@@ -166,5 +180,5 @@ Proof
       simp[Abbr `ins`, step_prov_other_output, step_taint_other_output, mk_inst_def] >>
       qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _`
         drule >> simp[lookup_var_def]) >>
-  fs[op_prov_def]
+  fs[op_prov_def, markerLib.L "alloc_fields"]
 QED
