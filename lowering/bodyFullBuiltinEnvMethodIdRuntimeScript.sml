@@ -131,6 +131,10 @@ Proof
      gvs[arg_type_fits_def] >>
      rename1 `BytesT physical_bytes` >> Cases_on `physical_bytes` >>
      gvs[arg_type_fits_def]) >>
+  suspend "child_run"
+QED
+
+Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
   `cs_appends (compile_method_id_runtime (expr_type e) x fixed)` by
     simp[cj 5 hash_suffix_appends] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
@@ -142,9 +146,20 @@ Proof
     (`cs_extends shadow_sa ss` by metis_tac[cj 2 compile_expr_grows] >>
      `cs_extends ss shadow_sb` by metis_tac[fragExecTheory.cs_appends_def] >>
      metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then (drule_all_then assume_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ss`, `x`,
+    `s0`, `G0`, `tn0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  strip_tac >> suspend "bind_composition"
+QED
+
+Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
   `bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx) =
     bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by
@@ -172,6 +187,10 @@ Proof
       simp[Abbr `childR`] >> rpt strip_tac >> Cases_on `res` >>
       gvs[exprSimDefsTheory.expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type,
           exprSimDefsTheory.halt_exit_def]) >>
+  suspend "successful_suffix"
+QED
+
+Resume method_id_runtime_joint_outcome_from_suffix[successful_suffix]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -192,9 +211,9 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ H res mid G1 tn1 t /\ _`
        (qspec_then `H` mp_tac) >> simp[]) >>
-  `?xs. !tail. bind (eval_expr cx e) (read_result cx)
-    (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)` by
-    (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> simp[]) >>
+  Q.SUBGOAL_THEN `?xs. !tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)` assume_tac
+  >- (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> simp[]) >>
   qpat_x_assum `!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op. _`
     (drule_all_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
       (strip_assume_tac o SIMP_RULE std_ss [LET_THM]))) >>
@@ -208,6 +227,8 @@ Proof
     (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `fixed` >> gvs[expr_type_def, is_word_type_def]
 QED
+
+Finalise method_id_runtime_joint_outcome_from_suffix
 
 Theorem method_id_runtime_sim_full_from_suffix:
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
@@ -263,9 +284,9 @@ Proof
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
-  `is_bytes_or_string_type (expr_type e) /\
-    (ann = BaseT (BytesT (Fixed 4)) \/ ann = BaseT (BytesT (Dynamic 4)))` by
-    (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`, `ts` |-> `[expr_type e]`]
+  Q.SUBGOAL_THEN `is_bytes_or_string_type (expr_type e) /\
+    (ann = BaseT (BytesT (Fixed 4)) \/ ann = BaseT (BytesT (Dynamic 4)))` assume_tac
+  >- (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`, `ts` |-> `[expr_type e]`]
       hash_builtin_types) >>
      gvs[expr_body_pre_def, well_typed_expr_def] >> metis_tac[]) >>
   qabbrev_tac `fixed = (ann = BaseT (BytesT (Fixed 4)))` >>
@@ -275,8 +296,11 @@ Proof
      cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
-  conj_tac
-  >- (rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- suspend "value_run" >> suspend "vv_run"
+QED
+
+Resume method_id_runtime_sim_full_from_suffix[value_run]:
+  (rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
       `?x sm op'. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
         compile_method_id_runtime (expr_type e) x fixed sm = (op',sb) /\ op = op'` by
         (qpat_x_assum `lower_value _ _ _ (Builtin _ MethodId _) _ = _` mp_tac >>
@@ -311,7 +335,10 @@ Proof
       disch_then (assume_tac o BETA_RULE o PURE_REWRITE_RULE [LET_THM]) >>
       irule gas_outcome_full_post_mono >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-      simp[] >> metis_tac[]) >>
+      simp[] >> metis_tac[])
+QED
+
+Resume method_id_runtime_sim_full_from_suffix[vv_run]:
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `?x sm op. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
@@ -343,6 +370,10 @@ Proof
   qpat_x_assum `ssb = shadow_sb` SUBST_ALL_TAC >>
   drule_all method_id_runtime_joint_outcome_from_suffix >>
   disch_then (assume_tac o BETA_RULE o PURE_REWRITE_RULE [LET_THM]) >>
+  suspend "vv_source_transport"
+QED
+
+Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
   `eval_expr cx (Builtin ann MethodId [e]) =
      bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. ((case builtin_result cx mid.accounts ann MethodId [expr_type e] [v] of
@@ -377,3 +408,5 @@ Proof
   Cases_on `raw_exit` >>
   gvs[oneline exprSimDefsTheory.expr_exit_def, AllCaseEqs(), exprSimDefsTheory.halt_exit_def]
 QED
+
+Finalise method_id_runtime_sim_full_from_suffix
