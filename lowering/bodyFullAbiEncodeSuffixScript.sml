@@ -139,7 +139,6 @@ Theorem abi_encode_suffix_full:
   local_ptrs_rel func ce es.scopes s /\ local_ptrs_reserved ce st /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
-  (!D. ghost_inv_at D lo ret ce cx es G tn s) /\
   ghost_kept_at lo ce es sa G0 tn0 s0 G tn /\
   (!p. not_fresh_at sa p ==> not_fresh_at st p) /\
   (!i. i IN P ==> i < s.vs_alloca_next /\
@@ -174,7 +173,8 @@ Theorem abi_encode_suffix_full:
     ghost_kept_at lo ce es sa G0 tn0 s0 G' tn' /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn') /\
-      ghost_inv_at D lo ret ce cx es G' tn' t
+      (ghost_inv_at D lo ret ce cx es G tn s ==>
+       ghost_inv_at D lo ret ce cx es G' tn' t)
 Proof
   strip_tac >>
   `!x. src = Var x \/ Var dp = Var x ==> not_fresh_at st x` by (simp[] >> metis_tac[]) >>
@@ -199,7 +199,7 @@ Proof
   conj_asm1_tac >- suspend "frontier" >>
   conj_tac >- suspend "history" >>
   conj_tac >- suspend "kept" >>
-  gen_tac >> asm_rewrite_tac[] >> suspend "inv"
+  gen_tac >> asm_rewrite_tac[] >> strip_tac >> suspend "inv"
 QED
 
 Resume abi_encode_suffix_full[bytes]:
