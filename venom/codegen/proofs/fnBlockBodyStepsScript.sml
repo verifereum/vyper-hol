@@ -1676,8 +1676,8 @@ Proof
   drule body_inv_not_in_rf_reloc >> simp[]
 QED
 
-Theorem body_inv_memory:
-  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+Theorem body_inv_memory_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 /\
@@ -1688,8 +1688,8 @@ Theorem body_inv_memory:
     (!fuel vs1. step_inst fuel ctx inst vs = OK vs1 ==>
                 context_spill_step_safe cpl vs vs1)
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >>
-  drule body_inv_facts >> strip_tac >> unpack_inv >>
+  strip_tac >> drule_all body_inv_inst_reloc >> strip_tac >>
+  drule body_inv_facts_reloc >> strip_tac >> unpack_inv_reloc >>
   `codegen_memory_obligations Inv ctx cpl` by
     fs[codegen_context_obligations_def] >>
   pop_assum (mp_tac o REWRITE_RULE [codegen_memory_obligations_def]) >>
@@ -1707,6 +1707,42 @@ Proof
       strip_tac >> res_tac)
 QED
 
+Theorem body_inv_memory:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    ~in_revert_forward fn vs ==>
+    source_memory_reads_disjoint cpl inst vs /\
+    context_source_memory_writes_disjoint cpl inst vs /\
+    (!fuel vs1. step_inst fuel ctx inst vs = OK vs1 ==>
+                context_spill_step_safe cpl vs vs1)
+Proof
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule body_inv_memory_reloc >> simp[] >> metis_tac[]
+QED
+
+Theorem body_plan_inv_label_resolve_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    inst.inst_opcode <> INVOKE /\
+    (!e. step_inst fuel ctx inst vs <> Error e) ==>
+    !l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)
+Proof
+  strip_tac >> drule_all body_plan_inv_inst_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  rpt strip_tac >>
+  `step_inst fuel ctx inst vs = step_inst_base inst vs` by
+    metis_tac[step_inst_non_invoke] >>
+  qspecl_then [`inst`, `vs`, `l`] mp_tac step_label_operands_resolve >>
+  impl_tac >- (fs[inst_shape_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `!l. FLOOKUP vs.vs_labels l = _` (fn th => simp[th]) >>
+  simp[IS_SOME_MAP]
+QED
+
 Theorem body_plan_inv_label_resolve:
   body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1717,14 +1753,22 @@ Theorem body_plan_inv_label_resolve:
     (!e. step_inst fuel ctx inst vs <> Error e) ==>
     !l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)
 Proof
-  strip_tac >> drule_all body_plan_inv_inst >> strip_tac >> unpack_plan_inv >>
-  rpt strip_tac >>
-  `step_inst fuel ctx inst vs = step_inst_base inst vs` by
-    metis_tac[step_inst_non_invoke] >>
-  qspecl_then [`inst`, `vs`, `l`] mp_tac step_label_operands_resolve >>
-  impl_tac >- (fs[inst_shape_ok_def] >> metis_tac[]) >>
-  qpat_x_assum `!l. FLOOKUP vs.vs_labels l = _` (fn th => simp[th]) >>
-  simp[IS_SOME_MAP]
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+  drule body_plan_inv_label_resolve_reloc >> simp[] >> metis_tac[]
+QED
+
+Theorem body_inv_label_resolve_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    inst.inst_opcode <> INVOKE /\
+    (!e. step_inst fuel ctx inst vs <> Error e) ==>
+    !l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule body_plan_inv_label_resolve_reloc >> simp[] >> metis_tac[]
 QED
 
 Theorem body_inv_label_resolve:
@@ -1737,6 +1781,6 @@ Theorem body_inv_label_resolve:
     (!e. step_inst fuel ctx inst vs <> Error e) ==>
     !l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule body_plan_inv_label_resolve >> simp[] >> metis_tac[]
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule body_inv_label_resolve_reloc >> simp[] >> metis_tac[]
 QED
