@@ -21,6 +21,19 @@ Definition active_frame_plan_def:
         rest_ops k ps pc0 s a ra pc_ret rest mem0
 End
 
+(* Label-map parameterization; the canonical definition above is retained. *)
+Definition active_frame_plan_reloc_def:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn s a ra rest mem0 <=>
+    ?i r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+     bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+     rest_ops k ps pc0 pc_ret.
+      body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
+        lo (build_offset_to_pc prog)
+        i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+        bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+        rest_ops k ps pc0 s a ra pc_ret rest mem0
+End
+
 Theorem entry_body_plan:
   !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as

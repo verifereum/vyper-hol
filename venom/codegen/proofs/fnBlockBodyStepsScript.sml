@@ -17,6 +17,7 @@
 
 Theory fnBlockBodySteps
 Ancestors
+  fnPlanPlaceRevertPostamble
   fnBlockBodyHelpers fnBlockPlanStatic fnAliasStep
   fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace asmRunBounded
   fnPlanCover fnPlanPlaceDfsBlock fnPlanLineage fnLineageStatic
@@ -109,6 +110,84 @@ Definition body_plan_inv_def:
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
 End
 
+(* Label-map parameterization; the canonical definition above is retained. *)
+Definition body_plan_inv_reloc_def:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 <=>
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations (\_ _ _ _. F) ctx cpl /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    fn_reachable fn bb.bb_label /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops, ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+      k ps /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (k - LENGTH (get_params bb.bb_instructions))
+      (DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps = SOME (rest_ops, ps_after) /\
+    block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+    phi_prefix_length bb.bb_instructions <= k /\
+    (!i j. revert_forward_pair bb i j ==> k <= i \/ j < k) /\
+    vs.vs_inst_idx = k /\
+    asm_block_at prog pc0 (execute_plan cpl.cp_initial_fmp block_ops) /\
+    as.as_pc = pc0 + LENGTH (execute_plan cpl.cp_initial_fmp
+                                 (SOLabel bb.bb_label :: prefix_ops)) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
+End
+
 Definition body_inv_def:
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -116,6 +195,86 @@ Definition body_inv_def:
       ra pc_ret rest mem0 <=>
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations Inv ctx cpl /\
+    reachability_closed Inv ctx /\
+    (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    fn_reachable fn bb.bb_label /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops, ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+      k ps /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (k - LENGTH (get_params bb.bb_instructions))
+      (DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps = SOME (rest_ops, ps_after) /\
+    block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+    phi_prefix_length bb.bb_instructions <= k /\
+    (!i j. revert_forward_pair bb i j ==> k <= i \/ j < k) /\
+    vs.vs_inst_idx = k /\
+    asm_block_at prog pc0 (execute_plan cpl.cp_initial_fmp block_ops) /\
+    as.as_pc = pc0 + LENGTH (execute_plan cpl.cp_initial_fmp
+                                 (SOLabel bb.bb_label :: prefix_ops)) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
+End
+
+(* Label-map parameterization; the canonical definition above is retained. *)
+Definition body_inv_reloc_def:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 <=>
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
     o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cpl /\
     codegen_assembly rpolicy unit = SOME prog /\

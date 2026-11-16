@@ -27,6 +27,27 @@ Definition entry_frame_plan_def:
         entry with vs_inst_idx := k)
 End
 
+(* Label-map parameterization; the canonical definition above is retained. *)
+Definition entry_frame_plan_reloc_def:
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 <=>
+    generate_context_plan unit.cu_context = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+    (!l. FLOOKUP entry.vs_labels l =
+      OPTION_MAP n2w (FLOOKUP lo l)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cpl fn entry ast ra rest /\ mem0 = ast.as_memory /\
+    (fn_has_retpc fn ==> FLOOKUP (build_offset_to_pc prog) (w2n ra) = SOME pc_ret) /\
+    (?i r. i < LENGTH unit.cu_context.ctx_functions /\
+      EL i unit.cu_context.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+      MEM fn.fn_name (fcg_analyze unit.cu_context).fcg_reachable /\
+      asm_block_at prog ast.as_pc (execute_plan cpl.cp_initial_fmp r.sr_plan)) /\
+    (?k. k <= LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+      s = entry_bind_pairs
+        (entry_param_pairs entry (TAKE k (get_params (HD fn.fn_blocks).bb_instructions)))
+        entry with vs_inst_idx := k)
+End
+
 Theorem entry_frame_plan_start:
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\

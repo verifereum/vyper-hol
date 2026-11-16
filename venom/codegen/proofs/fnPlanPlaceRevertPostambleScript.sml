@@ -3,6 +3,19 @@ Ancestors
   codegen asmSem symbolResolve planExec stackPlanGen list
   asmToBytecodeProofs codegenEncodingWf words stackOpSim
 
+(* Code labels retain their offsets; data-header offsets may relocate. *)
+Definition code_labels_agree_def:
+  code_labels_agree prog lo <=>
+    !l. MEM (AsmLabel l) prog ==>
+      FLOOKUP lo l = FLOOKUP (SND (compute_label_offsets prog)) l
+End
+
+Theorem code_labels_agree_refl[simp]:
+  code_labels_agree prog (SND (compute_label_offsets prog))
+Proof
+  simp[code_labels_agree_def]
+QED
+
 Theorem distinct_symbols_no_later_write:
   !prog i lbl.
     ALL_DISTINCT (FLAT (MAP asm_defined_symbols prog)) /\

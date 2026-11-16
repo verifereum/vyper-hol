@@ -178,6 +178,78 @@ Inductive frame_stack_plan:
       (n2w ret_off) (saved ++ rest) cas.as_memory)
 End
 
+(* Suspended-frame plans need only the entry frame relation. *)
+Inductive frame_stack_plan_reloc:
+[~entry:]
+  (!lo rpolicy unit cpl prog vs0 es0 root others lbl.
+    unit.cu_context.ctx_functions = root :: others /\
+    fn_entry_label root = SOME lbl /\
+    fn_entry_state_rel cpl root
+      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+      (entry_asm_state vs0 es0) 0w [] ==>
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 [] root
+      (entry_asm_state vs0 es0) 0w [] (entry_asm_state vs0 es0).as_memory)
+[~call:]
+  (!lo rpolicy unit cpl prog vs0 es0 stk fn caller_entry
+    i r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+    bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+    rest_ops k ps pc0 vs ast ra pc_ret rest mem0
+    f inst nm arg_ops callee args cvs ops ps' rest'
+    iops prepared rops arranged ret_lbl ret_off call_post mid saved cas pc.
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 stk fn caller_entry
+      ra rest mem0 /\
+    body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
+      lo (build_offset_to_pc prog)
+      i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+      bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+      rest_ops k ps pc0 vs ast ra pc_ret rest mem0 /\
+    f.cf_fn = fn /\ f.cf_inst = inst /\ f.cf_state = vs /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+    lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+    eval_operands arg_ops vs = SOME args /\ setup_callee callee args vs = SOME cvs /\
+    (vs.vs_call_ctx, vs.vs_tx_ctx, vs.vs_block_ctx, vs.vs_code, vs.vs_prev_hashes) =
+      (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+       vs0.vs_code, vs0.vs_prev_hashes) /\
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\ rest_ops = ops ++ rest' /\
+    emit_input_plan INVOKE (compute_operands inst)
+      (live_vars_at liveness bb.bb_label (k + 1)) ps = (iops, prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops, arranged) /\
+    ops = iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ call_post /\
+    fn_frame_inv unit.cu_context cpl lo
+      fn ra rest mem0 arranged vs mid /\
+    plan_state_residual_wf_marked spill_base (compute_operands inst)
+      (LENGTH (compute_operands inst)) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+      compute_operands inst /\
+    mid.as_stack = REVERSE args ++ saved ++ rest /\
+    LENGTH args = LENGTH (compute_operands inst) /\
+    r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    asm_steps lo (build_offset_to_pc prog)
+      prog (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ast = AsmOK mid /\
+    asm_block_at prog mid.as_pc (execute_plan cpl.cp_initial_fmp
+      ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ call_post)) /\
+    asm_steps lo (build_offset_to_pc prog)
+      prog 3 mid = AsmOK cas /\
+    cas = mid with <| as_stack := n2w ret_off :: mid.as_stack; as_pc := pc |> /\
+    fn_entry_state_rel cpl callee cvs cas (n2w ret_off) (saved ++ rest) /\
+    FLOOKUP (build_offset_to_pc prog) (w2n ((n2w ret_off):bytes32)) =
+      SOME (ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3) ==>
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 (f::stk) callee cas
+      (n2w ret_off) (saved ++ rest) cas.as_memory)
+End
+
 Theorem frame_stack_plan_entry_fields:
   !rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
     frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 ==>

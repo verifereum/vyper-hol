@@ -19,6 +19,17 @@ Definition normal_frame_plan_def:
        entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0)
 End
 
+(* Label-map parameterization; the canonical definition above is retained. *)
+Definition normal_frame_plan_reloc_def:
+  normal_frame_plan_reloc lo rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast <=>
+  ?saved ra rest mem0.
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 stk fn saved ra rest mem0 /\
+    (active_frame_plan_reloc lo rpolicy unit cpl prog fn s ast ra rest mem0 \/
+     ?entry pc_ret.
+       entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0)
+End
+
 Theorem active_frame_local_step:
   active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 /\
   active_inst fn inst s /\ ~in_revert_forward fn s /\
