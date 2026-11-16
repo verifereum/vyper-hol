@@ -63,6 +63,8 @@ Proof
   `32 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
   drule_all (INST_TYPE [beta |-> ``:256``] abi_encode_alloc_origin_exact) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
+  qpat_x_assum `t.vs_allocas = (abi_builtin_allocate_state _ _ _).vs_allocas` kall_tac >>
+  qpat_x_assum `t.vs_alloca_next = (abi_builtin_allocate_state _ _ _).vs_alloca_next` kall_tac >>
   `t.vs_labels = s.vs_labels /\ t.vs_halted = s.vs_halted` by
     (qpat_assum `t with <|vs_vars := _; vs_allocas := _;
       vs_alloca_next := _; vs_inst_idx := _|> = s`
