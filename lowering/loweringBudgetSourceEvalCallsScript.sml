@@ -156,24 +156,66 @@ Resume source_no_create_error_call_cases[IntCall]:
       rpt (IF_CASES_TAC >> simp[]) >>
       rename1 `eval_stmts _ _ initial = (INR exc,body_st)` >>
       Cases_on `exc` >> simp[handle_function_def, return_def, raise_def] >>
-      rpt strip_tac >> gvs[] >> qexistsl [`initial`, `body_st`] >> simp[]) >>
+      Cases_on `tup1 /\ tup0 <> View /\ tup0 <> Pure` >>
+      simp[return_def, raise_def, bind_def] >> rpt strip_tac >> gvs[] >> qexistsl [`initial`, `body_st`] >> simp[]) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp([Once evaluate_def] @ case_ss)
+  simp([Once evaluate_def] @ case_ss) >>
+  Cases_on `LENGTH es < LENGTH tup2` >- simp[] >>
+  disj1_tac >> decide_tac
 QED
 Resume source_no_create_error_call_cases[ExtCall]:
-  FAIL_TAC "ExtCall"
+  rpt strip_tac >> pop_assum mp_tac >> gvs syn_ss >>
+  `EVERY (^exprs_pre cx) es` by gvs[exprs_pre_every] >>
+  `!n. EVERY (^exprs_pre cx) (TAKE n es) /\
+       EVERY (^exprs_pre cx) (DROP n es) /\
+       EVERY (^exprs_pre cx) (TAKE n (DROP 1 es))` by
+    metis_tac[EVERY_TAKE, EVERY_DROP] >>
+  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+  rpt strip_tac >> gvs[]
+  >- metis_tac[] >- metis_tac[] >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  qmatch_asmsub_abbrev_tac `eval_ext_call cx is_static' skip_check sig opts operands s` >>
+  PairCases_on `sig` >> Cases_on `operands` >- gvs[eval_ext_call_def, raise_def] >>
+  gvs([eval_ext_call_def, frame_call_value_def,
+       AllCaseEqs(), option_CASE_rator] @ case_ss) >>
+  gvs([eval_ext_call_effects_def, AllCaseEqs(),
+       option_CASE_rator, adopt_call_outcome_equation] @ case_ss) >>
+  imp_res_tac take_call_outcome_error >> gvs[] >>
+  gvs[vyperStateTheory.lift_sum_runtime_def,
+      vyperABITheory.evaluate_abi_decode_return_def,
+      vyperABITheory.evaluate_abi_decode_returndata_def,
+      vyperABITheory.decode_abi_value_def, AllCaseEqs(),
+      raise_def, return_def] >>
+  gvs[COND_RATOR, option_CASE_rator, sum_CASE_rator,
+      AllCaseEqs(), raise_def, return_def]
 QED
 Resume source_no_create_error_call_cases[RawCall]:
-  FAIL_TAC "RawCall"
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+  rpt strip_tac >> gvs([AllCaseEqs()] @ case_ss) >>
+  gvs([option_CASE_rator, AllCaseEqs()] @ case_ss) >>
+  gvs([eval_raw_call_def, frame_call_value_def, adopt_call_outcome_equation,
+       option_CASE_rator, AllCaseEqs()] @ case_ss) >>
+  imp_res_tac take_call_outcome_error >> gvs[]
 QED
 Resume source_no_create_error_call_cases[RawCalldata]:
-  FAIL_TAC "RawCalldata"
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+  rpt strip_tac >> gvs([AllCaseEqs(), option_CASE_rator] @ case_ss) >>
+  gvs([eval_raw_call_def, frame_call_value_def, adopt_call_outcome_equation,
+       option_CASE_rator, AllCaseEqs()] @ case_ss) >>
+  imp_res_tac take_call_outcome_error >> gvs[]
 QED
 Resume source_no_create_error_call_cases[RawLog]:
-  FAIL_TAC "RawLog"
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+  rpt strip_tac >> gvs([AllCaseEqs(), option_CASE_rator,
+      check_not_static_def] @ case_ss)
 QED
 Resume source_no_create_error_call_cases[RawRevert]:
-  FAIL_TAC "RawRevert"
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+  rpt strip_tac >> gvs([AllCaseEqs(), option_CASE_rator] @ case_ss)
 QED
 Finalise source_no_create_error_call_cases
