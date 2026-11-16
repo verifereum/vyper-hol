@@ -14,6 +14,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
   dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
+  dftSsaPreserve[qualified,ignore_grammar]
 
 Definition dft_blocks_gas_prefix_def:
   dft_blocks_gas_prefix <=>
@@ -6388,6 +6389,32 @@ Resume native_residual_schedule_packet[compose]:
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]
 QED
 Finalise native_residual_schedule_packet
+
+Theorem native_dft_strict_dom_transport:
+  fn' = dft_fn fn /\ dft_fn_rel fn fn' ==>
+  (strict_dom_vars_defined fn' x <=> strict_dom_vars_defined fn x)
+Proof
+  strip_tac >>
+  `fn' = fn with fn_blocks := fn'.fn_blocks` by
+    (gvs[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  qpat_x_assum `fn' = dft_fn fn` kall_tac >>
+  `wf_function fn /\ LIST_REL dftScheduleOrder$dft_block_rel fn.fn_blocks fn'.fn_blocks` by
+    gvs[dft_fn_rel_def] >>
+  `!d n. fn_dominates fn' d n <=> fn_dominates fn d n` by
+    metis_tac[dftSsaPreserveTheory.dft_block_rel_dominates] >>
+  simp[venomWfPropsTheory.strict_dom_vars_defined_def] >>
+  eq_tac >> rpt strip_tac
+  >- (drule_all dftSsaPreserveTheory.dft_blocks_member_left >> strip_tac >>
+      `ALL_DISTINCT (MAP (\i. i.inst_id) d_bb.bb_instructions)` by
+        metis_tac[dftCorrectnessTheory.bb_inst_ids_distinct] >>
+      drule_all dftSsaPreserveTheory.dft_block_rel_member >> strip_tac >>
+      metis_tac[dftSsaPreserveTheory.dft_block_rel_label,
+                dftStructuralTheory.flip_operands_inst_outputs]) >>
+  drule_all dftSsaPreserveTheory.dft_blocks_member_right >> strip_tac >>
+  drule_all dftSsaPreserveTheory.dft_block_rel_origin >> strip_tac >>
+  metis_tac[dftSsaPreserveTheory.dft_block_rel_label,
+            dftStructuralTheory.flip_operands_inst_outputs]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
