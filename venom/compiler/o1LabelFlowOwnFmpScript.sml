@@ -29,6 +29,9 @@ Theorem compose_fmp_own:
   (4 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)
 Proof
   rpt gen_tac >> simp[] >> strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fmpStepBridgeTheory.fmp_fn_pass_step_result >> strip_tac >>
+     drule_all fmp_lower_function_no_param >> simp[]) >>
   `o1_fn_shape observed.cu_context out.fpo_function /\
    o1_fn_row 4 out.fpo_function` by
     (mp_tac (Q.INST [`rpolicy` |-> `rp`] fmp_step_contract_at) >>
@@ -37,7 +40,7 @@ Proof
   `middle_code_end_lifetime out.fpo_function` by
     (irule (PURE_REWRITE_RULE [GSYM middle_code_end_lifetime_def]
       fmp_row_code_end_lifetime) >> metis_tac[]) >>
-  simp[] >> reverse conj_tac >- fs[o1_fn_row_def] >>
+  simp[] >>
   irule label_flow_own_ok_from_code_end_use >>
   reverse conj_tac >- (simp[] >> fs[o1_fn_shape_def]) >>
   simp[] >> rpt strip_tac >>

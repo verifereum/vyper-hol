@@ -31,8 +31,8 @@ Proof
     (fs[mem_inv_raw_reachable, raw_mem_ok_def] >> metis_tac[]) >>
   `alloca_inv p.rpe_before` by
     metis_tac[ld_frame_reachable_current_alloca_inv] >>
-  `occurrence_annotation_ok n p.rpe_owner U B HP H stk PG G p.rpe_before` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n p.rpe_owner U B HP H stk PG G p.rpe_before` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `FLOOKUP p.rpe_before.vs_allocas (SND p.rpe_dst) = SOME (p.rpe_db,p.rpe_size) /\
    FLOOKUP p.rpe_before.vs_allocas (SND p.rpe_src) = SOME (p.rpe_sb,p.rpe_size)` by
     (fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>

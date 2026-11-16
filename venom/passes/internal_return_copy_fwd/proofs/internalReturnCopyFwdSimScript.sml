@@ -323,7 +323,7 @@ QED
 (* A current allocation whose id is not hidden cannot overlap a hidden
    current allocation or any saved-frame allocation. *)
 Theorem ircf_dead_current_site_exclusion:
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   ALL_DISTINCT (a::MAP (\u. u.of_owner) U) /\
   FLOOKUP s.vs_allocas aid = SOME (b,z) /\ aid NOTIN ids /\
@@ -372,7 +372,7 @@ Theorem ircf_forward_source_bytes:
   rb+q < s.vs_alloca_next
 Proof
   strip_tac >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   `occurrence_natural_geometry lo a U B stk s` by
     metis_tac[occ_frame_reachable_geometry] >>
   `ALL_DISTINCT (a::MAP (\u. u.of_owner) U)` by
@@ -432,7 +432,7 @@ Proof
     simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
   `ircf_fwd_ok fn bb k d sr sz` by metis_tac[ircf_block_plan_fwd_ok] >>
   drule_all ircf_fwd_operand_sites >> strip_tac >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   `occurrence_natural_geometry lo a U B stk s` by
     metis_tac[occ_frame_reachable_geometry] >>
   `FLOOKUP B (a,dai.inst_id) = SOME (db,w2n sz) /\
@@ -505,7 +505,7 @@ Theorem ircf_forward_copy_transport:
 Proof
   strip_tac >> drule_all ircf_forward_copy_sites >> strip_tac >>
   `MEM fn C.ctx_functions` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   `{i | db <= i /\ i < db+w2n sz} SUBSET
     ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
@@ -544,7 +544,7 @@ Theorem ircf_forward_copy_step_sites:
 Proof
   strip_tac >> drule_all ircf_forward_copy_sites >> strip_tac >>
   `MEM fn C.ctx_functions` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
     simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
@@ -1083,8 +1083,8 @@ Proof
   `ircf_alias_frames C stk fn inst s G` by
     (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_projection >> strip_tac >>
      drule_all ircf_alias_frames_reachable >> simp[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `occurrence_natural_geometry lo a U B stk s` by
     metis_tac[occ_frame_reachable_geometry] >>
   qpat_x_assum `_ IN _ UNION _` (strip_assume_tac o REWRITE_RULE [IN_UNION])
@@ -1207,7 +1207,7 @@ Theorem ircf_cross_disciplined_base:
 Proof
   strip_tac >>
   `MEM fn C.ctx_functions` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `active_inst fn inst s` by
     (qpat_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      once_rewrite_tac[occ_frame_reachable_cases] >> metis_tac[]) >>
@@ -1272,7 +1272,7 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[occ_frame_reachable_projection] >>
   `MEM fn C.ctx_functions` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `MEM inst (fn_insts fn)` by
     (simp[venomInstTheory.fn_insts_def] >>
      metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
@@ -2427,7 +2427,7 @@ Theorem ircf_noninvoke_next:
         UNION ircf_gam_stk fn_meta rma C stk) s' t'
 Proof
   strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
   `ctx_inst_ids_distinct C /\ EVERY wf_function C.ctx_functions /\
    EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_function_def] >>
@@ -2750,7 +2750,7 @@ Proof
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM fn C.ctx_functions` by
     (drule frame_reachable_occurrence_lift >> strip_tac >>
-     drule occ_frame_reachable_annotation >> simp[]) >>
+     drule occ_frame_reachable_annotation_static >> simp[]) >>
   `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
     (fs[EVERY_MEM] >> metis_tac[ircf_transform_block_plan, ircf_tbb_def,
       venomExecPropsTheory.lookup_block_MEM]) >>
@@ -3217,7 +3217,7 @@ Theorem ircf_runner_noninvoke_nonok:
 Proof
   rpt strip_tac >>
   drule frame_reachable_occurrence_lift >> strip_tac >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
   `ctx_inst_ids_distinct C /\ EVERY wf_function C.ctx_functions /\
    EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_function_def] >>

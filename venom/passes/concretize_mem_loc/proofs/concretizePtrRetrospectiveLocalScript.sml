@@ -22,7 +22,6 @@ QED
 Theorem ptr_endpoint_local_interval_exclusion:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -46,7 +45,7 @@ Theorem ptr_endpoint_local_interval_exclusion:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions /\
   concretize_function_fuel_in_context (concretize_memloc_fuel fn)
     observed.cu_context reserved fn = SOME out.fpo_function /\
@@ -56,7 +55,7 @@ Theorem ptr_endpoint_local_interval_exclusion:
   (!c p size. MEM (c,p,size) (imported_mems_used observed.cu_context fn) ==>
     ~MEM c (MAP (\i. Allocation i.inst_id)
       (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) ==>
-  ?w. w + 1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
+  (?w. w + 1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
     (!j. w < j /\ j + 1 < LENGTH h ==> ~ptr_chrono_write C (b+k) (EL j h)) /\
     (!j bid sb pb start len delta footprint.
       w < j /\ j + 1 < LENGTH h /\
@@ -66,11 +65,14 @@ Theorem ptr_endpoint_local_interval_exclusion:
       MEM (Allocation bid) (find_base_allocas_opt bp (inst_write_op (EL j h).po_inst)) /\
       start = pb + delta /\ delta + len <= sb /\
       (!x. x IN footprint ==> start <= x /\ x < start + len) ==>
-      pa + k NOTIN footprint)
+      pa + k NOTIN footprint)) \/
+  dyn_floor C vs <= b + k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `dyn_floor C vs <= b + k` >- simp[] >> disj1_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  drule_all ptr_endpoint_protected_livesets >> strip_tac >>
+  drule_all ptr_endpoint_protected_livesets >>
+  qpat_assum `~(dyn_floor C vs <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   qpat_x_assum `fn = _` (assume_tac o SYM) >>
   qpat_x_assum `bp = _` (assume_tac o SYM) >>
   qexists `w` >> simp[] >> rpt strip_tac >>
@@ -112,7 +114,6 @@ QED
 Theorem ptr_endpoint_local_mstore_exclusion:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -136,7 +137,7 @@ Theorem ptr_endpoint_local_mstore_exclusion:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions /\
   concretize_function_fuel_in_context (concretize_memloc_fuel fn)
     observed.cu_context reserved fn = SOME out.fpo_function /\
@@ -146,7 +147,7 @@ Theorem ptr_endpoint_local_mstore_exclusion:
   (!c p size. MEM (c,p,size) (imported_mems_used observed.cu_context fn) ==>
     ~MEM c (MAP (\i. Allocation i.inst_id)
       (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) ==>
-  ?w. w + 1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
+  (?w. w + 1 < LENGTH h /\ ptr_chrono_write C (b+k) (EL w h) /\
     (!j. w < j /\ j + 1 < LENGTH h ==> ~ptr_chrono_write C (b+k) (EL j h)) /\
     (!j bid sb pb ti ts post ta tv y value delta.
       w < j /\ j + 1 < LENGTH h /\
@@ -157,10 +158,13 @@ Theorem ptr_endpoint_local_mstore_exclusion:
       ti.inst_opcode = MSTORE /\ ti.inst_operands = [ta;tv] /\
       eval_operand ta ts = SOME y /\ eval_operand tv ts = SOME value /\
       w2n y = pb + delta /\ delta + 32 <= sb ==>
-      pa + k NOTIN range_bytes (step_writes ti ts post))
+      pa + k NOTIN range_bytes (step_writes ti ts post))) \/
+  dyn_floor C vs <= b + k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_endpoint_local_interval_exclusion >> strip_tac >>
+  Cases_on `dyn_floor C vs <= b + k` >- simp[] >> disj1_tac >>
+  drule_all ptr_endpoint_local_interval_exclusion >>
+  qpat_assum `~(dyn_floor C vs <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   qpat_x_assum `fn = _` (assume_tac o SYM) >>
   qpat_x_assum `bp = _` (assume_tac o SYM) >>
   qexists `w` >> asm_rewrite_tac[] >> rpt gen_tac >>

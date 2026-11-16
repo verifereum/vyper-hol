@@ -10,11 +10,14 @@ Ancestors
   o1ContractMakeSsaReplay o1LabelFlowMiddleSsaAssembly unitShapeDefs
   o1LabelFlowSourcePreWalk
   venomFnScheduleRunnerProps o1LabelFlowStaticContracts
+  venomPassDispatcherProps concretizeStageShape
+  fmpStepBridge fmpStepContract o1ContractLowerDload lowerDloadDefs
 
 (* A named runner invariant avoids repeating the three phase boundaries in
    every contract. It adds no assumptions to the source or pass contracts. *)
 Definition label_flow_row_extra_def:
   label_flow_row_extra ctx k f <=>
+    fmp_sig_no_param f /\ (k <= 3 ==> no_raw_fmp_ops f) /\
     label_flow_ok (ctx with ctx_functions := [f]) /\
     (k <= 1 ==> !i. MEM i (fn_insts f) ==>
       ~MEM (Label "code_end") i.inst_operands) /\
@@ -28,30 +31,22 @@ Proof
   simp[label_flow_ok_def]
 QED
 
-Theorem rows_step_contract_enrich_invariant[local]:
-  rows_step_contract o1_fn_row k rp pass /\
-  (!observed s f out.
-    fn_pass_step rp pass observed s f out /\
-    o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-    EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
-    o1_fn_row k f /\ P k f ==> P (SUC k) out.fpo_function) ==>
-  rows_step_contract (\j f. o1_fn_row j f /\ P j f) k rp pass
-Proof
-  rewrite_tac[rows_step_contract_def] >> rpt strip_tac >>
-  `EVERY (\g. ?j. o1_fn_row j g) observed.cu_context.ctx_functions` by
-    (gvs[EVERY_MEM] >> metis_tac[]) >>
-  `EVERY fmp_sig_no_param observed.cu_context.ctx_functions` by
-    (fs[EVERY_MEM, o1_fn_row_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem compose_first_ssa[local]:
   fn_pass_step rp (CFP_Simple VP_MakeSSA) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
   o1_fn_row 0 f /\ label_flow_row_extra ctx 0 f ==>
   label_flow_row_extra ctx 1 out.fpo_function
 Proof
-  simp[label_flow_row_extra_def] >> strip_tac >>
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     fs[label_flow_row_extra_def, fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    (irule (Q.INST [`tag` |-> `VP_MakeSSA`, `rpolicy` |-> `rp`,
+                     `fn` |-> `f`, `unit` |-> `observed`, `s` |-> `s`]
+       execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops) >>
+     fs[label_flow_row_extra_def, fn_pass_step_def] >> metis_tac[]) >>
+  fs[label_flow_row_extra_def] >>
   `!i. MEM i (fn_insts f) ==> i.inst_opcode <> CODESIZE /\
     (i.inst_opcode = CODECOPY ==>
       ?dst sz. i.inst_operands = [dst; Label "runtime_begin"; sz])` by
@@ -65,7 +60,20 @@ Theorem compose_lower_dload[local]:
   label_flow_row_extra ctx 1 f ==>
   label_flow_row_extra ctx 2 out.fpo_function
 Proof
-  simp[label_flow_row_extra_def] >> strip_tac >>
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     fs[label_flow_row_extra_def, fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    (drule lower_dload_step_supply >> strip_tac >>
+     fs[label_flow_row_extra_def, no_raw_fmp_ops_def] >> rpt strip_tac >>
+     drule_all lower_dload_function_supply_member >> strip_tac >>
+     rename1 `lower_dload_inst_supply u oldi = (ys,v)` >>
+     Cases_on `oldi.inst_opcode = DLOAD` >>
+     Cases_on `oldi.inst_opcode = DLOADBYTES` >>
+     gvs[lower_dload_inst_supply_def, AllCaseEqs(), is_raw_fmp_opcode_def] >>
+     metis_tac[]) >>
+  fs[label_flow_row_extra_def] >>
   drule lower_dload_step_supply >> strip_tac >> conj_tac
   >- (irule lower_dload_function_label_flow_ok >> metis_tac[]) >>
   rewrite_tac[middle_code_end_lifetime_def] >> rpt strip_tac >>
@@ -77,7 +85,14 @@ Theorem compose_concretize[local]:
   label_flow_row_extra ctx 2 f ==>
   label_flow_row_extra ctx 3 out.fpo_function
 Proof
-  simp[label_flow_row_extra_def] >> strip_tac >>
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     fs[label_flow_row_extra_def, fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    (irule concretize_step_no_raw_fmp >>
+     fs[label_flow_row_extra_def] >> metis_tac[]) >>
+  fs[label_flow_row_extra_def] >>
   `execute_configured_fn_pass rp (CFP_Simple VP_ConcretizeMemLoc)
     observed s f = SOME out` by fs[fn_pass_step_def] >>
   gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
@@ -107,7 +122,12 @@ Theorem compose_fmp[local]:
   o1_fn_row 3 f /\ label_flow_row_extra ctx 3 f ==>
   label_flow_row_extra ctx 4 out.fpo_function
 Proof
-  simp[label_flow_row_extra_def] >> strip_tac >> conj_tac
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fmp_fn_pass_step_result >> strip_tac >>
+     drule fmp_lower_function_no_param >>
+     fs[label_flow_row_extra_def]) >>
+  fs[label_flow_row_extra_def] >> conj_tac
   >- metis_tac[fmp_row_label_flow_ok] >>
   irule (PURE_REWRITE_RULE [GSYM middle_code_end_lifetime_def]
     fmp_row_code_end_lifetime) >> metis_tac[]
@@ -119,7 +139,11 @@ Theorem compose_second_ssa[local]:
   o1_fn_row 4 f /\ label_flow_row_extra ctx 4 f ==>
   label_flow_row_extra ctx 5 out.fpo_function
 Proof
-  simp[label_flow_row_extra_def] >> strip_tac >>
+  strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     fs[label_flow_row_extra_def, fn_pass_tag_def] >> metis_tac[]) >>
+  fs[label_flow_row_extra_def] >>
   `MEM f observed.cu_context.ctx_functions` by
     metis_tac[fn_pass_step_def, lookup_unique_function_member] >>
   `wf_function f /\ fn_inst_wf f /\ make_ssa_input_ok f` by
@@ -141,6 +165,9 @@ Theorem compose_late[local]:
   label_flow_row_extra ctx (SUC k) out.fpo_function
 Proof
   strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     fs[label_flow_row_extra_def, fn_pass_tag_def] >> metis_tac[fn_pass_tag_def]) >>
   `label_flow_ok (observed.cu_context with ctx_functions := [f])` by
     metis_tac[label_flow_row_extra_def, label_flow_singleton_context] >>
   `label_flow_ok (observed.cu_context with ctx_functions := [out.fpo_function])` by
@@ -157,7 +184,11 @@ Proof
   mp_tac (Q.SPEC `rp` (GEN_ALL o1_fn_passes_steps)) >>
   disch_then (mp_tac o MATCH_MP o1_step_contracts_from_rows) >>
   rewrite_tac[o1_fn_passes_def, rows_step_contracts_from_def] >> strip_tac >>
-  rpt conj_tac >> irule rows_step_contract_enrich_invariant >> simp[]
+  rpt conj_tac >>
+  (match_mp_tac (Q.INST [`P` |-> `label_flow_row_extra ctx`]
+    rows_step_contract_enrich_invariant) >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- simp[label_flow_row_extra_def] >> simp[])
   >- metis_tac[compose_first_ssa]
   >- metis_tac[compose_lower_dload]
   >- metis_tac[compose_concretize]
@@ -176,6 +207,8 @@ Theorem o1_label_flow_walk:
   ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
   (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
   ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\
+  EVERY no_raw_fmp_ops u.cu_context.ctx_functions /\
+  EVERY fmp_sig_no_param u.cu_context.ctx_functions /\
   (!f i. MEM f u.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands /\ i.inst_opcode <> CODESIZE /\
     (i.inst_opcode = CODECOPY ==>
@@ -189,9 +222,9 @@ Proof
   disch_then (drule_at (Pat `run_named_fn_schedules _ _ _ _ _ _ = _`)) >>
   impl_tac
   >- (simp[label_flow_row_extra_def, EVERY_MEM] >> rpt strip_tac
-      >- fs[EVERY_MEM]
-      >- (irule (iffRL label_flow_ok_seed_free_function) >> metis_tac[])
-      >> metis_tac[]) >>
+      >~ [`label_flow_ok _`]
+      >- (irule (iffRL label_flow_ok_seed_free_function) >> metis_tac[]) >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
   disch_then (qx_choose_then `chains` strip_assume_tac) >>
   `!i. i < LENGTH chains ==>
     label_flow_ok (u.cu_context with ctx_functions :=

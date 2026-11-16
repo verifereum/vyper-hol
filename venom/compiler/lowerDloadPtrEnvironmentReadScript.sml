@@ -86,18 +86,18 @@ Theorem dload_boundary_core_environment_read:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
     t' = t with vs_vars := t'.vs_vars
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `dload_equal_environment s t` by metis_tac[dload_boundary_environment] >>
   `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
@@ -124,7 +124,7 @@ Proof
      un with t_var := set_var_taint un.t_var [out] {}` by
     (irule environment_read_ghost_updates >> simp[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     (s with <|vs_vars := (update_var out z s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
@@ -142,13 +142,13 @@ Theorem dload_boundary_core_environment_read_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)

@@ -39,7 +39,9 @@ Theorem ld_annotated_compare_cases:
   (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
   ptr_discipline lo ctx vs0 /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
-  MEM i.inst_opcode [EQ;LT;GT] /\ i.inst_operands = [a;b] ==>
+  MEM i.inst_opcode [EQ;LT;GT] /\ i.inst_operands = [a;b] /\
+  (!v owner bs sz. FLOOKUP AG v = SOME (owner,(bs,sz)) ==>
+    bs + sz <= dyn_floor ctx s) ==>
   op_taint tn a = {} /\ op_taint tn b = {} /\
   ((ld_op_prov AG a = NONE /\ ld_op_prov AG b = NONE) \/
    ?owner bs sz x y.
@@ -58,18 +60,15 @@ Proof
   `op_taint tn a = {} /\ op_taint tn b = {}` by metis_tac[MEM] >> simp[] >>
   Cases_on `ld_op_prov AG a = NONE /\ ld_op_prov AG b = NONE` >> simp[] >>
   `?u v. a = Var u /\ b = Var v /\ u IN fn_pv P fn /\ v IN fn_pv P fn` by
-    metis_tac[ld_annotated_compare_shape] >> gvs[] >>
-  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+    metis_tac[ld_annotated_compare_shape] >>
+  (* substitute without splitting the opcode MEM: shared_site must stay one goal *)
+  rpt BasicProvers.VAR_EQ_TAC >>
+  drule_all ld_annotated_access_ok >> strip_tac >>
   `?bs sz x y. FLOOKUP (ld_erase AG) u = SOME(bs,sz) /\
      FLOOKUP (ld_erase AG) v = SOME(bs,sz) /\ 0 < sz /\
      eval_operand (Var u) s = SOME x /\ eval_operand (Var v) s = SOME y /\
      bs <= w2n x /\ w2n x <= bs+sz /\
-     bs <= w2n y /\ w2n y <= bs+sz` by
-    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-     simp[access_ok_def] >> strip_tac >>
-     `u IN FDOM (ld_erase AG) \/ v IN FDOM (ld_erase AG)` by
-       (gvs[ld_op_prov_def, FLOOKUP_DEF, ld_erase_def, FDOM_o_f] >>
-        metis_tac[]) >> metis_tac[]) >>
+     bs <= w2n y /\ w2n y <= bs+sz` by suspend "shared_site" >>
   `?oa. FLOOKUP AG u = SOME (oa,(bs,sz))` by
     (fs[ld_erase_lookup, AllCaseEqs()] >> PairCases_on `z` >> gvs[]) >>
   `?ob. FLOOKUP AG v = SOME (ob,(bs,sz))` by
@@ -83,6 +82,59 @@ Proof
      simp[] >> decide_tac) >>
   simp[ld_op_prov_def] >> metis_tac[]
 QED
+
+(* A pointer with a selected site and a DALLOCA pointer never share a
+   frame provenance: the site lies below the floor, the region above it. *)
+Theorem ld_compare_shared_site[local]:
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  (!v owner bs sz. FLOOKUP AG v = SOME (owner,(bs,sz)) ==> bs + sz <= fl) /\
+  FLOOKUP G (u:string) = SOME (b,z) /\ FLOOKUP G v = SOME (b,z) /\ 0 < z /\
+  (FLOOKUP AG u <> NONE \/ FLOOKUP AG v <> NONE) ==>
+  FLOOKUP (ld_erase AG) u = SOME (b,z) /\ FLOOKUP (ld_erase AG) v = SOME (b,z)
+Proof
+  strip_tac >>
+  `!w ow bw zw. FLOOKUP AG w = SOME (ow,(bw,zw)) ==> FLOOKUP G w = SOME (bw,zw)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!v x. FLOOKUP (ld_erase AG) v = SOME x ==> _` irule >>
+     simp[ld_erase_lookup]) >>
+  `b + z <= fl` by
+    (`?w p. FLOOKUP AG w = SOME p /\ FLOOKUP G w = SOME (b,z)` by
+       (Cases_on `FLOOKUP AG u` >> Cases_on `FLOOKUP AG v` >> fs[] >> metis_tac[]) >>
+     PairCases_on `p` >> res_tac >> gvs[]) >>
+  `FLOOKUP AG u <> NONE /\ FLOOKUP AG v <> NONE` by
+    (rpt strip_tac >> res_tac >> decide_tac) >>
+  Cases_on `FLOOKUP AG u` >> Cases_on `FLOOKUP AG v` >> fs[] >>
+  rename1 `FLOOKUP AG u = SOME pu` >> rename1 `FLOOKUP AG v = SOME pv` >>
+  PairCases_on `pu` >> PairCases_on `pv` >> res_tac >> gvs[ld_erase_lookup]
+QED
+
+Resume ld_annotated_compare_cases[shared_site]:
+  (Q.SUBGOAL_THEN `FLOOKUP AG u <> NONE \/ FLOOKUP AG v <> NONE` assume_tac
+   >- (spose_not_then strip_assume_tac >> gvs[ld_op_prov_def]) >>
+   `!w ow bw zw. FLOOKUP AG w = SOME (ow,(bw,zw)) ==> FLOOKUP G w = SOME (bw,zw)` by
+     (rpt strip_tac >>
+      qpat_x_assum `!v x. FLOOKUP (ld_erase AG) v = SOME x ==> _` irule >>
+      simp[ld_erase_lookup]) >>
+   Q.SUBGOAL_THEN `u IN FDOM G \/ v IN FDOM G` assume_tac
+   >- (Cases_on `FLOOKUP AG u` >> Cases_on `FLOOKUP AG v` >> fs[] >>
+       rename1 `FLOOKUP AG _ = SOME p` >> PairCases_on `p` >> res_tac >>
+       fs[FLOOKUP_DEF]) >>
+   qpat_x_assum `access_ok _ _ _ _ _` mp_tac >> rewrite_tac[access_ok_def] >> strip_tac >>
+   qpat_x_assum `!u w. (_ \/ _ \/ _) /\ _ ==> _` (qspecl_then [`u`,`v`] mp_tac) >>
+   impl_tac >- (fs[MEM] >> metis_tac[]) >>
+   strip_tac >>
+   rename1 `FLOOKUP G u = SOME (bb,zz)` >>
+   rename1 `eval_operand (Var u) s = SOME xx` >>
+   rename1 `eval_operand (Var v) s = SOME yy` >>
+   mp_tac (Q.INST [`fl` |-> `dyn_floor ctx s`, `b` |-> `bb`, `z` |-> `zz`]
+     ld_compare_shared_site) >>
+   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+   qexistsl_tac [`bb`,`zz`,`xx`,`yy`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
+QED
+
+Finalise ld_annotated_compare_cases
 
 Theorem ld_annotated_compare_backward:
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
@@ -116,7 +168,19 @@ Proof
       eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
       bs <= w2n x /\ w2n x <= bs+sz /\
       bs <= w2n y /\ w2n y <= bs+sz)` by
-    (drule_all ld_annotated_compare_cases >> simp[])
+    (`s.vs_alloca_next <= dyn_floor CS s` by
+       (irule ld_annotated_frontier_floor >> metis_tac[]) >>
+     `!v owner bs sz. FLOOKUP AG v = SOME (owner,(bs,sz)) ==>
+        bs + sz <= dyn_floor CS s` by
+       (rpt strip_tac >>
+        `?bt. ld_site_entry E owner bs bt sz` by
+          (qpat_x_assum `!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)`
+             (qspec_then `v` mp_tac) >>
+           simp[ld_owned_selection_def] >> metis_tac[]) >>
+        `ld_live astk L AP AG (owner,(bs,sz))` by
+          (simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
+        `bs+sz <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+     drule_all ld_annotated_compare_cases >> simp[])
   >- (irule ld_owned_pure_scalar_backward >> simp[MEM] >>
       fs[MEM] >> metis_tac[]) >>
   `ld_owned_selection E (ld_op_prov AG a) (ld_op_prov BH a)` by
@@ -165,7 +229,7 @@ Theorem ld_compare_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
@@ -193,7 +257,7 @@ Theorem ld_compare_certificate_backward:
       owner IN live /\ other IN live /\ owner <> other /\
       ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
       (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     (!v. op_taint (step_taint i s s' tn) (Var v) SUBSET count 32) /\
@@ -249,7 +313,7 @@ Proof
   `t' with vs_vars := t.vs_vars = t` by simp[ld_update_var_restore] >>
   `ld_frame_embedding E L H s' t'` by metis_tac[ld_frame_embedding_vars_transport] >>
   `ld_alloc_account keys d A s' t'` by metis_tac[ld_alloc_account_vars_transport] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
     metis_tac[ld_byte_rel_vars_transport] >>
   `(step_taint i s s' tn).t_mem = tn.t_mem /\

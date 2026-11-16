@@ -13,8 +13,8 @@ Theorem dload_call_clean_slice:
   MEM (w2n x,w2n z) (source_memory_read_ranges i s) /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   taint_ok f tn i s /\ ~about_to_revert f i s /\
-  dload_live_layout lo sf tf fs /\ dload_memory_match lo fs tn un s t /\
-  dload_value_word fs {} (op_prov G a) q x y ==>
+  dload_live_layout lo sf tf fs /\ dload_memory_match fl lo fs tn un s t /\
+  dload_value_word fl fs {} (op_prov G a) q x y ==>
   TAKE (w2n z) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n z) 0w) =
   TAKE (w2n z) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n z) 0w)
 Proof
@@ -34,7 +34,8 @@ Proof
   Q.SUBGOAL_THEN
     `((w2n x = w2n y /\ w2n x + w2n z <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n))` assume_tac
+       w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+     (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256)))` assume_tac
   >- (drule_all dload_value_contained_region >> simp[]) >>
   `!k. k < w2n z ==> w2n x+k NOTIN tn.t_mem` by
     (fs[taint_ok_def] >> rpt strip_tac >>
@@ -95,7 +96,7 @@ Theorem dload_call_evaluated_inputs:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) (TL i.inst_operands) ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel C i t = OK t' ==>
   (!op. MEM op i.inst_operands ==> eval_operand op s <> NONE) /\
   (!op. MEM op (if i.inst_opcode = CALL then [addr;value;sz;rs]
@@ -103,7 +104,7 @@ Theorem dload_call_evaluated_inputs:
     eval_operand op s = eval_operand op t) /\
   (!op x y. MEM op [a;r] /\ eval_operand op s = SOME x /\
     eval_operand op t = SOME y ==>
-    dload_value_word fs {} (op_prov G op) (op_prov H op) x y) /\
+    dload_value_word fl fs {} (op_prov G op) (op_prov H op) x y) /\
   (!x y z. eval_operand a s = SOME x /\ eval_operand a t = SOME y /\
     eval_operand sz s = SOME z ==>
     MEM (w2n x,w2n z) (source_memory_read_ranges i s) /\
@@ -121,7 +122,7 @@ Proof
     (rpt strip_tac >> irule eval_operand_definedness >> metis_tac[]) >>
   `!op. MEM op i.inst_operands ==> eval_operand op s <> NONE` by
     metis_tac[] >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `!op. MEM op (if i.inst_opcode = CALL then [addr;value;sz;rs]
                  else [addr;sz;rs]) ==>
      op_prov G op = NONE /\
@@ -135,7 +136,7 @@ Proof
      disch_then irule >> gvs[] >> metis_tac[]) >>
   `!op x y. MEM op [a;r] /\ eval_operand op s = SOME x /\
      eval_operand op t = SOME y ==>
-     dload_value_word fs {} (op_prov G op) (op_prov H op) x y` by
+     dload_value_word fl fs {} (op_prov G op) (op_prov H op) x y` by
     (rpt strip_tac >>
      `op_taint tn op = {}` by (gvs[] >> metis_tac[]) >>
      `!v. op = Var v ==> v IN V` by (gvs[] >> metis_tac[]) >>
@@ -157,8 +158,8 @@ Resume dload_call_evaluated_inputs[call_read_inputs]:
       Cases_on `eval_operand rs t` >> gvs[] >>
       Cases_on `eval_operand value t` >> gvs[] >> metis_tac[])) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
-  `dload_value_word fs {} (op_prov G a) (op_prov H a) x y` by simp[] >>
+   dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+  `dload_value_word fl fs {} (op_prov G a) (op_prov H a) x y` by simp[] >>
   `?ops. mem_read_ops i = SOME ops /\ ops.iao_ofst = a` by
     (gvs[mem_read_ops_def] >> metis_tac[]) >>
   Q.SUBGOAL_THEN

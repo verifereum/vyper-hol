@@ -187,7 +187,7 @@ QED
 
 Theorem occurrence_geometry_next:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   lo <= s.vs_alloca_next /\ inst.inst_opcode <> INVOKE /\
   step_inst fuel C inst s = OK s' ==>
   occurrence_natural_geometry lo a U (occurrence_sites_step a B inst s') stk
@@ -212,7 +212,7 @@ QED
 
 Theorem occurrence_geometry_call:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   setup_callee callee args s = SOME cs /\ enters_block callee cs s1 ==>
   occurrence_natural_geometry lo n
     (<|of_owner := a; of_prov := H; of_params := HP |> :: U) B
@@ -230,7 +230,7 @@ QED
 
 Theorem occurrence_geometry_return:
   occurrence_natural_geometry lo a (u::U) B (f::stk) s /\
-  occurrence_annotation_ok n a (u::U) B HP H (f::stk) PG G s /\
+  occurrence_annotation_ok fl n a (u::U) B HP H (f::stk) PG G s /\
   bind_outputs f.cf_inst.inst_outputs ret.iret_values
     (adopt_return_fmp ret (merge_callee_state f.cf_state s_end)) = SOME s' ==>
   occurrence_natural_geometry lo u.of_owner U
@@ -261,8 +261,8 @@ QED
 
 Resume occ_frame_reachable_geometry[next]:
   rpt gen_tac >> strip_tac >> strip_tac >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `lo <= s.vs_alloca_next` by
     (drule occ_frame_reachable_projection >> strip_tac >>
      drule o1LowerDloadStackFrontierTheory.ld_frame_reachable_current_initial_frontier >>
@@ -277,14 +277,14 @@ QED
 
 Resume occ_frame_reachable_geometry[call]:
   rpt gen_tac >> strip_tac >> strip_tac >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   gvs[] >> drule_all occurrence_geometry_call >> simp[]
 QED
 
 Resume occ_frame_reachable_geometry[ret]:
   rpt gen_tac >> strip_tac >> strip_tac >>
-  `occurrence_annotation_ok n a (u::U) B HP H (f::stk) PG G s` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `occurrence_annotation_ok (dimword (:256)) n a (u::U) B HP H (f::stk) PG G s` by
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   gvs[] >> drule_all occurrence_geometry_return >> simp[]
 QED
 
@@ -295,10 +295,10 @@ Theorem frame_reachable_occurrence_geometry:
   ~ctx_has_dalloca C /\ frame_reachable vs C stk PG G tn fn inst s ==>
   ?n a U B HP H.
     occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
     occurrence_natural_geometry lo a U B stk s
 Proof
-  strip_tac >> drule_all frame_reachable_occurrence_annotation >> strip_tac >>
+  strip_tac >> drule_all frame_reachable_occurrence_annotation_static >> strip_tac >>
   drule occ_frame_reachable_geometry >> simp[] >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -339,22 +339,22 @@ QED
 
 Theorem occurrence_env_var_site_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\ FLOOKUP H v <> SOME id /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\ FLOOKUP H v <> SOME id /\
   FLOOKUP B id = SOME (b,z) /\ FLOOKUP G v = SOME (c,w) /\
   0 < z /\ 0 < w ==> b + z <= c \/ c + w <= b
 Proof
   strip_tac >>
   `v IN FDOM H` by
-    (fs[occurrence_env_ok_def] >> gvs[FLOOKUP_DEF]) >>
+    (fs[occurrence_env_ok_ceil] >> gvs[FLOOKUP_DEF]) >>
   `?jd. FLOOKUP H v = SOME jd` by metis_tac[FLOOKUP_DEF] >>
   `FLOOKUP B jd = SOME (c,w)` by
-    (fs[occurrence_env_ok_def] >> metis_tac[]) >>
+    (fs[occurrence_env_ok_ceil] >> metis_tac[]) >>
   irule occurrence_geometry_sites_disjoint >> metis_tac[]
 QED
 
 Theorem occurrence_env_site_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
   (!v. FLOOKUP H v <> SOME id) /\
   FLOOKUP B id = SOME (b,z) /\ FLOOKUP G v = SOME (c,w) /\
   0 < z /\ 0 < w ==> b + z <= c \/ c + w <= b
@@ -417,13 +417,13 @@ QED
    does not invert numeric provenance without an occurrence annotation. *)
 Theorem occurrence_geometry_op_positive_key:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
   FLOOKUP B id = SOME (b,z) /\ 0 < z /\
   op_prov G op = SOME (b,z) ==>
   op_prov H op = SOME id
 Proof
   strip_tac >> drule occurrence_op_erasure >>
   disch_then (qspec_then `op` mp_tac) >>
-  simp[occurrence_param_ok_def] >> strip_tac >>
+  simp[occurrence_param_ok_ceil] >> strip_tac >>
   metis_tac[occurrence_geometry_positive_site_unique]
 QED

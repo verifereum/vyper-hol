@@ -47,6 +47,7 @@ Proof
   qpat_x_assum `so = _` SUBST_ALL_TAC >>
   gvs[initial_venom_state_rel_def, venom_env_rel_def]
 QED
+val _ = Parse.hide "tops";
 
 (* The program reads its own code: self.code occurs in a function body or a
    default argument (the only places code is generated from), as

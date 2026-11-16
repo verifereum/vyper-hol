@@ -152,7 +152,7 @@ Theorem ld_affine_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
@@ -180,7 +180,7 @@ Theorem ld_affine_certificate_backward:
       owner IN live /\ other IN live /\ owner <> other /\
       ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
       (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     (!v. op_taint (step_taint i s s' tn) (Var v) SUBSET count 32) /\
@@ -221,7 +221,7 @@ Proof
   `t' with vs_vars := t.vs_vars = t` by metis_tac[ld_affine_restore] >>
   `ld_frame_embedding E L H s' t'` by metis_tac[ld_frame_embedding_vars_transport] >>
   `ld_alloc_account keys d A s' t'` by metis_tac[ld_alloc_account_vars_transport] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
     metis_tac[ld_byte_rel_vars_transport] >>
   `(step_taint i s s' tn).t_mem = tn.t_mem /\

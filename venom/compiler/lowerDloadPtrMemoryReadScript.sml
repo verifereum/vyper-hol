@@ -7,26 +7,28 @@ Ancestors
   contextCodegenRel memLocDefs list rich_list pred_set arithmetic words finite_map
 
 Theorem dload_memory_read_bytes:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   ((a = z /\ a + len <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-      a = b+d /\ z = c+d /\ d+len <= n)) ==>
+      a = b+d /\ z = c+d /\ d+len <= n) \/
+   (a = z /\ fl <= a /\ a + len < dimword (:256))) ==>
   !k. k < len ==>
     (a+k IN tn.t_mem <=> z+k IN un.t_mem) /\
     (a+k NOTIN tn.t_mem ==>
       read_byte (a+k) s.vs_memory = read_byte (z+k) t.vs_memory)
 Proof
-  simp[dload_memory_match_def] >> strip_tac >> rpt strip_tac
+  simp[dload_memory_match_def, ld_dyn_agree_def] >> strip_tac >>
+  gen_tac >> disch_tac
   >- (`a+k < lo` by decide_tac >>
       qpat_x_assum `!i. i < lo ==> _` (qspec_then `a+k` mp_tac) >>
       gvs[ADD_COMM])
-  >- (`a+k < lo` by decide_tac >>
-      qpat_x_assum `!i. i < lo ==> _` (qspec_then `a+k` mp_tac) >>
-      gvs[ADD_COMM]) >>
-  `d+k < n` by decide_tac >>
-  first_x_assum (qspecl_then [`owner`,`id`,`b`,`c`,`n`,`d+k`] mp_tac) >>
-  `b+(d+k) = a+k /\ c+(d+k) = k+z` by decide_tac >>
-  asm_rewrite_tac[] >> strip_tac >> gvs[]
+  >- (`d+k < n` by decide_tac >>
+      qpat_x_assum `!owner id b c n k. _`
+        (qspecl_then [`owner`,`id`,`b`,`c`,`n`,`d+k`] mp_tac) >>
+      `b+(d+k) = a+k /\ c+(d+k) = k+z` by decide_tac >>
+      asm_rewrite_tac[] >> strip_tac >> gvs[]) >>
+  `fl <= a+k /\ a+k < dimword (:256)` by decide_tac >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem dload_mload_byte:
@@ -45,10 +47,11 @@ Proof
 QED
 
 Theorem dload_memory_read_word:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   ((a = z /\ a + 32 <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-      a = b+d /\ z = c+d /\ d+32 <= n)) ==>
+      a = b+d /\ z = c+d /\ d+32 <= n) \/
+   (a = z /\ fl <= a /\ a + 32 < dimword (:256))) ==>
   mem_word_taint tn.t_mem a = mem_word_taint un.t_mem z /\
   word_agree_except (mem_word_taint tn.t_mem a) (mload a s) (mload z t)
 Proof
@@ -78,10 +81,11 @@ Theorem dload_mload_region[local]:
   eval_operand a s = SOME x /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G a) q x y ==>
+  dload_value_word fl fs {} (op_prov G a) q x y ==>
   (w2n x = w2n y /\ w2n x + 32 <= lo) \/
   (?owner id b c n d. dload_live_site fs owner id b c n /\
-    w2n x = b+d /\ w2n y = c+d /\ d+32 <= n)
+    w2n x = b+d /\ w2n y = c+d /\ d+32 <= n) \/
+  (w2n x = w2n y /\ fl <= w2n x /\ w2n x + 32 < dimword (:256))
 Proof
   simp_tac pure_ss [MEM] >> strip_tac >> (
   gvs[access_ok_def, source_memory_read_ranges_def,
@@ -100,15 +104,19 @@ Proof
   qpat_x_assum `(_ ==> _) ==> _` mp_tac >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[op_prov_def] >>
-  Cases_on `q` >> gvs[dload_value_word_def] >>
-  PairCases_on `x'` >> gvs[dload_pointer_word_def] >>
-  `dload_pointer_word fs (b,sz) (x'0,sz) x
-     (x - n2w b + n2w x'0)` by
-    (simp[dload_pointer_word_def] >> metis_tac[]) >>
-  `w2n x <= b+sz` by decide_tac >>
-  drule_all dload_pointer_word_interval >> strip_tac >>
-  disj2_tac >> qexistsl [`owner`,`id`,`b`,`x'0`,`sz`,`w2n x-b`] >>
-  simp[] >> decide_tac)
+  Cases_on `q` >- gvs[dload_value_word_def] >>
+  PairCases_on `x'` >> gvs[dload_value_word_def]
+  >- (gvs[dload_pointer_word_def] >>
+      `dload_pointer_word fs (b,sz) (x'0,sz) x
+         (x - n2w b + n2w x'0)` by
+        (simp[dload_pointer_word_def] >> metis_tac[]) >>
+      `w2n x <= b+sz` by decide_tac >>
+      drule_all dload_pointer_word_interval >> strip_tac >>
+      disj2_tac >> disj1_tac >>
+      qexistsl [`owner`,`id`,`b`,`x'0`,`sz`,`w2n x-b`] >>
+      simp[] >> decide_tac) >>
+  `x = y` by gvs[word_agree_except_bits, fcpTheory.CART_EQ] >>
+  ntac 2 disj2_tac >> simp[] >> decide_tac)
 QED
 
 Theorem dload_boundary_core_mload:
@@ -118,11 +126,11 @@ Theorem dload_boundary_core_mload:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
@@ -138,16 +146,16 @@ Proof
      (impl_tac >- metis_tac[MEM]) >> simp[]) >>
   Cases_on `eval_operand a s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `op_taint tn a = {}` by (gvs[taint_ok_def] >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by
+   dload_memory_match fl lo fs tn un s t` by
     metis_tac[dload_boundary_core_def] >>
-  qpat_x_assum `dload_value_word _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_value_word _ _ _ _ _ _ _` mp_tac >>
   simp[] >> disch_then assume_tac >>
   drule_all (SRULE [MEM] dload_mload_region) >> disch_then assume_tac >>
   `mem_word_taint tn.t_mem (w2n xs) = mem_word_taint un.t_mem (w2n x) /\
@@ -161,7 +169,7 @@ Proof
   `out_taint tn i s = mem_word_taint tn.t_mem (w2n xs) /\
    out_taint un i t = mem_word_taint un.t_mem (w2n x)` by
     simp[out_taint_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] (out_taint tn i s))
     (un with t_var := set_var_taint un.t_var [out] (out_taint un i t))
     (s with <|vs_vars := (update_var out (mload (w2n xs) s) s).vs_vars;
@@ -184,7 +192,7 @@ Theorem dload_actual_mload_next:
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -197,7 +205,7 @@ Theorem dload_actual_mload_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

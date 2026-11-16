@@ -1260,7 +1260,7 @@ Proof
     (drule ircf_saved_forward_suffix_absent >> simp[] >>
      disch_then irule >> metis_tac[]) >>
   drule occurrence_suffix_absent_current >> strip_tac >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   drule occ_frame_reachable_geometry >> simp[] >>
   disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
   `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
@@ -1293,7 +1293,7 @@ Theorem ircf_saved_forward_write_disjoint:
 Proof
   strip_tac >> strip_tac >>
   `0 < z /\ len <> 0` by decide_tac >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
@@ -1369,13 +1369,13 @@ Proof
      metis_tac[occurrence_origin_certificate_current]) >>
   `FLOOKUP H v <> SOME (a,ai.inst_id)` by
     (irule ircf_fwd_later_writer_occurrence_exclusion >> metis_tac[]) >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
     fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
   `?jd. FLOOKUP H v = SOME jd /\ FLOOKUP B jd = SOME (c,w)` by
-    (fs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
+    (fs[occurrence_annotation_ok_def, occurrence_env_ok_ceil] >>
      metis_tac[FLOOKUP_DEF]) >>
   metis_tac[occurrence_geometry_sites_disjoint]
 QED
@@ -1398,7 +1398,7 @@ Theorem ircf_current_forward_write_disjoint:
 Proof
   strip_tac >> strip_tac >>
   `0 < z /\ len <> 0` by decide_tac >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
@@ -1511,7 +1511,7 @@ Proof
     (drule ircf_saved_destination_suffix_absent >> simp[] >>
      disch_then irule >> metis_tac[]) >>
   drule occurrence_suffix_absent_current >> strip_tac >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   drule occ_frame_reachable_geometry >> simp[] >>
   disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
   `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
@@ -1540,7 +1540,7 @@ Theorem ircf_saved_destination_read_disjoint:
 Proof
   strip_tac >> strip_tac >>
   `0 < z /\ len <> 0` by decide_tac >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
@@ -1636,7 +1636,7 @@ Proof
      metis_tac[occurrence_origin_certificate_current]) >>
   `FLOOKUP H v <> SOME (a,ai.inst_id)` by
     (irule ircf_unchanged_reader_occurrence_exclusion >> metis_tac[]) >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
@@ -1665,7 +1665,7 @@ Theorem ircf_planned_destination_read_disjoint:
 Proof
   strip_tac >> strip_tac >>
   `0 < z /\ len <> 0` by decide_tac >>
-  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation_static >> fs[] >>
   drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
   qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
   `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
@@ -1688,7 +1688,7 @@ Proof
      metis_tac[occurrence_origin_certificate_current]) >>
   `FLOOKUP H v <> SOME (a,ai.inst_id)` by
     (irule ircf_planned_destination_reader_occurrence_exclusion >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[occurrence_annotation_ok_def] >>
   `occurrence_natural_geometry lo a U B stk s` by fs[] >>
   `0 < z` by decide_tac >>

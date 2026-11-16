@@ -31,6 +31,14 @@ Theorem compose_first_ssa_own:
   (1 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)
 Proof
   simp[] >> rpt gen_tac >> strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     simp[venomPassScheduleTheory.fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    (irule (Q.INST [`tag` |-> `VP_MakeSSA`, `rpolicy` |-> `rp`,
+                     `fn` |-> `f`, `unit` |-> `observed`, `s` |-> `s`]
+       venomPassDispatcherPropsTheory.execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops) >>
+     fs[fn_pass_step_def] >> metis_tac[]) >>
   `o1_step_contract_at 0 rp (CFP_Simple VP_MakeSSA)` by
     simp[make_ssa_step_contract_at] >>
   `o1_fn_shape observed.cu_context out.fpo_function /\

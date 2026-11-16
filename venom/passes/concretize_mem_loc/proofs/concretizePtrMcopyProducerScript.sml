@@ -13,20 +13,20 @@ Ancestors concretizePtrMcopyContent concretizePtrMcopyEndpoint concretizePtrOrdi
   venomExecSemantics venomExecProofs venomState venomInst passSimulationDefs
   finite_map words list arithmetic
 
-Theorem ptr_mcopy_transcript_successor:
+Theorem ptr_mcopy_transcript_successor_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
   ?z. ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
       (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
@@ -34,7 +34,7 @@ Theorem ptr_mcopy_transcript_successor:
     ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
     z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack
 Proof
-  strip_tac >> drule_all ptr_paired_mcopy_postwrite_bytes >> strip_tac >>
+  strip_tac >> drule_all ptr_paired_mcopy_postwrite_bytes_static >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -43,7 +43,7 @@ Proof
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -90,7 +90,7 @@ Proof
   simp[ptr_activation_tokens_def, ptr_activation_registry_def]
 QED
 
-Theorem ptr_mcopy_write_producer:
+Theorem ptr_mcopy_transcript_successor:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -99,11 +99,37 @@ Theorem ptr_mcopy_write_producer:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
+  ?z. ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
+    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
+    z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mcopy_transcript_successor_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_mcopy_write_producer_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
   ?z dop sop nop d r dt rt n.
     a.po_inst.inst_operands = [dop;sop;nop] /\ at.po_inst = a.po_inst /\
@@ -126,8 +152,8 @@ Theorem ptr_mcopy_write_producer:
         (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
         (LENGTH h - 1,LENGTH ht - 1,rho))
 Proof
-  strip_tac >> drule_all ptr_mcopy_transcript_successor >> strip_tac >>
-  drule_all ptr_paired_mcopy_postwrite_bytes >> strip_tac >>
+  strip_tac >> drule_all ptr_mcopy_transcript_successor_static >> strip_tac >>
+  drule_all ptr_paired_mcopy_postwrite_bytes_static >> strip_tac >>
   qexistsl_tac [`z`,`dop`,`sop`,`nop`,`d`,`r`,`dt`,`rt`,`n`] >> simp[] >>
   conj_tac
   >- (simp[step_writes_def, source_memory_write_ranges_def,
@@ -136,7 +162,7 @@ Proof
   strip_tac >> suspend "certificate"
 QED
 
-Resume ptr_mcopy_write_producer[certificate]:
+Resume ptr_mcopy_write_producer_static[certificate]:
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -145,7 +171,7 @@ Resume ptr_mcopy_write_producer[certificate]:
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -190,7 +216,7 @@ Resume ptr_mcopy_write_producer[certificate]:
   suspend "classify"
 QED
 
-Resume ptr_mcopy_write_producer[classify]:
+Resume ptr_mcopy_write_producer_static[classify]:
   `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
    taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
@@ -200,8 +226,9 @@ Resume ptr_mcopy_write_producer[classify]:
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>
      `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
@@ -247,22 +274,27 @@ Resume ptr_mcopy_write_producer[classify]:
        range_bytes_def, pred_setTheory.EXTENSION] >> metis_tac[]) >>
   `n <> 0w` by (strip_tac >> gvs[]) >>
   qabbrev_tac `ops = <|iao_ofst := dop; iao_size := SOME nop; iao_max_size := SOME nop|>` >>
-  `(op_prov TG ops.iao_ofst = NONE /\
-    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\ w2n d + w2n n <= lo) \/
+  Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\
+    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
+    (w2n d + w2n n <= lo \/ dyn_floor C vs <= w2n d)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n d /\
-    w2n d + w2n n <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+    w2n d + w2n n <= db+sb /\ pb+sb < dimword(:256))`
+    (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
+  >- (irule ptr_historical_write_classification_static >>
      simp[Abbr `ops`, mem_write_ops_def, source_memory_write_ranges_def,
        sized_source_write_range_def] >>
+     conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
+     conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[])
-  >- suspend "fixed" >>
+  >- (qpat_x_assum `w2n d + w2n n <= lo \/ _` (assume_tac o REWRITE_RULE [DISJ_EQ_IMP]) >>
+      suspend "fixed") >>
   suspend "owned"
 QED
 
-Resume ptr_mcopy_write_producer[fixed]:
+Resume ptr_mcopy_write_producer_static[fixed]:
   fs[Abbr `ops`] >>
   `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
   `dt = d` by
@@ -273,7 +305,7 @@ Resume ptr_mcopy_write_producer[fixed]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def, source_memory_write_ranges_def,
         sized_source_write_range_def, range_bytes_def] >> rpt strip_tac >>
-      disj1_tac >> decide_tac) >>
+      `x < lo \/ dyn_floor C vs <= x` by (fs[] >> decide_tac) >> fs[]) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def, ptr_bytes_agree_def,
        step_writes_def, source_memory_write_ranges_def, sized_source_write_range_def,
        range_bytes_def] >>
@@ -283,15 +315,15 @@ Resume ptr_mcopy_write_producer[fixed]:
   simp[ADD_COMM]
 QED
 
-Resume ptr_mcopy_write_producer[owned]:
+Resume ptr_mcopy_write_producer_static[owned]:
   fs[Abbr `ops`] >>
   `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
     (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
-     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+     simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> gvs[]) >>
   `dt = d - n2w db + n2w pb` by
     gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
   `w2n dt = pb + (w2n d - db)` by
@@ -302,7 +334,7 @@ Resume ptr_mcopy_write_producer[owned]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def, source_memory_write_ranges_def,
         sized_source_write_range_def, range_bytes_def] >> rpt strip_tac >>
-      disj2_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def] >>
   conj_tac
   >- (simp[step_writes_def, source_memory_write_ranges_def, sized_source_write_range_def,
@@ -316,9 +348,9 @@ Resume ptr_mcopy_write_producer[owned]:
   simp[ADD_COMM]
 QED
 
-Finalise ptr_mcopy_write_producer
+Finalise ptr_mcopy_write_producer_static
 
-Theorem ptr_paired_prefix_mcopy:
+Theorem ptr_mcopy_write_producer:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -327,11 +359,52 @@ Theorem ptr_paired_prefix_mcopy:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
+  ?z dop sop nop d r dt rt n.
+    a.po_inst.inst_operands = [dop;sop;nop] /\ at.po_inst = a.po_inst /\
+    eval_operand dop a.po_state = SOME d /\
+    eval_operand sop a.po_state = SOME r /\
+    eval_operand nop a.po_state = SOME n /\
+    eval_operand dop at.po_state = SOME dt /\
+    eval_operand sop at.po_state = SOME rt /\
+    eval_operand nop at.po_state = SOME n /\
+    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
+    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
+    (w2n n = 0 ==>
+      range_bytes (step_writes a.po_inst a.po_state z.po_state) = {} /\
+      range_bytes (step_writes at.po_inst at.po_state zt.po_state) = {}) /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
+      ?rho. ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+        (done ++ [LENGTH h - 1])
+        (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
+        (LENGTH h - 1,LENGTH ht - 1,rho))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mcopy_write_producer_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_prefix_mcopy_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
   ?z extra. ptr_paired_prefix R lp positions lo vs C C'
     (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
@@ -341,7 +414,7 @@ Theorem ptr_paired_prefix_mcopy:
     (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
       ?rho. extra = [(LENGTH h - 1,LENGTH done,rho)])
 Proof
-  strip_tac >> drule_all ptr_mcopy_write_producer >> strip_tac >>
+  strip_tac >> drule_all ptr_mcopy_write_producer_static >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `ptr_chrono_step C a z` by
     (drule ptr_tagged_chrono_step_projection >> simp[]) >>
@@ -384,14 +457,14 @@ Proof
   suspend "retention"
 QED
 
-Resume ptr_paired_prefix_mcopy[sample]:
+Resume ptr_paired_prefix_mcopy_static[sample]:
   `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_paired_prefix_transcript >> strip_tac >>
      drule ptr_structural_transcript_erasure >> strip_tac >>
      drule ptr_structural_trace_source >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `MEM a.po_inst (fn_insts a.po_fn)` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> rpt strip_tac >>
@@ -411,14 +484,14 @@ Resume ptr_paired_prefix_mcopy[sample]:
       lookup_var_def, op_taint_def, DRESTRICT_UNIV] >> metis_tac[]
 QED
 
-Resume ptr_paired_prefix_mcopy[cursor]:
+Resume ptr_paired_prefix_mcopy_static[cursor]:
   `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_paired_prefix_transcript >> strip_tac >>
      drule ptr_structural_transcript_erasure >> strip_tac >>
      drule ptr_structural_trace_source >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `ALL_DISTINCT (fn_labels a.po_fn)` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
   `ALL_DISTINCT (fn_labels at.po_fn)` by
@@ -433,7 +506,7 @@ Resume ptr_paired_prefix_mcopy[cursor]:
   simp[mcopy_def, write_memory_with_expansion_def]
 QED
 
-Resume ptr_paired_prefix_mcopy[retention]:
+Resume ptr_paired_prefix_mcopy_static[retention]:
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
@@ -457,4 +530,32 @@ Resume ptr_paired_prefix_mcopy[retention]:
   irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
 
-Finalise ptr_paired_prefix_mcopy
+Finalise ptr_paired_prefix_mcopy_static
+
+Theorem ptr_paired_prefix_mcopy:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
+  ?z extra. ptr_paired_prefix R lp positions lo vs C C'
+    (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+    tokens registry births PT TG saved entries
+    (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls (ws ++ extra) /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) = {} ==> extra = []) /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
+      ?rho. extra = [(LENGTH h - 1,LENGTH done,rho)])
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_mcopy_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

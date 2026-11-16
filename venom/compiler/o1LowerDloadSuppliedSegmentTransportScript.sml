@@ -18,7 +18,8 @@ Theorem ld_joint_dloadbytes_destination:
   eval_operand dst s = SOME p /\ eval_operand src s = SOME x /\
   eval_operand sz s = SOME z ==>
   ?q. eval_operand dst t = SOME q /\
-    (w2n z = 0 \/ (w2n p = w2n q /\ w2n p + w2n z <= lo) \/
+    (w2n z = 0 \/ (w2n p=w2n q /\ (w2n p+w2n z<=lo \/
+       dyn_floor C vs<=w2n p /\ w2n p+w2n z<=dimword (:256))) \/
      (?id b c k j. FLOOKUP sites id = SOME (b,c,k) /\
        j + w2n z <= k /\ w2n p = b+j /\ w2n q = c+j))
 Proof
@@ -62,6 +63,12 @@ Theorem ld_joint_supply_dloadbytes_transport:
          s1.vs_memory (write_memory_with_expansion (w2n q)
           (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv
             (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)).vs_memory
+ /\
+
+       ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+         s1.vs_memory (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv
+            (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)).vs_memory
 Proof
   strip_tac >>
   drule_all ld_joint_dloadbytes_destination >>
@@ -100,12 +107,42 @@ Proof
           write_memory_with_expansion_def, FLOOKUP_DEF] >>
      simp[EXTENSION] >> metis_tac[]) >>
   asm_rewrite_tac[] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory tmp.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
+    (fs[ld_joint_boundary_def] >> metis_tac[]) >>
   Cases_on `w2n z = 0`
   >- (`bs = []` by metis_tac[LENGTH_NIL] >>
-      simp[] >> irule ld_memory_agree_empty_write >> simp[]) >>
+      simp[] >> conj_tac
+      >- (irule ld_memory_agree_empty_write >> simp[]) >>
+      qpat_x_assum `ld_dyn_agree _ _ _ tmp.vs_memory` mp_tac >>
+      simp[ptrDisciplineTheory.ld_dyn_agree_def,
+           regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+      rpt strip_tac >> first_x_assum irule >> fs[]) >>
   qpat_assum `LENGTH bs = _` (fn th => rewrite_tac[GSYM th]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-  disch_then irule >> simp[] >> metis_tac[w2n_11]
+  `(w2n p = w2n q /\ w2n p + LENGTH bs <= lo) \/
+   (w2n p = w2n q /\ dyn_floor C vs <= w2n p) \/
+   (?id b c k j. FLOOKUP sites id = SOME (b,c,k) /\ j + LENGTH bs <= k /\
+     w2n p = b+j /\ w2n q = c+j)` by metis_tac[]
+  >- (qpat_x_assum `w2n p = w2n q` (fn th => rewrite_tac[GSYM th]) >>
+      conj_tac
+      >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+          disch_then irule >> metis_tac[]) >>
+      irule ld_dyn_agree_clean_write_same >> metis_tac[])
+  >- (qpat_x_assum `w2n p = w2n q` (fn th => rewrite_tac[GSYM th]) >>
+      conj_tac
+      >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) o1LowerDloadRangeTransportTheory.ld_memory_agree_clean_write_dyn >>
+          disch_then irule >> rpt conj_tac >>
+          FIRST [first_assum ACCEPT_TAC,
+                 qpat_x_assum `tmp.vs_memory = _` (fn th => rewrite_tac[th]) >>
+                 first_assum ACCEPT_TAC]) >>
+      irule ld_dyn_agree_clean_write_same >> metis_tac[]) >>
+  `w2n p + LENGTH bs <= dyn_floor C vs /\ w2n q + LENGTH bs <= dyn_floor C vs` by
+    (qpat_x_assum `ld_dyn_floor_ok _ _ _ _` mp_tac >>
+     simp[ld_dyn_floor_ok_def] >> strip_tac >> res_tac >> decide_tac) >>
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+      disch_then irule >> metis_tac[]) >>
+  irule ld_dyn_agree_clean_write_below >> metis_tac[]
 QED
 
 Theorem ld_joint_supply_dload_transport:
@@ -122,7 +159,7 @@ Theorem ld_joint_supply_dload_transport:
   w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256) /\
   ((FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE /\ b = t.vs_alloca_next) \/
    FLOOKUP t.vs_allocas (EL 0 es).inst_id = SOME (b,32)) /\
-  b+32 < dimword(:256) /\
+  b+32 < dimword(:256) /\ b+32 <= dyn_floor C vs /\
   ld_joint_geometry sites X1 lo owners /\
   FLOOKUP X1 key = SOME ((EL 0 es).inst_id,b) ==>
   LENGTH es = 4 /\
@@ -185,6 +222,17 @@ Theorem ld_joint_supply_dload_transport:
            t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
                     vs_alloca_next := t.vs_alloca_next+32|>
          else t))))).vs_memory
+ /\
+
+     ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+       s1.vs_memory (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x)
+         t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP
+         (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH
+         t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))).vs_memory
 Proof
   strip_tac >> (
   `eval_operand off t = SOME x` by
@@ -222,7 +270,20 @@ Proof
   asm_rewrite_tac[] >>
   `ld_memory_agree sites lo tn.t_mem s.vs_memory tmp.vs_memory` by
     (simp[Abbr `tmp`, update_var_def] >> fs[ld_joint_boundary_def]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_scratch_write >>
-  disch_then irule >> simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
-  metis_tac[])
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_scratch_write >>
+      disch_then irule >> simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
+      metis_tac[]) >>
+  (* the scratch slot lies below the dynamic floor *)
+  `LENGTH bs = 32` by simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory tmp.vs_memory` by
+    (simp[Abbr `tmp`, update_var_def] >> fs[ld_joint_boundary_def]) >>
+  `addr + 32 <= dyn_floor C vs` by fs[markerTheory.Abbrev_def] >>
+  qpat_x_assum `ld_dyn_agree _ _ _ tmp.vs_memory` mp_tac >>
+  simp[ptrDisciplineTheory.ld_dyn_agree_def,
+       regularCallEmitSimTheory.read_byte_write_memory_with_expansion, update_var_def] >>
+  rpt strip_tac >>
+  `~(addr <= i /\ i < addr + LENGTH bs)` by decide_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >>
+  FIRST [asm_simp_tac (srw_ss()) [] >> NO_TAC, fs[]])
 QED

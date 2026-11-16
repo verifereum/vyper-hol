@@ -12,8 +12,18 @@ Ancestors
   literalsCodesize
   removeUnused
   concretizeMemLoc
+  (* FmpLowering stage proof *)
+  ctxSealAgree
+  fmpStageReclaimSound
+  fmpStageOpSteps
+  fmpStageFmpSteps
+  fmpStageBlockSim
+  o1PreDftStaticMem
   (* lower dload/dloadbytes *)
   lowerDload
+  lowerDloadCoverageOrdinary
+  lowerDloadOracleCallCoverage
+  lowerDloadRetpcProducer
   (* branch optimization *)
   branchOpt
   (* single use expansion *)

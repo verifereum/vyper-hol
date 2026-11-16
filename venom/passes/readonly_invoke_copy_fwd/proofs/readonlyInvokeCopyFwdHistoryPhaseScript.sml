@@ -109,7 +109,7 @@ Theorem ricf_history_origin_endpoints:
   FLOOKUP B p.rpe_src = SOME (p.rpe_sb,p.rpe_size)
 Proof
   simp[ricf_history_origin_def, ricf_source_copy_payload_def] >>
-  rpt strip_tac >> drule occ_frame_reachable_annotation >> strip_tac >>
+  rpt strip_tac >> drule occ_frame_reachable_annotation_static >> strip_tac >>
   gvs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
   metis_tac[pairTheory.PAIR]
 QED
@@ -178,12 +178,12 @@ Proof
     metis_tac[ricf_source_ledger_occurrence] >>
   drule_all ricf_located_event_actual_origin >> strip_tac >>
   `occurrence_allocas_ok B p.rpe_owner p.rpe_before` by
-    (drule occ_frame_reachable_annotation >>
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def] >> metis_tac[]) >>
   drule_all ricf_history_origin_endpoints >> strip_tac >>
   `(ricf_event_copy e (EL b fn.fn_blocks)).inst_opcode = MCOPY` by
     (`ssa_form fn` by
-       (drule occ_frame_reachable_annotation >>
+       (drule occ_frame_reachable_annotation_static >>
         fs[EVERY_MEM, venomWfTheory.wf_ssa_def]) >>
      drule_all ricf_located_event_source_descriptor >> strip_tac >>
      drule ricf_located_event_validation >> strip_tac >>

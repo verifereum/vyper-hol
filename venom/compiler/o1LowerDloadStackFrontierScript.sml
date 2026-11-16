@@ -1,7 +1,7 @@
 Theory o1LowerDloadStackFrontier
 Ancestors
   o1LowerDloadOccurrence venomMemProps venomMemProofs venomExecProofs
-  allocaFrontierBound localPtrsProps ptrDiscipline
+  allocaFrontierBound localPtrsProps ptrDiscipline frameAllocationOwnership
   contextCodegenRel venomExecSemantics venomInstProofs1 venomInst list
 
 Theorem ld_step_frontier_mono:
@@ -213,14 +213,14 @@ Proof
 QED
 
 Theorem ld_occurrence_saved_site_bound:
-  !U stk B owner aid b sz limit.
-  occurrence_saved_ok B U stk /\ MEM owner (MAP (\u. u.of_owner) U) /\
+  !fl U stk B owner aid b sz limit.
+  occurrence_saved_ok fl B U stk /\ MEM owner (MAP (\u. u.of_owner) U) /\
   FLOOKUP B (owner,aid) = SOME (b,sz) /\
   EVERY (\f. alloca_inv f.cf_state) stk /\
   EVERY (\f. f.cf_state.vs_alloca_next <= limit) stk ==>
   b + sz <= limit
 Proof
-  Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >> gvs[]
+  gen_tac >> Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >> gvs[]
   >- (gvs[occurrence_allocas_ok_def] >>
       `b + sz <= f.cf_state.vs_alloca_next` by
         metis_tac[venomMemDefsTheory.alloca_inv_def,
@@ -237,17 +237,20 @@ Proof
   strip_tac >>
   `alloca_inv s /\ EVERY (\f. alloca_inv f.cf_state) stk` by
     metis_tac[ld_frame_reachable_empty_alloca_inv] >>
-  drule_all frame_reachable_occurrence_annotation >> strip_tac >>
+  `cache_has_site s (b,sz) \/ saved_has_site stk (b,sz)` by
+    (irule frame_provenance_owner >> qexistsl_tac [`G`, `PG`, `C`, `fn`,
+       `inst`, `0`, `tn`, `v`, `vs`] >> simp[]) >>
+  drule frame_reachable_occurrence_lift >> strip_tac >>
   drule ld_occ_saved_frontiers >> strip_tac >>
-  gvs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
-  `?id. FLOOKUP H v = SOME id` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_IS_SOME_EQ_NONE] >>
-  PairCases_on `id` >>
-  first_x_assum (drule_at Any) >> strip_tac >> gvs[]
-  >- (gvs[occurrence_allocas_ok_def] >>
-      metis_tac[venomMemDefsTheory.alloca_inv_def,
-                venomMemDefsTheory.alloca_next_valid_def])
-  >> irule ld_occurrence_saved_site_bound >> metis_tac[]
+  gvs[cache_has_site_def, saved_has_site_def]
+  >- metis_tac[venomMemDefsTheory.alloca_inv_def,
+               venomMemDefsTheory.alloca_next_valid_def]
+  >> `alloca_inv (EL k stk).cf_state /\
+      (EL k stk).cf_state.vs_alloca_next <= s.vs_alloca_next` by
+    gvs[EVERY_EL] >>
+  `b + sz <= (EL k stk).cf_state.vs_alloca_next` by
+    metis_tac[venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.alloca_next_valid_def] >> decide_tac
 QED
 
 Theorem ld_frame_reachable_read_byte_bound:

@@ -1,7 +1,7 @@
 Theory lowerDloadPtrReturn
 Ancestors lowerDloadPtrJointNext lowerDloadPtrBlockEntry lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrInvoke lowerDloadPtrAggregate lowerDloadPtrRel
   lowerDloadPtrPhi ptrDiscipline venomExecSemantics venomState venomInst
-  memLocDefs pointerConfinedDefs finite_map list rich_list pred_set
+  memLocDefs pointerConfinedDefs o1LowerDloadOccurrence o1LowerDloadStackFrontier finite_map list rich_list pred_set
 
 Theorem dload_ret_operand_clean:
   i.inst_opcode = RET /\ ptr_use_ok P pv i /\ FDOM G SUBSET pv /\
@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem dload_ret_backwards:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = RET /\ ptr_use_ok P pv i /\ FDOM G SUBSET pv /\
   taint_ok fn tn i s /\
   (!a. MEM (Var a) (FRONT i.inst_operands) ==> a IN V) /\
@@ -43,7 +43,7 @@ Theorem dload_ret_backwards:
     rt.iret_adopt_fmp = NONE /\ s_end = s /\ t_end = t
 Proof
   rpt strip_tac >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `s.vs_labels = t.vs_labels` by
     metis_tac[dload_boundary_environment, dload_equal_environment_code] >>
   `!op. MEM op i.inst_operands ==>
@@ -67,8 +67,8 @@ QED
 
 Theorem dload_fold_outputs_vars:
   !pairs G H tv uv s t.
-    dload_vars_match fs V G H (tn with t_var := tv) (un with t_var := uv) s t ==>
-    dload_vars_match fs V
+    dload_vars_match fl fs V G H (tn with t_var := tv) (un with t_var := uv) s t ==>
+    dload_vars_match fl fs V
       (DRESTRICT G (COMPL (set (MAP FST pairs))))
       (DRESTRICT H (COMPL (set (MAP FST pairs))))
       (tn with t_var := DRESTRICT tv (COMPL (set (MAP FST pairs))))
@@ -93,10 +93,10 @@ Proof
 QED
 
 Theorem dload_bind_outputs_vars:
-  dload_vars_match fs V G H (tn with t_var := tv) (un with t_var := uv) s t /\
+  dload_vars_match fl fs V G H (tn with t_var := tv) (un with t_var := uv) s t /\
   bind_outputs outs vals t = SOME t' ==>
   ?s'. bind_outputs outs vals s = SOME s' /\
-    dload_vars_match fs V
+    dload_vars_match fl fs V
       (DRESTRICT G (COMPL (set outs))) (DRESTRICT H (COMPL (set outs)))
       (tn with t_var := DRESTRICT tv (COMPL (set outs)))
       (un with t_var := DRESTRICT uv (COMPL (set outs))) s' t'
@@ -108,31 +108,33 @@ Proof
 QED
 
 Theorem dload_memory_return_merge:
-  dload_memory_match lo (e::fs) tn un s t ==>
-  dload_memory_match lo fs tn un
+  dload_memory_match fl lo (e::fs) tn un s t /\ d.vs_alloca_next <= fl ==>
+  dload_memory_match fl lo fs tn un
     (merge_callee_state c s) (merge_callee_state d t)
 Proof
   simp[dload_memory_match_def, merge_callee_state_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`SUC owner`,`id`,`b`,`c'`,`n`,`k`] mp_tac) >>
+  qpat_x_assum `!owner id b c n k. dload_live_site (e::fs) _ _ _ _ _ /\ _ ==> _`
+    (qspecl_then [`SUC owner`,`id`,`b`,`c'`,`n`,`k`] mp_tac) >>
   gvs[dload_live_site_def]
 QED
 
 Theorem dload_return_merge_boundary:
-  dload_boundary_core lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
+  dload_boundary_core fl lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
   dload_equal_environment c.cf_state d.cf_state /\
   c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
   (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
     (EL k (c::cs)).cf_state.vs_alloca_next
-    (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) ==>
-  dload_boundary_core lo (f::fs) Vc Ws c.cf_params d.cf_params c.cf_prov d.cf_prov
+    (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) /\
+  d.cf_state.vs_alloca_next <= fl ==>
+  dload_boundary_core fl lo (f::fs) Vc Ws c.cf_params d.cf_params c.cf_prov d.cf_prov
     (tn with t_var := c.cf_tvar) (un with t_var := d.cf_tvar)
     (merge_callee_state c.cf_state s) (merge_callee_state d.cf_state t) cs ds
 Proof
   strip_tac >>
-  `dload_saved_metadata (f::fs) Vc c d` by
+  `dload_saved_metadata fl (f::fs) Vc c d` by
     (drule dload_boundary_saved >> disch_then (qspec_then `0` mp_tac) >> simp[]) >>
-  `dload_memory_match lo (f::fs) tn un
+  `dload_memory_match fl lo (f::fs) tn un
      (merge_callee_state c.cf_state s) (merge_callee_state d.cf_state t)` by
     (irule dload_memory_return_merge >> metis_tac[dload_boundary_memory]) >>
   `dload_shared_store tn un
@@ -150,12 +152,12 @@ Proof
     (merge_callee_state d.cf_state t).vs_alloca_next (f::fs)` by
     (irule dload_saved_layout_restore >>
      qexistsl [`cs`,`ds`] >> gvs[dload_boundary_core_def]) >>
-  `dload_vars_match (f::fs) Vc c.cf_prov d.cf_prov
+  `dload_vars_match fl (f::fs) Vc c.cf_prov d.cf_prov
     (tn with t_var := c.cf_tvar) (un with t_var := d.cf_tvar)
     (merge_callee_state c.cf_state s) (merge_callee_state d.cf_state t)` by
     (gvs[dload_saved_metadata_def, dload_vars_match_def, op_taint_def,
          lookup_var_def, merge_callee_state_def] >> metis_tac[]) >>
-  `dload_memory_match lo (f::fs)
+  `dload_memory_match fl lo (f::fs)
     (tn with t_var := c.cf_tvar) (un with t_var := d.cf_tvar)
     (merge_callee_state c.cf_state s) (merge_callee_state d.cf_state t)` by
     (gvs[dload_memory_match_def] >> metis_tac[]) >>
@@ -165,7 +167,7 @@ Proof
   gvs[dload_boundary_core_def, dload_saved_metadata_def,
       dload_merge_local_metadata] >>
   gen_tac >> strip_tac >>
-  qpat_x_assum `!k. k < SUC _ ==> dload_vars_match _ _ _ _ _ _ _ _ /\ _`
+  qpat_x_assum `!k. k < SUC _ ==> dload_vars_match _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `SUC k` mp_tac) >> simp[]
 QED
 
@@ -187,17 +189,17 @@ Proof
 QED
 
 Theorem dload_boundary_bind_outputs:
-  dload_boundary_core lo fs V Ws PG PH G H
+  dload_boundary_core fl lo fs V Ws PG PH G H
     (tn with t_var := tv) (un with t_var := uv) s t cs ds /\
   bind_outputs outs vals t = SOME t' ==>
   ?s'. bind_outputs outs vals s = SOME s' /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (DRESTRICT G (COMPL (set outs))) (DRESTRICT H (COMPL (set outs)))
       (tn with t_var := DRESTRICT tv (COMPL (set outs)))
       (un with t_var := DRESTRICT uv (COMPL (set outs))) s' t' cs ds
 Proof
   strip_tac >>
-  `dload_vars_match fs V G H (tn with t_var := tv) (un with t_var := uv) s t` by
+  `dload_vars_match fl fs V G H (tn with t_var := tv) (un with t_var := uv) s t` by
     metis_tac[dload_boundary_vars] >>
   drule_all dload_bind_outputs_vars >> strip_tac >> qexists_tac `s'` >> simp[] >>
   qpat_assum `bind_outputs _ _ s = _` (mp_tac o MATCH_MP dload_bind_outputs_frame) >>
@@ -212,16 +214,17 @@ Proof
 QED
 
 Theorem dload_return_pop_boundary:
-  dload_boundary_core lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
+  dload_boundary_core fl lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
   dload_equal_environment c.cf_state d.cf_state /\
   c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
   (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
     (EL k (c::cs)).cf_state.vs_alloca_next
     (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) /\
   c.cf_inst.inst_outputs = d.cf_inst.inst_outputs /\
-  bind_outputs d.cf_inst.inst_outputs vals (merge_callee_state d.cf_state t) = SOME t' ==>
+  bind_outputs d.cf_inst.inst_outputs vals (merge_callee_state d.cf_state t) = SOME t' /\
+  d.cf_state.vs_alloca_next <= fl ==>
   ?s'. bind_outputs c.cf_inst.inst_outputs vals (merge_callee_state c.cf_state s) = SOME s' /\
-    dload_boundary_core lo (f::fs) Vc Ws c.cf_params d.cf_params
+    dload_boundary_core fl lo (f::fs) Vc Ws c.cf_params d.cf_params
       (DRESTRICT c.cf_prov (COMPL (set c.cf_inst.inst_outputs)))
       (DRESTRICT d.cf_prov (COMPL (set d.cf_inst.inst_outputs)))
       (tn with t_var := DRESTRICT c.cf_tvar (COMPL (set c.cf_inst.inst_outputs)))
@@ -293,7 +296,7 @@ Proof
 QED
 
 Theorem dload_actual_return:
-  dload_boundary_core lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
+  dload_boundary_core fl lo (e::f::fs) V (Vc::Ws) PG PH G H tn un s t (c::cs) (d::ds) /\
   frame_reachable vs0 C (c::cs) PG G tn fn ri s /\ active_inst fn ri s /\
   ri.inst_opcode = RET /\ ptr_use_ok P pv ri /\ FDOM G SUBSET pv /\ taint_ok fn tn ri s /\
   (!a. MEM (Var a) (FRONT ri.inst_operands) ==> a IN V) /\
@@ -316,7 +319,7 @@ Theorem dload_actual_return:
     rs.iret_adopt_fmp = NONE /\ rt.iret_adopt_fmp = NONE /\
     bind_outputs c.cf_inst.inst_outputs rs.iret_values
       (adopt_return_fmp rs (merge_callee_state c.cf_state s)) = SOME s' /\
-    dload_boundary_core lo (f::fs) Vc Ws c.cf_params d.cf_params
+    dload_boundary_core fl lo (f::fs) Vc Ws c.cf_params d.cf_params
       (DRESTRICT c.cf_prov (COMPL (set c.cf_inst.inst_outputs)))
       (DRESTRICT d.cf_prov (COMPL (set d.cf_inst.inst_outputs)))
       (tn with t_var := DRESTRICT c.cf_tvar (COMPL (set c.cf_inst.inst_outputs)))
@@ -339,6 +342,7 @@ Proof
   strip_tac >>
   drule_all dload_ret_backwards >> disch_then (qspec_then `C` strip_assume_tac) >>
   gvs[adopt_return_fmp_def] >>
+  `d.cf_state.vs_alloca_next <= fl` by suspend "caller_floor" >>
   drule dload_return_pop_boundary >> simp[] >> disch_then drule >> strip_tac >>
   drule dload_return_control_reachable >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
@@ -356,3 +360,20 @@ Proof
   qpat_x_assum `!k. k < SUC _ ==> dload_live_layout _ _ _ _`
     (qspec_then `SUC k` mp_tac) >> simp[]
 QED
+
+(* The caller's target frontier is below the callee's: the source caller
+   frontier is (saved frontiers never exceed the current one), and the
+   callee frame only adds its scratch sites on top. *)
+Resume dload_actual_return[caller_floor]:
+  `c.cf_state.vs_alloca_next <= s.vs_alloca_next` by
+    (drule frame_reachable_occurrence_lift >> strip_tac >>
+     drule ld_occ_saved_frontiers >> simp[]) >>
+  `t.vs_alloca_next <= fl` by
+    (drule dload_boundary_memory >> simp[dload_memory_match_def]) >>
+  drule dload_boundary_tables >> simp[dload_table_stack_def] >> strip_tac >>
+  first_assum (qspec_then `0` mp_tac) >>
+  first_x_assum (qspec_then `1` mp_tac) >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+
+Finalise dload_actual_return

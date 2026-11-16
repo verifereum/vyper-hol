@@ -9,8 +9,9 @@
  * pipeline:
  *
  *   raw_mem_ok              below the alloca frontier; S3's output
- *                           (raw_unit_memory_ok is mem_inv raw_mem_ok)
- *   static_mem_ok eom       below a static layout end; after ConcretizeMemLoc
+ *                           (raw_unit_memory_ok, with the FMP facts)
+ *   static_mem_ok eom       below a static layout end or in the dynamic
+ *                           region; after ConcretizeMemLoc
  *   lowered_mem_ok eom fmp  static, or at or above the initial free-memory
  *                           pointer; after FmpLowering, what codegen consumes
  *
@@ -21,8 +22,8 @@
  * (mem_inv_codegen_obligations).
  *
  * TOP-LEVEL:
- *   inst_mem_ranges, mem_inv, raw_mem_ok, static_mem_ok, lowered_mem_ok,
- *   step_write_footprint                   - definitions
+ *   inst_mem_ranges, mem_inv, dalloca_no_wrap, raw_mem_ok, static_mem_ok,
+ *   lowered_mem_ok, step_write_footprint   - definitions
  *   raw_unit_memory_ok_mem_inv              - S3's statement is the raw phase
  *   mem_inv_raw_reachable                   - the witness is raw_reachable
  *   mem_inv_mono, static_mem_ok_lowered
@@ -74,18 +75,25 @@ Definition mem_inv_def:
 End
 
 (* Raw phase: the frontier fits a word and every access is below it, or
-   part of a revert forwarding (inst_mem_ok_in_fn). *)
+   part of a revert forwarding (inst_mem_ok_in_fn); DALLOCA does not wrap
+   and the free-memory pointer is at or above its initial value. *)
 Definition raw_mem_ok_def:
   raw_mem_ok (ctx:venom_context) (fn:ir_function) inst s <=>
-    s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
+    s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s /\
+    dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
 End
 
-(* Static phase: every access is below the static layout end, or part of
-   a revert forwarding. *)
+(* Static phase: every access is below the static layout end, inside the
+   dynamic region [vs_initial_fmp, vs_fmp) DALLOCA has allocated, or part
+   of a revert forwarding; and the raw phase's two FMP facts. *)
 Definition static_mem_ok_def:
   static_mem_ok eom (ctx:venom_context) (fn:ir_function) inst s <=>
-    in_revert_forward fn s \/
-    EVERY (\(off,len). len = 0 \/ off + len <= eom) (inst_mem_ranges inst s)
+    dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+    (in_revert_forward fn s \/
+     EVERY (\(off,len). len = 0 \/ off + len <= eom \/
+                        (w2n s.vs_initial_fmp <= off /\
+                         off + len <= w2n s.vs_fmp))
+       (inst_mem_ranges inst s))
 End
 
 (* Lowered phase: every access is static or dynamic, never in [eom, fmp),
@@ -113,13 +121,6 @@ Definition step_write_footprint_def:
         off <= i /\ i < off + len
 End
 
-(* ===== The raw phase is S3's statement ===== *)
-
-Theorem raw_unit_memory_ok_mem_inv:
-  raw_unit_memory_ok ctx vs <=> mem_inv raw_mem_ok ctx vs
-Proof
-  simp[raw_unit_memory_ok_def, mem_inv_def, raw_mem_ok_def]
-QED
 
 (* ===== The witness is raw_reachable ===== *)
 
@@ -145,11 +146,35 @@ Proof
   rw[mem_inv_def] >> metis_tac[]
 QED
 
+(* The raw phase is S3's statement plus the FMP facts at every
+   raw-reachable state. *)
+Theorem raw_unit_memory_ok_mem_inv:
+  mem_inv raw_mem_ok ctx vs <=>
+    raw_unit_memory_ok ctx vs /\
+    !fn inst s. raw_reachable vs ctx fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+Proof
+  simp[mem_inv_raw_reachable, raw_unit_memory_ok_def, raw_mem_ok_def] >>
+  eq_tac >> strip_tac
+  >- (rpt conj_tac
+      >- (qexists_tac `raw_reachable vs` >>
+          conj_tac >- metis_tac[raw_reachable_package] >>
+          metis_tac[]) >>
+      metis_tac[]) >>
+  conj_tac
+  >- (fs[codegen_reachability_package_def] >> metis_tac[]) >>
+  metis_tac[raw_reachable_least]
+QED
+
+(* A dynamic access starts at or above the initial free-memory pointer, so
+   at or above any fmp below it. *)
 Theorem static_mem_ok_lowered:
-  static_mem_ok eom ctx fn inst s ==> lowered_mem_ok eom fmp ctx fn inst s
+  static_mem_ok eom ctx fn inst s /\ fmp <= w2n s.vs_initial_fmp ==>
+  lowered_mem_ok eom fmp ctx fn inst s
 Proof
   rw[static_mem_ok_def, lowered_mem_ok_def, EVERY_MEM, FORALL_PROD] >>
-  metis_tac[]
+  Cases_on `in_revert_forward fn s` >> fs[] >>
+  rpt strip_tac >> first_x_assum drule >> rpt strip_tac >> fs[]
 QED
 
 (* ===== Transport along a simulation of reachable states ===== *)
@@ -252,7 +277,8 @@ Proof
 QED
 
 Theorem static_mem_ok_codegen_disjoint:
-  static_mem_ok eom ctx fn inst s /\ ~in_revert_forward fn s /\
+  static_mem_ok eom ctx fn inst s /\ fmp <= w2n s.vs_initial_fmp /\
+  ~in_revert_forward fn s /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   source_memory_reads_disjoint cp inst s /\
   context_source_memory_writes_disjoint cp inst s

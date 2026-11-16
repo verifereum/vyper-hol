@@ -18,6 +18,7 @@ Theorem o1_code_end_walk_stages_sim:
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
   (!k. k <= LENGTH o1_fn_passes ==>
     EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (!k. k <= 3 ==> EVERY no_raw_fmp_ops (stage k).ctx_functions) /\
   dead_wf D /\ o1_run_state_ok vs_out /\
   LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
   ?vi. gas_variant vi vs_out /\
@@ -75,6 +76,8 @@ Resume o1_code_end_walk_stages_sim[forward]:
   disch_then (qspecl_then [`stage 1`, `stage 2`, `vi`] mp_tac) >>
   simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
   drule_all lower_dload_stage_protected_lifetime >> strip_tac >>
+  `EVERY no_raw_fmp_ops (stage 2).ctx_functions` by simp[] >>
+  `EVERY no_raw_fmp_ops (stage 3).ctx_functions` by simp[] >>
   drule_all ((PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] (SRULE [o1_fn_passes_def] code_end_middle_stage_contracts))) >>
   strip_tac >>
   drule_all concretize_stage_protected_lifetime >> strip_tac >>

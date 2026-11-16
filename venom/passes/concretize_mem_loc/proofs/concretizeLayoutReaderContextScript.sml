@@ -2,11 +2,13 @@ Theory concretizeLayoutReaderContext
 Ancestors venomExecSemantics venomState
 
 (* A supplement for immutable transaction and block readers, independent of
-   call-local environment, opaque tokens and allocation metadata. *)
+   call-local environment, opaque tokens and allocation metadata.  The free
+   memory pointer is equal too: DALLOCA pointers are untagged, so both runs
+   allocate at the same address. *)
 Definition relocation_reader_context_def:
   relocation_reader_context s t <=>
     s.vs_tx_ctx = t.vs_tx_ctx /\ s.vs_block_ctx = t.vs_block_ctx /\
-    s.vs_prev_hashes = t.vs_prev_hashes
+    s.vs_prev_hashes = t.vs_prev_hashes /\ s.vs_fmp = t.vs_fmp
 End
 
 Theorem relocation_reader_context_refl[simp]:

@@ -117,7 +117,7 @@ Theorem ricf_analyzed_translation_origin_write_ranges:
   EVERY wf_ssa C.ctx_functions /\ EVERY ricf_param_order_ok C.ctx_functions /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\ access_ok lo G fn inst s /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\ access_ok lo G fn inst s /\
   ~in_revert_forward fn s /\
   MEM (off,len) (source_memory_write_ranges inst s) /\ k < sz ==>
   ~(off <= db+k /\ db+k < off+len) /\
@@ -156,8 +156,8 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
   `occurrence_natural_geometry lo a U B stk s /\
-   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
-    (drule occ_frame_reachable_annotation >>
+   occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def] >> strip_tac >>
      metis_tac[occ_frame_reachable_geometry, ptr_discipline_def,
        occ_frame_reachable_projection]) >>
@@ -210,10 +210,10 @@ Proof
     (fs[EVERY_MEM, wf_ssa_def, wf_function_def, fn_inst_ids_distinct_def,
        fn_insts_def, fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o,
        combinTheory.o_DEF] >> metis_tac[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s /\
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
    occurrence_syntax_origin fn a H /\
    occurrence_natural_geometry lo a U B stk s /\ access_ok lo G fn inst s` by
-    metis_tac[occ_frame_reachable_annotation,
+    metis_tac[occ_frame_reachable_annotation_static,
       occ_frame_reachable_origin_certificate, occurrence_origin_certificate_def,
       occ_frame_reachable_geometry, occ_frame_reachable_projection,
       ptr_discipline_def] >>

@@ -152,6 +152,25 @@ Proof
        mk_inst_def, eval_operand_def] >> EVAL_TAC
 QED
 
+(* An access inside the dynamic region [vs_initial_fmp, vs_fmp) passes above
+ * the alloca frontier; one starting a byte below vs_initial_fmp or ending a
+ * byte past vs_fmp does not. *)
+Theorem memory_dynamic_region_check:
+  inst_mem_below_frontiers (mk_inst 0 MLOAD [Lit 64w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>) /\
+  ~inst_mem_below_frontiers (mk_inst 0 MLOAD [Lit 63w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>) /\
+  ~inst_mem_below_frontiers (mk_inst 0 MLOAD [Lit 65w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>)
+Proof
+  simp[inst_mem_below_frontiers_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, mk_inst_def, eval_operand_def] >>
+  EVAL_TAC
+QED
+
 (* INVOKE's direct footprint is empty; callee accesses are NOT omitted from
  * raw_unit_memory_ok, whose package includes reachability_closed_callee. *)
 Theorem memory_invoke_direct_check:

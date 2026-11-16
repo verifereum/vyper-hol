@@ -19,7 +19,7 @@ Proof
   `n = 0 \/ n = 1 \/ n = 2 \/ n = 3` by decide_tac >> gvs[]
 QED
 
-Theorem dload_joint_call_closed:
+val dload_joint_call_closed_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -27,7 +27,7 @@ Theorem dload_joint_call_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ((?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -70,7 +70,7 @@ Theorem dload_joint_call_closed:
   enters_block gc u t1 /\ active_inst gc j t1 ==>
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG (MAP (op_prov H) ops) G H0 tn un0 s t0 cs
@@ -117,13 +117,24 @@ Theorem dload_joint_call_closed:
     dload_terminal_mode lo P vs C
       (<|cf_fn:=g; cf_inst:=callinst; cf_state:=t; cf_params:=PH;
          cf_prov:=H; cf_tvar:=un.t_var|> :: ds)
-      FEMPTY (un with t_var:=FEMPTY) gc j t1
+      FEMPTY (un with t_var:=FEMPTY) gc j t1``;
+
+val dload_joint_call_closed_static_header =
+  rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_call_closed_header)));
+
+Theorem dload_joint_call_closed_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (dload_joint_call_closed_static_header))))
 Proof
   strip_tac >- suspend "normal" >>
   metis_tac[dload_terminal_mode_no_call]
 QED
 
-Resume dload_joint_call_closed[normal]:
+Resume dload_joint_call_closed_static[normal]:
   drule_all dload_call_phase_zero >> strip_tac >> gnvs[dload_prefix_zero] >>
   `MEM f C.ctx_functions` by
     (drule frame_reachable_raw_certificate >> simp[] >> strip_tac >> simp[]) >>
@@ -165,8 +176,8 @@ Resume dload_joint_call_closed[normal]:
   suspend "push"
 QED
 
-Resume dload_joint_call_closed[push]:
-  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+Resume dload_joint_call_closed_static[push]:
+  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     dload_normal_invoke_call >> disch_then drule >>
   disch_then (drule_at (Pat `dload_control_match _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_function _ _ = _`)) >>
@@ -189,4 +200,14 @@ Resume dload_joint_call_closed[push]:
   simp[dload_prefix_zero] >> gnvs[] >> metis_tac[]
 QED
 
-Finalise dload_joint_call_closed
+Finalise dload_joint_call_closed_static
+
+Theorem dload_joint_call_closed:
+  ^dload_joint_call_closed_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_call_closed_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+

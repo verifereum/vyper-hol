@@ -86,19 +86,6 @@ Proof
   fs[EVERY_MEM, EXISTS_MEM, combinTheory.o_DEF] >> metis_tac[]
 QED
 
-(* The full source contract excludes DALLOCA; the target conditional is
-   therefore vacuous, rather than a bound on relocated alloca sites. *)
-Theorem lower_dload_src_inv_below_fmp:
-  !rpolicy view C C' D vs t.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_src_inv D C vs ==>
-    (ctx_has_dalloca C' ==> allocas_below_fmp t)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca C` by fs[o1_src_inv_def] >>
-  drule_all lower_dload_stage_no_dalloca >> simp[]
-QED
-
 (* Code offsets are not pointers, even when an operand is repeated in the
    destination position: the single-use clause excludes that case. *)
 Theorem ptr_use_ok_dload_offsets:

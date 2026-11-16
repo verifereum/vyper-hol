@@ -288,6 +288,11 @@ Proof
   `generate_context_plan unit.cu_context = SOME cpl` by
     fs[active_frame_plan_def, body_plan_inv_def] >>
   drule contextPlanLayoutPropsTheory.generate_context_plan_spill_gap >> strip_tac >>
+  `n2w cpl.cp_initial_fmp = vs.vs_initial_fmp` by
+    fs[active_frame_plan_def, body_plan_inv_def, fn_frame_inv_def] >>
+  `cpl.cp_initial_fmp <= w2n vs.vs_initial_fmp` by
+    metis_tac[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+              arithmeticTheory.LESS_EQ_REFL] >>
   drule_all static_mem_ok_codegen_disjoint >> strip_tac >>
   Cases_on `inst.inst_opcode = GAS`
   >- (drule_all active_frame_gas_step >> simp[]) >>

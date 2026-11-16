@@ -233,7 +233,7 @@ Theorem o1_schedule_stages_observations:
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
-       ctx_pass_stage rp (EL k passes) (\C' f observed. walk_view rp (DROP (SUC k) passes) C' f observed /\
+       ctx_pass_stage rp (EL k passes) (\C' f observed. walk_view R rp (SUC k) (DROP (SUC k) passes) C' f observed /\
            EVERY P observed.cu_context.ctx_functions)
          (stage k) (stage (SUC k))))
 Proof
@@ -276,7 +276,8 @@ Theorem o1_schedule_stages:
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
-       ctx_pass_stage rp (EL k passes) (walk_view rp (DROP (SUC k) passes))
+       ctx_pass_stage rp (EL k passes)
+         (walk_view R rp (SUC k) (DROP (SUC k) passes))
          (stage k) (stage (SUC k))))
 Proof
   strip_tac >>

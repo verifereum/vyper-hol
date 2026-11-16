@@ -4,6 +4,7 @@ Ancestors
   cfgWf
   mmTransformSupply venomInst finite_map venomWf venomFnScheduleRunner
   o1PassLift unitMemInv contextCodegenRel ctxLookupAgreeHelpers
+  venomExecSemantics
 Libs
   wordsLib finite_mapLib
 
@@ -178,30 +179,37 @@ Proof
 QED
 
 Theorem mm_copy_fixture_bound:
-  EVERY (\i. !st. static_mem_ok 192 ctx mm_adjacent_copy_function i st)
+  EVERY (\i. !st. w2n st.vs_initial_fmp <= w2n st.vs_fmp ==>
+    static_mem_ok 192 ctx mm_adjacent_copy_function i st)
     (fn_insts mm_adjacent_copy_function)
 Proof
   simp[mm_adjacent_copy_function_def, mk_raw_function_def,
-       fn_insts_def, fn_insts_blocks_def, static_mem_ok_def] >>
-  rpt conj_tac >> gen_tac >> disj2_tac >> EVAL_TAC
+       fn_insts_def, fn_insts_blocks_def, static_mem_ok_def,
+       dalloca_no_wrap_def, mk_inst_def] >>
+  rpt conj_tac >> gen_tac >> strip_tac >> simp[] >> disj2_tac >> EVAL_TAC
 QED
 
 Theorem mm_copy_fixture_reachability:
   reachability_closed
-    (\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t) ctx
+    (\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t /\
+      w2n t.vs_initial_fmp <= w2n t.vs_fmp) ctx
 Proof
   simp[reachability_closed_def] >> rpt strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE)
+  `EVERY (\i. i.inst_opcode = MCOPY \/ i.inst_opcode = STOP)
     (fn_insts mm_adjacent_copy_function)` by EVAL_TAC >>
-  drule_all EVERY_active_inst >> simp[]
+  imp_res_tac EVERY_active_inst >>
+  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      AllCaseEqs(), mcopy_def, venomStateTheory.write_memory_with_expansion_def]
 QED
 
 Theorem mm_copy_fixture_entry_inv:
   fn_entry_inv
-    (\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t)
+    (\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t /\
+      w2n t.vs_initial_fmp <= w2n t.vs_fmp)
     ctx mm_adjacent_copy_function (init_venom_state "entry")
 Proof
-  simp[fn_entry_inv_def]
+  simp[fn_entry_inv_def, enters_block_def, mm_adjacent_copy_function_def,
+       mk_raw_function_def] >> EVAL_TAC >> rw[] >> gvs[eval_phis_def]
 QED
 
 Theorem mm_supply_merges_copy_witness:
@@ -236,12 +244,14 @@ Theorem mm_correctness_premises_allow_merge:
     terminates (run_function 1 ctx mm_adjacent_copy_function
       (init_venom_state "entry"))
 Proof
-  `!inst st. active_inst mm_adjacent_copy_function inst st ==>
+  `!inst st. active_inst mm_adjacent_copy_function inst st /\
+     w2n st.vs_initial_fmp <= w2n st.vs_fmp ==>
      static_mem_ok 192 ctx mm_adjacent_copy_function inst st` by
     (rpt strip_tac >>
      mp_tac mm_copy_fixture_bound >> strip_tac >>
      drule_all EVERY_active_inst >> simp[]) >>
-  qexists_tac `\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t` >>
+  qexists_tac `\c f i t. f = mm_adjacent_copy_function /\ active_inst f i t /\
+    w2n t.vs_initial_fmp <= w2n t.vs_fmp` >>
   simp[mm_copy_fixture_wf, mm_copy_fixture_all_reachable, mm_copy_fixture_reachability,
        mm_copy_fixture_entry_inv, mm_supply_merges_copy_witness] >>
   EVAL_TAC

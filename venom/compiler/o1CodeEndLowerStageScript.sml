@@ -7,7 +7,7 @@ Ancestors
   lowerDloadSafetyKernel lowerDloadSafetyValues
   codegenSymRel o1PassContract ptrDiscipline unitMemInv contextCodegenRel
   lowerDloadSupplyProofs unitLabelMapIdentity venomInst list words finite_map
-  venomPassSchedule
+  venomPassSchedule lowerDloadPtrStatic
 
 Theorem lower_dload_stage_code_end[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -22,6 +22,8 @@ Theorem lower_dload_stage_code_end[local]:
 Proof
   rpt strip_tac >>
   drule_all ld_stage_ambient >> strip_tac >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[lower_dload_stage_no_dalloca] >>
   `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
   RULE_ASSUM_TAC BETA_RULE >>
   rewrite_tac[code_end_offset_ok_def] >> rpt strip_tac >>

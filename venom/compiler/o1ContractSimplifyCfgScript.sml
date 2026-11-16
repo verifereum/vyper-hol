@@ -17,7 +17,8 @@
 Theory o1ContractSimplifyCfg
 Ancestors
   o1ContractSimplifyCfgParams o1ContractSimplifyCfgSrcStatic o1ContractSimplifyCfgSrcFrame o1ContractSimplifyCfgSrcHeadroom o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
-  simplifyCfgDefs unitMemInv venomPassSchedule venomCompilerTypes
+  simplifyCfgDefs simplifyCfgStruct simplifyCfgInvariant
+  unitMemInv ptrDiscipline venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
   opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
 
@@ -306,7 +307,7 @@ Proof
 QED
 
 (* The source rows that read only the functions' code: no layout end, no
-   DALLOCA, no FMP convention or operation, the reserved fixed region, and
+   FMP convention or operation except DALLOCA, the reserved fixed region, and
    fn_ptr_ok of each function and its reachable part.  The pass keeps
    every reachable non-terminator instruction and makes no block
    unreachable, so the pointer variables of the output's reachable part
@@ -317,7 +318,7 @@ Theorem simplify_cfg_stage_src_static:
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
     C.ctx_functions /\
   o1_src_inv D C vs ==>
-  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\
   fmp_free_ctx C' /\
   (!lo. fixed_region_reserved lo C ==> fixed_region_reserved lo C') /\
   (!P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
@@ -331,9 +332,17 @@ Proof
   `C'.ctx_global_reserved = C.ctx_global_reserved` by
     fs[ctx_pass_stage_def] >>
   `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\
-   ~ctx_has_dalloca C' /\ fmp_free_ctx C' /\
+   fmp_free_ctx C' /\
    (!lo. fixed_region_reserved lo C ==> fixed_region_reserved lo C')` by
-    (irule simplify_cfg_ctx_static_rows >> fs[o1_src_inv_def]) >> simp[] >>
+    (fs[o1_src_inv_def, fmp_free_ctx_def, EVERY_MAP, EVERY_MEM,
+        fixed_region_reserved_def] >>
+     rpt conj_tac >> rpt strip_tac >> gvs[MEM_MAP]
+     >- metis_tac[simplify_cfg_fn_metadata, fn_static_layout_eq_def]
+     >- metis_tac[simplify_cfg_fn_metadata, fn_fmp_convention_eq_def]
+     >- (simp[pre_fmp_ops_def, simplify_cfg_fn_def] >>
+         irule simplify_cfg_fn_with_labels_opcodes >>
+         fs[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM] >> metis_tac[]) >>
+     metis_tac[]) >> simp[] >>
   gen_tac >> strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
   gen_tac >> strip_tac >> irule simplify_cfg_fn_shape_ptr_ok >>
   fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]
@@ -411,9 +420,10 @@ Proof
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     fs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `scfg_context_trace C C'` by metis_tac[scfg_context_trace_simplify_cfg] >>
-  `~ctx_has_dalloca C /\ taint_within D C vs /\
-   mem_inv dload_offset_ok C vs` by fs[o1_src_inv_def] >>
-  `~ctx_has_dalloca C'` by metis_tac[scfg_simplify_cfg_no_dalloca] >>
+  `taint_within D C vs /\ mem_inv dload_offset_ok C vs` by
+    fs[o1_src_inv_def] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[scfg_simplify_cfg_no_dalloca] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       drule_all scfg_context_trace_frame_rows >> simp[]) >>
@@ -459,7 +469,13 @@ Proof
   `ctx_dload_count C' <= ctx_dload_count C` by
     (irule simplify_cfg_ctx_dload_count_le >>
      simp[] >> irule simplify_cfg_stage_functions >> goal_assum drule) >>
-  irule dload_headroom_mem_inv_decrease >> qexists_tac `C` >> simp[] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    (`C' = C with ctx_functions := MAP simplify_cfg_fn C.ctx_functions` by
+       (drule simplify_cfg_stage_functions >>
+        strip_tac >> fs[ctx_pass_stage_def, venom_context_component_equality]) >>
+     metis_tac[scfg_simplify_cfg_no_dalloca]) >>
+  irule dload_headroom_mem_inv_decrease >> qexists_tac `C` >>
+  fs[ctx_has_dalloca_def] >>
   irule simplify_cfg_stage_mem_inv_rf_initial >>
   simp[dload_headroom_fixed_corr_closed_rf] >>
   qexistsl_tac [`C`, `rpolicy`, `view`] >> simp[] >>
@@ -485,7 +501,7 @@ Theorem simplify_cfg_stage_src_extras_initial:
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
     C.ctx_functions /\
   o1_initial_state_ok vs /\ o1_src_inv D C vs ==>
-  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\
   (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
   taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
   mem_inv dload_headroom_ok C' vs
@@ -507,7 +523,7 @@ Theorem simplify_cfg_stage_src_extras:
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
     C.ctx_functions /\
   o1_run_state_ok vs /\ o1_src_inv D C vs ==>
-  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\
   (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
   taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
   mem_inv dload_headroom_ok C' vs
@@ -585,7 +601,7 @@ Proof
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv_rf_initial >>
-      metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
+      metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
   >- (`simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>

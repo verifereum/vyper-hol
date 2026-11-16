@@ -445,7 +445,7 @@ QED
 (* ===== PHI hits at a join's entry stack ===== *)
 
 (* resolve_phi on well-formed PHI operands is the first matching pair. *)
-Theorem phi_resolve_find_pairs[local]:
+Theorem phi_resolve_find_pairs:
   !ops pred.
     phi_well_formed ops ==>
     resolve_phi pred ops =

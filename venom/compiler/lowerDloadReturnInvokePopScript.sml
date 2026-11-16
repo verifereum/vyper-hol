@@ -4,6 +4,7 @@ Ancestors
   lowerDloadReturnInvokePush lowerDloadSafetyKernel venomExecSemantics
   finite_map pred_set list o1LowerDloadJointRestore venomState ptrDiscipline
   lowerDloadSafetyUpdates lowerDloadReturnCallContext lowerDloadOracleCallAssembly
+  lowerDloadSafetyAllocation
 Libs
   lowerDloadReturnPackageLib
 
@@ -334,8 +335,8 @@ Theorem ld_return_stack_geometry:
   (!j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL j fs).lf_fn /\
     (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov = ld_erase A o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL j fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) A (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) A (EL j fs).lf_Q (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL j fs).lf_tv)
 Proof
   strip_tac >> drule_all ld_return_frame_geometry >> strip_tac >>
@@ -395,8 +396,8 @@ Theorem ld_saved_stack_alloc_agree:
   !j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL j fs).lf_fn /\
     (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov = ld_erase B o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase B)) (EL j fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) B (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) B (EL j fs).lf_Q (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL j fs).lf_tv
 Proof
   strip_tac >> gen_tac >> strip_tac >>
@@ -421,7 +422,10 @@ Proof
      Cases_on `x` >> simp[ld_erase_def]) >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[ld_sync_def] >> strip_tac >>
-  qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >> simp[]
+  qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >> simp[] >>
+  strip_tac >>
+  metis_tac[lowerDloadSafetyAllocationTheory.ld_ghost_ok_erase_cong,
+            lowerDloadSafetyAllocationTheory.ld_params_ok_erase_cong]
 QED
 
 Theorem ld_call_saved_stack_return:
@@ -431,10 +435,10 @@ Theorem ld_call_saved_stack_return:
   !j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL j fs).lf_fn /\
     (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov =
-      ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))) o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP
-      (OPTION_MAP (ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))))) (EL j fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) (DRESTRICT Ar (ld_slots Ar (f::fs)))
+      (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) (DRESTRICT Ar (ld_slots Ar (f::fs)))
+      (EL j fs).lf_Q (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL j fs).lf_tv
 Proof
   qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
@@ -511,13 +515,22 @@ Proof
   metis_tac[ld_sync_source]
 QED
 
-Theorem ld_invoke_pop_core:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+(* Dropping the outputs keeps the ghost relation. *)
+Theorem ld_ghost_ok_drestrict[local]:
+  ld_ghost_ok fl A H G ==>
+  ld_ghost_ok fl A (DRESTRICT H keep) (DRESTRICT G keep)
+Proof
+  rw[lowerDloadSafetyRelationTheory.ld_ghost_ok_def, FLOOKUP_DRESTRICT] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_invoke_pop_core_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
   fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
   t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
-  inst.inst_opcode = INVOKE /\ 
+  inst.inst_opcode = INVOKE /\
   decode_invoke inst = SOME (nm,ops) /\
   lookup_function nm C.ctx_functions = SOME callee /\
   eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
@@ -531,7 +544,7 @@ Theorem ld_invoke_pop_core:
   ^ld_transfer_point lo P C C' vs0 stk fn fn' s fs0 f0 A0 Sigma names bb
     (q with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
   qabbrev_tac `Terminal = ^ld_probe_terminal` >>
   qabbrev_tac `Point = ^ld_transfer_point` >>
@@ -625,8 +638,8 @@ Proof
   `!i. i < LENGTH stk ==>
     (EL i stk).cf_fn = (EL i fs).lf_fn /\
     (EL i stk).cf_state = (EL i fs).lf_src /\
-    (EL i stk).cf_prov = ld_erase B o_f (EL i fs).lf_H /\
-    (EL i stk).cf_params = MAP (OPTION_MAP (ld_erase B)) (EL i fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) B (EL i fs).lf_H (EL i stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) B (EL i fs).lf_Q (EL i stk).cf_params /\
     (EL i stk).cf_tvar = (EL i fs).lf_tv` by
     (rpt strip_tac >> qunabbrev_tac `B` >> qunabbrev_tac `Stable` >>
      drule_all ld_call_saved_stack_return >> simp[]) >>
@@ -676,12 +689,26 @@ Proof
     MAP (OPTION_MAP (ld_erase A)) f.lf_Q` by
     (irule MAP_CONG >> simp[] >> rpt strip_tac >>
      Cases_on `x` >> simp[ld_erase_def]) >>
-  `PG = MAP (OPTION_MAP (ld_erase B)) g.lf_Q /\
-   DRESTRICT G keep = ld_erase B o_f g.lf_H` by
+  `ld_params_ok (dyn_floor C vs0) B g.lf_Q PG /\
+   ld_ghost_ok (dyn_floor C vs0) B g.lf_H (DRESTRICT G keep)` by
     (qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
-       (strip_assume_tac o SRULE [ld_sync_def]) >>
-     `G = ld_erase B o_f f.lf_H` by metis_tac[] >>
-     simp[Abbr `g`, Abbr `keep`, lowerDloadSafetyBoundaryTheory.provenance_return_erasure]) >>
+       (strip_assume_tac o SRULE [] o MATCH_MP ld_sync_ghosts) >>
+     `ld_ghost_ok (dyn_floor C vs0) B f.lf_H G /\
+      ld_params_ok (dyn_floor C vs0) B f.lf_Q PG` by
+       metis_tac[lowerDloadSafetyAllocationTheory.ld_ghost_ok_erase_cong,
+                 lowerDloadSafetyAllocationTheory.ld_params_ok_erase_cong] >>
+     simp[Abbr `g`] >> irule ld_ghost_ok_drestrict >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) tnr.t_mem sr.vs_memory q.vs_memory` by
+    (`cs' = se /\ u = te` by
+       metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_ret_endpoint] >>
+     qpat_assum `bind_outputs _ _ (merge_callee_state s cs') = SOME sr`
+       (assume_tac o MATCH_MP o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only) >>
+     qpat_assum `bind_outputs _ _ (merge_callee_state t u) = SOME q`
+       (assume_tac o MATCH_MP o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only) >>
+     ntac 2 (pop_assum (fn th => once_rewrite_tac[th])) >>
+     simp[merge_callee_state_def] >>
+     qpat_assum `ld_sync _ _ _ _ _ PG' G' tnr _ _ _ _ _ _ _`
+       (mp_tac o MATCH_MP ld_sync_dyn_agree) >> simp[]) >>
   `EVERY (\h. h.lf_serial < N /\ ld_maps B h /\ ld_vars P B h /\
       ld_intervals lo h.lf_src /\ ld_intervals lo h.lf_tgt /\
       h.lf_src.vs_prev_bb = h.lf_tgt.vs_prev_bb /\
@@ -817,6 +844,105 @@ Proof
   rpt (pop_assum kall_tac) >> simp[]
 QED
 
+Theorem ld_invoke_active_pop_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  drule_all ld_invoke_pop_core_static >> simp[] >> strip_tac >>
+  simp[NoAsms, Abbr `Goal`] >>
+  qexistsl_tac [`PG'`,`G'`,`tn'`,`inst'`,`s''`,`t0`,`A'`,`frames`,`N'`,`X`,`p'`,`h`] >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ld_invoke_guarded_pop_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn caller_cs s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  ^ld_probe_guard C' j bb (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
+  qabbrev_tac `Stable = ^ld_probe_stable` >>
+  qabbrev_tac `Terminal = ^ld_probe_terminal` >>
+  qabbrev_tac `Point = ^ld_probe_point` >>
+  qabbrev_tac `Guard = ^ld_probe_guard` >> strip_tac >>
+  `q.vs_current_bb = t.vs_current_bb` by
+    metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control] >>
+  `?ti. get_instruction bb (SUC t.vs_inst_idx) = SOME ti` by
+    (mp_tac (Q.INST [`C` |-> `C'`, `k` |-> `j`,
+      `t` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
+      lowerDloadReturnAlignmentTheory.ld_successful_body_fetch) >>
+     fs[Abbr `Guard`] >> metis_tac[]) >>
+  `active_inst fn' ti (q with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (simp[contextCodegenRelTheory.active_inst_def] >>
+     qexists_tac `bb` >>
+     gvs[venomInstTheory.get_instruction_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       venomExecPropsTheory.lookup_block_label]) >>
+  qunabbrev_tac `Ambient` >> qunabbrev_tac `Stable` >>
+  qunabbrev_tac `Terminal` >> qunabbrev_tac `Point` >>
+  drule_all ld_invoke_active_pop_static >> simp[NoAsms]
+QED
+
+
+Theorem ld_invoke_pop_core:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_transfer_point lo P C C' vs0 stk fn fn' s fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o
+    BETA_RULE o REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_invoke_pop_core_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem ld_invoke_active_pop:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -837,11 +963,12 @@ Theorem ld_invoke_active_pop:
   ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
     (q with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
-  drule_all ld_invoke_pop_core >> simp[] >> strip_tac >>
-  simp[NoAsms, Abbr `Goal`] >>
-  qexistsl_tac [`PG'`,`G'`,`tn'`,`inst'`,`s''`,`t0`,`A'`,`frames`,`N'`,`X`,`p'`,`h`] >>
-  gvs[] >> metis_tac[]
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o
+    BETA_RULE o REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_invoke_active_pop_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ld_invoke_guarded_pop:
@@ -864,25 +991,10 @@ Theorem ld_invoke_guarded_pop:
   ^ld_probe_point lo P C C' vs0 stk fn fn' caller_cs fs0 f0 A0 Sigma names bb
     (q with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
-  qabbrev_tac `Stable = ^ld_probe_stable` >>
-  qabbrev_tac `Terminal = ^ld_probe_terminal` >>
-  qabbrev_tac `Point = ^ld_probe_point` >>
-  qabbrev_tac `Guard = ^ld_probe_guard` >> strip_tac >>
-  `q.vs_current_bb = t.vs_current_bb` by
-    metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control] >>
-  `?ti. get_instruction bb (SUC t.vs_inst_idx) = SOME ti` by
-    (mp_tac (Q.INST [`C` |-> `C'`, `k` |-> `j`,
-      `t` |-> `q with vs_inst_idx := SUC t.vs_inst_idx`]
-      lowerDloadReturnAlignmentTheory.ld_successful_body_fetch) >>
-     fs[Abbr `Guard`] >> metis_tac[]) >>
-  `active_inst fn' ti (q with vs_inst_idx := SUC t.vs_inst_idx)` by
-    (simp[contextCodegenRelTheory.active_inst_def] >>
-     qexists_tac `bb` >>
-     gvs[venomInstTheory.get_instruction_def] >>
-     metis_tac[venomExecPropsTheory.lookup_block_MEM,
-       venomExecPropsTheory.lookup_block_label]) >>
-  qunabbrev_tac `Ambient` >> qunabbrev_tac `Stable` >>
-  qunabbrev_tac `Terminal` >> qunabbrev_tac `Point` >>
-  drule_all ld_invoke_active_pop >> simp[NoAsms]
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o
+    BETA_RULE o REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_invoke_guarded_pop_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED

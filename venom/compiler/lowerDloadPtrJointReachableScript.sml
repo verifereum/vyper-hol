@@ -1,13 +1,13 @@
 Theory lowerDloadPtrJointReachable
 Ancestors o1PassContract lowerDloadPtrPhase lowerDloadPtrJointEntry lowerDloadPtrJointBlock
   lowerDloadPtrJointCall lowerDloadPtrJointReturn lowerDloadPtrJointDispatch
-  lowerDloadPtrRawReachable lowerDloadPtrStatic ptrDiscipline irSupply venomInst passSharedDefs list rich_list pred_set finite_map
+  lowerDloadPtrRawReachable lowerDloadPtrStatic frameAllocationOwnership ptrDiscipline irSupply venomInst passSharedDefs list rich_list pred_set finite_map
 
 (* ML-only abbreviation: the JointDispatch invariant with its guard true. *)
 val normal = ``\ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -46,7 +46,7 @@ val normal = ``\ds PH H un g j t.
 val joint = ``\ds PH H un g j t.
   (^normal) ds PH H un g j t \/ dload_terminal_mode lo P vs C ds H un g j t``;
 
-Theorem dload_joint_reachable_if_next:
+val dload_joint_reachable_if_next_header = ``
   !vs C' ds PH H un g j t.
   frame_reachable vs C' ds PH H un g j t ==>
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -62,7 +62,14 @@ Theorem dload_joint_reachable_if_next:
     active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
     (^joint) ds PH (step_prov PH H j t1) (step_taint j t t1 un) g next
       (t1 with vs_inst_idx := SUC t.vs_inst_idx)) ==>
-  (^joint) ds PH H un g j t
+  (^joint) ds PH H un g j t``;
+
+Theorem dload_joint_reachable_if_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
+    ``\s:venom_state. o1_initial_state_ok s /\
+      s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+    dload_joint_reachable_if_next_header))))
 Proof
   ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
   >- suspend "entry"
@@ -72,54 +79,70 @@ Proof
   >> suspend "return"
 QED
 
-Resume dload_joint_reachable_if_next[entry]:
+Resume dload_joint_reachable_if_next_static[entry]:
   rpt gen_tac >> strip_tac >> strip_tac >>
+  qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> disj1_tac >>
-  drule_all dload_joint_entry >> simp[]
+  drule_all dload_joint_entry_static >> simp[]
 QED
 
-Resume dload_joint_reachable_if_next[next]:
+Resume dload_joint_reachable_if_next_static[next]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
   strip_tac >> strip_tac >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Resume dload_joint_reachable_if_next[block]:
+Resume dload_joint_reachable_if_next_static[block]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
   strip_tac >> strip_tac >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
+  qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
-  drule_at (Pat `step_inst _ _ _ _ = _`) dload_joint_block_closed >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) dload_joint_block_closed_static >>
   disch_then drule_all >> simp[]
 QED
 
-Resume dload_joint_reachable_if_next[call]:
+Resume dload_joint_reachable_if_next_static[call]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
   strip_tac >> strip_tac >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
+  qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
-  drule_at (Pat `decode_invoke _ = _`) dload_joint_call_closed >>
+  drule_at (Pat `decode_invoke _ = _`) dload_joint_call_closed_static >>
   disch_then drule_all >> simp[]
 QED
 
-Resume dload_joint_reachable_if_next[return]:
+Resume dload_joint_reachable_if_next_static[return]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
   strip_tac >> strip_tac >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
+  qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
-  drule_at (Pat `step_inst _ _ _ _ = _`) dload_joint_return_closed >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) dload_joint_return_closed_static >>
   disch_then drule_all >> simp[]
 QED
 
-Finalise dload_joint_reachable_if_next
+Finalise dload_joint_reachable_if_next_static
+
+Theorem dload_joint_reachable_if_next:
+  ^dload_joint_reachable_if_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  rpt gen_tac >> disch_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule dload_joint_reachable_if_next_static >> disch_then irule >>
+  simp[o1_run_state_ok_def] >>
+  rpt (first_assum (irule_at Any)) >> gvs[o1_run_state_ok_def] >>
+  first_assum ACCEPT_TAC
+QED
 
 Theorem dload_target_reachable_labels:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -130,7 +153,7 @@ Proof
   drule frame_reachable_functions_member >> simp[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem dload_joint_reachable:
+val dload_joint_reachable_header = ``
   !vs C' ds PH H un g j t.
   frame_reachable vs C' ds PH H un g j t ==>
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -138,19 +161,38 @@ Theorem dload_joint_reachable:
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions ==>
-  (^joint) ds PH H un g j t
+  (^joint) ds PH H un g j t``;
+
+Theorem dload_joint_reachable_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
+    ``\s:venom_state. o1_initial_state_ok s /\
+      s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+    dload_joint_reachable_header))))
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
-  drule dload_joint_reachable_if_next >>
+  qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
+  drule dload_joint_reachable_if_next_static >>
   disch_then irule >>
   reverse conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (fn_labels g')` by (irule dload_target_reachable_labels >> metis_tac[]) >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  irule (SRULE [] dload_joint_next) >>
+  irule (SRULE [] dload_joint_next_static) >>
   simp[] >>
   conj_tac >- (qexists_tac `fuel` >> simp[]) >>
   qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
   disch_then kall_tac >> metis_tac[]
+QED
+
+Theorem dload_joint_reachable:
+  ^dload_joint_reachable_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  rpt gen_tac >> disch_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule dload_joint_reachable_static >> disch_then irule >>
+  simp[o1_run_state_ok_def] >>
+  rpt (first_assum (irule_at Any)) >> gvs[o1_run_state_ok_def]
 QED

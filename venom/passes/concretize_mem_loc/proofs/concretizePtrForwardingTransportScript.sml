@@ -31,8 +31,8 @@ Proof
   simp[revert_forward_at_def, revert_forward_pair_def, get_instruction_def]
 QED
 
-Theorem ptr_paired_prefix_forwarding:
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+Theorem ptr_paired_prefix_forwarding_static:
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   a.po_inst.inst_opcode <> NOP /\ in_revert_forward a.po_fn a.po_state ==>
@@ -47,7 +47,7 @@ Proof
      a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   irule ptr_paired_cursor_forwarding >>
   qexistsl_tac [`a`, `lp`] >> simp[EVERY_MEM] >>
   rpt strip_tac >>
@@ -55,4 +55,16 @@ Proof
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def,
         fn_insts_MEM] >> metis_tac[]) >>
   gvs[inst_wf_def]
+QED
+
+Theorem ptr_paired_prefix_forwarding:
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\ in_revert_forward a.po_fn a.po_state ==>
+  in_revert_forward at.po_fn at.po_state
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_forwarding_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

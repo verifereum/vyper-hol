@@ -226,6 +226,8 @@ Theorem ld_load_certificate_backward:
   lo <= f /\ allocas_non_overlapping t0 /\ alloca_next_valid t0 /\
   allocas_from f t0 /\ f <= t0.vs_alloca_next /\ t0.vs_alloca_next < dimword (:256) /\
   (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 <= dyn_floor CS s) /\
+  t0.vs_alloca_next <= dyn_floor CS s /\
   ld_frame_bound t0.vs_alloca_next H BP BH /\ ld_stack_bound t0.vs_alloca_next gstk /\
   (!owner bs size. ld_live astk L AP AG (owner,(bs,size)) ==>
     owner IN live /\ lo <= bs) /\
@@ -237,7 +239,7 @@ Theorem ld_load_certificate_backward:
     (bs+size <= cs \/ cs+cz <= bs) /\ (bt+size <= ct \/ ct+cz <= bt)) /\
   (!owner bs bt size. owner IN live /\ ld_site_entry E owner bs bt size ==>
     bt+size <= f \/ ?j. j NOTIN keys /\ FLOOKUP t0.vs_allocas j = SOME(bt,size)) /\
-  ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb)
+  ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
     tn.t_mem u0.t_mem (\aa. read_memory aa 1 s) (\bb. read_memory bb 1 t0) /\
   (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t0 = NONE)) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
@@ -247,7 +249,7 @@ Theorem ld_load_certificate_backward:
     ld_owned_vars U E (ld_set_prov AG [out] NONE)
       (ld_set_prov (ld_set_prov BH [bv] NONE) [out] NONE)
       (step_taint inst s z tn) u z t /\
-    ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb)
+    ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
       (step_taint inst s z tn).t_mem u.t_mem
       (\aa. read_memory aa 1 z) (\bb. read_memory bb 1 t) /\
     ld_frame_embedding E L H z t /\ ld_alloc_account keys d0 (a.inst_id INSERT A) z t /\
@@ -292,7 +294,7 @@ Proof
   drule_all ld_scratch_certificate_structure >>
   disch_then (qx_choose_then `p` (map_every assume_tac o CONJUNCTS)) >>
   drule_all (BETA_RULE (Q.INST
-    [`R` |-> `\aa bb. (aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb`]
+    [`R` |-> `\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb`]
     ld_load_completed_byte_rel)) >>
   disch_then (qspecl_then [`fuel`,`CS`] (qx_choose_then `z2` strip_assume_tac)) >>
   `z2 = z` by

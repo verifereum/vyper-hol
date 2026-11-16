@@ -37,3 +37,19 @@ Proof
   simp[setup_callee_def] >>
   Cases_on `NULL fn.fn_blocks` >> simp[] >> strip_tac >> gvs[]
 QED
+
+Theorem dload_no_phi_entry:
+  first_block_no_phi f /\ fn_entry_label f = SOME lbl ==>
+  (enters_block f
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t <=>
+   t = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+Proof
+  Cases_on `f.fn_blocks` >> simp[fn_entry_label_def, entry_block_def] >> strip_tac >> gvs[] >>
+  `phi_prefix_length h.bb_instructions = 0 /\
+   (!s. eval_phis s h.bb_instructions = OK s)` by
+    (qpat_x_assum `first_block_no_phi f` mp_tac >>
+     simp[first_block_no_phi_def] >>
+     Cases_on `h.bb_instructions` >>
+     simp[phi_prefix_length_def, eval_phis_def]) >>
+  simp[enters_block_def, lookup_block_def, FIND_thm] >> metis_tac[]
+QED
