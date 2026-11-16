@@ -133,7 +133,31 @@ Resume abi_encode_word_vv_full_from_packaging[word_continuation]:
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   qunabbrev_tac `childQ` >> disch_then (strip_assume_tac o BETA_RULE) >> gvs[] >>
-  FAIL_TAC "physical word staging"
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee t` by
+    fs[expr_post_def] >>
+  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
+    fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  `local_ptrs_reserved ce sm` by
+    (qpat_assum `lower_value _ _ _ e sa = _`
+       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >>
+     strip_tac >> irule local_ptrs_reserved_next_var >>
+     qexists `sa` >> simp[]) >>
+  `cs_extends sm sn` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `cs_extends sn sh` by
+    (qpat_x_assum `emit_void _ _ sn = _` mp_tac >>
+     simp[emit_void_def, emit_inst_def, comp_bind_def, fresh_id_def,
+       emit_def, comp_return_def] >> strip_tac >> gvs[] >>
+     irule cs_extends_same_block >> simp[]) >>
+  `fn_has_code sm sn func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `32 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all abi_encode_alloc_origin_exact >>
+  disch_then (qspecl_then [`tn1`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G1`]
+    strip_assume_tac) >>
+  FAIL_TAC "word allocation endpoint"
 QED
 
 Finalise abi_encode_word_vv_full_from_packaging
