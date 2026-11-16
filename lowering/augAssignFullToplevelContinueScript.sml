@@ -275,8 +275,11 @@ Theorem augassign_toplevel_store_outcome_full[local]:
         FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail.
-      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s.
+        (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >> irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gop`, `fin`, `INL ()`, `last`, `tnlast`] >> conj_tac
@@ -454,8 +457,11 @@ Theorem augassign_toplevel_success_continue_full[local]:
         FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail.
-      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s.
+        (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt result (mid with gas_obs := [])` >>
@@ -674,8 +680,11 @@ Theorem augassign_toplevel_continue_full:
         FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail.
-      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s.
+        (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >> qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
   `valid_horizon cx st0 H0 mid.storage_trace` by fs[storage_trace_domain_def, Abbr `H0`] >>
@@ -698,7 +707,7 @@ Proof
     `Abort Revert_abort (abort_state with vs_inst_idx := abort_idx)`,
     `INR (Error (RuntimeError msg))`, `tnabort`] >>
   simp[lift_sum_def, bind_def, raise_def, exit_result_def, stmt_exit_ptr_def,
-    exprSimDefsTheory.expr_exit_def] >> fs[ghost_inv_at_def]
+    exprSimDefsTheory.halt_exit_def, exprSimDefsTheory.expr_exit_def] >> fs[ghost_inv_at_def]
 QED
 
 Resume augassign_toplevel_continue_full[success]:
@@ -753,7 +762,7 @@ Resume augassign_toplevel_continue_full[success]:
             `Gop`, `tnop`] mp_tac) >>
           pure_rewrite_tac[APPEND] >> disch_then irule >>
           conj_tac >- REFL_TAC >> first_assum ACCEPT_TAC) >>
-      simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
+      simp[stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def, exprSimDefsTheory.expr_exit_def,
         halt_state_def, set_returndata_def]) >>
   `~operated.vs_call_ctx.cc_static /\
    operated.vs_call_ctx.cc_address = cx.txn.target` by

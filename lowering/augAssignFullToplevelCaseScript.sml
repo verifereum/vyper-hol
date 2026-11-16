@@ -4,7 +4,7 @@ Ancestors
   augAssignFullToplevelRead augAssignFullToplevelCode augAssignFullToplevelPrefix
   augAssignFullToplevelContinue augAssignFullSource augAssignFullSourcePrefix
   gasOutcomeFullRunning gasOutcomeFullCompose gasOutcomeFull
-  bodyFullPreds bodySimFull bodyFullShared bodyPtrDefs
+  bodyFullPreds bodySimFull bodyFullShared bodyPtrDefs bodyInvNoDalloca
   stmtSimAugAssignStorage stmtSimAugAssign augAssignStorageFieldSource
   exprSimSource exprSimUnwrap exprSimHypsDefs exprSimProps exprBopSimProps
   exprSimTopLevelProps accountsRelProps loweringPosts emitHelperProps
@@ -140,6 +140,7 @@ Proof
   `!H. valid_horizon cx st0 H root_es.storage_trace ==>
     storage_holds cx tr ty (Value cur) (n2w slot) es s0 /\
     key_taint (if tr then tn0.t_trans else tn0.t_stor) (n2w slot) = {}` by (simp[Abbr `root_es`] >> metis_tac[]) >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all augassign_toplevel_rhs_entry_full >>
   disch_then (qspecl_then [`RetQ`, `PG`] (qx_choosel_then [`t`, `Gload`, `tnload`] strip_assume_tac)) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
@@ -154,12 +155,15 @@ Proof
       `value_has_type tvt cur` by metis_tac[vyperTypeStatePreservationTheory.read_storage_slot_success_type] >>
       `word_value cur` by metis_tac[word_value_type_typed] >>
       `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
-      irule augassign_toplevel_continue_full >> reverse (rpt conj_tac)
+      simp[] >>
+      qpat_assum `~ctx_has_dalloca ctx`
+        (fn th => irule (SRULE [th] augassign_toplevel_continue_full)) >>
+      reverse (rpt conj_tac)
       >- (qexistsl_tac [`Gload`, `e`, `env`, `es`, `gas_explicit marks t.vs_gas_readings`,
         `id`, `id_str`, `rhs`, `out`, `res`, `root_es`, `s1`, `s2`, `s3`, `src`, `t`, `tnload`, `ts`] >>
       rpt conj_tac >> metis_tac[]) >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum irule)
   >- simp[Abbr `root_es`, NoAsms]
   >> rpt (first_assum ACCEPT_TAC) >> qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `Qrun`, NoAsms]
+  simp[Abbr `Qrun`, NoAsms, exprSimDefsTheory.halt_exit_def]
 QED
