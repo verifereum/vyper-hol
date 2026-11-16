@@ -74,17 +74,6 @@ Definition mem_inv_def:
           !fn inst s. Inv ctx fn inst s ==> M ctx fn inst s
 End
 
-(* A DALLOCA does not move the free-memory pointer past the word range:
-   its size, rounded up to a multiple of 32, fits above vs_fmp.  The
-   lowered BUMP from a lower pointer then does not wrap either. *)
-Definition dalloca_no_wrap_def:
-  dalloca_no_wrap inst s <=>
-    inst.inst_opcode = DALLOCA ==>
-    !sz_op sz.
-      inst.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
-      w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
-End
-
 (* Raw phase: the frontier fits a word and every access is below it, or
    part of a revert forwarding (inst_mem_ok_in_fn); DALLOCA does not wrap
    and the free-memory pointer is at or above its initial value. *)
