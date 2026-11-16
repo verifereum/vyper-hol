@@ -419,18 +419,24 @@ Resume raw_call_tuple_suffix_prepared[copy_premises]:
   `!mem. mem_agree_outside tn2.t_mem u2.vs_memory mem ==>
       val_in_memory (BaseTV (BytesT (Dynamic n)))
         (BytesV (TAKE n s.vs_returndata)) (w2n w) mem` by
-    (qunabbrev_tac `tn2` >>
+    (qunabbrev_tac `tn2` >> rpt strip_tac >>
      irule bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier >>
      simp[] >>
-     conj_tac >- simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+     conj_tac >-
+       (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+        irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `n` >>
+        simp[listTheory.LENGTH_TAKE_EQ, exprSimPropsTheory.le_word_size_mul]) >>
      rpt strip_tac >>
      `w2n w + (32*((n+31) DIV 32)+32) <= u.vs_alloca_next` by
-       (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u` mp_tac >>
-        simp[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
-        metis_tac[]) >>
-     fs[loweringPostsTheory.val_footprint_def] >>
-     mp_tac (Q.SPECL [`n`,`s.vs_returndata`] listTheory.LENGTH_TAKE) >>
-     decide_tac) >>
+       (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+          (strip_assume_tac o PURE_REWRITE_RULE [stmt_state_rel_def, alloca_inv_def,
+              alloca_next_valid_def]) >>
+        qpat_x_assum `!aid base sz. FLOOKUP u.vs_allocas aid = SOME (base,sz) ==> _`
+          (qspecl_then [`alloc.inst_id`,`w2n w`,`32*((n+31) DIV 32)+32`] mp_tac) >>
+        simp[]) >>
+     simp[loweringPostsTheory.val_footprint_def, listTheory.LENGTH_TAKE_EQ] >>
+     mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >>
+     simp[vfmConstantsTheory.word_size_def] >> decide_tac) >>
   FAIL_TAC "copy premises"
 QED
 
