@@ -1,0 +1,554 @@
+ 0.  dynamic_entry :-
+       ∀explicit tn2 G2 tn1 G1 tn G PG DF sA lo st vs array_base id P cenv ctx es st0 cx cond e5 e4
+           vld e3 g c e2 idx e1 entry j lv saved_base mi pre lbl s0 sz func p ainst.
+         ainst.inst_opcode = ALLOCA ∧ ainst.inst_outputs = [p] ∧ MEM ainst (fn_insts func) ∧
+         fn_inst_ids_distinct func ∧ ainst.inst_operands = [Lit (n2w sz)] ∧ sz < dimword (:256) ∧
+         lookup_block s0.vs_current_bb func.fn_blocks =
+         SOME
+           <|bb_label := lbl;
+             bb_instructions :=
+               pre ⧺ [mk_inst mi MLOAD [saved_base] [lv]; ainst; mk_inst j JMP [Label entry] []]|> ∧
+         lookup_block entry func.fn_blocks =
+         SOME
+           <|bb_label := entry;
+             bb_instructions :=
+               [mk_inst e1 ASSIGN [Lit 0w] [idx]; mk_inst e2 GT [Var lv; Lit (n2w c)] [g];
+                mk_inst e3 ISZERO [Var g] [vld]; mk_inst e4 ASSERT [Var vld] [];
+                mk_inst e5 JMP [Label cond] []]|> ∧ s0.vs_inst_idx = LENGTH pre ∧ ¬s0.vs_halted ∧
+         (∃H. valid_horizon cx st0 H es.storage_trace) ∧
+         (∀H. valid_horizon cx st0 H es.storage_trace ⇒
+              stmt_state_rel H ctx func cenv cx es s0 ∧ storage_well_formed_on cx es (FST H)) ∧
+         P es ∧ lookup_scopes id es.scopes = NONE ∧ eval_operand saved_base s0 = SOME array_base ∧
+         mload (w2n array_base) s0 = n2w (LENGTH vs) ∧ LENGTH vs ≤ c ∧ c < dimword (:256) ∧
+         ret_pc_ok cenv st s0 ∧ ALL_DISTINCT [lv; p; idx; g; vld] ∧
+         not_local_ptr cenv es.scopes lv ∧ not_local_ptr cenv es.scopes p ∧
+         not_local_ptr cenv es.scopes idx ∧ not_local_ptr cenv es.scopes g ∧
+         not_local_ptr cenv es.scopes vld ∧ (∀x. saved_base = Var x ⇒ ¬MEM x [lv; p; idx; g; vld]) ∧
+         (∀x. not_fresh_at st x ⇒ ¬MEM x [lv; p; idx; g; vld]) ∧ alloca_history func s0 ∧
+         w2n array_base + 32 ≤ s0.vs_alloca_next ∧ ¬ctx_has_dalloca ctx ∧ allocas_from lo s0 ∧
+         lo ≤ s0.vs_alloca_next ∧
+         exec_alloca ainst (update_var lv (n2w (LENGTH vs)) s0) (n2w sz) = OK sA ∧
+         (∀H. inst_seq_ptr (DF H) lo ctx func PG G tn [mk_inst mi MLOAD [saved_base] [lv]; ainst] s0
+                G1 tn1) ∧
+         (∀H. inst_seq_ptr (DF H) lo ctx func PG G1 tn1
+                [mk_inst e1 ASSIGN [Lit 0w] [idx]; mk_inst e2 GT [Var lv; Lit (n2w c)] [g];
+                 mk_inst e3 ISZERO [Var g] [vld]; mk_inst e4 ASSERT [Var vld] []] (jump_to entry sA)
+                G2 tn2) ⇒
+         ∃dst cc s1.
+           exec_alloca ainst (update_var lv (n2w (LENGTH vs)) s0) (n2w sz) = OK s1 ∧ s1 = sA ∧
+           cc =
+           jump_to cond (update_var vld 1w (update_var g 0w (update_var idx 0w (jump_to entry s1)))) ∧
+           array_loop_inv ctx func cenv cx st0 P vs id idx saved_base array_base p dst sz ainst cond
+             st 0 es cc ∧ lookup_var lv cc = SOME (n2w (LENGTH vs)) ∧ array_caller_frame st s0 cc ∧
+           gas_marked_path F ctx func s0 0 (OK cc) ∧ gas_path_mem ctx func s0 0 (OK cc) ∧
+           alloca_history func cc ∧ cc.vs_memory = s0.vs_memory ∧
+           s0.vs_alloca_next ≤ cc.vs_alloca_next ∧
+           ∀H. gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G,tn) [] (OK cc,G2,tn2)
+ 1.  ∀s'³' vs t' s'⁴' t''.
+       eval_iterator cx (Array (Name (ArrayT typ (Dynamic n')) name)) s'³' = (INL vs,t') ∧
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL (),t'') ⇒
+       body_for_full_ok cx tv id stmts vs
+ 2.  body_iterator_full_ok cx (Array (Name (ArrayT typ (Dynamic n')) name))
+ 3.  body_inv tops ctx cenv cx
+ 4.  supported_stmt tops bindings (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts)
+ 5.  ∀target.
+       supported_stmt_expr_exists (expr_abi_decode_target_root target)
+         (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts) ⇒
+       occurs_abi_decode_target target tops
+ 6.  expr_sim_inv cenv cx env es
+ 7.  ce_locals_declared cenv env
+ 8.  locals_alloc_ok cenv env
+ 9.  type_stmt env ret_ty (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts) =
+     SOME env
+10.  stmt_exprs_ok cenv (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts)
+11.  call_evaluation_safe cx
+       (int_calls_stmt (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts))
+12.  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty
+13.  ¬ctx_has_dalloca ctx
+14.  FLOOKUP env.var_types name = SOME (ArrayT typ (Dynamic n'))
+15.  id ∉ FDOM env.var_types
+16.  iterator_unmodified (Array (Name (ArrayT typ (Dynamic n')) name)) stmts
+17.  type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b
+18.  supported_stmts tops bindings stmts
+19.  ¬supported_stmts_expr_exists expr_internal_call_root stmts
+20.  lookup_scopes name es.scopes = SOME ent
+21.  evaluate_type (get_tenv cx) typ = SOME tv
+22.  ent.type = ArrayTV tv (Dynamic n')
+23.  value_has_type (ArrayTV tv (Dynamic n')) (ArrayV av)
+24.  well_formed_type_value (ArrayTV tv (Dynamic n'))
+25.  ent.value = ArrayV av
+26.  LENGTH vs ≤ n
+27.  LENGTH vs < dimword (:256)
+28.  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az)
+29.  ∀gs.
+       eval_iterator cx (Array (Name (ArrayT typ (Dynamic n')) name)) (es with gas_obs := gs) =
+       (INL (MAP Value vs),es with gas_obs := gs)
+30.  body_for_full_ok cx tv id stmts (MAP Value vs)
+31.  FLOOKUP cenv.ce_vars id = NONE
+32.  lookup_scopes id es.scopes = NONE
+33.  stmt_env cenv lctx ret_ty (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts)
+       start = (cenv,finish)
+34.  stmt_env cenv lctx ret_ty
+       (gas_shadow_stmt (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts))
+       shadow_start = (cenv,shadow_finish)
+35.  gas_shadow_state start shadow_start
+36.  gas_shadow_state finish shadow_finish
+37.  gas_shadow_context ctx shadow_ctx
+38.  ctx_inst_ids_distinct ctx
+39.  gas_shadow_function func shadow_func
+40.  MEM func ctx.ctx_functions
+41.  MEM shadow_func shadow_ctx.ctx_functions
+42.  fn_has_code start finish func
+43.  fn_has_code shadow_start shadow_finish shadow_func
+44.  ∀H. dead_lo_ok H (DF H) lo cenv cx
+45.  fn_inst_ids_distinct func
+46.  local_ptrs_reserved cenv start
+47.  ret_pc_ok cenv start s0
+48.  ∀x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ⇒ not_fresh_at start x
+49.  ¬block_is_terminated start
+50.  gas_admissible
+       (eval_stmt cx (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts))
+       (stmt_res_ok lctx) es
+51.  return_buf_frame d cenv start s0
+52.  alloca_history func s0
+53.  ctx_has_dalloca ctx ⇒ allocas_below_fmp s0
+54.  ∀fn inst s. frag_reachable ctx func s0 fn inst s ⇒ dalloca_no_wrap inst s
+55.  ∀H. valid_horizon cx st0 H es.storage_trace ⇒
+         stmt_state_rel H ctx func cenv cx es s0 ∧ storage_well_formed_on cx es (FST H) ∧
+         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0
+56.  ¬s0.vs_halted
+57.  s0.vs_current_bb = start.cs_current_bb
+58.  s0.vs_inst_idx = LENGTH start.cs_current_insts
+59.  storage_trace_domain cx st0 es.storage_trace
+60.  cenv.ce_alloca_locals
+61.  type_memory_size tv < 18446744073709551616
+62.  type_memory_bytes cenv typ = type_memory_size tv
+63.  type_memory_bytes cenv typ + 64 < dimword (:256)
+64.  ∀c lc a b.
+       compile_stmts c lc ret_ty stmts a = ((),b) ⇒ cs_extends a b ∧ a.cs_next_var ≤ b.cs_next_var
+65.  cenv' = cenv
+66.  compile_stmt cenv lctx ret_ty
+       (For id typ (Array (Name (ArrayT typ (Dynamic n')) name)) n stmts) start = ((),finish)
+67.  Abbrev
+       (Head =
+        (λidx p bound_op cond_lbl ainst arr_base dst H rs ee G tn s.
+           LENGTH rs ≤ LENGTH vs ∧ rs = MAP Value (DROP (LENGTH vs − LENGTH rs) vs) ∧
+           expr_sim_inv cenv cx env ee ∧ stmt_state_rel H ctx func cenv cx ee s ∧
+           storage_well_formed_on cx ee (FST H) ∧ dead_lo_ok H (DF H) lo cenv cx ∧
+           return_buf_frame d cenv start s ∧ alloca_history func s ∧
+           s0.vs_alloca_next ≤ s.vs_alloca_next ∧ allocas_from lo s ∧
+           ghost_inv_at (DF H) lo d cenv cx ee G tn s ∧ ¬s.vs_halted ∧ s.vs_current_bb = cond_lbl ∧
+           s.vs_inst_idx = 0 ∧ LENGTH vs < dimword (:256) ∧
+           lookup_var idx s = SOME (n2w (LENGTH vs − LENGTH rs)) ∧
+           eval_operand bound_op s = SOME (n2w (LENGTH vs)) ∧ FLOOKUP G idx = NONE ∧
+           op_prov G bound_op = NONE ∧ op_taint tn (Var idx) = ∅ ∧ op_taint tn bound_op = ∅ ∧
+           lookup_scopes name ee.scopes = SOME ent ∧ ent.type = ArrayTV tv (Dynamic n') ∧
+           ent.value = ArrayV av ∧ vs = array_elements ent.type av ∧
+           eval_operand (Var ap) s = SOME arr_base ∧ lookup_var p s = SOME dst ∧
+           ptr_covers G tn p s (type_memory_bytes cenv typ) ∧
+           FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,type_memory_bytes cenv typ) ∧
+           w2n dst + type_memory_bytes cenv typ < dimword (:256) ∧
+           w2n dst + type_memory_bytes cenv typ ≤ s.vs_alloca_next ∧
+           (∀nm b len.
+              local_region cenv ee.scopes s nm b len ⇒
+              regions_disjoint (w2n dst) (type_memory_bytes cenv typ) b len) ∧
+           (∀x w. not_fresh_at start x ∧ lookup_var x s0 = SOME w ⇒ lookup_var x s = SOME w) ∧
+           (∀aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ⇒ FLOOKUP s.vs_allocas aid = SOME bl) ∧
+           (∀x. not_fresh_at start x ⇒
+                FLOOKUP G x = FLOOKUP G0 x ∧ op_taint tn (Var x) = op_taint tn0 (Var x)) ∧
+           lookup_scopes id ee.scopes = NONE ∧ ret_pc_ok cenv start s))
+68.  ∀l. FLOOKUP cenv.ce_vars id = SOME l ⇒ ∃q z. l = PtrVar q z
+69.  ∀c lc a b. compile_stmts c lc ret_ty stmts a = ((),b) ⇒ cs_extends a b
+70.  (load_result,load_cs) = (Var (STRING #"%" (toString start.cs_next_var)),st1)
+71.  do
+       bc' <- declare_local cenv id typ;
+       emit_local_alloca bc' id;
+       entry <- fresh_label "iter_entry";
+       cond' <- fresh_label "iter_cond";
+       bod' <- fresh_label "iter_body";
+       incr' <- fresh_label "iter_incr";
+       exit' <- fresh_label "iter_exit";
+       emit_inst JMP [Label entry] [];
+       new_block entry;
+       idx' <- fresh_var;
+       emit_inst ASSIGN [Lit 0w] [idx'];
+       do
+         invalid <- emit_op GT [Var (STRING #"%" (toString start.cs_next_var)); Lit (n2w n')];
+         valid <- emit_op ISZERO [invalid];
+         emit_void ASSERT [valid]
+       od;
+       emit_inst JMP [Label cond'] [];
+       new_block cond';
+       done <- emit_op EQ [Var idx'; Var (STRING #"%" (toString start.cs_next_var))];
+       emit_inst JNZ [done; Label exit'; Label bod'] [];
+       new_block bod';
+       off <- emit_op MUL [Var idx'; Lit (n2w (type_memory_bytes cenv typ))];
+       tot <- emit_op ADD [Lit 32w; off];
+       ep <- emit_op ADD [Var ap; tot];
+       comp_return (bc',entry,cond',bod',incr',exit',idx',off,tot,ep)
+     od st1 =
+     ((bc,fresh_label_output "iter_entry" start.cs_next_label,
+       fresh_label_output "iter_cond" (start.cs_next_label + 1),
+       fresh_label_output "iter_body" (start.cs_next_label + 2),
+       fresh_label_output "iter_incr" (start.cs_next_label + 3),
+       fresh_label_output "iter_exit" (start.cs_next_label + 4),
+       STRING #"%" (toString (start.cs_next_var + 2)),
+       Var (STRING #"%" (toString (start.cs_next_var + 6))),
+       Var (STRING #"%" (toString (start.cs_next_var + 7))),
+       Var (STRING #"%" (toString (start.cs_next_var + 8)))),sa)
+72.  compile_stmts bc
+       (InLoop (fresh_label_output "iter_exit" (start.cs_next_label + 4))
+          (fresh_label_output "iter_incr" (start.cs_next_label + 3))) ret_ty stmts sb0 = ((),sb1)
+73.  emit_jmp_if_not_terminated (fresh_label_output "iter_incr" (start.cs_next_label + 3)) sb1 =
+     ((),sj)
+74.  do
+       new_block (fresh_label_output "iter_incr" (start.cs_next_label + 3));
+       next <- emit_op ADD [Var (STRING #"%" (toString (start.cs_next_var + 2))); Lit 1w];
+       emit_inst ASSIGN [next] [STRING #"%" (toString (start.cs_next_var + 2))];
+       emit_inst JMP [Label (fresh_label_output "iter_cond" (start.cs_next_label + 1))] [];
+       new_block (fresh_label_output "iter_exit" (start.cs_next_label + 4));
+       comp_return ()
+     od sj = ((),finish)
+75.  lv = STRING #"%" (toString start.cs_next_var)
+76.  p = STRING #"%" (toString (start.cs_next_var + 1))
+77.  idx = STRING #"%" (toString (start.cs_next_var + 2))
+78.  g = STRING #"%" (toString (start.cs_next_var + 3))
+79.  vld = STRING #"%" (toString (start.cs_next_var + 4))
+80.  dv = STRING #"%" (toString (start.cs_next_var + 5))
+81.  ov = STRING #"%" (toString (start.cs_next_var + 6))
+82.  tot = STRING #"%" (toString (start.cs_next_var + 7))
+83.  ep = STRING #"%" (toString (start.cs_next_var + 8))
+84.  lvo = Var lv
+85.  offo = Var ov
+86.  toto = Var tot
+87.  epo = Var ep
+88.  st1.cs_next_var = start.cs_next_var + 1
+89.  entry' = fresh_label_output "iter_entry" start.cs_next_label
+90.  cond = fresh_label_output "iter_cond" (start.cs_next_label + 1)
+91.  bod = fresh_label_output "iter_body" (start.cs_next_label + 2)
+92.  incr = fresh_label_output "iter_incr" (start.cs_next_label + 3)
+93.  exit = fresh_label_output "iter_exit" (start.cs_next_label + 4)
+94.  declare_local cenv id typ st1 = (bc,st1 with cs_next_var := st1.cs_next_var + 1)
+95.  STRING #"%" (toString st1.cs_next_var) = p
+96.  sa.cs_current_bb = bod
+97.  sa.cs_current_insts =
+     [<|inst_id := start.cs_next_id + 10; inst_opcode := MUL;
+        inst_operands := [Var idx; Lit (n2w (type_memory_bytes cenv typ))]; inst_outputs := [ov]|>;
+      <|inst_id := start.cs_next_id + 11; inst_opcode := ADD; inst_operands := [Lit 32w; Var ov];
+        inst_outputs := [tot]|>;
+      <|inst_id := start.cs_next_id + 12; inst_opcode := ADD; inst_operands := [Var ap; Var tot];
+        inst_outputs := [ep]|>]
+98.  sa.cs_next_var = start.cs_next_var + 9
+99.  sa.cs_next_id = start.cs_next_id + 13
+100.  sa.cs_next_label = start.cs_next_label + 5
+101.  sa.cs_blocks =
+      <|bb_label := cond;
+        bb_instructions :=
+          [<|inst_id := start.cs_next_id + 8; inst_opcode := EQ; inst_operands := [Var idx; Var lv];
+             inst_outputs := [dv]|>;
+           <|inst_id := start.cs_next_id + 9; inst_opcode := JNZ;
+             inst_operands := [Var dv; Label exit; Label bod]; inst_outputs := []|>]|> ::
+         <|bb_label := entry';
+          bb_instructions :=
+            [<|inst_id := start.cs_next_id + 3; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+               inst_outputs := [idx]|>;
+             <|inst_id := start.cs_next_id + 4; inst_opcode := GT;
+               inst_operands := [Var lv; Lit (n2w n')]; inst_outputs := [g]|>;
+             <|inst_id := start.cs_next_id + 5; inst_opcode := ISZERO; inst_operands := [Var g];
+               inst_outputs := [vld]|>;
+             <|inst_id := start.cs_next_id + 6; inst_opcode := ASSERT; inst_operands := [Var vld];
+               inst_outputs := []|>;
+             <|inst_id := start.cs_next_id + 7; inst_opcode := JMP; inst_operands := [Label cond];
+               inst_outputs := []|>]|> ::
+         <|bb_label := start.cs_current_bb;
+          bb_instructions :=
+            start.cs_current_insts ⧺
+            [<|inst_id := start.cs_next_id; inst_opcode := MLOAD; inst_operands := [Var ap];
+               inst_outputs := [lv]|>;
+             <|inst_id := start.cs_next_id + 1; inst_opcode := ALLOCA;
+               inst_operands := [Lit (n2w (type_memory_bytes cenv typ))]; inst_outputs := [p]|>;
+             <|inst_id := start.cs_next_id + 2; inst_opcode := JMP; inst_operands := [Label entry'];
+               inst_outputs := []|>]|> ::start.cs_blocks
+102.  nv = STRING #"%" (toString sb1.cs_next_var)
+103.  finish.cs_current_bb = exit
+104.  finish.cs_current_insts = []
+105.  finish.cs_next_var = sb1.cs_next_var + 1
+106.  finish.cs_next_id = sj.cs_next_id + 3
+107.  finish.cs_next_label = sj.cs_next_label
+108.  finish.cs_blocks =
+      <|bb_label := incr;
+        bb_instructions :=
+          [<|inst_id := sj.cs_next_id; inst_opcode := ADD; inst_operands := [Var idx; Lit 1w];
+             inst_outputs := [nv]|>;
+           <|inst_id := sj.cs_next_id + 1; inst_opcode := ASSIGN; inst_operands := [Var nv];
+             inst_outputs := [idx]|>;
+           <|inst_id := sj.cs_next_id + 2; inst_opcode := JMP; inst_operands := [Label cond];
+             inst_outputs := []|>]|> ::
+         <|bb_label := sb1.cs_current_bb; bb_instructions := sj.cs_current_insts|> ::sb1.cs_blocks
+109.  cs_extends sj finish
+110.  cs_extends start sa
+111.  ¬block_is_terminated sa
+112.  compile_iter_elem_copy cenv (Var (STRING #"%" (toString (start.cs_next_var + 8))))
+        (Var (STRING #"%" (toString (start.cs_next_var + 1)))) (type_memory_bytes cenv typ)
+        LocMemory F typ typ sa = ((),sb0)
+113.  same_blocks sa sb0
+114.  cs_extends sa sb0
+115.  sa.cs_next_var ≤ sb0.cs_next_var
+116.  sa.cs_next_id ≤ sb0.cs_next_id
+117.  sb0.cs_current_insts = sa.cs_current_insts ⧺ emitted_insts sa sb0
+118.  ¬block_is_terminated sb0
+119.  sj.cs_blocks = sb1.cs_blocks
+120.  sj.cs_current_bb = sb1.cs_current_bb
+121.  sj.cs_next_var = sb1.cs_next_var
+122.  cs_extends sb1 sj
+123.  ¬block_is_terminated sb1 ⇒
+      sj.cs_current_insts =
+      sb1.cs_current_insts ⧺
+      [<|inst_id := sb1.cs_next_id; inst_opcode := JMP; inst_operands := [Label incr];
+         inst_outputs := []|>]
+124.  cs_extends sb0 sb1
+125.  fn_has_code start sa func
+126.  fn_has_code sa sb0 func
+127.  fn_has_code sb0 sb1 func
+128.  fn_has_code sb1 sj func
+129.  fn_has_code sj finish func
+130.  stmts_env bc (InLoop exit incr) ret_ty stmts sb0 = (bc_out,sb1)
+131.  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt stmts) shadow_sb0 =
+      (bc_out,shadow_sb1)
+132.  gas_shadow_state sb0 shadow_sb0
+133.  gas_shadow_state sb1 shadow_sb1
+134.  fn_has_code shadow_sb0 shadow_sb1 shadow_func
+135.  sb0.cs_current_bb = bod
+136.  lookup_block start.cs_current_bb func.fn_blocks =
+      SOME
+        <|bb_label := start.cs_current_bb;
+          bb_instructions :=
+            start.cs_current_insts ⧺
+            [<|inst_id := start.cs_next_id; inst_opcode := MLOAD; inst_operands := [Var ap];
+               inst_outputs := [lv]|>;
+             <|inst_id := start.cs_next_id + 1; inst_opcode := ALLOCA;
+               inst_operands := [Lit (n2w (type_memory_bytes cenv typ))]; inst_outputs := [p]|>;
+             <|inst_id := start.cs_next_id + 2; inst_opcode := JMP; inst_operands := [Label entry'];
+               inst_outputs := []|>]|>
+137.  lookup_block entry' func.fn_blocks =
+      SOME
+        <|bb_label := entry';
+          bb_instructions :=
+            [<|inst_id := start.cs_next_id + 3; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+               inst_outputs := [idx]|>;
+             <|inst_id := start.cs_next_id + 4; inst_opcode := GT;
+               inst_operands := [Var lv; Lit (n2w n')]; inst_outputs := [g]|>;
+             <|inst_id := start.cs_next_id + 5; inst_opcode := ISZERO; inst_operands := [Var g];
+               inst_outputs := [vld]|>;
+             <|inst_id := start.cs_next_id + 6; inst_opcode := ASSERT; inst_operands := [Var vld];
+               inst_outputs := []|>;
+             <|inst_id := start.cs_next_id + 7; inst_opcode := JMP; inst_operands := [Label cond];
+               inst_outputs := []|>]|>
+138.  lookup_block cond func.fn_blocks =
+      SOME
+        <|bb_label := cond;
+          bb_instructions :=
+            [<|inst_id := start.cs_next_id + 8; inst_opcode := EQ;
+               inst_operands := [Var idx; Var lv]; inst_outputs := [dv]|>;
+             <|inst_id := start.cs_next_id + 9; inst_opcode := JNZ;
+               inst_operands := [Var dv; Label exit; Label bod]; inst_outputs := []|>]|>
+139.  lookup_block incr func.fn_blocks =
+      SOME
+        <|bb_label := incr;
+          bb_instructions :=
+            [<|inst_id := sj.cs_next_id; inst_opcode := ADD; inst_operands := [Var idx; Lit 1w];
+               inst_outputs := [nv]|>;
+             <|inst_id := sj.cs_next_id + 1; inst_opcode := ASSIGN; inst_operands := [Var nv];
+               inst_outputs := [idx]|>;
+             <|inst_id := sj.cs_next_id + 2; inst_opcode := JMP; inst_operands := [Label cond];
+               inst_outputs := []|>]|>
+140.  T
+141.  FLOOKUP bc.ce_vars id =
+      SOME (PtrVar (Var (STRING #"%" (toString st1.cs_next_var))) (type_memory_bytes cenv typ))
+142.  ∀n. n ≠ id ⇒ FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n
+143.  bc with
+      <|ce_vars := cenv.ce_vars; ce_dynarray_capacity := cenv.ce_dynarray_capacity;
+        ce_var_type := cenv.ce_var_type|> = cenv
+144.  start.cs_next_var + 9 ≤ sj.cs_next_var
+145.  ∀scs.
+        not_local_ptr cenv scs idx ∧ not_local_ptr cenv scs dv ∧ not_local_ptr cenv scs ov ∧
+        not_local_ptr cenv scs tot ∧ not_local_ptr cenv scs ep ∧ not_local_ptr cenv scs nv ∧
+        not_local_ptr cenv scs lv ∧ not_local_ptr cenv scs g ∧ not_local_ptr cenv scs vld
+146.  not_fresh_at start ap
+147.  idx ≠ dv
+148.  idx ≠ ov
+149.  idx ≠ tot
+150.  idx ≠ ep
+151.  idx ≠ nv
+152.  idx ≠ p
+153.  idx ≠ g
+154.  idx ≠ vld
+155.  dv ≠ ov
+156.  dv ≠ tot
+157.  dv ≠ ep
+158.  dv ≠ nv
+159.  dv ≠ p
+160.  dv ≠ g
+161.  dv ≠ vld
+162.  ov ≠ tot
+163.  ov ≠ ep
+164.  ov ≠ nv
+165.  ov ≠ p
+166.  ov ≠ g
+167.  ov ≠ vld
+168.  tot ≠ ep
+169.  tot ≠ nv
+170.  tot ≠ p
+171.  tot ≠ g
+172.  tot ≠ vld
+173.  ep ≠ nv
+174.  ep ≠ p
+175.  ep ≠ g
+176.  ep ≠ vld
+177.  nv ≠ p
+178.  nv ≠ g
+179.  nv ≠ vld
+180.  p ≠ lv
+181.  p ≠ g
+182.  p ≠ vld
+183.  lv ≠ g
+184.  lv ≠ vld
+185.  g ≠ vld
+186.  ∀x. not_fresh_at start x ⇒ x ≠ p ∧ x ≠ lv ∧ x ≠ g ∧ x ≠ vld
+187.  local_ptrs_reserved cenv st1
+188.  st1.cs_next_var + 1 ≤ sa.cs_next_var
+189.  local_ptrs_reserved bc sa
+190.  local_ptrs_reserved bc sb0
+191.  MEM
+        <|inst_id := start.cs_next_id + 1; inst_opcode := ALLOCA;
+          inst_operands := [Lit (n2w (type_memory_bytes cenv typ))]; inst_outputs := [p]|>
+        (fn_insts func)
+192.  ∀x. not_fresh_at start x ⇒ not_fresh_at st1 x
+193.  ∀x. not_fresh_at st1 x ⇒ not_fresh_at sa x ∧ x ≠ dv ∧ x ≠ ov ∧ x ≠ tot ∧ x ≠ ep
+194.  ∀x. not_fresh_at st1 x ⇒ not_fresh_at sb0 x ∧ x ≠ idx ∧ x ≠ nv
+195.  not_fresh_at st1 lv
+196.  not_fresh_at sa lv
+197.  not_fresh_at sa tot
+198.  not_fresh_at sa idx
+199.  not_fresh_at sa p
+200.  not_fresh_at sa ep
+201.  not_fresh_at sa ap
+202.  not_fresh_at sb0 idx
+203.  not_fresh_at sb0 p
+204.  not_fresh_at sb0 ap
+205.  emit_op MLOAD [Var ap] start = (load_result,load_cs)
+206.  load_result = Var lv
+207.  load_cs.cs_current_bb = start.cs_current_bb
+208.  load_cs.cs_current_insts =
+      start.cs_current_insts ⧺ [mk_inst start.cs_next_id MLOAD [Var ap] [lv]]
+209.  load_cs.cs_blocks = start.cs_blocks
+210.  load_cs.cs_next_id = start.cs_next_id + 1
+211.  load_cs.cs_next_var = start.cs_next_var + 1
+212.  compile_alloc_buffer (type_memory_size tv) load_cs = (buf,salloc)
+213.  buf.buf_operand = Var p
+214.  salloc.cs_current_bb = start.cs_current_bb
+215.  salloc.cs_current_insts =
+      load_cs.cs_current_insts ⧺
+      [mk_inst load_cs.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))] [p]]
+216.  salloc.cs_blocks = start.cs_blocks
+217.  fn_has_code load_cs salloc func
+218.  valid_horizon cx st0 H es.storage_trace
+219.  ∀x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ⇒ not_fresh_at start x
+220.  LENGTH vs ≤ n'
+221.  n' < dimword (:256)
+222.  lookup_block salloc.cs_current_bb func.fn_blocks =
+      SOME
+        <|bb_label := salloc.cs_current_bb;
+          bb_instructions :=
+            salloc.cs_current_insts ⧺ [mk_inst (start.cs_next_id + 2) JMP [Label entry'] []]|>
+223.  emit_op MLOAD [Var ap] start = (Var lv,load_cs)
+224.  lookup_var (STRING #"%" (toString start.cs_next_var)) t = SOME (n2w (LENGTH vs))
+225.  FLOOKUP Gp (STRING #"%" (toString start.cs_next_var)) = NONE
+226.  op_taint tp (Var (STRING #"%" (toString start.cs_next_var))) = ∅
+227.  lookup_var (STRING #"%" (toString (start.cs_next_var + 1))) t = SOME dst
+228.  ptr_covers Gp tp (STRING #"%" (toString (start.cs_next_var + 1))) t (type_memory_size tv)
+229.  FLOOKUP t.vs_allocas (start.cs_next_id + 1) = SOME (w2n dst,type_memory_size tv)
+230.  type_memory_size tv + w2n dst < dimword (:256)
+231.  type_memory_size tv + w2n dst ≤ t.vs_alloca_next
+232.  ∀nm b len.
+        local_region cenv es.scopes t nm b len ⇒
+        regions_disjoint (w2n dst) (type_memory_size tv) b len
+233.  t.vs_memory = s0.vs_memory
+234.  ¬t.vs_halted
+235.  t.vs_current_bb = start.cs_current_bb
+236.  t.vs_inst_idx = LENGTH start.cs_current_insts + 2
+237.  alloca_history func t
+238.  s0.vs_alloca_next ≤ t.vs_alloca_next
+239.  return_buf_frame d cenv salloc t
+240.  ∀H'.
+        valid_horizon cx st0 H' es.storage_trace ⇒
+        stmt_state_rel H' ctx func cenv cx es t ∧ allocas_from lo t ∧
+        ghost_inv_at (DF H') lo d cenv cx es Gp tp t
+241.  ∀x. not_fresh_at start x ⇒
+          lookup_var x t = lookup_var x s0 ∧ FLOOKUP Gp x = FLOOKUP G0 x ∧
+          op_taint tp (Var x) = op_taint tn0 (Var x)
+242.  ∀aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ⇒ FLOOKUP t.vs_allocas aid = SOME bl
+243.  lookup_var ap s0 = SOME base'
+244.  mload (w2n base') s0 = n2w (LENGTH vs)
+245.  ptr_covers G0 tn0 ap s0 32
+246.  mem_word_taint tn0.t_mem (w2n base') = ∅
+247.  exec_alloca
+        <|inst_id := start.cs_next_id + 1; inst_opcode := ALLOCA;
+          inst_operands := [Lit (n2w (type_memory_size tv))];
+          inst_outputs := [STRING #"%" (toString (start.cs_next_var + 1))]|>
+        (update_var (STRING #"%" (toString start.cs_next_var)) (n2w (LENGTH vs)) s0 with
+         vs_inst_idx := LENGTH start.cs_current_insts + 1) (n2w (type_memory_size tv)) =
+      OK (t with vs_inst_idx := LENGTH start.cs_current_insts + 1)
+248.  ∀D. inst_seq_ptr D lo ctx func PG G0 tn0
+            [<|inst_id := start.cs_next_id; inst_opcode := MLOAD; inst_operands := [Var ap];
+               inst_outputs := [STRING #"%" (toString start.cs_next_var)]|>;
+             <|inst_id := start.cs_next_id + 1; inst_opcode := ALLOCA;
+               inst_operands := [Lit (n2w (type_memory_size tv))];
+               inst_outputs := [STRING #"%" (toString (start.cs_next_var + 1))]|>] s0 Gp tp
+249.  ∀D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s0,G0,tn0) []
+            (OK t,Gp,tp)
+250.  Abbrev (vs = array_elements (ArrayTV tv (Dynamic n')) av)
+251.  Abbrev (sA = t with vs_inst_idx := s0.vs_inst_idx)
+252.  exec_alloca (mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_size tv))] [p])
+        (update_var lv (n2w (LENGTH vs)) s0) (n2w (type_memory_size tv)) = OK sA
+253.  lookup_var lv (jump_to entry' sA) = SOME (n2w (LENGTH vs))
+254.  allocas_from lo (jump_to entry' sA)
+255.  lo ≤ (jump_to entry' sA).vs_alloca_next
+256.  ∀D. inst_seq_ptr D lo ctx func PG Gp tp
+            [mk_inst (start.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+             mk_inst (start.cs_next_id + 4) GT [Var lv; Lit (n2w n')] [g];
+             mk_inst (start.cs_next_id + 5) ISZERO [Var g] [vld];
+             mk_inst (start.cs_next_id + 6) ASSERT [Var vld] []] (jump_to entry' sA) Gf tf
+257.  FLOOKUP Gf idx = NONE
+258.  FLOOKUP Gf lv = NONE
+259.  op_taint tf (Var idx) = ∅
+260.  op_taint tf (Var lv) = ∅
+261.  tf.t_mem = tp.t_mem
+262.  tf.t_stor = tp.t_stor
+263.  tf.t_trans = tp.t_trans
+264.  tf.t_imm = tp.t_imm
+265.  ∀x. ¬MEM x [idx; g; vld] ⇒
+          FLOOKUP Gf x = FLOOKUP Gp x ∧ op_taint tf (Var x) = op_taint tp (Var x)
+266.  ∀H. inst_seq_ptr (DF H) lo ctx func PG Gp tp
+            [mk_inst (start.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+             mk_inst (start.cs_next_id + 4) GT [Var lv; Lit (n2w n')] [g];
+             mk_inst (start.cs_next_id + 5) ISZERO [Var g] [vld];
+             mk_inst (start.cs_next_id + 6) ASSERT [Var vld] []] (jump_to entry' sA) Gf tf
+267.  ∀H. inst_seq_ptr (DF H) lo ctx func PG G0 tn0
+            [mk_inst start.cs_next_id MLOAD [Var ap] [lv];
+             mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_size tv))] [p]] s0 Gp tp
+------------------------------------
+     ∃dst cc s1.
+       exec_alloca (mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_size tv))] [p])
+         (update_var lv (n2w (LENGTH vs)) s0) (n2w (type_memory_size tv)) = OK s1 ∧ s1 = sA ∧
+       cc =
+       jump_to cond (update_var vld 1w (update_var g 0w (update_var idx 0w (jump_to entry' s1)))) ∧
+       array_loop_inv ctx func cenv cx st0 (expr_sim_inv cenv cx env) vs id idx (Var ap) base' p dst
+         (type_memory_size tv)
+         (mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_size tv))] [p]) cond start 0
+         es cc ∧ lookup_var lv cc = SOME (n2w (LENGTH vs)) ∧ array_caller_frame start s0 cc ∧
+       gas_marked_path F ctx func s0 0 (OK cc) ∧ gas_path_mem ctx func s0 0 (OK cc) ∧
+       alloca_history func cc ∧ cc.vs_memory = s0.vs_memory ∧
+       s0.vs_alloca_next ≤ cc.vs_alloca_next ∧
+       ∀H. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s0,G0,tn0)
+             [] (OK cc,Gf,tf)

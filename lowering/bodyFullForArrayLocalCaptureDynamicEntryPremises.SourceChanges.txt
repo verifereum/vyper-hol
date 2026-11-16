@@ -1,0 +1,36 @@
+INERT DIAGNOSTIC SOURCE COMPARISON (not an apply-ready patch)
+old: Consumer.reconstructed.txt (2970c304716a8db3019f7f0b490e31c98bce8270)
+new: bodyFullForArrayLocalCaptureDynamicEntryPremises.Replay.txt
+@@ old line 3,1 new line 3,1 @@
+-Theory bodyFullForArrayLocalConsumer
++Theory bodyFullForArrayDynamicCaptureReplay
+@@ old line 33,0 new line 33,1 @@
++   List.app (fn a => print ("ASSUMPTION\n" ^ Parse.term_to_string a ^ "\n")) (rev asl);
+@@ old line 1547,4 new line 1548,1 @@
+-    (qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
+-     simp[emitHelperTheory.emit_op_def,comp_bind_def,comp_ignore_bind_def,
+-       comp_return_def,fresh_id_def,fresh_var_def,emit_def] >>
+-     disch_then (fn th => simp[GSYM th])) >>
++    suspend "capture_load_equations" >>
+@@ old line 1583,1 new line 1581,4 @@
+-  `emit_op MLOAD [Var ap] start = (Var lv,load_cs)` by simp[] >>
++  `emit_op MLOAD [Var ap] start = (Var lv,load_cs)` by
++    (qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
++     qpat_x_assum `load_result = Var lv` mp_tac >>
++     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+@@ old line 1669,0 new line 1670,10 @@
++Resume body_for_local_array_full_from_contracts[dynamic_entry_pending]:
++  asm "dynamic_entry" (fn th =>
++    (fn g => (print "DYNAMIC-CONTRACT-BOUND-TYPES\n";
++      List.app (fn v => print (fst (dest_var v) ^ " : " ^
++        Parse.type_to_string (type_of v) ^ "\n"))
++        (fst (boolSyntax.strip_forall (concl th)));
++      all_tac g))) >>
++  capture_goal "dynamic-entry-pre-match"
++QED
++
+@@ old line 2018,4 new line 2029,0 @@
+-Resume body_for_local_array_full_from_contracts[dynamic_entry_pending]:
+-  asm "dynamic_entry" match_mp_tac >> simp[mk_inst_def] >>
+-  capture_goal "dynamic-entry-premises" (* original: FAIL_TAC "dynamic-entry-premises" *)
+-QED
