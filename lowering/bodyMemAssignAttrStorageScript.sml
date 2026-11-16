@@ -529,6 +529,15 @@ Proof
      simp[ci_mono_def] >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >>
+  rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >> BETA_TAC >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >~ [`expr_exit (INR _) _`]
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -537,13 +546,6 @@ Proof
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     eval_operand dst t = SOME (n2w slot + n2w off)` >>
   rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (gen_tac >> BETA_TAC >>
-      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
-           vyperStorageTraceTheory.storage_trace_frame_write_place])
-  >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
   >- (BETA_TAC >> irule compile_expr_add_read_outcome_mem_src >>
       simp[] >> qexistsl_tac [`sm`, `sn`, `expr_type e`, `vv`] >> simp[]) >>
