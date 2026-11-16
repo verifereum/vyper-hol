@@ -33,6 +33,12 @@ Ancestors
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
   venomInst allocaRemapSSA dfgAnalysisProps dfgDefs list finite_map arithmetic
 
+Theorem active_inst_outcomes_replace[simp]:
+  active_inst fn inst (s with vs_outcomes := os) = active_inst fn inst s
+Proof
+  simp[active_inst_def]
+QED
+
 (* ===== Label-flow facts of the Venom unit ===== *)
 
 (* The variables holding a code_end-derived pointer: an ADD's output whose
