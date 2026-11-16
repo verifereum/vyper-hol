@@ -357,7 +357,12 @@ Proof
   disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
   (impl_tac >- (asm_x "tail" kall_tac >>
-    asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >> metis_tac[])) >>
+    asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
+    conj_tac
+    >- (qpat_x_assum `hi = Lit 0w \/ _` mp_tac >>
+        qpat_x_assum `!h. eval_operand hi initial = SOME (n2w h) ==> _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+    first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   asm_x "tail" kall_tac >>
   `type_memory_size tv = type_memory_bytes ce ty /\ val_wf tv v` by
@@ -410,6 +415,10 @@ Proof
         ctor_checked_member_old_vars) >> simp[] >> decide_tac) >>
   conj_tac
   >- metis_tac[abi_decode_sim_trans] >>
+  qpat_x_assum `gas_path_mem ctx func initial 0 (OK prepared)` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx func prepared 0 (OK after_head)` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx func after_head 0 (OK actual)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[gas_path_mem_then, ADD_0]
 QED
 
