@@ -926,21 +926,30 @@ Resume body_for_local_array_full_from_contracts[fixed_staged_static]:
        mk_inst (start.cs_next_id + 1) JMP [Label entry'] []]|>` by
     (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
      simp_tac (srw_ss()) [] >>
-     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >> simp[]) >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
   `lookup_block entry' func.fn_blocks = SOME
     <|bb_label := entry'; bb_instructions :=
       [mk_inst (start.cs_next_id + 2) ASSIGN [Lit 0w] [idx];
        mk_inst (start.cs_next_id + 3) JMP [Label cond] []]|>` by
     (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
      simp_tac (srw_ss()) [] >>
-     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >> simp[]) >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
   `lookup_block cond func.fn_blocks = SOME
     <|bb_label := cond; bb_instructions :=
       [mk_inst (start.cs_next_id + 4) EQ [Var idx;Lit (n2w n)] [dv];
        mk_inst (start.cs_next_id + 5) JNZ [Var dv;Label exit;Label bod] []]|>` by
     (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
      simp_tac (srw_ss()) [] >>
-     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >> simp[]) >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
   `lookup_block incr func.fn_blocks = SOME
     <|bb_label := incr; bb_instructions :=
       [mk_inst sj.cs_next_id ADD [Var idx;Lit 1w] [nv];
@@ -1061,6 +1070,15 @@ Resume body_for_local_array_full_from_contracts[dynamic_shadow]:
   qpat_x_assum `Var _ = lvo'` (SUBST_ALL_TAC o SYM) >>
   qmatch_asmsub_abbrev_tac
     `prefix st1 = ((bc,entry',cond,bod,incr,exit,idx,offo,toto,epo),sa)` >>
+  `!args. gas_shadow_compiles
+    (do invalid <- emit_op GT args;
+        valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od)
+    (do invalid <- emit_op GT args;
+        valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od)` by
+    (gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >>
+     (conj_tac >- simp[gas_shadow_compiles_emit_op]) >> gen_tac >>
+     ho_match_mp_tac gas_shadow_compiles_bind >>
+     simp[gas_shadow_compiles_emit_op,gas_shadow_compiles_emit_void]) >>
   `gas_shadow_compiles prefix prefix` by
     (simp_tac (srw_ss()) [Abbr `prefix`,comp_ignore_bind_def] >>
      rpt (ho_match_mp_tac gas_shadow_compiles_bind >>
@@ -1076,10 +1094,134 @@ Resume body_for_local_array_full_from_contracts[dynamic_shadow]:
   disch_then (qspecl_then [`st1`,`st1'`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   simp[Abbr `prefix`] >> strip_tac >>
-  FAIL_TAC "dynamic-shadow-copy"
+  qpat_x_assum `bc = bc'` (SUBST_ALL_TAC o SYM) >>
+  `exit' = exit /\ incr' = incr /\ bod' = bod /\ cond' = cond /\
+   entry = entry' /\ idx' = idx` by simp[] >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`exit' = exit`,`incr' = incr`,`bod' = bod`,`cond' = cond`,
+     `entry = entry'`,`idx' = idx`] >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`fresh_label_output "iter_entry" _ = entry'`,
+     `fresh_label_output "iter_cond" _ = cond`,
+     `fresh_label_output "iter_body" _ = bod`,
+     `fresh_label_output "iter_incr" _ = incr`,
+     `fresh_label_output "iter_exit" _ = exit`,
+     `STRING #"%" _ = idx`] >>
+  qpat_x_assum `(case FLOOKUP bc.ce_vars id of _ => _ | _ => _) sa' = _`
+    mp_tac >> simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `copy sa = ((),sb0)` >>
+  `gas_shadow_compiles copy copy` by
+    simp[Abbr `copy`,gasShadowCompileStmtOpsTheory.gas_shadow_compiles_iter_elem_copy] >>
+  `gas_shadow_state sb0 sb0'` by
+    (qpat_x_assum `gas_shadow_compiles copy copy` mp_tac >>
+     pure_rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`sa'`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[Abbr `copy`]) >>
+  Cases_on `stmts_env bc (InLoop exit incr) ret_ty stmts sb0` >>
+  rename1 `stmts_env bc (InLoop exit incr) ret_ty stmts sb0 = (bc_out,body_end)` >>
+  `body_end = sb1` by
+    (qpat_x_assum `compile_stmts bc _ _ stmts sb0 = _` mp_tac >>
+     simp[stmtSimPropsTheory.compile_stmts_env]) >>
+  qpat_x_assum `body_end = sb1` SUBST_ALL_TAC >>
+  mp_tac (Q.SPECL [`stmts`,`bc`,`InLoop exit incr`,`ret_ty`]
+    gas_shadow_stmts_env) >>
+  pure_rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`sb0`,`sb0'`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  qpat_assum `stmts_env bc (InLoop exit incr) ret_ty stmts sb0 = _`
+    (fn th => pure_rewrite_tac[th,pairTheory.FST,pairTheory.SND]) >> strip_tac >>
+  `stmts_env bc (InLoop exit incr) ret_ty
+    (MAP gas_shadow_stmt stmts) sb0' = (bc_out,sb1')` by
+    (qpat_x_assum `compile_stmts bc _ _ (MAP _ _) sb0' = _` mp_tac >>
+     simp[stmtSimPropsTheory.compile_stmts_env] >> strip_tac >>
+     qpat_x_assum `SND _ = sb1'` (SUBST1_TAC o SYM) >> simp[]) >>
+  `gas_shadow_state sb1 sb1'` by
+    (qpat_x_assum `gas_shadow_state sb1 (SND _)` mp_tac >>
+     qpat_assum `stmts_env bc (InLoop exit incr) ret_ty (MAP _ _) sb0' = _`
+       (fn th => pure_rewrite_tac[th,pairTheory.SND]) >> simp_tac bool_ss []) >>
+  `cs_extends shadow_start sa'` by
+    (qpat_assum `emit_op MLOAD _ shadow_start = _`
+       (mp_then Any mp_tac compile_for_dynarray_prefix) >>
+     disch_then drule_all >> strip_tac >>
+     irule stmtSimForArrayPartsTheory.array_prefix_extends >>
+     simp_tac (srw_ss()) [] >> simp[]) >>
+  `~block_is_terminated sa'` by
+    (qpat_assum `gas_shadow_state sa sa'`
+      (mp_then Any mp_tac gasShadowCompileStmtBaseTheory.gas_shadow_state_terminated) >>
+     simp[]) >>
+  `cs_extends sa' sb0'` by
+    (qpat_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ sa' = _`
+      (mp_then Any mp_tac stmtSimForArrayPartsTheory.array_iter_copy_static) >>
+     simp[]) >>
+  `cs_extends sb0' sb1'` by
+    (qpat_assum `compile_stmts _ _ _ (MAP _ _) sb0' = _`
+      (mp_then Any mp_tac (SRULE[cs_mono_def] (cj 2 compile_stmt_cs_mono))) >>
+     simp[cs_mono_def]) >>
+  `cs_extends sb1' sj'` by
+    (qpat_assum `emit_jmp_if_not_terminated _ sb1' = _`
+      (mp_then Any mp_tac stmtSimForArrayPartsTheory.array_body_backedge) >> simp[]) >>
+  `cs_extends sj' cs'` by
+    (qpat_assum `_ sj' = ((),cs')`
+      (mp_then Any mp_tac stmtSimForArrayPartsTheory.compile_for_array_suffix) >>
+     simp[]) >>
+  qpat_x_assum `cs' = shadow_finish` SUBST_ALL_TAC >>
+  `cs_extends shadow_start sb0'` by
+    (irule cs_extends_trans >> qexists_tac `sa'` >> simp[]) >>
+  `cs_extends sb1' shadow_finish` by
+    (irule cs_extends_trans >> qexists_tac `sj'` >> simp[]) >>
+  `fn_has_code sb0' sb1' shadow_func` by
+    (irule fn_has_code_mid >> (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`shadow_finish`,`shadow_start`] >> simp[]) >>
+  qpat_x_assum `exit = fresh_label_output _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `incr = fresh_label_output _ _` SUBST_ALL_TAC >>
+  qexistsl_tac [`bc_out`,`sb0'`,`sb1'`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_staged_static]:
+  `sb0.cs_current_bb = bod` by fs[exprLoweringPropsTheory.same_blocks_def] >>
+  `lookup_block start.cs_current_bb func.fn_blocks = SOME
+    <|bb_label := start.cs_current_bb; bb_instructions := start.cs_current_insts ++
+      [mk_inst start.cs_next_id MLOAD [Var ap] [lv];
+       mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_bytes cenv typ))] [p];
+       mk_inst (start.cs_next_id + 2) JMP [Label entry'] []]|>` by
+    (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
+     simp_tac (srw_ss()) [] >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  `lookup_block entry' func.fn_blocks = SOME
+    <|bb_label := entry'; bb_instructions :=
+      [mk_inst (start.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+       mk_inst (start.cs_next_id + 4) GT [Var lv;Lit (n2w n')] [g];
+       mk_inst (start.cs_next_id + 5) ISZERO [Var g] [vld];
+       mk_inst (start.cs_next_id + 6) ASSERT [Var vld] [];
+       mk_inst (start.cs_next_id + 7) JMP [Label cond] []]|>` by
+    (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
+     simp_tac (srw_ss()) [] >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  `lookup_block cond func.fn_blocks = SOME
+    <|bb_label := cond; bb_instructions :=
+      [mk_inst (start.cs_next_id + 8) EQ [Var idx;Var lv] [dv];
+       mk_inst (start.cs_next_id + 9) JNZ [Var dv;Label exit;Label bod] []]|>` by
+    (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
+     simp_tac (srw_ss()) [] >>
+     qexistsl_tac [`TAKE 3 sa.cs_blocks`,`start`,`sa`] >>
+     qpat_assum `sa.cs_blocks = _` mp_tac >>
+     qpat_assum `fn_has_code start sa func` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  `lookup_block incr func.fn_blocks = SOME
+    <|bb_label := incr; bb_instructions :=
+      [mk_inst sj.cs_next_id ADD [Var idx;Lit 1w] [nv];
+       mk_inst (sj.cs_next_id + 1) ASSIGN [Var nv] [idx];
+       mk_inst (sj.cs_next_id + 2) JMP [Label cond] []]|>` by
+    (irule stmtSimForArrayPartsTheory.array_emitted_block_lookup >>
+     simp_tac (srw_ss()) [] >>
+     qexistsl_tac [`TAKE 2 finish.cs_blocks`,`sj`,`finish`] >> simp[]) >>
   drule_all stmtSimPropsTheory.declare_local_ptr >> strip_tac >>
   `start.cs_next_var + 9 <= sj.cs_next_var` by
     (qpat_x_assum `!c lc a b. _ ==> _ /\ _` drule >> simp[]) >>
@@ -1122,13 +1264,17 @@ Resume body_for_local_array_full_from_contracts[dynamic_staged_static]:
    not_fresh_at sa idx /\ not_fresh_at sa p /\
    not_fresh_at sa ep /\ not_fresh_at sa ap /\
    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\ not_fresh_at sb0 ap` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
-        "body_outcome","handler","entry"] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`p = STRING _ _`, `idx = STRING _ _`, `dv = STRING _ _`,
+        `ov = STRING _ _`, `tot = STRING _ _`, `ep = STRING _ _`,
+        `lv = STRING _ _`, `nv = STRING _ _`,
+        `st1.cs_next_var = _`, `sa.cs_next_var = _`,
+        `sa.cs_next_var <= sb0.cs_next_var`,
+        `start.cs_next_var + 9 <= sj.cs_next_var`, `not_fresh_at start ap`] >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[] >>
      simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
      rpt strip_tac >> gvs[] >>
-     qpat_x_assum `not_fresh_at start _` mp_tac >>
-     simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`tot`,`ep`,`nv`,`Var lv`,
     `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
     `start.cs_next_id + 8`,`start.cs_next_id + 9`,
