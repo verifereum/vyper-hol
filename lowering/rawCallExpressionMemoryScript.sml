@@ -67,10 +67,22 @@ Resume raw_call_expr_vv_sim_mem[prefix]:
   first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
   qpat_assum `lower_value _ _ _ a sa = _` (irule_at Any) >>
-  simp[] >> conj_tac >-
+  simp[] >>
+  conj_tac >-
     (rpt gen_tac >> Cases_on `r` >> Cases_on `exc` >>
-     simp[expr_exit_def] >> rename1 `Error err` >>
-     Cases_on `err` >> simp[expr_exit_def]) >>
+     simp[expr_exit_def, halt_exit_def] >> rename1 `Error err` >>
+     Cases_on `err` >> simp[expr_exit_def, halt_exit_def]) >>
+  conj_tac >-
+    (rpt gen_tac >>
+     irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_checks] >>
+     irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_lifts] >> gen_tac >>
+     irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_lifts] >> gen_tac >>
+     irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
+          vyperStorageTraceTheory.storage_trace_frame_raw_call]) >>
   rpt strip_tac >> suspend "tail"
 QED
 
@@ -88,7 +100,19 @@ Resume raw_call_expr_vv_sim_mem[tail]:
   first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   simp[] >> rpt (goal_assum (drule_at Any)) >> simp[] >>
   rpt strip_tac >> gvs[vyperASTTheory.expr_type_def] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  `s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon cx st0 H esK.storage_trace ==> _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`tm`,`tk`,`tD`,`tA`,`s4`,`s0`,`s2`,`s1`,`gw`,`data`,`b`] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H esK.storage_trace ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ tv _ _` >>
+  qexists_tac `tv` >> simp[] >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists_tac `t.vs_alloca_next` >> simp[]
 QED
 
 Finalise raw_call_expr_vv_sim_mem

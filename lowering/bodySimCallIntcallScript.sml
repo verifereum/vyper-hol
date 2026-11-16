@@ -181,8 +181,9 @@ Proof
          gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
          Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
-      simp[GSYM expr_exit_exception_transport] >>
-      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+      simp[GSYM expr_exit_exception_transport] >> conj_tac
+      >- (irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+      rpt strip_tac >> gvs[halt_exit_def]) >>
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[force_exempt_cert]
 QED

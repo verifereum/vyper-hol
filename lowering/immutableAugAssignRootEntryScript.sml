@@ -70,7 +70,10 @@ Theorem immutable_augassign_root_entry:
   stmt_env cenv lctx ret_ty (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
     sa = (c,sf) /\ fn_has_code sa sf func /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H)) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   c = cenv /\ ?off tv iv cur rhs result s1 s2 s3 u.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\ is_word_type ty /\
@@ -92,7 +95,9 @@ Theorem immutable_augassign_root_entry:
     (!z. not_fresh_at s1 z ==> not_fresh_at s2 z) /\
     (!z. not_fresh_at s2 z ==> not_fresh_at s3 z) /\
     gas_marked_path T ctx func s 0 (OK u) /\
-    stmt_state_rel H ctx func cenv cx es u /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es u /\
+      storage_well_formed_on cx es (FST H)) /\ alloca_history func u /\
     eval_operand cur u = SOME (typed_val_to_w256 tv iv) /\
     w2n (n2w off : bytes32) + 32 <= u.vs_alloca_next /\
     (!z. cur = Var z ==> not_fresh_at s1 z) /\
@@ -102,7 +107,9 @@ Theorem immutable_augassign_root_entry:
     ~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
     u.vs_inst_idx = LENGTH s1.cs_current_insts /\ (!l. cur <> Label l)
 Proof
-  strip_tac >> drule_all immutable_augassign_root_metadata >> strip_tac >>
+  strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  drule_all immutable_augassign_root_metadata >> strip_tac >>
   drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
   `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
   `FLOOKUP env.bare_globals (src,id) = SOME ty` by
@@ -110,12 +117,17 @@ Proof
         env_context_consistent_def] >> metis_tac[]) >>
   drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
   drule_all immutable_augassign_source_prefix >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   drule_all immutable_augassign_load >> strip_tac >>
   `type_memory_size tv = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
   `off + type_memory_size tv <= s.vs_alloca_next` by
-    (fs[exprLoweringPropsTheory.stmt_state_rel_def,
-        exprLoweringPropsTheory.immutable_alloca_sep_def] >>
-     first_x_assum drule_all >> simp[]) >>
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+                     exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+     strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> !name tv v off. _` mp_tac >>
+     simp[] >> disch_then
+       (qspecl_then [`id`, `tv`, `iv`, `off`] mp_tac) >> simp[]) >>
   drule_all immutable_augassign_root_compilation >> strip_tac >> gvs[] >>
   drule immutable_augassign_root_prefix_mem >>
   simp[] >> disch_then drule_all >> strip_tac >>

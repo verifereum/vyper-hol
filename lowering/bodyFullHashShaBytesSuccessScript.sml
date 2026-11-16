@@ -78,7 +78,7 @@ Theorem sha_bytes_success_frame_at:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   fn_has_code sa sb fn /\ run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -234,7 +234,7 @@ Theorem sha_bytes_abort_ptr_at:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   fn_has_code sa sb fn /\ run_inst_seq_mem_ok (emitted_insts sa sb) s /\

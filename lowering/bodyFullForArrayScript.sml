@@ -12,14 +12,14 @@ Ancestors
 Theorem for_array_assign_jump_path_full:
   code = [mk_inst i ASSIGN [Lit 0w] [idx]] /\
   bb = <|bb_label := lbl; bb_instructions :=
-    code ++ [mk_inst j JMP [Label cond] []]|> /\
+    code ++ [mk_inst j JMP [Label cond_lbl] []]|> /\
   lookup_block lbl func.fn_blocks = SOME bb /\
   s.vs_current_bb = lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
   ~ctx_has_dalloca ctx /\ allocas_from lo s /\
   (!H. inst_seq_ptr (DF H) lo ctx func PG G tn code s Gf tf) ==>
   ?G' tn'. !H.
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (OK (jump_to cond (update_var idx 0w s)),G',tn')
+      (OK (jump_to cond_lbl (update_var idx 0w s)),G',tn')
 Proof
   strip_tac >>
   qabbrev_tac `u = update_var idx 0w s` >>
@@ -40,7 +40,7 @@ Proof
      disch_then irule >> gvs[mk_inst_def,is_terminator_def]) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
      (u with vs_inst_idx := 1,Gf,tf) []
-     (OK (jump_to cond (u with vs_inst_idx := 1)),Gf,tf)` by
+     (OK (jump_to cond_lbl (u with vs_inst_idx := 1)),Gf,tf)` by
     (irule jmp_origin_ptr_path >>
      simp[Abbr `u`,update_var_def,get_instruction_def,allocas_from_def] >>
      qexists_tac `j` >> simp[]) >>

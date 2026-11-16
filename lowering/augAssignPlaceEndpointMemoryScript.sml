@@ -133,7 +133,7 @@ Proof
                  exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
      decide_tac) >>
   `stmt_state_rel H0 ctx func cenv cx mid t` by
-    (qpat_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[loweringPostsTheory.target_post_def] >>
      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -147,7 +147,8 @@ Proof
      rewrite_tac[loweringPostsTheory.target_post_def] >> strip_tac >>
      conj_tac
      >- (mp_tac (Q.INST [`es` |-> `mid`, `s` |-> `t`]
-           exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+           (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+             exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
          strip_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>

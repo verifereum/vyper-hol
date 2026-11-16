@@ -89,7 +89,10 @@ Resume pop_nested_local_sim[summary]:
   rename1 `expr_exit (INR exc) tr0` >>
   qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  disj2_tac >> qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> fs[halt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Resume pop_nested_local_sim[normal]:
@@ -188,7 +191,7 @@ Resume pop_nested_local_sim[empty]:
   conj_tac
   >- (once_rewrite_tac[GSYM APPEND_NIL] >>
       irule gas_marked_exec_bind_normal >> goal_assum drule >> simp[]) >>
-  simp[expr_exit_def, exit_result_def]
+  simp[expr_exit_def, exit_result_def, halt_exit_def]
 QED
 
 Resume pop_nested_local_sim[nonempty]:

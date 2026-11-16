@@ -32,7 +32,10 @@ env:
 
 jobs:
   build:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    # A push to main builds even when its tree passed, to publish main's
+    # theories and HBX archive.
+    needs: tested
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.tested.outputs.passed != 'true') && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -82,7 +85,9 @@ jobs:
             exit 1
           fi
 
+      # release.yml promotes only the archive of a main commit.
       - name: Export HBX archive
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           archive="$HBX_BASENAME.hbx"
           holbuild export --closure \
@@ -91,6 +96,7 @@ jobs:
           sha256sum "$archive" > "$archive.sha256"
 
       - name: Upload HBX artefact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ env.HBX_ARTEFACT_NAME }}
@@ -104,7 +110,8 @@ jobs:
   native-parity:
     # Compiles every bytecode fixture with the extracted compiler and compares
     # it with the pinned Python compiler's output (bytecode/native/README.md).
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -137,30 +144,52 @@ jobs:
         run: ./native/bytecode_parity_native.exe .
 
   tested:
-    # On a push to main, whether a merge-group run already passed this commit:
-    # the merge queue fast-forwards main to the commit it tested, so the push
-    # run skips the tests and oracle and builds only to publish main's theories.
-    if: github.event_name == 'push'
+    # Whether a run already passed this tree, so this one skips the checks.
+    # On a push to main: a merge-group run of this commit, since the merge
+    # queue fast-forwards main to the commit it tested. In a merge group: a
+    # pull-request run of the PR head whose tested merge with its base had
+    # this group commit's tree.
+    if: github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-26.04-arm
     permissions:
       actions: read
+      contents: read
     outputs:
-      merge-group-passed: ${{ steps.runs.outputs.merge-group-passed }}
+      passed: ${{ steps.runs.outputs.passed }}
     steps:
-      - name: Find a successful merge-group run of this commit
+      - name: Find a successful run of this tree
         id: runs
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          count=$(gh api "repos/${{ github.repository }}/actions/workflows/holbuild.yml/runs?head_sha=${{ github.sha }}&event=merge_group&status=success" -q .total_count)
-          echo "successful merge-group runs: $count"
-          echo "merge-group-passed=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          runs="repos/$REPO/actions/workflows/holbuild.yml/runs"
+          passed=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            count=$(gh api "$runs?head_sha=$GITHUB_SHA&event=merge_group&status=success" -q .total_count)
+            echo "successful merge-group runs: $count"
+            [ "$count" -gt 0 ] && passed=true
+          else
+            # The group's merge commit has the PR head as its second parent.
+            read -r tree head <<< "$(gh api "repos/$REPO/git/commits/$GITHUB_SHA" -q '[.tree.sha, .parents[1].sha] | join(" ")')"
+            echo "group tree $tree, PR head $head"
+            for id in $(gh api "$runs?head_sha=$head&event=pull_request&status=success" -q '.workflow_runs[].id'); do
+              # A draft's run succeeds with every job skipped, so take only a
+              # successful holbuild-success, whose step names the commit tested.
+              tested=$(gh api "repos/$REPO/actions/runs/$id/jobs" -q '.jobs[] | select(.name == "holbuild-success" and .conclusion == "success") | .steps[].name | select(startswith("Check all jobs succeeded on ")) | ltrimstr("Check all jobs succeeded on ")')
+              [ -n "$tested" ] || continue
+              tested_tree=$(gh api "repos/$REPO/git/commits/$tested" -q .tree.sha)
+              echo "pull-request run $id passed $tested, tree $tested_tree"
+              if [ "$tested_tree" = "$tree" ]; then passed=true; break; fi
+            done
+          fi
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
 
   test-deps:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ !cancelled() && needs.tested.outputs.passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -191,7 +220,7 @@ jobs:
 
   python-o1-oracle:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ !cancelled() && needs.tested.outputs.passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -213,7 +242,7 @@ jobs:
 
   export-vyper-tests:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ !cancelled() && needs.tested.outputs.passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -229,6 +258,20 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           overwrite: true
+
+  save-vyper-test-exports:
+    # Pull-request and merge-queue runs can restore a cache only from their own
+    # ref or from main, and export-vyper-tests is skipped on a push whose merge
+    # group passed, so this job keeps main's test-export cache: it restores it
+    # in seconds, or generates and saves it once per pin and export profile.
+    # holbuild-success doesn't need it.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-vyper-test-exports
 
   export-parity:
     # Compiles every contract of the Vyper test exports natively and compares
@@ -303,8 +346,8 @@ jobs:
           retention-days: 30
 
   vyper-tests:
-    # tested, skipped on other events than push, would skip this job through
-    # the implicit success(); the result checks stand in for it.
+    # tested, skipped on events other than push and merge_group, would skip
+    # this job through the implicit success(); the result checks stand in for it.
     if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-26.04-arm
@@ -382,15 +425,12 @@ jobs:
     runs-on: ubuntu-26.04-arm
     needs: [build, native-parity, tested, test-deps, python-o1-oracle, export-vyper-tests, export-parity, vyper-tests]
     steps:
-      - name: Check all jobs succeeded
+      # A merge group's tested job reads the commit from this step's name.
+      - name: Check all jobs succeeded on ${{ github.sha }}
         env:
-          BUILD_RESULTS: ${{ needs.build.result }} ${{ needs.native-parity.result }}
-          TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.export-parity.result }} ${{ needs.vyper-tests.result }}
-          MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
+          RESULTS: ${{ needs.build.result }} ${{ needs.native-parity.result }} ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.export-parity.result }} ${{ needs.vyper-tests.result }}
+          PASSED: ${{ needs.tested.outputs.passed }}
         run: |
-          for result in $BUILD_RESULTS; do
-            [ "$result" = success ] || exit 1
-          done
-          for result in $TEST_RESULTS; do
-            [ "$result" = success ] || { [ "$result" = skipped ] && [ "$MERGE_GROUP_PASSED" = true ]; } || exit 1
+          for result in $RESULTS; do
+            [ "$result" = success ] || { [ "$result" = skipped ] && [ "$PASSED" = true ]; } || exit 1
           done

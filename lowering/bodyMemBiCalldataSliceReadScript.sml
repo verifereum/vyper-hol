@@ -134,9 +134,9 @@ Resume compile_calldata_slice_sim_mem[exception]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
   conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  Cases_on `r` >> Cases_on `y` >> gvs[expr_exit_def] >>
+  Cases_on `r` >> Cases_on `y` >> gvs[expr_exit_def, halt_exit_def] >>
   rename1 `expr_exit (INR (Error err)) _` >>
-  Cases_on `err` >> gvs[expr_exit_def]
+  Cases_on `err` >> gvs[expr_exit_def, halt_exit_def]
 QED
 
 Finalise compile_calldata_slice_sim_mem

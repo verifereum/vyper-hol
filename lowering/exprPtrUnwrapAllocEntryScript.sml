@@ -4,13 +4,14 @@ Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   bufferAllocationExecution exprSimAlloc loweringPosts exprLoweringProps
   fragGasSeqPtr fragGasSeqAbort fragExec fragExecMem allocaHistory
-  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst finite_map words
+  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomMemDefs venomMemProofs
+  venomExecSemantics venomInst finite_map words
   compileEnv loweringStateRelDefs fragGasPathPtr stmtAppendStorageRunPtr exprPtrUnwrapStorageSource
 
 Theorem unwrap_alloc_origin_path:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?out u.
@@ -21,7 +22,16 @@ Theorem unwrap_alloc_origin_path:
        step_prov PG G (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) u,
        step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s u tn)
 Proof
-  strip_tac >> drule_all unwrap_alloc_generated_step >>
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (strip_tac >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  drule_all unwrap_alloc_generated_step >>
   disch_then (qspec_then `s` strip_assume_tac) >>
   qexistsl [`out`, `update_var out (n2w (buffer_allocation_base s sm.cs_next_id))
     (buffer_allocation_fields s sm.cs_next_id nb)`] >>
@@ -46,6 +56,37 @@ Proof
   simp[Abbr `u`, update_var_def,
     bufferAllocationExecutionTheory.buffer_allocation_fields_def] >>
   Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >> simp[]
+QED
+
+Theorem unwrap_alloc_below_fmp:
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel H ctx func cenv cx es s /\ buf.buf_operand = Var out /\
+  step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s = OK u ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u)
+Proof
+  strip_tac >> drule unwrap_alloc_generated_code >> strip_tac >>
+  `out = STRING #"%" (toString sm.cs_next_var)` by fs[] >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  qabbrev_tac `inst = mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]` >>
+  `step_inst_base inst s = OK u` by simp[Abbr `inst`] >>
+  `exec_alloca inst s (n2w nb:bytes32) = OK u` by
+    (qpat_assum `step_inst_base inst s = OK u` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `inst`, step_inst_base_def, mk_inst_def] >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_inv u` by
+    (qspecl_then [`0`, `ctx`, `inst`, `s`, `u`] mp_tac alloca_inv_step_inst_proof >>
+     simp[step_inst_non_invoke, Abbr `inst`, mk_inst_def] >>
+     fs[stmt_state_rel_def]) >>
+  `MEM inst (fn_insts func)` by simp[Abbr `inst`] >>
+  `inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit (n2w nb)]` by
+    simp[Abbr `inst`, mk_inst_def] >>
+  `fmp_room ctx func u` by
+    (irule fmp_room_exec_alloca >> qexistsl [`inst`, `n2w nb:bytes32`, `s`] >>
+     simp[] >> fs[stmt_state_rel_def]) >>
+  strip_tac >> qpat_x_assum `alloca_inv u` mp_tac >>
+  qpat_x_assum `fmp_room ctx func u` mp_tac >>
+  simp[allocas_below_fmp_def, fmp_room_def, alloca_inv_def, alloca_next_valid_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Theorem unwrap_alloc_origin_history:
@@ -76,7 +117,7 @@ QED
 Theorem unwrap_alloc_entry:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?out u Gf tnf a.
@@ -96,7 +137,13 @@ Theorem unwrap_alloc_entry:
 Proof
   strip_tac >> drule_all unwrap_alloc_code_prefix >> strip_tac >>
   `allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
-    simp[allocas_from_def] >>
+    (simp[allocas_from_def] >> strip_tac >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all unwrap_alloc_counted_edge >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   drule unwrap_alloc_generated_code >> strip_tac >> gvs[] >>

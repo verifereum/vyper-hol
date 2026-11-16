@@ -3,11 +3,36 @@ Theory bodyFullHashShaFixed
 Ancestors
   bodyFullHashShaStore bodyFullHashKeccakBytes bodyPtrHashBuiltinsShaFixed
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsKeccakFixed instSeqPtrLo
-  bodyPtrHashBuiltinsShaAlloc
-  fragGasSeqPtr fragExecMem bodyPtrDefs loweringHalt ptrDiscipline
+  bodyPtrHashBuiltinsShaAlloc bodyPtrPrecompileBuiltinsAllocationFrame
+  fragGasSeqPtr fragExecMem bodyPtrDefs loweringHalt ptrDiscipline ptrSafeRun
   compileEnv loweringStateRelDefs exprLoweringProps venomState venomInst
   venomExecSemantics fragExec words list rich_list arithmetic finite_map pred_set
-  freshWrites exprSimHash
+  freshWrites exprSimHash bodyFullHashKeccakFixed context venomInstProofs1 venomMemProps fragGasSeqPtrContext
+
+Theorem sha_allocated_sequence_restore_ctx:
+  compile_alloc_buffer 32 sa = (buf,sn) /\
+  run_inst_seq (emitted_insts sa sn) s = OK t /\
+  emitted_insts sa sb = emitted_insts sa sn ++ code /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) code /\
+  inst_seq_ptr D lo (ctx with ctx_functions := []) fn PG G tn
+    (emitted_insts sa sb) s Gf tf ==>
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf
+Proof
+  strip_tac >>
+  `emitted_insts sa sn = [mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]]` by
+    (drule emitted_allocation_singleton >> simp[]) >>
+  fs[run_inst_seq_def, AllCaseEqs()] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >> conj_tac
+  >- (irule ptr_inst_ok_restore_ctx >> simp[mk_inst_def]) >>
+  irule inst_seq_ptr_restore_ctx >>
+  simp[allocas_below_fmp_def]
+QED
 
 Theorem sha_fixed_prepare_frame_at:
   !D lo ctx fn PG G tn s bb value v sa ib sl sm m d cenv cx es.
@@ -22,7 +47,7 @@ Theorem sha_fixed_prepare_frame_at:
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t p w G2 tn2.
@@ -57,8 +82,30 @@ Proof
   `isPREFIX [mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p];
     mk_inst (sa.cs_next_id+1) MSTORE [Var p;value] []]
     (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
-  drule_all hash_alloc_store_counted >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    hash_alloc_store_counted) >>
   disch_then (qspec_then `D` strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H ctx fn cenv cx es (mstore _ _ t)`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >>
+     rpt (pop_assum kall_tac) >>
+     simp[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
+  `emitted_insts sa sl =
+    [mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]]` by
+    (drule emitted_allocation_singleton >> simp[]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G2 tn2` by
+    (irule sha_allocated_sequence_restore_ctx >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qexistsl_tac [`ib`,
+           `[mk_inst (sa.cs_next_id+1) MSTORE [Var p;value] []]`, `sl`, `t`] >>
+         rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+           (asm_rewrite_tac[] >>
+            simp_tac (srw_ss()) [mk_inst_def, is_terminator_def, is_alloca_op_def])]) >>
+     gvs[]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sm) s G2 tn2` by
     (irule (Q.SPECL [`emitted_insts sa sm`, `D`, `D`, `lo`,
       `ctx`, `fn`, `PG`, `G`, `tn`, `s`, `G2`, `tn2`] inst_seq_ptr_zero_to_lo) >>

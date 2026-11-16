@@ -13,6 +13,7 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -60,7 +61,7 @@ Proof
   irule body_annassign_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_append_case_ptr_at (bodyPtrLogCases). *)
+(* Admitted: the joint Append case. *)
 Theorem body_append_case_full:
   !cx t e.
     (!s'' p t'.
@@ -252,7 +253,26 @@ Theorem bop_in_expr_full_ok:
     (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty (Bop bop) es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_bop_args >> strip_tac >> gvs[] >> (
+  `body_exprs_full_ok cx [e1;e2]` by fs[builtin_args_length_ok_def] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `is_word_type (expr_type e1) /\ ty = BaseT BoolT` by
+    gvs[well_typed_binop_def, membership_element_word_boundary, is_word_type_def] >>
+  conj_asm1_tac
+  >- (Cases_on `word_value_type (expr_type e1) /\ word_value_type (expr_type e2)`
+      >- (irule bop_word_sim_full >> metis_tac[]) >>
+      Cases_on `?a t n elems. e2 = Builtin a (MakeArray t n) elems`
+      >- (gvs[] >> irule bop_in_literal_word_sim_full >> simp[] >>
+          gvs[body_exprs_full_ok_def] >>
+          metis_tac[body_make_array_children_full_ok]) >>
+      irule bop_rest_word_sim_full >> simp[] >>
+      metis_tac[]) >>
+  match_mp_tac bodyFullExprGenericTheory.expr_vv_sim_stack_full >>
+  simp[post_value_type_word, expr_type_def, is_word_type_def, compile_bop_stack] >>
+  metis_tac[eval_expr_builtin_value])
 QED
 
 (* Admitted: the joint twin of bodyPtrBop's bop_expr_ptr_ok. *)
@@ -262,7 +282,31 @@ Theorem bop_expr_full_ok:
     (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty (Bop bop) es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_bop_args >> strip_tac >> gvs[] >>
+  `body_exprs_full_ok cx [e1;e2]` by fs[builtin_args_length_ok_def] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `is_word_type ty` by
+    (Cases_on `bop` >> gvs[well_typed_binop_def, is_numeric_type_def] >>
+     Cases_on `expr_type e1` >>
+     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def]) >>
+  conj_asm1_tac
+  >- (Cases_on `(bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)`
+      >- (irule bop_bytestring_eqne_sim_full >> metis_tac[]) >>
+      Cases_on `word_value_type (expr_type e1) /\ word_value_type (expr_type e2)`
+      >- (irule bop_word_sim_full >> metis_tac[]) >>
+      Cases_on `(bop = Eq \/ bop = NotEq) /\
+                (expr_type e1 = BaseT AddressT \/
+                 ?m. expr_type e1 = BaseT (BytesT (Fixed m)))`
+      >- (irule bop_bytes_eq_sim_full >> metis_tac[]) >>
+      irule bop_rest_word_sim_full >> simp[] >> metis_tac[]) >>
+  match_mp_tac bodyFullExprGenericTheory.expr_vv_sim_stack_full >>
+  simp[post_value_type_word, expr_type_def, compile_bop_stack] >>
+  metis_tac[eval_expr_builtin_value]
 QED
 
 (* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
@@ -584,7 +628,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
+(* Admitted: the joint Log case. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
@@ -684,6 +728,8 @@ Theorem body_return_case_full:
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_const_name_free >> simp[]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>

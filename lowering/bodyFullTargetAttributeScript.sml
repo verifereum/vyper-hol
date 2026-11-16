@@ -4,7 +4,7 @@ Theory bodyFullTargetAttribute
 Ancestors
   bodyFullTargetDefs gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr
   bodyFullUnwrapRun targetPtrFacts
-  bodyPtrAttributeAdd
+  bodyPtrAttributeAdd typedCopyPtr decoderGhostFramePtr
   targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
   gasShadowCompile gasShadowCompileHelpers gasShadow gasExemptCert
   stmtLoweringMono exprLoweringProps emitHelperProps
@@ -53,7 +53,6 @@ Theorem target_add_suffix_full:
    G tn pv' G0 tn0 vt' explicit PG.
   emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
@@ -107,13 +106,11 @@ Proof
   `alloca_inv t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[target_post_def, stmt_state_rel_def]) >>
-  qspecl_then [`ADD`, `word_add`, `FST rb`, `Lit (n2w off)`, `sm`, `dst`,
-               `sb`, `func`, `ctx`, `t`, `w0`, `n2w off`, `tn`, `DF H`, `PG`,
-               `G`] mp_tac
-    (Q.GENL [`opc`, `f`, `left`, `right`, `sa`, `dst`, `sb`, `func`, `ctx`,
-             `s`, `a`, `b`, `tn`, `D`, `PG`, `G`] attribute_emit_binop_path_ptr) >>
-  impl_tac >- simp[eval_operand_def, op_taint_def] >>
-  strip_tac >> gvs[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (fs[target_post_def, stmt_state_rel_def, fmp_room_def,
+        allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
   qabbrev_tac `inst = mk_inst sm.cs_next_id ADD [FST rb; Lit (n2w off)] [out]` >>
   qabbrev_tac `u0 = update_var out (w0 + n2w off) t` >>
@@ -121,12 +118,24 @@ Proof
     (simp[Abbr `inst`, Abbr `u0`] >> irule step_ADD >>
      simp[eval_operand_def]) >>
   `run_inst_seq [inst] t = OK u0` by simp[run_inst_seq_def] >>
-  `sb.cs_current_bb = sm.cs_current_bb /\
+  `dst = Var out /\ sb.cs_current_bb = sm.cs_current_bb /\
    sb.cs_current_insts = sm.cs_current_insts ++ [inst]` by
     (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
           fresh_id_def, emit_def, comp_return_def, Abbr `inst`, Abbr `out`] >>
      strip_tac >> gvs[]) >>
+  `op_taint (step_taint inst t u0 tn) (Var out) = {} /\
+   (step_taint inst t u0 tn).t_mem = tn.t_mem /\
+   (step_taint inst t u0 tn).t_stor = tn.t_stor /\
+   (step_taint inst t u0 tn).t_trans = tn.t_trans /\
+   (!p. p <> out ==>
+      FLOOKUP (step_prov PG G inst u0) p = FLOOKUP G p /\
+      op_taint (step_taint inst t u0 tn) (Var p) = op_taint tn (Var p))` by
+    simp[Abbr `inst`, Abbr `u0`, copy_len_binop_ghost_frame] >>
+  `(step_taint inst t u0 tn).t_imm = tn.t_imm` by
+    (irule (cj 3 step_taint_nonmemory_frame) >>
+     simp[Abbr `inst`, mk_inst_def]) >>
+  gvs[] >>
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[Abbr `out`, not_fresh_at_def] >> rpt strip_tac >> gvs[] >>
      first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
@@ -235,7 +244,7 @@ Proof
     (mp_tac o REWRITE_RULE [target_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `Type bty`, `sa`, `sm`, `shadow_sa`,
                            `shadow_sm`, `rb`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
@@ -330,7 +339,11 @@ Resume target_attribute_sim_full[tail]:
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H es2.storage_trace ==>
                     gas_origin_ptr_path _ _ _ _ /\ _` drule >>
-  simp[]
+  simp[] >> strip_tac >>
+  fs[target_post_def, stmt_state_rel_def, fmp_room_def,
+     allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+     venomMemDefsTheory.alloca_next_valid_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Finalise target_attribute_sim_full

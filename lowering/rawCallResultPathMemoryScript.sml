@@ -85,14 +85,17 @@ Proof
        (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
     (qx_gen_tac `H2` >> strip_tac >>
      `stmt_state_rel H2 ctx func cenv cx es t` by
-       (drule_all (Q.SPEC `H2` raw_call_nonrevert_positive_run) >>
-        strip_tac >> gvs[]) >>
-     conj_tac
+       (qpat_assum `stmt_state_rel H2 _ _ _ _ _ _`
+          (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+             raw_call_nonrevert_positive_run) >>
+        disch_then drule_all >> strip_tac >> gvs[]) >>
+     conj_asm1_tac
      >- (qpat_assum `lowered_value_type _ _ = _`
            (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
          irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
          fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
-     irule aggregate_allocated_result_store_bound_mem >>
+     irule (INST_TYPE [alpha |-> ``:256``]
+       aggregate_allocated_result_store_bound_mem) >>
      conj_tac >- fs[stmt_state_rel_def] >>
      conj_tac
      >- (qexistsl_tac [`ti`,`w2n tw`,
@@ -100,7 +103,10 @@ Proof
            `64 + ((n+31) DIV 32)*32`] >>
          pure_rewrite_tac[mk_ptr_def, type_memory_size_def,
            vfmConstantsTheory.word_size_def] >> simp[arithmeticTheory.MULT_COMM]) >>
-     simp[] >> metis_tac[]) >>
+     simp[] >>
+     qexistsl_tac [`H2`,`ctx`,`es0`,`func`,`s0`,`sf`,`sb`] >>
+     qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
   qexistsl_tac [`t`,`tw`,`ti`] >>
   fs[arithmeticTheory.MULT_COMM, vv_store_bound_def, mk_ptr_def,
      eval_operand_def, lookup_var_def] >> metis_tac[]

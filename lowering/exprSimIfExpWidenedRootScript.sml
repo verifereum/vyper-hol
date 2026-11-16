@@ -52,7 +52,7 @@ Theorem normalized_arm_join_outcome[local]:
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   emit_inst ASSIGN [op] [rv] sd = ((),se) /\
   emit_inst JMP [Label xl] [] se = ((),sf) /\
   fn_has_code sd se func /\ fn_has_code se sf func /\
@@ -74,7 +74,7 @@ Theorem normalized_arm_join_outcome[local]:
          else LocatedValue ann (mk_ptr (Var rv) LocMemory)) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = 0)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -161,8 +161,9 @@ Proof
        vyperStorageTraceTheory.storage_trace_frame_raise]) >>
   first_assum (irule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   reverse conj_tac >-
-    (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >>
-     metis_tac[expr_exit_INR_type]) >>
+    (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def, halt_exit_def] >>
+     ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] expr_exit_INR_type] >>
+     simp[]) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   qabbrev_tac `H = storage_trace_horizon mid.storage_trace` >>
   `valid_horizon cx st0 H mid.storage_trace` by

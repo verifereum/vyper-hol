@@ -1,11 +1,12 @@
 (* The allocated SHA call carries a complete bounded success frame. *)
 Theory bodyFullHashShaSuccess
 Ancestors
+  bodyFullHashShaFixed bodyFullHashKeccakFixed context
   bodyFullHashShaInput bodyFullHashShaEmit bodyFullUnwrapRun bodyFullHashKeccakBytes instSeqPtrLo
   bodyPtrHashBuiltinsShaAlloc bodyPtrHashBuiltinsShaAllocInput bodyPtrHashBuiltinsShaEmit
   bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsShaEndpoint
   bodyPtrDefs loweringHalt emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
-  fragExec exprSimHash venomState ptrDiscipline finite_map pred_set words ghostPcTransportPtr
+  fragExec exprSimHash venomState venomInst ptrDiscipline finite_map pred_set words ghostPcTransportPtr
 
 Theorem sha_alloc_success_frame_at:
   compile_alloc_buffer 32 sa = (buf,sn) /\ fn_has_code sa sn fn /\
@@ -30,7 +31,7 @@ Theorem sha_alloc_success_frame_at:
       aid < sa.cs_next_id /\ b <= w2n w /\ w2n w+w2n n <= b+k) \/
    (?name b k. local_region cenv es.scopes s name b k /\
       b <= w2n w /\ w2n w+w2n n <= b+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
@@ -52,8 +53,25 @@ Proof
   `eval_operand (Var q) t = SOME v` by metis_tac[] >>
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
   `mem_bytes_at (w2n w) (w2n n) t.vs_memory = bs` by metis_tac[] >>
-  drule_all hash_alloc_sha256_success_from_input >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    hash_alloc_sha256_success_from_input) >>
   disch_then (qspec_then `D` strip_assume_tac) >>
+  drule_all hash_alloc_sha256_code_split >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sn sb)` by
+    (drule_all emitted_insts_sha256_tail >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
+    (irule sha_allocated_sequence_restore_ctx >>
+     conj_tac >- first_assum ACCEPT_TAC >> conj_tac
+     >- (qexistsl_tac [`buf`, `emitted_insts sn sb`, `sn`, `t`] >> simp[]) >>
+     simp[]) >>
   `local_ptrs_reserved cenv sn` by
     (qpat_assum `local_ptrs_reserved cenv sa` mp_tac >>
      qpat_assum `!y. not_fresh_at sa y ==> not_fresh_at sn y` mp_tac >>

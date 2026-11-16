@@ -3,11 +3,17 @@ Ancestors
   assignEffectfulIndexStoreReady tuplePlaceOwnedMemoryFrame tuplePlaceStep
   assignEffectfulIndexSnapshotFrame tuplePlaceSnapshot freshWrites
   exprLoweringProps loweringPosts venomMemDefs vyperScopePreservation
-  vyperTypeArgFits aggregateEvaluatedLayout
+  vyperTypeArgFits aggregateEvaluatedLayout vyperStoragePlaceProvenance
+  vyperStorageFootprint vyperStoragePlaceObserved
+Libs horizonTypeLib
 
 Theorem assign_effectful_snapshot_owned_store_ready:
-  target_post ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
-    (dst,SOME loc,SOME (ValPT dty)) s /\
+  (?H. valid_horizon cx st0 H mid.storage_trace) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+      (dst,SOME loc,SOME (ValPT dty)) s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ val_wf stv v /\
@@ -30,7 +36,7 @@ Theorem assign_effectful_snapshot_owned_store_ready:
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv st /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv st /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id mid.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -49,19 +55,27 @@ Theorem assign_effectful_snapshot_owned_store_ready:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func cenv cx ff z /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff z) /\
     (!x. not_fresh_at st x ==> lookup_var x z = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b) /\
     ~z.vs_halted /\ z.vs_current_bb = sf.cs_current_bb /\
     z.vs_inst_idx = LENGTH sf.cs_current_insts /\
     alloca_frame cenv mid st s cenv ff z
 Proof
-  strip_tac >> Cases_on `loc = LocMemory`
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `target_post H0 ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+     (dst,SOME loc,SOME (ValPT dty)) s /\
+   storage_place_observed H0 p /\ regions_consistent (FST H0) /\
+   storage_locks_separated (FST H0) (SND H0)` by metis_tac[] >> Cases_on `loc = LocMemory`
   >- suspend "memory" >>
   irule assign_effectful_snapshot_store_ready >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-  simp[] >> qexistsl_tac [`v`,`env`] >>
+  simp[] >>
+  reverse conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl_tac [`dst`,`dtv`,`dty`,`dw`,`e`,`ee`,`loc`,`p`,`snap`,
+    `ss`,`stv`,`sw`,`u`,`v`] >> simp[] >>
   Cases_on `is_word_type (lowered_value_type cenv e)` >> gvs[] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -73,7 +87,7 @@ Resume assign_effectful_snapshot_owned_store_ready[memory]:
     (simp[expr_val_rel_def] >>
      Cases_on `is_word_type (lowered_value_type cenv e)` >> gvs[] >>
      metis_tac[assign_effectful_target_snapshot_value, arithmeticTheory.ADD_COMM]) >>
-  `stmt_state_rel ctx func cenv cx mid s /\
+  `stmt_state_rel H0 ctx func cenv cx mid s /\
    place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type dty) /\
    (!x. dst = Var x ==> not_fresh_at st x)` by
     gvs[target_post_def] >>
@@ -98,26 +112,32 @@ Resume assign_effectful_snapshot_owned_store_ready[memory]:
      fs[alloca_next_valid_def] >> conj_tac
      >- (res_tac >> decide_tac) >>
      qexistsl_tac [`aid`,`sz`] >> simp[] >> decide_tac) >>
+  `storage_place_region cx p` by
+    (Cases_on `p` >> fs[place_ptr_rel_def,
+      vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+     Cases_on `b` >> fs[slot_loc_def]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
-    tuple_place_owned_memory_run_frame >>
+    (at_horizon_named "H" (at_horizon_named "H0" tuple_place_owned_memory_run_frame)) >>
   disch_then (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   disch_then (qspec_then `stv` mp_tac) >>
   impl_tac
   >- (simp[] >> Cases_on `is_word_type (lowered_value_type cenv e)` >>
       gvs[] >> goal_assum (drule_at Any) >> simp[]) >>
   strip_tac >>
-  qexists_tac `t` >> simp[] >>
+  qexists_tac `t` >> simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      fs[target_post_def] >> metis_tac[]) >>
   `MAP FDOM mid.scopes = MAP FDOM ff.scopes` by
     metis_tac[write_place_scopes_dom] >>
-  irule tuple_place_store_alloca_frame >> simp[] >>
+  irule (at_horizon_named "H" tuple_place_store_alloca_frame) >> simp[] >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[] >>
   goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
   simp[] >> rpt strip_tac >>
   (qpat_x_assum `!aid b len a n dtv. _ ==> mem_bytes_at _ _ _ = _` irule >>
    conj_tac

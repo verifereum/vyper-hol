@@ -6,6 +6,7 @@
  *)
 Theory bodyFullExprStmt
 Ancestors
+  bodyFullExprCore
   bodySimFull gasOutcomeFullStmts gasOutcomeFullCompose gasOutcomeFull
   stmtSimExpr stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   exprSimDefs gasShadow gasShadowState loweringPosts exprLoweringProps

@@ -1,6 +1,7 @@
 Theory bodyMemPopToplevelSim
 Ancestors
-  bodyMemPopToplevelPath exprSimMemDefs exprSimPopStorage
+  bodyMemPopToplevelPath bodyUnopFragMemory storageCopyGasPath
+  exprSimMemDefs exprSimPopStorage
   exprSimDefs exprSimProps loweringPosts exprSimLen exprSimTopLevelProps
   exprSimHyps exprSimHypsDefs exprLoweringProps exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperStorageBackend vyperStorageLayoutSafety vyperStorage
@@ -39,7 +40,13 @@ Proof
 QED
 
 Theorem pop_mem_positive_holds_cursor:
-  stmt_state_rel H ctx func cenv cx es s /  regions_consistent (FST H) /\ storage_well_formed_on cx es (FST H) /  MEM (tr,w,ArrayTV tv (Dynamic n)) (FST H) /  evaluate_type (get_tenv cx) ann = SOME tv /  len = w2n (lookup_storage w (get_storage cx es tr)) /\ 0 < len /  elem = w + n2w (1 + (len - 1) * type_slot_size tv) /  u = (if tr then tstore w (n2w (len - 1)) s else sstore w (n2w (len - 1)) s)
+  stmt_state_rel H ctx func cenv cx es s /\
+  regions_consistent (FST H) /\ storage_well_formed_on cx es (FST H) /\
+  MEM (tr,w,ArrayTV tv (Dynamic n)) (FST H) /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\
+  len = w2n (lookup_storage w (get_storage cx es tr)) /\ 0 < len /\
+  elem = w + n2w (1 + (len - 1) * type_slot_size tv) /\
+  u = (if tr then tstore w (n2w (len - 1)) s else sstore w (n2w (len - 1)) s)
         with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|> ==>
   storage_holds cx tr ann (PlaceR (StoragePlace tr elem tv)) elem
     (set_storage cx es tr (apply_writes w [(0,n2w (len - 1))] (get_storage cx es tr))) u
@@ -73,9 +80,11 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-   ~cx.txn.is_static /\ alloca_inv s0` by
-    (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_def]) >>
+   alloca_inv s0 /\ s0.vs_call_ctx.cc_static = cx.txn.is_static` by
+    (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE
+         [stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
   drule_all pop_storage_compiler_facts >> strip_tac >>
   `elem_size_in_location cenv (if tr then LocTransient else LocStorage) ann =
@@ -84,10 +93,15 @@ Proof
   Cases_on `compile_dynarray_pop (Lit (n2w slot)) 1 (type_slot_size tv)
     cenv.ce_is_ctor cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sa` >>
   gvs[] >>
-  drule_all eval_pop_storage >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0
     (es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))])`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (Cases_on `cx.txn.is_static`
+      >- (drule_all eval_pop_storage_static >> strip_tac >>
+          rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          simp[gasStorageTheory.gas_bad_storage_at_def, LET_THM, COND_RAND] >>
+          rw[]) >>
+      drule_all eval_pop_storage >> strip_tac >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gasStorageTheory.gas_bad_storage_at_def, LET_THM, COND_RAND] >>
       rw[]) >>
   `?H1. valid_horizon cx st0 H1 (es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))])` by
@@ -104,7 +118,17 @@ Proof
      lookup_storage (n2w slot) (get_storage cx es tr)` by
     (irule pop_declared_header_load >> metis_tac[]) >>
   Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w`
-  >- (`(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) = 0w` by
+  >- (`!tail. eval_expr cx (Pop ann (TopLevelNameTarget (src,id)))
+          (es with gas_obs := tail) =
+        (INR (Error (RuntimeError "pop empty storage array")),
+         (es with storage_trace := es.storage_trace ++
+            [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) with gas_obs := tail)` by
+        (gen_tac >> Cases_on `cx.txn.is_static`
+         >- (drule_all eval_pop_storage_static >>
+             simp[pop_storage_gas_obs, evaluation_state_component_equality]) >>
+         drule_all eval_pop_storage >>
+         simp[LET_THM, pop_storage_gas_obs, evaluation_state_component_equality]) >>
+      `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) = 0w` by
         metis_tac[] >>
       drule_all dynarray_pop_storage_empty_path_mem >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -120,15 +144,16 @@ Proof
               gvs[pop_storage_gas_obs, evaluation_state_component_equality])
           >- (qpat_x_assum `gas_path_mem _ _ _ _ _` mp_tac >>
               simp[gas_marked_path_def])) >>
-      disj2_tac >> simp[exit_result_def, expr_exit_def]) >>
+      disj2_tac >> simp[exit_result_def, expr_exit_def, halt_exit_def]) >>
   suspend "positive"
 QED
 Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by
     metis_tac[] >>
-  `~s0.vs_call_ctx.cc_static` by
-    (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_def]) >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
+  `~s0.vs_call_ctx.cc_static` by simp[] >>
+  drule_all eval_pop_storage >> strip_tac >>
   drule_all dynarray_pop_storage_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule dynarray_pop_storage_shape >> strip_tac >> gvs[] >>
@@ -166,7 +191,7 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
               Abbr `elem`])
       >- (qpat_x_assum `gas_path_mem _ _ _ _ _` mp_tac >>
           simp[gas_marked_path_def])) >>
-  disj1_tac >> qexists_tac `t` >> simp[] >>
+  disj1_tac >> qexists_tac `t` >> simp_tac (srw_ss()) [] >>
   gen_tac >> strip_tac >>
   `valid_horizon cx st0 H es.storage_trace /\ regions_consistent (FST H) /\
    storage_observations_ok cx H (es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))])` by
@@ -205,8 +230,43 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
     simp[] >>
   rpt conj_tac
   >- (irule pop_storage_vv_post >> rpt conj_tac >> metis_tac[])
-  >- (irule vv_store_bound_nonmem >> Cases_on `tr` >> simp[contextTheory.mk_ptr_def]) >>
-  fs[]
+  >- (irule vv_store_bound_nonmem >> Cases_on `tr` >> simp[contextTheory.mk_ptr_def])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `t.vs_alloca_next = _`
+    (fn th => rewrite_tac[th, arithmeticTheory.LESS_EQ_REFL])
+QED
+
+Resume compile_pop_storage_normalized_vv_sim_mem[static]:
+  `s0.vs_call_ctx.cc_static` by simp[] >>
+  drule dynarray_pop_storage_shape >> strip_tac >> gvs[] >>
+  `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by fs[ALL_DISTINCT] >>
+  `?u. run_inst_seq (emitted_insts sa r) s0 = Abort ExHalt_abort u` by
+    (simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+     irule dynarray_pop_storage_run_static >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa r) s0` by
+    (irule dynarray_pop_storage_mem_ok >> goal_assum (drule_at Any)) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sa r)` by
+    (irule dynarray_pop_storage_opcodes >> goal_assum (drule_at Any)) >>
+  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa r)
+          (DROP (LENGTH sa.cs_current_insts) bb.bb_instructions)` by
+    (irule storage_copy_code_prefix >>
+     simp[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path_mem >>
+  disch_then (qspecl_then [`ctx`,`func`,`bb`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all eval_pop_storage_static >> strip_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+    `es with storage_trace := es.storage_trace ++
+       [StorageRoot tr slot (ArrayTV tv (Dynamic n))]`,
+    `Abort ExHalt_abort (u with vs_inst_idx := j)`] >>
+  simp[gas_marked_exec_def, exit_result_def, expr_exit_def, halt_exit_def,
+       pop_storage_gas_obs, evaluation_state_component_equality]
 QED
 
 Finalise compile_pop_storage_normalized_vv_sim_mem

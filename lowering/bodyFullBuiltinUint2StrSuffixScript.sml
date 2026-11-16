@@ -64,6 +64,7 @@ Proof
   `stmt_state_rel H0 ctx fn cenv cx ee s` by metis_tac[] >>
   `type_memory_bytes cenv (BaseT (StringT n)) + n < dimword(:256)` by
     (irule (cj 6 u2s_builtin_result_requirements) >> simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`sa` |-> `sm`, `es` |-> `ee`] (INST_TYPE [``:'b`` |-> ``:256``] (SPEC_ALL alloc_buffer_origin_ptr_path_exact))) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
     (qx_choose_then `p` (qx_choose_then `w` (qx_choose_then `ready`

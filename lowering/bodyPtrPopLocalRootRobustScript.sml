@@ -2,7 +2,7 @@
    This reuses the general clean-store inverse, not a new memory definition. *)
 Theory bodyPtrPopLocalRootRobust
 Ancestors
-  bodyPtrPopLocalRootEntry augAssignPtrFieldStore exprSimPop exprSimAggregateEncoding
+  bodyPtrPopLocalRootEntry mstoreRestorePtr exprSimPop exprSimAggregateEncoding
   valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   bodyPtrDefs venomState venomMemProofs words list rich_list pred_set arithmetic
 

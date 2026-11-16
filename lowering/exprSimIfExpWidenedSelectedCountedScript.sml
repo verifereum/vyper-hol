@@ -162,7 +162,7 @@ Theorem selected_ifexp_arm_outcome:
         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `cs_extends sc sa /\ sc.cs_next_var <= sa.cs_next_var /\
@@ -181,7 +181,7 @@ Proof
   conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_conditional_result] >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
-  reverse conj_tac >- (simp[] >> metis_tac[]) >>
+  reverse conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   `gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks
     (INL v) (mid with gas_obs := []) (OK t)` by

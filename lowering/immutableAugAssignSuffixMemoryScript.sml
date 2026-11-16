@@ -39,7 +39,9 @@ Theorem immutable_augassign_scalar_suffix_mem:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace cenv.ce_module id []))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = s1.cs_current_bb /\
   s0.vs_inst_idx = LENGTH s1.cs_current_insts /\
   s_entry.vs_alloca_next <= s0.vs_alloca_next /\
@@ -47,15 +49,15 @@ Theorem immutable_augassign_scalar_suffix_mem:
          lookup_var z s0 = SOME u) /\
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
            FLOOKUP s0.vs_allocas aid = SOME b) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
       (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace cenv.ce_module id [])))) (es,s0)
-    (\res ff u. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
+    (\H res ff u. res = INL () /\
+      stmt_post H ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
 Proof
   strip_tac >>
   irule (immutable_augassign_rhs_mem |> SPEC_ALL |>
@@ -68,6 +70,25 @@ Proof
   >- (rpt strip_tac >> drule_all immutable_augassign_rhs_source >> simp[]) >>
   (conj_tac >- (
   rpt strip_tac >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by
+    fs[loweringPostsTheory.expr_post_def] >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    (rename1 `bind (eval_expr cx e) (read_result cx)
+       (es with gas_obs := gs) = (INL rhs,ee)` >>
+     mp_tac (Q.INST [`H` |-> `H0`,
+       `f` |-> `bind (eval_expr cx e) (read_result cx)`,
+       `st` |-> `es with gas_obs := gs`, `res` |-> `INL rhs`, `st'` |-> `ee`]
+       (INST_TYPE [alpha |-> ``:value``]
+         vyperStorageFootprintTheory.valid_horizon_frame)) >>
+     impl_tac
+     >- (conj_tac
+         >- simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >>
+         conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   drule_all immutable_augassign_rhs_source >>
   disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   drule_all immutable_augassign_current_root >> strip_tac >>
@@ -87,16 +108,18 @@ Proof
   `alloca_frame cenv es s1 s0 cenv ee s` by
     (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >>
      simp[] >> strip_tac >>
-     irule stmtSimDefsTheory.expr_post_alloca_frame >>
-     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+     irule (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.expr_post_alloca_frame) >>
+     simp[] >> qexistsl_tac [`H0`, `ctx`, `cx`, `e`, `func`, `y`, `s2`, `rhs`] >>
+     simp[]) >>
   `alloca_frame cenv es_entry sa s_entry cenv ee s` by
     (irule stmtSimDefsTheory.alloca_frame_trans >>
      goal_assum (drule_at Any) >> simp[] >>
      fs[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
   `alloca_frame cenv es_entry sa s_entry cenv ee t` by
-    (irule augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+    (irule (INST_TYPE [alpha |-> ``:256``]
+       augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept) >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ctx`, `cx`, `func`, `s2`] >>
+     qexistsl [`H0`, `ctx`, `cx`, `func`, `s2`] >>
      fs[loweringPostsTheory.expr_post_def]) >>
   irule immutable_augassign_root_write_callback >>
   goal_assum (drule_at Any) >> simp[] >>
