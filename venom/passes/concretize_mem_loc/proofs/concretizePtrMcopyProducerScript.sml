@@ -227,7 +227,7 @@ Resume ptr_mcopy_write_producer_static[classify]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
   `dyn_floor C a.po_state = dyn_floor C vs` by
-    (drule frameAllocationOwnershipTheory.frame_reachable_initial_fmp >>
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
      simp[dyn_floor_def]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>

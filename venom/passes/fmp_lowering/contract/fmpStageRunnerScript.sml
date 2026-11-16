@@ -27,6 +27,7 @@
  *)
 Theory fmpStageRunner
 Ancestors
+  reachableFnSim
   o1PassContract venomPassSchedule venomCompilerTypes fmpStageRel
   fmpStageRunnerFacts fmpStageFmpSteps fmpStageOpSteps fmpStageBlockSim
   fmpStageBlockSimCode
@@ -296,7 +297,7 @@ Proof
   conj_asm2_tac
   >- (simp[fmp_invoke_sim_def] >> rpt strip_tac >>
       `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
-      drule_all (unw ld_terminating_invoke_inversion) >>
+      drule_all (unw reachableFnSimTheory.ld_terminating_invoke_inversion) >>
       disch_then (qx_choosel_then [`nm`, `ops`, `callee`, `args`, `cs`]
         strip_assume_tac) >>
       drule_all fmp_runner_call >> strip_tac >> gvs[] >>

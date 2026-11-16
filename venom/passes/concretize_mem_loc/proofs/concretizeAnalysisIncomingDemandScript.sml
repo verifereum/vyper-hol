@@ -114,7 +114,7 @@ Theorem concretize_untainted_incoming_read_liveat_headroom_static:
 Proof
   strip_tac >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn current inst s oms om hs h)` by
-    metis_tac[trace_config_at] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at] >>
   `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>

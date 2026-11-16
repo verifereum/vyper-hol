@@ -314,7 +314,7 @@ Proof
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
   `dyn_floor C a.po_state = dyn_floor C vs` by
-    (drule frameAllocationOwnershipTheory.frame_reachable_initial_fmp >>
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
      simp[dyn_floor_def]) >>
   `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by

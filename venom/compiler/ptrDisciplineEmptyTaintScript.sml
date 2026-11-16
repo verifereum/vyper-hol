@@ -8,6 +8,18 @@ Definition var_taint_empty_def:
   var_taint_empty tv <=> !v m. FLOOKUP tv v = SOME m ==> m = {}
 End
 
+Theorem frame_reachable_initial_fmp:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    s.vs_initial_fmp = vs0.vs_initial_fmp /\
+    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rw[] >>
+  imp_res_tac ctxLookupAgreeHelpersTheory.enters_block_initial_fmp >> imp_res_tac ctxLookupAgreeHelpersTheory.step_inst_initial_fmp >>
+  imp_res_tac ctxLookupAgreeHelpersTheory.setup_callee_initial_fmp >> imp_res_tac ctxLookupAgreeHelpersTheory.bind_outputs_initial_fmp >>
+  gvs[]
+QED
+
 Definition taint_empty_def:
   taint_empty tn <=>
     tn.t_mem = {} /\ var_taint_empty tn.t_var /\

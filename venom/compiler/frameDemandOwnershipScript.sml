@@ -152,7 +152,7 @@ Proof
   drule origin_frame_erasure >> strip_tac >>
   drule_then (qspecl_then [`ncut`,`lo`] mp_tac) frame_reachable_caches_below_upto >>
   simp[] >> strip_tac >>
-  drule frame_reachable_initial_fmp >> strip_tac >>
+  drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >> strip_tac >>
   gvs[activation_cache_def]
   >- (first_x_assum (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
   first_x_assum (qspecl_then [`SUC (LENGTH stk - SUC d)`,`aid`,`b`,`sz`] mp_tac) >>

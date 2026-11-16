@@ -2,6 +2,7 @@
    Identities are (frame serial, instruction id), never inverse site lookups. *)
 Theory o1LowerDloadOccurrence
 Ancestors
+  ptrDisciplineEmptyTaint
   o1LowerDloadGhost o1LowerDloadAllocation ptrDiscipline ctxLookupAgreeHelpers
   finite_map
   venomExecSemantics venomMemProps venomExecProofs pred_set list
@@ -638,21 +639,6 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem frame_reachable_initial_fmp:
-  !vs C stk PG G tn fn inst s.
-    frame_reachable vs C stk PG G tn fn inst s ==>
-    s.vs_initial_fmp = vs.vs_initial_fmp /\
-    EVERY (\f. f.cf_state.vs_initial_fmp = vs.vs_initial_fmp) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt gen_tac >>
-  strip_tac >> gvs[]
-  >- (drule enters_block_initial_fmp >> simp[])
-  >- (drule step_inst_initial_fmp >> simp[])
-  >- metis_tac[enters_block_initial_fmp, step_inst_initial_fmp]
-  >- metis_tac[enters_block_initial_fmp, setup_callee_initial_fmp] >>
-  drule bind_outputs_initial_fmp >> simp[]
-QED
-
 Theorem occ_frame_reachable_annotation:
   !vs C stk PG G tn fn inst s n a U B HP H.
     occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
@@ -689,7 +675,7 @@ Resume occ_frame_reachable_annotation[next]:
     (strip_tac >>
      `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
      `allocas_below_fmp s` by metis_tac[ptr_discipline_def] >>
-     `s.vs_initial_fmp = vs.vs_initial_fmp` by metis_tac[frame_reachable_initial_fmp] >>
+     `s.vs_initial_fmp = vs.vs_initial_fmp` by metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
      gvs[dyn_floor_def, allocas_below_fmp_def]) >>
   `(inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
    !o1 o2. inst.inst_operands = [o1; o2] ==>

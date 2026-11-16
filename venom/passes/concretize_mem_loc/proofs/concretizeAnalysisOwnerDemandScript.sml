@@ -35,7 +35,7 @@ Theorem concretize_untainted_owner_read_liveat_headroom_static:
 Proof
   strip_tac >>
   `joint_config_reachable vs0 C (EL j (q0::qs))` by
-    metis_tac[trace_config_at] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at] >>
   `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
@@ -146,7 +146,7 @@ Proof
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      qexists_tac `byte` >> simp[] >> qexists_tac `n` >> simp[]) >>
   `MEM owner C.ctx_functions` by
-    (`joint_config_reachable vs0 C (EL j (q0::qs))` by metis_tac[trace_config_at] >>
+    (`joint_config_reachable vs0 C (EL j (q0::qs))` by metis_tac[frameJointTraceTheory.joint_trace_reachable_at] >>
      `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
        gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>

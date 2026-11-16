@@ -5105,7 +5105,7 @@ Resume ld_recursive_return_normal_prefix_static[normal_clauses]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule ctxLookupAgreeHelpersTheory.bind_outputs_initial_fmp >> strip_tac >>
      drule lowerDloadOwnershipTheory.ld_annotated_erasure >> strip_tac >>
-     drule o1LowerDloadOccurrenceTheory.frame_reachable_initial_fmp >> strip_tac >>
+     drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >> strip_tac >>
      gvs[LIST_REL_CONS1, dyn_floor_def]) >>
   drule ld_normal_data_geometry >> strip_tac >>
   drule ld_normal_data_masks >> strip_tac >>

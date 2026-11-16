@@ -127,7 +127,7 @@ Proof
     (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `w2n vs0.vs_initial_fmp <= w2n s.vs_fmp` by
     (drule ld_sync_source >> strip_tac >>
-     drule o1LowerDloadOccurrenceTheory.frame_reachable_initial_fmp >>
+     drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
      strip_tac >>
      qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
      simp[ptr_discipline_def] >> rpt strip_tac >>
