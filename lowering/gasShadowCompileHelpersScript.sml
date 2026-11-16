@@ -550,7 +550,13 @@ Proof
   gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
   Cases_on `first_arg` >> Cases_on `rest_args` >>
   gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
-  BasicProvers.every_case_tac >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
   gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin]
 QED
 

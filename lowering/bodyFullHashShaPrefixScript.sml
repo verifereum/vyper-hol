@@ -1,7 +1,7 @@
 (* The SHA bytes header read preserves the complete bounded ghost. *)
 Theory bodyFullHashShaPrefix
 Ancestors
-  bodyFullHashShaFixed bodyFullHashKeccakFixed context
+  bodyFullHashShaFixed fragGasSeqPtrContext bodyFullHashKeccakFixed context
   bodyFullGhostFrame bodyPtrHashBuiltinsShaPrefix bodyPtrHashBuiltinsGhostFrame
   bodyPtrHashBuiltinsKeccakBytesRun instSeqPtrLo fragGasSeqPtr
   fragGasOriginPtr fragExecMem exprSimHash exprSimHashBoundary exprSimProps
