@@ -12,7 +12,7 @@ Ancestors
 Libs
   wordsLib
 
-Theorem storage_well_formed_on_stk[local]:
+Theorem storage_well_formed_on_stk:
   storage_well_formed_on (cx with stk updated_by f) st R <=>
   storage_well_formed_on cx st R
 Proof
@@ -28,7 +28,7 @@ Proof
   irule storage_well_formed_on_backends >> simp[]
 QED
 
-Theorem storage_observations_ok_stk[local]:
+Theorem storage_observations_ok_stk:
   storage_observations_ok (cx with stk updated_by f) H tr <=>
   storage_observations_ok cx H tr
 Proof
@@ -112,7 +112,7 @@ Proof
             storage_observations_ok_prefix]
 QED
 
-Theorem push_empty_scope_runtime_consistent[local]:
+Theorem push_empty_scope_runtime_consistent:
   runtime_consistent env cx st ==>
   runtime_consistent env cx (st with scopes := FEMPTY::st.scopes)
 Proof
@@ -840,7 +840,7 @@ QED
 
 (* The horizon may contain a larger selected execution's roots. Its public
    caller supplies the horizon of that exact execution, including failures. *)
-Theorem push_loop_runtime_consistent[local]:
+Theorem push_loop_runtime_consistent:
   runtime_consistent env cx st /\
   evaluate_type env.type_defs ty = SOME tyv /\
   value_has_type tyv v /\ id NOTIN FDOM env.var_types /\
@@ -865,7 +865,7 @@ Proof
      finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem pushed_loop_cleanup[local]:
+Theorem pushed_loop_cleanup:
   push_scope_with_var id tyv v st = (INL (),stp) /\
   finally (try do eval_stmts cx body_stmts; return F od handle_loop_exception)
     pop_scope stp = (loop_res,st_after) ==>
