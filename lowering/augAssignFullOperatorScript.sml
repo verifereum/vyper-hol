@@ -28,7 +28,7 @@ Theorem binop_numeric_origin_ptr_continuation:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   scalar_code A (emitted_insts sa sb) /\
   (!z. z IN A ==> op_prov G (Var z) = NONE /\ op_taint tn (Var z) = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand x s = SOME (val_to_w256 v1) /\
   eval_operand y s = SOME (val_to_w256 v2) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
