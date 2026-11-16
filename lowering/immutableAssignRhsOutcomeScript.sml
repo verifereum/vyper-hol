@@ -79,7 +79,8 @@ Proof
         `func` |-> `func`, `cenv` |-> `ce`, `cx` |-> `cx`, `e` |-> `e`,
         `es` |-> `es`, `sa` |-> `sa`, `sb` |-> `su`, `s0` |-> `s0`,
         `es'` |-> `ee`, `v` |-> `v`, `op` |-> `op`, `s` |-> `s`, `u` |-> `u`]
-        (SPEC_ALL exprSimUnwrapTheory.expr_post_fields_transport)) >>
+        (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+          exprSimUnwrapTheory.expr_post_fields_transport))) >>
       impl_tac >- fs[loweringPostsTheory.vv_post_def] >> simp[]) >>
   `!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) ==>
@@ -96,11 +97,13 @@ Proof
   >- (Cases_on `is_word_type (expr_type e)`
       >- (`?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv` by
             metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
-          drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem >>
+          drule_at (Pat `unwrap_value _ _ _ = _`)
+            (INST_TYPE [alpha |-> ``:256``] unwrap_value_path_mem) >>
           disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           impl_tac >- simp[] >> strip_tac >>
           qexists_tac `u` >> simp[gas_marked_path_def]) >>
-      drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_unwrap_value_path_mem_capacity >>
+      drule_at (Pat `unwrap_value _ _ _ = _`)
+        (INST_TYPE [alpha |-> ``:256``] aggregate_unwrap_value_path_mem_capacity) >>
       disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       impl_tac >- simp[] >> strip_tac >> qexists_tac `u` >>
       simp[gas_marked_path_def] >> metis_tac[]) >>
@@ -195,13 +198,13 @@ Proof
    sa.cs_next_id <= sm.cs_next_id` by metis_tac[compile_expr_extends] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     metis_tac[cj 1 compiler_compile_var] >>
-  irule forced_vv_then_outcome >>
-  qexists_tac `\H pv ee s.
+  match_mp_tac (Q.INST [`P` |-> `\H pv ee s.
     vv_post H ctx func ce cx e es sa sm s0 ee pv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee pv vv s /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next` >>
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next`]
+    (SPEC_ALL forced_vv_then_outcome)) >>
   BETA_TAC >> rpt conj_tac
   >- (qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
@@ -241,7 +244,7 @@ Proof
       mp_tac (Q.INST [`H0` |-> `H0`, `s` |-> `t`]
         (SPEC_ALL immutable_rhs_unwrap_mem_path)) >>
       impl_tac >- simp[] >> strip_tac >> suspend "suffix")
-  >- (rpt strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC)
+  >- (rpt strip_tac >> first_x_assum irule >> simp[])
 QED
 
 Resume immutable_assign_rhs_outcome[suffix]:
@@ -265,14 +268,11 @@ Resume immutable_assign_rhs_outcome[suffix]:
     Q.INST [`imms` |->
       `case ALOOKUP ee.immutables cx.txn.target of NONE => [] | SOME m => m`] |>
     SIMP_RULE bool_ss []) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `Q H (INL ()) fin t_final` >>
+  qmatch_asmsub_abbrev_tac `Q _ (INL ()) fin _` >>
   `fin.storage_trace = ee.storage_trace` by simp[Abbr `fin`] >>
-  `!H. valid_horizon cx st0 H fin.storage_trace ==>
-    Q H (INL ()) fin t_final` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
-       Q H (INL ()) fin t_final` (qspec_then `H` mp_tac) >>
-     impl_tac >- fs[] >> simp[]) >>
+  qpat_assum `fin.storage_trace = ee.storage_trace`
+    (fn eq => qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+      Q H (INL ()) fin t_final` (assume_tac o REWRITE_RULE [GSYM eq])) >>
   `fin with gas_obs := [] = fin` by
     simp[Abbr `fin`, evaluation_state_component_equality] >>
   qexistsl_tac [`INL ()`, `fin`, `OK t_final`] >>
