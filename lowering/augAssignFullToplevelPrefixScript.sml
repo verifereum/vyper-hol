@@ -231,7 +231,10 @@ Theorem augassign_toplevel_rhs_entry_full:
         (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G2 u) /\
         ghost_kept_at lo cenv root_es s1 G' tn' t G2 tn2)
       (\H res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r)
+        (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
+        halt_exit H cx ee (INR ex) r /\
+        (ctx_has_dalloca ctx ==> !s.
+          (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   `body_expr_full_ok cx e` by (irule augassign_toplevel_rhs_ready_full >> metis_tac[]) >>
@@ -260,7 +263,8 @@ Proof
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
     (conj_tac >- metis_tac[not_fresh_at_mono] >> fs[ret_pc_ok_def]) >>
-  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[IgnAsm `root_es = _`, IgnAsm `t = _`] >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >>
+  simp[IgnAsm `root_es = _`, IgnAsm `t = _`, IgnAsm `~ctx_has_dalloca ctx`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule augassign_rhs_invoke_full >>
   simp[IgnAsm `root_es = _`, IgnAsm `t = _`] >>
