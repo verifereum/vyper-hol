@@ -70,12 +70,17 @@ QED
 Theorem immutable_augassign_root_prefix_mem:
   emit_op MLOAD [Lit w] sa = (op,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H)) /\ local_ptrs_reserved cenv sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   w2n w + 32 <= s.vs_alloca_next ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
-    stmt_state_rel H ctx func cenv cx es u /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es u /\
+      storage_well_formed_on cx es (FST H)) /\ alloca_history func u /\
     eval_operand op u = SOME (mload (w2n w) s) /\
     (!z. op = Var z ==> not_fresh_at sb z) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
@@ -85,7 +90,9 @@ Theorem immutable_augassign_root_prefix_mem:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved cenv sb /\
     (!l. op <> Label l)
 Proof
-  strip_tac >> drule_all immutable_root_mload_path_mem >> strip_tac >>
+  strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  drule_all immutable_root_mload_path_mem >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
@@ -94,7 +101,11 @@ Proof
   qexists `update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n w) s) s
     with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[] >> conj_tac
-  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[]) >>
+  >- (gen_tac >> strip_tac >>
+      `stmt_state_rel H ctx func cenv cx es s /\
+       storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+      simp[stmt_state_rel_inst_idx] >>
+      irule stmt_state_rel_update_var >> simp[]) >>
   drule emit_op_same_blocks >>
   simp[same_blocks_def, update_var_def, eval_operand_def, lookup_var_def,
     finite_mapTheory.FLOOKUP_UPDATE, not_fresh_at_def] >>

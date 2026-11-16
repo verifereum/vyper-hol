@@ -11,7 +11,7 @@ Theorem alloc_run_create_blueprint_check_frame:
   shape_stable R ==>
   alloc_run (\s. shape_state s /\ R s /\
       plain_operand s target /\ plain_operand s offset)
-    (compile_create_blueprint_check target offset)
+    (compile_create_blueprint_check is_lit target offset)
     (\v s. shape_state s /\ R s /\ plain_operand s v)
 Proof
   strip_tac >>

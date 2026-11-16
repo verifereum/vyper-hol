@@ -20,6 +20,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem body_annassign_mem_rhs_pre[local]:
   !cenv cx env e es tops id typ ctx.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
@@ -47,7 +50,7 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]

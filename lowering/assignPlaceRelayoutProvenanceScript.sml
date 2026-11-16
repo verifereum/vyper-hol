@@ -1,9 +1,11 @@
 Theory assignPlaceRelayoutProvenance
 Ancestors
-  assignPlaceProvenance assignPlaceSourceBounds assignPlaceMemoryCopy assignPlaceBytesStore
+  assignPlaceProvenance assignPlaceSourceBounds assignPlaceMemoryCopy
   placeRelayoutMemoryRun exprSimHyps annassignRelayoutSource
   exprSimTypedAlloc valueTypingMemoryProps loweringPosts stmtSimDefs
-  stmtLowering compileEnv words placeStore assignPlaceStaging
+  stmtLowering compileEnv words placeStore vyperStorageFootprint
+
+Libs horizonTypeLib
 
 Theorem assign_place_relayout_from_provenance:
   compile_assign_value cenv dst LocMemory src F src_loc dty sty bytes
@@ -23,14 +25,17 @@ Theorem assign_place_relayout_from_provenance:
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s) /\
   write_place cx p v ee = (INL (),ff) /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -38,15 +43,20 @@ Theorem assign_place_relayout_from_provenance:
     alloca_frame cenv ee sa s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by metis_tac[] >>
   `?sw. eval_operand src s = SOME sw /\
         val_in_memory stv v (w2n sw) s.vs_memory` by
     gvs[expr_val_rel_def] >>
   `w2n sw + type_memory_size stv < dimword (:256)` by
-    (irule nonbytes_expr_val_at_bound >> metis_tac[]) >>
+    (irule (horizonTypeLib.at_horizon_named "H"
+      nonbytes_expr_val_at_bound) >> metis_tac[]) >>
   `type_memory_size stv = 0 \/
    w2n sw + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= w2n sw` by
-    (irule nonbytes_expr_val_at_memory_separation >> metis_tac[]) >>
+    (irule (horizonTypeLib.at_horizon_named "H"
+      nonbytes_expr_val_at_memory_separation) >> metis_tac[]) >>
   `value_has_type dtv v` by
     (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
      strip_tac >> gvs[]) >>
@@ -56,8 +66,8 @@ Proof
     metis_tac[expr_sim_inv_memory_size] >>
   `val_footprint stv v = type_memory_size stv` by
     metis_tac[nonbytes_evaluated_val_footprint] >>
-  gvs[] >> irule place_relayout_memory_run >> simp[] >>
-  (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> qexistsl_tac [`p`, `v`] >> simp[]
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `env`, `ee`, `ff`, `s`,
+    `p`, `dw`, `dst`, `src`, `src_loc`, `dty`, `sty`, `stv`, `dtv`, `v`,
+    `sa`, `sb`, `bytes`, `sw`] mp_tac place_relayout_memory_run >>
+  impl_tac >- (simp[] >> rpt conj_tac >> decide_tac) >> simp[]
 QED
