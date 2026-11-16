@@ -521,11 +521,17 @@ Resume abi_encode_args_full_from_step[cons_post]:
 QED
 
 Resume abi_encode_args_full_from_step[cons_ghost]:
-  irule wordArgsPtrTheory.ghost_kept_at_wb_trans >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`, `func`, `mid'`] >>
-  simp[] >> qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def]
+  `wb_frame ce es mid' sa s0 t` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  qpat_assum `ghost_kept_at _ _ es sa _ _ s0 _ _`
+    (mp_then Any mp_tac
+      (INST_TYPE [beta |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans)) >>
+  disch_then drule >> simp[] >>
+  disch_then irule >>
+  conj_tac >- (qexists `mid'` >> simp[]) >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`, `func`] >>
+  simp[]
 QED
 
 Finalise abi_encode_args_full_from_step
