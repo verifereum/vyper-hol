@@ -5,7 +5,7 @@ Ancestors
   abiEncoder compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
   words list rich_list arithmetic venomState abiDecoderRange abiDecodePtrPrims
   abiDecoderCoherence abiDecoderReentry exprLoweringProps fragExecMem
-  loweringStateRelDefs decoderArraySetupPtr
+  loweringStateRelDefs decoderArraySetupPtr bodyFullAbiDecodeClampMemory
 
 (* The array helper has a footprint guard after its no-wrap guard. *)
 Theorem abi_decode_loop_select_segments[local]:
@@ -470,7 +470,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts s2 sb)` by
     metis_tac[bodyPtrBopScalarSeqTheory.bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts s2 sb) t` by metis_tac[bodyPtrBopScalarSeqTheory.bop_scalar_seq_mem_ok] >>
+  `run_inst_seq_mem_ok (emitted_insts s2 sb) t` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
   drule_all fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -494,8 +494,9 @@ Proof
        (qpat_x_assum `bop_scalar_seq _ _ (emitted_insts s2 sb) _` mp_tac >>
         qpat_x_assum `emitted_insts s2 sb = _` (fn th => once_rewrite_tac[GSYM th]) >>
         POP_ASSUM_LIST (K all_tac) >> strip_tac >>
-        drule bodyPtrBopScalarSeqTheory.bop_scalar_seq_memory_checks >>
-        simp[EVERY_MEM] >> metis_tac[]) >>
+        simp[EVERY_MEM] >> rpt strip_tac >>
+        drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_outputs >>
+        simp[MEM]) >>
      fs[inst_extends_def,IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at s2 x` by
     (qpat_x_assum `sa.cs_next_var <= s2.cs_next_var` mp_tac >>
