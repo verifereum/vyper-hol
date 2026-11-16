@@ -6492,27 +6492,172 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[is_pseudo_def]) >>
   `phi_prefix_length pre <= LENGTH pre` by
     simp[venomExecProofsTheory.phi_prefix_length_le] >>
-  `exec_block n C bb ((sp with vs_gas_readings := W) with
+  `phi_prefix_length pre - LENGTH pre = 0` by decide_tac >>
+  `exec_block n C bb ((sp with vs_gas_readings := ws) with
       vs_inst_idx := phi_prefix_length pre) =
       exec_block n C (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
-        (t with vs_gas_readings := W) /\
+        (t with vs_gas_readings := ws) /\
    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb
-      ((sp with vs_gas_readings := W) with vs_inst_idx := phi_prefix_length pre)) =
+      ((sp with vs_gas_readings := ws) with vs_inst_idx := phi_prefix_length pre)) =
       trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
         (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
-        (t with vs_gas_readings := W)) /\
+        (t with vs_gas_readings := ws)) /\
    gas_events_block n C fn.fn_name bb
-      ((sp with vs_gas_readings := W) with vs_inst_idx := phi_prefix_length pre) =
+      ((sp with vs_gas_readings := ws) with vs_inst_idx := phi_prefix_length pre) =
       gas_events_block n C fn.fn_name
         (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
-        (t with vs_gas_readings := W)` by
+        (t with vs_gas_readings := ws)` by
     (irule native_pseudo_suffix_skip >>
-     qexistsl_tac [`DROP (phi_prefix_length pre) pre`, `rest`] >>
-     simp[DROP_APPEND, rich_listTheory.EVERY_DROP]) >>
+     qexistsl_tac [`rest`, `DROP (phi_prefix_length pre) pre`] >>
+     simp[DROP_APPEND, rich_listTheory.EVERY_DROP, arithmeticTheory.SUB_EQ_0]) >>
   simp[run_block_def, dftIndexedExecTheory.dft_phi_prefix_append,
        dftIndexedExecTheory.dft_eval_phis_append] >>
   metis_tac[gas_events_length]
 QED
+
+Theorem native_block_entry_residual_boundary:
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  strict_dom_vars_defined fn s /\ fn_reachable fn s.vs_current_bb /\
+  ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+  ~s.vs_call_ctx.cc_static /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  terminates (run_block b C' bb' s) ==>
+  let pre = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions;
+      todo = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions;
+      j = LENGTH pre in
+  ?sp t scheduled body.
+    bb.bb_instructions = pre ++ todo /\
+    bb'.bb_instructions = pre ++ body /\ bb'.bb_label = bb.bb_label /\
+    EVERY (\i. is_pseudo i.inst_opcode) pre /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) todo /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) body /\
+    eval_phis s pre = OK sp /\
+    FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length pre) pre)
+      (sp with vs_inst_idx := phi_prefix_length pre) = OK t /\
+    t.vs_inst_idx = j /\ t.vs_gas_readings = s.vs_gas_readings /\
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    EVERY inst_shape_ok bb.bb_instructions /\
+    dft_remaining_inv fn bb todo t /\
+    ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+    ~t.vs_call_ctx.cc_static /\
+    dft_head_bubbles (\x y.
+      MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+      ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+      id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+      ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+      todo scheduled /\
+    EVERY (from_block bb.bb_instructions) body /\
+    LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+    (!bx rest. bx.bb_label = bb.bb_label /\ bx.bb_instructions = pre ++ rest /\
+      EVERY (\i. ~is_pseudo i.inst_opcode) rest ==>
+      !n ws D pad f p d.
+      let br = bb with bb_instructions := REPLICATE j pad ++ rest in
+      run_block n D bx (s with vs_gas_readings := ws) =
+        exec_block n D br (t with vs_gas_readings := ws) /\
+      (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
+         OK u => gas_count_block n D bx
+           (u with vs_inst_idx := phi_prefix_length bx.bb_instructions) | _ => 0) =
+        gas_count_block n D br (t with vs_gas_readings := ws) /\
+      (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
+         OK u => trace_gas (dftGasFromListTraceDefs$trace_block p d n D f bx
+           (u with vs_inst_idx := phi_prefix_length bx.bb_instructions)) | _ => []) =
+        trace_gas (dftGasFromListTraceDefs$trace_block p d n D f br
+          (t with vs_gas_readings := ws)) /\
+      (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
+         OK u => gas_events_block n D f.fn_name bx
+           (u with vs_inst_idx := phi_prefix_length bx.bb_instructions) | _ => []) =
+        gas_events_block n D f.fn_name br (t with vs_gas_readings := ws))
+Proof
+  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  `wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+   EVERY inst_wf bb.bb_instructions /\
+   EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+   EVERY inst_shape_ok bb.bb_instructions /\ pseudos_prefix bb /\
+   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+   bb.bb_label = s.vs_current_bb` by suspend "structure" >>
+  drule_all dftRunRelTheory.dft_fn_rel_lookup_order >> strip_tac >>
+  drule_all dftRunRelTheory.dft_block_head_bubbles >> strip_tac >>
+  rename1 `bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ out_body` >>
+  qabbrev_tac `pre = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  qabbrev_tac `todo = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  `bb.bb_instructions = pre ++ todo /\
+   EVERY (\i. is_pseudo i.inst_opcode) pre /\
+   EVERY (\i. ~is_pseudo i.inst_opcode) todo /\
+   EVERY (from_block bb.bb_instructions) out_body /\
+   EVERY (\i. ~is_pseudo i.inst_opcode) out_body /\
+   bb'.bb_label = bb.bb_label` by suspend "partition" >>
+  `?sp t. eval_phis s pre = OK sp /\
+     FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length pre) pre)
+       (sp with vs_inst_idx := phi_prefix_length pre) = OK t` by suspend "phase" >>
+  qexistsl_tac [`sp`, `t`, `norm`, `out_body`] >>
+  simp_tac pure_ss [] >>
+  `t.vs_inst_idx = LENGTH pre /\ t.vs_gas_readings = s.vs_gas_readings /\
+   dft_remaining_inv fn bb todo t /\
+   ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+   ~t.vs_call_ctx.cc_static` by suspend "initialize" >>
+  simp[] >> conj_tac
+  >- (irule LIST_REL_mono >> qexists_tac `\h i. h.inst_id = i.inst_id /\
+          (!fuel ctx s. step_inst fuel ctx h s = step_inst fuel ctx i s)` >> simp[]) >>
+  suspend "bridge"
+QED
+
+Resume native_block_entry_residual_boundary[structure]:
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  `wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_pseudos_prefix fn /\
+   EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn)` by
+    fs[dftRunRelTheory.dft_fn_rel_def] >>
+  `EVERY inst_shape_ok (fn_insts fn)` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >>
+     first_x_assum drule >>
+     simp[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> rpt conj_tac
+  >- (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[])
+  >- metis_tac[dftGasInvContractBoundaryTheory.inv_dft_fn_rel_block_no_alloca]
+  >- (irule ctxLookupAgreeHelpersTheory.EVERY_fn_block >> goal_assum (drule_at Any) >> simp[])
+  >- fs[fn_pseudos_prefix_def, EVERY_MEM] >>
+  `ALL_DISTINCT (FLAT (MAP (\f. FLAT (MAP (\b. MAP (\i. i.inst_id)
+     b.bb_instructions) f.fn_blocks)) C.ctx_functions))` by
+    fs[o1_ctx_shape_def, ctx_inst_ids_distinct_def] >>
+  drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+  BETA_TAC >> strip_tac >>
+  drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]
+QED
+Resume native_block_entry_residual_boundary[partition]:
+  `EVERY (from_block bb.bb_instructions) out_body /\
+   bb'.bb_label = bb.bb_label` by fs[dft_block_rel_def] >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) out_body` by
+    (fs[EVERY_MEM, from_block_def] >> metis_tac[flip_operands_is_pseudo]) >>
+  simp[Abbr `pre`, Abbr `todo`, EVERY_FILTER] >>
+  fs[venomWfPropsTheory.pseudos_prefix_split] >>
+  `FILTER (\i. is_pseudo i.inst_opcode) ps = ps /\
+   FILTER (\i. ~is_pseudo i.inst_opcode) rs = rs /\
+   FILTER (\i. is_pseudo i.inst_opcode) rs = [] /\
+   FILTER (\i. ~is_pseudo i.inst_opcode) ps = []` by
+    (simp[FILTER_EQ_ID, FILTER_EQ_NIL] >> fs[EVERY_MEM]) >>
+  simp[FILTER_APPEND_DISTRIB]
+QED
+Resume native_block_entry_residual_boundary[phase]:
+  cheat
+QED
+Resume native_block_entry_residual_boundary[initialize]:
+  cheat
+QED
+Resume native_block_entry_residual_boundary[bridge]:
+  rpt gen_tac >> strip_tac >>
+  `!pad. bx with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest =
+   bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest` by
+    simp[basic_block_component_equality] >>
+  drule_all native_pseudo_entry_bridge >> simp[]
+QED
+Finalise native_block_entry_residual_boundary
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
