@@ -37,7 +37,7 @@ Theorem unwrap_stack_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -144,7 +144,7 @@ Theorem unwrap_memory_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
