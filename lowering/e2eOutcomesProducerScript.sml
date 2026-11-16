@@ -168,7 +168,7 @@ Proof
   `EVERY (\p. ~computed_precompile (FST p)) (call_trace es)` by
     fs[vyper_closed_world_def] >>
   `source_deployment_rel tops am tx` by
-    fs[vyper_call_staging_def, call_state_rel_def] >>
+    fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >>
   `storage_observations_ok
     (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
     (mp_tac (SPEC_ALL aligned_trace_storage_observations |> Q.INST

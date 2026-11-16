@@ -89,7 +89,7 @@ Proof
     (irule generated_entry_code_layout_shape >> metis_tac[]) >>
   `o1_run_state_ok (entry_venom_state prog cplan es)` by
     (simp[o1_run_state_ok_def, entry_venom_state_o1_initial_state_ok] >>
-     gvs[entry_venom_state_fresh, entry_venom_state_def, call_state_rel_def]) >>
+     gvs[entry_venom_state_fresh, entry_venom_state_def, call_state_rel_def, evm_state_ok_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
     (drule lower_vyper_runtime_unit_raw_defaults >> simp[fixed_region_reserved_def]) >>
@@ -108,10 +108,10 @@ Proof
    vs_in.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     (drule gas_variant_outcomes >> drule gas_variant_call_ctx >>
      simp[entry_venom_state_def]) >>
-  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def, evm_state_ok_def] >>
   `EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed oc.co_accounts) vs_in.vs_outcomes` by
-    (simp[] >> irule call_trace_outcomes_bounded >> fs[call_state_rel_def]) >>
+    (simp[] >> irule call_trace_outcomes_bounded >> fs[call_state_rel_def, evm_state_ok_def]) >>
   qpat_x_assum `s1_request_prefix tops` mp_tac >>
   simp[ s1_request_prefix_def] >>
   disch_then (qspecl_then [`rpolicy`, `unit`, `am`, `tx`, `ret`, `vs_in`] mp_tac) >>
@@ -175,11 +175,11 @@ Proof
   qx_gen_tac `es` >> strip_tac >> rpt gen_tac >> strip_tac >>
   `wf_state es /\
    (FST (HD es.contexts)).msgParams.callee = tx.target` by
-    fs[vyper_call_staging_def, call_state_rel_def] >>
+    fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >>
   `runtime_bc <> []` by
     (fs[vyper_call_staging_def] >> drule compile_vyper_runtime_nonempty >> simp[]) >>
   `~NULL (lookup_account tx.target es.rollback.accounts).code` by
-    (fs[vyper_call_staging_def, call_state_rel_def, installed_code_rel_def, NULL_EQ] >>
+    (fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def, installed_code_rel_def, NULL_EQ] >>
      metis_tac[APPEND_eq_NIL]) >>
   `~account_empty (lookup_account tx.target es.originalAccounts)` by
     fs[vyper_closed_world_def] >>
@@ -239,7 +239,7 @@ Proof
      disch_then (mp_tac o last o CONJUNCTS) >>
      disch_then (qspecl_then [`s`, `()`, `e`] mp_tac) >> simp[]) >>
   `tx_e.target = tx.target` by
-    (fs[vyper_call_staging_def, call_state_rel_def] >>
+    (fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >>
      metis_tac[listTheory.HD, pairTheory.FST]) >>
   `account_already_created (lookup_account tx.target es.rollback.accounts)` by
     fs[account_already_created_def] >>
@@ -254,7 +254,7 @@ Proof
   `storage_well_formed_on
      (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE)
      (initial_state am_e []) (FST H)` by
-    (fs[vyper_call_staging_def, call_state_rel_def, storage_well_formed_on_def, boolTheory.FORALL_BOOL,
+    (fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def, storage_well_formed_on_def, boolTheory.FORALL_BOOL,
         get_storage_def, initial_state_def, Abbr `cx`, initial_evaluation_context_def,
         lookup_account_def] >> rpt strip_tac >> fs[]) >>
   `vyper_closed_world policy tops runtime_bc am_e tx_e H e` by
@@ -328,7 +328,7 @@ Proof
   `~source_exempt tops (res_e,am_f,rqs_e)` by
     (drule call_external_trace_result >> metis_tac[]) >>
   `source_deployment_rel tops am_e tx_e` by
-    fs[vyper_call_staging_def, call_state_rel_def] >>
+    fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >>
   `storage_observations_ok
     (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE) H obs_e` by
     (mp_tac (aligned_trace_storage_observations |> Q.INST
@@ -419,7 +419,7 @@ Proof
        checked_contract_runtime_ready art_e [(NONE,tops)] am_e tx_e /\
        machine_well_typed am_e /\ call_tx_well_typed tx_e` by
        (irule source_typing_ok_runtime_ready >>
-        fs[vyper_call_staging_def, call_state_rel_def]) >>
+        fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def]) >>
         mp_tac (checked_call_external_preserves_storage_well_formed_on |> Q.INST
        [`am` |-> `am_e`, `tx` |-> `tx_e`, `mods` |-> `[(NONE,tops)]`,
         `art` |-> `art_e`, `orc` |-> `SOME (MAP SND (call_trace e))`,
@@ -431,7 +431,7 @@ Proof
   `~MEM tx_e.target e'.rollback.toDelete` by
     (strip_tac >> drule_all run_call_to_delete >>
      drule_all step_push_saved_to_delete >>
-     fs[vyper_call_staging_def, call_state_rel_def] >> gvs[]) >>
+     fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >> gvs[]) >>
   `storage_well_formed_on cx
     (empty_state with <|accounts := e'.rollback.accounts;
                        tStorage := e'.rollback.tStorage|>) (FST H)` by
@@ -572,7 +572,7 @@ Proof
   `mem_inv dload_headroom_ok unit.cu_context vs` by
     (drule_all lower_vyper_runtime_unit_dload_headroom_ok >> simp[]) >>
   `source_deployment_rel tops am tx` by
-    fs[vyper_call_staging_def, call_state_rel_def] >>
+    fs[vyper_call_staging_def, call_state_rel_def, evm_state_ok_def] >>
   `storage_observations_ok
      (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
     (mp_tac (SPEC_ALL aligned_trace_storage_observations |> Q.INST
