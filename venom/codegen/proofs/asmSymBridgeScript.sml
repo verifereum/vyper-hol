@@ -1805,6 +1805,22 @@ Proof
   simp[arithmeticTheory.LESS_MOD]
 QED
 
+Theorem sym_codecopy_address_own:
+  asm_data_env_lo_ok lo p env own /\
+  sym_data_label p env l /\ sym_delta_ok d /\
+  sval_conc lo (Lab l d) = SOME w ==>
+  ?off. FLOOKUP lo l = SOME off /\
+        env ' l = DROP off own /\ w2n w = off + d
+Proof
+  strip_tac >>
+  fs[asm_data_env_lo_ok_def, sym_data_label_def] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[sval_conc_def, sym_delta_ok_def] >>
+  `off + d < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  simp[arithmeticTheory.LESS_MOD]
+QED
+
 Theorem sym_codecopy_slice[local]:
   TAKE n (if n = 0 then DROP a xs else asm_expand_memory n (DROP a xs)) =
   TAKE n (DROP a (if n = 0 then xs else asm_expand_memory (a+n) xs))
@@ -1848,22 +1864,22 @@ Proof
   `i - a - LENGTH b + (a+LENGTH b) = i` by decide_tac >> simp[]
 QED
 
-Theorem sym_copy_preserves[local]:
-  asm_sym_rel p env cs ss /\
+Theorem sym_copy_preserves_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
   ss.sym_stack = Val dst :: sv :: Val sz :: stk /\
   cs.as_stack = dst :: w :: sz :: rest /\
   TAKE (w2n sz) (if w2n sz = 0 then src else asm_expand_memory (w2n sz) src) =
   TAKE (w2n sz) (DROP (w2n w) (if w2n sz = 0 then cs.as_code
     else asm_expand_memory (w2n w + w2n sz) cs.as_code)) ==>
-  asm_sym_step_rel p env
+  bridge_result (bridge_core lo code_ok)
     (sym_lift 3 (mem_labels_clear ss.sym_mem_labels
       (in_mem_range (w2n dst) (w2n sz))) ss
       (asm_copy_to_mem src (ss.sym_base with as_stack := [dst;0w;sz])))
     (asm_copy_to_mem cs.as_code cs)
 Proof
-  strip_tac >>
-  gvs[asm_copy_to_mem_def, sym_lift_def, asm_sym_step_rel_def] >>
-  gvs[asm_sym_rel_def, asm_next_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[asm_copy_to_mem_def, sym_lift_def] >>
+  gvs[asm_next_def] >>
   Cases_on `sz = 0w`
   >- (gvs[mem_labels_clear_def, in_mem_range_def] >>
       pure_rewrite_tac[TAKE_DROP] >>
@@ -1910,14 +1926,37 @@ Proof
   metis_tac[]
 QED
 
-Theorem sym_codecopy_sim:
-  asm_static_wf p ∧ asm_sym_rel p env cs ss ⇒
-  asm_sym_step_rel p env (sym_codecopy p env ss)
-    (asm_step_op (build_offset_to_pc p) "CODECOPY" cs)
+Theorem sym_copy_preserves[local]:
+  asm_sym_rel p env cs ss /\
+  ss.sym_stack = Val dst :: sv :: Val sz :: stk /\
+  cs.as_stack = dst :: w :: sz :: rest /\
+  TAKE (w2n sz) (if w2n sz = 0 then src else asm_expand_memory (w2n sz) src) =
+  TAKE (w2n sz) (DROP (w2n w) (if w2n sz = 0 then cs.as_code
+    else asm_expand_memory (w2n w + w2n sz) cs.as_code)) ==>
+  asm_sym_step_rel p env
+    (sym_lift 3 (mem_labels_clear ss.sym_mem_labels
+      (in_mem_range (w2n dst) (w2n sz))) ss
+      (asm_copy_to_mem src (ss.sym_base with as_stack := [dst;0w;sz])))
+    (asm_copy_to_mem cs.as_code cs)
 Proof
   strip_tac >>
-  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-    ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_copy_preserves_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
+QED
+
+Theorem sym_codecopy_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  (!l d w. sym_data_label p env l /\ sym_delta_ok d /\
+    sval_conc lo (Lab l d) = SOME w ==>
+    ?off. FLOOKUP lo l = SOME off /\
+      env ' l = DROP off cs.as_code /\ w2n w = off + d) ==>
+  bridge_result (bridge_core lo code_ok) (sym_codecopy p env ss)
+    (asm_step_op (build_offset_to_pc p) "CODECOPY" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\sv w. sval_conc lo sv = SOME w)
+    ss.sym_stack cs.as_stack` by fs[] >>
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
        asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
        asm_step_extcall_def, asm_step_copy_def] >>
@@ -1935,15 +1974,33 @@ Proof
   gvs[sym_codecopy_def, asm_sym_step_rel_def] >>
   reverse IF_CASES_TAC >- simp[asm_sym_step_rel_def] >>
   fs[] >>
-  `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
-  drule_all sym_codecopy_address >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
   gvs[sval_conc_def] >>
-  irule sym_copy_preserves >> simp[] >>
+  qspecl_then [`lo`, `code_ok`]
+    (mp_tac o Q.GENL [`dst`, `sv`, `sz`, `stk`, `w`, `rest`, `src`])
+    sym_copy_preserves_core >>
+  simp[sval_conc_def] >> disch_then (irule o SPEC_ALL) >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `m` >> simp[]) >>
   simp[rich_listTheory.DROP_DROP_T] >>
   Cases_on `c'' = 0w` >- simp[] >>
   mp_tac (Q.INST [`n` |-> `w2n (c'':bytes32)`, `a` |-> `n+off`,
                   `xs` |-> `cs.as_code`] sym_codecopy_slice) >>
   pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >> simp[]
+QED
+
+Theorem sym_codecopy_sim:
+  asm_static_wf p ∧ asm_sym_rel p env cs ss ⇒
+  asm_sym_step_rel p env (sym_codecopy p env ss)
+    (asm_step_op (build_offset_to_pc p) "CODECOPY" cs)
+Proof
+  strip_tac >>
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_codecopy_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> rpt strip_tac >>
+  `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
+  drule_all sym_codecopy_address >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 (* ===== Helpers ===== *)
@@ -2006,19 +2063,62 @@ Proof
   `65536 < dimword (:256)` by simp[wordsTheory.dimword_def] >> simp[arithmeticTheory.LESS_MOD]
 QED
 
+Theorem sym_jump_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  (!dest i w. sym_jump_dest p dest = SOME i /\
+    sval_conc lo dest = SOME w ==>
+    FLOOKUP (build_offset_to_pc p) (w2n w) = SOME i) ==>
+  bridge_result (bridge_core lo code_ok) (sym_jump p ss)
+    (asm_step_op (build_offset_to_pc p) "JUMP" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\sv w. sval_conc lo sv = SOME w)
+     ss.sym_stack cs.as_stack` by fs[] >>
+  simp[sym_jump_def, asm_step_op_jump, asm_jump_def] >>
+  Cases_on `ss.sym_stack` >> gvs[LIST_REL_CONS1] >>
+  Cases_on `sym_jump_dest p h` >> simp[] >>
+  `FLOOKUP (build_offset_to_pc p) (w2n w) = SOME x` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem sym_jumpi_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  (!dest i w. sym_jump_dest p dest = SOME i /\
+    sval_conc lo dest = SOME w ==>
+    FLOOKUP (build_offset_to_pc p) (w2n w) = SOME i) ==>
+  bridge_result (bridge_core lo code_ok) (sym_jumpi p ss)
+    (asm_step_op (build_offset_to_pc p) "JUMPI" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\sv w. sval_conc lo sv = SOME w)
+     ss.sym_stack cs.as_stack` by fs[] >>
+  `ss.sym_base.as_pc = cs.as_pc` by (simp[asm_sym_rel_core_pc]) >>
+  simp[sym_jumpi_def, asm_step_op_jump, asm_jumpi_def] >>
+  Cases_on `ss.sym_stack` >> gvs[LIST_REL_CONS1] >>
+  Cases_on `t` >> gvs[LIST_REL_CONS1] >>
+  rename1 `sval_conc _ c = SOME cw` >>
+  Cases_on `c` >> gvs[sval_conc_def] >>
+  rename1 `ss.sym_stack = h::Val cond::tail` >>
+  Cases_on `cond = 0w`
+  >- (gvs[sym_set_stack_def, asm_next_def] >> metis_tac[]) >>
+  simp[sym_set_stack_def] >>
+  Cases_on `sym_jump_dest p h` >> simp[] >>
+  `FLOOKUP (build_offset_to_pc p) (w2n w) = SOME x` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem sym_jump_sim:
   asm_static_wf p ∧ asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_jump p ss)
     (asm_step_op (build_offset_to_pc p) "JUMP" cs)
 Proof
   strip_tac >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  simp[sym_jump_def, asm_step_op_jump, asm_jump_def] >>
-  Cases_on `ss.sym_stack` >> gvs[asm_sym_step_rel_def, LIST_REL_CONS1] >>
-  Cases_on `sym_jump_dest p h` >> simp[asm_sym_step_rel_def] >>
-  drule_all sym_jump_dest_conc >> simp[] >> strip_tac >>
-  drule_all asm_sym_rel_stack_pc >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_jump_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> metis_tac[sym_jump_dest_conc]
 QED
 
 Theorem sym_jumpi_sim:
@@ -2027,19 +2127,10 @@ Theorem sym_jumpi_sim:
     (asm_step_op (build_offset_to_pc p) "JUMPI" cs)
 Proof
   strip_tac >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  simp[sym_jumpi_def, asm_step_op_jump, asm_jumpi_def] >>
-  Cases_on `ss.sym_stack` >> gvs[asm_sym_step_rel_def, LIST_REL_CONS1] >>
-  Cases_on `t` >> gvs[asm_sym_step_rel_def, LIST_REL_CONS1] >>
-  rename1 `sval_conc _ c = SOME cw` >>
-  Cases_on `c` >> gvs[sval_conc_def, asm_sym_step_rel_def] >>
-  rw[sym_set_stack_def, asm_sym_step_rel_def, asm_next_def]
-  >- (drule_all asm_sym_rel_stack_pc >> simp[]) >>
-  Cases_on `sym_jump_dest p h` >> simp[asm_sym_step_rel_def] >>
-  drule_all sym_jump_dest_conc >> simp[] >> strip_tac >>
-  drule_all asm_sym_rel_stack_pc >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_jumpi_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> metis_tac[sym_jump_dest_conc]
 QED
 
 (* ===== One step: stack-only opcodes ===== *)
