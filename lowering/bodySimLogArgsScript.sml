@@ -9,7 +9,7 @@ Ancestors
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
   vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
-  aggregateEvaluatedLayout memoryLocalRhsProps vyperEventArgCompat
+  aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat
   vyperTypeExprResult retAbiPlanProps abiDecoderMembers finite_map pred_set
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
@@ -476,7 +476,7 @@ Theorem log_compatible_aggregate_source:
 Proof
   simp[event_arg_compatible_alias_def] >>
   metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type,
-            memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]
+            valueCopyBytesTheory.arg_type_fits_bytestring_target]
 QED
 
 Theorem log_compatible_declared_value:
