@@ -1308,8 +1308,8 @@ Proof
        FLOOKUP_UPDATE, mk_inst_def, is_terminator_def,
        GSYM word_mul_n2w, GSYM word_add_n2w, wordsTheory.WORD_MULT_COMM,
        wordsTheory.WORD_ADD_0] >>
-     gvs[eval_operand_def, lookup_var_def, stringTheory.STRCAT_EQNS,
-         FLOOKUP_UPDATE, wordsTheory.WORD_ADD_0]) >>
+     fs[eval_operand_def, lookup_var_def] >>
+     simp[stringTheory.STRCAT_EQNS, FLOOKUP_UPDATE, wordsTheory.WORD_ADD_0]) >>
   `lookup_var dst (u3 with vs_inst_idx := s.vs_inst_idx) =
     SOME (bw + n2w (skip + stride*i))` by
     simp[NoAsms, Abbr `u3`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
