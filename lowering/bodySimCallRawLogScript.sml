@@ -426,7 +426,7 @@ Proof
     `sm` |-> `sp`, `ops` |-> `ops`, `vs` |-> `vs`, `u` |-> `()`]
     (SPEC_ALL raw_log_dynamic_tail_summary)) >>
   (impl_tac >- simp[Abbr `call`]) >> strip_tac >> fs[Abbr `call`] >>
-  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+  pop_assum mp_tac >> simp[] >> rpt (pop_assum kall_tac) >>
   simp[gas_summary_at_def] >> metis_tac[]
 QED
 
@@ -879,7 +879,7 @@ Proof
     raw_log_fixed_tail_summary) >>
   (impl_tac >- (Cases_on `u` >> fs[Abbr `call`] >> first_assum ACCEPT_TAC)) >>
   strip_tac >> fs[Abbr `call`] >>
-  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+  pop_assum mp_tac >> simp[] >> rpt (pop_assum kall_tac) >>
   simp[gas_summary_at_def] >> metis_tac[]
 QED
 
