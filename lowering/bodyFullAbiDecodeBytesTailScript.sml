@@ -1,6 +1,6 @@
 Theory bodyFullAbiDecodeBytesTail
 Ancestors
-  bodyFullAbiDecodeLeafCases bodyFullAbiDecodeCopyFrame
+  bodyFullAbiDecodeLeafCases bodyFullAbiDecodeCopyFrame bodyFullAbiDecodeClampMemory
   bodyFullAbiDecodeOwnedCopy bodyFullAbiDecodeTailAdd bodyFullAbiDecodeFiniteGuard
   bodyPtrBopScalarCompile gasOriginPtrLabels contractABI vyperTypeABI
   allocaHistory abiDecodePtrMemberFrame bodyPtrDefs bodyFullGhostFrame
@@ -85,7 +85,7 @@ Proof
      i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    metis_tac[bop_scalar_seq_mem_ok] >>
+    metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
   drule_all emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -202,10 +202,15 @@ Proof
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `state_frame t = _` mp_tac >> simp[state_frame_def]) >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa c3)` by
-    (`bop_scalar_seq {x | not_fresh_at sa x} {cnt;Lit 31w}
-       (emitted_insts sa c3) (rounded INSERT mask INSERT up INSERT {cnt;Lit 31w})` by
-       (irule abi_decode_bytes_round_scalar >> simp[] >> metis_tac[]) >>
-     drule bop_scalar_seq_memory_checks >> simp[EVERY_MEM] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`emit_op AND _ c2 = _`, `emit_op NOT _ c1 = _`, `emit_op ADD _ sa = _`] >>
+     rpt (pop_assum kall_tac) >>
+     simp[emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt strip_tac >> gvs[] >>
+     simp_tac (srw_ss()) [emitted_insts_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp_tac (srw_ss()) [DROP_LENGTH_APPEND, EVERY_DEF, mk_inst_def]) >>
   `alloca_history fn t` by
     (irule abi_decode_no_alloca_endpoint_history >>
      qexistsl_tac [`s`, `sa`, `c3`] >> fs[]) >>
