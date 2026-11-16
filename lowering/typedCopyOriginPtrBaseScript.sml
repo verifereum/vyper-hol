@@ -39,7 +39,7 @@ Definition typed_copy_origin_ptr_entry_def:
        w2n dw + type_memory_size dtv <= w2n sw) /\
       ptr_covers G tn xs s (type_memory_size stv) /\
       ptr_covers G tn xd s (type_memory_size dtv) /\
-      allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+      allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -61,6 +61,14 @@ Definition typed_copy_origin_ptr_entry_def:
            FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 End
 
+Theorem typed_copy_state_frame_allocas_below_fmp:
+  typed_copy_state_frame sa off len s t ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  simp[typed_copy_state_frame_def, venom_state_component_equality,
+    allocas_below_fmp_def] >> metis_tac[]
+QED
+
 Theorem typed_copy_origin_ptr_entry_run:
   typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v /\
   compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
@@ -78,7 +86,7 @@ Theorem typed_copy_origin_ptr_entry_run:
    w2n dw + type_memory_size dtv <= w2n sw) /\
   ptr_covers G tn xs s (type_memory_size stv) /\
   ptr_covers G tn xd s (type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -111,7 +119,7 @@ Theorem typed_copy_origin_ptr_assign_path:
   fn_has_code a b func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?t Gf tnf.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
@@ -173,7 +181,7 @@ Theorem typed_copy_origin_ptr_counter_init_path:
   fn_has_code a c func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?t Gf tnf.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     t = jump_to hdr (update_var counter 0w s) /\
@@ -194,6 +202,8 @@ Proof
   drule_all typed_copy_origin_ptr_assign_path >> strip_tac >>
   first_x_assum (qspecl_then [`explicit`,`PG`,`D`] strip_assume_tac) >>
   `allocas_from lo t` by (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   drule_all emit_jmp_origin_ptr >>
   disch_then (qspecl_then [`tnf`,`explicit`,`PG`,`Gf`,`D`] mp_tac) >>
   strip_tac >>
@@ -363,7 +373,7 @@ QED
 Theorem typed_copy_origin_ptr_binop_checks:
   (opc = MUL \/ opc = ADD) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc [left;right] [out]) s =
     OK (update_var out w s) ==>
   ptr_inst_ok D lo 0 ctx func G tn
@@ -388,7 +398,7 @@ Theorem typed_copy_origin_ptr_binop_path:
   (opc = MUL /\ w = x * y \/ opc = ADD /\ w = x + y) /\
   eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?out t G' tn'.
@@ -437,7 +447,7 @@ Theorem typed_copy_origin_ptr_index_addresses_exact:
   lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
   op_taint tn (Var counter) = {} /\
   op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code a e func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
@@ -531,6 +541,8 @@ Resume typed_copy_origin_ptr_index_addresses_exact[steps]:
 QED
 
 Resume typed_copy_origin_ptr_index_addresses_exact[second]:
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q1)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `?vdo q2 G2 tn2.
     doff = Var vdo /\ not_fresh_at c vdo /\
     q2 = (update_var vdo (n2w (j*ds)) q1 with vs_inst_idx := SUC q1.vs_inst_idx) /\
@@ -567,6 +579,8 @@ Resume typed_copy_origin_ptr_index_addresses_exact[second]:
 QED
 
 Resume typed_copy_origin_ptr_index_addresses_exact[third]:
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q2)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `?vsp q3 G3 tn3.
     sp = Var vsp /\ not_fresh_at d vsp /\
     q3 = (update_var vsp (sw+n2w (j*ss)) q2 with vs_inst_idx := SUC q2.vs_inst_idx) /\
@@ -599,6 +613,8 @@ Resume typed_copy_origin_ptr_index_addresses_exact[third]:
 QED
 
 Resume typed_copy_origin_ptr_index_addresses_exact[fourth]:
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q3)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `?vdp t G4 tn4.
     dp = Var vdp /\ not_fresh_at e vdp /\
     t = (update_var vdp (dw+n2w (j*ds)) q3 with vs_inst_idx := SUC q3.vs_inst_idx) /\
@@ -720,7 +736,7 @@ Theorem typed_copy_origin_ptr_counter_backedge_path:
   fn_has_code a d func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?out t Gf tnf.
     inc = Var out /\ out <> counter /\ k + 1 < dimword (:256) /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
@@ -768,9 +784,13 @@ Proof
           update_var_def, op_prov_def, op_taint_def, FLOOKUP_DRESTRICT,
           FLOOKUP_UPDATE, allocas_from_def] >>
      gvs[allocas_from_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (gvs[Abbr `q`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   drule_all typed_copy_origin_ptr_assign_path >> strip_tac >>
   first_x_assum (qspecl_then [`explicit`,`PG`,`D`] strip_assume_tac) >>
   `allocas_from lo t` by (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (gvs[Abbr `q`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   drule_all emit_jmp_origin_ptr >>
   disch_then (qspecl_then [`tnf`,`explicit`,`PG`,`Gf`,`D`] strip_assume_tac) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,G1,tn1) []
@@ -834,7 +854,7 @@ Theorem typed_copy_origin_ptr_index_addresses_path:
   ptr_covers G tn xs s (N*ss) /\ ptr_covers G tn xd s (N*ds) /\
   w2n sw + N*ss < dimword(:256) /\
   w2n dw + N*ds < dimword(:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code a e func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
@@ -975,7 +995,7 @@ Theorem typed_copy_origin_ptr_header_branch_path:
   fn_has_code a d func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?x y t Gf tnf.
     lt = Var x /\ done = Var y /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
@@ -1035,6 +1055,8 @@ Proof
 QED
 
 Resume typed_copy_origin_ptr_header_branch_path[iszero]:
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `!out. step_inst_base (mk_inst b.cs_next_id ISZERO [lt] [out]) q =
     OK (update_var out (if k = N then 1w else 0w) q)` by
     (simp[step_inst_base_def, mk_inst_def, exec_pure1_def] >>
@@ -1048,7 +1070,7 @@ Resume typed_copy_origin_ptr_header_branch_path[iszero]:
      simp[NoAsms, ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
           source_memory_read_ranges_def, source_memory_write_ranges_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     gvs[update_var_def, op_taint_def, FLOOKUP_UPDATE]) >>
+     gvs[update_var_def, op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `!out. inst_mem_below_frontier (mk_inst b.cs_next_id ISZERO [lt] [out]) q /\
     inst_dload_in_section (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
     simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
@@ -1077,6 +1099,11 @@ Resume typed_copy_origin_ptr_header_branch_path[branch]:
     (simp[allocas_from_def, update_var_def] >> rpt strip_tac >>
      qpat_x_assum `allocas_from lo s` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
      disch_then drule >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
+    (gvs[allocas_below_fmp_def, update_var_def] >>
+     Cases_on `ctx_has_dalloca ctx` >> fs[] >> rpt strip_tac >>
+     qpat_assum `!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==> _`
+       irule >> first_assum (irule_at Any)) >>
   drule_all emit_jnz_origin_ptr >>
   disch_then (qspecl_then [`explicit`,`PG`,`G2`,`D`] assume_tac) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G2,tn2)` by
@@ -1173,7 +1200,7 @@ Theorem typed_copy_origin_ptr_index_loop:
    w2n dw + N * type_memory_size dtv <= w2n sw) /\
   ptr_covers G tn xs s (N * type_memory_size stv) /\
   ptr_covers G tn xd s (N * type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa stx func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1332,6 +1359,8 @@ Resume typed_copy_origin_ptr_index_loop[steps]:
   `q.vs_current_bb = sth.cs_current_bb /\
    q.vs_inst_idx = LENGTH sth.cs_current_insts` by simp[] >>
   `N <= N` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   drule_all typed_copy_origin_ptr_header_branch_path >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
@@ -1406,6 +1435,8 @@ Resume typed_copy_origin_ptr_index_loop[successor]:
   `q.vs_current_bb = sth.cs_current_bb /\
    q.vs_inst_idx = LENGTH sth.cs_current_insts` by simp[] >>
   `j <= N` by decide_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   drule_all typed_copy_origin_ptr_header_branch_path >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
@@ -1460,6 +1491,12 @@ Resume typed_copy_origin_ptr_index_loop[body]:
    t.vs_current_bb = stb.cs_current_bb /\
    t.vs_inst_idx = LENGTH stb.cs_current_insts` by
     (simp[] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (qpat_assum `t = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp q` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, jump_to_def, update_var_def] >>
+     metis_tac[]) >>
   drule_all typed_copy_origin_ptr_index_addresses_path >>
   disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,
     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
@@ -1519,6 +1556,10 @@ Resume typed_copy_origin_ptr_index_loop[child]:
      simp[typed_copy_state_frame_def, venom_state_component_equality,
        allocas_from_def] >> metis_tac[]) >>
   qpat_x_assum `sp = Var vsp` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t')` by
+    (qpat_assum `typed_copy_state_frame stb 0 0 t t'`
+       (mp_then Any (fn th => rewrite_tac[th]) typed_copy_state_frame_allocas_below_fmp) >>
+     simp[]) >>
   qpat_x_assum `dp = Var vdp` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   qpat_assum `typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f j)`
     (mp_then Any mp_tac typed_copy_origin_ptr_entry_run) >>
@@ -1572,6 +1613,10 @@ Resume typed_copy_origin_ptr_index_loop[copied]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[typed_copy_state_frame_def, venom_state_component_equality,
        allocas_from_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t'')` by
+    (qpat_assum `typed_copy_state_frame b4 _ _ t' t''`
+       (mp_then Any (fn th => rewrite_tac[th]) typed_copy_state_frame_allocas_below_fmp) >>
+     simp[]) >>
   drule_all typed_copy_origin_ptr_counter_backedge_path >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
