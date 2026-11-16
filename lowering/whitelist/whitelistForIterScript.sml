@@ -196,7 +196,9 @@ Proof
       simp[])
   >- (gen_tac >> strip_tac >> irule dynarray_elements_typed >>
       simp[] >> qexists_tac `c` >> gvs[])
-  >- (rpt strip_tac >> irule dynarray_snapshot_memory >> metis_tac[])
+  >- (rpt strip_tac >>
+      `value_has_type entry.type entry.value` by simp[] >>
+      drule_all dynarray_snapshot_memory >> disch_then ACCEPT_TAC)
   >- (rpt strip_tac >>
       `body_stmts_ok cx stmts` by
         (fs[body_for_ok_def] >> Cases_on `vs` >>
