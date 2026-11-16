@@ -47,3 +47,4 @@ Ancestors
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
+  asmSymBridgeOwn
