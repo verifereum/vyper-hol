@@ -272,7 +272,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `vv_post H0 ctx func cenv cx e es sa sm s0 ee tv vv s` by metis_tac[] >>
   mp_tac (Q.INST [`H` |-> `H0`]
-            (SPEC_ALL convert_unwrap_value_marked_read_mem_window)) >>
+            (INST_TYPE [alpha |-> ``:256``]
+              (SPEC_ALL convert_unwrap_value_marked_read_mem_window))) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
