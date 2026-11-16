@@ -4,7 +4,7 @@ Ancestors
   bodyFullBuiltinECArithPayloadShape bodyFullBuiltinECArithPointCopy
   bodyFullAllocaFresh bodyFullAllocGeneric bodyFullUnwrapRun bodyFullGhostFrame
   allocaHistoryFragment bodyFullUnwrapSlotPost
-  bodyMemEcArithCode bodyMemEcArithSafe
+  bodyMemEcArithCode bodyMemEcArithSafe bodyMemEcArithAssemble bodyBinopFragMemory
   bodyPtrMakeArrayCopyStateFrame exprSimAbiEncodeMemoryLength exprSimHash
   bodySimFull bodyFullPreds exprSimECArith
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts vyperAST list
@@ -256,6 +256,7 @@ Proof
   drule_all expr_post_operand_word >> strip_tac >>
   `!w. eval_operand x t1 = SOME w ==> eval_operand x t2 = SOME w` by
     metis_tac[optionTheory.SOME_11] >>
+  `expr_store_bound cx (expr_type e1) v1 x t1` by metis_tac[] >>
   drule_all ec_first_point_staging_ready >> strip_tac >>
   `ghost_kept cenv es1 s1 G1 tn1 t1 G2 tn2` by
     (qpat_assum `ghost_kept_at lo cenv es1 s1 G1 tn1 t1 G2 tn2` mp_tac >>
@@ -337,7 +338,7 @@ Proof
       `w2n w + 64 < dimword (:256)` by
         metis_tac[ec_point_pointer_bound] >>
       `regions_disjoint (w2n wi) 96 (w2n w) 64` by
-        (irule exprSimECArithTheory.ec_point_fresh_scratch_disjoint >>
+        (irule bodyMemEcArithAssembleTheory.ec_point_fresh_scratch_disjoint >>
          qpat_assum `expr_val_at _ _ _ sa s2 _ _ _ _` (irule_at Any) >>
          qexists `ta` >> simp[] >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -629,7 +630,7 @@ Proof
          simp[NoAsms, listTheory.LENGTH_APPEND] >> decide_tac) >>
       `alloca_history func tp` by
         (qspecl_then [`func`,`ta`,`tp`,`bbfull`,`emitted_insts ca sp`,`rest`]
-           mp_tac allocaHistoryFragmentTheory.alloca_history_no_alloca_slice >>
+           mp_tac bodyBinopFragMemoryTheory.alloca_history_no_alloca_slice >>
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
          qpat_assum `tp.vs_inst_idx = ta.vs_inst_idx + LENGTH (emitted_insts ca sp)`
            (fn idx => pure_rewrite_tac[GSYM idx] >> simp[NoAsms])) >>
@@ -687,7 +688,8 @@ Proof
          not_fresh_at s2 z)` by
         (rpt strip_tac >>
          `not_fresh_at sa z` by metis_tac[] >>
-         fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+         irule stmtFragPtrTheory.not_fresh_at_mono >>
+         qexists `sa` >> simp[] >> decide_tac) >>
       `!H. valid_horizon cx st0 H es2.storage_trace ==>
          ghost_inv_at (DF H) lo d cenv cx es2 Ga tna ta` by
         (gen_tac >> strip_tac >>
@@ -1354,10 +1356,7 @@ Proof
       qunabbrev_tac `gi` >> qunabbrev_tac `ci` >> qunabbrev_tac `ai` >>
       qexistsl_tac [`ib`,`ob`,`ca`,`sp`,`sm`,`src`,`dst`,`wi`,`wo`,
         `sm.cs_next_id`,`gv`,`cv`,`packet_bb`,`u`,`Gu`,`tnu`] >>
-      simp[venomStateTheory.eval_operand_def,wordsTheory.dimword_def] >>
-      qpat_assum `Var src = Var (STRING #"%" (toString s2.cs_next_var))`
-        (fn src_name =>
-       qpat_assum `Var dst = Var (STRING #"%" (toString sp.cs_next_var))`
-        (fn dst_name => pure_rewrite_tac [GSYM src_name,GSYM dst_name])) >>
-      rpt strip_tac >> simp[]
+      pure_rewrite_tac [EVAL ``w2n (64w:256 word)``,
+                        EVAL ``w2n (96w:256 word)``] >>
+      asm_rewrite_tac[]
 QED
