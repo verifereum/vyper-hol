@@ -7,7 +7,7 @@
  *)
 Theory bodyFullOfVV
 Ancestors
-  bodyFullUnwrap bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  bodyFullUnwrap bodyFullHashKeccakFixed bodySimFull gasOutcomeFullCompose gasOutcomeFull
   gasShadowCompile exprSimMemorySource exprSimDefs exprLowering
   exprLoweringProps loweringPosts compileEnv context vyperTypeSystem
   vyperAST vyperInterpreter vyperState venomState
@@ -61,7 +61,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -78,8 +78,10 @@ Proof
   >- (irule gas_outcome_full_post_source >>
       first_assum (irule_at Any) >> simp[Abbr `childR`] >>
       rpt strip_tac >> Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
-      Cases_on `r` >> Cases_on `y` >> fs[exprSimDefsTheory.expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]) >>
+      Cases_on `r` >> Cases_on `y` >>
+      fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      FIRST [first_assum ACCEPT_TAC,
+        rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]]) >>
   suspend "read"
 QED
 
@@ -116,7 +118,9 @@ Resume expr_sim_full_of_vv[unwrap]:
   strip_tac >> irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`G'`,`ee`,`INL v`,`z`,`tn'`] >>
   conj_tac >- metis_tac[read_result_gas_obs] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee z` by fs[expr_post_def] >>
+  drule stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 Finalise expr_sim_full_of_vv
