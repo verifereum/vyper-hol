@@ -352,7 +352,10 @@ Proof
   rename1 `_ = (res, ee')` >>
   `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
+  `res = INL ()` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq]) >>
+  pop_assum SUBST_ALL_TAC >>
   drule_all assign_storage_store_path >>
   disch_then (qspec_then `ctx` assume_tac) >>
   `ee'.gas_obs = [] /\ ee'.scopes = ee.scopes` by
@@ -501,19 +504,20 @@ Proof
        (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
      simp[]) >>
   Cases_on `cx.txn.is_static`
-  >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-      `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
-        (gvs[expr_val_rel_def] >> metis_tac[]) >>
+  >- (`eval_operand op t = SOME (typed_val_to_w256 etv v)` by
+        (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
       `t.vs_call_ctx.cc_static` by
-        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+        fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
       `eval_operand (Lit (n2w slot)) t = SOME (n2w slot)` by
         simp[eval_operand_def] >>
       drule_all storage_emit_static_path >>
       disch_then (qspec_then `ctx` assume_tac) >>
       qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
-        `ee`, `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
-      simp[write_storage_slot_eq, exit_result_def, stmt_exit_def, expr_exit_def]) >>
+        `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+      simp[ignore_bind_def, bind_def, record_storage_event_def, return_def,
+           write_storage_slot_eq, exit_result_def, stmt_exit_def, expr_exit_def,
+           halt_exit_def]) >>
   drule_all assign_storage_word_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`INL ()`,

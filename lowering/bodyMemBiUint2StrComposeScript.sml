@@ -109,7 +109,8 @@ Proof
   first_assum (irule_at (Pat `expr_sim_mem _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> fs[exprSimDefsTheory.halt_exit_def] >>
+      metis_tac[expr_exit_INR_cast]) >>
   rpt strip_tac >> suspend "continuation"
 QED
 

@@ -3,7 +3,7 @@ Ancestors
   bodyMemBiECRecoverPaths bodyArgsMemory exprSimPrecompiles exprSimWordArgs
   exprSimMemDefs gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath exprSimDefs vyperInterpreter vyperState list
-  exprSimProps exprLowering exprLoweringProps exprSimHypsDefs vyperTyping
+  exprSimProps stmtSimProps exprLowering exprLoweringProps exprSimHypsDefs vyperTyping
   vyperAST vyperTypeSystem compileEnv loweringStateRelDefs rich_list builtinMisc loweringPosts
   exprBopLowering vyperContext vyperValue vyperTypeInvariants valueEncoding
   integer_word words byte context emitHelper emitHelperProps venomExecSemantics
@@ -15,9 +15,10 @@ Ancestors
 Theorem ecrecover_eval_exprs_suffix_mem:
   gas_outcome T tops (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
     (\H rr ee t. ?vs. rr = INL vs /\ P H vs ee t)
-    (\H rr ee r. wb_args_exit rr r) /\
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r) /\
   (!vs. storage_trace_frame (k vs)) /\
-  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r /\
+     halt_exit H cx ee (INR exc) r ==> R H (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
      ee.gas_obs = [] /\ ~t.vs_halted /\
@@ -83,7 +84,9 @@ Proof
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       BETA_TAC >> rpt strip_tac >>
       qpat_x_assum `!H exc ee r. _ ==> R _ _ _ _` irule >>
-      gvs[wb_args_exit_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> halt_exit _ _ _ _ _`
+        (qspec_then `H` (drule_then strip_assume_tac)) >>
+      fs[wb_args_exit_def, halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = eval_exprs cx args` >>
   `ignore_bind (bind a k) (return ()) =
@@ -133,13 +136,15 @@ Proof
         simp[storage_trace_frame_ignore_bind, storage_trace_frame_return,
              storage_trace_frame_precompile_call_success] >>
       simp[storage_trace_frame_def] >> rpt gen_tac >>
-      Cases_on `builtin_result cx st.accounts ann ECRecover (MAP expr_type args) vs` >>
+      Cases_on `builtin_result cx st.accounts (BaseT AddressT) ECRecover (MAP expr_type args) vs` >>
       simp[] >>
       qpat_x_assum `!w. storage_trace_frame _` (qspec_then `x` mp_tac) >>
       disch_then (mp_tac o Q.SPECL [`st`, `observations`] o
                   PURE_ONCE_REWRITE_RULE [storage_trace_frame_def]) >>
       simp[])
-  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def] >>
+  >~ [`wb_args_exit (INR _) _`]
+  >- (simp[wb_args_exit_def, halt_exit_def] >> rpt strip_tac >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
                  [h;v;r;sig] vs t /\ t.vs_current_bb = sm.cs_current_bb /\
                  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -183,7 +188,7 @@ Proof
       qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`, `ee`,
                     `Abort a u`] >>
       asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-        expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]) >>
+        expr_exit_def, halt_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]) >>
   rename1 `t.vs_outcomes = co::rest` >> Cases_on `co.co_success`
   >- (`~EXISTS expr_has_effect [ah;av;ar;asig] ==>
         pure_frame cenv func es sa s0 t` by
@@ -221,5 +226,5 @@ Proof
   qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`,
                 `ee with outcomes := SOME rest`, `Abort a u`] >>
   asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-    expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]
+    expr_exit_def, halt_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]
 QED

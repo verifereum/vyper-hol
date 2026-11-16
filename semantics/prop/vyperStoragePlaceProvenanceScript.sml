@@ -137,6 +137,29 @@ Proof
   simp[storage_subregion_def]
 QED
 
+Theorem extend_place_immutable_root:
+  extend_place cx operand sb st =
+    (INL (PlaceR (ImmutablePlace sid nm path)),st') ==>
+  ?pre. operand = PlaceR (ImmutablePlace sid nm pre) /\ path = pre ++ [sb]
+Proof
+  Cases_on `operand`
+  >- (simp[extend_place_def, record_storage_event_def, ignore_bind_def, raise_def])
+  >- (rename1 `PlaceR pl` >> Cases_on `pl`
+      >- (simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[AllCaseEqs()] >>
+          drule extend_storage_place_subregion >> strip_tac >> gvs[]) >>
+      simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, ignore_bind_def, lift_sum_def,
+           return_def, raise_def, extend_memory_place_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
+  Cases_on `sb` >>
+  simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, lift_option_type_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  rpt strip_tac >>
+  gvs[bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]
+QED
+
 Theorem extend_storage_place_region:
   storage_place_region cx (StoragePlace tr slot tv) /\
   extend_storage_place cx tr slot tv sb st = (INL p,st') ==>

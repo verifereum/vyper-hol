@@ -177,7 +177,7 @@ Proof
       expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_def] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>

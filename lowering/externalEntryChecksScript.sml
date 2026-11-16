@@ -7,7 +7,7 @@ Theory externalEntryChecks
 Ancestors
   externalEntryShape
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
-  list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono
+  list pair fragExec bodySim entryStateRel loweringHalt stmtLoweringMono
   exprLoweringProps compileEnv loweringStateRelDefs compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   entryChecksProps moduleLoweringProps entryDispatchProps supportedNames
