@@ -1,10 +1,10 @@
 Theory o1CodeEndSourceTransport
 Ancestors
-  o1LabelReadinessSsa
+  o1LabelReadinessSsa o1LabelReadinessSimplify o1LabelReadinessCfgNorm
   o1CodeEndCfgBoundary o1ContractSimplifyCfg
   o1ContractMakeSsa o1ContractMakeSsaSrc makeSsaCurrentLockstep
   o1FrameLockstep lowerDloadPublicTrace memSafeRun
-  o1SymStaticMakeSSA o1SymStaticSimplifyCFG o1SafeUpto unitMemInv ctxLookupAgreeHelpers
+  o1SafeUpto unitMemInv ctxLookupAgreeHelpers
   o1ContractSimplifyCfgSrcFrame o1PassLift simplifyCfgControl
   simplifyCfgCorrectness simplifyCfgStaticInterface simplifyCfgProof
   simplifyCfgDefs venomInst venomWf list rich_list o1PassContract
@@ -95,9 +95,10 @@ Proof
     (fs[o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
         unitShapeDefsTheory.reserved_label_def, EVERY_MEM,
         fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
-  drule_all simplify_cfg_iter_label_absent >>
+  fs[GSYM cfg_label_absent_def] >>
+  drule_all cfg_absent_iter >>
   disch_then (qspec_then `LENGTH source.fn_blocks` assume_tac) >>
-  fs[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def, EVERY_MEM,
+  fs[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def, cfg_label_absent_def, EVERY_MEM,
      fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
 QED
 
