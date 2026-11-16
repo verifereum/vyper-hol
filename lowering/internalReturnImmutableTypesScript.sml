@@ -35,7 +35,7 @@ Proof
   `MEM (VariableDecl vis Immutable name ity slot) tops` by simp[] >>
   `bare_global_assignable_complete env.bare_global_assignable cx /\
    env_immutables_consistent env cx ee` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `get_module_code cx NONE = SOME tops /\ cx.in_deploy` by
     fs[body_inv_def] >>
   `FLOOKUP env.bare_global_assignable (NONE,name) = SOME ity` by
