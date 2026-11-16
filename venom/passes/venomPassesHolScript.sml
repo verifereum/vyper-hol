@@ -62,6 +62,8 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasMaskRequests dftGasPrefixProvider
+  dftGasOracleKeyReplay
+  dftFinitePacket
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
