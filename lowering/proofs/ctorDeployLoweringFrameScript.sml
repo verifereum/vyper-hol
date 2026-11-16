@@ -348,10 +348,16 @@ Theorem deploy_frame_module_constants_tStorage:
     evaluate_module_constants cx am addr mods = SOME am' ==>
     am'.tStorage = am.tStorage
 Proof
-  Induct >- simp[evaluate_module_constants_def] >>
+  rewrite_tac[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_trace_def] >>
   PairCases >> rpt gen_tac >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> rpt strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  simp[evaluate_module_constants_trace_def] >>
+  pairarg_tac >> Cases_on `result` >> simp[] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  pairarg_tac >> rpt strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then
+    [`cx`, `merge_constants addr h0 cenv am`, `addr`, `am'`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem deploy_frame_all_constants_tStorage:
@@ -367,10 +373,16 @@ Theorem deploy_frame_module_constants_accounts:
     evaluate_module_constants cx am addr mods = SOME am' ==>
     am'.accounts = am.accounts
 Proof
-  Induct >- simp[evaluate_module_constants_def] >>
+  rewrite_tac[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_trace_def] >>
   PairCases >> rpt gen_tac >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> rpt strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  simp[evaluate_module_constants_trace_def] >>
+  pairarg_tac >> Cases_on `result` >> simp[] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  pairarg_tac >> rpt strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then
+    [`cx`, `merge_constants addr h0 cenv am`, `addr`, `am'`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem deploy_frame_all_constants_accounts:
@@ -658,7 +670,7 @@ Proof
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by
     metis_tac[deploy_frame_outcomes_accounts_typed] >>
-  qexistsl [`deploy_art`, `runtime_art`, `args`, `bindings`, `env_body`, `env_after`] >>
+  qexistsl [`bindings`, `env_body`, `env_after`] >>
   simp[] >> metis_tac[]
 QED
 
