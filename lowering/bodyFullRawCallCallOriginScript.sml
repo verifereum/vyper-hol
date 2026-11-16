@@ -29,12 +29,16 @@ Proof
   strip_tac >>
   `access_ok 0 G func inst s` by
     (irule call_access_ok_ptr >>
-     gvs[ptr_covers_def] >> metis_tac[eval_operand_def, arithmeticTheory.ADD_COMM]) >>
+     gvs[ptr_covers_def] >> rpt strip_tac >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
   `access_ok lo G func inst s` by
     (qpat_x_assum `access_ok 0 _ _ _ _` mp_tac >>
      simp[access_ok_def] >> metis_tac[arithmeticTheory.LESS_ADD_NONZERO]) >>
   `taint_ok func tn inst s` by
     (irule call_taint_ok_ptr >>
+     Cases_on `eval_operand gas_op s` >>
+     Cases_on `eval_operand to_op s` >>
+     Cases_on `eval_operand val_op s` >>
      simp[source_memory_read_ranges_def, mem_read_ops_def,
           memory_range_of_operands_def] >>
      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
@@ -47,7 +51,11 @@ Proof
   drule_all straight_line_origin_ptr_edge >> simp[] >> strip_tac >>
   `step_inst 0 ctx inst s = OK u` by simp[step_inst_non_invoke] >>
   `~u.vs_halted` by metis_tac[step_preserves_halted] >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[gas_origin_ptr_path_rules]
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (u with vs_inst_idx := SUC s.vs_inst_idx,
+     step_prov PG G inst u, step_taint inst s u tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G inst u, step_taint inst s u tn)` by
+    (irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]
 QED
