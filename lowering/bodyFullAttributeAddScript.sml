@@ -3,7 +3,7 @@ Ancestors
   bodyPtrAttributeAdd bodyFullGhostFrame bodyPtrDefs typedCopyPtr
   ptrSafetyTransport unitTransformDefs decoderGhostFramePtr fragExec
   contextCodegenRel codegenRel memSafeRun
-  fragGasSeqPtr fragGasOriginPtr emitHelperProps loweringStateRelDefs
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr emitHelperProps loweringStateRelDefs
   compileEnv emitHelper context venomInst venomState venomExecSemantics
   ptrSafeRun ptrDiscipline finite_map list arithmetic words
 
@@ -40,7 +40,7 @@ QED
 (* The pure ADD has one explicit endpoint, independent of the dead mask. *)
 Theorem attribute_add_full_frame:
   emit_op ADD [left; Lit off] sm = (dst,sn) /\ fn_has_code sm sn func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   eval_operand left s = SOME w /\ op_taint tn left = {} /\
@@ -81,8 +81,11 @@ Proof
     (unabbrev_all_tac >> reverse conj_tac
      >- simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
              source_memory_write_ranges_def, inst_dload_in_section_def, mk_inst_def] >>
+     irule ptr_inst_ok_restore_ctx >>
+     conj_tac >- simp[mk_inst_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >> simp[] >>
-     irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+     irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def, ctx_has_dalloca_def]) >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
       step_prov PG G i u, step_taint i s u tn)` by

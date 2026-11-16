@@ -92,7 +92,8 @@ Theorem immutable_code_loop_outcome_mem:
   0 < type_memory_size tv /\ type_memory_bytes cenv et + 64 < dimword (:256) /\
   LENGTH vs < dimword (:256) /\ copy_old_operand st1 lvo /\
   eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
-  (!H ei t k. P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei t k.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t) /\
   (!st0 bc sd ex inc ei k.
@@ -111,7 +112,8 @@ Theorem immutable_code_loop_outcome_mem:
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
       ((r = INL () \/ r = INR ContinueException) ==>
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
-  (!H ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!(H : (bool # bytes32 # type_value) list # num list)
+      ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ety ety cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ety = SOME tyv /\
@@ -144,7 +146,8 @@ Theorem immutable_code_loop_outcome_mem:
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\H res ee t. res = INL () /\ array_round_done H d ctx func cenv cx st1 u exit ee t)
       (\H res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit H cx ee (INR ex) rr)
 Proof
   strip_tac >>
   `sb0.cs_next_var <= sb1.cs_next_var` by
@@ -341,18 +344,17 @@ Resume immutable_code_loop_outcome_mem[entry]:
   `p <> ov /\ p <> ep /\ idx <> ov /\ idx <> ep` by
     (qpat_x_assum `ALL_DISTINCT [p;idx;dv;ov;ep;nv]` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[ALL_DISTINCT] >> metis_tac[]) >>
-  drule (SRULE [PULL_EXISTS] immutable_array_entry_run_mem) >>
-  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sa.cs_current_insts = _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP live.vs_allocas _ = _`)) >>
-  disch_then (drule_at (Pat `ret_pc_ok bc sb0 live`)) >>
-  disch_then (drule_at (Pat `evaluate_type (get_tenv cx) et = SOME tv`)) >>
-  disch_then (drule_at (Pat `lookup_var idx live = _`)) >>
-  disch_then (drule_at (Pat `immutable_holds _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `lookup_scopes id ei.scopes = NONE`)) >>
-  disch_then (drule_at (Pat `return_buf_frame d cenv sa live`)) >>
-  disch_then (drule_at (Pat `lookup_block sb0.cs_current_bb _ = _`)) >>
-  disch_then (drule_all o SRULE []) >>
+  mp_tac (immutable_array_entry_run_mem |>
+    Q.INST [`s` |-> `live`, `es` |-> `ei`, `k` |-> `j`,
+      `stride` |-> `elem_size_in_location cenv LocCode et`,
+      `j3` |-> `h`, `j4` |-> `h + 1`, `j5` |-> `h + if dyn then 2 else 1`,
+      `v` |-> `EL j vs`, `st` |-> `st1`, `caller` |-> `st1`,
+      `sz` |-> `type_memory_bytes cenv et`,
+      `ainst` |-> `mk_inst st1.cs_next_id ALLOCA
+        [Lit (n2w (type_memory_bytes cenv et))] [p]`]) >>
+  (impl_tac >- (rpt conj_tac >>
+    TRY (FIRST_ASSUM ACCEPT_TAC) >>
+    simp_tac (srw_ss()) [mk_inst_def] >> metis_tac[])) >>
   strip_tac >> goal_assum (drule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

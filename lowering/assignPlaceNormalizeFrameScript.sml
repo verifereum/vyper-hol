@@ -50,7 +50,9 @@ Theorem assign_place_normalize_framed_path:
         regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
       ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_frame cenv es sa s cenv es u
+      alloca_frame cenv es sa s cenv es u /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all place_normalize_framed_path >> strip_tac >>

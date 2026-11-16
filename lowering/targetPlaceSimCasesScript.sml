@@ -167,7 +167,7 @@ Proof
           qx_gen_tac `H1` >> strip_tac >>
           qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
             (qspec_then `H1` mp_tac) >>
-          simp[expr_exit_INR_type, halt_exit_def]) >>
+          fs[expr_exit_INR_type, halt_exit_def]) >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> ?pv. _`
         (drule_then strip_assume_tac) >>
       gvs[] >>

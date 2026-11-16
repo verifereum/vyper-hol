@@ -29,6 +29,9 @@ Ancestors
 Libs
   monadsyntax emitTacticsLib
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* Pure source boundaries; all observations remain available to the RHS. *)
 Theorem augassign_attr_place_reads_mem_src[local]:
   lookup_scopes id es.scopes = SOME entry /\
@@ -140,7 +143,7 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem augassign_attr_rhs_normal_mem_src[local]:
+Theorem augassign_attr_rhs_normal_mem_src:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
@@ -1028,13 +1031,14 @@ Resume compile_augassign_attr_local_mem[rhs_summary]:
   simp[gas_summary_at_def]
   >- suspend "rhs_normal" >>
   `expr_exit res r` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H1` mp_tac) >> simp[]) >>
   `?ex. res = INR ex` by (Cases_on `res` >> fs[expr_exit_def]) >> gvs[] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule augassign_attr_rhs_exception_exec_mem_src >> metis_tac[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> rpt strip_tac
+  >- (simp[stmt_exit_def] >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume compile_augassign_attr_local_mem[rhs_normal]:
@@ -1333,7 +1337,7 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
       irule augassign_attr_error_continuation_exec_mem_src >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[stmt_exit_def] >> rpt strip_tac >>
+  simp[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -2263,7 +2267,7 @@ Proof
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>

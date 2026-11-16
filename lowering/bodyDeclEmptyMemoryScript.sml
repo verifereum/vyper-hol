@@ -33,7 +33,7 @@ Theorem annassign_raw_rhs_outcome_mem:
     (!gs tv ee. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) ==>
        ?v. tv = Value v) /\
     gas_outcome T tops (ctx,func) cx st0 (eval_expr cx e) (es,salloc) Q
-      (\H res ee r. expr_exit res r) /\
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
     (!H res ee t. Q H res ee t ==> ?tv. res = INL tv) /\
     (!marks v ee t.
       gas_marked_exec T (ctx,func) (eval_expr cx e) (es,salloc)
@@ -47,7 +47,8 @@ Theorem annassign_raw_rhs_outcome_mem:
           P H (INL ()) (ff with gas_obs := []) u) ==>
     gas_outcome T tops (ctx,func) cx st0
       (eval_stmt cx (AnnAssign id typ e)) (es,s0) P
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `salloc` >> simp[] >>
@@ -81,7 +82,7 @@ Proof
           impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[] >>
+          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[halt_exit_def] >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
             |> REWRITE_RULE [APPEND_NIL]) >>
           qexistsl_tac [`es_end`, `t`, `Value v`] >>
@@ -98,7 +99,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
@@ -211,7 +212,7 @@ Proof
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
       alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
      simp[expr_vv_sim_mem_def] >> disch_then irule >> simp[] >> metis_tac[]) >>
   `~block_is_terminated sb` by

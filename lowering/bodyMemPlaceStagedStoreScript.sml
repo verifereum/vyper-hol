@@ -9,7 +9,7 @@ Ancestors
 Theorem place_staging_prefix_cont:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-  fn_has_code sa sn func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code sa sn func /\ stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -19,7 +19,7 @@ Theorem place_staging_prefix_cont:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u w. mem_cont_sim ctx func s u /\
-    stmt_state_rel ctx func ce cx es u /\ alloca_history func u /\
+    stmt_state_rel H ctx func ce cx es u /\ alloca_history func u /\
     u.vs_labels = s.vs_labels /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
@@ -44,8 +44,8 @@ Proof
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all body_scratch_prefix_run >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
-  qpat_assum `stmt_state_rel ctx func ce cx es s`
-    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _`) mp_tac literal_alloc_buffer_run) >>
+  qpat_assum `stmt_state_rel H ctx func ce cx es s`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac literal_alloc_buffer_run) >>
   disch_then drule_all >> strip_tac >> gvs[] >>
   `a.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
   `eval_operand src a = SOME sw` by
@@ -84,32 +84,9 @@ Proof
 QED
 
 Theorem place_staged_store_cont:
-  let Pre = \u tw.
-    stmt_state_rel ctx func ce cx es u /\ alloca_history func u /\
-    eval_operand buf.buf_operand u = SOME tw /\ eval_operand dst u = SOME dw /\
-    val_in_memory stv v (w2n tw) u.vs_memory /\
-    w2n tw+n <= u.vs_alloca_next /\ w2n tw+n < dimword (:256) /\
-    w2n dw+m <= u.vs_alloca_next /\ w2n dw+m < dimword (:256) /\
-    (w2n tw+n <= w2n dw \/ w2n dw+m <= w2n tw) /\
-    (!x. dst = Var x \/ buf.buf_operand = Var x ==> not_fresh_at sn x) /\
-    ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sn.cs_current_insts;
-      Post = \u t.
-    mem_cont_sim ctx func u t /\ val_in_memory dtv v (w2n dw) t.vs_memory /\
-    (!p k. p+k <= w2n dw \/ w2n dw+m <= p ==>
-      mem_bytes_at p k t.vs_memory = mem_bytes_at p k u.vs_memory) /\
-    (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
-      vs_current_bb := sn.cs_current_bb; vs_inst_idx := LENGTH sn.cs_current_insts;
-      vs_prev_bb := u.vs_prev_bb|>) = u /\
-    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
-    t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next /\
-    alloca_inv t /\ alloca_room ctx func t /\ alloca_history func t /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
-  in
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-    fn_has_code sa sn func /\ stmt_state_rel ctx func ce cx es s /\
+    fn_has_code sa sn func /\ stmt_state_rel H ctx func ce cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -122,8 +99,50 @@ Theorem place_staged_store_cont:
     w2n dw+m <= s.vs_alloca_next /\ w2n dw+m < dimword (:256) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!u tw. Pre u tw ==> ?t. Post u t) ==>
-    ?u tw t. Pre u tw /\ Post u t /\
+    (!u tw. (\u tw.
+    stmt_state_rel H ctx func ce cx es u /\ alloca_history func u /\
+    eval_operand buf.buf_operand u = SOME tw /\ eval_operand dst u = SOME dw /\
+    val_in_memory stv v (w2n tw) u.vs_memory /\
+    w2n tw+n <= u.vs_alloca_next /\ w2n tw+n < dimword (:256) /\
+    w2n dw+m <= u.vs_alloca_next /\ w2n dw+m < dimword (:256) /\
+    (w2n tw+n <= w2n dw \/ w2n dw+m <= w2n tw) /\
+    (!x. dst = Var x \/ buf.buf_operand = Var x ==> not_fresh_at sn x) /\
+    ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts) u tw ==> ?t. (\u t.
+    mem_cont_sim ctx func u t /\ val_in_memory dtv v (w2n dw) t.vs_memory /\
+    LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+m <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k u.vs_memory) /\
+    (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+      vs_current_bb := sn.cs_current_bb; vs_inst_idx := LENGTH sn.cs_current_insts;
+      vs_prev_bb := u.vs_prev_bb|>) = u /\
+    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+    t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next /\
+    alloca_inv t /\ alloca_room ctx func t /\ alloca_history func t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts) u t) ==>
+    ?u tw t. (\u tw.
+    stmt_state_rel H ctx func ce cx es u /\ alloca_history func u /\
+    eval_operand buf.buf_operand u = SOME tw /\ eval_operand dst u = SOME dw /\
+    val_in_memory stv v (w2n tw) u.vs_memory /\
+    w2n tw+n <= u.vs_alloca_next /\ w2n tw+n < dimword (:256) /\
+    w2n dw+m <= u.vs_alloca_next /\ w2n dw+m < dimword (:256) /\
+    (w2n tw+n <= w2n dw \/ w2n dw+m <= w2n tw) /\
+    (!x. dst = Var x \/ buf.buf_operand = Var x ==> not_fresh_at sn x) /\
+    ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts) u tw /\ (\u t.
+    mem_cont_sim ctx func u t /\ val_in_memory dtv v (w2n dw) t.vs_memory /\
+    LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+m <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k u.vs_memory) /\
+    (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+      vs_current_bb := sn.cs_current_bb; vs_inst_idx := LENGTH sn.cs_current_insts;
+      vs_prev_bb := u.vs_prev_bb|>) = u /\
+    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+    t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next /\
+    alloca_inv t /\ alloca_room ctx func t /\ alloca_history func t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts) u t /\
       mem_cont_sim ctx func s u /\ mem_cont_sim ctx func s t /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
       (!p k. (p+k <= w2n tw \/ w2n tw+n <= p) /\
@@ -135,10 +154,8 @@ Theorem place_staged_store_cont:
       (!name b len. local_region ce es.scopes s name b len ==>
         local_region ce es.scopes u name b len)
 Proof
-  qmatch_goalsub_abbrev_tac `LET _ Pre` >>
-  pure_rewrite_tac [Once LET_THM] >>
-  qmatch_goalsub_abbrev_tac `LET _ Post` >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `!u tw. Pre u tw ==> ?t. Post u t` >>
+  strip_tac >>
   drule_all place_staging_prefix_cont >>
   disch_then (qx_choose_then `u` (qx_choose_then `tw` strip_assume_tac)) >>
   drule_all body_scratch_prefix_shape >> strip_tac >>
