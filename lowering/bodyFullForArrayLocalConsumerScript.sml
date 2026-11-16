@@ -643,6 +643,39 @@ Resume body_for_local_array_full_from_contracts[runtime]:
           comp_bind_def,comp_return_def] >>
      pairarg_tac >> simp[]) >>
   rename1 `compile_stmt _ _ _ _ start = ((),finish)` >>
+  (* The suffix determines the index before H is chosen.  Static register
+     parameters allow the same invariant to be used by both initializations. *)
+  qabbrev_tac `Head = \idx p bound_op cond_lbl ainst arr_base dst H rs ee G tn s.
+    LENGTH rs <= LENGTH vs /\
+    rs = MAP Value (DROP (LENGTH vs - LENGTH rs) vs) /\
+    expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+    storage_well_formed_on cx ee (FST H) /\ dead_lo_ok H (DF H) lo cenv cx /\
+    return_buf_frame d cenv start s /\ alloca_history func s /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\ allocas_from lo s /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+    ~s.vs_halted /\ s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\
+    LENGTH vs < dimword (:256) /\
+    lookup_var idx s = SOME (n2w (LENGTH vs - LENGTH rs)) /\
+    eval_operand bound_op s = SOME (n2w (LENGTH vs)) /\
+    FLOOKUP G idx = NONE /\ op_prov G bound_op = NONE /\
+    op_taint tn (Var idx) = {} /\ op_taint tn bound_op = {} /\
+    lookup_scopes name ee.scopes = SOME ent /\
+    ent.type = ArrayTV tv bd /\ ent.value = ArrayV av /\
+    vs = array_elements ent.type av /\
+    eval_operand (Var ap) s = SOME arr_base /\
+    lookup_var p s = SOME dst /\ ptr_covers G tn p s (type_memory_bytes cenv typ) /\
+    FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,type_memory_bytes cenv typ) /\
+    w2n dst + type_memory_bytes cenv typ < dimword (:256) /\
+    w2n dst + type_memory_bytes cenv typ <= s.vs_alloca_next /\
+    (!nm b len. local_region cenv ee.scopes s nm b len ==>
+      regions_disjoint (w2n dst) (type_memory_bytes cenv typ) b len) /\
+    (!x w. not_fresh_at start x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x s = SOME w) /\
+    (!aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ==>
+      FLOOKUP s.vs_allocas aid = SOME bl) /\
+    (!x. not_fresh_at start x ==> FLOOKUP G x = FLOOKUP G0 x /\
+      op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    lookup_scopes id ee.scopes = NONE /\ ret_pc_ok cenv start s` >>
   (* Normalize the two compiler branches before any loop reasoning.  All
      bounds, labels and registers in this packet are independent of H. *)
   `?bc p idx dv ov tov ep nv bound_op cond_lbl body_lbl incr_lbl exit_lbl
@@ -701,7 +734,14 @@ Resume body_for_local_array_full_from_contracts[runtime]:
       (bd = Dynamic (bound_length bd) ==> x <> tov)) /\
     (!x. not_fresh_at start x ==>
       not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
-    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\ not_fresh_at sb0 ap`
+    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\ not_fresh_at sb0 ap /\
+    (?arr_base dst cc Gentry tnentry.
+      ~cc.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+          (s0,G0,tn0) [] (OK cc,Gentry,tnentry) /\
+        Head idx p bound_op cond_lbl ainst arr_base dst H (MAP Value vs)
+          (es with gas_obs := []) Gentry tnentry cc))`
     by suspend "code_packet" >>
   suspend "initialized_packet"
 QED
@@ -719,11 +759,32 @@ Resume body_for_local_array_full_from_contracts[fixed_runtime]:
      simp[supported_stmt_def,supported_iterator_def,AllCaseEqs()]) >>
   qpat_x_assum `n' = n` SUBST_ALL_TAC >>
   drule_all compile_for_array_code_ready_framed >> strip_tac >>
-  FAIL_TAC "fixed-code-ready"
+  qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`ov`,`ep`,`nv`,`Lit (n2w n)`,
+    `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
+    `start.cs_next_id + 4`,`start.cs_next_id + 5`,
+    `start.cs_next_id + 6`,`0`,`start.cs_next_id + 7`,
+    `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,`start`,`sd`] >>
+  fs[array_for_code_def] >> gvs[mk_inst_def] >> suspend "fixed_init"
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_runtime]:
-  FAIL_TAC "dynamic-runtime"
+  `!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by simp[] >>
+  drule_all compile_for_dynarray_code_ready >> strip_tac >>
+  qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`tot`,`ep`,`nv`,`Var lv`,
+    `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
+    `start.cs_next_id + 8`,`start.cs_next_id + 9`,
+    `start.cs_next_id + 10`,`start.cs_next_id + 11`,`start.cs_next_id + 12`,
+    `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,`st1`,`sd`] >>
+  fs[whitelistForIterDynLoopTheory.dynarray_for_code_def] >>
+  gvs[mk_inst_def] >> suspend "dynamic_init"
+QED
+
+Resume body_for_local_array_full_from_contracts[fixed_init]:
+  FAIL_TAC "fixed-init"
+QED
+
+Resume body_for_local_array_full_from_contracts[dynamic_init]:
+  FAIL_TAC "dynamic-init"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_packet]:
