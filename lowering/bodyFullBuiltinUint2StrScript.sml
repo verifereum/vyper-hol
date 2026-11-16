@@ -3,7 +3,7 @@
    the old lo=0 pointer result does not certify this successful joint prefix. *)
 Theory bodyFullBuiltinUint2Str
 Ancestors
-  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh
+  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh bodyInvNoDalloca
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
   exprSimUint2Str bodyMemBiUint2StrBlocks bodyPtrBytestringBuiltinsUintArithmetic
@@ -31,6 +31,7 @@ Theorem uint2str_builtin_sim_full:
       cenv cx ty (Builtin ann (Uint2Str n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin ann (Uint2Str n) args) es` suffices_by
     (strip_tac >> simp[] >> irule expr_sim_full_of_vv >> simp[] >>
@@ -85,7 +86,7 @@ Proof
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ss`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- fs[]) >> disch_tac >>
+  (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[] >> fs[])) >> disch_tac >>
   suspend "compose"
 QED
 
@@ -114,8 +115,9 @@ Resume uint2str_builtin_sim_full[compose]:
   >- (irule gas_outcome_full_post_source >>
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
       conj_tac >- simp[] >> simp[Abbr `childR`] >> rpt strip_tac >>
-      Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type]) >>
+      Cases_on `res` >> asm_rewrite_tac[] >>
+      gvs[exprSimDefsTheory.expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type,
+          exprSimDefsTheory.halt_exit_def]) >>
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
