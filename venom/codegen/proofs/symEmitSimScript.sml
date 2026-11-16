@@ -5,6 +5,22 @@ Ancestors asmSymOwnCode[qualified,ignore_grammar]
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
   fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
 
+(* Reuse the bridge's closed structural relation as syntax, not a new definition. *)
+val emit_bridge_core_tm = let
+  val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
+  val core = fst (dest_imp body)
+  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars core) of
+      [v] => v | _ => raise Fail ("missing unique bridge parameter " ^ n)
+  val args = case params of
+      [lo, code_ok] => [lo, code_ok, named "cs", named "ss"]
+    | _ => raise Fail "unexpected bridge core quantifiers"
+  val tm = list_mk_abs (args, core)
+  val _ = if null (free_vars tm) andalso
+      aconv (rhs (concl (DEPTH_CONV BETA_CONV (list_mk_comb (tm, args))))) core
+    then () else raise Fail "invalid bridge core abstraction"
+in tm end;
+val _ = Parse.temp_overload_on ("bridge_core", emit_bridge_core_tm);
+
 Theorem sval_val_map:
   !ws. OPT_MMAP sval_val (MAP Val ws) = SOME ws
 Proof
@@ -2636,6 +2652,45 @@ QED
 
 Finalise sym_named_source_emit
 
+Theorem asm_sym_rel_localize_stack_core:
+  bridge_core lo code_ok cs ss /\ ss.sym_stack = top ++ stail /\
+  cs.as_stack = ws ++ wtail /\ LENGTH top = LENGTH ws ==>
+  bridge_core lo code_ok (cs with as_stack := ws) (ss with sym_stack := top) /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w) stail wtail
+Proof
+  simp[] >> rpt strip_tac >> gvs[LIST_REL_APPEND_EQ] >> metis_tac[]
+QED
+
+Theorem asm_sym_rel_restore_stack_core:
+  bridge_core lo code_ok cs ss /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w) stail wtail ==>
+  bridge_core lo code_ok (cs with as_stack := cs.as_stack ++ wtail)
+    (ss with sym_stack := ss.sym_stack ++ stail)
+Proof
+  simp[LIST_REL_APPEND_EQ] >> metis_tac[LIST_REL_APPEND_suff]
+QED
+
+Theorem asm_sym_rel_localize_stack_own:
+  asm_sym_rel_own lo p env own cs ss /\ ss.sym_stack = top ++ stail /\
+  cs.as_stack = ws ++ wtail /\ LENGTH top = LENGTH ws ==>
+  asm_sym_rel_own lo p env own (cs with as_stack := ws)
+    (ss with sym_stack := top) /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w) stail wtail
+Proof
+  rewrite_tac[GSYM asmSymBridgeTheory.asm_sym_rel_core_own] >>
+  MATCH_ACCEPT_TAC asm_sym_rel_localize_stack_core
+QED
+
+Theorem asm_sym_rel_restore_stack_own:
+  asm_sym_rel_own lo p env own cs ss /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w) stail wtail ==>
+  asm_sym_rel_own lo p env own (cs with as_stack := cs.as_stack ++ wtail)
+    (ss with sym_stack := ss.sym_stack ++ stail)
+Proof
+  rewrite_tac[GSYM asmSymBridgeTheory.asm_sym_rel_core_own] >>
+  MATCH_ACCEPT_TAC asm_sym_rel_restore_stack_core
+QED
+
 Theorem asm_sym_rel_localize_stack:
   asm_sym_rel p env cs ss /\ ss.sym_stack = top ++ stail /\
   cs.as_stack = ws ++ wtail /\ LENGTH top = LENGTH ws ==>
@@ -2643,8 +2698,8 @@ Theorem asm_sym_rel_localize_stack:
   LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
     stail wtail
 Proof
-  simp[asmSymBridgeTheory.asm_sym_rel_def] >>
-  rpt strip_tac >> gvs[LIST_REL_APPEND_EQ] >> metis_tac[]
+  rewrite_tac[GSYM asmSymBridgeTheory.asm_sym_rel_core_canonical] >>
+  MATCH_ACCEPT_TAC asm_sym_rel_localize_stack_core
 QED
 
 Theorem asm_sym_rel_restore_stack:
@@ -2654,8 +2709,8 @@ Theorem asm_sym_rel_restore_stack:
   asm_sym_rel p env (cs with as_stack := cs.as_stack ++ wtail)
     (ss with sym_stack := ss.sym_stack ++ stail)
 Proof
-  simp[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_APPEND_EQ] >>
-  metis_tac[LIST_REL_APPEND_suff]
+  rewrite_tac[GSYM asmSymBridgeTheory.asm_sym_rel_core_canonical] >>
+  MATCH_ACCEPT_TAC asm_sym_rel_restore_stack_core
 QED
 
 Theorem sym_kinds_ok_localize_stack:
