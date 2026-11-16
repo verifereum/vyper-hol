@@ -1,6 +1,6 @@
 (* Uniform all-fillings prefix mask with entry-aligned oracle replay. *)
 Theory dftGasPrefixProvider
-Ancestors
+Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
   dftGasSimSwap dftGasSimLocalBoundary
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
@@ -2080,6 +2080,362 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
 QED
 
+Theorem native_inventory_root_visit[local]:
+  !s. ctx_labels_bound C s.vs_labels /\
+    ctx_labels_bound C' s.vs_labels /\ ~s.vs_call_ctx.cc_static /\
+    terminates (exec_block b C' bb s) /\
+    gas_count_block b C' bb s <= LENGTH s.vs_gas_readings ==>
+    !i a. MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bb s) ==>
+      ctx_labels_bound C a.vs_labels /\ ctx_labels_bound C' a.vs_labels /\
+      ~a.vs_call_ctx.cc_static /\ terminates (step_inst b C' i a) /\
+      gas_count_step b C' i a <= LENGTH a.vs_gas_readings
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs)]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `~MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s)` by
+    (spose_not_then assume_tac >>
+     `MEM (p,d,i.inst_id) (MAP FST
+        (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s))` by
+       (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+     metis_tac[trace_step_not_root]) >>
+  qpat_x_assum `MEM _ (dftGasFromListTraceDefs$trace_block _ _ _ _ _ _ _)` mp_tac >>
+  simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs), MEM_APPEND] >>
+  strip_tac
+  >- (gvs[] >> conj_tac
+      >- (qpat_x_assum `terminates _` mp_tac >>
+          simp[Once run_block_non_phis_def] >>
+          Cases_on `step_inst b C' i a` >>
+          simp[passSimulationDefsTheory.terminates_def]) >>
+      qpat_x_assum `gas_count_block _ _ _ _ <= _` mp_tac >>
+      simp[Once gas_count_block_def] >>
+      Cases_on `step_inst b C' i a` >> simp[] >>
+      Cases_on `is_terminator i.inst_opcode` >> simp[]) >>
+  Cases_on `step_inst b C' inst s` >> gvs[] >>
+  rename1 `step_inst b C' inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by gvs[get_instruction_def] >>
+  `u.vs_gas_readings = DROP (gas_count_step b C' inst s) s.vs_gas_readings` by
+    (mp_tac (cj 1 gas_count_suffix) >>
+     disch_then (qspecl_then [`b`, `C'`, `inst`, `s`] mp_tac) >>
+     simp[gas_count_suffix_def]) >>
+  `ctx_labels_bound C u.vs_labels /\ ctx_labels_bound C' u.vs_labels` by
+    metis_tac[ctx_labels_bound_step] >>
+  `~u.vs_call_ctx.cc_static` by metis_tac[venomExecProofsTheory.step_inst_ok_preserves_call_ctx] >>
+  `terminates (exec_block b C' bb (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (qpat_x_assum `terminates _` mp_tac >> simp[Once run_block_non_phis_def]) >>
+  `gas_count_block b C' bb (u with vs_inst_idx := SUC s.vs_inst_idx) <=
+     LENGTH u.vs_gas_readings` by
+    (qpat_x_assum `gas_count_block b C' bb s <= _` mp_tac >>
+     simp[Once gas_count_block_def, LENGTH_DROP]) >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  gvs[LENGTH_DROP] >> metis_tac[]
+QED
+
+Theorem native_inventory_call_admissible[local]:
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
+  gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
+  i.inst_opcode = INVOKE /\
+  MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ==>
+  ?nm ops args cf cf' cs ct.
+    i.inst_opcode = INVOKE /\
+    MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) /\
+    decode_invoke i = SOME (nm,ops) /\
+    lookup_function nm C.ctx_functions = SOME cf /\
+    lookup_function nm C'.ctx_functions = SOME cf' /\
+    MEM cf C.ctx_functions /\ MEM cf' C'.ctx_functions /\
+    cf' = dft_fn cf /\ dft_fn_rel cf cf' /\
+    eval_operands ops a = SOME args /\
+    setup_callee cf args a = SOME cs /\
+    setup_callee cf' args a = SOME ct /\ cs = ct /\
+    fn_entry_label cf = SOME cs.vs_current_bb /\
+    strict_dom_vars_defined cf cs /\ fn_reachable cf cs.vs_current_bb /\
+    ctx_labels_bound C cs.vs_labels /\ ctx_labels_bound C' cs.vs_labels /\
+    ~cs.vs_call_ctx.cc_static /\ terminates (run_blocks b C' cf' ct) /\
+    gas_count_blocks b C' cf' ct <= LENGTH ct.vs_gas_readings
+Proof
+  strip_tac >>
+  `ctx_labels_bound C a.vs_labels /\ ctx_labels_bound C' a.vs_labels /\
+   ~a.vs_call_ctx.cc_static /\ terminates (step_inst b C' i a) /\
+   gas_count_step b C' i a <= LENGTH a.vs_gas_readings` by
+    (irule native_inventory_root_visit >> metis_tac[]) >>
+  qpat_x_assum `terminates (step_inst _ _ _ _)` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `decode_invoke i` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `decode_invoke i = SOME dec` >> PairCases_on `dec` >>
+  Cases_on `lookup_function dec0 C'.ctx_functions` >>
+  simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_function dec0 C'.ctx_functions = SOME cf'` >>
+  Cases_on `eval_operands dec1 a` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `eval_operands dec1 a = SOME args` >>
+  Cases_on `setup_callee cf' args a` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `setup_callee cf' args a = SOME ct` >>
+  strip_tac >>
+  `terminates (run_blocks b C' cf' ct)` by
+    (Cases_on `run_blocks b C' cf' ct` >> gvs[passSimulationDefsTheory.terminates_def]) >>
+  drule dft_fn_rel_lookup_function >>
+  disch_then (qspec_then `dec0` mp_tac) >>
+  Cases_on `lookup_function dec0 C.ctx_functions` >> simp[] >> strip_tac >>
+  rename1 `lookup_function dec0 C.ctx_functions = SOME cf` >>
+  `OPTREL (\f g. g = dft_fn f)
+    (lookup_function dec0 C.ctx_functions)
+    (lookup_function dec0 C'.ctx_functions)` by
+    (irule o1PassLiftTheory.list_rel_lookup_function >> simp[] >>
+     gen_tac >> simp[dftDefsTheory.dft_fn_def] >> pairarg_tac >> simp[]) >>
+  `cf' = dft_fn cf` by gvs[] >>
+  `setup_callee cf args a = SOME ct` by
+    metis_tac[dft_fn_rel_setup_callee] >>
+  `ct.vs_gas_readings = a.vs_gas_readings` by gvs[setup_callee_def] >>
+  `gas_count_blocks b C' cf' ct <= LENGTH ct.vs_gas_readings` by
+    (gvs[gas_count_step_def]) >>
+  qexists_tac `ct` >>
+  simp[GSYM passSimulationDefsTheory.terminates_def] >>
+  `fn_entry_label cf = SOME ct.vs_current_bb` by metis_tac[dft_setup_callee_entry] >>
+  `fn_reachable cf ct.vs_current_bb` by simp[fn_reachable_def] >>
+  metis_tac[venomInstTheory.lookup_function_MEM,
+    dftGasSimInvariantTheory.ev_setup_callee_dominators,
+    ctx_labels_bound_setup_callee, dftGasSimInvariantTheory.ev_setup_callee_nonstatic]
+QED
+
+Theorem native_inventory_gas_excludes[local]:
+  ~MEM id ids /\
+  EVERY (\v. block_region p d ids (FST v)) visits ==>
+  FILTER (\kw. frame_below ((d,id)::p) (FST (FST kw)))
+    (trace_gas visits) = []
+Proof
+  simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+  `MEM (FST kw) (MAP FST visits)` by
+    (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[MEM_MAP] >>
+  first_x_assum drule >> strip_tac >>
+  PairCases_on `y` >> gvs[] >>
+  `block_region p d [id] (y0,y1,y2)` by
+    (irule below_call_region >> simp[]) >>
+  `~block_region p d [id] (y0,y1,y2)` by
+    (irule block_regions_disjoint >> qexists_tac `ids` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem native_inventory_root_subtree[local]:
+  !s. ALL_DISTINCT (MAP (\i. i.inst_id)
+      (DROP s.vs_inst_idx bb.bb_instructions)) ==>
+  !i a. MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bb s) ==>
+  FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw)))
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bb s)) =
+  trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i a)
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs)]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `~MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s)` by
+    (spose_not_then assume_tac >>
+     `MEM (p,d,i.inst_id) (MAP FST
+        (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s))` by
+       (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+     metis_tac[trace_step_not_root]) >>
+  drule remaining_ids_step >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM _ (dftGasFromListTraceDefs$trace_block _ _ _ _ _ _ _)` mp_tac >>
+  simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs), MEM_APPEND] >>
+  strip_tac
+  >- (gvs[] >>
+      `FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw)))
+         (trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i a)) =
+       trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i a)` by
+        (simp[FILTER_EQ_ID, EVERY_MEM] >> rpt strip_tac >>
+         `MEM (FST kw) (MAP FST
+           (dftGasFromListTraceDefs$trace_step p d b C' fn' i a))` by
+           (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+         gvs[MEM_MAP] >>
+         mp_tac (cj 1 trace_regions) >> simp[EVERY_MEM] >> metis_tac[]) >>
+      CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV
+        (REWR_CONV (cj 2 dftGasFromListTraceDefsTheory.trace_defs))))) >>
+      Cases_on `i.inst_opcode = GAS` >>
+      simp[FILTER_APPEND_DISTRIB, visit_gas_def, frame_not_below_self] >>
+      Cases_on `step_inst b C' i a` >> simp[] >>
+      Cases_on `is_terminator i.inst_opcode` >> simp[] >>
+      irule native_inventory_gas_excludes >>
+      qexists_tac `MAP (\i. i.inst_id) (DROP (SUC a.vs_inst_idx) bb.bb_instructions)` >>
+      gvs[] >>
+      qspecl_then [`p`, `d`, `b`, `C'`, `fn'`, `bb`,
+        `v with vs_inst_idx := SUC a.vs_inst_idx`] mp_tac (cj 2 trace_regions) >>
+      simp[]) >>
+  Cases_on `step_inst b C' inst s` >> gvs[] >>
+  rename1 `step_inst b C' inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  `MEM i.inst_id (MAP (\i. i.inst_id)
+    (DROP (SUC s.vs_inst_idx) bb.bb_instructions))` by
+    (drule trace_block_region >> simp[block_region_def] >>
+     strip_tac >> gvs[] >>
+     `frame_below ((d,call_id)::p) p` by
+       (simp[frame_below_def] >> metis_tac[]) >>
+     metis_tac[frame_not_below_self]) >>
+  `i.inst_id <> inst.inst_id` by metis_tac[] >>
+  `FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw)))
+     (trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s)) = []` by
+    (irule native_inventory_gas_excludes >> qexists_tac `[inst.inst_id]` >>
+     simp[EVERY_MEM] >> rpt strip_tac >> irule trace_step_region >> metis_tac[]) >>
+  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV
+    (REWR_CONV (cj 2 dftGasFromListTraceDefsTheory.trace_defs))))) >>
+  simp[FILTER_APPEND_DISTRIB, visit_gas_def, frame_not_below_self] >>
+  Cases_on `inst.inst_opcode = GAS` >> gvs[frame_not_below_self] >>
+  qpat_x_assum `!y. _` (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- gvs[get_instruction_def]) >>
+  disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem native_inventory_child_lookup[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) /\
+  MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) /\
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME cf' /\
+  eval_operands ops a = SOME args /\ setup_callee cf' args a = SOME ct /\
+  EVERY (later_region ((d,i.inst_id)::p) d) keys ==>
+  MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks
+    ((d,i.inst_id)::p) d b C' cf' ct))) keys =
+  MAP (ALOOKUP (trace_gas
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) keys
+Proof
+  strip_tac >>
+  `FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw)))
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)) =
+    trace_gas (dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C' cf' ct)` by
+    (drule_all native_inventory_root_subtree >>
+     drule_all dftGasFromListTraceDefsTheory.trace_step_invoke >> simp[]) >>
+  pop_assum (SUBST1_TAC o SYM) >> ho_match_mp_tac ambient_region_mask >>
+  gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+  rename1 `later_region _ _ key` >> PairCases_on `key` >>
+  simp[] >> metis_tac[later_region_frame]
+QED
+
+Theorem native_inventory_suffix_distinct[local]:
+  !s. EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+      f.fn_blocks) ctx.ctx_functions /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (DROP s.vs_inst_idx bb.bb_instructions)) ==>
+    ALL_DISTINCT (MAP FST
+      (dftGasFromListTraceDefs$trace_block p d fuel ctx fn bb s))
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs)] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  drule remaining_ids_step >> strip_tac >> gvs[] >>
+  `ALL_DISTINCT (MAP FST
+    (dftGasFromListTraceDefs$trace_step p d fuel ctx fn inst s))` by
+    metis_tac[cj 1 trace_names_distinct] >>
+  simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs), MAP_APPEND,
+       ALL_DISTINCT_APPEND] >>
+  conj_tac
+  >- (simp[trace_step_not_root] >>
+      Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+      Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+      irule trace_block_excludes >> simp[]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK t` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+  `ALL_DISTINCT (MAP FST (dftGasFromListTraceDefs$trace_block p d fuel ctx fn bb
+    (t with vs_inst_idx := SUC s.vs_inst_idx)))` by
+    (qpat_x_assum `!y. _` (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+     (impl_tac >- gvs[get_instruction_def]) >>
+     disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  `~MEM inst.inst_id (MAP (\i. i.inst_id)
+    (DROP (t with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx bb.bb_instructions))` by simp[] >>
+  drule trace_step_block_disjoint >> metis_tac[]
+QED
+
+Theorem native_inventory_lookup_rows[local]:
+  !keys obs. ALL_DISTINCT keys /\ ALL_DISTINCT (MAP FST obs) ==>
+  PERM
+    (MAP (\k. (k,THE (ALOOKUP obs k)))
+      (FILTER (\k. IS_SOME (ALOOKUP obs k)) keys))
+    (FILTER (\kw. MEM (FST kw) keys) obs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (MAP (\k. (k,THE (ALOOKUP obs k)))
+      (FILTER (\k. IS_SOME (ALOOKUP obs k)) keys))` by
+    (irule ALL_DISTINCT_MAP_INJ >> simp[FILTER_ALL_DISTINCT]) >>
+  `ALL_DISTINCT (FILTER (\kw. MEM (FST kw) keys) obs)` by
+    (irule FILTER_ALL_DISTINCT >> metis_tac[listTheory.ALL_DISTINCT_MAP]) >>
+  irule PERM_ALL_DISTINCT >> simp[] >>
+  Cases >> simp[MEM_MAP, MEM_FILTER] >>
+  eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      Cases_on `ALOOKUP obs q` >> gvs[] >>
+      metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  strip_tac >> drule_all alistTheory.ALOOKUP_ALL_DISTINCT_MEM >> simp[]
+QED
+
+Theorem native_inventory_lookup_values[local]:
+  !keys obs.
+    MAP THE (FILTER IS_SOME (MAP (ALOOKUP obs) keys)) =
+    MAP (\k. THE (ALOOKUP obs k))
+      (FILTER (\k. IS_SOME (ALOOKUP obs k)) keys)
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `ALOOKUP obs h` >> simp[]
+QED
+
+Theorem native_inventory_lookup_partition[local]:
+  ALL_DISTINCT keys /\ ALL_DISTINCT (MAP FST obs) ==>
+  PERM
+    (MAP THE (FILTER IS_SOME (MAP (ALOOKUP obs) keys)) ++
+      MAP SND (FILTER (\kw. ~MEM (FST kw) keys) obs))
+    (MAP SND obs)
+Proof
+  strip_tac >>
+  qspecl_then [`keys`, `obs`] mp_tac native_inventory_lookup_rows >>
+  simp[] >> disch_then (mp_tac o MATCH_MP PERM_MAP) >>
+  disch_then (qspec_then `SND` mp_tac) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, GSYM native_inventory_lookup_values] >>
+  strip_tac >>
+  irule PERM_TRANS >>
+  qexists_tac `MAP SND (FILTER (\kw. MEM (FST kw) keys) obs) ++
+    MAP SND (FILTER (\kw. ~MEM (FST kw) keys) obs)` >>
+  conj_tac >- simp[PERM_APPEND_IFF] >>
+  rewrite_tac[GSYM MAP_APPEND] >> irule PERM_MAP >>
+  qspecl_then [`\kw. MEM (FST kw) keys`, `obs`] mp_tac PERM_SPLIT >>
+  simp[combinTheory.o_DEF, PERM_SYM]
+QED
+
+Theorem native_inventory_return_saturation[local]:
+  ALL_DISTINCT keys /\ ALL_DISTINCT (MAP FST obs) /\
+  PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP obs) keys)) ++ residual) input /\
+  residual = DROP (LENGTH obs) input /\ LENGTH obs <= LENGTH input ==>
+  FILTER (\kw. ~MEM (FST kw) keys) obs = []
+Proof
+  strip_tac >>
+  `PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP obs) keys)) ++
+      MAP SND (FILTER (\kw. ~MEM (FST kw) keys) obs)) (MAP SND obs)` by
+    (irule native_inventory_lookup_partition >> simp[]) >>
+  pop_assum (assume_tac o MATCH_MP PERM_LENGTH) >>
+  qpat_x_assum `PERM _ input` (assume_tac o MATCH_MP PERM_LENGTH) >>
+  gvs[LENGTH_APPEND, LENGTH_MAP, LENGTH_DROP] >>
+  `LENGTH (FILTER (\kw. ~MEM (FST kw) keys) obs) = 0` by decide_tac >>
+  metis_tac[LENGTH_NIL]
+QED
+
 Theorem native_stopping_call_partner[local]:
   inst_wf z /\ inst_shape_ok z /\ dft_gas_swap_pair z call /\
   call.inst_opcode = INVOKE /\
@@ -2547,6 +2903,515 @@ Proof
   disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
   simp[] >> disch_then drule >> strip_tac >> metis_tac[]
 QED
+
+Theorem native_inventory_root_success[local]:
+  !s i a.
+    ((?u. exec_block b C' bt s = OK u) \/
+     (?v u. exec_block b C' bt s = IntRet v u)) /\
+    MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt s) ==>
+    ((?u. step_inst b C' i a = OK u) \/
+     (?v u. step_inst b C' i a = IntRet v u))
+Proof
+  measureInduct_on `LENGTH bt.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `get_instruction bt s.vs_inst_idx`
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs)]) >>
+  rename1 `get_instruction bt s.vs_inst_idx = SOME inst` >>
+  `~MEM ((p,d,i.inst_id),fn',i,a)
+      (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s)` by
+    (spose_not_then assume_tac >>
+     `MEM (p,d,i.inst_id) (MAP FST
+       (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s))` by
+       (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+     metis_tac[trace_step_not_root]) >>
+  qpat_x_assum `MEM _ (dftGasFromListTraceDefs$trace_block _ _ _ _ _ _ _)` mp_tac >>
+  pure_once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+  simp[MEM_APPEND] >> strip_tac
+  >- (gvs[] >>
+      qpat_x_assum `exec_block b C' bt _ = _` mp_tac >>
+      simp[Once run_block_non_phis_def] >>
+      Cases_on `step_inst b C' i a` >> simp[]) >>
+  Cases_on `step_inst b C' inst s` >> gvs[] >>
+  rename1 `step_inst b C' inst s = OK mid` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  qpat_x_assum `!y. _` (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- gvs[get_instruction_def]) >>
+  disch_then (qspec_then `mid with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp_tac bool_ss [venom_state_accfupds, combinTheory.K_THM] >>
+  disch_then (qspecl_then [`i`, `a`] mp_tac) >>
+  (impl_tac >- (conj_tac >- (qpat_x_assum `exec_block b C' bt s = _` mp_tac >>
+    simp[Once run_block_non_phis_def] >> metis_tac[]) >> simp[])) >>
+  simp[]
+QED
+
+Theorem native_inventory_root_owner[local]:
+  !s f i a. MEM ((p,d,i.inst_id),f,i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt s) ==> f = fn'
+Proof
+  measureInduct_on `LENGTH bt.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  Cases_on `get_instruction bt s.vs_inst_idx`
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      pure_once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >> simp[]) >>
+  rename1 `get_instruction bt s.vs_inst_idx = SOME inst` >>
+  `~MEM ((p,d,i.inst_id),f,i,a)
+      (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s)` by
+    (spose_not_then assume_tac >>
+     `MEM (p,d,i.inst_id) (MAP FST
+       (dftGasFromListTraceDefs$trace_step p d b C' fn' inst s))` by
+       (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+     metis_tac[trace_step_not_root]) >>
+  qpat_x_assum `MEM _ (dftGasFromListTraceDefs$trace_block _ _ _ _ _ _ _)` mp_tac >>
+  pure_once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+  simp[MEM_APPEND] >> strip_tac >>
+  Cases_on `step_inst b C' inst s` >> gvs[] >>
+  rename1 `step_inst b C' inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- gvs[get_instruction_def]) >>
+  disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+(* Quotation macros only: these introduce no logical constants or selectors. *)
+val native_inventory_Dq = ``\q r f f' cs ct K S U.
+  let Ochild = trace_gas (dftGasFromListTraceDefs$trace_blocks q r b C' f' ct);
+      Tchild = run_blocks b C' f' ct
+  in let Mchild = MAP (ALOOKUP Ochild) K in
+    ALL_DISTINCT K /\ EVERY (later_region q r) K /\ LENGTH K = LENGTH S /\
+    PERM (MAP THE (FILTER IS_SOME Mchild) ++ U) ct.vs_gas_readings /\
+    (!v u. Tchild = IntRet v u ==> EVERY IS_SOME Mchild /\ U = u.vs_gas_readings) /\
+    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mchild g ==>
+      (!n. ?k. k <= LENGTH K /\
+        trace_gas (dftGasFromListTraceDefs$trace_blocks q r n C f
+          (cs with vs_gas_readings := g ++ tail)) = ZIP (TAKE k K, TAKE k g) /\
+        gas_events_blocks n C f (cs with vs_gas_readings := g ++ tail) = TAKE k S) /\
+      ((?n. terminates (run_blocks n C f (cs with vs_gas_readings := g ++ tail))) ==>
+       terminates (run_blocks b C f (cs with vs_gas_readings := g ++ tail)) /\
+       dft_res_rel
+         (restore_result [] (run_blocks b C f (cs with vs_gas_readings := g ++ tail)))
+         (restore_result [] Tchild) /\
+       (!v u. Tchild = IntRet v u ==>
+         gas_events_blocks b C f (cs with vs_gas_readings := g ++ tail) = S /\
+         residual_result tail Tchild
+           (run_blocks b C f (cs with vs_gas_readings := g ++ tail)))))``;
+
+val native_inventory_IHq = ``!f f' x q r.
+  LIST_REL (\h h'. h' = dft_fn h) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM f C.ctx_functions /\ f' = dft_fn f /\ dft_fn_rel f f' /\
+  strict_dom_vars_defined f x /\ fn_reachable f x.vs_current_bb /\
+  ctx_labels_bound C x.vs_labels /\ ctx_labels_bound C' x.vs_labels /\
+  ~x.vs_call_ctx.cc_static /\ terminates (run_blocks b C' f' x) /\
+  gas_count_blocks b C' f' x <= LENGTH x.vs_gas_readings ==>
+  ?K S U. ^native_inventory_Dq q r f f' x x K S U``;
+
+val native_inventory_Aq = ``\i a nm ops args cf cf' cs ct.
+  i.inst_opcode = INVOKE /\
+  MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) /\
+  decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME cf /\
+  lookup_function nm C'.ctx_functions = SOME cf' /\
+  MEM cf C.ctx_functions /\ MEM cf' C'.ctx_functions /\
+  cf' = dft_fn cf /\ dft_fn_rel cf cf' /\
+  eval_operands ops a = SOME args /\ setup_callee cf args a = SOME cs /\
+  setup_callee cf' args a = SOME ct /\ cs = ct /\
+  fn_entry_label cf = SOME cs.vs_current_bb /\
+  strict_dom_vars_defined cf cs /\ fn_reachable cf cs.vs_current_bb /\
+  ctx_labels_bound C cs.vs_labels /\ ctx_labels_bound C' cs.vs_labels /\
+  ~cs.vs_call_ctx.cc_static /\ terminates (run_blocks b C' cf' ct) /\
+  gas_count_blocks b C' cf' ct <= LENGTH ct.vs_gas_readings``;
+
+val native_inventory_Rq = ``\obs i Kc Sc cert.
+  if i.inst_opcode = INVOKE then
+    ?a nm ops args cf cf' cs ct Uc.
+      cert = SOME (a,nm,ops,args,cf,cf',cs,ct,Uc) /\
+      ^native_inventory_Aq i a nm ops args cf cf' cs ct /\
+      ^native_inventory_Dq ((d,i.inst_id)::p) d cf cf' cs ct Kc Sc Uc /\
+      MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks
+        ((d,i.inst_id)::p) d b C' cf' ct))) Kc = MAP (ALOOKUP obs) Kc
+  else cert = NONE /\
+    (if i.inst_opcode = GAS then
+       Kc = [(p,d,i.inst_id)] /\ Sc = [(fn.fn_name,i.inst_id)]
+     else Kc = [] /\ Sc = [])``;
+
+Theorem native_frontier_mask_inventory:
+  !body.
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
+  gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
+  (?rest. todo = P ++ rest) /\
+  MAP FST (MAP (\(e,f,i,a). (i,a))
+    (FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) =
+      FILTER (\i. i.inst_opcode = INVOKE) P /\
+  (((?u. exec_block b C' bt t = OK u) \/ (?v u. exec_block b C' bt t = IntRet v u)) ==>
+      P = todo) /\
+  ^native_inventory_IHq ==>
+  let V = dftGasFromListTraceDefs$trace_block p d b C' fn' bt t in
+  let obs = trace_gas V in
+  ?key_rows site_rows certs.
+    LENGTH key_rows = LENGTH P /\ LENGTH site_rows = LENGTH P /\ LENGTH certs = LENGTH P /\
+    (!h. h < LENGTH P ==>
+      ^native_inventory_Rq obs (EL h P) (EL h key_rows) (EL h site_rows) (EL h certs)) /\
+    (let K = FLAT key_rows; S = FLAT site_rows in
+     let M = MAP (ALOOKUP obs) K;
+         U = MAP SND (FILTER (\kw. ~MEM (FST kw) K) obs) ++ DROP (LENGTH obs) t.vs_gas_readings
+     in ALL_DISTINCT K /\
+        EVERY (block_region p d (MAP (\i. i.inst_id) todo)) K /\ LENGTH K = LENGTH S /\
+        PERM (MAP THE (FILTER IS_SOME M) ++ U) t.vs_gas_readings /\
+        (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+        (!v u. exec_block b C' bt t = IntRet v u ==>
+           EVERY IS_SOME M /\ U = u.vs_gas_readings))
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `trace_gas V` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions))` by
+    suspend "suffix_ids" >>
+  `!i. MEM i P ==> ?Kc Sc cert. ^native_inventory_Rq (trace_gas V) i Kc Sc cert` by
+    suspend "pointwise" >>
+  qpat_x_assum `!i. MEM i P ==> ?Kc Sc cert. _` mp_tac >>
+  CONV_TAC (LAND_CONV (SIMP_CONV pure_ss [GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM])) >>
+  disch_then (qx_choose_then `kr` (qx_choose_then `sr` (qx_choose_then `cr` assume_tac))) >>
+  qexistsl_tac [`MAP kr P`, `MAP sr P`, `MAP cr P`] >>
+  simp_tac bool_ss [LENGTH_MAP] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. MEM i P ==> _` (qspec_then `EL h P` mp_tac) >>
+      simp[EL_MEM, EL_MAP, SKOLEM_THM]) >>
+  suspend "accounting"
+QED
+
+Resume native_frontier_mask_inventory[suffix_ids]:
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) todo)` by
+    (irule ALL_DISTINCT_MAP_INJ >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >>
+     rpt strip_tac >>
+     drule dftCorrectnessTheory.all_distinct_map_mem_inj >>
+     disch_then irule >> metis_tac[MEM_APPEND]) >>
+  `PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) scheduled)` by
+    metis_tac[PERM_MAP, ALL_DISTINCT_PERM] >>
+  rename1 `LIST_REL _ scheduled actual_body` >>
+  `MAP (\i. i.inst_id) scheduled = MAP (\i. i.inst_id) actual_body` by
+    (irule LIST_EQ >> fs[LIST_REL_EL_EQN, EL_MAP]) >>
+  gvs[DROP_APPEND]
+QED
+Resume native_frontier_mask_inventory[pointwise]:
+  rpt gen_tac >> strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (`?f a. MEM ((p,d,i.inst_id),f,i,a) V` by
+        (qpat_x_assum `MAP FST _ = _` mp_tac >>
+         disch_then (mp_tac o Q.AP_TERM `MEM i`) >>
+         simp[MEM_FILTER, MEM_MAP] >>
+         disch_then (qx_choose_then `v` strip_assume_tac) >>
+         PairCases_on `v` >> gvs[] >>
+         rename1 `MEM visit V` >> PairCases_on `visit` >> gvs[] >> metis_tac[]) >>
+      `f = fn'` by
+        (irule native_inventory_root_owner >> metis_tac[markerTheory.Abbrev_def]) >>
+      qpat_x_assum `f = fn'` SUBST_ALL_TAC >>
+      `?nm ops args cf cf' cs ct. ^native_inventory_Aq i a nm ops args cf cf' cs ct` by
+        (BETA_TAC >> irule native_inventory_call_admissible >>
+         gvs[markerTheory.Abbrev_def] >> metis_tac[]) >>
+      pop_assum (strip_assume_tac o BETA_RULE) >>
+      `?Kc Sc Uc. ^native_inventory_Dq ((d,i.inst_id)::p) d cf cf' cs ct Kc Sc Uc` by
+        (BETA_TAC >>
+         qpat_x_assum `!f f' x q r. _`
+           (qspecl_then [`cf`, `cf'`, `cs`] mp_tac) >>
+         disch_then (qspecl_then [`((d,i.inst_id)::p)`, `d`] mp_tac) >>
+         impl_tac >- gvs[] >> simp[]) >>
+      pop_assum (fn th => assume_tac th >>
+        strip_assume_tac (SIMP_RULE std_ss [LET_THM] (BETA_RULE th))) >>
+      `MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks
+          ((d,i.inst_id)::p) d b C' cf' ct))) Kc =
+       MAP (ALOOKUP (trace_gas V)) Kc` by
+        (simp_tac pure_ss [Abbr `V`] >>
+         irule native_inventory_child_lookup >> metis_tac[]) >>
+      qexistsl_tac [`Kc`, `Sc`, `SOME (a,nm,ops,args,cf,cf',cs,ct,Uc)`] >>
+      BETA_TAC >> gvs[]) >>
+  simp_tac pure_ss [] >>
+  Cases_on `i.inst_opcode = GAS` >>
+  simp[] >> metis_tac[]
+QED
+Resume native_frontier_mask_inventory[accounting]:
+  qpat_x_assum `!f f' x q r. _` kall_tac >>
+  simp_tac pure_ss [LET_THM] >>
+  `!i. MEM i P ==> ALL_DISTINCT (kr i) /\
+     EVERY (block_region p d [i.inst_id]) (kr i) /\
+     LENGTH (kr i) = LENGTH (sr i)` by suspend "row_shape" >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) P)` by suspend "prefix_ids" >>
+  `ALL_DISTINCT (FLAT (MAP kr P)) /\
+   EVERY (block_region p d (MAP (\i. i.inst_id) P)) (FLAT (MAP kr P)) /\
+   LENGTH (FLAT (MAP kr P)) = LENGTH (FLAT (MAP sr P))` by
+    suspend "flat_shape" >>
+  `ALL_DISTINCT (MAP FST (trace_gas V))` by suspend "obs_distinct" >>
+  `LENGTH (trace_gas V) = gas_count_block b C' bt t /\
+   MAP SND (trace_gas V) ++ DROP (LENGTH (trace_gas V)) t.vs_gas_readings =
+     t.vs_gas_readings` by suspend "obs_readings" >>
+  simp[] >> conj_tac
+  >- (fs[EVERY_MEM] >> rpt strip_tac >> irule block_region_mono >>
+      qexists_tac `MAP (\i. i.inst_id) P` >>
+      simp[] >> metis_tac[MEM_MAP, MEM_APPEND]) >>
+  conj_tac
+  >- (`PERM
+         (MAP THE (FILTER IS_SOME (MAP (ALOOKUP (trace_gas V)) (FLAT (MAP kr P)))) ++
+          MAP SND (FILTER (\kw. ~MEM (FST kw) (FLAT (MAP kr P))) (trace_gas V)))
+         (MAP SND (trace_gas V))` by
+        (irule native_inventory_lookup_partition >> simp[]) >>
+      qpat_x_assum `_ ++ DROP _ _ = t.vs_gas_readings`
+        (fn th => CONV_TAC (RAND_CONV (REWR_CONV (GSYM th)))) >>
+      simp[APPEND_ASSOC, PERM_APPEND_IFF]) >>
+  suspend "success_accounting"
+QED
+Resume native_frontier_mask_inventory[row_shape]:
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!i. MEM i P ==> _` (qspec_then `i` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      fs[EVERY_MEM] >> rpt strip_tac >>
+      first_x_assum drule >>
+      rename1 `later_region _ _ key` >> PairCases_on `key` >>
+      metis_tac[later_region_frame, below_call_region, MEM]) >>
+  Cases_on `i.inst_opcode = GAS` >> simp[block_region_def]
+QED
+Resume native_frontier_mask_inventory[prefix_ids]:
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) todo)` by
+    (irule ALL_DISTINCT_MAP_INJ >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >>
+     rpt strip_tac >>
+     drule dftCorrectnessTheory.all_distinct_map_mem_inj >>
+     disch_then irule >> metis_tac[MEM_APPEND]) >>
+  qpat_x_assum `?rest. todo = P ++ rest` strip_assume_tac >>
+  gvs[MAP_APPEND, ALL_DISTINCT_APPEND]
+QED
+Resume native_frontier_mask_inventory[flat_shape]:
+  qpat_x_assum `!i. MEM i P ==> ALL_DISTINCT _ /\ _` mp_tac >>
+  qpat_x_assum `ALL_DISTINCT (MAP (\i. i.inst_id) P)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> qid_spec_tac `P` >> Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >> disch_tac >>
+  `ALL_DISTINCT (kr h) /\ EVERY (block_region p d [h.inst_id]) (kr h) /\
+   LENGTH (kr h) = LENGTH (sr h)` by metis_tac[] >>
+  `ALL_DISTINCT (FLAT (MAP kr P)) /\
+   EVERY (block_region p d (MAP (\i. i.inst_id) P)) (FLAT (MAP kr P)) /\
+   LENGTH (FLAT (MAP kr P)) = LENGTH (FLAT (MAP sr P))` by
+    (first_x_assum irule >> metis_tac[]) >>
+  simp[ALL_DISTINCT_APPEND, EVERY_APPEND] >>
+  rpt conj_tac >- (rpt strip_tac >>
+    `block_region p d [h.inst_id] e` by metis_tac[EVERY_MEM] >>
+    `block_region p d (MAP (\i. i.inst_id) P) e` by metis_tac[EVERY_MEM] >>
+    metis_tac[block_regions_disjoint, MEM]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >> irule block_region_mono >>
+  first_x_assum drule >> strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+Resume native_frontier_mask_inventory[obs_distinct]:
+  simp_tac pure_ss [Abbr `V`] >> irule trace_gas_names_distinct >>
+  irule native_inventory_suffix_distinct >> simp[] >>
+  qpat_x_assum `o1_ctx_shape C'` mp_tac >>
+  simp_tac bool_ss [o1_ctx_shape_def, ctx_inst_ids_distinct_def] >>
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+  BETA_TAC >> strip_tac >>
+  drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]
+QED
+Resume native_frontier_mask_inventory[obs_readings]:
+  simp_tac pure_ss [Abbr `V`, cj 2 trace_gas_lengths] >>
+  simp_tac pure_ss [cj 2 trace_gas_readings, gas_prefix_def] >>
+  simp[TAKE_APPEND1]
+QED
+Resume native_frontier_mask_inventory[success_accounting]:
+  `!u. (exec_block b C' bt t = OK u \/
+        (?v. exec_block b C' bt t = IntRet v u)) ==>
+    EVERY IS_SOME (MAP (ALOOKUP (trace_gas V)) (FLAT (MAP kr P))) /\
+    MAP SND (FILTER (\kw. ~MEM (FST kw) (FLAT (MAP kr P))) (trace_gas V)) ++
+      DROP (LENGTH (trace_gas V)) t.vs_gas_readings = u.vs_gas_readings`
+    suffices_by metis_tac[] >>
+  gen_tac >> disch_tac >>
+  `P = todo` by metis_tac[] >>
+  `!i a nm ops args cf cs Uc.
+    MEM i P /\ i.inst_opcode = INVOKE /\
+    cr i = SOME (a,nm,ops,args,cf,dft_fn cf,cs,cs,Uc) ==>
+    EVERY IS_SOME (MAP (ALOOKUP (trace_gas V)) (kr i)) /\
+    FILTER (\kw. ~MEM (FST kw) (kr i))
+      (trace_gas (dftGasFromListTraceDefs$trace_blocks
+        ((d,i.inst_id)::p) d b C' (dft_fn cf) cs)) = []` by
+    suspend "success_children" >>
+  `EVERY IS_SOME (MAP (ALOOKUP (trace_gas V)) (FLAT (MAP kr P)))` by
+    suspend "selected_coverage" >>
+  `FILTER (\kw. ~MEM (FST kw) (FLAT (MAP kr P))) (trace_gas V) = []` by
+    suspend "actual_coverage" >>
+  qpat_x_assum `bt = _` kall_tac >>
+  simp[] >>
+  mp_tac (cj 2 gas_count_suffix) >>
+  disch_then (qspecl_then [`b`, `C'`, `bt`, `t`] mp_tac) >>
+  Cases_on `exec_block b C' bt t` >> gvs[gas_count_suffix_def]
+QED
+Resume native_frontier_mask_inventory[selected_coverage]:
+  qpat_x_assum `!i. MEM i P ==> ALL_DISTINCT _ /\ _` kall_tac >>
+  pure_rewrite_tac[EVERY_MAP, EVERY_FLAT, EVERY_MEM] >> rpt strip_tac >>
+  rename1 `MEM i P` >>
+  qpat_assum `!i. MEM i P ==> _` (qspec_then `i` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      qpat_assum `!i a nm ops args cf cs Uc. _` drule_all >>
+      simp_tac pure_ss [EVERY_MAP, EVERY_MEM] >> strip_tac >>
+      first_assum MATCH_ACCEPT_TAC) >>
+  Cases_on `i.inst_opcode = GAS` >> simp[] >> strip_tac >> gvs[] >>
+  `MEM (p,d,i.inst_id) (MAP FST (trace_gas V))` by
+    (simp_tac pure_ss [Abbr `V`] >>
+     irule native_inventory_success_gas_coverage >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_IS_SOME_EQ_NONE]
+QED
+Resume native_frontier_mask_inventory[actual_coverage]:
+  simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+  `?i a. MEM i (DROP t.vs_inst_idx bt.bb_instructions) /\
+    MEM ((p,d,i.inst_id),fn',i,a) V /\
+    ((i.inst_opcode = GAS /\ FST kw = (p,d,i.inst_id)) \/
+     (i.inst_opcode = INVOKE /\ MEM kw (trace_gas
+       (dftGasFromListTraceDefs$trace_step p d b C' fn' i a))))` by
+    (simp_tac pure_ss [Abbr `V`] >>
+     irule native_inventory_observation_origin >> metis_tac[markerTheory.Abbrev_def])
+  >- suspend "actual_gas"
+  >> suspend "actual_call"
+QED
+Resume native_frontier_mask_inventory[success_children]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i. MEM i P ==> ALL_DISTINCT _ /\ _` kall_tac >>
+  qpat_x_assum `!i. MEM i P ==> _` (qspec_then `i` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >> simp[] >> strip_tac >> gvs[] >>
+  `(?u. step_inst b C' i a = OK u) \/
+   (?v u. step_inst b C' i a = IntRet v u)` by
+    (irule native_inventory_root_success >>
+     gvs[markerTheory.Abbrev_def] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `?v u. run_blocks b C' (dft_fn cf) cs = IntRet v u` by
+    (qpat_x_assum `step_inst b C' i a = _` mp_tac >>
+     simp[Once step_inst_def] >>
+     Cases_on `run_blocks b C' (dft_fn cf) cs` >> simp[]) >>
+  (conj_tac >- metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST (trace_gas (dftGasFromListTraceDefs$trace_blocks
+      ((d,i.inst_id)::p) d b C' (dft_fn cf) cs)))` by
+    suspend "success_child_distinct" >>
+  irule native_inventory_return_saturation >> simp[] >>
+  qexists_tac `cs.vs_gas_readings` >>
+  simp_tac pure_ss [cj 3 trace_gas_lengths] >>
+  `Uc = DROP (gas_count_blocks b C' (dft_fn cf) cs) cs.vs_gas_readings` by
+    (mp_tac (cj 3 gas_count_suffix) >>
+     disch_then (qspecl_then [`b`, `C'`, `dft_fn cf`, `cs`] mp_tac) >>
+     simp[gas_count_suffix_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+Resume native_frontier_mask_inventory[success_child_distinct]:
+  markerLib.RESUME_TAC >>
+  irule trace_gas_names_distinct >>
+  irule (cj 3 trace_names_distinct) >>
+  qpat_x_assum `o1_ctx_shape C'` mp_tac >>
+  simp_tac bool_ss [o1_ctx_shape_def, ctx_inst_ids_distinct_def] >>
+  strip_tac >>
+  `EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+      f.fn_blocks) C'.ctx_functions` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+     BETA_TAC >> strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+Resume native_frontier_mask_inventory[actual_gas]:
+  `MEM i body'` by
+    (qpat_x_assum `MEM i (DROP _ _)` mp_tac >> simp[DROP_APPEND]) >>
+  `?h. MEM h scheduled /\ h.inst_id = i.inst_id` by
+    (drule_all LIST_REL_MEM_IMP_R >> simp[]) >>
+  `PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+  `MEM h todo` by metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  `MEM h bb.bb_instructions` by
+    (fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `from_block bb.bb_instructions i` by metis_tac[EVERY_MEM] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `i = h \/ i = flip_operands h` by
+    metis_tac[dftScheduleOrderTheory.from_block_id_cases] >>
+  `h.inst_opcode = GAS` by
+    (qpat_x_assum `i = _` mp_tac >>
+     qpat_x_assum `i.inst_opcode = GAS` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `h.inst_opcode` >>
+     simp[flip_operands_def, is_comparator_def, flip_comparison_opcode_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `!i. MEM i P ==> ALL_DISTINCT _ /\ _` kall_tac >>
+  qpat_assum `!i. MEM i P ==> _` (qspec_then `h` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >>
+  `MEM h P` by metis_tac[] >>
+  qpat_assum `h.inst_opcode = GAS`
+    (fn th => simp_tac (srw_ss()) [th]) >>
+  qpat_assum `MEM h P` (fn th => simp_tac bool_ss [th]) >> strip_tac >>
+  simp_tac pure_ss [MEM_FLAT, MEM_MAP] >> qexists_tac `kr h` >>
+  metis_tac[MEM]
+QED
+Resume native_frontier_mask_inventory[actual_call]:
+  `MEM i P` by
+    (`MEM i (MAP FST (MAP (\(e,f,i,a). (i,a))
+       (FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE) V)))` by
+       (simp[MEM_MAP, MEM_FILTER] >>
+        qexists_tac `(i,a)` >> simp[] >>
+        qexists_tac `((p,d,i.inst_id),fn',i,a)` >> simp[]) >>
+     qpat_x_assum `MAP FST _ = FILTER _ P` mp_tac >>
+     metis_tac[MEM_FILTER]) >>
+  qpat_x_assum `!i. MEM i P ==> ALL_DISTINCT _ /\ _` kall_tac >>
+  qpat_assum `!i. MEM i P ==> _` (qspec_then `i` mp_tac) >>
+  simp_tac bool_ss [LET_THM] >> simp[] >> strip_tac >>
+  rename1 `cr i = SOME (a0,nm,ops,args,cf,dft_fn cf,cs,cs,Uc)` >>
+  `trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i a) =
+   trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i a0)` by
+    (`!x. MEM ((p,d,i.inst_id),fn',i,x) V ==>
+       FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw)))
+         (trace_gas V) =
+       trace_gas (dftGasFromListTraceDefs$trace_step p d b C' fn' i x)` by
+       (rpt strip_tac >> simp_tac pure_ss [Abbr `V`] >>
+        irule native_inventory_root_subtree >> simp[] >>
+        gvs[markerTheory.Abbrev_def]) >>
+     metis_tac[markerTheory.Abbrev_def]) >>
+  `MEM kw (trace_gas (dftGasFromListTraceDefs$trace_blocks
+     ((d,i.inst_id)::p) d b C' (dft_fn cf) cs))` by
+    (drule_all dftGasFromListTraceDefsTheory.trace_step_invoke >>
+     metis_tac[]) >>
+  `FILTER (\kw. ~MEM (FST kw) (kr i))
+     (trace_gas (dftGasFromListTraceDefs$trace_blocks
+       ((d,i.inst_id)::p) d b C' (dft_fn cf) cs)) = []` by
+    (qpat_assum `!i a nm ops args cf cs Uc. _` drule_all >> simp[]) >>
+  `MEM (FST kw) (kr i)` by
+    (qpat_x_assum `FILTER _ _ = []` mp_tac >>
+     simp_tac bool_ss [FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
+  simp_tac pure_ss [MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+Finalise native_frontier_mask_inventory
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
