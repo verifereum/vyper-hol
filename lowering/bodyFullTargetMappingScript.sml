@@ -116,7 +116,17 @@ Resume target_mapping_tail_full[join]:
   `wb_frame cenv es mid1 sa s0 t1 /\
    wb_frame cenv mid1 mid2 sm t1 t2 /\
    stmt_state_rel (storage_trace_horizon mid2.storage_trace) ctx func cenv cx es s0` by
-    (gvs[target_post_def, expr_post_def, wb_frame_def] >> metis_tac[]) >>
+    (conj_tac >-
+       (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o PURE_REWRITE_RULE [target_post_def]) >>
+        PURE_REWRITE_TAC [wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o PURE_REWRITE_RULE [expr_post_def]) >>
+        PURE_REWRITE_TAC [wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid2.storage_trace` mp_tac) >>
+     simp[]) >>
   `wb_frame cenv es mid2 sa s0 t2 /\
    ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
     (irule (INST_TYPE [Type.beta |-> ``:256``] mapping_suffix_frames_join) >> simp[] >>
