@@ -49,6 +49,34 @@ Definition entry_frame_plan_reloc_def:
         entry with vs_inst_idx := k)
 End
 
+Theorem entry_frame_plan_reloc_specialize:
+  entry_frame_plan_reloc (SND (compute_label_offsets prog))
+    rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 <=>
+  entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0
+Proof
+  simp[entry_frame_plan_reloc_def, entry_frame_plan_def]
+QED
+
+Theorem entry_frame_plan_start_reloc:
+  generate_context_plan unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+  (!l. FLOOKUP entry.vs_labels l =
+    OPTION_MAP n2w (FLOOKUP lo l)) /\
+  LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+  fn_entry_state_rel cpl fn entry ast ra rest /\
+  (fn_has_retpc fn ==> FLOOKUP (build_offset_to_pc prog) (w2n ra) = SOME pc_ret) /\
+  i < LENGTH unit.cu_context.ctx_functions /\
+  EL i unit.cu_context.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+  MEM fn.fn_name (fcg_analyze unit.cu_context).fcg_reachable /\
+  asm_block_at prog ast.as_pc (execute_plan cpl.cp_initial_fmp r.sr_plan) ==>
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry
+    (entry with vs_inst_idx := 0) ast ra pc_ret rest ast.as_memory
+Proof
+  rw[entry_frame_plan_reloc_def] >- metis_tac[] >>
+  qexists_tac `0` >> simp[entry_prefix_zero]
+QED
+
 Theorem entry_frame_plan_start:
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
@@ -65,20 +93,20 @@ Theorem entry_frame_plan_start:
   entry_frame_plan rpolicy unit cpl prog fn entry
     (entry with vs_inst_idx := 0) ast ra pc_ret rest ast.as_memory
 Proof
-  rw[entry_frame_plan_def] >- metis_tac[] >>
-  qexists_tac `0` >> simp[entry_prefix_zero]
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize] >>
+  metis_tac[entry_frame_plan_start_reloc]
 QED
 
-Theorem entry_frame_active_param:
-  entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+Theorem entry_frame_active_param_reloc:
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
   active_inst fn inst s /\
   s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
   inst = EL s.vs_inst_idx (get_params (HD fn.fn_blocks).bb_instructions) /\
   is_param_opcode inst.inst_opcode
 Proof
   strip_tac >>
-  qpat_x_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_def]) >>
+  qpat_x_assum `entry_frame_plan_reloc _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_reloc_def]) >>
   `s.vs_inst_idx = k` by fs[] >>
   `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
   `wf_function fn /\ fn.fn_blocks <> []` by
@@ -102,18 +130,29 @@ Proof
   metis_tac[]
 QED
 
-Theorem entry_frame_plan_next:
+Theorem entry_frame_active_param:
   entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  active_inst fn inst s /\
+  s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
+  inst = EL s.vs_inst_idx (get_params (HD fn.fn_blocks).bb_instructions) /\
+  is_param_opcode inst.inst_opcode
+Proof
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize] >>
+  metis_tac[entry_frame_active_param_reloc]
+QED
+
+Theorem entry_frame_plan_next_reloc:
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
   s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
   ?post.
     step_inst fuel unit.cu_context
       (EL s.vs_inst_idx (get_params (HD fn.fn_blocks).bb_instructions)) s = OK post /\
-    entry_frame_plan rpolicy unit cpl prog fn entry
+    entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry
       (post with vs_inst_idx := SUC s.vs_inst_idx) ast ra pc_ret rest mem0
 Proof
   strip_tac >>
-  qpat_x_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_def]) >>
+  qpat_x_assum `entry_frame_plan_reloc _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_reloc_def]) >>
   `s.vs_inst_idx = k` by fs[] >>
   `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
   drule_all bounded_entry_param_shape >> strip_tac >>
@@ -123,10 +162,22 @@ Proof
       (TAKE (SUC k) (get_params (HD fn.fn_blocks).bb_instructions))) entry
       with vs_inst_idx := k` >>
   conj_tac >- metis_tac[] >>
-  PURE_REWRITE_TAC [entry_frame_plan_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC)
-  >- (qexistsl_tac [`i`, `r`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[entry_frame_plan_reloc_def] >>
+  conj_tac >- metis_tac[] >>
   qexists_tac `SUC k` >> fs[]
+QED
+
+Theorem entry_frame_plan_next:
+  entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
+  ?post.
+    step_inst fuel unit.cu_context
+      (EL s.vs_inst_idx (get_params (HD fn.fn_blocks).bb_instructions)) s = OK post /\
+    entry_frame_plan rpolicy unit cpl prog fn entry
+      (post with vs_inst_idx := SUC s.vs_inst_idx) ast ra pc_ret rest mem0
+Proof
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize] >>
+  metis_tac[entry_frame_plan_next_reloc]
 QED
 
 Theorem entry_frame_plan_ready:
@@ -244,18 +295,26 @@ Proof
     fs[fn_entry_state_rel_def] >> NO_TAC]
 QED
 
-Theorem entry_frame_plan_initial:
+Theorem entry_frame_plan_initial_reloc:
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
-  initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 ==>
+  code_labels_agree prog lo /\
+  (!l. FLOOKUP vs0.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  (!fe rest lbl.
+    unit.cu_context.ctx_functions = fe :: rest /\
+    get_params (HD fe.fn_blocks).bb_instructions = [] /\
+    fn_entry_label fe = SOME lbl ==>
+    fn_entry_state_rel cpl fe
+      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+      (entry_asm_state vs0 es0) 0w []) ==>
   ?fn others lbl entry.
     unit.cu_context.ctx_functions = fn::others /\
     unit.cu_context.ctx_entry = SOME fn.fn_name /\
     fn_entry_label fn = SOME lbl /\
     entry = vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                        vs_inst_idx := 0 |> /\
-    entry_frame_plan rpolicy unit cpl prog fn entry entry
+    entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry entry
       (entry_asm_state vs0 es0) 0w 0 []
       (entry_asm_state vs0 es0).as_memory
 Proof
@@ -272,8 +331,7 @@ Proof
        venomWfTheory.fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
   `fn_entry_state_rel cpl fn
     (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-    (entry_asm_state vs0 es0) 0w []` by
-    metis_tac[entry_fn_entry_state_rel_tail] >>
+    (entry_asm_state vs0 es0) 0w []` by metis_tac[] >>
   `0 < LENGTH cpl.cp_regions` by
     metis_tac[fnPlanPlaceFnRegionTheory.context_region_leading_label,
       LENGTH, prim_recTheory.LESS_0, EL] >>
@@ -286,21 +344,35 @@ Proof
      fs[codegen_context_obligations_def]) >>
   `asm_block_at prog 0 (execute_plan cpl.cp_initial_fmp r.sr_plan)` by
     metis_tac[codegen_assembly_first_region] >>
-  `!l. FLOOKUP vs0.vs_labels l =
-    OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)` by
-    fs[initial_ctx_rel_tail_def, initial_ctx_rel_def] >>
   qexistsl_tac [`fn`, `others`, `lbl`,
     `vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
-  mp_tac (Q.INST
-    [`entry` |-> `vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                            vs_inst_idx := 0 |>`,
-     `ast` |-> `entry_asm_state vs0 es0`, `ra` |-> `0w:bytes32`,
-     `pc_ret` |-> `0`, `rest` |-> `[]:bytes32 list`,
-     `i` |-> `0`, `r` |-> `r`]
-    (SPEC_ALL entry_frame_plan_start)) >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      asm_simp_tac (srw_ss()) [entry_asm_state_def, fn_has_retpc_def]) >>
-  simp[]
+  simp[] >>
+  irule (Q.INST [`entry` |->
+    `vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>`]
+    entry_frame_plan_start_reloc |> SRULE []) >>
+  simp[entry_asm_state_def, fn_has_retpc_def] >>
+  qexists_tac `0` >> simp[]
+QED
+
+Theorem entry_frame_plan_initial:
+  generate_context_plan unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+  initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 ==>
+  ?fn others lbl entry.
+    unit.cu_context.ctx_functions = fn::others /\
+    unit.cu_context.ctx_entry = SOME fn.fn_name /\
+    fn_entry_label fn = SOME lbl /\
+    entry = vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                       vs_inst_idx := 0 |> /\
+    entry_frame_plan rpolicy unit cpl prog fn entry entry
+      (entry_asm_state vs0 es0) 0w 0 []
+      (entry_asm_state vs0 es0).as_memory
+Proof
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize] >>
+  strip_tac >>
+  irule entry_frame_plan_initial_reloc >>
+  simp[fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl] >>
+  conj_tac >- metis_tac[entry_fn_entry_state_rel_tail] >>
+  fs[initial_ctx_rel_tail_def, initial_ctx_rel_def]
 QED
