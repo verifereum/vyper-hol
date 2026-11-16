@@ -124,7 +124,7 @@ QED
 Theorem ptr_inst_ok_mstore:
   !D ctx fn G tn s id p v fuel.
     ptr_covers G tn p s 32 /\ op_taint tn v = {} /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id MSTORE [Var p; v] []) s
 Proof
