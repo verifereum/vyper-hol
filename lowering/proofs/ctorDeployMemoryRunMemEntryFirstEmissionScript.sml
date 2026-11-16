@@ -4555,64 +4555,6 @@ Proof
   simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
 QED
 
-Theorem ctor_fresh_vars_first_emission[local]:
-  !n a x b. fresh_vars n a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  Induct >> rewrite_tac[emitHelperTheory.fresh_vars_def]
-  >- (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]) >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (simp[fresh_var_def] >> rpt strip_tac >> gvs[] >>
-      irule cs_extends_same_block >> simp[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[] >>
-  simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
-QED
-
-Theorem ctor_emit_multi_op_first_emission[local]:
-  !opc ops n. opc <> PHI ==> !a x b. emit_multi_op opc ops n a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[emitHelperTheory.emit_multi_op_def] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[ctor_fresh_vars_first_emission] >>
-  gen_tac >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      irule (cj 1 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
-QED
-
-Theorem ctor_store_multi_results_first_emission[local]:
-  !buf ops offset a x b. store_multi_results buf ops offset a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  gen_tac >> Cases >> gen_tac >> rewrite_tac[Once store_multi_results_def]
-  >- (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]) >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-  ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- simp[cs_appends_emit_helpers] >>
-  irule ctor_ci_mono_appends >> simp[ci_mono_store_multi_results]
-QED
-
 Theorem ctor_guarded_int_call_expr_first_emission:
   (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
