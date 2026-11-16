@@ -106,7 +106,9 @@ Theorem snapshot_unwrap_source_mem:
     eval_operand dst z = SOME d /\
     FLOOKUP z.vs_allocas aid = SOME (w2n d,cap) /\
     (!n b len. local_region ce ee.scopes z n b len ==>
-      regions_disjoint (w2n d) cap b len)
+      regions_disjoint (w2n d) cap b len) /\
+    z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+    z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `!t p. vv = LocatedValue t p ==> p.ptr_location = LocMemory`
