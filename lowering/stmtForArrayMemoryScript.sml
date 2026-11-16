@@ -57,7 +57,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rw[stmt_frag_mem_def] >>
   reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gas_bad_storage_at_initial >>
       fs[storage_trace_domain_def, evaluate_storage_trace_frame]) >>
   qpat_x_assum `?H. _` strip_assume_tac >>
@@ -87,6 +87,7 @@ Proof
     s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s` by
     (irule array_loop_initialize_mem >>
      goal_assum (drule_at Any) >> simp[] >>
+     conj_tac >- (qexists_tac `H` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`sa.cs_next_id + 2`, `sa.cs_next_id + 3`] >> simp[]) >>
      conj_tac >- (qexists_tac `sa.cs_next_id + 1` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`arr_sz`, `name`] >> simp[]) >>
@@ -100,7 +101,8 @@ Proof
      (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx sa s0 exit ee t)
      (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr)` by
     (drule array_code_loop_outcome_mem >> disch_then irule >>
      gvs[] >> conj_tac
      >- (drule array_for_code_stmts >> strip_tac >>
@@ -118,7 +120,8 @@ QED
 Resume compile_for_array_frag_mem[element_layout]:
   rpt strip_tac >>
   `P ei` by fs[array_loop_inv_def] >>
-  `?H'. stmt_state_rel H' ctx func cenv cx ei t` by
+  `?(H':(bool # bytes32 # type_value) list # num list).
+    stmt_state_rel H' ctx func cenv cx ei t` by
     (fs[array_loop_inv_def] >> metis_tac[]) >>
   qpat_x_assum `!H ei s. P ei /\ _ ==> _` drule_all >> strip_tac >>
   gvs[array_loop_inv_def] >>
@@ -159,13 +162,17 @@ Resume compile_for_array_frag_mem[public_outcome]:
      (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx sa s0 exit ee t)
      (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr)` by
     (irule stmtForArrayMemoryRoundSupportTheory.array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
   ` (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) =
-    (\H res ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr) =
+    (\H res ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr) /\
+      halt_exit H cx ee res rr)` by
     (simp[FUN_EQ_THM] >> Cases_on `res` >>
-     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
+     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
+          exprSimDefsTheory.halt_exit_def]) >>
   gvs[] >>
   drule exprSimMemDefsTheory.gas_outcome_post_mono >> disch_then irule >>
   rpt strip_tac >>

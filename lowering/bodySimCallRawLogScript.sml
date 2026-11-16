@@ -127,7 +127,7 @@ Theorem raw_log_dynamic_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -201,7 +201,7 @@ Proof
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
   reverse (rpt conj_tac)
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def, halt_exit_def])
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
@@ -417,12 +417,15 @@ Proof
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   BETA_TAC >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  match_mp_tac (Q.INST [`data` |-> `data`, `cap` |-> `cap`,
+  qmatch_goalsub_abbrev_tac `expr_post _ ctx func cenv cx call es sa sb s0` >>
+  mp_tac (Q.INST [`data` |-> `data`, `cap` |-> `cap`,
+    `e` |-> `call`, `es2` |-> `mid2 with gas_obs := []`, `s` |-> `td`,
     `es1` |-> `mid with gas_obs := []`, `s1` |-> `sm`, `sd` |-> `sn`,
     `t0` |-> `t`, `H0` |-> `H2`, `ptr_op` |-> `data_op`,
     `len_op` |-> `len_op`, `sl` |-> `sl`, `data_op` |-> `ptr_op`,
     `sm` |-> `sp`, `ops` |-> `ops`, `vs` |-> `vs`, `u` |-> `()`]
-    (SPEC_ALL raw_log_dynamic_tail_summary)) >> simp[]
+    (SPEC_ALL raw_log_dynamic_tail_summary)) >>
+  (impl_tac >- simp[Abbr `call`]) >> strip_tac >> fs[Abbr `call`]
 QED
 
 Resume raw_log_dynamic_frag[static]:
@@ -484,7 +487,7 @@ Theorem raw_log_fixed32_body_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -564,7 +567,7 @@ Proof
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
   reverse (rpt conj_tac)
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def, halt_exit_def])
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
@@ -862,15 +865,18 @@ Proof
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   BETA_TAC >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  match_mp_tac (Q.INST [`data` |-> `data`,
+  qmatch_goalsub_abbrev_tac `expr_post _ ctx func cenv cx call es sa sb s0` >>
+  mp_tac (Q.INST [`data` |-> `data`,
+    `e` |-> `call`, `es2` |-> `mid2 with gas_obs := []`, `s` |-> `td`,
     `es1` |-> `mid with gas_obs := []`, `s1` |-> `sk`, `sd` |-> `sn`,
     `t0` |-> `ta`, `H0` |-> `H2`, `val_op` |-> `data_op`,
     `ptr_op` |-> `Var p`, `sm` |-> `sp`, `u` |-> `()`,
     `b` |-> `w2n (w:bytes32)`, `inst` |->
       `mk_inst sm.cs_next_id ALLOCA [Lit 32w]
         [STRING #"%" (toString sm.cs_next_var)]`]
-    raw_log_fixed_tail_summary) >> Cases_on `u` >> fs[] >>
-  first_assum ACCEPT_TAC
+    raw_log_fixed_tail_summary) >>
+  (impl_tac >- (Cases_on `u` >> fs[Abbr `call`] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> fs[Abbr `call`]
 QED
 
 Resume raw_log_fixed32_body_frag[static]:

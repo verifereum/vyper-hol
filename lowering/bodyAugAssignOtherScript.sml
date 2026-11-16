@@ -26,6 +26,9 @@ Ancestors
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
   vyperTypeStoragePreservation
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
 Proof
@@ -167,7 +170,7 @@ Proof
   gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       allocLimitsTheory.alloc_limits_stmt_def, int_calls_stmt_def, AllCaseEqs()] >>
   imp_res_tac alloc_limits_expr_not_extcode >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right,
             APPEND_NIL]
@@ -281,6 +284,9 @@ Proof
      fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
+  `~supported_target_exists (const_name_root cx) t` by
+    (drule_then irule bodySimTheory.body_inv_target_const_name_free >>
+     qexists_tac `bindings` >> simp[]) >>
   irule aug_place_target_indices_pre >>
   gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
       allocLimitsTheory.alloc_limits_stmt_def,

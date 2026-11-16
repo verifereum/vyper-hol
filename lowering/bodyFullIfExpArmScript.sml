@@ -22,14 +22,13 @@ Theorem ifexp_unwrap_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
-    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
       ~is_word_type (post_value_type cenv e) ==>
@@ -70,6 +69,11 @@ Theorem ifexp_unwrap_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+      (~is_word_type (post_value_type cenv e) ==>
+       vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+       vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
       expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
@@ -94,7 +98,8 @@ Theorem ifexp_unwrap_arm_step_full:
   (~is_word_type t ==>
    ?rtp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rtp) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

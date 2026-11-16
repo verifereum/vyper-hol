@@ -675,14 +675,13 @@ Theorem ifexp_widen_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
-    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
       ~is_word_type (post_value_type cenv e) ==>
@@ -723,6 +722,11 @@ Theorem ifexp_widen_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+      (~is_word_type (post_value_type cenv e) ==>
+       vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+       vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
       expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
@@ -742,7 +746,7 @@ Theorem ifexp_widen_arm_step_full:
       ghost_kept_at lo cenv ee sb G tn s G' tn') /\
   (* ifexp_alloca_origin_ptr_edge *)
   (!s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     lo <= s.vs_alloca_next /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
@@ -791,7 +795,7 @@ Theorem ifexp_widen_arm_step_full:
       (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
       allocas_from lo s /\ lo <= s.vs_alloca_next /\
       run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-      ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
       ?Gf tnf sf.
@@ -814,7 +818,8 @@ Theorem ifexp_widen_arm_step_full:
   is_bytestring_type t /\ is_bytestring_type (lowered_value_type cenv e) /\
   arg_type_fits (lowered_value_type cenv e) t /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -1071,7 +1076,9 @@ Proof
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       qpat_x_assum `cenv.ce_is_ctor /\ _ ==> ?val. _ /\ !rt w. _` mp_tac >>
       simp[]) >>
-  strip_tac >>
+  disch_then (qx_choose_then `v` (qx_choose_then `su`
+    (qx_choose_then `Gu` (qx_choose_then `tu`
+      (map_every assume_tac o CONJUNCTS))))) >>
   rename1 `ptr_val_ok cx t v src Gu tu su` >>
   `expr_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e es1 sa sn u ee v src su` by
     (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _` drule >> simp[]) >>
@@ -1122,10 +1129,17 @@ Proof
   `FLOOKUP su.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_bytes cenv t)` by
     (qpat_x_assum `wb_frame cenv ee ee salloc q su` mp_tac >>
      simp[wb_frame_def, Abbr `q`] >> strip_tac >> first_x_assum irule >> simp[]) >>
-  `alloca_inv su` by
+  `alloca_inv su /\ fmp_room ctx func su` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
      pure_rewrite_tac[expr_post_def, stmt_state_rel_def] >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp su)` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv su` mp_tac >>
+     qpat_x_assum `fmp_room ctx func su` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   `w2n w + n <= su.vs_alloca_next` by
     (qpat_x_assum `alloca_inv su` mp_tac >>
      simp[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >> strip_tac >>
