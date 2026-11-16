@@ -46,6 +46,14 @@ Ancestors
   loweringMemCorrect
   asmSymBridge
   asmDataEnv
+  asmOptOwnPeephole
   asmOptFinalizerCorrect
   asmSymOwnCode
+  asmOptOwnMergeIszero
+  finalizerContractOwn
+  asmOptOwnPruneUnreachable
+  asmSpliceOwn
+  asmOptOwnInefficientJumps
+  asmOptOwnPruneUnused
+  asmOptOwnPruneJumps
   o1LabelFlowOwnSecondSsa
