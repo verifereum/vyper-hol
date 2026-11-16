@@ -41,7 +41,7 @@ Theorem scalar_code_origin_ptr_success:
   !code A s t G tn ctx func PG explicit bb.
     scalar_code A code /\
     (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq code s = OK t ==>
@@ -61,7 +61,8 @@ Proof
   qabbrev_tac `D0 = <|d_stor := K (K {}); d_trans := K (K {});
                      d_imm := K {}; d_ret := K {}|>` >>
   `?G' tn'. inst_seq_ptr D0 0 ctx func PG G tn code s G' tn'` by
-    metis_tac[scalar_code_inst_seq_ptr] >>
+    (irule scalar_code_inst_seq_ptr_lo >> simp[allocas_from_def] >>
+     qexists `A` >> simp[]) >>
   pop_assum strip_assume_tac >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   qspecl_then [`code`, `A`, `G`, `tn`, `s`, `G'`, `tn'`, `t`] mp_tac
