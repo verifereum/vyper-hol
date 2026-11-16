@@ -157,7 +157,8 @@ Proof
     asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
     tr (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest)
        (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)`
-    by (unabbrev_all_tac >> mp_tac inefficient_jump_site >> simp[]) >>
+    by (unabbrev_all_tac >> MATCH_MP_TAC inefficient_jump_site >>
+        first_assum MATCH_ACCEPT_TAC) >>
   qpat_x_assum `!pre pat repl post D. _` kall_tac >>
   `!sfx pre. asm_static_wf (pre ++ sfx) ==>
       tr (pre ++ sfx) (pre ++ FST (optimize_inefficient_jumps sfx))`
