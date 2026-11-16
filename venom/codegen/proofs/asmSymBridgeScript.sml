@@ -1941,6 +1941,62 @@ Proof
        asm_sym_step_rel_core_canonical]
 QED
 
+Theorem sym_step_concrete_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  name <> "JUMP" /\ name <> "JUMPI" /\ name <> "CODECOPY" /\ name <> "CODESIZE" /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op (build_offset_to_pc p) name cs)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `MEM name ["ADD"; "MUL"; "SUB"; "DIV"; "SDIV"; "MOD"; "SMOD"; "EXP";
+    "LT"; "GT"; "SLT"; "SGT"; "EQ"; "AND"; "OR"; "XOR";
+    "SHL"; "SHR"; "SAR"; "SIGNEXTEND"; "BYTE"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_pure_binary_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["ISZERO"; "NOT"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_pure_unary_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["ADDMOD"; "MULMOD"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_pure_ternary_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["CALLER"; "ADDRESS"; "CALLVALUE"; "CALLDATASIZE"; "ORIGIN";
+    "GASPRICE"; "CHAINID"; "COINBASE"; "TIMESTAMP"; "NUMBER";
+    "PREVRANDAO"; "GASLIMIT"; "BASEFEE"; "BLOBBASEFEE";
+    "SELFBALANCE"; "RETURNDATASIZE"; "MSIZE"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_context_push_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["CALLDATALOAD"; "BLOCKHASH"; "BLOBHASH"; "BALANCE";
+    "EXTCODESIZE"; "EXTCODEHASH"; "SLOAD"; "TLOAD"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_context_load_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["SSTORE"; "TSTORE"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_store_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["POP"; "JUMPDEST"; "STOP"; "INVALID"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_plain_control_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["RETURN"; "REVERT"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_memory_terminal_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["MSTORE"; "MSTORE8"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_memory_store_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["CREATE"; "CREATE2"]`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_create_sim_core >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
+    "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
+  >- (qpat_x_assum `MEM name _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+      qpat_x_assum `name = _` SUBST1_TAC >>
+      FIRST (map (qspecl_then [`lo`, `code_ok`] irule)
+        [sym_step_call_sim_core, sym_step_staticcall_sim_core,
+         sym_step_delegatecall_sim_core, sym_step_selfdestruct_sim_core,
+         sym_step_gas_sim_core, sym_step_mload_sim_core,
+         sym_step_sha3_sim_core, sym_step_calldatacopy_sim_core,
+         sym_step_extcodecopy_sim_core, sym_step_mcopy_sim_core,
+         sym_step_returndatacopy_sim_core]) >> simp[] >> metis_tac[]) >>
+  Cases_on `ALOOKUP log_table name`
+  >- (qspecl_then [`lo`, `code_ok`] irule sym_step_concrete_good_core >>
+      gvs[MEM] >> rpt strip_tac >>
+      simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
+      simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
+      simp[asm_step_extcall_def, asm_step_copy_def, asm_step_context_def] >>
+      simp[sym_lift_def] >> metis_tac[]) >>
+  qspecl_then [`lo`, `code_ok`] irule sym_step_log_sim_core >> simp[] >> metis_tac[]
+QED
+
 Theorem sym_step_concrete_sim:
   asm_sym_rel p env cs ss ∧
   name ≠ "JUMP" ∧ name ≠ "JUMPI" ∧ name ≠ "CODECOPY" ∧ name ≠ "CODESIZE" ∧
@@ -1948,47 +2004,10 @@ Theorem sym_step_concrete_sim:
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op (build_offset_to_pc p) name cs)
 Proof
-  strip_tac >>
-  Cases_on `MEM name ["ADD"; "MUL"; "SUB"; "DIV"; "SDIV"; "MOD"; "SMOD"; "EXP";
-    "LT"; "GT"; "SLT"; "SGT"; "EQ"; "AND"; "OR"; "XOR";
-    "SHL"; "SHR"; "SAR"; "SIGNEXTEND"; "BYTE"]`
-  >- (irule sym_step_pure_binary_sim >> simp[]) >>
-  Cases_on `MEM name ["ISZERO"; "NOT"]`
-  >- (irule sym_step_pure_unary_sim >> simp[]) >>
-  Cases_on `MEM name ["ADDMOD"; "MULMOD"]`
-  >- (irule sym_step_pure_ternary_sim >> simp[]) >>
-  Cases_on `MEM name ["CALLER"; "ADDRESS"; "CALLVALUE"; "CALLDATASIZE"; "ORIGIN";
-    "GASPRICE"; "CHAINID"; "COINBASE"; "TIMESTAMP"; "NUMBER";
-    "PREVRANDAO"; "GASLIMIT"; "BASEFEE"; "BLOBBASEFEE";
-    "SELFBALANCE"; "RETURNDATASIZE"; "MSIZE"]`
-  >- (irule sym_step_context_push_sim >> simp[]) >>
-  Cases_on `MEM name ["CALLDATALOAD"; "BLOCKHASH"; "BLOBHASH"; "BALANCE";
-    "EXTCODESIZE"; "EXTCODEHASH"; "SLOAD"; "TLOAD"]`
-  >- (irule sym_step_context_load_sim >> simp[]) >>
-  Cases_on `MEM name ["SSTORE"; "TSTORE"]`
-  >- (irule sym_step_store_sim >> simp[]) >>
-  Cases_on `MEM name ["POP"; "JUMPDEST"; "STOP"; "INVALID"]`
-  >- (irule sym_step_plain_control_sim >> simp[]) >>
-  Cases_on `MEM name ["RETURN"; "REVERT"]`
-  >- (irule sym_step_memory_terminal_sim >> simp[]) >>
-  Cases_on `MEM name ["MSTORE"; "MSTORE8"]`
-  >- (irule sym_step_memory_store_sim >> simp[]) >>
-  Cases_on `MEM name ["CREATE"; "CREATE2"]`
-  >- (irule sym_step_create_sim >> simp[]) >>
-  Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
-    "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (qpat_x_assum `MEM name _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
-      simp[sym_step_call_sim, sym_step_staticcall_sim,
-        sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
-        sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
-        sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>
-  Cases_on `ALOOKUP log_table name`
-  >- (gvs[MEM] >> irule sym_step_concrete_good >> simp[] >> rpt strip_tac >>
-      simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
-      simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
-      simp[asm_step_extcall_def, asm_step_copy_def, asm_step_context_def] >>
-      simp[sym_lift_def, asm_sym_step_rel_def]) >>
-  irule sym_step_log_sim >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_concrete_sim_core >>
+  simp[asm_sym_rel_core_canonical, SF ETA_ss,
+       asm_sym_step_rel_core_canonical]
 QED
 
 (* ===== One step: the opcodes with label cases ===== *)
@@ -2061,17 +2080,29 @@ Proof
   >> (metis_tac[])
 QED
 
+Theorem sym_add_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_add p env ss)
+    (asm_step_op (build_offset_to_pc p) "ADD" cs)
+Proof
+  rpt gen_tac >> disch_tac >>
+  qspecl_then [`lo`, `code_ok`] mp_tac sym_add_sim_core_from_concrete >>
+  impl_tac
+  >- (conj_tac >- (simp[] >> metis_tac[]) >>
+      qspecl_then [`lo`, `code_ok`] irule sym_step_concrete_sim_core >>
+      simp[dup_table_def, swap_table_def] >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem sym_add_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_add p env ss)
     (asm_step_op (build_offset_to_pc p) "ADD" cs)
 Proof
-  strip_tac >>
   qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
-    mp_tac sym_add_sim_core_from_concrete >>
-  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
-  disch_then irule >> irule sym_step_concrete_sim >>
-  simp[dup_table_def, swap_table_def]
+    mp_tac sym_add_sim_core >>
+  simp[asm_sym_rel_core_canonical, SF ETA_ss,
+       asm_sym_step_rel_core_canonical]
 QED
 
 Theorem mstore_labels_lookup:
@@ -2217,17 +2248,29 @@ Proof
   disch_then (irule o SPEC_ALL) >> simp[] >> metis_tac[]
 QED
 
+Theorem sym_mstore_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_mstore ss)
+    (asm_step_op (build_offset_to_pc p) "MSTORE" cs)
+Proof
+  rpt gen_tac >> disch_tac >>
+  qspecl_then [`lo`, `code_ok`] mp_tac sym_mstore_sim_core_from_concrete >>
+  impl_tac
+  >- (conj_tac >- (simp[] >> metis_tac[]) >>
+      qspecl_then [`lo`, `code_ok`] irule sym_step_concrete_sim_core >>
+      simp[dup_table_def, swap_table_def] >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem sym_mstore_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_mstore ss)
     (asm_step_op (build_offset_to_pc p) "MSTORE" cs)
 Proof
-  strip_tac >>
   qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
-    mp_tac sym_mstore_sim_core_from_concrete >>
-  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
-  disch_then irule >> irule sym_step_concrete_sim >>
-  simp[dup_table_def, swap_table_def]
+    mp_tac sym_mstore_sim_core >>
+  simp[asm_sym_rel_core_canonical, SF ETA_ss,
+       asm_sym_step_rel_core_canonical]
 QED
 
 Theorem mem_label_at_bytes[local]:
@@ -2340,17 +2383,29 @@ Proof
   gvs[asm_state_component_equality]
 QED
 
+Theorem sym_mload_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_mload ss)
+    (asm_step_op (build_offset_to_pc p) "MLOAD" cs)
+Proof
+  rpt gen_tac >> disch_tac >>
+  qspecl_then [`lo`, `code_ok`] mp_tac sym_mload_sim_core_from_concrete >>
+  impl_tac
+  >- (conj_tac >- (simp[] >> metis_tac[]) >>
+      qspecl_then [`lo`, `code_ok`] irule sym_step_concrete_sim_core >>
+      simp[dup_table_def, swap_table_def] >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem sym_mload_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_mload ss)
     (asm_step_op (build_offset_to_pc p) "MLOAD" cs)
 Proof
-  strip_tac >>
   qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
-    mp_tac sym_mload_sim_core_from_concrete >>
-  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
-  disch_then irule >> irule sym_step_concrete_sim >>
-  simp[dup_table_def, swap_table_def]
+    mp_tac sym_mload_sim_core >>
+  simp[asm_sym_rel_core_canonical, SF ETA_ss,
+       asm_sym_step_rel_core_canonical]
 QED
 
 (* asm_static_wf bounds label offsets (asm_encoding_wf), so a data label's
