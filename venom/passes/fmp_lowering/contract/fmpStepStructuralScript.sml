@@ -1,7 +1,8 @@
 (* Checked block and entry structure transport for FMP lowering. *)
 Theory fmpStepStructural
 Ancestors
-  fmpStepLayout fmpStepReclaim fmpStepRewrite fmpStepRestrictionClosure
+  fmpStepLayout fmpStepReclaim fmpStepRewrite
+  fmpStepRewriteSupply fmpStepRewriteOrigin fmpStepRestrictionClosure
   fmpLowerDefs fmpLowerProps venomExecProofs venomWf venomInst o1PassContract
   fmpStepPredicateTransport unitShapeDefs
   fmpStepList fmpStepChunk

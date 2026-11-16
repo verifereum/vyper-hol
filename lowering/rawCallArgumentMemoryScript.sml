@@ -41,21 +41,15 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   drule raw_call_outcome_normal >> strip_tac >>
-  irule raw_call_value_outcome_bind >> goal_assum (drule_at Any) >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ _
+    (\H res ee t. _ /\ ~t.vs_halted) _`
+    (fn outcome => irule raw_call_value_outcome_bind >>
+      irule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`) outcome) >>
   rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- (rpt strip_tac >> Cases_on `rr` >> gvs[expr_exit_def] >> metis_tac[])
-  >- (rpt strip_tac >> fs[] >> metis_tac[])
-  >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  qpat_x_assum `!gs v ee t. _ ==> gas_outcome _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`gs`,`v`,`ee`,`t`] mp_tac) >>
-  (impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >>
-     qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
-       (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
-     simp[])) >>
-  disch_then ACCEPT_TAC
+  >- (rpt strip_tac >> fs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem raw_call_data_prefix_code[local]:
@@ -171,20 +165,14 @@ Proof
   drule_all raw_call_kwargs_word_args >> strip_tac >>
   drule_all raw_call_kwargs_sim_mem >>
   disch_then (mp_tac o MATCH_MP raw_call_outcome_normal) >> disch_tac >>
-  irule raw_call_values_outcome_bind >> goal_assum (drule_at Any) >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ _
+    (\H res ee t. _ /\ ~t.vs_halted) _`
+    (fn outcome => irule raw_call_values_outcome_bind >>
+      irule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`) outcome) >>
   rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def] >>
       metis_tac[wb_args_exit_def])
-  >- (rpt strip_tac >> fs[] >> metis_tac[])
-  >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  qpat_x_assum `!gs vs ee t xs. _ ==> gas_outcome _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`gs`,`v`,`ee`,`t`,`xs`] mp_tac) >>
-  (impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (simp[] >> NO_TAC) >>
-     rpt strip_tac >>
-     first_assum (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
-     gvs[])) >>
-  disch_then ACCEPT_TAC
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[]
 QED
