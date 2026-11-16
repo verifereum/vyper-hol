@@ -57,7 +57,7 @@ Proof
   rw[expr_can_mutate_def, gas_shadow_expr_def, pairTheory.PAIR_MAP_THM]
 QED
 
-Theorem gas_shadow_compiles_ext_call_args[local]:
+Theorem gas_shadow_compiles_ext_call_args:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
   !es kw_es tys.
