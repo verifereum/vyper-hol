@@ -312,3 +312,37 @@ Theorem calldata_dispatch_fallback_examples:
 Proof
   EVAL_TAC
 QED
+
+Theorem calldata_dispatch_none_cases:
+  !tops cd.
+    calldata_dispatch tops cd = NONE ==>
+    (~EXISTS is_default_decl tops /\
+      (LENGTH cd < 4 \/
+       FIND (\(name,tys).
+         abi_method_id (type_env tops) name tys = cd_selector cd)
+         (abi_external_signatures tops) = NONE)) \/
+    (?name tys.
+      4 <= LENGTH cd /\
+      FIND (\(name,tys).
+        abi_method_id (type_env tops) name tys = cd_selector cd)
+        (abi_external_signatures tops) = SOME (name,tys) /\
+      (OPT_MMAP (evaluate_type (type_env tops)) tys = NONE \/
+       ?tvs.
+         OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs /\
+         (LENGTH cd < 4 + SUM (MAP tv_abi_size tvs) \/
+          (4 + SUM (MAP tv_abi_size tvs) <= LENGTH cd /\
+           calldata_decode_args cd tvs 0 = NONE))))
+Proof
+  rpt gen_tac >>
+  simp[calldata_dispatch_def] >>
+  Cases_on `LENGTH cd < 4`
+  >- simp[] >>
+  simp[] >>
+  Cases_on `FIND (\(name,tys).
+    abi_method_id (type_env tops) name tys = cd_selector cd)
+    (abi_external_signatures tops)`
+  >- simp[] >>
+  rename1 `SOME hit` >> PairCases_on `hit` >>
+  simp[AllCaseEqs(), NOT_LESS]
+QED
+
