@@ -2414,8 +2414,46 @@ Proof
     FOLDR (dft_exec_cons (fuel-depths (LENGTH cuts - 1)) C7) OK
       (TAKE (qs (LENGTH cuts - 1)) (xss (LENGTH cuts - 1)))
       (bes (LENGTH cuts - 1) with vs_gas_readings := FLAT kgss ++ tail) = OK u` by
-    (irule dft_packet_rooted_row_alignment >>
-     FAIL_TAC "rooted application") >>
+    (irule (dft_packet_rooted_row_alignment |> Q.INST_TYPE
+       [`:'b` |-> `:ir_function`, `:'c` |-> `:num`,
+        `:'d` |-> `:exec_result option`, `:'e` |-> `:bytes32 list option`,
+        `:'f` |-> `:basic_block`, `:'g` |-> `:num list`,
+        `:'h` |-> `:num`, `:'i` |-> `:num`, `:'j` |-> `:num`,
+        `:'k` |-> `:exec_result`, `:'l` |-> `:bool`, `:'m` |-> `:bytes32 list option`]) >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- (qpat_assum `row_eval = _` (fn th => rewrite_tac[th]) >>
+       POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`C8`,`work`,`acts`,`blocks`,`call_setup C7`,`events`,`levels`,
+       `plan_eval fuel C7`,`pss`,`root_entry`,`rooted_eval fuel C7`,`rows`,`sps`,`yss`] >>
+     conj_tac >- (qpat_assum `call_setup = _` (fn th => rewrite_tac[th]) >>
+       POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     conj_tac >- (qpat_assum `plan_eval = _` (fn th => rewrite_tac[th]) >>
+       POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     conj_tac >- (qpat_assum `rooted_eval = _` (fn th => rewrite_tac[th]) >>
+       POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     conj_tac >-
+       (rpt gen_tac >> strip_tac >>
+        qpat_assum `!i ai ds ei qi zi. _ ==> ?tf inc res nrest. _`
+          (drule_all_then mp_tac) >>
+        POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+     reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     gen_tac >> strip_tac >>
+     qpat_assum `!i. i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
+     reverse conj_tac >-
+       (strip_tac >>
+        qpat_x_assum `SUC i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
+        `child_entry = HD (entries (SUC i))` by
+          (qpat_assum `!i. SUC i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
+           qpat_x_assum `FLOOKUP acts _ = SOME (csf,_)` mp_tac >>
+           qpat_x_assum `FLOOKUP acts _ = SOME (sfs (SUC i),_)` mp_tac >>
+           POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[]) >>
+        qexistsl_tac [`b0`,`nm'`,`ops`,`args`,`ctf`] >>
+        FAIL_TAC "child witnesses") >>
+     qunabbrev_tac `segments` >> rewrite_tac[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   FAIL_TAC "rooted result"
 QED
 
