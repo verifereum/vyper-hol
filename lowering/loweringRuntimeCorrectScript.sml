@@ -41,7 +41,10 @@ Ancestors
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
   fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
-  acceptedContextPhi vyperLoweringCorrect
+  acceptedContextPhi vyperLoweringCorrect selectedExternalTraceBody
+  compileEnv venomInst venomExecSemantics venomState gasCount gasEvents
+  memSafeRun unitTransformDefs ptrSafeRun ptrDiscipline contextCodegenRel
+  fragGasPathPtr list vyperContext
 
 val _ = Parse.hide "body";
 
@@ -89,6 +92,7 @@ QED
 
 (* The selected call at gas observations gx, from the body's run at gx:
    its observations are the body's, and its result is the body's. *)
+
 Theorem selected_call_trace_body[local]:
   !tops am tx ret mut args fbody env os gx es0 res ee.
     source_deployment_rel tops am tx /\
@@ -123,31 +127,20 @@ Theorem selected_call_trace_body[local]:
                                  am.exports am.layouts ee))) /\
       (!e. res = INR e /\ (!v. e <> ReturnException v) /\
            e <> HaltException ==>
-         r = INR e /\ am' = am /\ rqs = ee.requests)
+         r = INR e /\ am' = am /\ rqs = ee.requests) /\
+      (res = INR HaltException ==>
+         r = INR HaltException /\ rqs = ee.requests /\
+         am' = finalize_pending_deletions
+                 (abstract_machine_from_state am.sources am.exports
+                    am.layouts ee))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `LENGTH tx.args = LENGTH args` by
-    (drule bind_arguments_length >> simp[]) >>
-  drule_all call_external_selected_body_trace >> strip_tac >>
-  qexistsl_tac [`r`, `am'`, `rqs`] >> simp[] >>
-  drule call_external_trace_result >> strip_tac >>
-  drule_all call_external_selected_body_gas >>
-  disch_then (qspec_then `gx` assume_tac) >>
-  `es0.scopes = [env]` by
-    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
-  `(es0 with gas_obs := gx).scopes = [env]` by simp[] >>
-  drule_all call_external_body_run >>
-  disch_then (qspecl_then [`am`, `mut`, `type_env tops`, `ret`]
-                strip_assume_tac) >>
-  rpt conj_tac
-  >- (strip_tac >> gvs[])
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `!v. res = INR (ReturnException v) ==> _`
-        (qspec_then `v` mp_tac) >>
-      gvs[] >> strip_tac >> gvs[] >> BasicProvers.EVERY_CASE_TAC >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!e. res = INR e /\ _ ==> _` (qspec_then `e` mp_tac) >>
-  simp[] >> strip_tac >> Cases_on `e` >> gvs[]
+  rpt strip_tac >> drule_all selected_external_trace_body_result >>
+  disch_then SUBST1_TAC >>
+  Cases_on `res` >> simp[] >>
+  rename1 `eval_stmts _ _ _ = (INR exc, ee)` >>
+  Cases_on `exc` >> simp[] >>
+  Cases_on `evaluate_type (type_env tops) ret` >> simp[] >>
+  rename1 `safe_cast tv v` >> Cases_on `safe_cast tv v` >> simp[]
 QED
 
 (* The selected call is the same at two gas observations at which the body
@@ -167,6 +160,7 @@ Proof
   gvs[abstract_machine_from_state_def] >> BasicProvers.EVERY_CASE_TAC >> gvs[]
 QED
 *)
+
 Theorem selected_call_trace_gas_cong[local]:
   !tops am tx ret mut args fbody env os es0 g1 g2 res ee o1 o2.
     source_deployment_rel tops am tx /\
@@ -185,7 +179,11 @@ Theorem selected_call_trace_gas_cong[local]:
     call_external_trace (SOME os) g1 am tx =
     call_external_trace (SOME os) g2 am tx
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all selected_external_trace_body_result >> strip_tac >>
+  qpat_x_assum `eval_stmts _ _ (es0 with gas_obs := g2) = _` kall_tac >>
+  drule_all selected_external_trace_body_result >>
+  simp[abstract_machine_from_state_def]
 QED
 
 (* The call's fourth component is its storage observations. *)
@@ -214,6 +212,7 @@ Proof
   rw[get_storage_def, accounts_after_transfer_def, LET_THM,
      vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
      combinTheory.APPLY_UPDATE_THM]
+  >> (gvs[])
 QED
 
 (* So the body starts on the initial storage. *)
@@ -292,13 +291,9 @@ Proof
              imm_taint_def, ret_taint_def, halt_state_def,
              stor_taint_ok_def, cx_dead_def]) >>
       irule (cj 3 gas_origin_ptr_path_rules) >>
-      simp[exit_result_def, gas_origin_ptr_edge_def] >> conj_tac
-      >- (simp[gas_origin_edge_def] >>
-          qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
-          simp[]) >>
-      simp[gas_path_ptr_edge_def] >>
-      qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
-      simp[]) >>
+      simp[fragExecTheory.exit_result_def, gas_origin_ptr_edge_def] >> conj_tac
+      >- simp[gas_origin_edge_def, fragExecTheory.exit_result_def] >>
+      simp[gas_path_ptr_edge_def, fragExecTheory.exit_result_def]) >>
   simp[halt_state_def]
 QED
 
@@ -330,7 +325,8 @@ Proof
   impl_tac
   >- simp[initial_evaluation_context_def, vyperStateTheory.return_def] >>
   strip_tac >>
-  simp[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
+  gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
+      abstract_machine_from_state_def, finalize_pending_deletions_def]
 QED
 
 (* ===== S1 ===== *)
@@ -368,7 +364,9 @@ Proof
     (drule bind_arguments_length >> simp[]) >>
   qpat_x_assum `runtime_entry_endpoint _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [runtime_entry_endpoint_def]) >>
-  drule_all external_body_frame >> strip_tac >>
+  gvs[] >>
+  drule_all (INST_TYPE [alpha |-> ``:expr``] external_body_frame) >>
+  strip_tac >>
   `rt = if ret = NoneT then NONE else SOME ret` by
     gvs[package_external_fn_def, set_external_package_target_def] >>
   drule guarded_body_code >> strip_tac >>
