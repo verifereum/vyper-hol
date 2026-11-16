@@ -38,6 +38,7 @@ Ancestors
   o1PipelineRequests
   (* O1: joint simulation, abort requests and memory for static frames *)
   o1StaticPipelineCorrect
+  o1PipelineMemoryLoweredAbort
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
