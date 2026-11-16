@@ -14,6 +14,14 @@ Ancestors
   vyperInterpreter vyperCallMetadata vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
   list pair
 
+Theorem gas_readings_rel_mono:
+  !readings P Q.
+    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
+    gas_readings_rel readings Q T
+Proof
+  rw[gas_readings_rel_def] >> metis_tac[]
+QED
+
 (* ===== Actual EVM run, including exempt source failures ===== *)
 
 Theorem run_call_total:
