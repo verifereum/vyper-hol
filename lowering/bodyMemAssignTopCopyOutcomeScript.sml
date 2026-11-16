@@ -27,11 +27,6 @@ Theorem compile_assign_storage_copy_stmt_frag_mem:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-       declared_storage_region cx mid' n' subs' = SOME (tr, k', tv') /\
-       (k', tv') <> (n2w slot, tvt) ==>
-       ranges_disjoint slot (type_slot_size tvt) (w2n k') (type_slot_size tv')) /\
     (!gs v es1.
        (do result <- eval_expr cx e; read_result cx result od)
          (es with gas_obs := gs) = (INL v, es1) ==> value_has_type tvt v) /\
@@ -68,6 +63,8 @@ Proof
   disch_then (qspec_then `e` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th])) >>
   drule forced_then_admissible >> strip_tac >>
+  reverse (Cases_on `slot + type_slot_size tvt <= dimword (:256)`)
+  >- suspend "bad_slot" >>
   `~block_is_terminated sb` by
     (irule assign_storage_copy_suffix_open >> goal_assum (drule_at Any) >> simp[]) >>
   `sa.cs_next_var <= sb.cs_next_var` by
@@ -297,6 +294,76 @@ Resume compile_assign_storage_copy_stmt_frag_mem[static_one]:
        memSafeRunTheory.inst_dload_in_section_def,
        venomExecSemanticsTheory.exec_read1_def,
        stepInstBaseLib.simp_opcode_clause ``MLOAD``] >> fs[]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[bad_slot]:
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  `!v. storage_trace_frame
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v))` by
+    (gen_tac >>
+     irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_event,
+          vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[])
+  >- suspend "bad_slot_summary" >>
+  rename1 `gas_exempt_cert T _ _ _ _ marks (err,ee) (leaf,finish')` >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[bad_slot_summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
+  rename1 `gas_marked_exec T _ _ _ marks res es_end r` >>
+  qexists_tac `marks` >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+   >- (disj1_tac >>
+       irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
+       metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix])) >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]
+  >- suspend "bad_slot_success" >>
+  suspend "bad_slot_exception"
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[bad_slot_success]:
+  fs[] >>
+  `?v. res = INL v` by metis_tac[] >>
+  pop_assum strip_assume_tac >> gvs[] >> disj1_tac >>
+  irule (SRULE [] (Q.INST [`right` |-> `[]`]
+    gasStorageTheory.gas_bad_storage_at_bind_right)) >>
+  goal_assum (drule_at Any) >>
+  rewrite_tac[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
+  simp[ignore_bind_def, bind_def, record_storage_event_def, return_def] >>
+  Cases_on `cx.txn.is_static` >> simp[write_storage_slot_eq] >>
+  Cases_on `encode_value tvt v` >> simp[] >> Cases_on `tr` >>
+  fs[vyperStorageFootprintTheory.storage_trace_domain_def,
+     vyperStorageFootprintTheory.valid_horizon_def,
+     vyperStorageFootprintTheory.storage_observations_ok_def,
+     vyperStorageFootprintTheory.storage_roots_fit_def,
+     EVERY_APPEND, set_storage_def]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[bad_slot_exception]:
+  fs[] >>
+  `expr_exit res r` by metis_tac[] >>
+  Cases_on `res` >- fs[expr_exit_def] >> rename1 `INR ex` >>
+  disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >>
+  conj_tac
+  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
+      first_assum ACCEPT_TAC) >>
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
 QED
 
 Finalise compile_assign_storage_copy_stmt_frag_mem
