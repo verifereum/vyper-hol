@@ -2,8 +2,9 @@
 Theory bodyFullRawCallHeader
 Ancestors
   bodyFullRawCallHeaderSteps bodyFullRawCallHeaderView bodyFullGhostFrame
-  exprSimHash exprLoweringProps fragGasSeqPtr bodyBinopFragMemory
-  bodyMemoryDefs bodyPtrDefs ghostPcTransportPtr ptrSafetyTransport
+  exprSimHash exprSimHashBoundary exprSimProps exprLoweringProps
+  fragGasSeqPtr bodyBinopFragMemory
+  bodyMemoryDefs bodyPtrDefs loweringPosts ghostPcTransportPtr ptrSafetyTransport
   loweringStateRelDefs venomState venomInst venomExecSemantics
   ptrDiscipline words list finite_map emitHelper compileEnv ASCIInumbers
   fragExec fragExecMem unitTransformDefs contextCodegenRel codegenRel memSafeRun
@@ -189,24 +190,46 @@ Resume raw_call_header_joint[history]:
   `alloca_history fn
     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts s2 s4))` by
     (irule alloca_history_no_alloca_slice >>
-     goal_assum (drule_at Any) >> simp[mk_inst_def] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[mk_inst_def] >>
+     qexists_tac `rest` >> gvs[mk_inst_def]) >>
   gvs[]
 QED
 
 Resume raw_call_header_joint[invariants]:
-  cheat
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (simp[stmt_state_rel_inst_idx] >>
+      irule hash_readonly_state_rel >> goal_assum (drule_at Any) >>
+      qexists_tac `s2` >> simp[lookup_var_def]) >>
+  irule ghost_inv_at_exterior_frame >> goal_assum (drule_at Any) >>
+  qexists_tac `s2` >> simp[lookup_var_def]
 QED
 
 Resume raw_call_header_joint[oldghost]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!z. not_fresh_at sa z ==> not_fresh_at s2 z` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  gvs[ghost_kept_at_def] >> metis_tac[]
 QED
 
 Resume raw_call_header_joint[wb]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!z. not_fresh_at sa z ==> not_fresh_at s2 z` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  fs[wb_frame_def, lookup_var_def] >> conj_tac
+  >- (first_assum MATCH_ACCEPT_TAC) >>
+  irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Resume raw_call_header_joint[return]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!z. not_fresh_at sa z ==> not_fresh_at s2 z` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  conj_tac >> irule return_buf_frame_frame >>
+  goal_assum (drule_at Any) >> simp[lookup_var_def] >>
+  rpt strip_tac >> rename1 `not_fresh_at sa z` >>
+  `not_fresh_at s2 z` by metis_tac[] >>
+  qpat_x_assum `!z. not_fresh_at s2 z ==> FLOOKUP t.vs_vars z = _`
+    (drule_then SUBST1_TAC) >> simp[]
 QED
 
 Finalise raw_call_header_joint
