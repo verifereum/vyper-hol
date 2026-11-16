@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinEnvMethodIdCompose
 Ancestors
   bodyFullLiteralBuffer bodyFullExprGeneric bodyFullPreds bodyFullGhostFrame
-  bodyFullUnwrapRun
+  bodyFullUnwrapRun bodyFullHashKeccakFixed
   bodySimFull exprSimMemDefs fragGasOriginPtr fragGasSeqPtr ptrDiscipline venomState vyperStorageFootprint
   exprSimPrecompiles exprSimVVFrame loweringStateRelDefs exprSimWordArgs
   gasOutcomeFullCompose exprSimHash exprSimSource exprSimProps exprLoweringProps
@@ -18,7 +18,7 @@ Theorem method_id_literal_dynamic_sim_full_from_endpoint:
     compile_bytelike_literal (TAKE 4 (Keccak_256_w64 bs))
       (LENGTH (TAKE 4 (Keccak_256_w64 bs))) sa = (buf,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -166,7 +166,12 @@ Proof
      simp[] >> conj_tac
      >- gvs[stmt_state_rel_def, state_rel_def] >>
      fs[EVERY_MEM]) >>
-  simp[] >> rpt conj_tac
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[expr_post_def] >> strip_tac >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  simp[exprSimDefsTheory.halt_exit_def] >> rpt conj_tac
   >~ [`expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`]
   >- (qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
