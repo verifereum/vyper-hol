@@ -41,8 +41,9 @@ Proof
        (update_var tmp (mload (w2n a) s) s) tn)
      (mk_inst (id+1) (if tr then TSTORE else SSTORE) [dst;Var tmp] [])
      (update_var tmp (mload (w2n a) s) s with vs_inst_idx := SUC s.vs_inst_idx)` by
-    ((irule assign_base_ptr_inst_ok_storage_word >>
-     simp[allocas_below_fmp_def, update_var_def] >> Cases_on `tr` >> simp[] >> (gvs[allocas_below_fmp_def, update_var_def, assign_base_ptr_inst_ok_storage_word]))) >>
+    (irule assign_base_ptr_inst_ok_storage_word >>
+     Cases_on `tr` >> gvs[allocas_below_fmp_def, update_var_def] >>
+     metis_tac[]) >>
   Cases_on `tr` >>
   gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, exec_write2_def, eval_operand_def, update_var_def,
