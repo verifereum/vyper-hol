@@ -23,7 +23,7 @@ Theorem sha_fixed_success_frame_at:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   LENGTH bs = m /\ TAKE m (word_to_bytes_be v) = bs /\

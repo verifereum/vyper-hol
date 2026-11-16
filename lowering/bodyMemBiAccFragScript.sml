@@ -121,11 +121,17 @@ Proof
       u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next /\
       (?out. c = Var out /\ not_fresh_at s1 out) /\
       u.vs_memory = s0.vs_memory` by
-    (drule emit_acc_path_frame_mem >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-     disch_then (qspec_then `r` mp_tac) >> simp[] >>
-     (impl_tac >- (qpat_x_assum `!H x ss n out. _ ==> step_inst_base _ _ = _` irule >>
-                   qexists_tac `H0` >> simp[])) >>
+    (mp_tac (Q.INST
+       [`H` |-> `H0`, `opc` |-> `opc`, `args` |-> `[x]`,
+        `sa` |-> `sa`, `op` |-> `c`, `sb` |-> `s1`, `w` |-> `r`,
+        `s0` |-> `s0`, `ctx` |-> `ctx`, `func` |-> `func`,
+        `cenv` |-> `cenv`, `cx` |-> `cx`, `es` |-> `es0`]
+       (INST_TYPE [alpha |-> ``:256``] (SPEC_ALL emit_acc_path_frame_mem))) >>
+     (impl_tac >- (asm_rewrite_tac[] >>
+                   qpat_x_assum `!H x ss n out. _ ==> step_inst_base _ _ = _`
+                     (qspecl_then [`H0`, `x`, `s0`, `sa.cs_next_id`,
+                       `STRING #"%" (toString sa.cs_next_var)`] mp_tac) >>
+                   asm_rewrite_tac[])) >>
      strip_tac >>
      `not_local_ptr cenv es0.scopes (STRING #"%" (toString sa.cs_next_var))` by
        (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
@@ -168,11 +174,12 @@ Theorem unop_frag_mem_read:
     unop_frag_mem ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `opc = _` SUBST_ALL_TAC >>
   once_rewrite_tac[GSYM comp_bind_comp_return] >>
   irule unop_frag_mem_read_then >> simp[straight_fresh_return] >>
   qexists_tac `r` >>
   simp[comp_return_def, emitted_insts_refl, run_inst_seq_def] >>
-  qexists_tac `r` >> simp[]
+  qexists_tac `r` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_acc_frag_mem:
