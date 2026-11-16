@@ -419,25 +419,52 @@ Resume raw_call_tuple_suffix_prepared[copy_premises]:
   `!mem. mem_agree_outside tn2.t_mem u2.vs_memory mem ==>
       val_in_memory (BaseTV (BytesT (Dynamic n)))
         (BytesV (TAKE n s.vs_returndata)) (w2n w) mem` by
-    (qunabbrev_tac `tn2` >> rpt strip_tac >>
-     irule bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier >>
-     simp[] >>
-     conj_tac >-
+    (`val_wf (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n s.vs_returndata))` by
        (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
         irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `n` >>
         simp[listTheory.LENGTH_TAKE_EQ, exprSimPropsTheory.le_word_size_mul]) >>
-     rpt strip_tac >>
-     `w2n w + (32*((n+31) DIV 32)+32) <= u.vs_alloca_next` by
-       (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
-          (strip_assume_tac o PURE_REWRITE_RULE [stmt_state_rel_def, alloca_inv_def,
-              alloca_next_valid_def]) >>
-        qpat_x_assum `!aid base sz. FLOOKUP u.vs_allocas aid = SOME (base,sz) ==> _`
-          (qspecl_then [`alloc.inst_id`,`w2n w`,`32*((n+31) DIV 32)+32`] mp_tac) >>
-        simp[]) >>
-     simp[loweringPostsTheory.val_footprint_def, listTheory.LENGTH_TAKE_EQ] >>
-     mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >>
-     simp[vfmConstantsTheory.word_size_def] >> decide_tac) >>
-  FAIL_TAC "copy premises"
+     `!i. w2n w <= i /\ i < w2n w + val_footprint
+          (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n s.vs_returndata)) ==>
+          i < u.vs_alloca_next` by
+       (rpt strip_tac >>
+        `w2n w + (32*((n+31) DIV 32)+32) <= u.vs_alloca_next` by
+          (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+             (strip_assume_tac o PURE_REWRITE_RULE [stmt_state_rel_def, alloca_inv_def,
+                 alloca_next_valid_def]) >>
+           qpat_x_assum `!aid base sz. FLOOKUP u.vs_allocas aid = SOME (base,sz) ==> _`
+             (qspecl_then [`alloc.inst_id`,`w2n w`,`32*((n+31) DIV 32)+32`] mp_tac) >>
+           simp[]) >>
+        fs[loweringPostsTheory.val_footprint_def, listTheory.LENGTH_TAKE_EQ] >>
+        mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >>
+        simp[vfmConstantsTheory.word_size_def] >> decide_tac) >>
+     qunabbrev_tac `tn2` >>
+     qpat_assum `step_inst_base (mk_inst _ ALLOCA _ _) u = OK u2`
+       (mp_then (Pat `step_inst_base _ _ = _`) mp_tac
+         bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier) >>
+     disch_then (qspecl_then [`tn1`, `BaseTV (BytesT (Dynamic n))`,
+       `BytesV (TAKE n s.vs_returndata)`, `w2n w`] mp_tac) >> simp[]) >>
+  suspend "copy_separation"
+QED
+
+Resume raw_call_tuple_suffix_prepared[copy_separation]:
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by
+    fs[ptrDisciplineTheory.allocas_from_def] >>
+  `allocas_from lo u2` by
+    (irule frameActivationSeparationTheory.allocas_from_step >>
+     qexistsl_tac [`u`,`0`,`ctx`,
+       `mk_inst s4.cs_next_id ALLOCA [Lit (n2w (32*((n+31) DIV 32)+64))] [out]`] >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (qpat_assum `STRING #"%" _ = out` (SUBST1_TAC o SYM) >>
+     irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
+     qexists_tac `s4` >> simp[]) >>
+  asm "separation" (fn sep =>
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es u2`
+      (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac sep)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (qspecl_then [`out`,`sf`,`es`,`u2`,`lo`] mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >> strip_tac >>
+  FAIL_TAC "separation at tuple"
 QED
 
 Finalise raw_call_tuple_suffix_prepared
