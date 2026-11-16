@@ -38,7 +38,9 @@ Theorem snapshot_alloc_source_mem:
       pure_frame cenv func ee sm s u /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
-      u.vs_inst_idx = LENGTH mid.cs_current_insts
+      u.vs_inst_idx = LENGTH mid.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
@@ -49,6 +51,7 @@ Proof
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all ifexp_alloc_preserves_post >> strip_tac >>
+  imp_res_tac exprSimUnwrapTheory.alloc_buffer_fields >>
   gvs[] >>
   qexistsl_tac [`q with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
   `!ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9 n9.
