@@ -4785,7 +4785,8 @@ Proof
   simp[calldata_typed_args_post_gas_obs, calldata_vv_post_gas_obs] >>
   strip_tac >>
   `res <> INR HaltException` by
-    (drule_all calldata_call_source_outcome >> strip_tac >> gvs[AllCaseEqs()]) >>
+    (drule_all calldata_call_source_outcome >> rpt (pop_assum kall_tac) >>
+     strip_tac >> gvs[AllCaseEqs()]) >>
   irule calldata_tail_summary >> simp[] >>
   qexistsl_tac [`fin`, `res`, `sb`, `s2`] >> simp[] >>
   drule_then irule frag_path_conseq >> simp[halt_exit_def] >>
