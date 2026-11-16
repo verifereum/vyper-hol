@@ -6,7 +6,8 @@ Ancestors
   exprSimAbiEncodeNonwordCase exprSimAbiEncodeRuntimeInputs
   exprSimAbiEncodeNonwordResources exprSimAbiEncodeCapacity
   exprSimAbiEncodeNonwordResult bodyFullAbiEncodeReadResources
-  exprSimIfExpWidenedPhysicalType
+  exprSimIfExpWidenedPhysicalType bodyFullAbiEncodeNonwordWindow
+  abiEncodeMaterialize valueCopyBytes
   exprSimHyps exprSimSource gasOutcomeFullCompose gasShadowCompile
   gasShadowCompileStmtHelpers exprLowering compileEnv
 
@@ -119,5 +120,22 @@ Proof
      type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= s.vs_alloca_next` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
   drule_all abi_encode_arg_positive_resources >> simp[] >> strip_tac >>
-  FAIL_TAC "positive and zero capacity"
+  `value_runtime_typed env (post_value_type ce e) v` by
+    (irule memory_rhs_read_post_typed >>
+     qexistsl_tac [`cx`,
+       `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+       `ee with gas_obs := []`] >> simp[] >>
+     qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[]) >>
+  `value_has_type ptv v` by
+    (gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+       exprSimHypsDefsTheory.expr_body_pre_def,
+       exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  `val_footprint tv v = val_footprint ptv v` by
+    (drule expr_body_pre_lowered_fits >> strip_tac >>
+     drule_all materialize_post_lowered_classify >> strip_tac
+     >- gvs[] >>
+     metis_tac[bytestring_val_footprint_eq]) >>
+  FAIL_TAC "footprints aligned"
 QED
