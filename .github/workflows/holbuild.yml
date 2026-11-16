@@ -124,6 +124,10 @@ jobs:
 
       - uses: ./.github/actions/setup-holbuild-project
 
+      - name: Check native runtime primitives
+        working-directory: bytecode/native
+        run: poly --script compilerNativeRuntimeTest.sml
+
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
