@@ -359,8 +359,21 @@ Resume abi_encode_arg_step_full[capture_read]:
        (drule_then strip_assume_tac) >>
      gvs[] >> qexists_tac `v` >> simp[] >> rpt strip_tac >> gvs[] >>
      first_x_assum drule >> simp[]) >>
-  drule_all abi_encode_capture_endpoint_origin >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
+  qpat_assum `ptr_vv_ok cx (post_value_type ce e) tv vv ee G1 tn1 s`
+    (mp_then (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`) mp_tac
+      abi_encode_capture_endpoint_origin) >>
+  disch_then (drule_at (Pos hd)) >>
+  disch_then (drule_at (Pos hd)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `storage_trace_domain _ _ _`)) >>
+  disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `val_wf _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ (post_value_type _ _) = _`)) >>
+  disch_then (qspec_then `rty` mp_tac) >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`d`,`PG`,`DF`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`Gt'`,`ee`,`INL v`,`t`,`tt`] >>
   conj_tac >- metis_tac[read_result_gas_obs] >>
