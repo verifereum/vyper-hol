@@ -171,3 +171,58 @@ Proof
   first_x_assum irule >> simp[] >>
   fs[rich_listTheory.DROP_CONS_EL]
 QED
+
+(* PHI entry exposes exactly the recorder starting after the PHI prefix. *)
+Theorem gas_events_blocks_current_entry:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK p ==>
+  gas_events_blocks (SUC n) ctx func s =
+    (case lookup_block
+       (p with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+       func.fn_blocks of
+       NONE => []
+     | SOME b =>
+         gas_events_block n ctx func.fn_name b
+           (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) ++
+         (case exec_block n ctx b
+                 (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
+            OK u => if u.vs_halted then []
+                    else gas_events_blocks n ctx func u
+          | _ => []))
+Proof
+  strip_tac >>
+  drule venomExecProofsTheory.eval_phis_preserves_current_bb >> strip_tac >>
+  simp[Once gas_events_blocks_def]
+QED
+
+(* A raw jump may still point at a PHI. Direct stepping then records nothing,
+   so even that observation is a prefix of the entered-block recorder. *)
+Theorem gas_events_blocks_jump_prefix:
+  ?extra.
+    gas_events_blocks (SUC n) ctx func (jump_to lbl s) =
+    (case lookup_block (jump_to lbl s).vs_current_bb func.fn_blocks of
+       NONE => []
+     | SOME bb =>
+         gas_events_block n ctx func.fn_name bb (jump_to lbl s) ++
+         (case exec_block n ctx bb (jump_to lbl s) of
+            OK u => if u.vs_halted then []
+                    else gas_events_blocks n ctx func u
+          | _ => [])) ++ extra
+Proof
+  Cases_on `lookup_block lbl func.fn_blocks`
+  >- simp[Once gas_events_blocks_def, jump_to_def] >>
+  rename1 `lookup_block lbl func.fn_blocks = SOME bb` >>
+  Cases_on `bb.bb_instructions`
+  >- (qexists_tac `[]` >>
+      simp[Once gas_events_blocks_def, jump_to_def, eval_phis_def,
+           phi_prefix_length_def]) >>
+  rename1 `bb.bb_instructions = inst::rest` >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (simp[jump_to_def] >>
+      once_rewrite_tac[gas_events_block_def, exec_block_def] >>
+      simp[get_instruction_def, gas_events_step_def, step_inst_non_invoke,
+           step_inst_base_opcode_eqs]) >>
+  qexists_tac `[]` >>
+  simp[Once gas_events_blocks_def, jump_to_def, eval_phis_def,
+       phi_prefix_length_def]
+QED
