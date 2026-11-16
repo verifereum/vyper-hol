@@ -180,18 +180,19 @@ Proof
   metis_tac[entry_frame_plan_next_reloc]
 QED
 
-Theorem entry_frame_plan_ready:
-  entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+Theorem entry_frame_plan_ready_reloc:
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  code_labels_agree prog lo /\
   s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
   ?n ast1.
     0 < n /\
-    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    asm_steps lo (build_offset_to_pc prog)
       prog n ast = AsmOK ast1 /\
-    active_frame_plan rpolicy unit cpl prog fn s ast1 ra rest mem0
+    active_frame_plan_reloc lo rpolicy unit cpl prog fn s ast1 ra rest mem0
 Proof
   strip_tac >>
-  qpat_x_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_def]) >>
+  qpat_x_assum `entry_frame_plan_reloc _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_reloc_def]) >>
   `s.vs_inst_idx = k` by fs[] >>
   `s = entry_bind_pairs
     (entry_param_pairs entry (get_params (HD fn.fn_blocks).bb_instructions)) entry
@@ -214,85 +215,52 @@ Proof
      rewrite_tac[execute_plan_append, asm_block_at_append] >>
      rpt strip_tac >> fs[]) >>
   `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
-  qspecl_then [`unit.cu_context`, `cpl`, `SND (compute_label_offsets prog)`,
-    `build_offset_to_pc prog`, `prog`, `liveness_analyze fn`, `fn`,
-    `cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-      unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name`,
-    `cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context)`,
-    `r.sr_spill_base`, `lbl_ctr`,
-    `init_cleanup_plan_state
-      (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-        unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-      (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-      r.sr_spill_base lbl_ctr`, `param_ops`, `ps1`, `r`, `entry`, `ast`,
-    `ra`, `rest`, `s`] mp_tac entry_prefix_asm_exact >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  disch_then (qx_choose_then `ast1` strip_assume_tac) >>
-  mp_tac (Q.INST
-    [`fn` |-> `fn`, `liveness` |-> `liveness_analyze fn`,
-     `ch` |-> `cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-       unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name`,
-     `growth` |-> `cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context)`,
-     `spill_base` |-> `r.sr_spill_base`, `lbl_ctr` |-> `lbl_ctr`,
-     `ps0` |-> `init_cleanup_plan_state
-       (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-         unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-       (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-       r.sr_spill_base lbl_ctr`,
-     `ops` |-> `param_ops`, `ps1` |-> `ps1`]
-    (SPEC_ALL entry_plan_normalize)) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  strip_tac >>
+  `?ast1. asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan cpl.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) ast = AsmOK ast1 /\
+    ast1.as_pc = ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+    fn_frame_inv unit.cu_context cpl lo fn ra rest ast.as_memory ps1 s ast1 /\
+    create_safe_prefix lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan cpl.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) ast` by
+    (irule entry_prefix_asm_exact_reloc >>
+     simp[] >> metis_tac[LESS_EQ_REFL]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+     normalize_operand (dfg_build_function fn) [] at = at` by
+    metis_tac[entry_plan_normalize] >>
   drule_at (Pat `codegen_context_obligations _ _ _`) codegen_invoke_targets_retpc >>
-  disch_then (assume_tac o SIMP_RULE (srw_ss())
-    [ASSUME ``unit_shape_ok unit``]) >>
-  `!l. FLOOKUP s.vs_labels l =
-     OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)` by
-    (gvs[entry_bind_pairs_normal]) >>
+  simp[] >> strip_tac >>
+  `!l. FLOOKUP s.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)` by
+    gvs[entry_bind_pairs_normal] >>
   qexistsl_tac [`LENGTH (execute_plan cpl.cp_initial_fmp
     (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))`, `ast1`] >>
   conj_tac >- simp[execute_plan_def, exec_stack_op_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  simp[active_frame_plan_def] >>
-  qexistsl_tac [`i`, `r`, `liveness_analyze fn`, `dfg_build_function fn`,
-    `cfg_analyze fn`,
-    `cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-      unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name`,
-    `cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context)`,
-    `r.sr_spill_base`, `lbl_ctr`, `r.sr_plan`, `ps_end`, `HD fn.fn_blocks`,
-    `init_cleanup_plan_state
-      (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-        unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-      (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-      r.sr_spill_base lbl_ctr`,
-    `(init_cleanup_plan_state
-      (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-        unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-      (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-      r.sr_spill_base lbl_ctr).ps_cleanup_height`,
-    `(init_cleanup_plan_state
-      (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-        unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-      (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-      r.sr_spill_base lbl_ctr).ps_cleanup_promised`,
-    `init_cleanup_plan_state
-      (cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
-        unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name)
-      (cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context))
-      r.sr_spill_base lbl_ctr`,
-    `SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops`,
-    `ps_after`, `ps_after`, `param_ops`, `body_ops`,
-    `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`, `ps1`,
-    `ast.as_pc`, `pc_ret`] >>
-  irule entry_body_plan >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC) >> gvs[entry_bind_pairs_normal]
-  >>
-  FIRST [
-    gen_tac >> disch_tac >>
-      qpat_x_assum `!x. p x ==> normalize_operand d [] x = x`
-        (qspec_then `at` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >> simp[] >> NO_TAC,
-    fs[fn_entry_state_rel_def] >> NO_TAC]
+  rewrite_tac[active_frame_plan_reloc_def] >>
+  irule_at Any entry_body_plan_reloc >>
+  simp[] >>
+  qexistsl_tac [`ps_end`, `ps_after`, `ps1`, `pc_ret`, `ast.as_pc`,
+    `param_ops`, `lbl_ctr`, `i`, `body_ops`] >>
+  gvs[entry_bind_pairs_normal, APPEND] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- fs[fn_entry_state_rel_def] >>
+  metis_tac[]
+QED
+
+Theorem entry_frame_plan_ready:
+  entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
+  ?n ast1.
+    0 < n /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    active_frame_plan rpolicy unit cpl prog fn s ast1 ra rest mem0
+Proof
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize,
+              GSYM active_frame_plan_reloc_specialize] >>
+  metis_tac[entry_frame_plan_ready_reloc,
+    fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl]
 QED
 
 Theorem entry_frame_plan_initial_reloc:
