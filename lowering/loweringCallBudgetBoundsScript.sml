@@ -342,25 +342,6 @@ Proof
 QED
 
 Theorem lower_budget_path_fmp_envelope:
-  (!fuel ctx i s t I L U c.
-    step_inst fuel ctx i s = OK t /\ i.inst_opcode <> INVOKE /\
-    s.vs_initial_fmp = I /\ L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U /\
-    U + c < dimword (:256) /\
-    (i.inst_opcode = SETFMP ==>
-      L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= w2n s.vs_fmp) /\
-    (i.inst_opcode <> DALLOCA ==> c = 0) /\
-    (i.inst_opcode = DALLOCA ==>
-      ?op sz. i.inst_operands = [op] /\ eval_operand op s = SOME sz /\
-        c = ceil32 (w2n sz)) ==>
-    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U + c) /\
-  (!fuel ctx i s ret se caller t I L U.
-    step_inst fuel ctx i s = IntRet ret se /\ i.inst_opcode <> DRET /\
-    bind_outputs caller.cf_inst.inst_outputs ret.iret_values
-      (adopt_return_fmp ret (merge_callee_state caller.cf_state se)) = SOME t /\
-    caller.cf_state.vs_initial_fmp = I /\
-    L <= w2n caller.cf_state.vs_fmp /\ w2n caller.cf_state.vs_fmp <= U /\
-    L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U ==>
-    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U) ==>
   !checked cfg root h marks q.
     lower_budget_path checked cfg root h marks q ==>
     !charge.
@@ -393,7 +374,28 @@ Theorem lower_budget_path_fmp_envelope:
           SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
             (GENLIST I (LENGTH h)))))
 Proof
-  strip_tac >>
+  `!fuel ctx i s t I L U c.
+    step_inst fuel ctx i s = OK t /\ i.inst_opcode <> INVOKE /\
+    s.vs_initial_fmp = I /\ L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U /\
+    U + c < dimword (:256) /\
+    (i.inst_opcode = SETFMP ==>
+      L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= w2n s.vs_fmp) /\
+    (i.inst_opcode <> DALLOCA ==> c = 0) /\
+    (i.inst_opcode = DALLOCA ==>
+      ?op sz. i.inst_operands = [op] /\ eval_operand op s = SOME sz /\
+        c = ceil32 (w2n sz)) ==>
+    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U + c` by
+    MATCH_ACCEPT_TAC lower_budget_step_fmp_interval >>
+  `!fuel ctx i s ret se caller t I L U.
+    step_inst fuel ctx i s = IntRet ret se /\ i.inst_opcode <> DRET /\
+    bind_outputs caller.cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state caller.cf_state se)) = SOME t /\
+    caller.cf_state.vs_initial_fmp = I /\
+    L <= w2n caller.cf_state.vs_fmp /\ w2n caller.cf_state.vs_fmp <= U /\
+    L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U ==>
+    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all lower_budget_return_fmp_interval >> simp[]) >>
   qpat_x_assum `!fuel ctx i s t I L U c.
     step_inst fuel ctx i s = OK t /\ _ ==> _` (mk_asm "step") >>
   qpat_x_assum `!fuel ctx i s ret se caller t I L U.
@@ -532,10 +534,6 @@ Proof
     SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
       (GENLIST I (LENGTH h)))) < dimword (:256)` by metis_tac[] >>
   mp_tac lower_budget_path_fmp_envelope >>
-  (impl_tac >-
-    (conj_tac >- MATCH_ACCEPT_TAC lower_budget_step_fmp_interval >>
-     rpt gen_tac >> strip_tac >>
-     drule_all lower_budget_return_fmp_interval >> simp[])) >>
   disch_then drule >> disch_then (qspec_then `charge` mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >> gvs[] >>
   rpt strip_tac >>

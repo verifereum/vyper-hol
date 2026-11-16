@@ -59,10 +59,6 @@ Proof
     (fs[listTheory.LENGTH_NIL, listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
      metis_tac[listTheory.EL_MEM]) >>
   mp_tac lower_budget_path_fmp_envelope >>
-  (impl_tac >-
-    (conj_tac >- MATCH_ACCEPT_TAC lower_budget_step_fmp_interval >>
-     rpt gen_tac >> strip_tac >>
-     drule_all lower_budget_return_fmp_interval >> simp[])) >>
   disch_then drule >> disch_then (qspec_then `K 0` mp_tac) >>
   (impl_tac >-
     (gvs[] >> rpt conj_tac
