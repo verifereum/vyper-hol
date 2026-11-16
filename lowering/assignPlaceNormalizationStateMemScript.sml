@@ -10,11 +10,11 @@ Ancestors
 
 Theorem normalization_copy_state:
   compile_alloc_buffer n sa = (buf,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel ctx func ce cx ee r /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx ee r /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   FLOOKUP r.vs_allocas sa.cs_next_id = SOME (d,n) /\
   typed_copy_effect ctx func sm sb r t d n ==>
-  stmt_state_rel ctx func ce cx ee t
+  stmt_state_rel H ctx func ce cx ee t
 Proof
   strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -22,7 +22,7 @@ Proof
     (drule typed_copy_effect_record >>
      simp[copy_static_def, venom_state_component_equality]) >>
   irule copy_buffer_state_rel_frame >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`d`, `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString sa.cs_next_var)]`, `sm`, `n`] >>
   simp[mk_inst_def] >>
@@ -47,7 +47,7 @@ Theorem assign_place_normalization_state_mem:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand ty (vv_operand vv) sty sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   type_memory_size dtv < dimword (:256) /\
   vv_at ce cx sty origin sa ee raw vv s /\
@@ -90,7 +90,9 @@ Theorem assign_place_normalization_state_mem:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     gas_path_mem ctx func s 0 (OK r) /\
     typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv) /\
-    stmt_state_rel ctx func ce cx ee r /\ stmt_state_rel ctx func ce cx ee t
+    stmt_state_rel H ctx func ce cx ee r /\ stmt_state_rel H ctx func ce cx ee t /\
+    (!J. stmt_state_rel J ctx func ce cx ee s ==>
+      stmt_state_rel J ctx func ce cx ee t)
 Proof
   strip_tac >>
   drule_all normalization_allocate >> strip_tac >>
@@ -106,8 +108,14 @@ Proof
      goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
      simp[] >> qexistsl_tac [`stv`,`get_tenv cx`] >>
      simp[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
-  `stmt_state_rel ctx func ce cx ee t` by
+  `stmt_state_rel H ctx func ce cx ee t` by
     (irule normalization_copy_state >> metis_tac[]) >>
+  `!J : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel J ctx func ce cx ee s ==>
+    stmt_state_rel J ctx func ce cx ee t` by
+    (qx_gen_tac `J` >> disch_tac >>
+     irule (INST_TYPE [alpha |-> beta] normalization_copy_state) >>
+     metis_tac[]) >>
   `t.vs_alloca_next = r.vs_alloca_next` by
     (drule_all typed_copy_effect_record >>
      simp[venom_state_component_equality]) >>
