@@ -52,3 +52,4 @@ Ancestors
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
+  asmSymOwnCode
