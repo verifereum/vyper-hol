@@ -51,5 +51,40 @@ Theorem extcall_success_source_boundary:
   (!H. valid_horizon cx st0 H ee'.storage_trace ==>
        storage_well_formed_on cx ee' (FST H))
 Proof
-  cheat
+  strip_tac >>
+  `adopt_call_outcome rq oc consumed = (INL (),ee')` by
+    gvs[adopt_call_outcome_equation] >>
+  `ee'.scopes = ee.scopes` by
+    (drule oracle_take_adoption_locals >> metis_tac[]) >>
+  `consumed.gas_obs = ee.gas_obs /\
+   consumed.accounts = ee.accounts /\ consumed.tStorage = ee.tStorage` by
+    (drule take_call_outcome_frame >>
+     simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `ee'.gas_obs = ee.gas_obs` by
+    (drule adopt_call_outcome_frame >>
+     gvs[vyperStateTheory.evaluation_state_component_equality]) >>
+  `accounts_runtime_well_typed ee.accounts /\
+   outcomes_accounts_typed ee.outcomes /\ ee.gas_obs = [] /\
+   MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    fs[extcall_request_ready_def] >>
+  `accounts_runtime_well_typed ee'.accounts` by
+    (irule take_adopt_call_outcome_typed >> metis_tac[]) >>
+  `LENGTH oc.co_returnData < dimword (:256)` by
+    (irule take_call_outcome_returnData_length >> metis_tac[]) >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[]
+  >- metis_tac[]
+  >- metis_tac[] >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 H consumed.storage_trace` by
+    metis_tac[valid_horizon_frame, storage_trace_frame_adopt] >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    metis_tac[valid_horizon_frame, storage_trace_frame_take_call] >>
+  `storage_well_formed_on cx ee (FST H)` by
+    metis_tac[extcall_request_ready_def] >>
+  `storage_well_formed_on cx consumed (FST H)` by
+    metis_tac[storage_well_formed_on_backends] >>
+  irule adopt_call_outcome_preserves_finite_storage >>
+  metis_tac[valid_horizon_def]
 QED
