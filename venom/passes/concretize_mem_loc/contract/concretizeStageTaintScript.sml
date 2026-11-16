@@ -34,14 +34,14 @@ Theorem concretize_stage_taint_within_static:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
   taint_within D C' vs
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `?names. callee_first names C.ctx_functions`
     (qx_choose_then `names` assume_tac) >>
   Cases_on `max_live_eom C'`
-  >- (irule ptr_dalloca_no_eom_taint_within_static >> metis_tac[]) >>
+  >- (irule ptr_dalloca_no_eom_taint_within_static >> simp[] >> metis_tac[]) >>
   rename1 `max_live_eom C' = SOME eom` >>
   `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by simp[] >>
   drule ptr_stage_paired_bridge_static >>
@@ -129,7 +129,7 @@ Theorem concretize_stage_taint_within:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
   taint_within D C' vs
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_taint_within_static) >>
