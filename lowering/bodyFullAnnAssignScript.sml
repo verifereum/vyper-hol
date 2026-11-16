@@ -19,7 +19,7 @@ Ancestors
   supportedStmtTraverse supportedExprs supportedExprTraverse vyperTypeEnv
   vyperTypeInvariants vyperTypeContractStaticMaps supportedDecls compileVyper
   gasContext exprSimSource exprSimHyps assignRelayoutCaller allocLimits
-  vyperTypeCallGraph bodyInvNoDalloca
+  vyperTypeCallGraph bodyInvNoDalloca bodyFullAnnAssignOrdinary
 
 val _ = Parse.hide "body";
 
@@ -55,6 +55,7 @@ Proof
 QED
 
 (* A memory local whose source is stored at its own layout. *)
+
 Theorem body_annassign_memory_full:
   !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
@@ -89,7 +90,10 @@ Theorem body_annassign_memory_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >>
+  Cases_on `has_length_word typ /\ is_empty_value_expr e`
+  >- (irule body_annassign_memory_empty_full >> metis_tac[]) >>
+  irule body_annassign_memory_nonempty_full >> metis_tac[]
 QED
 
 (* A memory local whose source is a widened aggregate. *)
