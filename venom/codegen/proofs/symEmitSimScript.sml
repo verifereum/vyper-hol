@@ -2616,6 +2616,62 @@ Proof
   irule sym_codecopy_data_result >> metis_tac[]
 QED
 
+Theorem sym_codecopy_source_emit_core:
+  (!cs ss. R cs ss ==>
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!cs ss cs' dw l d nw tail. R cs ss /\
+    asm_block_at p cs.as_pc [AsmOp "CODECOPY"] /\
+    asm_step slo (build_offset_to_pc p) (AsmOp "CODECOPY") cs = AsmOK cs' /\
+    ss.sym_stack = Val dw :: Lab l d :: Val nw :: tail /\
+    sym_data_label p env l /\ sym_delta_ok d /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> ~in_mem_range (w2n dw) (w2n nw) b) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+      ss'.sym_mem_labels = ss.sym_mem_labels /\ ss'.sym_stack = tail) /\
+  (!cs ss cs' dw sw nw tail. allow_own /\ R cs ss /\
+    asm_block_at p cs.as_pc [AsmOp "CODECOPY"] /\
+    asm_step slo (build_offset_to_pc p) (AsmOp "CODECOPY") cs = AsmOK cs' /\
+    ss.sym_stack = Val dw :: Val sw :: Val nw :: tail /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> ~in_mem_range (w2n dw) (w2n nw) b) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+      ss'.sym_mem_labels = ss.sym_mem_labels /\ ss'.sym_stack = tail) /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  R cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel vlo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ [sz; src; dst] /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) vlo op) /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  sym_data_label p env "code_end" /\
+  (MEM (Label "runtime_begin") inst.inst_operands ==>
+    sym_data_label p env "runtime_begin") /\
+  (!x w off. src = Var x /\ code_end_var fn x /\
+    eval_operand src vs = SOME w /\ FLOOKUP slo "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2) /\
+  qs = ps with ps_stack := stack_pop 3 ps.ps_stack /\
+  asm_block_at p cs.as_pc [AsmOp "CODECOPY"] /\
+  asm_step slo (build_offset_to_pc p) (AsmOp "CODECOPY") cs = AsmOK cs' ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
+    metis_tac[] >>
+  drule_all sym_codecopy_prepared_safe_core >>
+  disch_then (qx_choose_then `dw` (qx_choose_then `sw`
+    (qx_choose_then `nw` (qx_choose_then `tail` strip_assume_tac)))) >>
+  `?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\ ss'.sym_stack = tail` by
+    metis_tac[] >>
+  qexists `ss'` >> simp[] >> irule sym_emit_kinds_pop >>
+  qexistsl [`3`, `ps`, `ss`] >> simp[]
+QED
+
 Theorem sym_codecopy_source_emit:
   inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
   opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
@@ -2644,10 +2700,37 @@ Theorem sym_codecopy_source_emit:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  strip_tac >> drule_all sym_codecopy_prepared_safe >> strip_tac >>
-  drule_all sym_codecopy_data_replay >> strip_tac >>
-  qexists `ss'` >> simp[] >> irule sym_emit_kinds_pop >>
-  qexistsl [`3`, `ps`, `ss`] >> simp[]
+  strip_tac >>
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`,
+                  `R` |-> `asm_sym_rel p env`,
+                  `slo` |-> `SND (compute_label_offsets p)`, `vlo` |-> `lo`]
+    sym_codecopy_source_emit_core) >>
+  simp[sym_steps_mode_def] >> disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_codecopy_data_replay >> metis_tac[]) >>
+  simp[asmSymBridgeTheory.asm_sym_rel_def]
+QED
+
+Theorem sym_code_end_add_prepared_layout_mode:
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ADD /\
+  inst.inst_operands = [op; Label "code_end"] /\ label_positions_ok inst /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected /\
+  (selected = [op; Label "code_end"] \/ selected = [Label "code_end"; op]) ==>
+  ?w tail.
+    (selected = [op; Label "code_end"] /\
+     ss.sym_stack = Lab "code_end" 0 :: Val w :: tail) \/
+    (selected = [Label "code_end"; op] /\
+     ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~is_label_operand op` by gvs[unitShapeDefsTheory.label_positions_ok_def] >>
+  `!sv. op_kind_ok fn ret op sv <=> ?w. sv = Val w` by
+    (gen_tac >> irule ordinary_source_input_numeric_kind_mode >> simp[] >>
+     reverse conj_tac >- metis_tac[] >> qexists `inst` >> gvs[MEM]) >>
+  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
+      op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >> metis_tac[]
 QED
 
 Theorem sym_code_end_add_prepared_layout:
@@ -2663,13 +2746,8 @@ Theorem sym_code_end_add_prepared_layout:
     (selected = [Label "code_end"; op] /\
      ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~is_label_operand op` by gvs[unitShapeDefsTheory.label_positions_ok_def] >>
-  `!sv. op_kind_ok fn ret op sv <=> ?w. sv = Val w` by
-    (gen_tac >> irule ordinary_source_input_numeric_kind >> simp[] >>
-     conj_tac >- metis_tac[] >> qexists `inst` >> gvs[MEM]) >>
-  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
-      op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >> metis_tac[]
+  metis_tac[Q.INST [`allow_own` |-> `F`] sym_code_end_add_prepared_layout_mode |>
+    SIMP_RULE std_ss []]
 QED
 
 Theorem asm_sym_code_end_add_value:
