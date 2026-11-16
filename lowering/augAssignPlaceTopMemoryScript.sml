@@ -34,6 +34,7 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `tr` (qx_choose_then `id_str`
       (qx_choose_then `slot` (qx_choose_then `tvt` strip_assume_tac))))) >>
+  qpat_assum `src = NONE` SUBST_ALL_TAC >>
   irule compile_augassign_toplevel_mem >> simp[] >> conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
