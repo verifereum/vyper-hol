@@ -45,7 +45,7 @@ Proof
       `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK (jump_to good s),G,tn)` by
         (rpt gen_tac >> metis_tac[emit_jnz_origin_ptr]) >>
-      simp[venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
+      gvs[venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
            op_taint_def, ptr_vv_ok_def, read_result_def, return_def, ptr_val_ok_none]) >>
   gvs[] >> drule raw_call_nonrevert_finish_code >> simp[comp_return_def] >>
   strip_tac >> Cases_on `stat` >> gvs[] >>
