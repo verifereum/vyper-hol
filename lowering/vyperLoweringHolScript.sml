@@ -49,6 +49,7 @@ Ancestors
   asmOptOwnPeephole
   asmOptFinalizerCorrect
   asmSymOwnCode
+  asmOptOwnMergeIszero
   finalizerContractOwn
   asmSpliceOwn
   asmOptOwnInefficientJumps
