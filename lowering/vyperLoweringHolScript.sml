@@ -46,6 +46,7 @@ Ancestors
   loweringMemCorrect
   asmSymBridge
   asmDataEnv
+  asmOptOwnPeephole
   asmOptFinalizerCorrect
   asmSymOwnCode
   finalizerContractOwn
