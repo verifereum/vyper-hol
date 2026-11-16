@@ -519,12 +519,14 @@ Theorem native_normalized_block_observations:
     LIST_REL (\h i. h.inst_id = i.inst_id) norm scheduled /\
     a.vs_inst_idx = j ==>
     !n C fn p d.
-      let bn = bb with bb_instructions := REPLICATE j pad ++ norm;
-          bt = bb with bb_instructions := REPLICATE j pad ++ scheduled in
-      exec_block n C bn a = exec_block n C bt a /\
-      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bn a) =
-      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bt a) /\
-      gas_events_block n C fn.fn_name bn a = gas_events_block n C fn.fn_name bt a
+      exec_block n C (bb with bb_instructions := REPLICATE j pad ++ norm) a = exec_block n C (bb
+        with bb_instructions := REPLICATE j pad ++ scheduled) a /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions :=
+        REPLICATE j pad ++ norm) a) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions :=
+        REPLICATE j pad ++ scheduled) a) /\
+      gas_events_block n C fn.fn_name (bb with bb_instructions := REPLICATE j pad ++ norm) a =
+        gas_events_block n C fn.fn_name (bb with bb_instructions := REPLICATE j pad ++ scheduled) a
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> simp_tac pure_ss [LET_THM] >>
   irule native_normalized_suffix_observations >>
@@ -535,18 +537,21 @@ Theorem native_prefix_cut:
   !pre a j.
     a.vs_inst_idx = j /\ EVERY (\i. ~is_terminator i.inst_opcode) pre ==>
     !n C fn p d rest bb pad.
-    let bp = bb with bb_instructions := REPLICATE j pad ++ pre;
-        bw = bb with bb_instructions := REPLICATE j pad ++ (pre ++ rest);
-        br = bb with bb_instructions := REPLICATE (j + LENGTH pre) pad ++ rest;
-        R = FOLDR (dft_exec_cons n C) OK pre a
-    in
-    exec_block n C bw a = (case R of OK t => exec_block n C br t | other => other) /\
-    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bw a) =
-      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bp a) ++
-      (case R of OK t => trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br t) | _ => []) /\
-    gas_events_block n C fn.fn_name bw a = gas_events_block n C fn.fn_name bp a ++
-      (case R of OK t => gas_events_block n C fn.fn_name br t | _ => []) /\
-    (!t. R = OK t ==> t.vs_inst_idx = j + LENGTH pre)
+    exec_block n C (bb with bb_instructions := REPLICATE j pad ++ (pre ++ rest)) a = (case (FOLDR
+      (dft_exec_cons n C) OK pre a) of OK t => exec_block n C (bb with bb_instructions := REPLICATE
+      (j + LENGTH pre) pad ++ rest) t | other => other) /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions := REPLICATE
+      j pad ++ (pre ++ rest)) a) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions :=
+        REPLICATE j pad ++ pre) a) ++
+      (case (FOLDR (dft_exec_cons n C) OK pre a) of OK t => trace_gas
+        (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions := REPLICATE (j +
+        LENGTH pre) pad ++ rest) t) | _ => []) /\
+    gas_events_block n C fn.fn_name (bb with bb_instructions := REPLICATE j pad ++ (pre ++ rest)) a
+      = gas_events_block n C fn.fn_name (bb with bb_instructions := REPLICATE j pad ++ pre) a ++
+      (case (FOLDR (dft_exec_cons n C) OK pre a) of OK t => gas_events_block n C fn.fn_name (bb with
+        bb_instructions := REPLICATE (j + LENGTH pre) pad ++ rest) t | _ => []) /\
+    (!t. (FOLDR (dft_exec_cons n C) OK pre a) = OK t ==> t.vs_inst_idx = j + LENGTH pre)
 Proof
   Induct >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp_tac pure_ss [LET_THM]
@@ -947,13 +952,14 @@ Theorem native_inventory_child_agreement:
   i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
   lookup_function nm C'.ctx_functions = SOME cf' /\
   eval_operands ops a = SOME args /\ setup_callee cf' args a = SOME ct ==>
-  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
-      child = dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C' cf' ct
-  in ALL_DISTINCT (MAP FST obs) /\
-     EVERY (\kw. MEM kw obs) (trace_gas child) /\
+  ALL_DISTINCT (MAP FST (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) /\
+     EVERY (\kw. MEM kw (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))
+       (trace_gas (dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C' cf' ct)) /\
      trace_agrees
-       (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
-         NONE => 0w | SOME w => w) child
+       (\key. case ALOOKUP ((trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)) ++
+         ZIP (keys,vals)) key of
+         NONE => 0w | SOME w => w) (dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C'
+           cf' ct)
 Proof
   strip_tac >> simp_tac pure_ss [LET_THM] >>
   qmatch_goalsub_abbrev_tac `ALL_DISTINCT (MAP FST obs)` >>
@@ -1763,13 +1769,13 @@ QED
 
 (* Quotation macros only: these introduce no logical constants or selectors. *)
 val native_inventory_Dq = ``\q r f f' cs ct K S U.
-  let Ochild = trace_gas (dftGasFromListTraceDefs$trace_blocks q r b C' f' ct);
-      Tchild = run_blocks b C' f' ct
-  in let Mchild = MAP (ALOOKUP Ochild) K in
-    ALL_DISTINCT K /\ EVERY (later_region q r) K /\ LENGTH K = LENGTH S /\
-    PERM (MAP THE (FILTER IS_SOME Mchild) ++ U) ct.vs_gas_readings /\
-    (!v u. Tchild = IntRet v u ==> EVERY IS_SOME Mchild /\ U = u.vs_gas_readings) /\
-    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mchild g ==>
+  ALL_DISTINCT K /\ EVERY (later_region q r) K /\ LENGTH K = LENGTH S /\
+    PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks q r
+      b C' f' ct))) K)) ++ U) ct.vs_gas_readings /\
+    (!v u. (run_blocks b C' f' ct) = IntRet v u ==> EVERY IS_SOME (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_blocks q r b C' f' ct))) K) /\ U = u.vs_gas_readings) /\
+    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_blocks q r b C' f' ct))) K) g ==>
       (!n. ?k. k <= LENGTH K /\
         trace_gas (dftGasFromListTraceDefs$trace_blocks q r n C f
           (cs with vs_gas_readings := g ++ tail)) = ZIP (TAKE k K, TAKE k g) /\
@@ -1778,10 +1784,10 @@ val native_inventory_Dq = ``\q r f f' cs ct K S U.
        terminates (run_blocks b C f (cs with vs_gas_readings := g ++ tail)) /\
        dft_res_rel
          (restore_result [] (run_blocks b C f (cs with vs_gas_readings := g ++ tail)))
-         (restore_result [] Tchild) /\
-       (!v u. Tchild = IntRet v u ==>
+         (restore_result [] (run_blocks b C' f' ct)) /\
+       (!v u. (run_blocks b C' f' ct) = IntRet v u ==>
          gas_events_blocks b C f (cs with vs_gas_readings := g ++ tail) = S /\
-         residual_result tail Tchild
+         residual_result tail (run_blocks b C' f' ct)
            (run_blocks b C f (cs with vs_gas_readings := g ++ tail)))))``;
 
 val native_inventory_IHq = ``!f f' x q r.
@@ -1920,21 +1926,31 @@ Theorem native_frontier_mask_inventory:
   (((?u. exec_block b C' bt t = OK u) \/ (?v u. exec_block b C' bt t = IntRet v u)) ==>
       P = todo) /\
   ^native_inventory_IHq ==>
-  let V = dftGasFromListTraceDefs$trace_block p d b C' fn' bt t in
-  let obs = trace_gas V in
   ?key_rows site_rows certs.
     LENGTH key_rows = LENGTH P /\ LENGTH site_rows = LENGTH P /\ LENGTH certs = LENGTH P /\
     (!h. h < LENGTH P ==>
-      ^native_inventory_Rq obs (EL h P) (EL h key_rows) (EL h site_rows) (EL h certs)) /\
-    (let K = FLAT key_rows; S = FLAT site_rows in
-     let M = MAP (ALOOKUP obs) K;
-         U = MAP SND (FILTER (\kw. ~MEM (FST kw) K) obs) ++ DROP (LENGTH obs) t.vs_gas_readings
-     in ALL_DISTINCT K /\
-        EVERY (block_region p d (MAP (\i. i.inst_id) todo)) K /\ LENGTH K = LENGTH S /\
-        PERM (MAP THE (FILTER IS_SOME M) ++ U) t.vs_gas_readings /\
-        (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+      ^native_inventory_Rq (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)) (EL h
+        P) (EL h key_rows) (EL h site_rows) (EL h certs)) /\
+    (ALL_DISTINCT (FLAT key_rows) /\
+        EVERY (block_region p d (MAP (\i. i.inst_id) todo)) (FLAT key_rows) /\ LENGTH (FLAT
+          key_rows) = LENGTH (FLAT site_rows) /\
+        PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block
+          p d b C' fn' bt t))) (FLAT key_rows))) ++ (MAP SND (FILTER (\kw. ~MEM (FST kw) (FLAT
+          key_rows)) (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) ++ DROP
+          (LENGTH (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))
+          t.vs_gas_readings)) t.vs_gas_readings /\
+        (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME (MAP (ALOOKUP (trace_gas
+          (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) (FLAT key_rows)) /\ (MAP SND
+          (FILTER (\kw. ~MEM (FST kw) (FLAT key_rows)) (trace_gas
+          (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) ++ DROP (LENGTH (trace_gas
+          (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) t.vs_gas_readings) =
+          u.vs_gas_readings) /\
         (!v u. exec_block b C' bt t = IntRet v u ==>
-           EVERY IS_SOME M /\ U = u.vs_gas_readings))
+           EVERY IS_SOME (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn'
+             bt t))) (FLAT key_rows)) /\ (MAP SND (FILTER (\kw. ~MEM (FST kw) (FLAT key_rows))
+             (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) ++ DROP (LENGTH
+             (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) t.vs_gas_readings)
+             = u.vs_gas_readings))
 Proof
   gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp_tac pure_ss [LET_THM] >>
@@ -3068,22 +3084,20 @@ Theorem native_successful_cut_inventory:
     todo = A ++ rest /\ P = A ++ frontpost /\
     EVERY (\i. ~is_terminator i.inst_opcode) A /\
     FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail) = OK q ==>
-    let KA = FLAT (TAKE (LENGTH A) key_rows);
-        SA = FLAT (TAKE (LENGTH A) site_rows) in
-    let m = LENGTH KA;
-        orc = (\key. case ALOOKUP
+    inv_ev_trace ((\key. case ALOOKUP
           (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ++
-           ZIP (FLAT key_rows,g)) key of NONE => 0w | SOME w => w) in
-    inv_ev_trace orc p d b C' A (t with vs_gas_readings := []) (q with vs_gas_readings := []) /\
-    q.vs_gas_readings = DROP m (g ++ tail) /\
+           ZIP (FLAT key_rows,g)) key of NONE => 0w | SOME w => w)) p d b C' A (t with
+             vs_gas_readings := []) (q with vs_gas_readings := []) /\
+    q.vs_gas_readings = DROP (LENGTH (FLAT (TAKE (LENGTH A) key_rows))) (g ++ tail) /\
     q.vs_inst_idx = s.vs_inst_idx + LENGTH A /\
     dft_remaining_inv fn bb rest q /\
     trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ A)
-      (s with vs_gas_readings := g ++ tail)) = ZIP (KA,TAKE m g) /\
+      (s with vs_gas_readings := g ++ tail)) = ZIP ((FLAT (TAKE (LENGTH A) key_rows)),TAKE (LENGTH
+        (FLAT (TAKE (LENGTH A) key_rows))) g) /\
     gas_events_block n C fn.fn_name
       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ A)
-      (s with vs_gas_readings := g ++ tail) = SA
+      (s with vs_gas_readings := g ++ tail) = (FLAT (TAKE (LENGTH A) site_rows))
 Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac rich_listTheory.SNOC_INDUCT >> conj_tac
@@ -3288,11 +3302,10 @@ Theorem native_lookup_fill_schedule_result:
   bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
   ctx_inst_ids_distinct C' /\
   ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) ==>
-  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
-      orc = (\key. case ALOOKUP (obs ++ ZIP (K,g)) key of
-        NONE => 0w | SOME w => w)
-  in dft_res_rel
-    (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+  dft_res_rel
+    (ev_suffix ((\key. case ALOOKUP ((trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt
+      t)) ++ ZIP (K,g)) key of
+        NONE => 0w | SOME w => w)) p d b C' todo (t with vs_gas_readings := []))
     (restore_result [] (exec_block b C' bt t))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4204,14 +4217,14 @@ Theorem native_inventory_stopped_cut_event_result:
     terminates (exec_block b C
       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
       (s with vs_gas_readings := g ++ tail)) ==>
-    let orc = (\key. case ALOOKUP
-      (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ++
-       ZIP (FLAT key_rows,g)) key of NONE => 0w | SOME w => w) in
     dft_res_rel
       (restore_result [] (exec_block b C
         (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
         (s with vs_gas_readings := g ++ tail)))
-      (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+      (ev_suffix ((\key. case ALOOKUP
+      (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ++
+       ZIP (FLAT key_rows,g)) key of NONE => 0w | SOME w => w)) p d b C' todo (t with
+         vs_gas_readings := []))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
   rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
@@ -4484,22 +4497,27 @@ Proof
 QED
 
 Theorem native_stopped_cut_budget_lift:
-  let x = s with vs_gas_readings := g ++ tail;
-      source_residual = bb with
-        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
   todo = A ++ i::rest /\ P = A ++ i::frontpost /\
   EVERY (\j. ~is_terminator j.inst_opcode) A /\
-  FOLDR (dft_exec_cons n C) OK A x = OK q /\
+  FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail) = OK q /\
   (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)) /\
-  terminates (exec_block n C source_residual x) /\
+  terminates (exec_block n C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail)) /\
   (!H h r fp u.
     todo = H ++ h::r /\ P = H ++ h::fp /\
     EVERY (\j. ~is_terminator j.inst_opcode) H /\
-    FOLDR (dft_exec_cons n C) OK H x = OK u /\
+    FOLDR (dft_exec_cons n C) OK H (s with vs_gas_readings := g ++ tail) = OK u /\
     h.inst_opcode = INVOKE /\ terminates (step_inst n C h u) ==>
     step_inst b C h u = step_inst n C h u) ==>
-  exec_block b C source_residual x = exec_block n C source_residual x /\
-  terminates (exec_block b C source_residual x)
+  exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = exec_block n C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) /\
+  terminates (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail))
 Proof
   simp_tac pure_ss [LET_THM] >> strip_tac >>
   `!f. exec_block f C
@@ -4544,17 +4562,24 @@ QED
 Theorem native_inventory_success_residual:
   !frontier_body key_rows site_rows certs.
   ^native_inventory_frontierq ==>
-  let x = s with vs_gas_readings := g ++ tail;
-      source_residual = bb with
-        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
-  dft_res_rel (restore_result [] (exec_block b C source_residual x))
+  dft_res_rel (restore_result [] (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail)))
               (restore_result [] (exec_block b C' bt t)) ==>
   ((?u. exec_block b C' bt t = OK u) \/
    (?v u. exec_block b C' bt t = IntRet v u)) ==>
-  gas_events_block b C fn.fn_name source_residual x = FLAT site_rows /\
-  (!u. exec_block b C source_residual x = OK u ==> u.vs_gas_readings = tail) /\
-  (!v u. exec_block b C source_residual x = IntRet v u ==> u.vs_gas_readings = tail) /\
-  residual_result tail (exec_block b C' bt t) (exec_block b C source_residual x)
+  gas_events_block b C fn.fn_name (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = FLAT site_rows /\
+  (!u. exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = OK u ==> u.vs_gas_readings = tail) /\
+  (!v u. exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = IntRet v u ==> u.vs_gas_readings = tail) /\
+  residual_result tail (exec_block b C' bt t) (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp_tac pure_ss [LET_THM] >> rpt disch_tac >>
@@ -4708,39 +4733,53 @@ Theorem native_residual_schedule_packet:
   ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
   gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
   ^native_inventory_IHq ==>
-  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
-      source_residual = bb with
-        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
   ?K S U.
-    let M = MAP (ALOOKUP obs) K in
     ALL_DISTINCT K /\ EVERY (block_region p d (MAP (\i. i.inst_id) todo)) K /\
     LENGTH K = LENGTH S /\
-    PERM (MAP THE (FILTER IS_SOME M) ++ U) t.vs_gas_readings /\
-    (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+    PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block p d
+      b C' fn' bt t))) K)) ++ U) t.vs_gas_readings /\
+    (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) K) /\ U = u.vs_gas_readings) /\
     (!v u. exec_block b C' bt t = IntRet v u ==>
-      EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
-    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+      EVERY IS_SOME (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt
+        t))) K) /\ U = u.vs_gas_readings) /\
+    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) K) g ==>
       (!n. ?k. k <= LENGTH K /\
-        trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn source_residual
+        trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
           (s with vs_gas_readings := g ++ tail)) = ZIP (TAKE k K, TAKE k g) /\
-        gas_events_block n C fn.fn_name source_residual
+        gas_events_block n C fn.fn_name (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
           (s with vs_gas_readings := g ++ tail) = TAKE k S) /\
-      ((?n. terminates (exec_block n C source_residual
+      ((?n. terminates (exec_block n C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
           (s with vs_gas_readings := g ++ tail))) ==>
-        terminates (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)) /\
+        terminates (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail)) /\
         dft_res_rel
-          (restore_result [] (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)))
+          (restore_result [] (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail)))
           (restore_result [] (exec_block b C' bt t)) /\
         (((?u. exec_block b C' bt t = OK u) \/
           (?v u. exec_block b C' bt t = IntRet v u)) ==>
-          gas_events_block b C fn.fn_name source_residual
+          gas_events_block b C fn.fn_name (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
             (s with vs_gas_readings := g ++ tail) = S /\
-          (!u. exec_block b C source_residual (s with vs_gas_readings := g ++ tail) = OK u ==>
+          (!u. exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = OK u ==>
             u.vs_gas_readings = tail) /\
-          (!v u. exec_block b C source_residual (s with vs_gas_readings := g ++ tail) = IntRet v u ==>
+          (!v u. exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail) = IntRet v u ==>
             u.vs_gas_readings = tail) /\
           residual_result tail (exec_block b C' bt t)
-            (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)))))
+            (exec_block b C (bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo) (s with vs_gas_readings := g ++
+          tail)))))
 Proof
   gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
@@ -4968,22 +5007,25 @@ Theorem native_pseudo_entry_bridge[local]:
     (sp with vs_inst_idx := phi_prefix_length pre) = OK t /\
   t.vs_inst_idx = LENGTH pre ==>
   !n W C pad fn p d.
-    let br = bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest in
     run_block n C bb (s with vs_gas_readings := W) =
-      exec_block n C br (t with vs_gas_readings := W) /\
+      exec_block n C (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest) (t with
+        vs_gas_readings := W) /\
     (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
        OK u => gas_count_block n C bb
          (u with vs_inst_idx := phi_prefix_length bb.bb_instructions) | _ => 0) =
-      gas_count_block n C br (t with vs_gas_readings := W) /\
+      gas_count_block n C (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest) (t with
+        vs_gas_readings := W) /\
     (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
        OK u => trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb
          (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)) | _ => []) =
-      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn (bb with bb_instructions :=
+        REPLICATE (LENGTH pre) pad ++ rest)
         (t with vs_gas_readings := W)) /\
     (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
        OK u => gas_events_block n C fn.fn_name bb
          (u with vs_inst_idx := phi_prefix_length bb.bb_instructions) | _ => []) =
-      gas_events_block n C fn.fn_name br (t with vs_gas_readings := W)
+      gas_events_block n C fn.fn_name (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++
+        rest) (t with vs_gas_readings := W)
 Proof
   strip_tac >> drule_all native_pseudo_phase_readings >> strip_tac >>
   map_every qx_gen_tac [`n`, `ws`, `C`, `pad`, `fn`, `p`, `d`] >>
@@ -5026,24 +5068,27 @@ Theorem native_block_entry_residual_boundary:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
   terminates (run_block b C' bb' s) ==>
-  let pre = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions;
-      todo = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions;
-      j = LENGTH pre in
   ?sp t scheduled body.
-    bb.bb_instructions = pre ++ todo /\
-    bb'.bb_instructions = pre ++ body /\ bb'.bb_label = bb.bb_label /\
-    EVERY (\i. is_pseudo i.inst_opcode) pre /\
-    EVERY (\i. ~is_pseudo i.inst_opcode) todo /\
+    bb.bb_instructions = (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ++ (FILTER (\i.
+      ~is_pseudo i.inst_opcode) bb.bb_instructions) /\
+    bb'.bb_instructions = (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ++ body /\
+      bb'.bb_label = bb.bb_label /\
+    EVERY (\i. is_pseudo i.inst_opcode) (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)
+      /\
     EVERY (\i. ~is_pseudo i.inst_opcode) body /\
-    eval_phis s pre = OK sp /\
-    FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length pre) pre)
-      (sp with vs_inst_idx := phi_prefix_length pre) = OK t /\
-    t.vs_inst_idx = j /\ t.vs_gas_readings = s.vs_gas_readings /\
+    eval_phis s (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) = OK sp /\
+    FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length (FILTER (\i. is_pseudo i.inst_opcode)
+      bb.bb_instructions)) (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions))
+      (sp with vs_inst_idx := phi_prefix_length (FILTER (\i. is_pseudo i.inst_opcode)
+        bb.bb_instructions)) = OK t /\
+    t.vs_inst_idx = (LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)) /\
+      t.vs_gas_readings = s.vs_gas_readings /\
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
     EVERY inst_wf bb.bb_instructions /\
     EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
     EVERY inst_shape_ok bb.bb_instructions /\
-    dft_remaining_inv fn bb todo t /\
+    dft_remaining_inv fn bb (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) t /\
     ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
     ~t.vs_call_ctx.cc_static /\
     dft_head_bubbles (\x y.
@@ -5051,28 +5096,32 @@ Theorem native_block_entry_residual_boundary:
       ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
       id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
       ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
-      todo scheduled /\
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) scheduled /\
     EVERY (from_block bb.bb_instructions) body /\
     LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
-    (!bx rest. bx.bb_label = bb.bb_label /\ bx.bb_instructions = pre ++ rest /\
+    (!bx rest. bx.bb_label = bb.bb_label /\ bx.bb_instructions = (FILTER (\i. is_pseudo
+      i.inst_opcode) bb.bb_instructions) ++ rest /\
       EVERY (\i. ~is_pseudo i.inst_opcode) rest ==>
       !n ws D pad f p d.
-      let br = bb with bb_instructions := REPLICATE j pad ++ rest in
       run_block n D bx (s with vs_gas_readings := ws) =
-        exec_block n D br (t with vs_gas_readings := ws) /\
+        exec_block n D (bb with bb_instructions := REPLICATE (LENGTH (FILTER (\i. is_pseudo
+          i.inst_opcode) bb.bb_instructions)) pad ++ rest) (t with vs_gas_readings := ws) /\
       (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
          OK u => gas_count_block n D bx
            (u with vs_inst_idx := phi_prefix_length bx.bb_instructions) | _ => 0) =
-        gas_count_block n D br (t with vs_gas_readings := ws) /\
+        gas_count_block n D (bb with bb_instructions := REPLICATE (LENGTH (FILTER (\i. is_pseudo
+          i.inst_opcode) bb.bb_instructions)) pad ++ rest) (t with vs_gas_readings := ws) /\
       (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
          OK u => trace_gas (dftGasFromListTraceDefs$trace_block p d n D f bx
            (u with vs_inst_idx := phi_prefix_length bx.bb_instructions)) | _ => []) =
-        trace_gas (dftGasFromListTraceDefs$trace_block p d n D f br
+        trace_gas (dftGasFromListTraceDefs$trace_block p d n D f (bb with bb_instructions :=
+          REPLICATE (LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)) pad ++ rest)
           (t with vs_gas_readings := ws)) /\
       (case eval_phis (s with vs_gas_readings := ws) bx.bb_instructions of
          OK u => gas_events_block n D f.fn_name bx
            (u with vs_inst_idx := phi_prefix_length bx.bb_instructions) | _ => []) =
-        gas_events_block n D f.fn_name br (t with vs_gas_readings := ws))
+        gas_events_block n D f.fn_name (bb with bb_instructions := REPLICATE (LENGTH (FILTER (\i.
+          is_pseudo i.inst_opcode) bb.bb_instructions)) pad ++ rest) (t with vs_gas_readings := ws))
 Proof
   strip_tac >> simp_tac pure_ss [LET_THM] >>
   `wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
@@ -5335,17 +5384,18 @@ val native_block_sitesq = ``\n D f bx x.
       (z with vs_inst_idx := phi_prefix_length bx.bb_instructions)
   | _ => []``;
 val native_block_packetq = ``\q r bx bx' x K S U.
-  let obsx = ^native_block_gasq q r b C' fn' bx' x;
-      R = run_block b C' bx' x in
-  let M = MAP (ALOOKUP obsx) K in
   ALL_DISTINCT K /\
   EVERY (block_region q r (MAP (\i. i.inst_id)
     (FILTER (\i. ~is_pseudo i.inst_opcode) bx.bb_instructions))) K /\
   LENGTH K = LENGTH S /\
-  PERM (MAP THE (FILTER IS_SOME M) ++ U) x.vs_gas_readings /\
-  (!u. R = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
-  (!v u. R = IntRet v u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
-  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+  PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP (^native_block_gasq q r b C' fn' bx' x)) K)) ++ U)
+    x.vs_gas_readings /\
+  (!u. (run_block b C' bx' x) = OK u ==> EVERY IS_SOME (MAP (ALOOKUP (^native_block_gasq q r b C'
+    fn' bx' x)) K) /\ U = u.vs_gas_readings) /\
+  (!v u. (run_block b C' bx' x) = IntRet v u ==> EVERY IS_SOME (MAP (ALOOKUP (^native_block_gasq q r
+    b C' fn' bx' x)) K) /\ U = u.vs_gas_readings) /\
+  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (MAP (ALOOKUP (^native_block_gasq q r b
+    C' fn' bx' x)) K) g ==>
     (!n. ?k. k <= LENGTH K /\
       ^native_block_gasq q r n C fn bx (x with vs_gas_readings := g ++ tail) =
         ZIP (TAKE k K, TAKE k g) /\
@@ -5353,14 +5403,15 @@ val native_block_packetq = ``\q r bx bx' x K S U.
     ((?n. terminates (run_block n C bx (x with vs_gas_readings := g ++ tail))) ==>
       terminates (run_block b C bx (x with vs_gas_readings := g ++ tail)) /\
       dft_res_rel (restore_result [] (run_block b C bx (x with vs_gas_readings := g ++ tail)))
-        (restore_result [] R) /\
-      (((?u. R = OK u) \/ (?v u. R = IntRet v u)) ==>
+        (restore_result [] (run_block b C' bx' x)) /\
+      (((?u. (run_block b C' bx' x) = OK u) \/ (?v u. (run_block b C' bx' x) = IntRet v u)) ==>
         ^native_block_sitesq b C fn bx (x with vs_gas_readings := g ++ tail) = S /\
         (!u. run_block b C bx (x with vs_gas_readings := g ++ tail) = OK u ==>
           u.vs_gas_readings = tail) /\
         (!v u. run_block b C bx (x with vs_gas_readings := g ++ tail) = IntRet v u ==>
           u.vs_gas_readings = tail) /\
-        residual_result tail R (run_block b C bx (x with vs_gas_readings := g ++ tail)))))``;
+        residual_result tail (run_block b C' bx' x) (run_block b C bx (x with vs_gas_readings := g
+          ++ tail)))))``;
 
 Theorem native_whole_block_packet[local]:
   LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
