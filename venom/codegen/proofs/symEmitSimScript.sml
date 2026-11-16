@@ -644,6 +644,33 @@ Proof
             asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
+Theorem sym_single_step_replay_safe_mode_conditional:
+  (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
+  (!cs ss cs'. R cs ss /\ cs.as_pc < LENGTH p /\
+    asm_step lo (build_offset_to_pc p) (EL cs.as_pc p) cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own (EL cs.as_pc p) ss
+            else sym_step p env (EL cs.as_pc p) ss) <> SymBad msg) ==>
+    ?ss'. (if allow_own then sym_step_own p env own (EL cs.as_pc p) ss
+           else sym_step p env (EL cs.as_pc p) ss) = SymOK ss' /\ R cs' ss') /\
+  R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+  asm_step lo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+  (!msg. (if allow_own then sym_step_own p env own inst ss
+          else sym_step p env inst ss) <> SymBad msg) ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss'
+Proof
+  strip_tac >>
+  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
+    (fs[asm_block_at_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+  `?ss'. (if allow_own then sym_step_own p env own inst ss
+           else sym_step p env inst ss) = SymOK ss' /\ R cs' ss'` by
+    metis_tac[] >>
+  qexists `ss'` >> simp[] >>
+  `asm_block_at p ss.sym_base.as_pc [inst]` by metis_tac[] >>
+  drule sym_steps_mode_single >> simp[]
+QED
+
 Theorem sym_single_step_replay_safe:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   asm_block_at p cs.as_pc [inst] /\
@@ -652,14 +679,14 @@ Theorem sym_single_step_replay_safe:
   ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss'
 Proof
   strip_tac >>
-  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
-    (fs[asm_block_at_def] >>
-     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `ss.sym_base.as_pc = cs.as_pc` by
-    fs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  `?ss'. sym_step p env inst ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
-    metis_tac[asm_sym_step_success_from_safe] >>
-  qexists `ss'` >> simp[] >> irule sym_steps_single_emit >> metis_tac[]
+  irule (Q.INST [`allow_own` |-> `F`, `R` |-> `asm_sym_rel p env`,
+    `lo` |-> `SND (compute_label_offsets p)`]
+    sym_single_step_replay_safe_mode_conditional |>
+    SIMP_RULE std_ss [sym_steps_mode_def]) >>
+  conj_tac >- metis_tac[asm_sym_step_success_from_safe] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]) >>
+  qexistsl [`cs`, `inst`] >> simp[]
 QED
 
 (* Ordinary operand lists may be evaluated in the source state even when
@@ -2351,7 +2378,7 @@ Theorem sym_log_source_emit_core:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `MEM name ["LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"] /\
    asm_op_arity name = LENGTH selected /\
    ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
@@ -2395,6 +2422,42 @@ Proof
   qexistsl [`cs`, `name`, `[]`, `ps`, `slo`] >> simp[] >> gvs[MEM] >> metis_tac[]
 QED
 
+Theorem sym_log_source_emit_mode_conditional:
+  (!cs ss. R cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!cs ss inst cs'. R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step slo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own inst ss
+            else sym_step p env inst ss) <> SymBad msg) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss') /\
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
+  LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
+  ALOOKUP log_table name = SOME (w2n tc) /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  R cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel lo qs vsout cs' /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  qs = ps with ps_stack := stack_pop (LENGTH selected) ps.ps_stack /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step slo (build_offset_to_pc p) (AsmOp name) cs = AsmOK cs' ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  (MATCH_ACCEPT_TAC (DB.fetch "symEmitSim" "sym_log_source_emit_core"))
+QED
+
 Theorem sym_log_source_emit:
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
   LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
@@ -2420,7 +2483,7 @@ Theorem sym_log_source_emit:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `!cs ss. asm_sym_rel p env cs ss ==>
     ss.sym_base.as_pc = cs.as_pc /\
     LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
