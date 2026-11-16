@@ -49,5 +49,6 @@ Ancestors
   asmOptFinalizerCorrect
   asmSymOwnCode
   finalizerContractOwn
+  asmOptOwnPruneUnreachable
   asmSpliceOwn
   asmOptOwnPruneUnused
