@@ -1,6 +1,6 @@
 (* Symbolic emitted-opcode boundaries. *)
 Theory symEmitSim
-Ancestors
+Ancestors asmSymOwnCode[qualified,ignore_grammar]
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
   fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
@@ -492,6 +492,22 @@ Proof
   metis_tac[label_flow_ok_def]
 QED
 
+Theorem ordinary_source_input_numeric_kind_mode:
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM op inst.inst_operands /\ ~is_label_operand op /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] ==>
+  (op_kind_ok fn ret op sv <=> ?w. sv = Val w)
+Proof
+  simp[MEM] >> strip_tac >> irule op_kind_ok_numeric >> simp[] >>
+  `label_flow_own_ok ctx` by
+    (Cases_on `allow_own` >> gvs[] >>
+     metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]) >>
+  metis_tac[frameViewFactsTheory.ordinary_operand_not_retpc,
+            ordinary_input_not_code_end_own]
+QED
+
 Theorem ordinary_source_input_numeric_kind:
   opaque_use_ok fn /\ label_flow_ok ctx /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -499,9 +515,8 @@ Theorem ordinary_source_input_numeric_kind:
   ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] ==>
   (op_kind_ok fn ret op sv <=> ?w. sv = Val w)
 Proof
-  simp[MEM] >> strip_tac >> irule op_kind_ok_numeric >> simp[] >>
-  metis_tac[frameViewFactsTheory.ordinary_operand_not_retpc,
-            ordinary_input_not_code_end]
+  mp_tac (Q.INST [`allow_own` |-> `F`] ordinary_source_input_numeric_kind_mode) >>
+  simp[]
 QED
 
 Theorem sval_conc_numeric_list:
@@ -520,15 +535,21 @@ Proof
   Induct >> Cases_on `svs` >> simp[] >> metis_tac[]
 QED
 
+Theorem asm_sym_numeric_take_core:
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE k ss.sym_stack) ==>
+  TAKE k ss.sym_stack = MAP Val (TAKE k cs.as_stack)
+Proof
+  strip_tac >> irule sval_conc_numeric_list >> simp[] >>
+  qexists `slo` >> metis_tac[rich_listTheory.EVERY2_TAKE]
+QED
+
 Theorem asm_sym_numeric_take:
   asm_sym_rel p env cs ss /\
   EVERY (\sv. ?w. sv = Val w) (TAKE k ss.sym_stack) ==>
   TAKE k ss.sym_stack = MAP Val (TAKE k cs.as_stack)
 Proof
-  strip_tac >> irule sval_conc_numeric_list >> simp[] >>
-  qexists `SND (compute_label_offsets p)` >>
-  gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  metis_tac[rich_listTheory.EVERY2_TAKE]
+  metis_tac[asm_sym_numeric_take_core, asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
 Theorem asm_sym_step_success_from_safe:
@@ -544,6 +565,21 @@ Proof
   gvs[asmSymBridgeTheory.asm_sym_step_rel_def]
 QED
 
+Theorem sym_step_concrete_numeric_safe_core:
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  ~mem_labels_hit ss.sym_mem_labels
+    (asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack)) /\
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack ==>
+  !msg. sym_step_concrete name ss <> SymBad msg
+Proof
+  strip_tac >> drule_all asm_sym_numeric_take_core >> strip_tac >>
+  simp[sym_step_concrete_def, sval_val_map] >>
+  Cases_on `asm_step_op FEMPTY name
+    (ss.sym_base with as_stack := TAKE (asm_op_arity name) cs.as_stack)` >>
+  simp[sym_lift_def]
+QED
+
 Theorem sym_step_concrete_numeric_safe:
   asm_op_arity name <= LENGTH ss.sym_stack /\
   EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
@@ -552,11 +588,31 @@ Theorem sym_step_concrete_numeric_safe:
   asm_sym_rel p env cs ss ==>
   !msg. sym_step_concrete name ss <> SymBad msg
 Proof
-  strip_tac >> drule_all asm_sym_numeric_take >> strip_tac >>
+  metis_tac[sym_step_concrete_numeric_safe_core,
+            asmSymBridgeTheory.asm_sym_rel_def]
+QED
+
+Theorem sym_step_concrete_numeric_shape_core:
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
+  sym_step_concrete name ss = SymOK ss' ==>
+  ss'.sym_mem_labels = ss.sym_mem_labels /\
+  ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
+Proof
+  strip_tac >> drule_all asm_sym_numeric_take_core >> strip_tac >>
+  `mem_labels_clear ss.sym_mem_labels
+      (asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack)) =
+    ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  qpat_x_assum `sym_step_concrete _ _ = _` mp_tac >>
   simp[sym_step_concrete_def, sval_val_map] >>
+  Cases_on `mem_labels_hit ss.sym_mem_labels
+    (asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack))` >> simp[] >>
   Cases_on `asm_step_op FEMPTY name
     (ss.sym_base with as_stack := TAKE (asm_op_arity name) cs.as_stack)` >>
-  simp[sym_lift_def]
+  simp[sym_lift_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem sym_step_concrete_numeric_shape:
@@ -568,17 +624,8 @@ Theorem sym_step_concrete_numeric_shape:
   ss'.sym_mem_labels = ss.sym_mem_labels /\
   ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
 Proof
-  strip_tac >> drule_all asm_sym_numeric_take >> strip_tac >>
-  `mem_labels_clear ss.sym_mem_labels
-      (asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack)) =
-    ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
-  qpat_x_assum `sym_step_concrete _ _ = _` mp_tac >>
-  simp[sym_step_concrete_def, sval_val_map] >>
-  Cases_on `mem_labels_hit ss.sym_mem_labels
-    (asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack))` >> simp[] >>
-  Cases_on `asm_step_op FEMPTY name
-    (ss.sym_base with as_stack := TAKE (asm_op_arity name) cs.as_stack)` >>
-  simp[sym_lift_def] >> strip_tac >> gvs[] >> metis_tac[]
+  metis_tac[sym_step_concrete_numeric_shape_core,
+            asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
 Theorem sym_single_step_replay_safe:
@@ -919,6 +966,50 @@ Proof
   metis_tac[source_read_byte_no_labels, source_write_byte_no_labels]
 QED
 
+Theorem sym_numeric_emit_replay_core:
+  (!cs ss. R cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!cs ss inst cs'. R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step slo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own inst ss
+            else sym_step p env inst ss) <> SymBad msg) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss') /\
+  R cs ss /\ asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step slo (build_offset_to_pc p) (AsmOp name) cs = AsmOK cs' /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  (if allow_own then sym_step_op_own p env own name ss
+   else sym_step_op p env name ss) = sym_step_concrete name ss ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\
+    R cs' ss' /\ ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
+Proof
+  strip_tac >>
+  `LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
+    metis_tac[] >>
+  `!msg. sym_step_concrete name ss <> SymBad msg` by
+    (irule sym_step_concrete_numeric_safe_core >>
+     simp[mem_labels_hit_def] >> metis_tac[]) >>
+  `?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss'` by
+    (first_x_assum irule >> qexistsl [`cs`, `AsmOp name`] >>
+     simp[] >> Cases_on `allow_own` >>
+     gvs[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def]) >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp name]` by metis_tac[] >>
+  `sym_step_concrete name ss = SymOK ss'` by
+    (drule (Q.INST [`allow_own` |-> `allow_own`, `env` |-> `env`,
+       `own` |-> `own`] sym_steps_mode_single) >>
+     disch_then (fn th => qpat_x_assum `sym_steps_mode _ _ _ _ _ _ = SymOK _` mp_tac >>
+       rewrite_tac[th]) >>
+     Cases_on `allow_own` >> fs[] >>
+     simp[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def]) >>
+  qexists `ss'` >> simp[] >>
+  metis_tac[sym_step_concrete_numeric_shape_core]
+QED
+
 Theorem sym_numeric_emit_replay:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   asm_block_at p cs.as_pc [AsmOp name] /\
@@ -936,23 +1027,12 @@ Theorem sym_numeric_emit_replay:
     ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
 Proof
   strip_tac >>
-  `!msg. sym_step_concrete name ss <> SymBad msg` by
-    (irule sym_step_concrete_numeric_safe >>
-     simp[mem_labels_hit_def] >> metis_tac[]) >>
-  `?ss'. sym_step p env (AsmOp name) ss = SymOK ss' /\
-    asm_sym_rel p env cs' ss'` by
-    (`cs.as_pc < LENGTH p /\ EL cs.as_pc p = AsmOp name` by
-       (fs[asm_block_at_def] >>
-        first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-     drule asm_sym_step_success_from_safe >>
-     disch_then (qspecl_then [`ss`, `env`, `cs'`, `cs`] mp_tac) >>
-     simp[sym_step_def]) >>
-  qexists `ss'` >>
-  `sym_steps p env 1 ss = SymOK ss'` by
-    (irule sym_steps_single_emit >>
-     fs[asmSymBridgeTheory.asm_sym_rel_def] >> metis_tac[]) >>
-  simp[] >> irule sym_step_concrete_numeric_shape >>
-  fs[sym_step_def] >> metis_tac[]
+  irule (Q.INST [`allow_own` |-> `F`] sym_numeric_emit_replay_core |>
+    SIMP_RULE std_ss [sym_steps_mode_def]) >>
+  simp[] >> qexistsl [`cs`, `SND (compute_label_offsets p)`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> irule sym_single_step_replay_safe >> metis_tac[]) >>
+  rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
 Theorem sym_emit_kinds_numeric_result:
@@ -999,8 +1079,8 @@ Proof
   metis_tac[sym_step_mstore_words]
 QED
 
-Theorem sym_step_mload_numeric_dispatch:
-  asm_sym_rel p env cs ss /\
+Theorem sym_step_mload_numeric_dispatch_core:
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
   1 <= LENGTH ss.sym_stack /\
   EVERY (\sv. ?w. sv = Val w) (TAKE 1 ss.sym_stack) /\
   (!b. b IN FDOM ss.sym_mem_labels ==>
@@ -1009,7 +1089,7 @@ Theorem sym_step_mload_numeric_dispatch:
 Proof
   strip_tac >>
   `TAKE 1 ss.sym_stack = MAP Val (TAKE 1 cs.as_stack)` by
-    metis_tac[asm_sym_numeric_take] >>
+    metis_tac[asm_sym_numeric_take_core] >>
   Cases_on `ss.sym_stack` >> gvs[] >>
   Cases_on `cs.as_stack` >> gvs[] >>
   rename1 `ss.sym_stack = Val off :: tail` >>
@@ -1017,6 +1097,44 @@ Proof
     (qpat_x_assum `!b. _` (qspec_then `w2n off` mp_tac) >>
      simp[asm_op_mem_reads_def, in_mem_range_def]) >>
   irule sym_step_mload_word >> metis_tac[]
+QED
+
+Theorem sym_step_mload_numeric_dispatch:
+  asm_sym_rel p env cs ss /\
+  1 <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE 1 ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads "MLOAD" (TAKE 1 cs.as_stack) b) ==>
+  sym_step_op p env "MLOAD" ss = sym_step_concrete "MLOAD" ss
+Proof
+  metis_tac[sym_step_mload_numeric_dispatch_core,
+            asmSymBridgeTheory.asm_sym_rel_def]
+QED
+
+Theorem sym_step_numeric_dispatch_core:
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b) ==>
+  (if allow_own then sym_step_op_own p env own name ss
+   else sym_step_op p env name ss) = sym_step_concrete name ss
+Proof
+  strip_tac >>
+  `sym_step_op p env name ss = sym_step_concrete name ss` suffices_by
+    (Cases_on `allow_own` >> gvs[asmSymOwnCodeTheory.sym_step_op_own_def, MEM]) >>
+  Cases_on `name = "ADD"`
+  >- (gvs[] >> irule sym_step_add_numeric_dispatch >>
+      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
+  Cases_on `name = "MSTORE"`
+  >- (gvs[] >> irule sym_step_mstore_numeric_dispatch >>
+      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
+  Cases_on `name = "MLOAD"`
+  >- (gvs[] >> irule sym_step_mload_numeric_dispatch_core >>
+      fs[asm_op_arity_def, asm_op_arity_table_def] >> metis_tac[]) >>
+  irule sym_step_op_plain >> fs[]
 QED
 
 Theorem sym_step_numeric_dispatch:
@@ -1029,16 +1147,58 @@ Theorem sym_step_numeric_dispatch:
     ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b) ==>
   sym_step_op p env name ss = sym_step_concrete name ss
 Proof
-  strip_tac >> Cases_on `name = "ADD"`
-  >- (gvs[] >> irule sym_step_add_numeric_dispatch >>
-      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
-  Cases_on `name = "MSTORE"`
-  >- (gvs[] >> irule sym_step_mstore_numeric_dispatch >>
-      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
-  Cases_on `name = "MLOAD"`
-  >- (gvs[] >> irule sym_step_mload_numeric_dispatch >>
-      fs[asm_op_arity_def, asm_op_arity_table_def] >> metis_tac[]) >>
-  irule sym_step_op_plain >> fs[]
+  strip_tac >>
+  irule (Q.INST [`allow_own` |-> `F`] sym_step_numeric_dispatch_core |> SIMP_RULE std_ss []) >>
+  simp[] >> qexistsl [`cs`, `SND (compute_label_offsets p)`] >>
+  fs[asmSymBridgeTheory.asm_sym_rel_def]
+QED
+
+Theorem sym_prepared_numeric_emit_core:
+  (!cs ss. R cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!cs ss inst cs'. R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step slo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own inst ss
+            else sym_step p env inst ss) <> SymBad msg) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss') /\
+  R cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step slo (build_offset_to_pc p) (AsmOp name) cs = AsmOK cs' /\
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ps.ps_stack /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  qs.ps_spilled = ps.ps_spilled /\
+  REVERSE qs.ps_stack = outputs ++ DROP (asm_op_arity name) (REVERSE ps.ps_stack) /\
+  (!op w. MEM op outputs ==> op_kind_ok fn ret op (Val w)) /\
+  LENGTH cs'.as_stack + asm_op_arity name = LENGTH cs.as_stack + LENGTH outputs ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  strip_tac >>
+  `LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
+    metis_tac[] >>
+  `(if allow_own then sym_step_op_own p env own name ss
+    else sym_step_op p env name ss) = sym_step_concrete name ss` by
+    (irule sym_step_numeric_dispatch_core >> metis_tac[]) >>
+  drule_all sym_numeric_emit_replay_core >> strip_tac >>
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack /\
+   LENGTH ss'.sym_stack = LENGTH cs'.as_stack` by
+    metis_tac[LIST_REL_LENGTH] >>
+  `LENGTH ws = LENGTH outputs` by
+    (qpat_x_assum `ss'.sym_stack = _` (mp_tac o AP_TERM ``LENGTH:sval list -> num``) >>
+     simp[] >> decide_tac) >>
+  `LIST_REL (op_kind_ok fn ret) outputs (MAP Val ws)` by
+    (rw[LIST_REL_EL_EQN] >> simp[EL_MAP] >>
+     first_x_assum irule >> metis_tac[MEM_EL]) >>
+  qexists `ss'` >> simp[] >>
+  drule_all sym_emit_kinds_numeric_result >> simp[]
 QED
 
 Theorem sym_prepared_numeric_emit:
@@ -1064,20 +1224,12 @@ Theorem sym_prepared_numeric_emit:
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
   strip_tac >>
-  `sym_step_op p env name ss = sym_step_concrete name ss` by
-    (irule sym_step_numeric_dispatch >> metis_tac[]) >>
-  drule_all sym_numeric_emit_replay >> strip_tac >>
-  `LENGTH ss.sym_stack = LENGTH cs.as_stack /\
-   LENGTH ss'.sym_stack = LENGTH cs'.as_stack` by
-    metis_tac[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_LENGTH] >>
-  `LENGTH ws = LENGTH outputs` by
-    (qpat_x_assum `ss'.sym_stack = _` (mp_tac o AP_TERM ``LENGTH:sval list -> num``) >>
-     simp[] >> decide_tac) >>
-  `LIST_REL (op_kind_ok fn ret) outputs (MAP Val ws)` by
-    (rw[LIST_REL_EL_EQN] >> simp[EL_MAP] >>
-     first_x_assum irule >> metis_tac[MEM_EL]) >>
-  qexists `ss'` >> simp[] >>
-  drule_all sym_emit_kinds_numeric_result >> simp[]
+  irule (Q.INST [`allow_own` |-> `F`] sym_prepared_numeric_emit_core |>
+    SIMP_RULE std_ss [sym_steps_mode_def]) >>
+  simp[] >> qexistsl [`cs`, `name`, `outputs`, `ps`, `SND (compute_label_offsets p)`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_single_step_replay_safe >> metis_tac[]) >>
+  rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
 Theorem sym_prepared_selected_numeric:
@@ -1100,8 +1252,9 @@ Proof
   qexistsl [`fn`, `REVERSE selected`, `ret`] >> simp[]
 QED
 
-Theorem ordinary_prepared_selected_numeric:
-  opaque_use_ok fn /\ label_flow_ok ctx /\
+Theorem ordinary_prepared_selected_numeric_mode:
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   (!op. MEM op selected ==> MEM op inst.inst_operands /\ ~is_label_operand op) /\
   ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] /\
@@ -1112,7 +1265,21 @@ Theorem ordinary_prepared_selected_numeric:
 Proof
   strip_tac >> irule sym_prepared_selected_numeric >>
   qexistsl [`cplan`, `fn`, `ps`, `residual`, `ret`, `srest`] >> simp[] >>
-  rw[EVERY_MEM] >> metis_tac[ordinary_source_input_numeric_kind]
+  rw[EVERY_MEM] >> metis_tac[ordinary_source_input_numeric_kind_mode]
+QED
+
+Theorem ordinary_prepared_selected_numeric:
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  (!op. MEM op selected ==> MEM op inst.inst_operands /\ ~is_label_operand op) /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected ==>
+  LENGTH selected <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)
+Proof
+  mp_tac (Q.INST [`allow_own` |-> `F`] ordinary_prepared_selected_numeric_mode) >>
+  simp[]
 QED
 
 Theorem sym_numeric_emit_output_plan:
@@ -1446,6 +1613,89 @@ Proof
   metis_tac[nonmemory_emission_writes_empty]
 QED
 
+Theorem sym_named_numeric_source_emit_core:
+  (!cs ss. R cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!cs ss inst cs'. R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step slo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own inst ss
+            else sym_step p env inst ss) <> SymBad msg) ==>
+    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss') /\
+  R cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step slo (build_offset_to_pc p) (AsmOp name) cs = AsmOK cs' /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\ inst.inst_opcode <> GAS /\
+  inst.inst_opcode <> CODECOPY /\ inst.inst_opcode <> CODESIZE /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+  ~(?op. inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"]) /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\
+  fn_shape_ok fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) vlo op) /\
+  venom_asm_rel vlo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel vlo qs vsout cs' /\
+  qs = ps with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop (LENGTH selected) ps.ps_stack) inst.inst_outputs /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY; RETPC_PARAM]` by
+    (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+     Cases_on `inst.inst_opcode` >>
+     simp[asmIRTheory.venom_to_evm_name_def] >> fs[]) >>
+  drule_all named_numeric_selected_operands >> strip_tac >>
+  drule_all named_numeric_emission_arity >> strip_tac >>
+  `eval_operands (REVERSE selected) vs =
+     SOME (TAKE (LENGTH selected) cs.as_stack)` by
+    (irule ordinary_prepared_source_evaluation >> simp[] >>
+     qexistsl [`fn`, `inst`, `vlo`, `m`, `ps`, `ra`, `residual`] >> fs[MEM]) >>
+  `LENGTH selected <= LENGTH ss.sym_stack /\
+   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)` by
+    (irule ordinary_prepared_selected_numeric_mode >>
+     qexistsl [`allow_own`, `cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
+     fs[MEM]) >>
+  `!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (LENGTH selected) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (LENGTH selected) cs.as_stack) b` by
+    (ho_match_mp_tac source_footprint_symbolic_memory_safe >> simp[] >>
+     conj_tac >- fs[sym_kinds_ok_def] >>
+     conj_tac >- (gen_tac >> strip_tac >> irule named_selected_read_coverage >>
+       metis_tac[]) >>
+     gen_tac >> strip_tac >> irule named_selected_write_coverage >> metis_tac[]) >>
+  `qs.ps_spilled = ps.ps_spilled /\
+   REVERSE qs.ps_stack = REVERSE (MAP Var inst.inst_outputs) ++
+     DROP (asm_op_arity name) (REVERSE ps.ps_stack)` by
+    (irule sym_numeric_emit_output_plan >> simp[]) >>
+  `LENGTH (compute_operands inst) <= LENGTH ps.ps_stack` by simp[] >>
+  `LENGTH cs'.as_stack + asm_op_arity name =
+   LENGTH cs.as_stack + LENGTH (REVERSE (MAP Var inst.inst_outputs))` by
+    (irule sym_emit_concrete_output_count >> simp[] >> metis_tac[]) >>
+  drule_all named_numeric_dispatch_names >> strip_tac >>
+  irule sym_prepared_numeric_emit_core >> simp[] >>
+  qexistsl [`cs`, `name`, `REVERSE (MAP Var inst.inst_outputs)`, `ps`, `slo`] >>
+  simp[] >> conj_tac
+  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      irule ordinary_output_kind >> fs[MEM] >> metis_tac[]) >>
+  metis_tac[MEM]
+QED
+
 Theorem sym_named_numeric_source_emit:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   sym_kinds_ok cplan fn ret srest ps ss /\
@@ -1482,47 +1732,21 @@ Theorem sym_named_numeric_source_emit:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `inst.inst_opcode <> CODESIZE` by metis_tac[label_flow_inst_not_codesize] >>
-  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY; RETPC_PARAM]` by
-    (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
-     Cases_on `inst.inst_opcode` >>
-     simp[asmIRTheory.venom_to_evm_name_def] >> fs[]) >>
-  drule_all named_numeric_selected_operands >> strip_tac >>
-  drule_all named_numeric_emission_arity >> strip_tac >>
-  `eval_operands (REVERSE selected) vs =
-     SOME (TAKE (LENGTH selected) cs.as_stack)` by
-    (irule ordinary_prepared_source_evaluation >> simp[] >>
-     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >> fs[MEM]) >>
-  `LENGTH selected <= LENGTH ss.sym_stack /\
-   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)` by
-    (irule ordinary_prepared_selected_numeric >>
-     qexistsl [`cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
-     fs[MEM]) >>
-  `!b. b IN FDOM ss.sym_mem_labels ==>
-    ~asm_op_mem_reads name (TAKE (LENGTH selected) cs.as_stack) b /\
-    ~asm_op_mem_writes name (TAKE (LENGTH selected) cs.as_stack) b` by
-    (ho_match_mp_tac source_footprint_symbolic_memory_safe >>
-     simp[] >>
-     conj_tac >- fs[sym_kinds_ok_def] >>
-     conj_tac >- (gen_tac >> strip_tac >> irule named_selected_read_coverage >>
-       metis_tac[]) >>
-     gen_tac >> strip_tac >> irule named_selected_write_coverage >>
-     metis_tac[]) >>
-  `qs.ps_spilled = ps.ps_spilled /\
-   REVERSE qs.ps_stack = REVERSE (MAP Var inst.inst_outputs) ++
-     DROP (asm_op_arity name) (REVERSE ps.ps_stack)` by
-    (irule sym_numeric_emit_output_plan >> simp[]) >>
-  `LENGTH (compute_operands inst) <= LENGTH ps.ps_stack` by simp[] >>
-  `LENGTH cs'.as_stack + asm_op_arity name =
-   LENGTH cs.as_stack + LENGTH (REVERSE (MAP Var inst.inst_outputs))` by
-    (irule sym_emit_concrete_output_count >> simp[] >>
-     metis_tac[]) >>
-  drule_all named_numeric_dispatch_names >> strip_tac >>
-  irule sym_prepared_numeric_emit >> simp[] >>
-  qexistsl [`cs`, `name`, `REVERSE (MAP Var inst.inst_outputs)`, `ps`] >>
-  simp[] >> conj_tac
-  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
-      irule ordinary_output_kind >> fs[MEM] >> metis_tac[]) >>
-  metis_tac[MEM]
+  `!cs ss. asm_sym_rel p env cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+      ss.sym_stack cs.as_stack` by
+    (rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]) >>
+  `!cs ss inst cs'. asm_sym_rel p env cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. sym_step p env inst ss <> SymBad msg) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
+    (rpt strip_tac >> irule sym_single_step_replay_safe >> metis_tac[]) >>
+  drule_all (Q.INST [`allow_own` |-> `F`, `R` |-> `asm_sym_rel p env`,
+    `slo` |-> `SND (compute_label_offsets p)`]
+    sym_named_numeric_source_emit_core |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[]
 QED
 
 Theorem sym_emit_run_endpoint:
