@@ -48,7 +48,7 @@ Theorem ctor_source_landing_world:
   accounts_rel H (deploy_evaluation_context tops am tx)
     (es0 with outcomes := SOME os) actual /\
   logs_rel cenv tx.target (es0 with outcomes := SOME os) actual /\
-  LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
+  LIST_REL (request_agree H (deploy_evaluation_context tops am tx).txn.target)
     (es0 with outcomes := SOME os).requests actual.vs_requests /\
   (es0 with outcomes := SOME os).pending_deletions = actual.vs_pending_deletions
 Proof
