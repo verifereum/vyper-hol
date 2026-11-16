@@ -16,7 +16,6 @@
  * TOP-LEVEL:
  *   e2e_deploy_correct_from_gas_link -- the deploy result relation at every
  *     filling, from the facts above
- *   gas_readings_rel_mono -- gas_readings_rel is monotone in its run
  *)
 Theory e2eDeployAtMarks
 Ancestors
@@ -27,14 +26,6 @@ Ancestors
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
-
-Theorem gas_readings_rel_mono:
-  !readings P Q.
-    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
-    gas_readings_rel readings Q T
-Proof
-  rw[gas_readings_rel_def] >> metis_tac[]
-QED
 
 Theorem deploy_exempt_result_rel[local]:
   deploy_source_exempt tops src ==>
