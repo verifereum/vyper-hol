@@ -2643,6 +2643,27 @@ Proof
     `u with vs_inst_idx := SUC s.vs_inst_idx`, `t`] mp_tac) >> simp[]
 QED
 
+Theorem native_selected_maximal_cut:
+  !P n C s. ?A rest q.
+    P = A ++ rest /\
+    EVERY (\i. ~is_terminator i.inst_opcode) A /\
+    FOLDR (dft_exec_cons n C) OK A s = OK q /\
+    (rest = [] \/ ?i more. rest = i::more /\
+       (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)))
+Proof
+  Induct >> rpt gen_tac
+  >- (qexistsl_tac [`[]`, `[]`, `s`] >> simp[]) >>
+  Cases_on `is_terminator h.inst_opcode \/ ~(?u. step_inst n C h s = OK u)`
+  >- (qexistsl_tac [`[]`, `h::P`, `s`] >> gvs[]) >>
+  gvs[] >>
+  rename1 `step_inst n C h s = OK u` >>
+  qpat_x_assum `!n C s. _` (qspecl_then
+    [`n`, `C`, `u with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  strip_tac >>
+  qexistsl_tac [`h::A`, `rest`, `q`] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def]
+QED
+
 Theorem native_suffix_stopping_decomposition:
   !xs b C t. terminates (dft_exec_suffix b C xs t) ==>
   ?done z later tz.
