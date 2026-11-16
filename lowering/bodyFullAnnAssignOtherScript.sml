@@ -8,7 +8,7 @@ Ancestors
   stmtSimDeclMem stmtSimProps loweringSlice stmtLoweringMono
   compileEnv exprLowering stmtLowering loweringPosts
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState vyperAST
-  list finite_map exprSimAbiEncodePrefixWindow annassignRelayoutPost stmtSimDeclSource bodyFullMemoryValue bodyFullAnnAssignMemoryPost bodyFullMemoryFrames gasOutcomeFull fragGasOriginPtr freshWrites bodySim exprOperandVar exprSimTypedAlloc stmtSimDeclSourceSeparation bodyPtrDefs venomState
+  list finite_map exprSimAbiEncodePrefixWindow annassignRelayoutPost stmtSimDeclSource bodyFullMemoryValue bodyFullAnnAssignMemoryPost bodyFullMemoryFrames gasOutcomeFull fragGasOriginPtr freshWrites bodySim exprOperandVar exprSimTypedAlloc stmtSimDeclSourceSeparation bodyPtrDefs venomState bodyFullAnnAssignReserve contextRawReachable ptrDiscipline unitMemInv decoderGhostFramePtr bodyMemBopRestWordPath fragGasOrigin bodyMemoryDefs stmtSimDecl
 
 Theorem annassign_other_full_code_parts:
   compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
@@ -561,4 +561,204 @@ Proof
    (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at k x)` by metis_tac[] >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Gf,tf)` by simp[] >>
   drule_all annassign_other_full_install >> strip_tac >> gvs[]
+QED
+
+Theorem annassign_other_full_rhs:
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e a = (op,b) /\
+  lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
+  gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code a b func /\ fn_has_code shadow_a shadow_b shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\ ~ctx_has_dalloca ctx /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  return_buf_frame d ce a t /\ alloca_history func t /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es t /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx es G tn t) /\
+  ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
+  t.vs_inst_idx = LENGTH a.cs_current_insts /\
+  expr_body_pre ce cx env e es /\
+  type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+  ~is_word_type typ /\ ~is_bytestring_type typ /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
+  lookup_var p t = SOME w /\ ptr_covers G tn p t n /\ not_fresh_at a p /\
+  FLOOKUP t.vs_allocas aid = SOME (w2n w,n) ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G,tn)
+    (\H res ee Gf tnf u. ?v. res = INL v /\
+      expr_post H ctx func ce cx e es a b t ee v op u /\
+      expr_val_at ce cx (lowered_value_type ce e) a b ee v op u /\
+      (!src. eval_operand op u = SOME src ==> type_memory_size stv = 0 \/
+        w2n src + type_memory_size stv <= u.vs_alloca_next) /\
+      u.vs_current_bb = b.cs_current_bb /\
+      u.vs_inst_idx = LENGTH b.cs_current_insts /\
+      alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d ce cx ee Gf tnf u /\
+      ptr_val_ok cx (post_value_type ce e) v op Gf tnf u /\
+      ptr_buf_ok ce e op Gf u /\
+      ghost_kept_at lo ce es a G tn t Gf tnf /\
+      lookup_var p u = SOME w /\ ptr_covers Gf tnf p u n /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,n))
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  strip_tac >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     qpat_assum `~ctx_has_dalloca ctx`
+       (mp_tac o REWRITE_RULE [ctx_has_dalloca_def, listTheory.EXISTS_MEM]) >>
+     simp[dalloca_no_wrap_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`, `a`, `b`, `shadow_a`, `shadow_b`,
+    `op`, `t`, `G`, `tn`] mp_tac) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  irule gas_outcome_full_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `expr_post _ _ _ _ _ _ _ _ _ _ ee v op u` >>
+  rename1 `ghost_kept_at lo ce es a G tn t Gf tnf` >>
+  drule_all annassign_other_full_rhs_layout >> strip_tac >>
+  drule_all annassign_other_full_layout >> strip_tac >>
+  `lookup_var p u = SOME w /\
+   FLOOKUP u.vs_allocas aid = SOME (w2n w,n)` by
+    (fs[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
+  `ptr_covers Gf tnf p u n` by
+    (irule ptr_covers_frame >> goal_assum (drule_at Any) >>
+     fs[bodyPtrDefsTheory.ghost_kept_at_def]) >>
+  qexists_tac `v` >> simp[] >>
+  qpat_x_assum `!src. eval_operand op u = SOME src ==> _` mp_tac >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem annassign_other_full_alloc_rhs:
+  declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
+  FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
+  compile_alloc_buffer n sa = (<|buf_operand := Var p; buf_size := n|>,a) /\
+  fn_has_code sa a func /\ local_ptrs_reserved old sa /\ n < dimword (:256) /\
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e a = (op,b) /\
+  lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
+  gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code a b func /\ fn_has_code shadow_a shadow_b shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\ ~ctx_has_dalloca ctx /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
+  (!x sz. old.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. old.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= a.cs_next_var /\
+  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
+  return_buf_frame d old sa s0 /\ alloca_history func s0 /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func old cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d old cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  expr_body_pre ce cx env e es /\
+  type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+  ~is_word_type typ /\ ~is_bytestring_type typ /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv ==>
+  ?w t G tn.
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) [] (OK t,G,tn)) /\
+    lookup_var p t = SOME w /\ ptr_covers G tn p t n /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP t.vs_allocas aid = SOME z) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
+      FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G,tn)
+      (\H res ee Gf tnf u. ?v. res = INL v /\
+        expr_post H ctx func ce cx e es a b t ee v op u /\
+        expr_val_at ce cx (lowered_value_type ce e) a b ee v op u /\
+        (!src. eval_operand op u = SOME src ==> type_memory_size stv = 0 \/
+          w2n src + type_memory_size stv <= u.vs_alloca_next) /\
+        u.vs_current_bb = b.cs_current_bb /\
+        u.vs_inst_idx = LENGTH b.cs_current_insts /\
+        alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d ce cx ee Gf tnf u /\
+        ptr_val_ok cx (post_value_type ce e) v op Gf tnf u /\
+        ptr_buf_ok ce e op Gf u /\ ghost_kept_at lo ce es a G tn t Gf tnf /\
+        lookup_var p u = SOME w /\ ptr_covers Gf tnf p u n /\
+        FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,n))
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+    by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] bodyFullMemoryFramesTheory.body_full_alloc_buffer_path) >>
+  disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
+    (qx_choosel_then [`entry`,`root`,`dest_start`,`G1`,`tn1`] strip_assume_tac)) >>
+  gvs[] >>
+  rename1 `lookup_var p t = SOME (n2w dest_start)` >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es t /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx es G1 tn1 t` by
+    (qx_gen_tac `H` >> disch_tac >>
+     `stmt_state_rel H ctx func old cx es t /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d old cx es G1 tn1 t` by metis_tac[] >>
+     conj_tac >- (irule stmtSimDeclTheory.stmt_state_rel_declare_local_entry >>
+       goal_assum (drule_at Any) >>
+       qexistsl_tac [`id`,`sa`,`r`,`typ`] >> simp[]) >>
+     conj_tac >- simp[] >>
+     irule ghost_inv_at_declare_local_entry >> metis_tac[]) >>
+  `alloca_inv s0` by metis_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `gas_marked_path T ctx func s0 0 (OK t)` by
+    (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
+      (qspec_then `DF (storage_trace_horizon es.storage_trace)` mp_tac) >>
+     disch_then (strip_assume_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >>
+     drule fragGasOriginTheory.gas_origin_path_erase >> simp[]) >>
+  `alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
+    metis_tac[bodyMemBopRestWordPathTheory.rest_word_marked_allocation_posts] >>
+  `dest_start < dimword (:256)` by decide_tac >>
+  `w2n (n2w dest_start : bytes32) = dest_start` by simp[wordsTheory.w2n_n2w] >>
+  `dest_start + n <= t.vs_alloca_next` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es t`
+       by metis_tac[] >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
+  `return_buf_frame d ce a t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  qexistsl_tac [`n2w dest_start`,`t`,`G1`,`tn1`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x)` by
+    (conj_tac >> rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[stmtSimDeclSourceTheory.annassign_admissible_rhs] >>
+  `FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n (n2w dest_start : bytes32),n)` by simp[] >>
+  drule_all annassign_other_full_rhs >> simp[]
 QED
