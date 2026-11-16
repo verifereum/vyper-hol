@@ -6183,6 +6183,212 @@ Resume native_inventory_success_residual[residual]:
 QED
 Finalise native_inventory_success_residual
 
+Theorem native_residual_schedule_packet:
+  !body.
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\
+  (s with vs_gas_readings := []) = (t with vs_gas_readings := []) /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
+  gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
+  ^native_inventory_IHq ==>
+  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
+      source_residual = bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
+  ?K S U.
+    let M = MAP (ALOOKUP obs) K in
+    ALL_DISTINCT K /\ EVERY (block_region p d (MAP (\i. i.inst_id) todo)) K /\
+    LENGTH K = LENGTH S /\
+    PERM (MAP THE (FILTER IS_SOME M) ++ U) t.vs_gas_readings /\
+    (!u. exec_block b C' bt t = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+    (!v u. exec_block b C' bt t = IntRet v u ==>
+      EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+    (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+      (!n. ?k. k <= LENGTH K /\
+        trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn source_residual
+          (s with vs_gas_readings := g ++ tail)) = ZIP (TAKE k K, TAKE k g) /\
+        gas_events_block n C fn.fn_name source_residual
+          (s with vs_gas_readings := g ++ tail) = TAKE k S) /\
+      ((?n. terminates (exec_block n C source_residual
+          (s with vs_gas_readings := g ++ tail))) ==>
+        terminates (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)))
+          (restore_result [] (exec_block b C' bt t)) /\
+        (((?u. exec_block b C' bt t = OK u) \/
+          (?v u. exec_block b C' bt t = IntRet v u)) ==>
+          gas_events_block b C fn.fn_name source_residual
+            (s with vs_gas_readings := g ++ tail) = S /\
+          (!u. exec_block b C source_residual (s with vs_gas_readings := g ++ tail) = OK u ==>
+            u.vs_gas_readings = tail) /\
+          (!v u. exec_block b C source_residual (s with vs_gas_readings := g ++ tail) = IntRet v u ==>
+            u.vs_gas_readings = tail) /\
+          residual_result tail (exec_block b C' bt t)
+            (exec_block b C source_residual (s with vs_gas_readings := g ++ tail)))))
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
+  `?done z later before after tz.
+    scheduled = done ++ z::later /\ todo = before ++ z::after /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+    tz.vs_inst_idx = j + LENGTH done /\
+    exec_block b C' bt t = dft_exec_suffix b C' [z] tz /\
+    (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) before /\
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+      FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) /\
+    (((?u. exec_block b C' bt t = OK u) \/
+      (?v u. exec_block b C' bt t = IntRet v u)) ==> after = [])` by
+    (mp_tac (Q.SPEC `actual_body` native_schedule_stopping_frontier) >>
+     (impl_tac >- gvs[]) >> asm_rewrite_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `EVERY (\i. MEM i bb.bb_instructions) scheduled` by
+    (drule native_bubbles_perm >>
+     qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [dft_remaining_inv_def] >> rpt strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[PERM_MEM_EQ]) >>
+  `MAP FST (MAP (\(e,f,i,a). (i,a))
+    (FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) =
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z])` by
+    (mp_tac (Q.SPEC `actual_body`
+       (Q.INST [`bi` |-> `bb.bb_instructions`] native_frontier_root_calls)) >>
+     (impl_tac >- gvs[]) >> simp[]) >>
+  suspend "select"
+QED
+Resume native_residual_schedule_packet[select]:
+  markerLib.RESUME_TAC >>
+  mp_tac (Q.SPEC `actual_body`
+    (Q.INST [`P` |-> `before ++ [z]`] native_frontier_mask_inventory)) >>
+  (impl_tac >- (asm_rewrite_tac[] >> conj_tac
+    >- (qexists_tac `after` >> simp[]) >>
+    qpat_x_assum `((?u. exec_block b C' bt t = OK u) \/ _) ==> after = []` mp_tac >>
+    qpat_x_assum `exec_block b C' bt t = _` mp_tac >>
+    rpt (pop_assum kall_tac) >> simp[])) >>
+  simp_tac pure_ss [LET_THM] >>
+  disch_then (qx_choose_then `key_rows` (qx_choose_then `site_rows`
+    (qx_choose_then `certs` (map_every assume_tac o CONJUNCTS)))) >>
+  simp_tac pure_ss [LET_THM] >>
+  qexistsl_tac [`FLAT key_rows`, `FLAT site_rows`,
+    `MAP SND (FILTER (\kw. ~MEM (FST kw) (FLAT key_rows))
+       (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) ++
+     DROP (LENGTH (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) t.vs_gas_readings`] >>
+  asm_rewrite_tac[] >> rpt gen_tac >> disch_tac >>
+  rename1 `EVERY (from_block bb.bb_instructions) frontier_body` >>
+  `^native_inventory_frontierq` by
+    (gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]) >>
+  (conj_tac >- (mp_tac (Q.SPECL [`frontier_body`, `key_rows`, `site_rows`, `certs`]
+      native_inventory_all_budget_prefix) >>
+    (impl_tac >- (simp_tac pure_ss [LET_THM] >> asm_rewrite_tac[] >> NO_TAC)) >>
+    simp[] >> NO_TAC)) >>
+  suspend "bounded"
+QED
+Resume native_residual_schedule_packet[bounded]:
+  markerLib.RESUME_TAC >> disch_then (qx_choose_then `n` assume_tac) >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    (Q.INST [`P` |-> `before ++ [z]`] native_inventory_invoke_budget_equal) >>
+  (impl_tac >- (asm_rewrite_tac[] >> qexists_tac `after` >> simp[])) >>
+  disch_tac >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    native_inventory_contained_stop >>
+  (impl_tac >- (simp_tac pure_ss [LET_THM] >> asm_rewrite_tac[])) >>
+  disch_then (qspec_then `n` (qx_choose_then `A` (qx_choose_then `i`
+    (qx_choose_then `rest` (qx_choose_then `frontpost` (qx_choose_then `q`
+      (map_every assume_tac o CONJUNCTS))))))) >>
+  mp_tac (Q.INST [`P` |-> `before ++ [z]`] native_stopped_cut_budget_lift) >>
+  simp_tac pure_ss [LET_THM] >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  asm_rewrite_tac[] >> suspend "result"
+QED
+Resume native_residual_schedule_packet[result]:
+  markerLib.RESUME_TAC >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    native_inventory_contained_stop >>
+  (impl_tac >- (simp_tac pure_ss [LET_THM] >> asm_rewrite_tac[] >> metis_tac[])) >>
+  disch_then (qspec_then `b` (qx_choose_then `Ab` (qx_choose_then `ib`
+    (qx_choose_then `restb` (qx_choose_then `postb` (qx_choose_then `qb`
+      (map_every assume_tac o CONJUNCTS))))))) >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    (Q.INST [`P` |-> `before ++ [z]`] native_inventory_stopped_cut_event_result) >>
+  (impl_tac >- (asm_rewrite_tac[] >> qexists_tac `after` >>
+    qpat_x_assum `todo = before ++ z::after` mp_tac >>
+    qpat_x_assum `before ++ [z] = Ab ++ ib::postb` mp_tac >>
+    qpat_x_assum `todo = Ab ++ ib::restb` mp_tac >>
+    rpt (pop_assum kall_tac) >> simp[APPEND_ASSOC])) >>
+  disch_then (qspecl_then [`Ab`, `ib`, `restb`, `postb`, `qb`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  simp_tac pure_ss [LET_THM] >> disch_tac >>
+  suspend "compose"
+QED
+Resume native_residual_schedule_packet[compose]:
+  markerLib.RESUME_TAC >>
+  `ctx_inst_ids_distinct C'` by fs[o1_ctx_shape_def] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) todo)` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     qpat_x_assum `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt disch_tac >>
+     irule ALL_DISTINCT_MAP_INJ >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >> rpt strip_tac >>
+     drule dftCorrectnessTheory.all_distinct_map_mem_inj >>
+     disch_then irule >> metis_tac[]) >>
+  `PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) scheduled)` by
+    metis_tac[PERM_MAP, ALL_DISTINCT_PERM] >>
+  `MAP (\i. i.inst_id) scheduled = MAP (\i. i.inst_id) frontier_body` by
+    (irule LIST_EQ >> fs[LIST_REL_EL_EQN, EL_MAP]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions))` by
+    (qpat_x_assum `bt = _` mp_tac >>
+     qpat_x_assum `t.vs_inst_idx = j` mp_tac >>
+     qpat_x_assum `MAP (\i. i.inst_id) scheduled = MAP (\i. i.inst_id) frontier_body` mp_tac >>
+     qpat_x_assum `ALL_DISTINCT (MAP (\i. i.inst_id) scheduled)` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt disch_tac >> gvs[DROP_APPEND]) >>
+  qspecl_then [`frontier_body`, `FLAT key_rows`, `g`] mp_tac
+    native_lookup_fill_schedule_result >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  simp_tac pure_ss [LET_THM] >> disch_tac >>
+  `dft_res_rel
+    (restore_result [] (exec_block b C
+      (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+      (s with vs_gas_readings := g ++ tail)))
+    (restore_result [] (exec_block b C' bt t))` by
+      metis_tac[dft_res_rel_trans] >>
+  asm_rewrite_tac[] >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    native_inventory_success_residual >>
+  (impl_tac >- (simp_tac pure_ss [LET_THM] >> asm_rewrite_tac[] >> metis_tac[])) >>
+  simp_tac pure_ss [LET_THM] >>
+  qpat_x_assum `dft_res_rel _ (restore_result [] (exec_block b C' bt t))` mp_tac >>
+  qpat_x_assum `terminates (exec_block b C _ _)` mp_tac >>
+  qpat_x_assum `exec_block b C _ _ = exec_block n C _ _` mp_tac >>
+  qpat_x_assum `exec_block b C' bt t = _` mp_tac >>
+  qpat_x_assum `todo = before ++ z::after` mp_tac >>
+  qpat_x_assum `todo = Ab ++ ib::restb` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt disch_tac >> gvs[] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]
+QED
+Finalise native_residual_schedule_packet
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
