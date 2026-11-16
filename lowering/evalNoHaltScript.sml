@@ -729,18 +729,6 @@ Proof
   metis_tac[cj 2 eval_no_halt_every]
 QED
 
-Theorem lookup_external_MEM[local]:
-  !tops. lookup_function src name External tops =
-           SOME (mut,nr,args,dflts,ret,fbody) ==>
-  (?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops) \/
-  (?pnr m ty x. MEM (VariableDecl (Public pnr) m name ty x) tops) \/
-  (?pnr b kt vt x. MEM (HashMapDecl (Public pnr) b name kt vt x) tops)
-Proof
-  Induct >- rw[lookup_function_def] >>
-  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
-  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
-QED
-
 Theorem build_getter_no_evm_run[local]:
   !e kt vt n args ret exp.
     build_getter e kt vt n = (args,ret,exp) /\
