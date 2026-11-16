@@ -685,6 +685,8 @@ Theorem body_return_case_full:
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_const_name_free >> simp[]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
