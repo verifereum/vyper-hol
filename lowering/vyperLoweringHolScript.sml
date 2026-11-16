@@ -48,6 +48,7 @@ Ancestors
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
+  asmOptOwnMergeJumpdests
   asmSymOwnCode
   asmOptOwnMergeIszero
   finalizerContractOwn
@@ -55,4 +56,5 @@ Ancestors
   asmSpliceOwn
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
+  asmOptFinalizerOwn
   asmOptOwnPruneJumps
