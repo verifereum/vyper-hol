@@ -21,6 +21,10 @@
  *   compile_state_ok_*              — label-space invariant through monad ops
  *   fresh_label_produces_external    — fresh_label returns an external label
  *   label_external_mono             — external labels survive extension
+ *   exec_pure_ok_update             — a successful pure step writes only its output
+ *   step_pure_opcode_frame          — the frame of a pure or assert step
+ *   run_inst_seq_protected_frame    — a run whose steps keep P-protected variables
+ *                                     keeps them and everything but vs_vars
  *
  * Helper:
  *   fresh_var_name    — characterize fresh_var output
