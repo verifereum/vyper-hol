@@ -597,13 +597,12 @@ Proof
   `vv_post H0 ctx func ce cx e es sa sm s0
      (mid with gas_obs := []) tvv vv r /\
    stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
-  drule_at (Pat `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    custom_error_store_head_path_mem_at_horizon >>
-  impl_tac >- metis_tac[] >> strip_tac >>
-  qexistsl_tac [`v`, `q`] >> simp[] >>
-  rpt strip_tac >>
-  `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) r` by
-    metis_tac[vv_post_def] >>
-  irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-  qexistsl_tac [`H0`, `r`] >> simp[]
+  drule_all custom_error_store_head_path_mem_at_horizon >> strip_tac >>
+  `!H1. valid_horizon cx st0 H1 mid.storage_trace ==>
+     stmt_state_rel H1 ctx func ce cx (mid with gas_obs := []) q` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H1 ctx func ce cx (mid with gas_obs := []) r` by
+       metis_tac[vv_post_def] >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
+  qexistsl_tac [`v`, `q`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
