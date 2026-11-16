@@ -6,6 +6,7 @@ Ancestors
   exprSimAbiEncodeNonwordCase exprSimAbiEncodeRuntimeInputs
   exprSimAbiEncodeNonwordResources exprSimAbiEncodeCapacity
   exprSimAbiEncodeNonwordResult bodyFullAbiEncodeReadResources
+  exprSimIfExpWidenedPhysicalType
   exprSimHyps exprSimSource gasOutcomeFullCompose gasShadowCompile
   gasShadowCompileStmtHelpers exprLowering compileEnv
 
@@ -74,5 +75,49 @@ Proof
   simp[expr_can_mutate_def] >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  FAIL_TAC "ArgStep obtained"
+  simp[eval_expr_singleton_type_builtin_action,
+    vyperContextTheory.type_builtin_args_length_ok_def] >>
+  irule gas_outcome_full_bind_all >> rpt conj_tac
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_bind,
+      vyperStorageTraceTheory.evaluate_storage_trace_frame,
+      vyperStorageTraceTheory.storage_trace_frame_read_result]
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> drule gasExemptCertTheory.gas_exempt_cert_bind_value >> simp[] >>
+      disch_then irule >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+      first_assum ACCEPT_TAC) >>
+  qexists `childQ` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
+      simp[Abbr `childR`] >> rpt strip_tac >>
+      Cases_on `res` >- gvs[exprSimDefsTheory.expr_exit_def] >>
+      qexists `y` >> Cases_on `r` >> Cases_on `y` >>
+      gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >>
+      gvs[exprSimDefsTheory.expr_exit_def]) >>
+  map_every qx_gen_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> childQ _ _ _ _ _ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  simp_tac bool_ss [Abbr `childQ`] >> strip_tac >> gvs[] >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[post_value_type_nonword] >>
+  `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+    metis_tac[post_type_evaluates] >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[expr_body_pre_lowered_fits,
+      exprSimLayoutTransportTheory.compatible_word_type] >>
+  `expr_post (storage_trace_horizon ee.storage_trace)
+    ctx func ce cx e es sa sm s0 ee v op s` by metis_tac[] >>
+  `~is_word_type (post_value_type ce e) ==> !w.
+     eval_operand op s = SOME w ==>
+     type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= s.vs_alloca_next` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  drule_all abi_encode_arg_positive_resources >> simp[] >> strip_tac >>
+  FAIL_TAC "positive and zero capacity"
 QED
