@@ -705,8 +705,12 @@ Proof
   rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
   qpat_x_assum `!i. i < 9 ==> _` kall_tac >>
   qpat_x_assum `get_instruction _ _ = _` kall_tac >>
-  simp[Abbr `post`, Abbr `u9`, Abbr `u8`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
-       Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, update_var_def,
+  simp[Abbr `post`, Abbr `u9`, Abbr `u8`, Abbr `u7`, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, mload_def,
+       vars_kept_def] >>
+  simp[Abbr `u6`, Abbr `u5`, Abbr `u4`, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, mload_def] >>
+  simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, mload_def,
        vars_kept_def] >>
   conj_tac

@@ -12,7 +12,7 @@ Ancestors
 Theorem storage_field_store_origin_ptr:
   emit_void (if tr then TSTORE else SSTORE) [dst;value] sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   alloca_history func s /\ alloca_inv s /\
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -63,9 +63,16 @@ Proof
                           mk_inst_def, exec_write2_def]) >>
   `run_inst_seq [inst] s = OK u` by simp[run_inst_seq_def] >>
   `ptr_inst_ok D lo 0 ctx func G tn inst s` by
-    (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[] >>
-     simp[Abbr `inst`] >> irule clean_storage_ptr_inst_ok >> simp[]) >>
+    (Cases_on `tr` >>
+     simp[Abbr `inst`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, fixed_source_write_range_def] >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
+                          instruction_accfupds, combinTheory.K_THM,
+                          opcode_case_def] >>
+     simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
+     rpt strip_tac >> gvs[]) >>
   `inst_mem_below_frontier inst s /\ inst_dload_in_section inst s` by
     (Cases_on `tr` >>
      simp[Abbr `inst`, inst_mem_below_frontier_def, inst_dload_in_section_def,

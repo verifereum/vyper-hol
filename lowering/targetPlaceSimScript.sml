@@ -420,3 +420,34 @@ Proof
   strip_tac >> gvs[] >> drule extend_place_memory_origin >> strip_tac >> gvs[] >>
   simp[target_root_def] >> metis_tac[]
 QED
+
+Theorem aug_place_extend_name_memory:
+  extend_place cx (PlaceR (MemoryPlace id path)) sb s = (INL out,st) ==>
+  out = PlaceR (MemoryPlace id (path ++ [sb]))
+Proof
+  simp[extend_place_def, extend_memory_place_def, bind_def,
+       ignore_bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem aug_place_name_root_base:
+  !t id cx s out st.
+    target_root t = NameTarget id /\
+    eval_base_place cx t s = (INL out,st) ==>
+    ?path. out = PlaceR (MemoryPlace id path)
+Proof
+  `(!e:expr. T) /\ (!t. !id cx s out st.
+    target_root t = NameTarget id /\
+    eval_base_place cx t s = (INL out,st) ==>
+    ?path. out = PlaceR (MemoryPlace id path))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_root_def] >> rpt conj_tac >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      metis_tac[])
+  >> rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  gvs[] >> metis_tac[aug_place_extend_name_memory]
+QED

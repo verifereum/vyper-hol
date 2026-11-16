@@ -5,7 +5,7 @@ Ancestors
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
   exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding valueEncodingDefs
-  gasOutcome
+  gasOutcome evalNoHalt
 
 Theorem framed_array_select_error:
   expr_body_pre cenv cx env obj es /\
@@ -854,7 +854,7 @@ Theorem framed_array_suffix_outcome:
       vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
         (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\H res ee' outcome. expr_exit res outcome)
+    (\H res ee' outcome. expr_exit res outcome /\ halt_exit H cx ee' res outcome)
 Proof
   disch_tac >>
   mp_tac (Q.GEN `P` (INST_TYPE [alpha |-> ``:256``] framed_array_suffix_summary_family)) >>
@@ -864,5 +864,12 @@ Proof
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
   rewrite_tac[gas_summary_at_def] >>
-  goal_assum (drule_at Any) >> gvs[]
+  goal_assum (drule_at Any) >> gvs[] >>
+  rw[halt_exit_def] >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+  strip_tac >> disj2_tac >> rpt strip_tac >>
+  qpat_x_assum `!tail. select_result _ _ _ _ _ = _`
+    (qspec_then `[]` mp_tac) >>
+  gvs[evalNoHaltTheory.select_result_nh]
 QED
