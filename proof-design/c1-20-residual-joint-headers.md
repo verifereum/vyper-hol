@@ -23,12 +23,19 @@ prefix rule. These four boundaries are subject-specific proposed new scripts:
 
 All local `let` bindings in the statements are ordinary term abbreviations,
 **not** proposed HOL definitions. The displayed binders are the complete
-proposed interfaces; types not annotated are inferred from the existing
-constants. `Q` in A has type
-`horizon -> (unit + exception) -> evaluation_state -> provenance -> taint -> venom_state -> bool`
-with `horizon`, `provenance`, and `taint` here descriptive names for the types
-inferred by `stmt_exit_ptr`, `FLOOKUP G`, and `op_taint tn`, not proposed type
-aliases. A caller supplies the canonical normal statement post as Q. B and D
+proposed interfaces; unannotated binders use ordinary HOL type inference from
+the existing constants. In particular, the actual type of `Q` in A is
+```sml
+((bool # bytes32 # type_value) list # num list) ->
+(unit + exception) -> evaluation_state -> (string, num # num) fmap ->
+taint -> venom_state -> bool
+```
+Here `taint` is the existing record type from `ptrDiscipline`, not a new type
+alias. `H` is the pair of typed storage regions and natural lock slots,
+`G/G0/Gr/Gt/Gl/Gop` have type `(string, num # num) fmap`, and
+`tn/tn0/tnr/tnt/tnl/tnop` have type `taint`. These types follow from
+`storage_trace_horizon_def`, `op_prov_def`, and the existing `taint` datatype.
+A caller supplies the canonical normal statement post as Q. B and D
 return a local framed statement post, which the caller composes with its saved
 entry frame. This avoids teaching either destination producer about RHS syntax.
 
@@ -545,3 +552,69 @@ owned by their current leaves.
 * Entry diagnostic only: augAssignFullRhsTheory restored from cache and holbuild
   finished 3.432s; TO_assignment_cases-L0040-20261116T132824426721Z_m0030_t001.
   This does not parse or certify any proposal in this document.
+
+## Bounded self-audit (current source, 2026-11-16)
+
+This audit finishes the interface-design artifact; it does **not** approve any
+new contract or discharge the labelled mathematical probes.
+
+* A's P was compared conjunct-by-conjunct with
+  `augAssignFullRhsScript.sml:41-53`: expr_post uses the actual RHS input source
+  `es`, compiler states `sa/s2`, input concrete state `s_rhs0`, actual output
+  source `ee`, RHS value/operand `rhs/y`, and concrete endpoint `u`. Its kept
+  frame refers to `es/sa/G0/tn0/s_rhs0`, not to the post-operator cursor.
+  The output R at :54-58 matches A/B/D's full exceptional callback. The
+  existing numeric continuation :39-57 provides a single concrete/ghost
+  endpoint outside H and a variable-only normal frame. A still owes the
+  small source `bop_result`/`evaluate_binop` bridge and the bind certificates;
+  neither is supplied by separately existential simulations.
+* Immutable address lowering is exact, not guessed from Assign:
+  `defs/exprLoweringScript.sml:2075-2084` returns
+  `(Lit (n2w off), SOME LocCode, OPTION_MAP ValPT ...)` for the saved immutable.
+  `defs/stmtLoweringScript.sml:900-923` selects default MLOAD/MSTORE for LocCode
+  and emits the store as `[dst_op;res_op]`. Thus B's
+  `emit_void MSTORE [Lit (n2w off);op]` is the actual AugAssign suffix; it is
+  NOT `compile_imm_store_word`'s ADD-based suffix. The constructor metadata
+  fact also supplies `off + type_memory_size ptv < dimword(:256)`; its
+  derivation at B's use is `immutable_augassign_metadata:20-21`.
+* B1 remains a real probe, not an asserted missing external precondition.
+  `ghost_inv_at:142-143` tests `imm_section_dead` using the NEW memory section.
+  `immSectionDead:27-48,60-67` shows why that predicate is content-sensitive
+  for bytestrings/dynamic arrays. B writes a word-typed immutable, so the
+  promising argument is typed declaration-region separation: it cannot alter
+  another immutable's length/header, and its own word layout has no dead
+  bytes. The document does not claim that boundary has already been proved.
+  Ordinary `lo <= off` store framing remains inapplicable in general.
+* C's all-H target bundle matches `bodyFullTargetDefs:126-140`. In particular
+  target memory liveness, conditional actual FMP, target_ptr_ok and ghost_kept
+  are retained. `loweringPosts:719-738` confirms the r type, place readability,
+  register/allocation frame, and locals_kept; it does NOT return
+  return_buf_frame explicitly. The separate input frame in C must be derived
+  by the consumer from its saved frame and target_post (allocated return
+  region separation, saved pointer/PC registers). That discharge remains an
+  explicit verification item and must not be erased by alleging the bundle
+  contains it.
+* D's r reconstruction is exact: target_post fixes
+  `SND (SND r) = SOME (value_type_place (Type ty))`, and C fixes its loc. The
+  original first operand is retained by register frames. For memory,
+  `place_ptr_rel:683-691` uses saved base registers plus compile/type metadata;
+  for storage :692-694 it uses the saved slot, location and evaluated type.
+  These are the exact facts a producer must frame, rather than assuming that
+  operand equality alone gives source write readiness. The success-only
+  counted-memory recipe :161-194 contains the same entry-type compatibility
+  and frontier conditions as D, but no static-error proof or pointer ghost
+  proof. Hence D1/D2, selected-bank taint, static/source lock alignment and
+  actual post-RHS scope liveness are still de-risking items, not completed
+  callbacks. If a whole-write interface is unjustified, the strategist should
+  choose a source-success-first callback before seeking approval, rather than
+  add an unexplained lock/nonstatic premise.
+* No new `.sml` file, statement, semantic definition, admission, or foreign
+  supplier edit was made. The canonical RHS target was checked with holbuild
+  (nothing to rebuild, 1.525s); this is entry/interface evidence only. The
+  four proposals are deliberately still unparsed documentation. Exact
+  header approval and proof-probe decomposition are the next decisions.
+
+Audit evidence: TO_assignment_cases-L0040-20261116T132824426721Z_m0040_t001
+through m0040_t007; m0041_t003/m0041_t004; m0042_t002/m0042_t003/m0042_t004;
+m0043_t004/m0043_t005/m0043_t006; m0044_t002/m0044_t003;
+m0047_t001/m0047_t003; m0049_t001; m0050_t001/m0050_t002/m0050_t005.
