@@ -322,6 +322,125 @@ Proof
   rpt (goal_assum (drule_at Any)) >> gvs[] >> metis_tac[]
 QED
 
+Theorem body_callee_sim_resource_at_lo:
+  !safe q fuel rpolicy unit cpl prog ctx lo o2pc Inv.
+    (gen_fn_sim_at_reloc safe q fuel \/
+     (lo = SND (compute_label_offsets prog) /\ gen_fn_sim_at safe q fuel)) /\
+    (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    codegen_context_obligations Inv ctx cpl /\
+    reachability_closed Inv ctx ==>
+    !j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cpl.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cpl.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+       fn_entry_state_rel cpl callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas)) /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas)) /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cpl callee vs' cas as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas))
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[gen_fn_sim_at_reloc_def, gen_fn_sim_at_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl [`n`, `as'`] >> simp[]
+QED
+
+Theorem body_callee_sim_resource_reloc:
+  !safe q fuel rpolicy unit cpl prog ctx lo o2pc Inv.
+    gen_fn_sim_at_reloc safe q fuel /\
+    (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    codegen_context_obligations Inv ctx cpl /\
+    reachability_closed Inv ctx ==>
+    !j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cpl.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cpl.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+       fn_entry_state_rel cpl callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas)) /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas)) /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. cost_le (OPTION_MAP (\F. F unit cpl prog) q) n /\
+                  asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cpl callee vs' cas as' /\
+                  (safe ==> create_safe_prefix lo o2pc prog n cas))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Q.SUBGOAL_THEN
+    `gen_fn_sim_at_reloc safe q fuel \/
+     (lo = SND (compute_label_offsets prog) /\ gen_fn_sim_at safe q fuel)`
+    assume_tac >- simp[] >>
+  `code_labels_agree prog lo` by gvs[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all body_callee_sim_resource_at_lo >> simp[]
+QED
+
 Theorem body_callee_sim_resource:
   !safe q fuel rpolicy unit cpl prog ctx lo o2pc Inv.
     gen_fn_sim_at safe q fuel /\
@@ -372,16 +491,63 @@ Theorem body_callee_sim_resource:
                   fn_return_state_rel ctx cpl callee vs' cas as' /\
                   (safe ==> create_safe_prefix lo o2pc prog n cas))
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gen_fn_sim_at _ _ _`
-    (mp_tac o REWRITE_RULE [gen_fn_sim_at_def]) >>
-  disch_then (qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
-                           `o2pc`, `j`, `rj`, `callee`, `cvs`, `cas`, `Inv`,
-                           `cra`, `cpc`, `crest`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  qexistsl_tac [`n`, `as'`] >> simp[]
+  rpt gen_tac >> strip_tac >>
+  Q.SUBGOAL_THEN
+    `gen_fn_sim_at_reloc safe q fuel \/
+     (lo = SND (compute_label_offsets prog) /\ gen_fn_sim_at safe q fuel)`
+    assume_tac >- simp[] >>
+  `code_labels_agree prog lo` by gvs[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all body_callee_sim_resource_at_lo >> simp[]
+QED
+
+Theorem body_callee_sim_reloc:
+  !fuel rpolicy unit cpl prog ctx lo o2pc Inv.
+    gen_fn_sim_at_simple_reloc fuel /\
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    codegen_context_obligations Inv ctx cpl /\
+    reachability_closed Inv ctx ==>
+    !j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cpl.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cpl.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+       fn_entry_state_rel cpl callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cpl callee vs' cas as')
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all (SRULE [GSYM gen_fn_sim_at_simple_reloc_def, cost_le_def]
+    (Q.SPECL [`F`, `NONE`] body_callee_sim_resource_reloc)) >>
+  disch_then irule >> simp[]
 QED
 
 
