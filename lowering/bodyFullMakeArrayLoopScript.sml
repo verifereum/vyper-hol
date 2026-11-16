@@ -324,7 +324,7 @@ Resume make_array_loop_full[tail_entry]:
   simp[] >> rpt conj_tac >> suspend "tail_entry_close"
 QED
 Resume make_array_loop_full[tail_entry_close]:
-  cheat
+  gvs[typeLayoutPropsTheory.type_memory_size_list_sum]
 QED
 Resume make_array_loop_full[tail_right_cert]:
   BETA_TAC >> rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
@@ -334,17 +334,15 @@ Resume make_array_loop_full[tail_left_cert]:
   BETA_TAC >> rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >> simp[]
 QED
 Resume make_array_loop_full[tail_exit]:
-  `(!H ee res r. expr_exit (res : value list + exception) r /\ halt_exit H cx ee res r <=>
-      ?exc. res = INR exc /\ expr_exit (INR exc : value list + exception) r /\
-        halt_exit H cx ee (INR exc : value list + exception) r)` by
-    (ntac 2 gen_tac >> Cases >> Cases >>
-     simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-     Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-     rename1 `Error err` >> Cases_on `err` >>
-     simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]) >>
-  pop_assum (fn th =>
-    CONV_TAC (DEPTH_CONV BETA_CONV) >> pure_rewrite_tac[GSYM th]) >>
-  first_assum ACCEPT_TAC
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >>
+  POP_ASSUM_LIST (K all_tac) >>
+  qx_genl_tac [`Hexit`,`res_exit`,`ee_exit`,`r_exit`] >>
+  Cases_on `res_exit` >- simp[exprSimDefsTheory.expr_exit_INL] >>
+  Cases_on `r_exit` >> Cases_on `y` >>
+  simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >>
+  simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
 Resume make_array_loop_full[tail_return]:
   qx_genl_tac [`tailmarks`,`tailres`,`ee`,`G2`,`tn2`,`u`] >> BETA_TAC >> strip_tac >>
@@ -479,16 +477,14 @@ Resume make_array_loop_full[head_frame]:
        vyperStorageTraceTheory.storage_trace_frame_read_result]
 QED
 Resume make_array_loop_full[exit_packet]:
-  `(!H ee res r. expr_exit (res : value + exception) r /\ halt_exit H cx ee res r <=>
-      ?exc. res = INR exc /\ expr_exit (INR exc : value list + exception) r /\
-        halt_exit H cx ee (INR exc : value list + exception) r)` by
-    (ntac 2 gen_tac >> Cases >> Cases >>
-     simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-     Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-     rename1 `Error err` >> Cases_on `err` >>
-     simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]) >>
-  pop_assum (fn th =>
-    CONV_TAC (DEPTH_CONV BETA_CONV) >> pure_rewrite_tac[GSYM th]) >>
-  first_assum ACCEPT_TAC
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >>
+  POP_ASSUM_LIST (K all_tac) >>
+  qx_genl_tac [`Hexit`,`res_exit`,`ee_exit`,`r_exit`] >>
+  Cases_on `res_exit` >- simp[exprSimDefsTheory.expr_exit_INL] >>
+  Cases_on `r_exit` >> Cases_on `y` >>
+  simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >>
+  simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
 Finalise make_array_loop_full
