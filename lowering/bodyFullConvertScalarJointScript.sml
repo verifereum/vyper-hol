@@ -15,7 +15,9 @@ Theorem convert_scalar_vv_sim_full:
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
-  strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
+  drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_expr cenv ty (TypeBuiltin _ _ _ _) sa = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
@@ -65,7 +67,7 @@ Proof
   simp[expr_sim_full_def] >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   `eval_expr cx (TypeBuiltin ann Convert ann [e]) =
     bind (bind (eval_expr cx e) (read_result cx))
@@ -102,8 +104,10 @@ Proof
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> Cases_on `res` >> simp[Abbr `childR`] >>
-  Cases_on `y` >> Cases_on `r` >> simp[exprSimDefsTheory.expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
+  Cases_on `y` >> Cases_on `r` >>
+  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >>
+  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume convert_scalar_vv_sim_full[continuation]:
@@ -206,6 +210,7 @@ Resume convert_scalar_vv_sim_full[continuation]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
   reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR (Error (RuntimeError msg))`,`tnf`] >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 Finalise convert_scalar_vv_sim_full
