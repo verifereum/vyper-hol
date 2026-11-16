@@ -1,6 +1,6 @@
 Theory dftPacketClosedRows
 Ancestors
-  dftPacketFillingBoundary dftGasFromListTraceDefs dftGasToListReplay
+  dftPacketFillingBoundary dftGasFromListTraceDefs dftGasFromListReadings dftGasToListReplay
   dftRunRel crossBlockSimProofs gasEvents venomExecSemantics
   passSimulationDefs venomState list rich_list arithmetic sorting
 
@@ -75,4 +75,68 @@ Proof
   qpat_x_assum `!i. i < SUC _ ==> _` (qspec_then `SUC i` mp_tac) >>
   simp[]
   >> (simp [SUC_ONE_ADD])
+QED
+
+Theorem dft_packet_closed_row_enter:
+  !f C sf bb s sp r a inc.
+    lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK sp /\ run_block f C bb s = r ==>
+    run_blocks (SUC f) C sf s =
+      (case r of OK v => if v.vs_halted then Halt v else run_blocks f C sf v
+       | other => other) /\
+    gas_events_blocks (SUC f) C sf s =
+      gas_events_block f C sf.fn_name bb
+        (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) ++
+      (case r of OK v => if v.vs_halted then [] else gas_events_blocks f C sf v
+       | other => []) /\
+    trace_gas (trace_blocks a inc (SUC f) C sf s) =
+      trace_gas (trace_block a (SUC inc) f C sf bb
+        (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) ++
+      (case r of OK v => if v.vs_halted then [] else
+         trace_gas (trace_blocks a (SUC inc) f C sf v)
+       | other => [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  `exec_block f C bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = r`
+    by gvs[run_block_def] >>
+  drule_all trace_blocks_enter >> strip_tac >>
+  simp[Once gas_events_blocks_def, run_blocks_unfold] >>
+  Cases_on `r` >> simp[] >> Cases_on `v.vs_halted` >> simp[]
+QED
+
+Theorem dft_packet_closed_row_terminating_head:
+  !f C sf s bb.
+    lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+    terminates (run_blocks f C sf s) ==>
+    ?g. terminates (run_block g C bb s)
+Proof
+  Cases >- simp[Once run_blocks_def, terminates_def] >> rpt strip_tac >>
+  qexists_tac `n` >>
+  qpat_x_assum `terminates _` mp_tac >>
+  simp[run_blocks_unfold] >>
+  Cases_on `run_block n C bb s` >> simp[terminates_def]
+QED
+
+Theorem dft_packet_closed_row_terminating_tail:
+  !C sf bb s N inc next tail.
+    lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~next.vs_halted /\
+    (!F. N <= F ==>
+      ((?g. terminates (run_block g C bb s)) ==>
+       residual_result tail (OK next) (run_block (F-SUC inc) C bb s))) /\
+    (?f. terminates (run_blocks f C sf s)) ==>
+    ?f. terminates (run_blocks f C sf (next with vs_gas_readings := tail))
+Proof
+  rpt strip_tac >>
+  `?g. terminates (run_block g C bb s)` by
+    metis_tac[dft_packet_closed_row_terminating_head] >>
+  drule run_blocks_fuel_mono >>
+  disch_then (qspec_then `N + SUC inc` mp_tac) >> strip_tac >>
+  `f + (N + SUC inc) = SUC (f + N + inc)` by decide_tac >>
+  `run_block (f+N+inc) C bb s = OK (next with vs_gas_readings := tail)` by
+    (first_x_assum (qspec_then `f+N+inc+SUC inc` mp_tac) >> simp[] >> metis_tac[]) >>
+  qexists_tac `f+N+inc` >>
+  qpat_x_assum `terminates _` mp_tac >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` (mp_tac o GSYM) >>
+  simp[run_blocks_unfold]
+  >> (gvs[venomExecSemanticsTheory.exec_result_case_eq])
 QED
