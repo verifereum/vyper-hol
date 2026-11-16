@@ -672,7 +672,7 @@ Theorem external_selected_return_buffer_ok:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `tx.function_name = "__default__"`
-  >- (drule_all external_default_return_buffer_ok >> simp[]) >>
+  >- (strip_tac >> drule_all external_default_return_buffer_ok >> simp[]) >>
   strip_tac >>
   qpat_x_assum `set_external_package_target _ _ = _`
     (fn th => mp_tac (Q.ISPEC `[]:expr list`
