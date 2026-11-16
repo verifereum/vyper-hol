@@ -143,18 +143,6 @@ Proof
   Cases_on `inst.inst_opcode = DALLOCA` >> gvs[]
 QED
 
-Theorem fmp_code_unlowered_no_raw[local]:
-  fmp_stage_lowered infos ctx runner fn fn' /\
-  ~(fn.fn_fmp_signature = NONE /\
-    ?info. FLOOKUP infos fn.fn_name = SOME info /\
-      (info.fi_needs_fmp \/ info.fi_publishes_fmp)) ==>
-  no_raw_fmp_ops fn
-Proof
-  simp[fmp_stage_lowered_def] >> strip_tac >>
-  gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
-  irule fmp_no_need_input_no_raw >> metis_tac[]
-QED
-
 Theorem fmp_code_empty_index[local]:
   !idx. idx <= LENGTH xs /\ EVERY (\i. i.inst_opcode <> DALLOCA) xs ==>
   fmp_stage_tidx FEMPTY NONE lbl xs idx = idx
@@ -178,7 +166,7 @@ Theorem fmp_code_unlowered_index[local]:
 Proof
   rpt strip_tac >>
   drule_all fmp_stage_unlowered >> strip_tac >>
-  drule_all fmp_code_unlowered_no_raw >> strip_tac >>
+  drule_all fmp_control_unlowered_no_raw >> strip_tac >>
   simp[] >> irule fmp_code_empty_index >> simp[] >>
   gvs[no_raw_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
   `MEM i (fn_insts fn)` by

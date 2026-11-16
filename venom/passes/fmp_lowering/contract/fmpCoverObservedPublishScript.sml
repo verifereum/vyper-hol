@@ -1,18 +1,9 @@
 Theory fmpCoverObservedPublish
 Ancestors
+  fmpStageFmpStepsCallAbi
   fmpStageOpBaseActual fmpStageRel fmpStepBridge fmpAnalysisProps fmpAnalysisDefs fmpLowerDefs
   o1PassContract venomPassDispatcher venomPassSchedule venomInst list finite_map
   concretizeStageLookup fmpLowerProps venomWf venomFnScheduleRunner venomFnScheduleRunnerProps fcgBridge
-
-Theorem fmp_cover_step_signature[local]:
-  fn_pass_step rpolicy pass observed s fn out /\
-  fn_pass_tag pass <> VP_FmpLowering ==>
-  out.fpo_function.fn_fmp_signature = fn.fn_fmp_signature
-Proof
-  rw[fn_pass_step_def, fn_pass_effects_hold_def, fn_abi_effect_holds_def,
-     fn_fmp_convention_eq_def] >>
-  Cases_on `fn_pass_tag pass` >> gvs[fn_pass_abi_effect_def]
-QED
 
 Theorem fmp_cover_direct_nonpublish[local]:
   pre_fmp_ops fn ==> ~(fmp_direct_info fn).fi_publishes_fmp
@@ -39,14 +30,6 @@ Proof
   gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
   drule_all analyze_fmp_context_unsealed_publishes_iff >> strip_tac >>
   gvs[fmp_checked_seal_def, fmp_seal_def, AllCaseEqs()]
-QED
-
-Theorem fmp_cover_later_signature[local]:
-  fn_steps rpolicy (DROP 4 o1_fn_passes) fn fn' ==>
-  fn'.fn_fmp_signature = fn.fn_fmp_signature
-Proof
-  simp[o1_fn_passes_def, fn_steps_def] >> rpt strip_tac >>
-  imp_res_tac fmp_cover_step_signature >> gvs[fn_pass_tag_def]
 QED
 
 Theorem fmp_cover_output_nonpublish[local]:
@@ -112,7 +95,7 @@ Proof
     (qpat_x_assum `o1_walk_view rpolicy 3 C' fn observed`
        (assume_tac o REWRITE_RULE [o1_walk_view_def]) >>
      drule_all walk_view_fn_steps >> strip_tac >> gvs[]) >>
-  drule fmp_cover_later_signature >> strip_tac >>
+  drule fmp_call_later_signature >> strip_tac >>
   drule_all fmp_cover_output_nonpublish >> strip_tac >>
   gvs[fmp_info_of_signature_def]
 QED
