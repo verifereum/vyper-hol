@@ -3,7 +3,7 @@ Theory bodyFullRaiseReasonNonliteral
 Ancestors
   bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
-  reasonResourcesPtr reasonRaiseContinuationPtr stmtReasonKindsMemory
+  reasonResourcesPtr bodyFullRaiseReasonSource
   exprSimSource exprSimHypsDefs exprOperandVar aggregateEvaluatedLayout vyperEvalExprPreservesScopesDom
   gasOutcomeFullCompose gasOutcomeFull gasShadowState gasShadow
   bodyExprPreFacts bodySim supportedStmtTraverse supportedExprTraverse
@@ -43,6 +43,9 @@ Proof
   drule_then strip_assume_tac supported_string_reason_body_calls >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> gvs[body_inv_def]) >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule body_inv_const_name_root >> strip_tac >>
+     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -141,12 +144,12 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
       (\v. bind (lift_option_type (dest_StringV v) "not StringV")
         (\str. raise (AssertException str))) (mid with gas_obs := tail) =
       (INR (AssertException str) : unit + exception,mid with gas_obs := tail)` by
-    (mp_tac (Q.GENL [`r`,`H`] (Q.INST [`ee` |-> `mid`] (INST_TYPE [alpha |-> ``:256``] raise_reason_raw_string))) >>
+    (mp_tac (Q.GENL [`r`,`H`] (Q.INST [`ee` |-> `mid`] (INST_TYPE [alpha |-> ``:256``] bodyFullRaiseReasonSourceTheory.raise_reason_raw_string))) >>
      simp[] >> disch_then irule >>
      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`e`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
-  drule_all supported_reason_string_type >>
+  drule_all bodyFullRaiseReasonSourceTheory.supported_reason_string_type >>
   disch_then (qx_choose_then `cap` assume_tac) >>
   `post_value_type cenv e = expr_type e` by
     simp[post_value_type_bytestring, is_bytestring_type_def] >>
@@ -172,6 +175,7 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
     (qpat_assum `compile_expr _ _ e sa = _`
        (mp_then Any mp_tac (cj 1 compiler_compile_var)) >> simp[]) >>
   fs[] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `?z Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (t,G1,tn1) [] (Abort Revert_abort z,Gf,tnf)` by
@@ -186,8 +190,8 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
   irule gas_outcome_full_exit >>
   conj_tac >- (qexistsl_tac [`Gf`,`mid`,`Abort Revert_abort z`,
                            `INR (AssertException str)`,`tnf`] >>
-               simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def]) >>
-  simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def]
+               simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
+  simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
 Finalise compile_raise_reason_nonliteral_frag_full
