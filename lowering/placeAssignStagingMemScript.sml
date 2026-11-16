@@ -12,7 +12,7 @@ Ancestors
 Theorem compile_staging_prefix_mem:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand op n sm = ((),sn) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sn func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -24,7 +24,7 @@ Theorem compile_staging_prefix_mem:
   ?r u tw. gas_path_mem ctx func s 0 (OK r) /\
     gas_path_mem ctx func s 0 (OK u) /\
     gas_path_mem ctx func r 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx ee r /\ alloca_history func r /\
+    stmt_state_rel H ctx func cenv cx ee r /\ alloca_history func r /\
     r.vs_memory = s.vs_memory /\
     s.vs_alloca_next <= r.vs_alloca_next /\
     eval_operand buf.buf_operand r = SOME tw /\
@@ -36,7 +36,9 @@ Theorem compile_staging_prefix_mem:
        regions_disjoint (w2n tw) n b len) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
     typed_copy_effect ctx func sm sn r u (w2n tw) n /\
-    val_in_memory stv v (w2n tw) u.vs_memory
+    val_in_memory stv v (w2n tw) u.vs_memory /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ee r)
 Proof
   strip_tac >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -55,7 +57,16 @@ Proof
   `val_in_memory stv v (w2n w) u.vs_memory` by
     (irule valueEncodingPropsTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
      qexistsl_tac [`s.vs_memory`, `n`, `w2n sw`] >> simp[]) >>
-  qexistsl_tac [`r`, `u`, `w`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`r`, `u`, `w`] >> gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `J` >> disch_tac >>
+  qpat_x_assum `stmt_state_rel J _ _ _ _ _ _`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+      alloc_buffer_source_path_mem_endpoint) >>
+  disch_then (qspecl_then [`sa`, `sm`, `buf`, `type_memory_size stv`,
+    `op`, `sw`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> gvs[]
 QED
 
 Theorem compile_store_memory_nonword_effect_mem:

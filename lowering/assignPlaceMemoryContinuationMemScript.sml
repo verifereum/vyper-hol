@@ -30,7 +30,7 @@ QED
 Theorem assign_staging_frame_mem[local]:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand op n sm = ((),sn) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sn func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -41,7 +41,7 @@ Theorem assign_staging_frame_mem[local]:
   w2n sw + n <= s.vs_alloca_next /\ alloca_history func s ==>
   ?r u tw. gas_path_mem ctx func s 0 (OK r) /\
     gas_path_mem ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx ee r /\ alloca_history func r /\
+    stmt_state_rel H ctx func cenv cx ee r /\ alloca_history func r /\
     r.vs_memory = s.vs_memory /\ s.vs_alloca_next <= r.vs_alloca_next /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
@@ -57,7 +57,9 @@ Theorem assign_staging_frame_mem[local]:
     (!name b len. local_region cenv ee.scopes s name b len ==>
        local_region cenv ee.scopes r name b len) /\
     typed_copy_effect ctx func sm sn r u (w2n tw) n /\
-    val_in_memory stv v (w2n tw) u.vs_memory
+    val_in_memory stv v (w2n tw) u.vs_memory /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ee r)
 Proof
   strip_tac >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -83,13 +85,22 @@ Proof
   `val_in_memory stv v (w2n w) u.vs_memory` by
     (irule valueEncodingPropsTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
      qexistsl_tac [`s.vs_memory`, `n`, `w2n sw`] >> simp[]) >>
-  qexistsl_tac [`r`, `u`, `w`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`r`, `u`, `w`] >> gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `J` >> disch_tac >>
+  qpat_x_assum `stmt_state_rel J _ _ _ _ _ _`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+      alloc_buffer_source_path_mem_endpoint) >>
+  disch_then (qspecl_then [`sa`, `sm`, `buf`, `type_memory_size stv`,
+    `op`, `sw`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> gvs[]
 QED
 
 Theorem assign_memory_destination_bounds:
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
      lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
@@ -106,7 +117,7 @@ Proof
 QED
 
 Theorem assign_staging_immutable_frame[local]:
-  stmt_state_rel ctx func cenv cx ee r /\
+  stmt_state_rel H ctx func cenv cx ee r /\
   compile_alloc_buffer n sa = (buf,sm) /\ fn_has_code sa sm func /\
   FLOOKUP r.vs_allocas sa.cs_next_id = SOME (tmp,n) /\
   local_region cenv ee.scopes r name root_addr len /\
@@ -142,8 +153,8 @@ Proof
 QED
 
 Theorem assign_staged_effect_state[local]:
-  stmt_state_rel ctx func cenv cx ee s /\
-  stmt_state_rel ctx func cenv cx ee r /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee r /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
@@ -164,7 +175,7 @@ Theorem assign_staged_effect_state[local]:
   typed_copy_effect ctx func sm sn r u tmp n /\
   typed_copy_effect ctx func sn sb u t (w2n w) (type_memory_size dtv) /\
   val_in_memory dtv v (w2n w) t.vs_memory ==>
-  stmt_state_rel ctx func cenv cx ff t
+  stmt_state_rel H ctx func cenv cx ff t
 Proof
   strip_tac >>
   drule_all memory_place_live_region >> strip_tac >>
@@ -177,7 +188,7 @@ Proof
     mem_bytes_at off (type_memory_size tv) r.vs_memory` by
     (rpt strip_tac >> irule assign_staging_immutable_frame >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ sn sb _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -191,6 +202,8 @@ Proof
   disch_then (qspec_then `ee.scopes` mp_tac) >>
   disch_then (qspecl_then [`sa`, `s`, `r`, `cenv`] mp_tac) >>
   (impl_tac >- (gvs[typed_copy_effect_def] >> metis_tac[])) >> strip_tac >>
+  `LENGTH r.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[typed_copy_effect_length, arithmeticTheory.LESS_EQ_TRANS] >>
   irule memory_place_write_stmt_state >>
   goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
   qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >> simp[] >>
@@ -211,7 +224,7 @@ Theorem assign_staged_memory_path_mem[local]:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!x. dst_op = Var x ==> not_fresh_at sa x) /\
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
-  stmt_state_rel ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
   local_ptrs_reserved cenv sa /\ alloca_history func s /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
@@ -222,10 +235,12 @@ Theorem assign_staged_memory_path_mem[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel ctx func cenv cx ff t /\
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ff t)
 Proof
   strip_tac >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -303,9 +318,20 @@ Resume assign_staged_memory_path_mem[finish]:
   markerLib.RESUME_TAC >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
     metis_tac[not_fresh_at_mono, typed_copy_effect_lookup] >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (qpat_assum `typed_copy_effect _ _ sm sn _ _ _ _`
        (mp_then (Pat `typed_copy_effect _ _ _ _ _ _ _ _`) mp_tac
+         assign_staged_effect_state) >>
+     disch_then drule_all >> simp[]) >>
+  `!J : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel J ctx func cenv cx ee s ==>
+    stmt_state_rel J ctx func cenv cx ff t` by
+    (qx_gen_tac `J` >> disch_tac >>
+     `stmt_state_rel J ctx func cenv cx ee r` by
+       (qpat_assum `!K. stmt_state_rel K _ _ _ _ _ s ==> _`
+          (qspec_then `J` mp_tac) >> simp[]) >>
+     qpat_assum `stmt_state_rel J _ _ _ _ _ s`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
          assign_staged_effect_state) >>
      disch_then drule_all >> simp[]) >>
   drule_at (Pat `typed_copy_effect _ _ sn sb _ _ _ _`) typed_copy_effect_endpoint >>
@@ -333,12 +359,12 @@ Theorem assign_storage_unwrap_endpoint_mem:
   (!x. srcp.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes cenv ty = type_memory_size tv /\ type_memory_size tv < 2**64) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue ty srcp) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue ty srcp) s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?z w tv. gas_path_mem ctx func s 0 (OK z) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ eval_operand op z = SOME w /\
     val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
     w2n w + type_memory_size tv < dimword (:256) /\
@@ -370,7 +396,7 @@ QED
 
 Resume assign_storage_unwrap_endpoint_mem[finish]:
   rename1 `copy_static z = copy_static u` >>
-  `expr_post ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -395,7 +421,7 @@ Theorem assign_code_typed_suffix_mem[local]:
   fn_has_code mid sb func /\ fn_inst_ids_distinct func /\
   copy_old_operand mid src /\ copy_old_operand mid dst /\
   eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
-  stmt_state_rel ctx func cenv cx ee u /\
+  stmt_state_rel H ctx func cenv cx ee u /\
   immutable_holds cenv cx ty (Value v) a ee u /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   w2n w + type_memory_size tv <= u.vs_alloca_next /\
@@ -475,12 +501,12 @@ Theorem assign_code_unwrap_endpoint_mem:
   (!x. srcp.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes cenv ty = type_memory_size tv) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue ty srcp) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue ty srcp) s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?z w tv. gas_path_mem ctx func s 0 (OK z) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ eval_operand op z = SOME w /\
     val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
     w2n w + type_memory_size tv < dimword (:256) /\
@@ -520,7 +546,7 @@ Proof
   `fn_has_code sm mid func /\ fn_has_code mid sc func` by
     metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
   drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
   suspend "allocated"
 QED
@@ -571,14 +597,14 @@ Resume assign_code_unwrap_endpoint_mem[constructor_bounds]:
      [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
   irule exprSimCopyTheory.immutable_holds_alloca_disjoint >>
-  qexistsl_tac [`cenv`, `ctx`, `cx`, `ee`, `func`] >>
+  qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `ee`, `func`] >>
   goal_assum (drule_at Any) >> simp[mk_inst_def] >>
   qexistsl_tac [`ty`, `u`, `v`] >> gvs[]
 QED
 
 Resume assign_code_unwrap_endpoint_mem[finish]:
   rename1 `copy_static z = copy_static u` >>
-  `expr_post ctx func cenv cx e es sa sc s0 ee v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sc s0 ee v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -612,7 +638,7 @@ Theorem assign_direct_memory_path_mem[local]:
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
   (!name b len. local_region cenv ee.scopes s name b len ==>
     regions_disjoint (w2n sw) (type_memory_size stv) b len) /\
-  stmt_state_rel ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
   local_ptrs_reserved cenv sa /\ alloca_history func s /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
@@ -623,10 +649,12 @@ Theorem assign_direct_memory_path_mem[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel ctx func cenv cx ff t /\
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ff t)
 Proof
   strip_tac >>
   `w2n w + type_memory_size dtv <= s.vs_alloca_next /\
@@ -652,10 +680,19 @@ Proof
         type_memory_bytes cenv ty = type_memory_size tv` by
        metis_tac[expr_sim_inv_memory_size] >>
      gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (irule memory_place_write_copy_effect >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!J : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel J ctx func cenv cx ee s ==>
+    stmt_state_rel J ctx func cenv cx ff t` by
+    (qx_gen_tac `J` >> disch_tac >>
+     irule memory_place_write_copy_effect >>
+     goal_assum (drule_at (Pat `stmt_state_rel J _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
   drule typed_copy_effect_endpoint >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[typed_copy_effect_lookup]
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    (drule typed_copy_effect_lookup >> simp[]) >>
+  qexists_tac `t` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 
@@ -674,7 +711,7 @@ Theorem assign_place_memory_continuation_mem:
   (src_loc <> SOME LocMemory ==>
     !name b len. local_region cenv ee.scopes s name b len ==>
       regions_disjoint (w2n sw) (type_memory_size stv) b len) /\
-  stmt_state_rel ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
   local_ptrs_reserved cenv sa /\ alloca_history func s /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
@@ -685,10 +722,12 @@ Theorem assign_place_memory_continuation_mem:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel ctx func cenv cx ff t /\
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ff t)
 Proof
   strip_tac >> Cases_on `src_loc = SOME LocMemory`
   >- (`type_memory_bytes cenv sty = type_memory_size stv` by
@@ -697,11 +736,13 @@ Proof
           comp_return_def, comp_ignore_bind_def] >>
       pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
       irule assign_staged_memory_path_mem >> simp[] >>
+      conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
       goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
       simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `compile_store_memory cenv op dst_op dty sty sa = ((),sb)` by
     gvs[stmtLoweringTheory.compile_assign_value_def] >>
   irule assign_direct_memory_path_mem >> simp[] >>
+  conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
