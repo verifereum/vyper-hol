@@ -5121,18 +5121,6 @@ Proof
   simp[ctor_check_create_result_ci_mono]
 QED
 
-Theorem ctor_create_copy_ci_mono[local]:
-  !target value salt rof a.
-    ci_mono a (SND (compile_create_copy target value salt rof a))
-Proof
-  rpt gen_tac >> Cases_on `salt` >> Cases_on `rof` >>
-  simp[compile_create_copy_def, compile_alloc_dynamic_def] >>
-  rpt (FIRST [
-    ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op],
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void, ci_mono_comp_return],
-    gen_tac]) >> simp[ctor_check_create_result_ci_mono]
-QED
-
 Theorem ctor_create_blueprint_append_ci_mono[local]:
   !target value salt offset size ptr len rof a.
     ci_mono a (SND (compile_create_blueprint_append target value salt offset size ptr len rof a))
@@ -5157,24 +5145,6 @@ Proof
   gen_tac >> rewrite_tac[compile_create_proxy_buf_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[ctor_alloc_buffer_first_emission] >>
-  rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
-  rpt (FIRST [gen_tac,
-    CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return]),
-    ho_match_mp_tac cs_appends_bind >> conj_tac,
-    ho_match_mp_tac cs_appends_ignore_bind >> conj_tac])
-QED
-
-Theorem ctor_create_blueprint_check_first_emission_strong:
-  !target offset a x b. compile_create_blueprint_check target offset a = (x,b) ==>
-    cs_extends a b /\
-    (!fn. fn_has_code a b fn ==> ?bb i.
-      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
-Proof
-  ntac 2 gen_tac >> rewrite_tac[compile_create_blueprint_check_def] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
   rpt (FIRST [gen_tac,
     CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return]),
@@ -5338,9 +5308,10 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_create_salt_first_emission >> disch_then irule >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
+  >- (rpt CASE_TAC >> simp[comp_return_def, cs_extends_refl] >>
+      ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[ctor_create_blueprint_check_first_emission_strong] >>
+  >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
   gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- simp[ci_mono_compile_create_blueprint_args] >>

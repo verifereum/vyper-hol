@@ -53,6 +53,9 @@ Proof
        env_context_consistent_def] >>
   `?t. FLOOKUP env.bare_globals (NONE, nsid1) = SOME t` by
     metis_tac[bare_globals_complete_def] >>
+  `~cx_const_name cx (NONE,nsid1)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
+     strip_tac >> gvs[]) >>
   fs[expr_sim_inv_def] >> metis_tac[]
 QED
 
@@ -120,7 +123,9 @@ Resume compile_expr_open_general[toplevel]:
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       `?off. FLOOKUP cenv.ce_module_vars (nsid0,nsid1) = SOME (ImmutableLoc off)` by
-        (fs[expr_sim_inv_def] >> metis_tac[]) >>
+        (fs[expr_body_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+         metis_tac[]) >>
       gvs[compile_expr_def]) >>
   rename1 `find_var_decl_by_name nsid1 ts = SOME di` >> PairCases_on `di` >>
   Cases_on `di0`

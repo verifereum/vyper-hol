@@ -22,6 +22,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* The MSTORE of the typed word of v at a live local's pointer, run on a
    memory-safe path: the local's region holds a word (store_lays_out) and
    lies below the frontier (local_ptrs_rel). *)
@@ -184,7 +187,7 @@ Resume assign_local_word_frag_mem[exception]:
   >- (first_x_assum irule >> irule gas_marked_exec_bind_exception >>
       simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >> simp[stmt_exit_def] >>
+  rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type])
 QED
 
@@ -375,7 +378,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

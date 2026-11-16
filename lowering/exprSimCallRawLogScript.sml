@@ -18,7 +18,6 @@ Ancestors
 Libs
   pairLib
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_typed_shape[local]:
   well_typed_expr env (Call ann RawLog args dflt) ==>
   ?topics data n.
@@ -47,24 +46,7 @@ Proof
   metis_tac[arg_type_fits_prim_word, is_prim_word_type_def,
             arithmeticTheory.LESS_EQ_REFL]
 QED
-*)
-Theorem raw_log_typed_shape[local]:
-  well_typed_expr env (Call ann RawLog args dflt) ==>
-  ?topics data n.
-    ann = NoneT /\ dflt = NONE /\ n <= 4 /\
-    args = [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-                    (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-            data] /\
-    LENGTH topics <= 4 /\ compatible_bound (Dynamic n) (LENGTH topics) /\
-    well_typed_exprs env topics /\ well_typed_expr env data /\
-    EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
-    (expr_type data = BaseT (BytesT (Fixed 32)) \/
-     ?m. expr_type data = BaseT (BytesT (Dynamic m)))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_child_pre[local]:
   expr_sim_pre cenv cx env (Call ann RawLog args dflt) es /\
   MEM e args /\ expr_sim_inv cenv cx env es' ==>
@@ -78,16 +60,7 @@ Proof
   gvs[expr_has_evm_run_thm, supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
   metis_tac[int_calls_exprs_mem]
 QED
-*)
-Theorem raw_log_child_pre[local]:
-  expr_sim_pre cenv cx env (Call ann RawLog args dflt) es /\
-  MEM e args /\ expr_sim_inv cenv cx env es' ==>
-  expr_sim_pre cenv cx env e es'
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topic_pre[local]:
   expr_sim_pre cenv cx env
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
@@ -102,17 +75,7 @@ Proof
                `dflt`, `es`] >> simp[]) >>
   drule expr_sim_pre_builtin_arg >> disch_then irule >> simp[]
 QED
-*)
-Theorem raw_log_topic_pre[local]:
-  expr_sim_pre cenv cx env
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
-  MEM e topics /\ expr_sim_inv cenv cx env es' ==>
-  expr_sim_pre cenv cx env e es'
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topic_size[local]:
   MEM e topics ==>
   expr_size e < expr_size
@@ -120,16 +83,7 @@ Theorem raw_log_topic_size[local]:
 Proof
   strip_tac >> drule expr_list_member_bound >> simp[expr_size_def]
 QED
-*)
-Theorem raw_log_topic_size[local]:
-  MEM e topics ==>
-  expr_size e < expr_size
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_expr_raw_log_shape[local]:
   compile_expr cenv ty
     (Call NoneT RawLog
@@ -154,33 +108,7 @@ Theorem compile_expr_raw_log_shape[local]:
 Proof
   simp[compile_raw_log_stages, raw_log_topics_lowering_bridge]
 QED
-*)
-Theorem compile_expr_raw_log_shape[local]:
-  compile_expr cenv ty
-    (Call NoneT RawLog
-      [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] NONE) st =
-  (let (topic_ops, st1) = compile_multi_exprs compile_expr cenv topics st in
-   if expr_type data = BaseT (BytesT (Fixed 32)) then
-     let (tmp, st2) = compile_alloc_buffer 32 st1 in
-     let (v, st3) = lower_value compile_expr cenv (expr_type data) data st2 in
-     let (_, st4) = emit_void MSTORE [tmp.buf_operand; v] st3 in
-     let (_, st5) = emit_inst LOG
-       (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++
-        [Lit 32w; tmp.buf_operand]) [] st4 in
-     (StackValue NoneT (Lit 0w), st5)
-   else
-     let (v, st2) = lower_value compile_expr cenv (expr_type data) data st1 in
-     let (data_len, st3) = emit_op MLOAD [v] st2 in
-     let (data_ptr, st4) = emit_op ADD [v; Lit 32w] st3 in
-     let (_, st5) = emit_inst LOG
-       (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++
-        [data_len; data_ptr]) [] st4 in
-     (StackValue NoneT (Lit 0w), st5))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_eval[local]:
   compatible_bound (Dynamic n) (LENGTH topics) ==>
   eval_expr cx
@@ -196,19 +124,7 @@ Proof
   simp[bind_def, return_def] >>
   Cases_on `q` >> simp[]
 QED
-*)
-Theorem raw_log_topics_eval[local]:
-  compatible_bound (Dynamic n) (LENGTH topics) ==>
-  eval_expr cx
-    (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-      (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) =
-  do vs <- eval_exprs cx topics;
-     return (Value (ArrayV (DynArrayV vs))) od
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_eval:
   compatible_bound (Dynamic n) (LENGTH topics) ==>
   vyperState$bind (eval_expr cx
@@ -245,28 +161,8 @@ Proof
   Cases_on `cx.txn.is_static` >>
   simp[raise_def, return_def, bind_def, ignore_bind_def, read_result_def]
 QED
-*)
-Theorem raw_log_eval:
-  compatible_bound (Dynamic n) (LENGTH topics) ==>
-  vyperState$bind (eval_expr cx
-        (Call ann RawLog
-          [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-           data] dflt)) (read_result cx) =
-  do vs <- eval_exprs cx topics;
-     r <- eval_expr cx data;
-     v <- read_result cx r;
-     bs <- lift_option_type (dest_BytesV v) "raw_log data";
-     type_check (LENGTH vs <= 4) "raw_log too many topics";
-     check_not_static cx;
-     push_log (encode_raw_event_values cx.txn.target vs bs);
-     return NoneV od
-Proof
-  cheat
-QED
 
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_eval_value[local]:
   eval_expr cx (Call ann RawLog args dflt) es = (INL tv, es') ==>
   tv = Value NoneV
@@ -276,16 +172,8 @@ Proof
        lift_option_def, push_log_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
-*)
-Theorem raw_log_eval_value[local]:
-  eval_expr cx (Call ann RawLog args dflt) es = (INL tv, es') ==>
-  tv = Value NoneV
-Proof
-  cheat
-QED
 
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_source[local]:
   expr_sim_pre cenv cx env
     (Call ann RawLog
@@ -315,21 +203,7 @@ Proof
       vyperTypeInvariantsTheory.eval_result_typed_def, vyperTypingTheory.value_has_type_def] >>
   gvs[vyperTypingTheory.all_have_type_EVERY]
 QED
-*)
-Theorem raw_log_topics_source[local]:
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt) es /\
-  compatible_bound (Dynamic n) (LENGTH topics) /\
-  eval_exprs cx topics es = (INL vs,es1) ==>
-  expr_sim_pre cenv cx env data es1 /\
-  EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_marked_source[local]:
   expr_sim_pre cenv cx env
     (Call ann RawLog
@@ -355,22 +229,7 @@ Proof
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
   drule_all raw_log_topics_source >> simp[]
 QED
-*)
-Theorem raw_log_topics_marked_source[local]:
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt) es /\
-  compatible_bound (Dynamic n) (LENGTH topics) /\
-  gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
-    marks (INL vs) mid (OK t) ==>
-  expr_sim_pre cenv cx env data (mid with gas_obs := []) /\
-  EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_data_sim[local]:
   expr_sim_below cenv (expr_size (Call ann RawLog [topic; data] dflt)) /\
   expr_sim_pre cenv cx env data es1 ==>
@@ -380,32 +239,15 @@ Proof
   first_x_assum (qspec_then `data` mp_tac) >>
   simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
-*)
-Theorem raw_log_data_sim[local]:
-  expr_sim_below cenv (expr_size (Call ann RawLog [topic; data] dflt)) /\
-  expr_sim_pre cenv cx env data es1 ==>
-  expr_sim ctx func cenv cx (expr_type data) data es1
-Proof
-  cheat
-QED
 
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_multi_exprs_lower_word_args[local]:
   !topics. compile_multi_exprs compile_expr cenv topics =
            lower_word_args cenv expr_type topics
 Proof
   Induct >> simp[compile_multi_exprs_def, lower_word_args_def]
 QED
-*)
-Theorem compile_multi_exprs_lower_word_args[local]:
-  !topics. compile_multi_exprs compile_expr cenv topics =
-           lower_word_args cenv expr_type topics
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_ready[local]:
   expr_sim_below cenv (expr_size
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt)) /\
@@ -429,21 +271,7 @@ Proof
     (irule raw_log_topic_size >> simp[]) >>
   gvs[expr_sim_below_def, expr_ok_def] >> metis_tac[]
 QED
-*)
-Theorem raw_log_topics_ready[local]:
-  expr_sim_below cenv (expr_size
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt)) /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
-  EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) ==>
-  typed_args_ready ctx func cenv cx expr_type
-    (expr_sim_inv cenv cx env) topics /\
-  wb_args_shape cenv expr_type topics
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_sim[local]:
   expr_sim_below cenv (expr_size
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt)) /\
@@ -462,7 +290,7 @@ Theorem raw_log_topics_sim[local]:
        typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_topics_ready >> strip_tac >>
   irule lower_typed_args_sim >> simp[] >>
@@ -470,31 +298,7 @@ Proof
   gvs[compile_multi_exprs_lower_word_args, expr_sim_pre_def] >>
   metis_tac[expr_sim_inv_gas_obs]
 QED
-*)
-Theorem raw_log_topics_sim[local]:
-  expr_sim_below cenv (expr_size
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt)) /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
-  EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
-  compile_multi_exprs compile_expr cenv topics sa = (ops, sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es s0 /\
-     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-  s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx topics) (es,s0)
-    (\H rr ee t. ?vs. rr = INL vs /\
-       typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
-       t.vs_current_bb = sb.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_operands_frame[local]:
   !ops ws.
   eval_operands ops s = SOME ws /\
@@ -509,20 +313,7 @@ Proof
   drule_all exprBopSimPropsTheory.eval_operand_frame >> strip_tac >>
   simp[] >> first_x_assum irule >> simp[]
 QED
-*)
-Theorem raw_log_operands_frame[local]:
-  !ops ws.
-  eval_operands ops s = SOME ws /\
-  EVERY (\op. (!p. op = Var p ==> not_fresh_at sa p) /\
-              (!l. op <> Label l)) ops /\
-  (!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==>
-    lookup_var p t = SOME w) ==>
-  eval_operands ops t = SOME ws
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_post_rebase[local]:
   expr_post H ctx func cenv cx e es1 s1 sb t es2 v op u /\
   stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
@@ -534,19 +325,7 @@ Proof
   strip_tac >> irule wb_frame_trans >> goal_assum (drule_at Any) >>
   metis_tac[expr_post_frame]
 QED
-*)
-Theorem raw_log_post_rebase[local]:
-  expr_post H ctx func cenv cx e es1 s1 sb t es2 v op u /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-  wb_frame cenv es es1 sa s0 t ==>
-  wb_frame cenv es es2 sa s0 u
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_post_operands[local]:
   expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
   eval_operands ops s0 = SOME ws /\
@@ -558,18 +337,7 @@ Proof
   qexistsl [`s0`, `sa`] >> simp[] >>
   gvs[expr_post_def]
 QED
-*)
-Theorem raw_log_post_operands[local]:
-  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
-  eval_operands ops s0 = SOME ws /\
-  EVERY (\op. (!p. op = Var p ==> not_fresh_at sa p) /\
-              (!l. op <> Label l)) ops ==>
-  eval_operands ops s = SOME ws
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_scratch_transport[local]:
   expr_post H ctx func cenv cx e es sa sm s0 es' v op s /\
   stmt_state_rel H ctx func cenv cx es s0 /\
@@ -593,25 +361,8 @@ Proof
      qexistsl [`sa`, `es'.scopes`, `s`] >> simp[]) >>
   metis_tac[]
 QED
-*)
-Theorem raw_log_scratch_transport[local]:
-  expr_post H ctx func cenv cx e es sa sm s0 es' v op s /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  FLOOKUP s0.vs_allocas aid = SOME (b,32) /\
-  not_fresh_at sa p /\ lookup_var p s0 = SOME (n2w b) /\
-  (!name lb len. local_region cenv es.scopes s0 name lb len ==>
-    b + 32 <= lb \/ lb + len <= b) ==>
-  FLOOKUP s.vs_allocas aid = SOME (b,32) /\
-  lookup_var p s = SOME (n2w b) /\
-  (!name lb len. local_region cenv es'.scopes s name lb len ==>
-    b + 32 <= lb \/ lb + len <= b)
-Proof
-  cheat
-QED
 
 (* The post-data source suffix consumes no gas observations. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_tail_summary:
   dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
   gas_marked_path F ctx func s 0 (OK t) /\
@@ -633,26 +384,10 @@ Proof
        vyperStateTheory.evaluation_state_component_equality] >>
   disj1_tac >> Cases_on `es` >> gvs[]
 QED
-*)
-Theorem raw_log_tail_summary:
-  dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
-  gas_marked_path F ctx func s 0 (OK t) /\
-  Q (INL NoneV)
-    ((es with logs := es.logs ++
-       [encode_raw_event_values cx.txn.target vals bs]) with gas_obs := []) t ==>
-  gas_summary_at F (ctx,func) []
-    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
-        type_check (LENGTH vals <= 4) "raw_log too many topics";
-        push_log (encode_raw_event_values cx.txn.target vals bs');
-        return NoneV od) (es,s) Q R
-Proof
-  cheat
-QED
 
 (* The data read and the log push only add storage observations, so a
    horizon valid after the topics is valid before them, and likewise
    across the data. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_topics_horizon[local]:
   gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
     marks (INL vs) mid (OK t) /\
@@ -671,17 +406,7 @@ Proof
   `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace` by simp[] >>
   drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]
 QED
-*)
-Theorem raw_log_topics_horizon[local]:
-  gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
-    marks (INL vs) mid (OK t) /\
-  valid_horizon cx st0 H mid.storage_trace ==>
-  valid_horizon cx st0 H es.storage_trace
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_data_horizon[local]:
   bind (eval_expr cx data) (read_result cx) (mid with gas_obs := gs) = (INL v, ee) /\
   valid_horizon cx st0 H ee.storage_trace ==>
@@ -693,18 +418,9 @@ Proof
          storage_trace_frame_read_result] >>
   drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]
 QED
-*)
-Theorem raw_log_data_horizon[local]:
-  bind (eval_expr cx data) (read_result cx) (mid with gas_obs := gs) = (INL v, ee) /\
-  valid_horizon cx st0 H ee.storage_trace ==>
-  valid_horizon cx st0 H mid.storage_trace
-Proof
-  cheat
-QED
 
 (* The dynamic payload's tail: the endpoint of the MLOAD/ADD/LOG run does
    not depend on the horizon, the posts hold at every valid one. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_dynamic_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
@@ -738,7 +454,8 @@ Theorem raw_log_dynamic_tail_summary:
       expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
+    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `expr_post H0 ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s` by
@@ -834,46 +551,7 @@ Proof
       gvs[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs]) >>
   simp[]
 QED
-*)
-Theorem raw_log_dynamic_tail_summary:
-  expr_has_effect e /\
-  (!H. valid_horizon cx st0 H es2.storage_trace ==>
-     expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s) /\
-  valid_horizon cx st0 H0 es2.storage_trace /\
-  wb_frame cenv es es2 sa s0 s /\
-  expr_type data = BaseT (BytesT (Dynamic cap)) /\
-  evaluate_type (get_tenv cx) (expr_type data) =
-    SOME (BaseTV (BytesT (Dynamic cap))) /\
-  emit_op MLOAD [ptr_op] sd = (len_op, sl) /\
-  emit_op ADD [ptr_op; Lit 32w] sl = (data_op, sm) /\
-  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;data_op]) []
-    sm = (u,sb) /\
-  (!x. ptr_op = Var x ==> not_fresh_at sd x) /\
-  EVERY (\op. (!p. op = Var p ==> not_fresh_at sd p) /\
-              (!l. op <> Label l)) ops /\
-  eval_operands ops s = SOME (MAP event_value_to_word vs) /\
-  LENGTH ops < dimword (:256) /\ local_ptrs_reserved cenv sd /\
-  sa.cs_next_var <= sd.cs_next_var /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
-  fn_has_code sd sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sd.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
-  gas_summary_at F (ctx,func) []
-    (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
-        type_check (LENGTH vs <= 4) "raw_log too many topics";
-        check_not_static cx;
-        push_log (encode_raw_event_values cx.txn.target vs bytes);
-        return NoneV od) (es2,s)
-    (\rr ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
-      ?v. rr = INL v /\
-      expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_dynamic_tail_summary[static]:
   qunabbrev_tac `logops` >>
   `u = ()` by (Cases_on `u` >> simp[]) >> gvs[] >>
@@ -900,15 +578,17 @@ Resume raw_log_dynamic_tail_summary[static]:
   simp[dest_BytesV_def, gas_summary_at_def] >>
   disch_then (qx_choose_then `rr` (qx_choose_then `ee`
     (qx_choose_then `r` strip_assume_tac))) >>
-  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+  `rr <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+          assert_def, return_def, raise_def] >> metis_tac[]) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[halt_exit_def]
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Finalise raw_log_dynamic_tail_summary
-*)
 
 (* The 32-byte payload's tail: as above, around the MSTORE and the LOG. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_fixed_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
@@ -943,7 +623,8 @@ Theorem raw_log_fixed_tail_summary:
       expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
+    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `expr_post H0 ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s` by
@@ -1065,47 +746,7 @@ Proof
       gvs[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs]) >>
   simp[]
 QED
-*)
-Theorem raw_log_fixed_tail_summary:
-  expr_has_effect e /\
-  (!H. valid_horizon cx st0 H es2.storage_trace ==>
-     expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s) /\
-  valid_horizon cx st0 H0 es2.storage_trace /\
-  wb_frame cenv es es2 sa s0 s /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\
-  value_has_type (BaseTV (BytesT (Fixed 32))) (BytesV bs) /\
-  emit_void MSTORE [ptr_op;val_op] sd = ((),sm) /\
-  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) []
-    sm = (u,sb) /\
-  eval_operand ptr_op s = SOME (n2w b) /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,32) /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  sa.cs_next_id <= inst.inst_id /\
-  (!name lb len. local_region cenv es2.scopes s name lb len ==>
-    b + 32 <= lb \/ lb + len <= b) /\
-  MAP FDOM es.scopes = MAP FDOM es2.scopes /\ local_ptrs_reserved cenv sa /\
-  eval_operands ops s = SOME (MAP event_value_to_word vs) /\
-  LENGTH ops < dimword (:256) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
-  fn_has_code sd sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sd.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
-  gas_summary_at F (ctx,func) []
-    (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
-        type_check (LENGTH vs <= 4) "raw_log too many topics";
-        check_not_static cx;
-        push_log (encode_raw_event_values cx.txn.target vs bytes);
-        return NoneV od) (es2,s)
-    (\rr ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
-      ?v. rr = INL v /\
-      expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_fixed_tail_summary[static]:
   `u = ()` by (Cases_on `u` >> simp[]) >> gvs[] >>
   `s.vs_call_ctx.cc_static` by
@@ -1132,15 +773,17 @@ Resume raw_log_fixed_tail_summary[static]:
   simp[dest_BytesV_def, gas_summary_at_def] >>
   disch_then (qx_choose_then `rr` (qx_choose_then `ee`
     (qx_choose_then `r` strip_assume_tac))) >>
-  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+  `rr <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+          assert_def, return_def, raise_def] >> metis_tac[]) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[halt_exit_def]
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Finalise raw_log_fixed_tail_summary
-*)
 
 (* The buffer's ALLOCA: one endpoint, its relation at each valid horizon. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_alloc_path[local]:
   compile_alloc_buffer 32 sa = (buf,sb) /\ fn_has_code sa sb func /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -1196,38 +839,7 @@ Proof
   simp[stmt_state_rel_inst_idx, lookup_var_def] >>
   gvs[lookup_var_def, local_region_def] >> metis_tac[]
 QED
-*)
-Theorem raw_log_alloc_path[local]:
-  compile_alloc_buffer 32 sa = (buf,sb) /\ fn_has_code sa sb func /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es s /\
-     storage_well_formed_on cx es (FST H)) /\
-  valid_horizon cx st0 H0 es.storage_trace /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t w. gas_marked_path F ctx func s 0 (OK t) /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx es t) /\ ~t.vs_halted /\
-    t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    eval_operand buf.buf_operand t = SOME w /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32) /\
-    w2n w + 32 < dimword (:256) /\ t.vs_memory = s.vs_memory /\
-    sa.cs_next_id < sb.cs_next_id /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-       FLOOKUP t.vs_allocas aid = SOME entry) /\
-    (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-       regions_disjoint (w2n w) 32 b len) /\
-    (!name b len. local_region cenv es.scopes t name b len ==>
-       regions_disjoint (w2n w) 32 b len) /\
-    (?p. buf.buf_operand = Var p /\ not_fresh_at sb p)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_dynamic_sim[local]:
   call = Call NoneT RawLog
     [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -1292,29 +904,16 @@ Proof
   reverse conj_tac
   >- (`(\(H:(bool # bytes32 # type_value) list # num list)
            (rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit H cx ee (INR exc : value + exception) r) =
        (\(H:(bool # bytes32 # type_value) list # num list) rr ee r.
-          wb_args_exit rr r)` by
+          wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `rr` >>
-         simp[wb_args_exit_def]) >>
+         simp[wb_args_exit_def, halt_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
   rpt gen_tac >> strip_tac >> suspend "data"
 QED
-*)
-Theorem raw_log_dynamic_sim[local]:
-  call = Call NoneT RawLog
-    [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-      (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] NONE /\
-  expr_type data = BaseT (BytesT (Dynamic m)) /\
-  compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
-  expr_sim_below cenv (expr_size call) /\ expr_sim_pre cenv cx env call es ==>
-  expr_vv_sim ctx func cenv cx ty call es
-Proof
-  cheat
-QED
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_dynamic_sim[data]:
   drule_all raw_log_topics_marked_source >> strip_tac >>
   qpat_x_assum `!sb' sa' s0' ops func' ctx'. _` kall_tac >>
@@ -1376,13 +975,12 @@ Resume raw_log_dynamic_sim[data]:
        storage_trace_frame_ignore_bind, storage_trace_frame_checks,
        storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
        storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> gvs[halt_exit_def]) >>
   qexistsl [`cenv`, `v`, `st1`, `st2`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- metis_tac[local_ptrs_reserved_next_var] >>
   rpt gen_tac >> strip_tac >> suspend "tail"
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_dynamic_sim[tail]:
   qpat_x_assum `valid_horizon _ _ H mid.storage_trace` kall_tac >>
   rename1 `valid_horizon cx st0 H ee.storage_trace` >>
@@ -1459,12 +1057,8 @@ Resume raw_log_dynamic_sim[tail]:
   conj_tac >- metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Finalise raw_log_dynamic_sim
-*)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_fixed_sim[local]:
   call = Call NoneT RawLog
     [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -1530,29 +1124,16 @@ Proof
   reverse conj_tac
   >- (`(\(H:(bool # bytes32 # type_value) list # num list)
            (rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit H cx ee (INR exc : value + exception) r) =
        (\(H:(bool # bytes32 # type_value) list # num list) rr ee r.
-          wb_args_exit rr r)` by
+          wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `rr` >>
-         simp[wb_args_exit_def]) >>
+         simp[wb_args_exit_def, halt_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
   rpt gen_tac >> strip_tac >> suspend "data"
 QED
-*)
-Theorem raw_log_fixed_sim[local]:
-  call = Call NoneT RawLog
-    [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-      (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] NONE /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\
-  compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
-  expr_sim_below cenv (expr_size call) /\ expr_sim_pre cenv cx env call es ==>
-  expr_vv_sim ctx func cenv cx ty call es
-Proof
-  cheat
-QED
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_fixed_sim[data]:
   drule_all raw_log_topics_marked_source >> strip_tac >>
   qpat_x_assum `!sb' sa' s0' ops func' ctx'. _` kall_tac >>
@@ -1635,14 +1216,13 @@ Resume raw_log_fixed_sim[data]:
        storage_trace_frame_ignore_bind, storage_trace_frame_checks,
        storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
        storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> gvs[halt_exit_def]) >>
   qexistsl [`cenv`, `v`, `st2`, `st3`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>
       drule emitted_insts_emit_op_local >> simp[]) >>
   rpt gen_tac >> strip_tac >> suspend "tail"
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Resume raw_log_fixed_sim[tail]:
   qpat_x_assum `expr_sim_below _ _` kall_tac >>
   qpat_x_assum `typed_args_ready _ _ _ _ _ _ _` kall_tac >>
@@ -1751,12 +1331,8 @@ Resume raw_log_fixed_sim[tail]:
   conj_tac >- gvs[typed_args_post_def] >>
   metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]
 QED
-*)
-(* LOCAL STUB - preserved suspension.
 Finalise raw_log_fixed_sim
-*)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem raw_log_expr_vv_ok:
   !cenv ann args dflt.
     expr_sim_below cenv (expr_size (Call ann (RawLog) args dflt)) ==>
@@ -1768,12 +1344,4 @@ Proof
   drule raw_log_typed_shape >> strip_tac >> gvs[]
   >- (irule raw_log_fixed_sim >> simp[] >> metis_tac[]) >>
   irule raw_log_dynamic_sim >> simp[] >> metis_tac[]
-QED
-*)
-Theorem raw_log_expr_vv_ok:
-  !cenv ann args dflt.
-    expr_sim_below cenv (expr_size (Call ann (RawLog) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (RawLog) args dflt)
-Proof
-  cheat
 QED

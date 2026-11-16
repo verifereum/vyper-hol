@@ -204,6 +204,12 @@
                   "lineno": 5,
                   "node_id": 22,
                   "src": "84:1:0",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
                   "folded_value": {
                     "ast_type": "Int",
                     "col_offset": 23,
@@ -212,8 +218,24 @@
                     "lineno": 1,
                     "node_id": 9,
                     "src": "23:5:0",
-                    "value": 3
-                  }
+                    "value": 3,
+                    "type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "variable_reads": [
+                    {
+                      "name": "N",
+                      "decl_node": {
+                        "node_id": 1,
+                        "source_id": 0
+                      },
+                      "access_path": []
+                    }
+                  ]
                 },
                 "src": "76:10:0",
                 "value": {
@@ -435,6 +457,7 @@
     "name": null,
     "node_id": 0,
     "path": "tests/fixtures/check_contract/constant_bound.vy",
+    "resolved_path": "tests/fixtures/check_contract/constant_bound.vy",
     "settings": {},
     "source_id": 0,
     "src": "0:118:0",

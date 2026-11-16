@@ -127,6 +127,7 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_all unwrap_single_layout >> strip_tac >>
   `32*1 <= nb` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all unwrap_alloc_loop_entry >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `root <> STRING #"%" (toString sm.cs_next_var)` by
