@@ -4,6 +4,7 @@ Ancestors
   assignPlaceMemoryContinuationMem assignPlaceBackendContinuationMem
   augAssignPlaceWordStoreMemory bodyMemAssignSnapshot bodyMemBopRestWordPath
   stmtLowering loweringPosts exprLoweringProps exprSimHypsDefs
+  vyperStoragePlaceObserved vyperStorageFootprint
   exprSimProps compileEnv fragGasMode fragGasPathMem stmtSimAugAssignPlaceMemory
   venomState words vyperState vyperValue context
 
@@ -30,9 +31,12 @@ Theorem assign_place_captured_store_mem:
   (!x. vv_operand saved = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
   (loc = LocMemory ==> w2n w + type_memory_size dtv <= s.vs_alloca_next) /\
   place_ptr_rel ce cx s (PlaceR p) w (SOME loc) (Type dty) /\
-  storage_place_region cx p /\ expr_sim_inv ce cx env ee /\
+  storage_place_observed H p /\
+  (loc <> LocMemory ==>
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H)) /\
+  expr_sim_inv ce cx env ee /\
   acyclic_struct_metadata ce.ce_struct_fields /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   local_ptrs_reserved ce sa /\ alloca_history func s /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
@@ -45,20 +49,30 @@ Theorem assign_place_captured_store_mem:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?z. gas_marked_path T ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func ce cx ff z /\
+    stmt_state_rel H ctx func ce cx ff z /\
     (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
       FLOOKUP z.vs_allocas aid = SOME b) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
     z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    (!J. stmt_state_rel J ctx func ce cx ee s /\
+      storage_place_observed J p /\
+      (loc <> LocMemory ==>
+        regions_consistent (FST J) /\ storage_locks_separated (FST J) (SND J)) ==>
+      stmt_state_rel J ctx func ce cx ff z)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?z. gas_marked_path T ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func ce cx ff z /\
+    stmt_state_rel H ctx func ce cx ff z /\
     (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
-    z.vs_inst_idx = LENGTH sb.cs_current_insts` by suspend "dispatch" >>
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee s /\
+      storage_place_observed J p /\
+      (loc <> LocMemory ==>
+        regions_consistent (FST J) /\ storage_locks_separated (FST J) (SND J)) ==>
+      stmt_state_rel J ctx func ce cx ff z)` by suspend "dispatch" >>
   qexists_tac `z` >> simp[] >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next` by
@@ -87,9 +101,10 @@ Resume assign_place_captured_store_mem[dispatch]:
       mp_tac (Q.INST [`cenv` |-> `ce`, `dst_op` |-> `dst`,
         `op` |-> `vv_operand saved`, `src_loc` |-> `SOME LocMemory`,
         `mem_size` |-> `type_memory_bytes ce dty`]
-        (SPEC_ALL assign_place_memory_continuation_mem)) >>
+        (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+          assign_place_memory_continuation_mem))) >>
       (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-      qexists_tac `t` >> simp[gas_marked_path_def]) >>
+      qexists_tac `t` >> simp[gas_marked_path_def] >> metis_tac[]) >>
   `(if loc = LocTransient then LocTransient else LocStorage) = loc` by
     metis_tac[] >>
   mp_tac (Q.INST [`tr` |-> `loc = LocTransient`, `vv` |-> `saved`,
@@ -98,7 +113,7 @@ Resume assign_place_captured_store_mem[dispatch]:
   >- (simp[] >> Cases_on `saved` >>
       gvs[vv_location_def, read_result_def, return_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qexists_tac `t` >> simp[]
+  qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
 Finalise assign_place_captured_store_mem
