@@ -83,24 +83,18 @@ Proof
       (empty_state with <|accounts := e'.rollback.accounts;
                          tStorage := e'.rollback.tStorage|>) (FST H)` by
     (strip_tac >> drule_all guard_processed_backend_well_formed >> simp[]) >>
-  `accounts_agree h tx.target =
-    accounts_agree h cx.txn.target` by
-    simp[FUN_EQ_THM, accounts_agree_def, initial_evaluation_context_def] >>
-  `transient_agree h tx.target =
-    transient_agree h cx.txn.target` by
-    simp[FUN_EQ_THM, transient_agree_def, initial_evaluation_context_def] >>
   `call_external (SOME (MAP SND (call_trace e))) gs am tx = (res,am',rqs)` by
     metis_tac[call_external_trace_result] >>
   qpat_x_assum `call_result_rel_at _ _ _ _ _ _ _ _` mp_tac >>
-  simp[call_result_rel_at_def, effects_agree_def, source_storage_trace_def, Abbr `h`] >>
+  simp[call_result_rel_at_def, source_storage_trace_def, Abbr `h`] >>
   Cases_on `res`
   >- (simp[effects_agree_def] >> rpt strip_tac >>
       qpat_x_assum `accounts_agree _ _ _ (process_deletions _ _) /\ _ ==> _` irule >>
-      fs[]) >>
+      fs[] >> metis_tac[]) >>
   rename1 `INR exc` >> Cases_on `exc = HaltException`
-  >- (gvs[] >> rpt strip_tac >>
+  >- (gvs[effects_agree_def] >> rpt strip_tac >>
       qpat_x_assum `accounts_agree _ _ _ (process_deletions _ _) /\ _ ==> _` irule >>
-      fs[]) >>
+      fs[] >> metis_tac[]) >>
   Cases_on `exc` >> simp[exception_outcome_rel_def] >> rpt strip_tac >>
   gvs[source_exempt_def] >>
   qpat_x_assum `!exc out lgs. frame_outcome _ _ _ (SOME exc) out lgs ==> _`
