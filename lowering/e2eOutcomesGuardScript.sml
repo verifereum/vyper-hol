@@ -373,12 +373,14 @@ Proof
      `recorded_outcomes_count pre < LENGTH vs.vs_outcomes` by simp[] >>
      qpat_assum `am_e.sources = am.sources` (fn sources_eq =>
        qpat_assum `am_e.layouts = am.layouts` (fn layouts_eq =>
-         RULE_ASSUM_TAC (PURE_REWRITE_RULE [sources_eq,layouts_eq]) >>
-         drule_all (PURE_REWRITE_RULE [sources_eq,layouts_eq]
+       qpat_assum `tx_e.target = tx.target` (fn target_eq =>
+         RULE_ASSUM_TAC (PURE_REWRITE_RULE [sources_eq,layouts_eq,target_eq]) >>
+         drule_all (PURE_REWRITE_RULE [sources_eq,layouts_eq,target_eq]
            (SPEC_ALL source_compiled_request_alignment |> Q.INST
-             [`am` |-> `am_e`, `tx` |-> `tx_e`, `es` |-> `e`, `H` |-> `H`])))) >>
+             [`am` |-> `am_e`, `tx` |-> `tx_e`, `es` |-> `e`, `H` |-> `H`]))))) >>
      strip_tac >>
-     qexists_tac `EL (recorded_outcomes_count pre) (call_requests e)` >> gvs[]) >>
+     qexists_tac `EL (recorded_outcomes_count pre) (call_requests e)` >>
+     gvs[initial_evaluation_context_def]) >>
      simp[]) >>
   `!st. storage_well_formed_on
       (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE) st (FST H) ==>
