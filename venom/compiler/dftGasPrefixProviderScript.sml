@@ -5429,6 +5429,103 @@ Resume native_inventory_frontier_no_pass[contradiction]:
 QED
 Finalise native_inventory_frontier_no_pass
 
+(* The selected frontier environment is notation, not a logical definition. *)
+val native_inventory_frontierq = ``
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\
+  (s with vs_gas_readings := []) = (t with vs_gas_readings := []) /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) frontier_body /\
+  LIST_REL (\h x. h.inst_id = x.inst_id) scheduled frontier_body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ frontier_body /\ t.vs_inst_idx = j /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
+  gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
+  LENGTH key_rows = LENGTH (before ++ [z]) /\
+  LENGTH site_rows = LENGTH (before ++ [z]) /\ LENGTH certs = LENGTH (before ++ [z]) /\
+  (!h. h < LENGTH (before ++ [z]) ==>
+    ^native_inventory_Rq
+      (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+      (EL h (before ++ [z])) (EL h key_rows) (EL h site_rows) (EL h certs)) /\
+  ALL_DISTINCT (FLAT key_rows) /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+    (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))
+      (FLAT key_rows)) g /\
+  todo = before ++ z::after /\ scheduled = done ++ z::later /\
+  EVERY (\i. ~is_terminator i.inst_opcode) done /\
+  EVERY (\i. ~is_terminator i.inst_opcode) before /\
+  FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+  exec_block b C' bt t = dft_exec_suffix b C' [z] tz /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) /\
+  (((?u. exec_block b C' bt t = OK u) \/
+    (?v u. exec_block b C' bt t = IntRet v u)) ==> after = [])``;
+
+Theorem native_inventory_contained_stop:
+  !frontier_body key_rows site_rows certs.
+  ^native_inventory_frontierq ==>
+  !n. ?A i rest frontpost q.
+    todo = A ++ i::rest /\ before ++ [z] = A ++ i::frontpost /\
+    EVERY (\x. ~is_terminator x.inst_opcode) A /\
+    FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail) = OK q /\
+    (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >>
+  qspecl_then [`before ++ [z]`, `n`, `C`, `s with vs_gas_readings := g ++ tail`]
+    (qx_choose_then `A` (qx_choose_then `rest` (qx_choose_then `q`
+      (map_every assume_tac o CONJUNCTS)))) native_selected_maximal_cut >>
+  Cases_on `rest = []`
+  >- (`A = before ++ [z]` by metis_tac[APPEND_NIL] >>
+      Cases_on `is_terminator z.inst_opcode`
+      >- (qpat_x_assum `EVERY _ A` mp_tac >>
+          qpat_x_assum `A = _` (fn th => rewrite_tac[th, EVERY_APPEND, EVERY_DEF]) >>
+          simp[]) >>
+      `~(?u. step_inst b C' z tz = OK u)` by metis_tac[] >>
+      drule_all native_inventory_frontier_no_pass >> metis_tac[]) >>
+  qpat_x_assum `rest = [] \/ _` mp_tac >> simp[] >> strip_tac >>
+  qexistsl_tac [`A`, `i`, `more ++ after`, `more`, `q`] >>
+  simp[] >> metis_tac[APPEND_ASSOC, APPEND]
+QED
+
+Theorem native_inventory_all_budget_prefix:
+  !frontier_body key_rows site_rows certs.
+  ^native_inventory_frontierq ==>
+  !n. ?k. k <= LENGTH (FLAT key_rows) /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+      (s with vs_gas_readings := g ++ tail)) =
+      ZIP (TAKE k (FLAT key_rows), TAKE k g) /\
+    gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+      (s with vs_gas_readings := g ++ tail) = TAKE k (FLAT site_rows)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >>
+  drule_all native_inventory_contained_stop >>
+  disch_then (qspecl_then [`tail`, `n`] (qx_choose_then `A`
+    (qx_choose_then `i` (qx_choose_then `rest` (qx_choose_then `frontpost`
+      (qx_choose_then `q` (map_every assume_tac o CONJUNCTS))))))) >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    (Q.INST [`P` |-> `before ++ [z]`] native_inventory_stopped_cut_prefix) >>
+  (impl_tac >- (asm_rewrite_tac[] >> qexists_tac `after` >>
+    qpat_x_assum `todo = before ++ z::after` mp_tac >>
+    qpat_x_assum `before ++ [z] = _` mp_tac >>
+    qpat_x_assum `todo = A ++ i::rest` mp_tac >>
+    rpt (pop_assum kall_tac) >> simp[APPEND_ASSOC])) >>
+  disch_then (qspecl_then [`A`, `i`, `n`, `rest`, `frontpost`, `q`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> simp[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
