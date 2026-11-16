@@ -3,7 +3,7 @@ Theory bodyFullAbiEncodeSuffix
 Ancestors
   abiEncoderWindowJoint abiEncoderWindowContract bodyPtrDefs ghostObservationPtr abiDecodeStaticProps
   localPtrsProps loweringStateRelDefs valueEncodingProps valueEncodingProofs abiAllocationHistory
-  exprSimAbiEncodeExecFrame abiEncoderRegisteredEffect ptrDiscipline
+  exprSimAbiEncodeExecFrame abiEncoderRegisteredEffect ptrDiscipline bodyFullPathHistory
   exprSimProps externalReturnEncoderSites arithmetic finite_map pred_set words list
 
 (* Protected caller bytes lie below the entry frontier. Reused scratch
@@ -135,7 +135,6 @@ Theorem abi_encode_suffix_full:
     regions_disjoint (d,LENGTH (enc at av)) (b,sz)) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  abi_alloca_history (fn_insts func) s /\
   local_ptrs_rel func ce es.scopes s /\ local_ptrs_reserved ce st /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
@@ -162,7 +161,9 @@ Theorem abi_encode_suffix_full:
     ptr_covers G' tn' dp t dstcap /\
     alloca_inv t /\ alloca_room ctx func t /\
     allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    abi_alloca_history (fn_insts func) t /\
+    (abi_alloca_history (fn_insts func) s ==>
+      abi_alloca_history (fn_insts func) t) /\
+    (alloca_history func s ==> alloca_history func t) /\
     ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
     (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -198,6 +199,7 @@ Proof
   conj_asm1_tac >- suspend "allocas" >>
   conj_asm1_tac >- suspend "frontier" >>
   conj_tac >- suspend "history" >>
+  conj_tac >- suspend "ordinary_history" >>
   conj_tac >- suspend "kept" >>
   gen_tac >> asm_rewrite_tac[] >> strip_tac >> suspend "inv"
 QED
@@ -224,6 +226,7 @@ Resume abi_encode_suffix_full[frontier]:
   drule window_strong_result_growth >> simp[window_alloca_growth_def]
 QED
 Resume abi_encode_suffix_full[history]:
+  disch_tac >>
   drule window_strong_result_effect >> strip_tac >>
   pure_rewrite_tac[abi_alloca_history_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `id IN window_alloca_sites func (frag_ids st en)`
@@ -241,6 +244,12 @@ Resume abi_encode_suffix_full[history]:
      pure_rewrite_tac[abi_encoder_registered_effect_def] >> metis_tac[]) >>
   qpat_x_assum `abi_alloca_history _ _` mp_tac >>
   pure_rewrite_tac[abi_alloca_history_def] >> metis_tac[]
+QED
+Resume abi_encode_suffix_full[ordinary_history]:
+  strip_tac >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `ARB` assume_tac) >>
+  drule_all body_full_path_alloca_history >> simp[]
 QED
 Resume abi_encode_suffix_full[kept]:
   qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
