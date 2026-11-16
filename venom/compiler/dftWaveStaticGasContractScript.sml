@@ -141,21 +141,3 @@ Proof
   Cases_on `run_context fuel C (vs' with vs_gas_readings := rds)` >>
   simp[gas_res_rel_def]
 QED
-
-Theorem dft_ctx_sim_rq_gas_static_forward:
-  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
-  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
-  o1_ctx_shape C /\ dead_wf D /\
-  ctx_labels_bound C vs'.vs_labels /\ o1_initial_state_ok vs' /\
-  vs'.vs_fmp = vs'.vs_initial_fmp /\ code_layout_valid vs' /\
-  (vs'.vs_call_ctx.cc_static ==>
-    !fn inst l. MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
-      inst.inst_opcode = CODECOPY /\ MEM (Label l) inst.inst_operands ==>
-      l IN FDOM vs'.vs_labels) ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
-       ctx_abort_rq D C C' vs vs'
-Proof
-  strip_tac >> drule_all dft_ctx_sim_gas_wave_static_abort >>
-  metis_tac[ctx_sim_fuel_imp_ctx_sim]
-QED
