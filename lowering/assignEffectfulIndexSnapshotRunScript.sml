@@ -13,6 +13,7 @@ Ancestors
   immutableDeployPhysicalSource exprSimIfExpWidenedPhysicalType
   aggregateEvaluatedLayout exprSimIfExpWidenedCounted exprReasonOperand exprOperandVar exprSafeOperand exprSimHypsDefs
   annassignRelayoutSource exprSimHyps exprLoweringProps vyperStorageFootprint
+  bodyMemSnapshotSourceLocation
 
 (* Memory unwrap does not write memory.  Unlike the ordinary read boundary,
    this retains entry-relative frames even for allocations made after the
