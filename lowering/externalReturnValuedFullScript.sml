@@ -153,7 +153,9 @@ Resume return_selected_valued_frag_full[joint_return_suffix]:
       (CONV_RULE (DEPTH_CONV ETA_CONV) return_site_value_semantics)) >>
   disch_then (qspecl_then [`ret`,`env`,`ce`] mp_tac) >>
   simp[] >> strip_tac >>
-  `well_typed_expr env e` by fs[type_stmt_def, AllCaseEqs()] >>
+  `well_typed_expr env e` by
+    (qpat_assum `IS_SOME (type_stmt env ret (Return (SOME e)))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[type_stmt_def, AllCaseEqs()]) >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_context_consistent_def] >>
@@ -322,7 +324,10 @@ Resume return_selected_valued_frag_full[buffered_direct_dispatch]:
   Q.SUBGOAL_THEN `expr_val_at ce cx ret sa sm mid v op t /\
     ptr_val_ok cx ret v op G1 tn1 t` ASSUME_TAC
   >- (Cases_on `post_value_type ce e=ret`
-      >- metis_tac[] >> suspend "buffered_direct_widened_source") >>
+      >- (qpat_assum `post_value_type ce e=ret`
+            (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+          conj_tac >> first_assum ACCEPT_TAC) >>
+      suspend "buffered_direct_widened_source") >>
   suspend "buffered_direct_ret_ready"
 QED
 
@@ -357,7 +362,10 @@ Resume return_selected_valued_frag_full[buffered_direct_widened_source]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring]) >>
   `evaluate_type (get_tenv cx) (post_value_type ce e)=SOME ptv /\
-   evaluate_type (get_tenv cx) ret=SOME dtv` by metis_tac[] >>
+   evaluate_type (get_tenv cx) ret=SOME dtv` by
+    (qpat_assum `get_tenv cx=type_env tops`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `~is_word_type (post_value_type ce e)` by
     metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `val_footprint ptv v=val_footprint dtv v` by
@@ -377,12 +385,17 @@ Resume return_selected_valued_frag_full[buffered_direct_widened_source]:
     (qpat_assum `value_has_type ptv v`
        (ACCEPT_TAC o MATCH_MP valueTypingMemoryPropsTheory.value_has_type_memory_wf)) >>
   `?sbt. ptv = BaseTV sbt` by
-    (qspecl_then [`get_tenv cx`,`post_value_type ce e`,`ptv`] mp_tac
-       valueCopyBytesTheory.bytestring_type_value >> simp[] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`is_bytestring_type (post_value_type ce e)`,
+        `evaluate_type (get_tenv cx) (post_value_type ce e)=SOME ptv`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all valueCopyBytesTheory.bytestring_type_value >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `?dbt. dtv = BaseTV dbt` by
-    (qspecl_then [`get_tenv cx`,`ret`,`dtv`] mp_tac
-       valueCopyBytesTheory.bytestring_type_value >> simp[] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`is_bytestring_type ret`,`evaluate_type (get_tenv cx) ret=SOME dtv`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all valueCopyBytesTheory.bytestring_type_value >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `!name offset. local_val_at ce cx name offset ptv v ==>
      local_val_at ce cx name offset dtv v` by
@@ -448,7 +461,9 @@ Resume return_selected_valued_frag_full[buffered_finish]:
       (strip_assume_tac o BETA_RULE o MATCH_MP th)) >>
   conj_tac
   >- (qpat_assum `!D. stor_taint_ok_at D tn1 t ==> _`
-       (qspec_then `DF H` MATCH_MP_TAC) >> fs[ghost_inv_at_def]) >>
+       (qspec_then `DF H` MATCH_MP_TAC) >>
+       qpat_assum `ghost_inv_at (DF H) lo d ce cx mid G1 tn1 t` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_inv_at_def]) >>
   simp[fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
   rpt gen_tac >> suspend "buffered_post"
 QED
@@ -779,7 +794,22 @@ Resume return_selected_valued_frag_full[buffered_normalize_separate]:
   Q.SUBGOAL_THEN `w2n sw + type_memory_size ptv <= w2n norm_dw \/
    w2n norm_dw + type_memory_size dtv <= w2n sw` ASSUME_TAC
   >-
-    (qpat_assum `stmt_state_rel _ ctx func ce cx mid norm_alloc`
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`stmt_state_rel _ ctx func ce cx mid norm_alloc`,
+        `fn_inst_ids_distinct func`,
+        `expr_val_at ce cx (post_value_type ce e) sa sm mid v op norm_alloc`,
+        `evaluate_type (type_env tops) (post_value_type ce e)=SOME ptv`,
+        `get_tenv cx=type_env tops`,`~is_word_type (post_value_type ce e)`,
+        `0 < val_footprint ptv v`,`eval_operand op norm_alloc=SOME sw`,
+        `MEM (mk_inst sm.cs_next_id ALLOCA
+          [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)`,
+        `not_local_ptr ce mid.scopes norm_dst`,
+        `FLOOKUP norm_alloc.vs_allocas sm.cs_next_id=_`,
+        `norm_dst=STRING #"%" (toString sm.cs_next_var)`,
+        `val_footprint ptv v=type_memory_size ptv`,
+        `type_memory_bytes ce ret=type_memory_size dtv`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx mid norm_alloc`
       (fn pre =>
         let
           val target_h = hd (snd (strip_comb (concl pre)))
@@ -816,10 +846,20 @@ Resume return_selected_valued_frag_full[buffered_normalize_copy]:
       [`type_widens_to (type_env tops) (post_value_type ce e) ret`,
        `post_value_type ce e=lowered_value_type ce e`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `not_fresh_at nalloc norm_src /\ ~norm_alloc.vs_halted` by metis_tac[] >>
+  `not_fresh_at nalloc norm_src /\ ~norm_alloc.vs_halted` by
+    (conj_tac
+     >- (irule stmtFragPtrTheory.not_fresh_at_mono >>
+         qexists_tac `sm` >> rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+           (qpat_assum `ci_mono sm nalloc` mp_tac >> simp[ci_mono_def])]) >>
+     qpat_assum `norm_alloc.vs_halted=t.vs_halted`
+       (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
   `lo <= norm_alloc.vs_alloca_next` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   `ptr_covers norm_G norm_tn norm_dst norm_alloc (type_memory_size dtv) /\
-   w2n norm_dw + type_memory_size dtv < dimword (:256)` by metis_tac[] >>
+   w2n norm_dw + type_memory_size dtv < dimword (:256)` by
+    (qpat_assum `type_memory_bytes ce ret=type_memory_size dtv`
+       (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   Q.SUBGOAL_THEN `type_memory_size ptv=0 \/
     w2n sw + type_memory_size ptv <= norm_alloc.vs_alloca_next` ASSUME_TAC
   >- (disj2_tac >>
@@ -931,7 +971,9 @@ Resume return_selected_valued_frag_full[buffered_normalize_state]:
        loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   `FLOOKUP norm_copy.vs_allocas sm.cs_next_id=
-     SOME (w2n norm_dw,type_memory_bytes ce ret)` by metis_tac[] >>
+     SOME (w2n norm_dw,type_memory_bytes ce ret)` by
+    (qpat_assum `norm_copy.vs_allocas=norm_alloc.vs_allocas`
+       (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
   `sm.cs_next_id < ncopy.cs_next_id` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`ci_mono nalloc ncopy`,`nalloc.cs_next_id=sm.cs_next_id+1`] >>
@@ -1359,7 +1401,11 @@ Resume return_selected_valued_frag_full[buffered_generic_resources]:
      irule (Q.INST [`sa` |-> `src_st`,`s` |-> `src_state`,`s'` |-> `ra`,
        `G` |-> `Gs`,`tn` |-> `ts`,`G'` |-> `rG`,`tn'` |-> `rtn`]
        appendStorageGhostPtrTheory.ptr_covers_old_transport) >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`ptr_covers Gs ts source_var src_state cap`,
+        `src=Var source_var`,`!x. src=Var x ==> not_fresh_at src_st x`,
+        `!x. not_fresh_at src_st x ==> lookup_var x ra=lookup_var x src_state /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `w2n rw+LENGTH (contractABI$enc ct rv)<=ra.vs_alloca_next` by decide_tac >>
   `0<LENGTH (contractABI$enc ct rv) ==> ?p.
     retbuf.buf_operand=Var p /\ ptr_covers rG rtn p ra (LENGTH (contractABI$enc ct rv))` by
@@ -1760,6 +1806,16 @@ Resume return_selected_valued_frag_full[buffered_return_path]:
                `w2n (n2w (LENGTH (contractABI$enc ct rv)):bytes32)=LENGTH (contractABI$enc ct rv)`] >>
              POP_ASSUM_LIST (K ALL_TAC) >> simp[]),asm_rewrite_tac[]]) >>
         disch_then ACCEPT_TAC) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`lookup_block renc_en.cs_current_bb func.fn_blocks=SOME ret_bb`,
+        `get_instruction ret_bb (LENGTH renc_en.cs_current_insts)=SOME ret_inst`,
+        `rencoded.vs_current_bb=renc_en.cs_current_bb`,
+        `rencoded.vs_inst_idx=LENGTH renc_en.cs_current_insts`,
+        `~rencoded.vs_halted`,`ret_inst.inst_opcode=RETURN`,
+        `!fuel. step_inst fuel ctx ret_inst rencoded=Halt ret_ss`,
+        `ptr_inst_ok D lo 0 ctx func rGenc rtenc ret_inst rencoded`,
+        `mem_safe_step 0 ctx ret_inst rencoded`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      irule (Q.INST [`bb` |-> `ret_bb`,`i` |-> `ret_inst`]
        (SPEC_ALL fragGasEmitCtrlTheory.exit_inst_origin_ptr)) >>
      asm_simp_tac (srw_ss()) [gasEventsTheory.gas_events_step_def,
@@ -2052,7 +2108,9 @@ Resume return_selected_valued_frag_full[word_finish]:
       (strip_assume_tac o BETA_RULE o MATCH_MP th)) >>
   conj_tac
   >- (qpat_assum `!D. stor_taint_ok_at D tn1 t ==> _`
-        (qspec_then `DF H` MATCH_MP_TAC) >> fs[ghost_inv_at_def]) >>
+        (qspec_then `DF H` MATCH_MP_TAC) >>
+       qpat_assum `ghost_inv_at (DF H) lo d ce cx mid G1 tn1 t` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_inv_at_def]) >>
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
   rpt gen_tac >> suspend "word_post"
 QED
@@ -2073,13 +2131,28 @@ Resume return_selected_valued_frag_full[word_post]:
                 `mut = View`,`tops`,`tx`,`am.sources`,`am.exports`,`am.layouts`]
     mp_tac external_halt_success_unlock >>
   impl_tac >- simp[vyperStateTheory.return_def] >> strip_tac >>
-  fs[external_call_result_rel_def, tx_return_bytes_def,
-     abstract_machine_from_state_def, finalize_pending_deletions_def] >> gvs[]
+  qpat_assum `INL v = INL _`
+    (assume_tac o REWRITE_RULE [sumTheory.INL_11]) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`return_bytes tops ret v (word_to_bytes (typed_val_to_w256 tv v) T)`,
+     `ss.vs_returndata = _`,
+     `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`,
+     `accounts_agree H _ _ _`,`transient_agree H _ _ _`,
+     `logs_correspond (compiled_event_info tops) _ _ _ _`,
+     `LIST_REL (request_agree H _) _ _`] >>
+  POP_ASSUM_LIST (fn ths => map_every ASSUME_TAC
+    (List.filter (fn th => is_eq (concl th) andalso
+       type_of (lhs (concl th)) = ``:vyperValue$value``) ths)) >>
+  rpt strip_tac >>
+  gvs[external_call_result_rel_def,tx_return_bytes_def,
+    abstract_machine_from_state_def,finalize_pending_deletions_def]
 QED
 
 Resume return_selected_valued_frag_full[raw_typed_copy]:
   `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret` by
-    fs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
+    (qpat_assum `IS_SOME (type_stmt env ret (Return (SOME e)))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()]) >>
   `is_bytestring_type ret /\ ~is_word_type ret` by
     simp[is_bytestring_type_def, is_word_type_def] >>
   `is_bytestring_type (expr_type e)` by
@@ -2605,7 +2678,9 @@ Resume return_selected_valued_frag_full[raw_finish]:
       (strip_assume_tac o BETA_RULE o MATCH_MP th)) >>
   conj_tac
   >- (qpat_assum `!D. stor_taint_ok_at D tn1 t ==> _`
-       (qspec_then `DF H` MATCH_MP_TAC) >> fs[ghost_inv_at_def]) >>
+       (qspec_then `DF H` MATCH_MP_TAC) >>
+       qpat_assum `ghost_inv_at (DF H) lo d ce cx mid G1 tn1 t` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_inv_at_def]) >>
   simp[fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
   rpt gen_tac >> suspend "raw_post"
 QED

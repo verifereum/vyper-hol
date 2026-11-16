@@ -397,7 +397,7 @@ Proof
     (qpat_assum `tm.t_mem = _` mp_tac >>
      Cases_on `opc = CALLDATACOPY` >> gvs[] >>
      Cases_on `opc = CODECOPY` >>
-     gvs[source_memory_write_ranges_def,sized_source_write_range_def,
+     simp[source_memory_write_ranges_def,sized_source_write_range_def,
        range_bytes_def,mk_inst_def,eval_operand_def,w2n_n2w,EXTENSION]) >>
   `!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tm.t_mem` by
     (qpat_assum `tm.t_mem = (tn2.t_mem DIFF
@@ -569,7 +569,9 @@ Proof
             simp[mk_inst_def]) >> first_assum ACCEPT_TAC) >>
      irule alloca_history_frame >>
      qexists_tac `vc with vs_inst_idx := SUC vc.vs_inst_idx` >>
-     simp[] >> simp[NoAsms,mstore_def,write_memory_with_expansion_def,LET_THM] >>
+     simp[] >>
+     simp_tac pure_ss [mstore_def,write_memory_with_expansion_def,LET_THM,
+       venom_state_accfupds] >>
      simp[]) >>
   qexistsl_tac [`root`,`w`,`t`,`G2`,`tm`] >>
   asm_simp_tac bool_ss [] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)

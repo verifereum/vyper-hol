@@ -1668,7 +1668,7 @@ Proof
       qexists_tac `u` >> simp[]) >>
   gvs[] >> qexists_tac `s` >>
   simp[eval_operand_def, gas_marked_path_def, gas_path_rules, alloca_frame_def] >>
-  TRY (metis_tac[])
+  rpt gen_tac >> strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem immutable_optional_length_boundary:
@@ -2101,6 +2101,6 @@ Resume immutable_for_loop_counted[round]:
      goal_assum (drule_at Any) >>
      qpat_x_assum `array_caller_frame caller old s` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[array_caller_frame_def]) >>
-  simp[] >> TRY (metis_tac[])
+  simp[]
 QED
 Finalise immutable_for_loop_counted

@@ -90,10 +90,14 @@ Proof
      imp_res_tac word_builtin_modular_types >>
      gvs[]) >>
   `?e1 e2 e3. args = [e1;e2;e3]` by
-    (gvs[MAP_EQ_CONS, MAP_EQ_NIL] >> metis_tac[]) >>
+    (qpat_assum `MAP expr_type args = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[MAP_EQ_CONS, MAP_EQ_NIL] >> metis_tac[]) >>
   gvs[] >>
   conj_asm1_tac
-  >- (rw[expr_sim_full_def] >>
+  >- (qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es. _ ==> expr_vv_sim_full _ _ _ _ _ _`
+        kall_tac >>
+      rw[expr_sim_full_def] >>
       drule_at Any lower_value_ternary_modular >> simp[] >> strip_tac >>
       `expr_body_pre cenv cx env e1 es` by
         (drule expr_body_pre_builtin_arg >>
@@ -102,7 +106,11 @@ Proof
       `body_expr_full_ok cx e1` by
         (fs[vyperContextTheory.builtin_args_length_ok_def, body_exprs_full_ok_def]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es` by
-        (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+        (qpat_assum `body_expr_full_ok cx e1` mp_tac >>
+         qpat_assum `body_inv _ _ _ _` mp_tac >>
+         qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `!e. MEM e [e1;e2;e3] ==> expr_body_pre cenv cx env e es` by
         (gen_tac >> strip_tac >> drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e`, `es`] mp_tac) >>
@@ -122,6 +130,7 @@ Proof
            (ACCEPT_TAC o CONJUNCT1 o MATCH_MP (cj 2 compile_expr_grows))) >>
       `cs_extends s3 sb` by
         (qpat_x_assum `f x y z s3 = (op,sb)` mp_tac >>
+         rpt (pop_assum kall_tac) >>
          simp[compile_addmod_def, compile_mulmod_def, comp_bind_def,
               comp_ignore_bind_def] >>
          rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
@@ -228,6 +237,7 @@ Proof
           simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+          markerLib.asm_x "suffix" kall_tac >>
           metis_tac[]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
@@ -257,27 +267,37 @@ Proof
       `body_expr_full_ok cx e2` by
         (fs[vyperContextTheory.builtin_args_length_ok_def, body_exprs_full_ok_def] >>
          `?s tv t s1 v t1. eval_expr cx e1 s = (INL tv,t) /\
-                            read_result cx tv s1 = (INL v,t1)` suffices_by metis_tac[] >>
+                            read_result cx tv s1 = (INL v,t1)` suffices_by
+           (markerLib.asm_x "suffix" kall_tac >> metis_tac[]) >>
          qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
          pure_rewrite_tac[vyperStateTheory.bind_def, APPEND_NIL, AllCaseEqs()] >>
          strip_tac >> Cases_on `x'` >> gvs[] >>
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> simp[]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-        (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+        (qpat_assum `body_expr_full_ok cx e2` mp_tac >>
+         qpat_assum `body_inv _ _ _ _` mp_tac >>
+         qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[body_expr_full_ok_def] >> metis_tac[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ e2 mid`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspecl_then [`st0`, `s1`, `s2`, `sh1`, `sh2`, `y`, `t`, `G1`, `tn1`] mp_tac) >>
       (impl_tac >- (simp[] >>
-        conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-        conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-        conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]) >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
         conj_tac >- (qpat_assum `expr_body_pre cenv cx env e2 mid`
           (ACCEPT_TAC o MATCH_MP expr_body_pre_gas_admissible)) >>
-        conj_tac >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
-        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
+        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >>
+          markerLib.asm_x "suffix" kall_tac >> metis_tac[]) >>
         gen_tac >> strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _`
           (qspec_then `H` mp_tac) >>
@@ -314,6 +334,7 @@ Proof
           simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+          markerLib.asm_x "suffix" kall_tac >>
           metis_tac[]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
@@ -355,29 +376,39 @@ Proof
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> simp[]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e3 mid'` by
-        (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+        (qpat_assum `body_expr_full_ok cx e3` mp_tac >>
+         qpat_assum `body_inv _ _ _ _` mp_tac >>
+         qpat_assum `expr_body_pre cenv cx env e3 mid'` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `s1.cs_next_var <= s2.cs_next_var` by
         (qpat_assum `lower_value _ _ _ e2 s1 = _`
            (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o MATCH_MP (cj 2 compile_expr_grows))) >>
       `local_ptrs_reserved cenv s1` by
-        metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+        (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+         qexists_tac `sa` >> simp[]) >>
       `local_ptrs_reserved cenv s2` by
-        metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+        (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+         qexists_tac `s1` >> simp[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ e3 mid'`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspecl_then [`st0`, `s2`, `s3`, `sh2`, `sh3`, `z`, `t'`, `G1'`, `tn1'`] mp_tac) >>
       (impl_tac >- (simp[] >>
-        conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-        conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
         conj_tac >- (qpat_assum `expr_body_pre cenv cx env e3 mid'`
           (ACCEPT_TAC o MATCH_MP expr_body_pre_gas_admissible)) >>
-        conj_tac >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+        conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+          irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `t`, `s1`] >> simp[] >>
           conj_tac >- metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)] >>
           irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
-        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
+        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >>
+          markerLib.asm_x "suffix" kall_tac >> metis_tac[]) >>
         gen_tac >> strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ /\ _`
           (qspec_then `H` mp_tac) >>
@@ -414,6 +445,7 @@ Proof
           simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+          markerLib.asm_x "suffix" kall_tac >>
           metis_tac[]) >>
       conj_tac
       >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
@@ -499,7 +531,8 @@ Proof
        eval_operand z t'' = SOME (val_to_w256 v'')` by
         (rpt conj_tac >>
          irule exprBopSimPropsTheory.expr_val_rel_word >>
-         (conj_tac >- metis_tac[loweringSliceTheory.word_value_def]) >>
+         (conj_tac >- (markerLib.asm_x "suffix" kall_tac >>
+           metis_tac[loweringSliceTheory.word_value_def])) >>
          qexistsl [`cx`, `BaseT (UintT 256)`] >>
          simp[is_word_type_def, vyperValueTheory.evaluate_type_def] >>
          first_assum ACCEPT_TAC) >>
@@ -520,7 +553,8 @@ Proof
          qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _`
            (mp_tac o MATCH_MP (cj 6 (iffLR loweringPostsTheory.expr_post_def))) >> simp[]) >>
       `!q. x = Var q ==> not_fresh_at s2 q` by
-        metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+        (markerLib.asm_x "suffix" kall_tac >>
+         metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
       `!q. y = Var q ==> not_fresh_at s2 q` by
         (qpat_assum `lower_value _ _ _ e2 _ = _` mp_tac >>
          disch_then (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
@@ -551,7 +585,8 @@ Proof
          conj_tac >- (Cases_on `x` >> simp[ptrDisciplineTheory.op_taint_def]) >>
          Cases_on `y` >> simp[ptrDisciplineTheory.op_taint_def]) >>
       `local_ptrs_reserved cenv s3` by
-        metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var, cj 2 compile_expr_grows] >>
+        (markerLib.asm_x "suffix" kall_tac >>
+         metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var, cj 2 compile_expr_grows]) >>
       `!H. valid_horizon cx st0 H mid''.storage_trace ==>
         stmt_state_rel H ctx func cenv cx mid'' t'' /\
         ghost_inv_at (DF H) lo d cenv cx mid'' G1'' tn1'' t''` by
@@ -592,7 +627,12 @@ Proof
            (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
       `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id /\
        sa.cs_next_var <= s3.cs_next_var /\ sa.cs_next_id <= s3.cs_next_id` by
-        metis_tac[cj 2 compile_expr_grows, arithmeticTheory.LESS_EQ_TRANS] >>
+        (qpat_assum `lower_value _ _ _ e2 s1 = _` mp_tac >>
+         qpat_assum `lower_value _ _ _ e3 s2 = _` mp_tac >>
+         qpat_assum `sa.cs_next_var <= s1.cs_next_var` mp_tac >>
+         qpat_assum `sa.cs_next_id <= s1.cs_next_id` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         metis_tac[cj 2 compile_expr_grows, arithmeticTheory.LESS_EQ_TRANS]) >>
       `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
         (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
            (ACCEPT_TAC o SYM o
@@ -735,5 +775,6 @@ Proof
       fs[Abbr `ee`] >>
       drule_at Any compile_word_builtin_stack >> simp[] >>
       strip_tac >> gvs[] >> metis_tac[]) >>
+  markerLib.asm_x "suffix" kall_tac >>
   metis_tac[eval_expr_builtin_value]))
 QED

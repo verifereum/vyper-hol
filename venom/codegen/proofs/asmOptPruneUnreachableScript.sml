@@ -111,7 +111,7 @@ Proof
 QED
 
 (* A data item right after a code instruction breaks asm_static_wf. *)
-Theorem terminal_data_not_wf[local]:
+Theorem terminal_data_not_wf:
   asm_terminal_op t ∧ ¬asm_reachable_marker x ∧ is_data_inst x ⇒
   ¬asm_static_wf (pfx ++ t :: x :: rest)
 Proof

@@ -7,6 +7,7 @@ Ancestors
   stmtLowering exprLoweringProps loweringStateRelDefs loweringPosts
   assignTuplePtrCopyLen localPtrsProps freshWrites compileEnv bodyPtrDefs
   venomState venomMemDefs venomInst ptrDiscipline memSafeRun fragExec arithmetic
+  bodyFullHashKeccakFixed
 
 Theorem body_full_assign_local_memory_value_path:
   compile_assign_value cenv (Var p) LocMemory (Var xs) F loc dty sty bytes sa = ((),sb) /\
@@ -37,7 +38,7 @@ Theorem body_full_assign_local_memory_value_path:
   (w2n sw + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= w2n sw) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ lo <= w2n dw /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   stmt_state_rel H0 ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\ entry.type = dtv /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
@@ -66,6 +67,8 @@ Theorem body_full_assign_local_memory_value_path:
       op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   Cases_on `loc = SOME LocMemory`
   >- suspend "staged" >>
   `compile_store_memory cenv (Var xs) (Var p) dty sty sa = ((),sb)` by

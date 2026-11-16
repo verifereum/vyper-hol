@@ -43,10 +43,6 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (irule topcopy_rhs_pre >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   drule_all topcopy_memory_size >> strip_tac >>
-  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-  `storage_var_info cx NONE id = SOME (tr,off,tvt)` by
-    simp[storage_var_info_def] >>
-  drule_all topcopy_region >> strip_tac >>
   `supported_storage_type tops (expr_type e)` by
     (`supported_program tops` by fs[body_inv_def] >>
      drule supported_variable_decl_mem >> strip_tac >>

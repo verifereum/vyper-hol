@@ -83,7 +83,7 @@ Proof
         qexistsl_tac [`sm`, `es1.scopes`, `q`] >> asm_rewrite_tac[]) >> metis_tac[]) >>
   `mem_bytes_at p n t1.vs_memory = mem_bytes_at p n s0.vs_memory` by
     (irule vv_post_old_buffer >> goal_assum (drule_at Any) >>
-     qexists `aid` >> simp[] >> metis_tac[]) >>
+     qexistsl_tac [`H`, `aid`] >> simp[] >> metis_tac[]) >>
   `FLOOKUP t1.vs_allocas aid = SOME (p,n)` by (fs[vv_post_def] >> metis_tac[]) >>
   `FLOOKUP q.vs_allocas aid = SOME (p,n)` by metis_tac[] >>
   `mem_bytes_at p n q.vs_memory = mem_bytes_at p n t1.vs_memory` by

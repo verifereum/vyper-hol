@@ -39,7 +39,7 @@ Theorem deploy_ctor_entry_ambient:
  vs.vs_accounts = accounts_after_transfer tx am.accounts /\
  vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
  vs.vs_requests = [] /\ vs.vs_pending_deletions = am.pending_deletions /\
- call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
+ call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
  ~vs.vs_call_ctx.cc_static /\ ~tx.is_static /\ am.logs = []
 Proof
  rpt gen_tac >>
@@ -48,7 +48,7 @@ Proof
  gvs[venom_state_component_equality, call_ctx_rel_def, tx_block_fields_rel_def] >>
  qpat_x_assum `_ = vs.vs_call_ctx` (assume_tac o GSYM) >>
  qpat_x_assum `_ = vs.vs_tx_ctx` (assume_tac o GSYM) >>
- qpat_x_assum `_ = vs.vs_block_ctx` (assume_tac o GSYM) >> simp[]
+ qpat_x_assum `_ = vs.vs_block_ctx` (assume_tac o GSYM) >> fs[tx_env_ok_def]
 QED
 (* Deployment analogue of entryStateRel's private immutable-map boundary. *)
 Theorem deploy_ctor_module_lookup_immutable_frame[local]:
@@ -177,5 +177,8 @@ Proof
    gvs[deploy_state_rel_def]) >>
  simp[state_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def,
       storage_rel_def, transient_rel_def,
-      accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def]
+      accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def,
+      accountsRelPropsTheory.storage_agree_refl,
+      accountsRelPropsTheory.accounts_agree_refl,
+      accountsRelPropsTheory.transient_agree_refl]
 QED

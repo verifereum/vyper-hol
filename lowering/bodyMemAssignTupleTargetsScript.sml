@@ -47,7 +47,19 @@ Proof
   rpt strip_tac >>
   reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
   >- (simp[stmt_frag_mem_def] >> rpt strip_tac >>
-      fs[stmt_state_rel_def, state_rel_def]) >>
+      `~storage_trace_domain cx st0 es.storage_trace` by
+        (strip_tac >>
+         qpat_x_assum `storage_trace_domain _ _ _`
+           (assume_tac o REWRITE_RULE
+             [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+         qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+           (qspec_then `storage_trace_horizon es.storage_trace`
+             (strip_assume_tac o UNDISCH)) >>
+         fs[stmt_state_rel_def, state_rel_def]) >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   drule tuple_targets_typing >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>

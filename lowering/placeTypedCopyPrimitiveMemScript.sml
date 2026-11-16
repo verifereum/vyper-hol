@@ -3,7 +3,8 @@ Theory placeTypedCopyPrimitiveMem
 Ancestors
   loweringStateRelDefs valueEncodingDefs bodyMemAssignTopCopyFacts
   placeTypedCopyMem placeMemoryTypedPrimitive placeMemoryCopyEffect
-  bodyCopyMemory bodyDeclMemoryCounted fragGasPathMem fragGasMode
+  bodyCopyMemory bodyCopyMemoryBase bodyDeclZeroGasPath
+  bodyDeclMemoryCounted fragGasPathMem fragGasMode
   valueEncodingProps venomState venomExecSemantics context compileEnv
   exprLoweringProps fragExec list rich_list
   placeMemoryFieldsForward externalReturnNormalizeMem

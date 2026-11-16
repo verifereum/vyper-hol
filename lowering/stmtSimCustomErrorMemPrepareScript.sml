@@ -115,10 +115,12 @@ Proof
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
     (rpt strip_tac >>
-     irule (SRULE [] (Q.INST [`off` |-> `0`] custom_error_buffer_immutable_frame)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     gvs[] >> qexistsl_tac [`iv`,`name`] >> simp[]) >>
+     `FLOOKUP t.vs_allocas sa.cs_next_id =
+        SOME (b,type_memory_bytes ce (TupleT (MAP SND params)))` by metis_tac[] >>
+     `0 + type_memory_size_list tvs <=
+        type_memory_bytes ce (TupleT (MAP SND params))` by fs[] >>
+     drule_all (Q.INST [`off` |-> `0`] custom_error_buffer_immutable_frame) >>
+     simp[]) >>
   gvs[] >>
   drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)
     (Q.INST [`st0` |-> `st0`] (SPEC_ALL custom_error_store_args_sim_mem)) >>
@@ -126,6 +128,10 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >> simp[] >>
+  disch_then (qspecl_then [`st0`, `func`, `es`] mp_tac) >>
   (impl_tac >- (conj_tac >- metis_tac[] >> metis_tac[])) >>
-  disch_tac >> qexistsl_tac [`inst`,`t`,`b`] >> simp[]
+  disch_tac >> qexistsl_tac [`inst`,`t`,`b`] >> fs[] >>
+  qpat_x_assum `!name p n. local_region ce es.scopes t name p n <=> _`
+    (fn frame => qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
+      (ACCEPT_TAC o REWRITE_RULE [frame]))
 QED

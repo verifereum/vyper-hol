@@ -251,7 +251,7 @@ Proof
    Cases_on `word_result` >> simp[] >>
    rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
         >- (simp[gas_shadow_compiles_ifexp_arm, gas_shadow_compiles_emit_inst,
-                 gas_shadow_compiles_new_block] >> metis_tac[COND_CLAUSES]) >>
+                 gas_shadow_compiles_new_block] >> fs[FORALL_BOOL]) >>
         gen_tac >> BETA_TAC) >>
    CONV_TAC (DEPTH_CONV ETA_CONV) >> irule gas_shadow_compiles_return)
 QED
@@ -1022,7 +1022,7 @@ Proof
   Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-    >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC) >>
+    >- fs[FORALL_BOOL] >> gen_tac >> BETA_TAC) >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
     >- simp[gas_shadow_compiles_slice_out_buf,
@@ -1030,7 +1030,7 @@ Proof
             gas_shadow_compiles_emit_void, gas_shadow_compiles_bytestring_src] >>
     gen_tac >> BETA_TAC >>
     rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-      >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC)) >>
+      >- fs[FORALL_BOOL] >> gen_tac >> BETA_TAC)) >>
   CONV_TAC (DEPTH_CONV ETA_CONV)
   >>~- ([`gas_shadow_compiles (\s. as_ptr_val _ _ (_ s)) _`],
     irule gas_shadow_compiles_as_ptr_val >>
@@ -1039,7 +1039,7 @@ Proof
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-    >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC) >>
+    >- fs[FORALL_BOOL] >> gen_tac >> BETA_TAC) >>
   CONV_TAC (DEPTH_CONV ETA_CONV)
   >>~- ([`gas_shadow_compiles (\s. as_ptr_val _ _ (_ s)) _`],
     irule gas_shadow_compiles_as_ptr_val >>

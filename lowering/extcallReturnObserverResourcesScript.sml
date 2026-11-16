@@ -138,8 +138,10 @@ Proof
      stmt_state_rel H' ctx func ce cx es t` by
     (rpt strip_tac >>
      `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es s` by
-       (fs[stmt_state_rel_def] >>
-        metis_tac[return_observer_alloca_structure]) >>
+       (drule (Q.INST_TYPE [`:'a` |-> `:256`]
+          (return_observer_alloca_structure |>
+            UNDISCH |> CONJUNCT1 |> DISCH_ALL)) >>
+        strip_tac >> fs[stmt_state_rel_def] >> first_assum ACCEPT_TAC) >>
      `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es t` by
        (qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp[abi_malformed_resource_post_def] >> rpt strip_tac >>

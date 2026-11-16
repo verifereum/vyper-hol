@@ -55,11 +55,21 @@ Ancestors
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
+  asmOptOwnMergeJumpdests
   asmSymOwnCode
   asmOptOwnMergeIszero
   finalizerContractOwn
+  asmOptOwnPruneUnreachable
   asmSpliceOwn
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
+  asmOptFinalizerOwn
   asmOptOwnPruneJumps
+  (* reached here instead of as holproject.toml roots *)
+  targetPtrFacts bodyFullTarget
+  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
+  extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
+  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* providers awaiting their consumers *)
+  sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa

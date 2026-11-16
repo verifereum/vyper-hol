@@ -43,7 +43,7 @@ Proof
                                 tStorage := outcome.co_tStorage|>) []))
      (MAP SND (call_trace es))` by
     (`ALOOKUP am.sources tx.target = NONE` by fs[deploy_state_rel_def] >>
-     simp[EVERY_MEM, contract_storage_well_formed_def,
+     simp[listTheory.EVERY_MEM, contract_storage_well_formed_def,
           well_formed_storage_def, storage_var_in_range_def,
           storage_var_info_def, declared_storage_region_def,
           get_module_code_def, initial_evaluation_context_def]) >>

@@ -241,12 +241,16 @@ Proof
       drule exprSimSourceTheory.expr_body_pre_eval >>
       disch_then (qspecl_then [`INL v`,`ee`] mp_tac) >>
       simp[vyperStateTheory.bind_def] >> strip_tac >>
-      gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-          vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-          exprSimHypsDefsTheory.expr_body_pre_def,
-          exprSimHypsDefsTheory.expr_sim_inv_def,
-          vyperTypeInvariantsTheory.env_consistent_def,
-          vyperTypeInvariantsTheory.env_context_consistent_def,
-          post_value_type_def, vyperTypeInvariantsTheory.value_result_typed_def])
+      qpat_x_assum `expr_sim_inv _ _ _ ee`
+        (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE
+          [exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+      disch_then (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE
+        [vyperTypeInvariantsTheory.env_consistent_def]) >>
+      disch_then (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE
+        [vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+      qpat_x_assum `expr_result_typed _ _ _` mp_tac >>
+      simp[vyperTypeExprResultTheory.expr_result_typed_def,
+           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+           vyperTypeInvariantsTheory.value_result_typed_def])
   >- (irule toplevel_name_vv_full >> metis_tac[])
 QED
