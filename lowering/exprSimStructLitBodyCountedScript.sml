@@ -29,7 +29,7 @@ Theorem compile_struct_lit_body_value_owned:
         (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>
@@ -115,7 +115,7 @@ Resume compile_struct_lit_body_value_owned[outcome]:
   qpat_assum `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q`
     (fn eqth => qspecl_then
       [`\H vs ee r. Q H (INL vs) ee r`,
-       `\H res ee r. expr_exit res r`,
+       `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`,
        `\vs. Value (StructV (ZIP (MAP FST fields,vs)))`]
       (drule o REWRITE_RULE [GSYM AND_IMP_INTRO, eqth] o BETA_RULE)
       (Q.GENL [`P`, `R`, `f`] counted_outcome_map_values)) >>
