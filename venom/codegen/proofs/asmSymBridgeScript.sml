@@ -1129,26 +1129,56 @@ Proof
   EVAL_TAC
 QED
 
+Theorem sym_step_store_sim_core:
+  !lo code_ok.
+  bridge_core lo code_ok cs ss /\ MEM name ["SSTORE"; "TSTORE"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_op_arity name = 2` by gvs[MEM, remaining_plain_arities] >>
+  irule sym_step_concrete_good_core >> simp[concrete_underflow] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
+  simp[asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def] >>
+  Cases_on `cs.as_call_ctx.cc_static` >>
+  simp[asm_sstore_def, asm_tstore_def, sym_lift_def, asm_next_def,
+       asm_op_mem_writes_def, mem_labels_clear_def,
+       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
+       sym_obs_def, sym_init_def] >>
+  conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
+QED
+
 Theorem sym_step_store_sim[local]:
   asm_sym_rel p env cs ss /\ MEM name ["SSTORE"; "TSTORE"] ==>
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >>
-  `asm_op_arity name = 2` by gvs[MEM, remaining_plain_arities] >>
-  irule sym_step_concrete_good >> simp[concrete_underflow] >>
-  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
-  simp[asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def] >>
-  gvs[asm_sym_rel_def] >>
-  (* a static frame faults on both sides, closed by the simp *)
-  Cases_on `cs.as_call_ctx.cc_static` >>
-  simp[asm_sstore_def, asm_tstore_def, sym_lift_def, asm_next_def,
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_store_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
+QED
+
+Theorem sym_step_gas_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete "GAS" ss)
+    (asm_step_op otp "GAS" cs)
+Proof
+  rpt gen_tac >> strip_tac >> irule sym_step_concrete_good_core >>
+  simp[remaining_plain_arities] >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
+  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
+  simp[asm_step_extcall_def, asm_step_copy_def, asm_step_context_def] >>
+  Cases_on `cs.as_gas_readings` >>
+  simp[asm_gas_def, asm_push_val_def, sym_lift_def, asm_next_def,
        asm_op_mem_writes_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
-       asm_sym_step_rel_def, asm_sym_rel_def, sym_obs_def, sym_init_def] >>
-  conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
+       sval_conc_def] >>
+  conj_tac >- (qexists_tac `m` >> simp[]) >>
+  gvs[sval_conc_def] >> metis_tac[]
 QED
 
 Theorem sym_step_gas_sim[local]:
@@ -1156,18 +1186,9 @@ Theorem sym_step_gas_sim[local]:
   asm_sym_step_rel p env (sym_step_concrete "GAS" ss)
     (asm_step_op otp "GAS" cs)
 Proof
-  strip_tac >> irule sym_step_concrete_good >>
-  simp[remaining_plain_arities] >> rpt strip_tac >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
-  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
-  simp[asm_step_extcall_def, asm_step_copy_def, asm_step_context_def] >>
-  gvs[asm_sym_rel_def] >> Cases_on `cs.as_gas_readings` >>
-  simp[asm_gas_def, asm_push_val_def, sym_lift_def, asm_next_def,
-       asm_op_mem_writes_def, mem_labels_clear_def,
-       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
-       asm_sym_step_rel_def, asm_sym_rel_def, sval_conc_def] >>
-  conj_tac >- (qexists_tac `m` >> simp[]) >>
-  gvs[sval_conc_def] >> metis_tac[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_gas_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem sym_step_plain_control_sim[local]:
@@ -1189,20 +1210,30 @@ Proof
   conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
 QED
 
+Theorem sym_step_selfdestruct_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete "SELFDESTRUCT" ss)
+    (asm_step_op otp "SELFDESTRUCT" cs)
+Proof
+  rpt gen_tac >> strip_tac >> irule sym_step_concrete_good_core >>
+  simp[remaining_plain_arities, concrete_underflow] >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  Cases_on `cs.as_stack` >> gvs[] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
+  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
+  simp[asm_step_extcall_def] >>
+  Cases_on `cs.as_call_ctx.cc_static` >>
+  simp[asm_selfdestruct_def, sym_lift_def, sym_obs_def, sym_init_def]
+QED
+
 Theorem sym_step_selfdestruct_sim[local]:
   asm_sym_rel p env cs ss ==>
   asm_sym_step_rel p env (sym_step_concrete "SELFDESTRUCT" ss)
     (asm_step_op otp "SELFDESTRUCT" cs)
 Proof
-  strip_tac >> irule sym_step_concrete_good >>
-  simp[remaining_plain_arities, concrete_underflow] >> rpt strip_tac >>
-  Cases_on `cs.as_stack` >> gvs[] >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
-  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
-  simp[asm_step_extcall_def] >> gvs[asm_sym_rel_def] >>
-  Cases_on `cs.as_call_ctx.cc_static` >>
-  simp[asm_selfdestruct_def, sym_lift_def, asm_sym_step_rel_def,
-       sym_obs_def, sym_init_def]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_selfdestruct_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem memory_read_arities[local]:
