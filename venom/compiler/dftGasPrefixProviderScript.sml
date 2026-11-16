@@ -10,7 +10,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasFromListLocator dftGasFromListContextReach
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
-  dftGasInvResidualTrace venomInstProps venomInstProofs stateEquivProofs
+  dftGasInvResidualTrace dftGasInvFixedTrace venomInstProps venomInstProofs stateEquivProofs
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
   dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
@@ -3412,6 +3412,191 @@ Resume native_frontier_mask_inventory[actual_call]:
   simp_tac pure_ss [MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 Finalise native_frontier_mask_inventory
+
+Theorem native_successful_trace_pull_enabled[local]:
+  !X s u v.
+    ALL_DISTINCT X /\ EVERY (\x. MEM x universe) X /\ MEM y universe /\
+    (!x. id_before X x y \/ (MEM x X /\ ~MEM y X) ==> indep x y) /\
+    (!x y q r t. MEM x universe /\ MEM y universe /\ x <> y /\ indep x y /\
+      inv_ev_trace orc p d b C [x] q r /\
+      inv_ev_trace orc p d b C [y] q t ==>
+      ?w. inv_ev_trace orc p d b C [y] r w /\
+          inv_ev_trace orc p d b C [x] t w) /\
+    inv_ev_trace orc p d b C X s u /\
+    inv_ev_trace orc p d b C [y] s v ==>
+    ?w. inv_ev_trace orc p d b C (if MEM y X then [] else [y]) u w /\
+        inv_ev_trace orc p d b C (FILTER (\x. x <> y) X) v w
+Proof
+  Induct
+  >- (simp[inv_ev_trace_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h = y`
+  >- (gvs[] >>
+      `FILTER (\x. x <> h) X = X` by simp[FILTER_EQ_ID, EVERY_MEM] >>
+      gvs[inv_ev_trace_def]) >>
+  `indep h y` by
+    (first_x_assum irule >> simp[id_before_cons] >> metis_tac[MEM]) >>
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ (h::X) _ _` mp_tac >>
+  simp[Once inv_ev_trace_def] >> strip_tac >>
+  rename1 `ev_step orc p d b C h s = OK r` >>
+  `?w. inv_ev_trace orc p d b C [y]
+          (r with vs_inst_idx := SUC s.vs_inst_idx) w /\
+        inv_ev_trace orc p d b C [h] v w` by
+    (first_x_assum irule >> simp[] >> conj_tac
+     >- gvs[] >>
+     qexists_tac `s` >> simp[inv_ev_trace_def] >>
+     metis_tac[inv_ev_trace_def]) >>
+  first_x_assum (qspecl_then
+    [`r with vs_inst_idx := SUC s.vs_inst_idx`, `u`, `w`] mp_tac) >>
+  impl_tac
+  >- (gvs[id_before_cons] >> metis_tac[]) >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ [h] v w` mp_tac >>
+  simp[inv_ev_trace_def] >> metis_tac[]
+QED
+
+Theorem native_successful_prefix_union_core[local]:
+  !Y X Xrest Yrest.
+    ALL_DISTINCT (X ++ Xrest) /\ ALL_DISTINCT (Y ++ Yrest) /\
+    PERM (X ++ Xrest) (Y ++ Yrest) /\
+    (!x y. id_before (X ++ Xrest) x y /\
+       id_before (Y ++ Yrest) y x ==> indep x y) /\
+    (!x y q r t. MEM x (X ++ Xrest) /\ MEM y (X ++ Xrest) /\
+      x <> y /\ indep x y /\
+      inv_ev_trace orc p d b C [x] q r /\
+      inv_ev_trace orc p d b C [y] q t ==>
+      ?w. inv_ev_trace orc p d b C [y] r w /\
+          inv_ev_trace orc p d b C [x] t w) ==>
+    !s u v. inv_ev_trace orc p d b C X s u /\
+      inv_ev_trace orc p d b C Y s v ==>
+      ?w. inv_ev_trace orc p d b C (FILTER (\i. ~MEM i X) Y) u w /\
+          inv_ev_trace orc p d b C (FILTER (\i. ~MEM i Y) X) v w
+Proof
+  Induct
+  >- (simp[inv_ev_trace_def, FILTER_EQ_ID] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT X /\ ~MEM h Y /\ ~MEM h Yrest` by gvs[ALL_DISTINCT_APPEND] >>
+  `MEM h (X ++ Xrest)` by metis_tac[PERM_MEM_EQ, MEM, MEM_APPEND] >>
+  `!x. id_before X x h \/ (MEM x X /\ ~MEM h X) ==> indep x h` by
+    (qpat_x_assum `!A B D. ALL_DISTINCT _ /\ _ ==> _` kall_tac >>
+     qpat_x_assum `!x y q r t. _` kall_tac >>
+     qpat_x_assum `inv_ev_trace _ _ _ _ _ X s u` kall_tac >>
+     qpat_x_assum `inv_ev_trace _ _ _ _ _ (h::Y) s v` kall_tac >>
+     drule PERM_MEM_EQ >> simp[] >> strip_tac >>
+     `!x. MEM x X /\ x <> h ==> MEM x Y \/ MEM x Yrest` by
+       (rpt strip_tac >> first_x_assum (qspec_then `x` mp_tac) >> simp[]) >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[dftSsaPreserveTheory.id_before_append, id_before_cons] >>
+     metis_tac[id_before_mem, id_before_distinct_endpoints, MEM_APPEND]) >>
+  `?a. inv_ev_trace orc p d b C [h] s a /\
+       inv_ev_trace orc p d b C Y a v` by
+    (qpat_x_assum `inv_ev_trace _ _ _ _ _ (h::Y) _ _` mp_tac >>
+     simp[inv_ev_trace_def] >> metis_tac[]) >>
+  `?z. inv_ev_trace orc p d b C (if MEM h X then [] else [h]) u z /\
+       inv_ev_trace orc p d b C (FILTER (\i. i <> h) X) a z` by
+    (irule native_successful_trace_pull_enabled >> simp[] >>
+     conj_tac
+     >- (qexistsl_tac [`indep`, `X ++ Xrest`] >>
+         asm_rewrite_tac[EVERY_MEM] >> simp[]) >>
+     qexists_tac `s` >> simp[]) >>
+  first_x_assum (qspecl_then
+    [`FILTER (\i. i <> h) X`, `FILTER (\i. i <> h) Xrest`, `Yrest`] mp_tac) >>
+  impl_tac
+  >- suspend "deleted_orders" >>
+  disch_then drule_all >> strip_tac >>
+  qexists_tac `w` >>
+  conj_tac
+  >- suspend "left_extension" >>
+  suspend "right_extension"
+QED
+Resume native_successful_prefix_union_core[deleted_orders]:
+  `FILTER (\i. i <> h) (Y ++ Yrest) = Y ++ Yrest` by
+    simp[FILTER_EQ_ID, EVERY_MEM] >>
+  `PERM (FILTER (\i. i <> h) (X ++ Xrest)) (Y ++ Yrest)` by
+    (drule PERM_FILTER >>
+     disch_then (qspec_then `\i. i <> h` mp_tac) >> simp[]) >>
+  pure_rewrite_tac[GSYM FILTER_APPEND_DISTRIB] >>
+  conj_tac >- (irule FILTER_ALL_DISTINCT >> simp[]) >>
+  conj_tac >- gvs[] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> conj_tac
+      >- metis_tac[dftGasInvExtractionTheory.inv_id_before_filter_reflect] >>
+      simp_tac (srw_ss()) [APPEND, id_before_cons] >> simp[]) >>
+  simp_tac (srw_ss()) [MEM_FILTER] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> qexists_tac `q` >> simp[]
+QED
+Resume native_successful_prefix_union_core[left_extension]:
+  `FILTER (\i. ~MEM i (FILTER (\i. i <> h) X)) Y =
+   FILTER (\i. ~MEM i X) Y` by
+    (simp[rich_listTheory.FILTER_EQ, MEM_FILTER] >> metis_tac[]) >>
+  Cases_on `MEM h X`
+  >- (qpat_x_assum `inv_ev_trace _ _ _ _ _ (if _ then _ else _) u z` mp_tac >>
+      simp[inv_ev_trace_def] >> strip_tac >>
+      qpat_x_assum `inv_ev_trace _ _ _ _ _ (FILTER _ Y) z w` mp_tac >>
+      simp[]) >>
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ (if _ then _ else _) u z` mp_tac >>
+  simp[inv_ev_trace_def] >> strip_tac >>
+  simp[Once inv_ev_trace_def] >> (gvs[])
+QED
+Resume native_successful_prefix_union_core[right_extension]:
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ (FILTER _ (FILTER _ X)) _ _` mp_tac >>
+  simp[rich_listTheory.FILTER_FILTER, MEM_FILTER] >>
+  ` (\i. ~MEM i Y /\ i <> h) = (\i. ~MEM i (h::Y))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >> simp[]
+QED
+Finalise native_successful_prefix_union_core
+
+Theorem native_successful_prefix_union:
+  !L L' X Xrest Y Yrest indep orc p d b C s u v.
+    ALL_DISTINCT L /\ ALL_DISTINCT L' /\ PERM L L' /\
+    L = X ++ Xrest /\ L' = Y ++ Yrest /\
+    (!x y. indep x y ==> indep y x) /\
+    (!x y. id_before L x y /\ id_before L' y x ==> indep x y) /\
+    (!x q r t. MEM x L /\ ev_step orc p d b C x q = OK r /\
+       ev_step orc p d b C x q = OK t ==>
+       (r with vs_inst_idx := SUC q.vs_inst_idx) =
+       (t with vs_inst_idx := SUC q.vs_inst_idx)) /\
+    (!x y q r t. MEM x L /\ MEM y L /\ x <> y /\ indep x y /\
+       ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+       ev_step orc p d b C x q = OK r /\
+       ev_step orc p d b C y q = OK t ==>
+       ?r' t'.
+         ev_step orc p d b C y (r with vs_inst_idx := SUC q.vs_inst_idx) = OK r' /\
+         ev_step orc p d b C x (t with vs_inst_idx := SUC q.vs_inst_idx) = OK t' /\
+         (r' with vs_inst_idx := SUC (SUC q.vs_inst_idx)) =
+         (t' with vs_inst_idx := SUC (SUC q.vs_inst_idx))) /\
+    inv_ev_trace orc p d b C X s u /\ inv_ev_trace orc p d b C Y s v ==>
+    ?w.
+      inv_ev_trace orc p d b C (X ++ FILTER (\i. ~MEM i X) Y) s w /\
+      inv_ev_trace orc p d b C (Y ++ FILTER (\i. ~MEM i Y) X) s w /\
+      inv_ev_trace orc p d b C (FILTER (\i. ~MEM i X) Y) u w /\
+      inv_ev_trace orc p d b C (FILTER (\i. ~MEM i Y) X) v w
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `L = _` SUBST_ALL_TAC >>
+  qpat_x_assum `L' = _` SUBST_ALL_TAC >>
+  `!x y q r t. MEM x (X ++ Xrest) /\ MEM y (X ++ Xrest) /\
+      x <> y /\ indep x y /\
+      inv_ev_trace orc p d b C [x] q r /\
+      inv_ev_trace orc p d b C [y] q t ==>
+      ?w. inv_ev_trace orc p d b C [y] r w /\
+          inv_ev_trace orc p d b C [x] t w` by suspend "square" >>
+  qspecl_then [`Y`, `X`, `Xrest`, `Yrest`] mp_tac native_successful_prefix_union_core >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then drule_all >> strip_tac >> qexists_tac `w` >>
+  simp[inv_ev_trace_append] >> conj_tac
+  >- (qexists_tac `u` >> simp[]) >>
+  qexists_tac `v` >> simp[]
+QED
+Resume native_successful_prefix_union[square]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ [x] q r` mp_tac >>
+  qpat_x_assum `inv_ev_trace _ _ _ _ _ [y] q t` mp_tac >>
+  simp[inv_ev_trace_def] >> rpt strip_tac >>
+  qpat_x_assum `!x y q r t. _` drule_all >> strip_tac >>
+  gvs[inv_ev_trace_def]
+QED
+Finalise native_successful_prefix_union
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
