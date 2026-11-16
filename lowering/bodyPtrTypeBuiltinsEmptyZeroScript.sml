@@ -66,7 +66,7 @@ Proof
   `ptr_covers G1 tn1 out u 32` by
     (simp[Abbr `G1`, Abbr `tn1`, Abbr `u`] >>
      irule reasonPrefixResourcesPtrTheory.reason_encoder_offset_covers >>
-     metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
+     conj_tac >- decide_tac >> simp[] >> qexists_tac `sz` >> simp[]) >>
   `ptr_covers G1 tn1 p u sz` by suspend "base" >>
   drule_all (SRULE [] (Q.INST [`sz` |-> `32`] (SPEC_ALL empty_zero_store_certificate))) >>
   disch_then (qspecl_then [`id+1`, `func`, `PG`, `D`] strip_assume_tac) >>
