@@ -389,9 +389,10 @@ End
 
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
+    (e = RuntimeError "abi_decode invalid" /\
     ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+         is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "transfer_value recipient overflow"
 End
 
 Definition source_exempt_def:

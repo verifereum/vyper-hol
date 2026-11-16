@@ -68,6 +68,11 @@ Theorem call_external_body_run:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
+    (res = INR HaltException ==>
+     call_external_body am cx F mut tenv es0 env fbody ret =
+       (INR HaltException,
+        abstract_machine_from_state am.sources am.exports am.layouts es',
+        es'.requests)) /\
     (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
@@ -585,7 +590,7 @@ Proof
           simp[abstract_machine_from_state_gas_obs] >>
           irule external_stop_result_rel >>
           gvs[stmt_state_rel_def] >> metis_tac[]) >>
-      (* the body exits: an abort, or a return *)
+      (* The body exits through an abort, return or source halt. *)
       rpt gen_tac >> BETA_TAC >> strip_tac >>
       `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
          fbody (es0 with gas_obs := gx) = (res, ee with gas_obs := [])` by
