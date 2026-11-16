@@ -197,33 +197,6 @@ Proof
   qpat_x_assum `_ ==> _` mp_tac >> simp[] >> decide_tac
 QED
 
-Theorem calldata_memory_locals[local]:
-  !sa ptr len sb s func cenv scopes.
-  compile_msg_data_to_memory sa = ((ptr,len),sb) /\
-  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_rel func cenv scopes s /\
-  s.vs_alloca_next <= w2n s.vs_fmp ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    local_ptrs_rel func cenv scopes t /\
-    eval_operand ptr t = SOME s.vs_fmp /\
-    eval_operand len t = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    read_memory (w2n s.vs_fmp) (LENGTH s.vs_call_ctx.cc_calldata) t =
-      s.vs_call_ctx.cc_calldata
-Proof
-  rpt strip_tac >> drule_all calldata_memory_readback >> strip_tac >>
-  qexists_tac `t` >> simp[] >>
-  irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> sym_tac >> first_x_assum irule >>
-      qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
-      gvs[local_region_def, local_ptrs_rel_def] >>
-      metis_tac[arithmeticTheory.LESS_EQ_TRANS, optionTheory.SOME_11]) >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` (qspec_then `p` mp_tac) >>
-  gvs[local_ptrs_reserved_def] >> metis_tac[]
-QED
-
-
 (* ===== Legal source shape ===== *)
 Theorem calldata_call_pre[local]:
   !cenv cx env ann flags args dflt es.
@@ -1237,44 +1210,6 @@ Proof
   gvs[LENGTH_TAKE_EQ]
 QED
 
-Theorem raw_call_output_store_run[local]:
-  !sa sb ptr cap s w n data.
-    emit_void MSTORE [ptr;cap] sa = ((),sb) /\
-    eval_operand ptr s = SOME w /\
-    eval_operand cap s = SOME (n2w (MIN n (LENGTH data))) /\
-    fresh_vars_wrt sa s /\
-    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n data)) s.vs_memory = TAKE n data ==>
-    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      t = mstore (w2n w) (n2w (MIN n (LENGTH data))) s /\
-      val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data))
-        (w2n w) t.vs_memory /\
-      fresh_vars_wrt sb t /\
-      (!op v. eval_operand op s = SOME v ==> eval_operand op t = SOME v)
-Proof
-  rpt strip_tac >> drule_all emit_void_MSTORE_correct >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >>
-  drule raw_call_output_length_memory >>
-  simp[mstore_def, write_memory_with_expansion_def]
-QED
-
-Theorem raw_call_restore_run[local]:
-  !sa sb op s saved.
-    emit_void SETFMP [op] sa = ((),sb) /\
-    eval_operand op s = SOME saved /\ fresh_vars_wrt sa s ==>
-    run_inst_seq (emitted_insts sa sb) s = OK (s with vs_fmp := saved) /\
-    fresh_vars_wrt sb (s with vs_fmp := saved) /\
-    (!p w. eval_operand p s = SOME w ==>
-           eval_operand p (s with vs_fmp := saved) = SOME w)
-Proof
-  rpt strip_tac >>
-  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
-  drule emit_void_extends >> strip_tac >>
-  gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
-      emit_void_def, comp_bind_def, fresh_id_def, emit_def, comp_return_def] >>
-  Cases_on `p` >> gvs[eval_operand_def, lookup_var_def]
-QED
-
 (* The header store is valid even while DALLOCA has temporarily moved FMP. *)
 Theorem raw_call_output_store_frame[local]:
   !ctx func cenv cx es s saved inst q b sz (w:bytes32) len.
@@ -1317,158 +1252,6 @@ Proof
   simp[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def]
-QED
-
-Theorem raw_call_output_restore_run[local]:
-  !sa z s1 cmp s2 cap s3 s4 sb pop dop s w saved n.
-    emit_op RETURNDATASIZE [] sa = (z,s1) /\
-    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
-    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
-    emit_void MSTORE [pop;cap] s3 = ((),s4) /\
-    emit_void SETFMP [dop] s4 = ((),sb) /\
-    fresh_vars_wrt sa s /\ n < dimword (:256) /\
-    LENGTH s.vs_returndata < dimword (:256) /\
-    eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
-    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
-      TAKE n s.vs_returndata ==>
-    ?t u. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      vars_ext s u /\
-      t = (mstore (w2n w) (n2w (MIN n (LENGTH s.vs_returndata))) u)
-            with vs_fmp := saved /\
-      val_in_memory (BaseTV (BytesT (Dynamic n)))
-        (BytesV (TAKE n s.vs_returndata)) (w2n w) t.vs_memory /\
-      fresh_vars_wrt sb t /\
-      (!op v. eval_operand op s = SOME v ==> eval_operand op t = SOME v)
-Proof
-  rpt strip_tac >>
-  `inst_extends sa s3` by
-    (drule compile_select_extends >> strip_tac >>
-     irule inst_extends_trans >> qexists_tac `s1` >> conj_tac
-     >- (irule inst_extends_emit_op >> goal_assum (drule_at Any)) >>
-     irule inst_extends_trans >> qexists_tac `s2` >> conj_tac
-     >- (irule inst_extends_emit_op >> goal_assum (drule_at Any)) >>
-     simp[inst_extends_def]) >>
-  drule_all raw_call_cap_run >>
-  disch_then (qx_choose_then `u` strip_assume_tac) >>
-  `vars_ext s u` by
-    (simp[varsExtTheory.vars_ext_def, finite_mapTheory.SUBMAP_FLOOKUP_EQN] >>
-     rpt strip_tac >>
-     qpat_x_assum `!op v. eval_operand op s = SOME v ==> _`
-       (qspec_then `Var x` mp_tac) >>
-     simp[eval_operand_def, lookup_var_def]) >>
-  `eval_operand pop u = SOME w /\ eval_operand dop u = SOME saved` by metis_tac[] >>
-  `mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) u.vs_memory =
-    TAKE n s.vs_returndata` by gvs[] >>
-  drule_all raw_call_output_store_run >>
-  disch_then (qx_choose_then `v` strip_assume_tac) >>
-  `eval_operand dop v = SOME saved` by metis_tac[] >>
-  drule_all raw_call_restore_run >> strip_tac >>
-  qexistsl_tac [`v with vs_fmp := saved`, `u`] >>
-  conj_tac
-  >- (`inst_extends s3 s4 /\ inst_extends s4 sb` by
-        (conj_tac >> irule inst_extends_emit_void >> goal_assum (drule_at Any)) >>
-      `inst_extends sa s4` by
-        (irule inst_extends_trans >> qexists_tac `s3` >> simp[]) >>
-      irule run_inst_seq_compose_ok >> qexistsl_tac [`v`, `s4`] >> simp[] >>
-      irule run_inst_seq_compose_ok >> qexistsl_tac [`u`, `s3`] >> simp[]) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem raw_call_output_restore_frame[local]:
-  !ctx func cenv cx es s u t saved inst q b sz (w:bytes32) len.
-    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
-    vars_ext s u /\
-    t = (mstore (w2n w) len u) with vs_fmp := saved /\
-    fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
-    b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    stmt_state_rel H ctx func cenv cx es t
-Proof
-  rpt strip_tac >>
-  `vars_ext (s with vs_fmp := saved) (u with vs_fmp := saved)` by
-    (qpat_x_assum `vars_ext _ _` mp_tac >>
-     simp[varsExtTheory.vars_ext_def] >> strip_tac >>
-     qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
-    (irule stmt_state_rel_vars_ext >> goal_assum (drule_at Any) >> simp[]) >>
-  gvs[] >> irule raw_call_output_store_frame >> simp[] >>
-  qexistsl_tac [`b`, `inst`, `q`, `sz`] >> simp[] >>
-  qpat_x_assum `vars_ext s u` mp_tac >>
-  simp[varsExtTheory.vars_ext_def] >> strip_tac >>
-  qpat_x_assum `u = _` SUBST1_TAC >> simp[]
-QED
-
-Theorem raw_call_output_restore_frag[local]:
-  !ctx func cenv cx es sa z s1 cmp s2 cap s3 s4 sb pop dop s w saved n inst q b sz.
-    emit_op RETURNDATASIZE [] sa = (z,s1) /\
-    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
-    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
-    emit_void MSTORE [pop;cap] s3 = ((),s4) /\
-    emit_void SETFMP [dop] s4 = ((),sb) /\
-    fresh_vars_wrt sa s /\ n < dimword (:256) /\
-    LENGTH s.vs_returndata < dimword (:256) /\
-    eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
-    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
-      TAKE n s.vs_returndata /\
-    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
-    fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
-    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
-    not_local_ptr cenv es.scopes q /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
-    b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel H ctx func cenv cx es r /\
-        val_in_memory (BaseTV (BytesT (Dynamic n)))
-          (BytesV (TAKE n s.vs_returndata)) (w2n w) r.vs_memory /\
-        r.vs_fmp = saved /\ fresh_vars_wrt sb r /\
-        (!op v. eval_operand op s = SOME v ==> eval_operand op r = SOME v))
-      (\r. F)
-Proof
-  rpt strip_tac >> drule_all raw_call_output_code >> strip_tac >>
-  irule frag_path_run_inst_seq >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all raw_call_output_restore_run >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es t` by
-    (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s`, `u`, `t`, `saved`,
-                  `inst`, `q`, `b`, `sz`, `w`,
-                  `n2w (MIN n (LENGTH s.vs_returndata))`]
-       mp_tac (GEN_ALL raw_call_output_restore_frame) >> simp[]) >>
-  qexists_tac `t` >>
-  simp[stmt_state_rel_inst_idx, fresh_vars_wrt_def,
-       instIdxIndepTheory.eval_op_inst_idx] >>
-  gvs[fresh_vars_wrt_def]
-QED
-
-(* With no output the continuation is just SETFMP; the result is Lit 0w. *)
-Theorem raw_call_empty_restore_frag[local]:
-  !ctx func cenv cx es sa sb dop s saved.
-    emit_void SETFMP [dop] sa = ((),sb) /\
-    eval_operand dop s = SOME saved /\ fresh_vars_wrt sa s /\
-    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) ==>
-    frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel H ctx func cenv cx es r /\
-        r.vs_fmp = saved /\ fresh_vars_wrt sb r /\
-        eval_operand (Lit 0w) r = SOME 0w /\
-        (!op v. eval_operand op s = SOME v ==> eval_operand op r = SOME v))
-      (\r. F)
-Proof
-  rpt strip_tac >>
-  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
-   isPREFIX sa.cs_current_insts sb.cs_current_insts /\
-   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts sa sb)` by
-    (drule emitted_insts_emit_void >> strip_tac >>
-     drule emit_void_extends >> strip_tac >>
-     simp[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND, mk_inst_def,
-          is_terminator_def] >> gvs[same_blocks_def]) >>
-  irule frag_path_run_inst_seq >> simp[] >> rpt strip_tac >> gvs[] >>
-  drule_all raw_call_restore_run >> strip_tac >>
-  qexists_tac `s with vs_fmp := saved` >>
-  simp[stmt_state_rel_inst_idx, fresh_vars_wrt_def, eval_operand_def,
-       instIdxIndepTheory.eval_op_inst_idx] >>
-  gvs[fresh_vars_wrt_def]
 QED
 
 (* Bounded output writes leave protected allocations and local regions alone.
@@ -2419,42 +2202,6 @@ Proof
                 `n2w (MIN n (LENGTH s.vs_returndata))`]
     mp_tac (GEN_ALL raw_call_output_restore_arbitrary_frame) >> simp[] >>
   disch_then irule >> qexists_tac `vars` >> simp[]
-QED
-
-Theorem raw_call_output_restore_arbitrary_frag[local]:
-  !ctx func cenv cx es es0 sf s0 sa z s1 cmp s2 cap s3 s4 sb pop dop s w saved n inst q b sz.
-    emit_op RETURNDATASIZE [] sa = (z,s1) /\
-    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
-    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
-    emit_void MSTORE [pop;cap] s3 = ((),s4) /\
-    emit_void SETFMP [dop] s4 = ((),sb) /\
-    safe_operand sa pop /\ safe_operand sa dop /\ n < dimword (:256) /\
-    LENGTH s.vs_returndata < dimword (:256) /\
-    eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
-    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
-      TAKE n s.vs_returndata /\
-    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
-    local_ptrs_reserved cenv sa /\ wb_frame cenv es0 es sf s0 s /\
-    sf.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sf /\
-    MAP FDOM es0.scopes = MAP FDOM es.scopes /\ sf.cs_next_id <= inst.inst_id /\
-    fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
-    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
-    not_local_ptr cenv es.scopes q /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
-    b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel H ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
-        val_in_memory (BaseTV (BytesT (Dynamic n)))
-          (BytesV (TAKE n s.vs_returndata)) (w2n w) r.vs_memory /\
-        (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
-              stmt_state_rel H' ctx func cenv cx es r) /\
-        r.vs_fmp = saved /\
-        (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
-          eval_operand p r = SOME v)) (\r. F)
-Proof
-  rpt strip_tac >> drule_all raw_call_output_restore_allocas_frag >> strip_tac >>
-  irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  simp[] >> metis_tac[]
 QED
 
 Definition raw_call_buffer_frame_def[local]:
@@ -4581,13 +4328,6 @@ Proof
   simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
 
-Theorem calldata_gas_explicit_false[local]:
-  !n gs. gas_explicit (REPLICATE n F) gs = []
-Proof
-  Induct >> gen_tac >> Cases_on `gs` >>
-  simp[rich_listTheory.REPLICATE, gas_explicit_cons]
-QED
-
 (* In oracle mode raw_call reads no gas observation. *)
 Theorem calldata_take_call_outcome_gas_obs[local]:
   !target cd vo st g.
@@ -4666,7 +4406,7 @@ Proof
   `fin with gas_obs := [] = fin` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
-       calldata_gas_explicit_false] >>
+       gas_explicit_replicate_false] >>
   qexistsl_tac [`res`, `fin`, `r`] >> simp[]
 QED
 
@@ -4727,7 +4467,8 @@ Proof
        t.vs_inst_idx = LENGTH s2.cs_current_insts`] eval_exprs_suffix) >>
   simp[wb_args_exit_def] >>
   conj_tac >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >>
-    simp[expr_exit_def] >> rename1 `Error e` >> Cases_on `e` >> simp[expr_exit_def]) >>
+    simp[expr_exit_def, halt_exit_def] >> rename1 `Error e` >>
+    Cases_on `e` >> simp[expr_exit_def, halt_exit_def]) >>
   qexistsl_tac [`addr`, `addr_op`, `cenv`, `kws`, `ops`, `s2`, `sa`] >>
   reverse conj_tac >- gvs[wb_args_exit_def] >>
   rpt gen_tac >> strip_tac >>
@@ -4776,14 +4517,19 @@ Proof
   `typed_args_post H0 ctx func cenv cx (es with gas_obs := gs) sa s0 ee
      (addr::kws) (addr_op::ops) vs t` by
     simp[calldata_typed_args_post_gas_obs] >>
-  pop_assum (mp_then (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+  qpat_assum `typed_args_post H0 ctx func cenv cx (es with gas_obs := gs) sa s0 ee
+    (addr::kws) (addr_op::ops) vs t`
+    (mp_then (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
     (INST_TYPE [``:'b`` |-> ``:256``] calldata_call_success_frag)) >>
   disch_then drule_all >>
   simp[calldata_typed_args_post_gas_obs, calldata_vv_post_gas_obs] >>
   strip_tac >>
+  `res <> INR HaltException` by
+    (drule_all calldata_call_source_outcome >> rpt (pop_assum kall_tac) >>
+     strip_tac >> gvs[AllCaseEqs()]) >>
   irule calldata_tail_summary >> simp[] >>
   qexistsl_tac [`fin`, `res`, `sb`, `s2`] >> simp[] >>
-  drule_then irule frag_path_conseq >> simp[] >>
+  drule_then irule frag_path_conseq >> simp[halt_exit_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ /\ _ ==> _` irule >>
   `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>

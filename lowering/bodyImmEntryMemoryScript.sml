@@ -11,7 +11,7 @@ Ancestors
   exprSimBopRestWordLayout exprSimProps localPtrsProps
   whitelistForIterImmCopy whitelistForIterImmLoop exprSimCopy
   bodyLiteralBufferMemory emitHelperProps
-  stmtSimForArrayLoop loweringPosts loweringStateRelDefs
+  stmtSimForArrayLoop loweringPosts loweringStateRelDefs loweringSlice
   vyperStorageFootprint vyperStorageBackend
 Libs
   monadsyntax
@@ -378,16 +378,17 @@ Proof
      storage_well_formed_on cx es (FST H')` by
     (rpt strip_tac
      >- (`stmt_state_rel H' ctx func cenv cx es s` by metis_tac[] >>
-         irule stmt_state_rel_fields_transport >> qexists_tac `H` >>
-         rpt conj_tac >> first_assum ACCEPT_TAC)
+         irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+           stmt_state_rel_fields_transport) >> metis_tac[])
      >- metis_tac[]) >>
   `ret_pc_ok cenv sb u` by
     (fs[ret_pc_ok_def, not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   `lookup_block u.vs_current_bb func.fn_blocks =
     SOME <|bb_label := lbl; bb_instructions :=
       sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|>` by simp[] >>
-  drule_all (SRULE [PULL_EXISTS] immutable_allocate_initialize_mem) >>
-  disch_then (qspec_then `off` strip_assume_tac) >>
+  mp_tac (Q.INST [`s0` |-> `u`, `st` |-> `sb`,
+    `pre` |-> `sb.cs_current_insts`] immutable_allocate_initialize_mem) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst sz ainst cond_lbl sa 0 es cc` by
     (irule immutable_initial_frame_rebase >> goal_assum (drule_at Any) >>
@@ -483,7 +484,8 @@ Theorem immutable_array_entry_run_mem:
   (!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
     eval_operand region s = SOME 0w /\ copy_old_operand sa region /\
     (!x. region = Var x ==> x <> ov /\ x <> tot /\ x <> ep)) /\
-  (!H ce srcop dstop bytes ty cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!(H : (bool # bytes32 # type_value) list # num list)
+      ce srcop dstop bytes ty cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ty ty cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ty = SOME tyv /\
@@ -609,13 +611,10 @@ Resume immutable_array_entry_run_mem[copy]:
      rpt (irule eval_operand_update_other_local >> simp[])) >>
   `w2n dst + stride < dimword (:256)` by simp[] >>
   qpat_x_assum `!H ce srcop dstop bytes ty cs ct tyv cxx cxxctx fn ee ss vv aa bb dd. _`
-    (drule_at (Pat `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `immutable_holds _ _ _ _ _ _ s1`)) >>
-  disch_then (drule_at (Pat `return_buf_frame _ _ _ s1`)) >>
-  disch_then (qspec_then `dst` mp_tac) >>
-  (impl_tac >- simp[]) >>
+    (qspecl_then [`H`, `cenv`, `Var ep`, `Var p`, `stride`, `et`,
+      `sa`, `sb0`, `tv`, `cx`, `ctx`, `func`, `es`, `s1`, `v`,
+      `n2w off + n2w ((if dyn then 32 else 0) + k * stride)`, `dst`, `d`] mp_tac) >>
+  (impl_tac >- (simp[] >> Cases_on `dyn` >> gvs[update_var_def])) >>
   strip_tac >>
   `z = t` by fs[copy_runtime_frame_def] >>
   Cases_on `dyn` >> gvs[update_var_def]

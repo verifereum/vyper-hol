@@ -321,7 +321,7 @@ Resume compile_slice_ordinary_case[dynamic]:
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
-     simp[]) >>
+     fs[exprSimDefsTheory.halt_exit_def]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>
@@ -611,7 +611,7 @@ Resume compile_slice_ordinary_case[fixed_source]:
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
-     simp[]) >>
+     fs[exprSimDefsTheory.halt_exit_def]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>
