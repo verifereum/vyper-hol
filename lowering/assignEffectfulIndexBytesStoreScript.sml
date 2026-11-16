@@ -261,6 +261,8 @@ Resume assign_effectful_snapshot_bytes_store_ready[protected]:
   suspend "finish"
 QED
 Resume assign_effectful_snapshot_bytes_store_ready[finish]:
+  `LENGTH r.vs_memory <= LENGTH z.vs_memory` by
+    (drule typed_copy_effect_length >> simp[] >> decide_tac) >>
   `stmt_state_rel H0 ctx func cenv cx ff z` by
     (irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
