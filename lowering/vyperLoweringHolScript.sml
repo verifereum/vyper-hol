@@ -9,6 +9,7 @@ Ancestors
   createCtorTupleExecution dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
+  loweringRuntimeCallBudget
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
