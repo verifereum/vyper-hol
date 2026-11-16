@@ -785,7 +785,6 @@ QED
    1. take_reverse_decompose - list decomposition for induction step
    2. stack_peek_last - stack_peek 0 = LAST
    3. spill_n_sim - n spill steps by induction on pairs
-   4. restore_n_sim - n restore steps by induction
    ========================================================================= *)
 
 (* ---------------------------------------------------------------
@@ -1110,110 +1109,8 @@ Proof
 QED
 
 (* ---------------------------------------------------------------
-   restore_n_sim: Induction on items to restore.
-   Each step uses restore_op_venom_asm_rel.
-   FLOOKUP persistence: ALL_DISTINCT items ensures removing
-   item_k via domsub doesn't affect FLOOKUP of item_{k+1}..
-   --------------------------------------------------------------- *)
-Theorem restore_n_sim[local]:
-  !items offsets lo o2pc prog ps vs st.
-    venom_asm_rel lo ps vs st /\
-    LENGTH items = LENGTH offsets /\
-    ALL_DISTINCT items /\
-    (!k. k < LENGTH items ==>
-       FLOOKUP ps.ps_spilled (EL k items) = SOME (EL k offsets) /\
-       EL k offsets < dimword(:256)) /\
-    asm_block_at prog st.as_pc
-      (execute_plan initial_fmp (MAP SORestore offsets)) ==>
-    ?st'.
-      asm_steps lo o2pc prog (2 * LENGTH items) st = AsmOK st' /\
-      st'.as_pc = st.as_pc + 2 * LENGTH items /\
-      venom_asm_rel lo
-        (ps with <| ps_stack :=
-           ps.ps_stack ++ items;
-           ps_spilled :=
-             FOLDL (\sp item. sp \\ item) ps.ps_spilled items |>)
-        vs st'
-Proof
-  Induct_on `items` >> rpt gen_tac >> strip_tac
-  >| [
-    (* Base case: items = [] *)
-    qexists_tac `st` >>
-    simp[Once asm_steps_def] >>
-    Cases_on `offsets` >> fs[] >>
-    SUBGOAL_THEN ``ps with <| ps_stack := ps.ps_stack;
-      ps_spilled := ps.ps_spilled |> = ps``
-      (fn th => rewrite_tac [th]) >>
-    fs[],
-    (* Step case: h::items *)
-    Cases_on `offsets` >> fs[] >>
-    rename1 `LENGTH items = LENGTH t` >>
-    mp_tac restore_op_venom_asm_rel >>
-    disch_then (qspecl_then [`lo`, `o2pc`, `prog`, `h'`,
-      `h`, `ps`, `vs`, `st`] mp_tac) >>
-    (impl_tac
-    >- (
-      rpt conj_tac >> TRY (fs[] >> NO_TAC)
-      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[])
-      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[])
-      >> (qpat_x_assum `asm_block_at _ _ (execute_plan initial_fmp _)` mp_tac >>
-          simp[execute_plan_def, exec_stack_op_def, asm_block_at_cons,
-               asm_block_at_nil])
-    )) >>
-    strip_tac >>
-    SUBGOAL_THEN ``asm_block_at prog (st.as_pc + 2)
-      (execute_plan initial_fmp (MAP SORestore t))`` ASSUME_TAC
-    >- (
-      qpat_x_assum `asm_block_at _ _ (execute_plan initial_fmp _)` mp_tac >>
-      simp[execute_plan_def, exec_stack_op_def,
-           asm_block_at_append, asm_block_at_cons, asm_block_at_nil]
-    ) >>
-    first_x_assum (qspecl_then [`t`, `lo`, `o2pc`, `prog`,
-      `ps with <| ps_stack := stack_push h ps.ps_stack;
-                  ps_spilled := ps.ps_spilled \\ h |>`,
-      `vs`, `st'`] mp_tac) >>
-    impl_tac >- suspend "ih_precond" >>
-    strip_tac >>
-    qexists_tac `st''` >>
-    suspend "compose"
-  ]
-QED
-
-Resume restore_n_sim[ih_precond]:
-  simp[] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!k. k < SUC _ ==> _`
-    (qspec_then `SUC k` mp_tac) >>
-  simp[] >>
-  strip_tac >>
-  simp[DOMSUB_FLOOKUP_THM] >>
-  CCONTR_TAC >> gvs[] >>
-  metis_tac[MEM_EL]
-QED
-
-Resume restore_n_sim[compose]:
-  fs[] >>
-  conj_tac
-  >- (
-    SUBGOAL_THEN ``2 * SUC (LENGTH (t:num list)) =
-      2 + 2 * LENGTH t`` SUBST1_TAC
-    >- simp[] >>
-    irule (GEN_ALL asm_steps_compose_ok) >>
-    qexists_tac `st'` >>
-    simp[]
-  ) >>
-  qpat_x_assum `venom_asm_rel lo _ vs st''` mp_tac >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV stack_push_def)) >>
-  REWRITE_TAC[SNOC_APPEND, GSYM APPEND_ASSOC, APPEND]
-QED
-
-Finalise restore_n_sim;
-
-(* ---------------------------------------------------------------
    do_swap_venom_asm_rel_big: dist > 16 case.
-   Strategy: unfold do_swap into spill_ops ++ restore_ops,
-   apply spill_n_sim for spill phase, restore_n_sim for restore,
-   compose via asm_steps_compose_ok.
+   Compose the spill and restore phases via asm_steps_compose_ok.
    --------------------------------------------------------------- *)
 (*  flookup_fupdate_list_el: after |++ ZIP(items, offsets),
     looking up EL idx items gives EL idx offsets *)
@@ -1306,54 +1203,6 @@ Proof
   Cases_on `LENGTH offsets <= LENGTH ps.ps_stack` >> simp[] >>
   fs[LENGTH_TAKE_EQ, LENGTH_REVERSE]
 QED
-
-(* spill_alloc_n: wf preservation through the allocation FOLDL *)
-Theorem spill_alloc_n_wf[local]:
-  !items offs0 al0 sp prev_items.
-    spill_alloc_wf al0 (sp |++ ZIP(prev_items, offs0)) /\
-    LENGTH prev_items = LENGTH offs0 /\
-    ALL_DISTINCT (prev_items ++ items) /\
-    al0.sa_next_offset + 32 * LENGTH items < dimword(:256) ==>
-    spill_alloc_wf
-      (SND (spill_alloc_n offs0 al0 items))
-      (sp |++ ZIP(prev_items ++ items,
-                  FST (spill_alloc_n offs0 al0 items)))
-Proof
-  Induct >- simp[spill_alloc_n_def] >>
-  simp[spill_alloc_n_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `alloc_spill_slot al0` >>
-  rename1 `alloc_spill_slot al0 = (off0, al1)` >>
-  simp[] >>
-  imp_res_tac alloc_spill_slot_next_offset_upper >>
-  first_x_assum (qspecl_then [`SNOC off0 offs0`, `al1`, `sp`,
-    `prev_items ++ [h]`] mp_tac) >>
-  simp[LENGTH_SNOC] >>
-  suspend "step_case"
-QED
-
-Resume spill_alloc_n_wf[step_case]:
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[CONS_APPEND]
-    THENC REWRITE_CONV[APPEND_ASSOC])) >>
-  disch_then irule >>
-  suspend "wf_preconds"
-QED
-
-Resume spill_alloc_n_wf[wf_preconds]:
-  conj_tac
-  >- (
-    qpat_x_assum `ALL_DISTINCT _` mp_tac >>
-    REWRITE_TAC[APPEND, GSYM APPEND_ASSOC]
-  )
-  >>
-  PURE_REWRITE_TAC[SNOC_APPEND] >>
-  simp[GSYM ZIP_APPEND, FUPDATE_LIST_APPEND, FUPDATE_LIST_THM] >>
-  irule spill_alloc_wf_after_spill >>
-  conj_tac >- (gvs[] >> decide_tac) >>
-  qexists_tac `al0` >> simp[]
-QED
-
-Finalise spill_alloc_n_wf;
 
 
 (* spill_alloc_n prefix-split: offs0 prefix factored out *)
@@ -5684,79 +5533,6 @@ Resume do_swap_apply_stack_align_layout[restore]:
   (* Goal: base_stack ⧺ items_pushed = base_stack ⧺ ... *)
   suspend "items_eq"
 QED
-
-(*  Separation is preserved after spill phase update.
-    Case-split on old vs new for each operand. *)
-Theorem spilled_after_spill_separated[local]:
-  !items offsets sp al.
-    spill_alloc_wf al sp /\
-    ALL_DISTINCT items /\
-    DISJOINT (set items) (FDOM sp) /\
-    LENGTH offsets = LENGTH items /\
-    offsets = FST (spill_alloc_n [] al items) /\
-    al.sa_next_offset + 32 * LENGTH items < dimword(:256) ==>
-    (!op1 off1 op2 off2.
-       FLOOKUP (sp |++ ZIP(REVERSE items, offsets)) op1 = SOME off1 /\
-       FLOOKUP (sp |++ ZIP(REVERSE items, offsets)) op2 = SOME off2 /\
-       op1 <> op2 ==>
-       off1 + 32 <= off2 \/ off2 + 32 <= off1)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `FLOOKUP _ op1 = _` mp_tac >>
-  qpat_x_assum `FLOOKUP _ op2 = _` mp_tac >>
-  simp[flookup_fupdate_list] >>
-  Cases_on `ALOOKUP (REVERSE (ZIP (REVERSE items,offsets))) op1` >>
-  Cases_on `ALOOKUP (REVERSE (ZIP (REVERSE items,offsets))) op2` >>
-  simp[] >> rpt strip_tac
-  >- suspend "both_old"
-  >- suspend "old_new"
-  >- suspend "new_old"
-  >> suspend "both_new"
-QED
-
-Resume spilled_after_spill_separated[both_old]:
-  gvs[spill_alloc_wf_def] >> metis_tac[]
-QED
-
-(* old_new: op1 from sp, op2 from new allocation *)
-Resume spilled_after_spill_separated[old_new]:
-  gvs[] >> imp_res_tac ALOOKUP_MEM >>
-  qpat_x_assum `MEM (op2,_) (REVERSE _)` mp_tac >>
-  simp[MEM_REVERSE, MEM_ZIP, LENGTH_REVERSE] >> strip_tac >> gvs[] >>
-  qspecl_then [`items`, `al`, `sp`] mp_tac spill_alloc_n_offset_props >>
-  simp[LET_THM] >>
-  disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
-  first_x_assum drule >> metis_tac[]
-QED
-
-(* new_old: op1 from new allocation, op2 from sp *)
-Resume spilled_after_spill_separated[new_old]:
-  gvs[] >> imp_res_tac ALOOKUP_MEM >>
-  qpat_x_assum `MEM (op1,_) (REVERSE _)` mp_tac >>
-  simp[MEM_REVERSE, MEM_ZIP, LENGTH_REVERSE] >> strip_tac >> gvs[] >>
-  qspecl_then [`items`, `al`, `sp`] mp_tac spill_alloc_n_offset_props >>
-  simp[LET_THM] >>
-  disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
-  first_x_assum drule >> metis_tac[]
-QED
-
-Resume spilled_after_spill_separated[both_new]:
-  gvs[] >> imp_res_tac ALOOKUP_MEM >>
-  qpat_x_assum `MEM (op1,_) (REVERSE _)` mp_tac >>
-  qpat_x_assum `MEM (op2,_) (REVERSE _)` mp_tac >>
-  simp[MEM_REVERSE, MEM_ZIP, LENGTH_REVERSE] >>
-  rpt strip_tac >> gvs[] >>
-  qspecl_then [`items`, `al`, `sp`] mp_tac spill_alloc_n_offset_props >>
-  simp[LET_THM] >> strip_tac >>
-  `n' < n \/ n = n' \/ n < n'` by decide_tac
-  >- (first_x_assum (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
-      first_x_assum (qspec_then `n'` mp_tac) >> simp[])
-  >- gvs[]
-  >> first_x_assum (qspec_then `n'` mp_tac) >> simp[] >> strip_tac >>
-     first_x_assum (qspec_then `n` mp_tac) >> simp[]
-QED
-
-Finalise spilled_after_spill_separated
 
 Resume do_swap_apply_stack_align_layout[all_distinct]:
   simp[Abbr `items_pushed`, Abbr `rev_items`] >>
