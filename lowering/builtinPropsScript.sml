@@ -66,18 +66,6 @@ val emitted_insts_tac =
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM listTheory.APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND];
 
-(* eval_operand ignores vs_allocas and vs_alloca_next —
-   only depends on vs_vars and vs_labels. Used after ALLOCA. *)
-Theorem eval_operand_alloca_fields[local]:
-  ∀ op ss a n.
-    eval_operand op (ss with <| vs_allocas := a;
-                                vs_alloca_next := n |>) =
-    eval_operand op ss
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, lookup_var_def]
-QED
-
 (* SHA3 step lemma: given two defined operands, SHA3 computes the hash
    of the selected memory range. *)
 Theorem step_SHA3[local]:
@@ -389,28 +377,6 @@ Proof
 QED
 
 (* ===== Shift ===== *)
-
-(* eval_operand_fresh_step: peel one update_var off eval_operand AND bump
-   fresh_vars_wrt. Designed for forward chaining: after one application,
-   the assumptions contain the updated eval_operand and the bumped
-   fresh_vars_wrt, enabling the next step. *)
-Theorem eval_operand_fresh_step[local]:
-  ∀ op v (w:bytes32) ss st.
-    eval_operand op ss = SOME v ∧
-    fresh_vars_wrt st ss
-    ⇒
-    eval_operand op
-      (update_var (STRING #"%" (toString st.cs_next_var)) w ss) = SOME v ∧
-    fresh_vars_wrt (st with cs_next_var := st.cs_next_var + 1)
-      (update_var (STRING #"%" (toString st.cs_next_var)) w ss)
-Proof
-  rpt strip_tac
-  >- (irule eval_operand_update_fresh >>
-      conj_tac >- simp[] >>
-      qexistsl [`st.cs_next_var`, `st`] >> simp[])
-  >> irule fresh_vars_wrt_advance >>
-  qexistsl [`st.cs_next_var`, `st`] >> simp[]
-QED
 
 (* ===== Definedness-propagation framework for long pure chains ===== *)
 
