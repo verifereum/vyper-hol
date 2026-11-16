@@ -1952,6 +1952,46 @@ Proof
   irule sym_emit_kinds_pop >> metis_tac[]
 QED
 
+Theorem sym_assert_source_emit:
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ inst.inst_operands /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  qs = ps with ps_stack := stack_pop 1 ps.ps_stack /\
+  (inst.inst_opcode = ASSERT ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"]) /\
+  (inst.inst_opcode = ASSERT_UNREACHABLE ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
+    INDEX_OF (AsmLabel lbl) p = SOME (ss.sym_base.as_pc + 3)) /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    p 3 cs = AsmOK cs' ==>
+  ?ss'. sym_steps p env 3 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+     ss.sym_stack cs.as_stack` by fs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+      p n cs = AsmOK cs' /\ asm_sym_rel p env cs' ss'` by
+    metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`,
+             `R` |-> `asm_sym_rel p env`]
+      sym_assert_source_emit_mode_conditional)) >> simp[]
+QED
+
 Theorem sym_bump_source_emit:
   inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\
   inst.inst_outputs = [ptr; next] /\ ssa_form fn /\
