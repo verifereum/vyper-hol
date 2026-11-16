@@ -61,7 +61,7 @@ Proof
       vv_post H ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (irule widened_place_raw_rhs_outcome >> simp[] >> metis_tac[]) >>
   irule assign_place_raw_outcome >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >> simp[] >>
@@ -69,12 +69,13 @@ Proof
     `?ex. res = INR ex` by
       (qpat_x_assum `expr_exit _ _` mp_tac >>
        Cases_on `res` >> simp[expr_exit_def]) >>
-    qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
-    pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
-    qpat_x_assum `expr_exit _ _` mp_tac >>
-    rpt (pop_assum kall_tac) >>
-    simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    qexists_tac `ex` >> asm_rewrite_tac[] >> conj_tac
+    >- (gen_tac >> pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
+        qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+        qpat_x_assum `expr_exit _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    fs[halt_exit_def]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
@@ -134,12 +135,13 @@ Proof
       `?ex. res = INR ex` by
         (qpat_x_assum `expr_exit _ _` mp_tac >>
          Cases_on `res` >> simp[expr_exit_def]) >>
-      qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
-      pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-      qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      rpt (pop_assum kall_tac) >>
-      simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qexists_tac `ex` >> asm_rewrite_tac[] >> conj_tac
+      >- (gen_tac >> pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
+          qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+          qpat_x_assum `expr_exit _ _` mp_tac >>
+          rpt (pop_assum kall_tac) >>
+          simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      fs[halt_exit_def]) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   qpat_assum `?H. valid_horizon _ _ H mid'.storage_trace`
