@@ -30,7 +30,6 @@ Libs
   monadsyntax
 
 (* Counted source-address/load prefix.  Intermediate states stay opaque. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_source_prefix_path[local]:
   !ctx func bb s src b i cv mv sv vv id.
     ~s.vs_halted /\
@@ -121,35 +120,8 @@ Proof
       eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
       ALL_DISTINCT, store_copy_normalize_def]
 QED
-*)
-Theorem storage_copy_source_prefix_path[local]:
-  !ctx func bb s src b i cv mv sv vv id.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst id MUL [Var cv; Lit 32w] [mv]) /\
-    get_instruction bb (SUC s.vs_inst_idx) =
-      SOME (mk_inst (id+1) ADD [src; Var mv] [sv]) /\
-    get_instruction bb (s.vs_inst_idx+2) =
-      SOME (mk_inst (id+2) MLOAD [Var sv] [vv]) /\
-    eval_operand src s = SOME b /\
-    (!x. src = Var x ==> ~MEM x [mv;sv;vv]) /\
-    eval_operand (Var cv) s = SOME (n2w i) /\
-    ALL_DISTINCT [cv;mv;sv;vv] ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      eval_operand (Var cv) t = SOME (n2w i) /\
-      eval_operand (Var vv) t = SOME (mload (w2n (b+n2w i*32w)) s) /\
-      (!x. ~MEM x [mv;sv;vv] ==> lookup_var x t = lookup_var x s) /\
-      store_copy_normalize s t = store_copy_normalize s s /\
-      t.vs_memory = s.vs_memory /\
-      t.vs_current_bb = s.vs_current_bb /\
-      t.vs_inst_idx = s.vs_inst_idx+3 /\ ~t.vs_halted
-Proof
-  cheat
-QED
 
 (* The store/counter half of the counted body, independent of the source buffer. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_store_increment_path[local]:
   !ctx func bb s dst k i w loc cv vv dv nv id.
     ~s.vs_halted /\
@@ -269,38 +241,8 @@ Proof
       FLOOKUP_UPDATE, sstore_def, tstore_def, store_copy_normalize_def,
       arithmeticTheory.ADD1, wordsTheory.word_add_n2w]
 QED
-*)
-Theorem storage_copy_store_increment_path[local]:
-  !ctx func bb s dst k i w loc cv vv dv nv id.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst id ADD [dst; Var cv] [dv]) /\
-    get_instruction bb (SUC s.vs_inst_idx) =
-      SOME (mk_inst (id+1) (if loc = LocStorage then SSTORE else TSTORE)
-        [Var dv; Var vv] []) /\
-    get_instruction bb (s.vs_inst_idx+2) =
-      SOME (mk_inst (id+2) ADD [Var cv; Lit 1w] [nv]) /\
-    get_instruction bb (s.vs_inst_idx+3) =
-      SOME (mk_inst (id+3) ASSIGN [Var nv] [cv]) /\
-    eval_operand dst s = SOME k /\
-    eval_operand (Var cv) s = SOME (n2w i) /\
-    eval_operand (Var vv) s = SOME w /\ ~s.vs_call_ctx.cc_static /\
-    ALL_DISTINCT [cv;vv;dv;nv] ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      eval_operand (Var cv) t = SOME (n2w (SUC i)) /\
-      (!x. ~MEM x [dv;nv;cv] ==> lookup_var x t = lookup_var x s) /\
-      store_copy_normalize s t = store_copy_normalize s
-        ((if loc = LocStorage then sstore else tstore) (k+n2w i) w s) /\
-      t.vs_memory = s.vs_memory /\
-      t.vs_current_bb = s.vs_current_bb /\
-      t.vs_inst_idx = s.vs_inst_idx+4 /\ ~t.vs_halted
-Proof
-  cheat
-QED
 
 (* A typed source value always has a successful storage write. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem typed_storage_copy_write:
   !cx tr slot tvt v es.
     value_has_type tvt v /\ ~cx.txn.is_static ==>
@@ -315,21 +257,8 @@ Proof
     metis_tac[value_has_type_equiv] >>
   Cases_on `encode_value tvt v` >> gvs[write_storage_slot_eq]
 QED
-*)
-Theorem typed_storage_copy_write:
-  !cx tr slot tvt v es.
-    value_has_type tvt v /\ ~cx.txn.is_static ==>
-    ?writes.
-      encode_value tvt v = SOME writes /\
-      write_storage_slot cx tr slot tvt v es =
-        (INL (), set_storage cx es tr
-          (apply_writes slot writes (get_storage cx es tr)))
-Proof
-  cheat
-QED
 
 (* The empty shortcut does not evaluate the RHS in generated code. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_storage_empty_code[local]:
   !cenv lctx ty nsid e sa sf c tr slot.
     stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
@@ -351,25 +280,9 @@ Proof
      stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, compile_store_at_loc_def]
 QED
-*)
-Theorem assign_storage_empty_code[local]:
-  !cenv lctx ty nsid e sa sf c tr slot.
-    stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
-      sa = (c, sf) /\
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    has_length_word (expr_type e) /\ is_empty_value_expr e ==>
-    c = cenv /\
-    emit_void (if tr then TSTORE else SSTORE) [Lit slot; Lit 0w] sa =
-      ((), sf)
-Proof
-  cheat
-QED
 
 (* Expose the RHS prefix independently of the later assignment dispatch.
    In particular this interface remains valid when RHS evaluation fails. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_storage_copy_code_parts:
   !cenv lctx ty nsid e sa sf c tr slot vtyp.
     stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
@@ -406,33 +319,9 @@ Proof
   simp[] >> strip_tac >>
   simp[lower_value_def, comp_bind_def]
 QED
-*)
-Theorem assign_storage_copy_code_parts:
-  !cenv lctx ty nsid e sa sf c tr slot vtyp.
-    stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
-      sa = (c, sf) /\
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    cenv.ce_module_var_type nsid = SOME vtyp /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    lowered_value_type cenv e = expr_type e ==>
-    c = cenv /\
-    ?vv sV sB op.
-      compile_expr cenv (expr_type e) e sa = (vv, sV) /\
-      unwrap_value cenv vv sV = (op, sB) /\
-      lower_value compile_expr cenv (expr_type e) e sa = (op, sB) /\
-      compile_assign_value cenv (Lit slot)
-        (if tr then LocTransient else LocStorage) op (is_word_type vtyp)
-        (vv_location vv) vtyp (lowered_value_type cenv e)
-        (type_memory_bytes cenv vtyp) sB = ((), sf)
-Proof
-  cheat
-QED
 
 (* Once source layout compatibility is known, only the size dispatch
    remains. No dynamic-array path or normalization can be selected. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_storage_copy_suffix:
   !cenv dst src tr loc typ src_ty mem_size.
     ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
@@ -454,29 +343,8 @@ Proof
   simp[FUN_EQ_THM, compile_assign_value_def] >>
   simp[Once compile_store_slots_def, comp_bind_def, comp_return_def]
 QED
-*)
-Theorem assign_storage_copy_suffix:
-  !cenv dst src tr loc typ src_ty mem_size.
-    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
-    typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
-    compile_assign_value cenv dst
-      (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty mem_size =
-    (if mem_size DIV 32 = 1 then
-       do loaded <- emit_op MLOAD [src];
-          emit_void (if tr then TSTORE else SSTORE) [dst; loaded]
-       od
-     else
-       do (if tr then compile_memory_to_transient src dst (mem_size DIV 32)
-           else compile_memory_to_storage src dst (mem_size DIV 32));
-          return ()
-       od)
-Proof
-  cheat
-QED
 
 (* A value's footprint is its type's memory size unless it is a bytestring. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem topcopy_val_footprint:
   ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
   val_footprint tv v = type_memory_size tv
@@ -491,16 +359,8 @@ Proof
   rename1 `BytesT bd` >> Cases_on `bd` >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
 QED
-*)
-Theorem topcopy_val_footprint:
-  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
-  val_footprint tv v = type_memory_size tv
-Proof
-  cheat
-QED
 
 (* The word copy loop ends in its exit block, which is open. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem word_copy_loop_op_open:
   !src dst n loc ctor sa u sb.
     compile_word_copy_loop_op src dst n LocMemory loc ctor sa = (u,sb) ==>
@@ -512,16 +372,7 @@ Proof
   rpt (pairarg_tac >> simp[]) >>
   strip_tac >> gvs[new_block_def, block_is_terminated_def]
 QED
-*)
-Theorem word_copy_loop_op_open:
-  !src dst n loc ctor sa u sb.
-    compile_word_copy_loop_op src dst n LocMemory loc ctor sa = (u,sb) ==>
-    ~block_is_terminated sb
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_storage_copy_suffix_open:
   !cenv dst src tr loc typ src_ty mem_size sa sb.
     compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
@@ -543,19 +394,7 @@ Proof
   irule word_copy_loop_op_open >> Cases_on `tr` >>
   fs[compile_word_copy_loop_def] >> metis_tac[]
 QED
-*)
-Theorem assign_storage_copy_suffix_open:
-  !cenv dst src tr loc typ src_ty mem_size sa sb.
-    compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F loc typ src_ty mem_size sa = ((),sb) /\
-    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
-    typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
-    ~block_is_terminated sb
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_dyn_live_word[local]:
   !st base cap len i b.
     w2n (lookup_storage (n2w base) st) = len /\
@@ -566,18 +405,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   fs[dyn_bytes_dead_def] >> decide_tac
 QED
-*)
-Theorem storage_copy_dyn_live_word[local]:
-  !st base cap len i b.
-    w2n (lookup_storage (n2w base) st) = len /\
-    i < 1 + word_size cap /\ b < 32 /\
-    ~dyn_bytes_dead st base cap (base + i) b ==>
-    32 * i < 32 + len
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_word_address:
   !w:bytes32 i len.
     w2n w + len < dimword (:256) /\ 32 * i < len ==>
@@ -589,16 +417,7 @@ Proof
   `n + i * 32 < dimword (:256)` by decide_tac >>
   simp[arithmeticTheory.LESS_MOD]
 QED
-*)
-Theorem storage_copy_word_address:
-  !w:bytes32 i len.
-    w2n w + len < dimword (:256) /\ 32 * i < len ==>
-    w2n (w + n2w i * 32w) = w2n w + 32 * i
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_length_type[local]:
   !typ.
     has_length_word typ /\ (!elem n. typ <> ArrayT elem (Dynamic n)) ==>
@@ -614,18 +433,8 @@ Proof
   rename1 `has_length_word (ArrayT elem bd)` >>
   Cases_on `bd` >> gvs[has_length_word_def, is_bytestring_type_def]
 QED
-*)
-Theorem storage_copy_length_type[local]:
-  !typ.
-    has_length_word typ /\ (!elem n. typ <> ArrayT elem (Dynamic n)) ==>
-    (?n. typ = BaseT (BytesT (Dynamic n))) \/
-    (?n. typ = BaseT (StringT n))
-Proof
-  cheat
-QED
 
 (* The repaired Empty branch evaluates only its type, not any operands. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_empty_eval[local]:
   !cx ann typ args tvt es.
     evaluate_type (get_tenv cx) typ = SOME tvt ==>
@@ -641,19 +450,7 @@ Proof
        lift_sum_def, evaluate_type_builtin_def, read_result_def] >>
   simp[evaluate_def, bind_def, return_def, read_result_def]
 QED
-*)
-Theorem storage_copy_empty_eval[local]:
-  !cx ann typ args tvt es.
-    evaluate_type (get_tenv cx) typ = SOME tvt ==>
-    (do result <- eval_expr cx (TypeBuiltin ann Empty typ args);
-        read_result cx result od) es =
-    (if args = [] then (INL (default_value tvt), es)
-     else (INR (Error (TypeError "TypeBuiltin args")), es))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_empty_rhs[local]:
   !cx e typ tvt es r es1.
     has_length_word (expr_type e) /\ is_empty_value_expr e /\
@@ -714,26 +511,7 @@ Proof
       type_check_def, assert_def, builtin_args_length_ok_def,
       get_accounts_def, read_result_def]
 QED
-*)
-Theorem storage_copy_empty_rhs[local]:
-  !cx e typ tvt es r es1.
-    has_length_word (expr_type e) /\ is_empty_value_expr e /\
-    expr_type e = typ /\ (!elem n. typ <> ArrayT elem (Dynamic n)) /\
-    (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    (!v st. (do result <- eval_expr cx e; read_result cx result od) es =
-       (INL v,st) ==> value_has_type tvt v) /\
-    (do result <- eval_expr cx e; read_result cx result od) es = (r,es1) ==>
-    es1 = es /\
-    (!tail. (do result <- eval_expr cx e; read_result cx result od)
-       (es with gas_obs := tail) = (r, es with gas_obs := tail)) /\
-    ((?v. r = INL v /\ encode_value tvt v = SOME [(0,0w)]) \/
-     (?msg. r = INR (Error (TypeError msg))))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_length_head[local]:
   !base tv v len tail st.
     encode_value tv v = SOME ((0,n2w len)::tail) /\
@@ -765,21 +543,7 @@ Proof
        combinTheory.APPLY_UPDATE_THM, wordsTheory.w2n_n2w,
        arithmeticTheory.LESS_MOD]
 QED
-*)
-Theorem storage_copy_length_head[local]:
-  !base tv v len tail st.
-    encode_value tv v = SOME ((0,n2w len)::tail) /\
-    value_has_type tv v /\
-    (!off w. MEM (off,w) tail ==> 0 < off) /\
-    base + type_slot_size tv <= dimword (:256) /\
-    len < dimword (:256) /\ base < dimword (:256) ==>
-    w2n (lookup_storage (n2w base)
-      (apply_writes (n2w base) ((0,n2w len)::tail) st)) = len
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_dyn_head[local]:
   !tv v cap bs writes k st.
     encode_value tv v = encode_dyn_bytes_slots cap bs /\
@@ -795,19 +559,7 @@ Proof
   >- (simp[indexedListsTheory.MEM_MAPi] >> rpt strip_tac >> gvs[]) >>
   simp[] >> qexistsl_tac [`tv`, `v`] >> simp[]
 QED
-*)
-Theorem storage_copy_dyn_head[local]:
-  !tv v cap bs writes k st.
-    encode_value tv v = encode_dyn_bytes_slots cap bs /\
-    encode_value tv v = SOME writes /\ value_has_type tv v /\
-    k + type_slot_size tv <= dimword (:256) /\
-    k < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
-    w2n (lookup_storage (n2w k) (apply_writes (n2w k) writes st)) = LENGTH bs
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_dyn_footprint[local]:
   !tv v cap bs writes k st i b.
     encode_value tv v = encode_dyn_bytes_slots cap bs /\
@@ -824,21 +576,7 @@ Proof
      qexistsl_tac [`cap`, `tv`, `v`] >> gvs[]) >>
   irule storage_copy_dyn_live_word >> metis_tac[]
 QED
-*)
-Theorem storage_copy_dyn_footprint[local]:
-  !tv v cap bs writes k st i b.
-    encode_value tv v = encode_dyn_bytes_slots cap bs /\
-    value_has_type tv v /\ encode_value tv v = SOME writes /\
-    k + type_slot_size tv <= dimword (:256) /\
-    k < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-    i < 1 + word_size cap /\ b < 32 /\
-    ~dyn_bytes_dead (apply_writes (n2w k) writes st) k cap (k+i) b ==>
-    32*i < 32 + LENGTH bs
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_live_footprint[local]:
   !tv v writes k st i b.
     well_formed_type_value tv /\ value_has_type tv v /\
@@ -873,20 +611,7 @@ Proof
   gvs[encode_value_def, type_slot_size_def, dead_bytes_def] >>
   qexistsl_tac [`b`, `k`, `st`] >> simp[] >> decide_tac
 QED
-*)
-Theorem storage_copy_live_footprint[local]:
-  !tv v writes k st i b.
-    well_formed_type_value tv /\ value_has_type tv v /\
-    encode_value tv v = SOME writes /\
-    k + type_slot_size tv <= dimword (:256) /\ k < dimword (:256) /\
-    i < type_slot_size tv /\ b < 32 /\
-    ~dead_bytes (apply_writes (n2w k) writes st) k tv (k+i) b ==>
-    32*i < val_footprint tv v
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_live_memory_word[local]:
   !tv v writes k st i b (w:bytes32) s.
     well_formed_type_value tv /\ value_has_type tv v /\
@@ -903,22 +628,7 @@ Proof
   drule_all storage_copy_word_address >>
   simp[valueEncodingPropsTheory.mem_word_at_eq_mload]
 QED
-*)
-Theorem storage_copy_live_memory_word[local]:
-  !tv v writes k st i b (w:bytes32) s.
-    well_formed_type_value tv /\ value_has_type tv v /\
-    encode_value tv v = SOME writes /\
-    k + type_slot_size tv <= dimword (:256) /\ k < dimword (:256) /\
-    i < type_slot_size tv /\ b < 32 /\
-    ~dead_bytes (apply_writes (n2w k) writes st) k tv (k+i) b /\
-    w2n w + val_footprint tv v < dimword (:256) ==>
-    mload (w2n (w + n2w i * 32w)) s =
-      mem_word_at (w2n w + 32*i) s.vs_memory
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_capacity_bound[local]:
   !n. n < dimword (:256) ==> 1 + word_size n < dimword (:256)
 Proof
@@ -932,14 +642,7 @@ Proof
      drule_all vyperArithTheory.word_size_not_lt_self >> decide_tac) >>
   decide_tac
 QED
-*)
-Theorem storage_copy_capacity_bound[local]:
-  !n. n < dimword (:256) ==> 1 + word_size n < dimword (:256)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_count_bound[local]:
   !tv v.
     well_formed_type_value tv /\ val_footprint tv v < dimword (:256) ==>
@@ -957,16 +660,7 @@ Proof
   fs[well_formed_type_value_def, type_slot_size_def] >>
   qspec_then `n` mp_tac storage_copy_capacity_bound >> simp[]
 QED
-*)
-Theorem storage_copy_count_bound[local]:
-  !tv v.
-    well_formed_type_value tv /\ val_footprint tv v < dimword (:256) ==>
-    type_slot_size tv < dimword (:256)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_post_words:
   !H ctx func cenv cx e es sa sm s0 es1 v op s tv w writes k st.
     expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
@@ -992,26 +686,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   qexists_tac `v` >> simp[]
 QED
-*)
-Theorem storage_copy_post_words:
-  !H ctx func cenv cx e es sa sm s0 es1 v op s tv w writes k st.
-    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
-    post_value_type cenv e = expr_type e /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
-    value_has_type tv v /\ encode_value tv v = SOME writes /\
-    k + type_slot_size tv <= dimword (:256) /\ k < dimword (:256) ==>
-    type_slot_size tv < dimword (:256) /\
-    (!i. i < type_slot_size tv /\
-         (?b. b < 32 /\
-              ~dead_bytes (apply_writes (n2w k) writes st) k tv (k+i) b) ==>
-         mload (w2n (w + n2w i * 32w)) s =
-           mem_word_at (w2n w + 32*i) s.vs_memory)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_backend_fold:
   !is k ws s tr.
     FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
@@ -1032,27 +707,8 @@ Proof
        contract_transient_def, vfmStateTheory.lookup_account_def,
        combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID]
 QED
-*)
-Theorem storage_copy_backend_fold:
-  !is k ws s tr.
-    FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
-    if tr then
-      s with vs_transient :=
-        (s.vs_call_ctx.cc_address =+
-          FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-            (contract_transient s) is) s.vs_transient
-    else
-      s with vs_accounts :=
-        (s.vs_call_ctx.cc_address =+
-          (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with storage :=
-            FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-              (contract_storage s) is)) s.vs_accounts
-Proof
-  cheat
-QED
 
 (* The copy prefix writes storage only: the call context stays sbase's. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem store_copy_prefix_call_ctx[local]:
   !i. (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx
 Proof
@@ -1064,14 +720,7 @@ Proof
   pop_assum SUBST1_TAC >>
   Cases_on `loc = LocStorage` >> fs[sstore_def, tstore_def]
 QED
-*)
-Theorem store_copy_prefix_call_ctx[local]:
-  !i. (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_body_path[local]:
   !ctx func bb sa loc b k sbase i s src dst cv mv sv vv dv nv id.
     store_copy_frame sa loc b k sbase i s /\ ~sbase.vs_call_ctx.cc_static /\
@@ -1172,36 +821,8 @@ Proof
      simp[NoAsms, store_copy_normalize_def, sstore_def, tstore_def]) >>
   simp[mload_def]
 QED
-*)
-Theorem storage_copy_body_path[local]:
-  !ctx func bb sa loc b k sbase i s src dst cv mv sv vv dv nv id.
-    store_copy_frame sa loc b k sbase i s /\ ~sbase.vs_call_ctx.cc_static /\
-    eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k /\
-    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
-    eval_operand (Var cv) s = SOME (n2w i) /\
-    ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
-    (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var cv;Lit 32w] [mv]) /\
-    get_instruction bb (s.vs_inst_idx+1) = SOME (mk_inst (id+1) ADD [src;Var mv] [sv]) /\
-    get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) MLOAD [Var sv] [vv]) /\
-    get_instruction bb (s.vs_inst_idx+3) = SOME (mk_inst (id+3) ADD [dst;Var cv] [dv]) /\
-    get_instruction bb (s.vs_inst_idx+4) = SOME (mk_inst (id+4)
-      (if loc = LocStorage then SSTORE else TSTORE) [Var dv;Var vv] []) /\
-    get_instruction bb (s.vs_inst_idx+5) = SOME (mk_inst (id+5) ADD [Var cv;Lit 1w] [nv]) /\
-    get_instruction bb (s.vs_inst_idx+6) = SOME (mk_inst (id+6) ASSIGN [Var nv] [cv]) ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      store_copy_frame sa loc b k sbase (SUC i) t /\
-      eval_operand (Var cv) t = SOME (n2w (SUC i)) /\
-      t.vs_current_bb = s.vs_current_bb /\
-      t.vs_inst_idx = s.vs_inst_idx+7 /\ ~t.vs_halted
-Proof
-  cheat
-QED
 
 (* Counted header, including the conditional transfer. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_header_path[local]:
   !ctx func bb sa loc b k sbase i n s cv tv id exit loop_body.
     store_copy_frame sa loc b k sbase i s /\
@@ -1271,28 +892,7 @@ Proof
   gvs[store_copy_frame_def, store_copy_normalize_def, eval_operand_def,
       lookup_var_def] >> metis_tac[]
 QED
-*)
-Theorem storage_copy_header_path[local]:
-  !ctx func bb sa loc b k sbase i n s cv tv id exit loop_body.
-    store_copy_frame sa loc b k sbase i s /\
-    eval_operand (Var cv) s = SOME (n2w i) /\
-    cv <> tv /\ (!x. not_fresh_at sa x ==> x <> tv) /\
-    i <= n /\ n < dimword (:256) /\ ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) /\
-    get_instruction bb (SUC s.vs_inst_idx) =
-      SOME (mk_inst (id+1) JNZ [Var tv;Label exit;Label loop_body] []) ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      store_copy_frame sa loc b k sbase i t /\
-      eval_operand (Var cv) t = SOME (n2w i) /\
-      t.vs_current_bb = (if i = n then exit else loop_body) /\
-      t.vs_inst_idx = 0 /\ ~t.vs_halted
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_store_copy_path:
   !ctx func loc src dst n sa u sb sbase b k.
     (loc = LocStorage \/ loc = LocTransient) /\
@@ -1479,26 +1079,7 @@ Proof
   irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
   qexists_tac `jump_to hdr r0` >> simp[]
 QED
-*)
-Theorem compile_store_copy_path:
-  !ctx func loc src dst n sa u sb sbase b k.
-    (loc = LocStorage \/ loc = LocTransient) /\
-    compile_word_copy_loop src dst n LocMemory loc F sa = (u,sb) /\
-    fn_has_code sa sb func /\ n < dimword (:256) /\
-    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
-    eval_operand src sbase = SOME b /\ eval_operand dst sbase = SOME k /\
-    ~sbase.vs_halted /\ ~sbase.vs_call_ctx.cc_static /\
-    sbase.vs_current_bb = sa.cs_current_bb /\
-    sbase.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F ctx func sbase 0 (OK t) /\
-      store_copy_frame sa loc b k sbase n t /\ ~t.vs_halted /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_accounts_fold[local]:
   !H cx es s tr k ws is stor.
     accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
@@ -1517,20 +1098,7 @@ Proof
   qexistsl_tac [`es`, `s`, `stor`] >>
   simp[set_storage_backend_eq] >> goal_assum (drule_at Any) >> simp[]
 QED
-*)
-Theorem storage_copy_accounts_fold[local]:
-  !H cx es s tr k ws is stor.
-    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-    storage_agree (storage_dead H tr stor) stor
-      (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-        (if tr then contract_transient s else contract_storage s) is) ==>
-    accounts_rel H cx (set_storage cx es tr stor)
-      (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_state_fold[local]:
   !H ctx func cenv cx es s tr k ws is stor.
     stmt_state_rel H ctx func cenv cx es s /\
@@ -1566,20 +1134,7 @@ Proof
   qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
-*)
-Theorem storage_copy_state_fold[local]:
-  !H ctx func cenv cx es s tr k ws is stor.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_agree (storage_dead H tr stor) stor
-      (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-        (if tr then contract_transient s else contract_storage s) is) ==>
-    stmt_state_rel H ctx func cenv cx (set_storage cx es tr stor)
-      (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_initial_agree:
   !H ctx func cenv cx es s tr.
     stmt_state_rel H ctx func cenv cx es s ==>
@@ -1591,18 +1146,7 @@ Proof
   fs[stmt_state_rel_def, state_rel_def, storage_rel_def,
      transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]
 QED
-*)
-Theorem storage_copy_initial_agree:
-  !H ctx func cenv cx es s tr.
-    stmt_state_rel H ctx func cenv cx es s ==>
-    storage_agree (storage_dead H tr (get_storage cx es tr))
-      (get_storage cx es tr)
-      (if tr then contract_transient s else contract_storage s)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_state_region[local]:
   !H ctx func cenv cx es s tr k tv v writes off mem ws res es'.
     stmt_state_rel H ctx func cenv cx es s /\ ~cx.txn.is_static /\
@@ -1638,31 +1182,7 @@ Proof
   gvs[write_storage_slot_eq] >>
   irule storage_copy_state_fold >> simp[]
 QED
-*)
-Theorem storage_copy_state_region[local]:
-  !H ctx func cenv cx es s tr k tv v writes off mem ws res es'.
-    stmt_state_rel H ctx func cenv cx es s /\ ~cx.txn.is_static /\
-    MEM (tr, k, tv) (FST H) /\ regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
-    w2n k + type_slot_size tv <= dimword (:256) /\
-    well_formed_type_value tv /\ value_has_type tv v /\
-    val_in_memory tv v off mem /\ encode_value tv v = SOME writes /\
-    (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
-    (!i. i < type_slot_size tv /\
-         (?b. b < 32 /\
-              ~dead_bytes (apply_writes k writes (get_storage cx es tr))
-                (w2n k) tv (w2n k + i) b) ==>
-         ws i = mem_word_at (off + 32 * i) mem) /\
-    write_storage_slot cx tr k tv v es = (res, es') ==>
-    res = INL () /\
-    stmt_state_rel H ctx func cenv cx es'
-      (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t)
-        s (COUNT_LIST (type_slot_size tv)))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_state_zero[local]:
   !H ctx func cenv cx es s tr k.
     stmt_state_rel H ctx func cenv cx es s ==>
@@ -1683,18 +1203,7 @@ Proof
   disch_then (qspecl_then [`tr`, `k`, `\i. 0w`, `[0]`] mp_tac) >>
   simp[wordsTheory.WORD_ADD_0] >> disch_then irule >> simp[]
 QED
-*)
-Theorem storage_copy_state_zero[local]:
-  !H ctx func cenv cx es s tr k.
-    stmt_state_rel H ctx func cenv cx es s ==>
-    stmt_state_rel H ctx func cenv cx
-      (set_storage cx es tr (update_storage k 0w (get_storage cx es tr)))
-      ((if tr then tstore else sstore) k 0w s)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_control_frame[local]:
   !H ctx func cenv cx es s V bb ix prev.
     stmt_state_rel H ctx func cenv cx es
@@ -1717,18 +1226,7 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
-*)
-Theorem storage_copy_control_frame[local]:
-  !H ctx func cenv cx es s V bb ix prev.
-    stmt_state_rel H ctx func cenv cx es
-      (s with <|vs_vars := V; vs_current_bb := bb;
-                vs_inst_idx := ix; vs_prev_bb := prev|>) =
-    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_normalized_state:
   !H ctx func cenv cx es s t sa.
     stmt_state_rel H ctx func cenv cx es
@@ -1747,20 +1245,7 @@ Proof
   irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
 QED
-*)
-Theorem storage_copy_normalized_state:
-  !H ctx func cenv cx es s t sa.
-    stmt_state_rel H ctx func cenv cx es
-      (t with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
-                vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>) /\
-    local_ptrs_reserved cenv sa /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-    stmt_state_rel H ctx func cenv cx es t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_fold_memory[local]:
   !l s f g tr.
     (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
@@ -1768,16 +1253,7 @@ Theorem storage_fold_memory[local]:
 Proof
   Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
 QED
-*)
-Theorem storage_fold_memory[local]:
-  !l s f g tr.
-    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
-    s.vs_memory
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_bulk_run[local]:
   !ctx func cenv tr src k n sa sb u s b.
     compile_word_copy_loop src (Lit k) n LocMemory
@@ -1834,37 +1310,7 @@ Proof
   simp[Abbr `norm`, storage_copy_backend_fold] >>
   Cases_on `tr` >> simp[] >> metis_tac[]
 QED
-*)
-Theorem storage_copy_bulk_run[local]:
-  !ctx func cenv tr src k n sa sb u s b.
-    compile_word_copy_loop src (Lit k) n LocMemory
-      (if tr then LocTransient else LocStorage) F sa = (u,sb) /\
-    n < dimword (:256) /\ ~s.vs_call_ctx.cc_static /\
-    (!x. src = Var x ==> not_fresh_at sa x) /\
-    eval_operand src s = SOME b /\
-    fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      (!H cx es'.
-         stmt_state_rel H ctx func cenv cx es'
-           (FOLDL (\t i. (if tr then tstore else sstore)
-             (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
-         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent) /\
-      t.vs_memory = s.vs_memory /\
-      !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-               ?fuel'. run_from fuel' ctx func s = r
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_one_run[local]:
   !ctx func cenv tr src k sa sm sb op s b.
     emit_op MLOAD [src] sa = (op,sm) /\
@@ -1955,33 +1401,7 @@ Proof
   simp[sstore_def, tstore_def, update_var_def, LET_THM, arithmeticTheory.ADD1] >>
   qexists_tac `fuel` >> simp[]
 QED
-*)
-Theorem storage_copy_one_run[local]:
-  !ctx func cenv tr src k sa sm sb op s b.
-    emit_op MLOAD [src] sa = (op,sm) /\
-    emit_void (if tr then TSTORE else SSTORE) [Lit k;op] sm = ((),sb) /\
-    eval_operand src s = SOME b /\ local_ptrs_reserved cenv sa /\
-    fn_has_code sa sb func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      (!H cx es'.
-         stmt_state_rel H ctx func cenv cx es'
-           ((if tr then tstore else sstore) k (mload (w2n b) s) s) ==>
-         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent) /\
-      t.vs_memory = s.vs_memory /\
-      !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-               ?fuel'. run_from fuel' ctx func s = r
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_suffix_run[local]:
   !ctx func cenv tr src k n typ src_ty loc sa sb s b.
     compile_assign_value cenv (Lit k)
@@ -2037,40 +1457,7 @@ Proof
   drule_all storage_copy_bulk_run >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
-*)
-Theorem storage_copy_suffix_run[local]:
-  !ctx func cenv tr src k n typ src_ty loc sa sb s b.
-    compile_assign_value cenv (Lit k)
-      (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty (32 * n) sa = ((),sb) /\
-    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
-    typ = src_ty /\ type_memory_bytes cenv typ = 32 * n /\
-    0 < n /\ n < dimword (:256) /\ ~s.vs_call_ctx.cc_static /\
-    (!x. src = Var x ==> not_fresh_at sa x) /\
-    eval_operand src s = SOME b /\
-    fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      (!H cx es'.
-         stmt_state_rel H ctx func cenv cx es'
-           (FOLDL (\t i. (if tr then tstore else sstore)
-             (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
-         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent) /\
-      t.vs_memory = s.vs_memory /\
-      !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-               ?fuel'. run_from fuel' ctx func s = r
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_static_suffix[local]:
   compile_assign_value cenv (Lit k)
     (if tr then LocTransient else LocStorage) src F loc
@@ -2130,26 +1517,7 @@ Proof
                 `n`, `sa`, `sf`, `src`, `u`] >>
   Cases_on `tr` >> simp[eval_operand_def]
 QED
-*)
-Theorem storage_copy_static_suffix[local]:
-  compile_assign_value cenv (Lit k)
-    (if tr then LocTransient else LocStorage) src F loc
-    typ typ (32 * n) sa = ((),sb) /\
-  ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
-  type_memory_bytes cenv typ = 32 * n /\
-  0 < n /\ n < dimword (:256) /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME b /\ fn_has_code sa sb func /\
-  ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_post_region:
   !H ctx func cenv cx e es sa sm s0 es1 v op s tv tr slot es'.
     expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
@@ -2195,44 +1563,23 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
-Theorem storage_copy_post_region:
-  !H ctx func cenv cx e es sa sm s0 es1 v op s tv tr slot es'.
-    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
-    post_value_type cenv e = expr_type e /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ value_has_type tv v /\
-    MEM (tr,n2w slot,tv) (FST H) /\ regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
-    0 < type_slot_size tv /\ slot + type_slot_size tv <= dimword (:256) /\
-    write_storage_slot cx tr (n2w slot) tv v es1 = (INL (),es') ==>
-    ?w. eval_operand op s = SOME w /\ type_slot_size tv < dimword (:256) /\
-      stmt_state_rel H ctx func cenv cx es'
-        (FOLDL (\t i. (if tr then tstore else sstore)
-          (n2w slot+n2w i) (mload (w2n (w+n2w i*32w)) s) t)
-          s (COUNT_LIST (type_slot_size tv)))
-Proof
-  cheat
-QED
 
 (* A bad natural root invalidates the selected trace after the RHS,
    including when its write fails in a static context. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_toplevel_bad_slot_outcome:
   !ctx func cx st0 e es s0 tr slot tvt P Q RetQ.
     ~(slot + type_slot_size tvt <= dimword (:256)) /\
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (eval_expr cx e) (read_result cx)) (es,s0)
       (\H res ee t. ?v. res = INL v /\ P H v ee t)
-      (\H res ee r. expr_exit res r) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
           (write_storage_slot cx tr (n2w slot) tvt v))) (es,s0) Q
-      (\H res ee r. !tail.
-        stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail.
+        stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `!v. storage_trace_frame
@@ -2250,25 +1597,7 @@ Proof
   ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
-*)
-Theorem assign_toplevel_bad_slot_outcome:
-  !ctx func cx st0 e es s0 tr slot tvt P Q RetQ.
-    ~(slot + type_slot_size tvt <= dimword (:256)) /\
-    gas_outcome F (cx_tops cx) (ctx,func) cx st0
-      (bind (eval_expr cx e) (read_result cx)) (es,s0)
-      (\H res ee t. ?v. res = INL v /\ P H v ee t)
-      (\H res ee r. expr_exit res r) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) cx st0
-      (bind (bind (eval_expr cx e) (read_result cx))
-        (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
-          (write_storage_slot cx tr (n2w slot) tvt v))) (es,s0) Q
-      (\H res ee r. !tail.
-        stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume assign_toplevel_bad_slot_outcome[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
@@ -2281,9 +1610,7 @@ Resume assign_toplevel_bad_slot_outcome[summary]:
   >- suspend "success" >>
   suspend "exception"
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume assign_toplevel_bad_slot_outcome[success]:
   fs[] >>
   `?v. res = INL v` by metis_tac[] >>
@@ -2298,9 +1625,7 @@ Resume assign_toplevel_bad_slot_outcome[success]:
   fs[storage_trace_domain_def, valid_horizon_def, storage_observations_ok_def,
      storage_roots_fit_def, EVERY_APPEND, set_storage_def]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume assign_toplevel_bad_slot_outcome[exception]:
   fs[] >>
   `expr_exit res r` by metis_tac[] >>
@@ -2308,16 +1633,13 @@ Resume assign_toplevel_bad_slot_outcome[exception]:
   disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  fs[halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise assign_toplevel_bad_slot_outcome
-*)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_storage_empty_stmt_frag[local]:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -2390,7 +1712,7 @@ Proof
                     (fn th => rewrite_tac[GSYM th]) >>
                   simp[gas_explicit_def]) >>
               simp[]) >>
-          simp[exit_result_def, stmt_exit_def, expr_exit_def]) >>
+          simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def]) >>
       `~s0.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
         (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
          fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
@@ -2495,28 +1817,7 @@ Proof
   simp[bind_def] >> strip_tac >>
   gvs[AllCaseEqs(), stmt_res_ok_def]
 QED
-*)
-Theorem assign_storage_empty_stmt_frag[local]:
-  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    has_length_word (expr_type e) /\ is_empty_value_expr e /\
-    expr_type e = typ /\ (!elem n. typ <> ArrayT elem (Dynamic n)) /\
-    (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    cenv.ce_hashmap_info (src,id) = NONE /\
-    (!gs v st. (do result <- eval_expr cx e; read_result cx result od)
-       (es with gas_obs := gs) = (INL v,st) ==> value_has_type tvt v) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-        (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_copy_success_run[local]:
   !H0 ctx func cenv cx e es es1 es' v tv tr slot sa sm sf op loc s0 s1.
     expr_post H0 ctx func cenv cx e es sa sm s0 es1 v op s1 /\
@@ -2603,54 +1904,10 @@ Proof
   conj_tac >- metis_tac[] >>
   metis_tac[]
 QED
-*)
-Theorem storage_copy_success_run[local]:
-  !H0 ctx func cenv cx e es es1 es' v tv tr slot sa sm sf op loc s0 s1.
-    expr_post H0 ctx func cenv cx e es sa sm s0 es1 v op s1 /\
-    ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
-    s1.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ value_has_type tv v /\
-    lowered_value_type cenv e = expr_type e /\
-    type_memory_bytes cenv (expr_type e) = type_memory_size tv /\
-    0 < type_slot_size tv /\ slot + type_slot_size tv <= dimword (:256) /\
-    write_storage_slot cx tr (n2w slot) tv v es1 = (INL (),es') /\
-    lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-    compile_assign_value cenv (Lit (n2w slot))
-      (if tr then LocTransient else LocStorage) op F loc
-      (expr_type e) (expr_type e) (type_memory_size tv) sm = ((),sf) /\
-    fn_has_code sa sm func /\ fn_has_code sm sf func /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel H0 ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F ctx func s1 0 (OK t) /\
-      (!H. expr_post H ctx func cenv cx e es sa sm s0 es1 v op s1 /\
-           MEM (tr,(n2w slot :256 word),tv) (FST H) /\ regions_consistent (FST H) /\
-           storage_locks_separated (FST H) (SND H) ==>
-           stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
-      t.vs_current_bb = sf.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
-             lookup_var x t = SOME u) /\
-      (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent) /\
-      t.vs_memory = s1.vs_memory /\
-      (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
-        aid < sa.cs_next_id /\
-        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-          off + sz <= b \/ b + sz' <= off) ==>
-        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory)
-Proof
-  cheat
-QED
 
 
 (* Assignment to a non-word ABI-static storage or transient variable.
    The region fits the slot space and is apart from other declared regions. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_assign_storage_copy_stmt_frag:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt.
@@ -2785,7 +2042,7 @@ Proof
         `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
         `r`] >>
       fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
-         write_storage_slot_eq, stmt_exit_def]) >>
+         write_storage_slot_eq, stmt_exit_def, halt_exit_def]) >>
   drule typed_storage_copy_write >>
   disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
@@ -2851,35 +2108,4 @@ Proof
   simp[] >>
   drule eval_read_preserves_scopes_dom >>
   simp[Abbr `ef`, Abbr `ee'`, set_storage_def] >> metis_tac[]
-QED
-*)
-Theorem compile_assign_storage_copy_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
-   tvt.
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    expr_type e = typ /\ lowered_value_type cenv e = expr_type e /\
-    ~is_word_type typ /\
-    (!elem n. typ <> ArrayT elem (Dynamic n)) /\
-    (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    ~is_abi_dynamic cenv.ce_struct_fields typ /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    0 < type_slot_size tvt /\
-    type_memory_bytes cenv typ = type_memory_size tvt /\
-    cenv.ce_hashmap_info (src, id) = NONE /\
-    cenv.ce_module_var_type (src, id) = SOME typ /\
-    (!gs v es1.
-       (do result <- eval_expr cx e; read_result cx result od)
-         (es with gas_obs := gs) = (INL v, es1) ==>
-       value_has_type tvt v) /\
-    expr_sim ctx func cenv cx (expr_type e) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-         (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
-      es
-Proof
-  cheat
 QED
