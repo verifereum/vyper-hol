@@ -32,16 +32,17 @@ Proof
       REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
       disch_then irule >> simp[]) >>
   Cases_on `h` >> gvs[asm_unused_label_def] >>
+  rename1 `AsmLabel l0` >>
   irule asm_refines_own_trans >>
   qexists_tac `pfx ++ sfx` >>
   `!l. MEM l (asm_label_refs (pfx ++ sfx)) ==> MEM l used`
-    by (qpat_assum `!l. MEM l (asm_label_refs (pfx ++ AsmLabel s :: sfx)) ==> _`
+    by (qpat_assum `!l. MEM l (asm_label_refs (pfx ++ AsmLabel l0 :: sfx)) ==> _`
           mp_tac >>
         simp[label_refs_append, asm_label_refs_def]) >>
-  `~MEM s (asm_label_refs (pfx ++ AsmLabel s :: sfx))`
+  `~MEM l0 (asm_label_refs (pfx ++ AsmLabel l0 :: sfx))`
     by metis_tac[] >>
   simp[] >>
-  first_x_assum (qspecl_then [`pfx`, `s`, `sfx`] mp_tac) >>
+  first_x_assum (qspecl_then [`pfx`, `l0`, `sfx`] mp_tac) >>
   REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   simp[]
 QED
