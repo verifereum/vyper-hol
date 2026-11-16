@@ -431,11 +431,12 @@ val local_body_fragment_contract = ``
     (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt stmts))
     (eval_stmts cx stmts) ee``;
 
+(* Literal delivered C1.5.1 eliminator, up to consistent variable renaming.
+   Its source parameter stays general; callers specialize to eval_stmts. *)
 val local_body_outcome_contract = ``
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ bc (stmts_env bc lctx ret_ty stmts)
-    (stmts_env bc lctx ret_ty (MAP gas_shadow_stmt stmts))
-    (eval_stmts cx stmts) ee /\
+    (stmts_env bc lctx ret_ty (MAP gas_shadow_stmt stmts)) source ee /\
   stmts_env bc lctx ret_ty stmts sa = (cenv',sb) /\
   stmts_env bc lctx ret_ty (MAP gas_shadow_stmt stmts) shadow_sa =
     (cenv',shadow_sb) /\
@@ -449,7 +450,7 @@ val local_body_outcome_contract = ``
   ret_pc_ok bc sa s0 /\
   (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~block_is_terminated sa /\
-  gas_admissible (eval_stmts cx stmts) (stmt_res_ok lctx) ee /\
+  gas_admissible source (stmt_res_ok lctx) ee /\
   return_buf_frame d bc sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
@@ -460,7 +461,7 @@ val local_body_outcome_contract = ``
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_stmts cx stmts) (ee,s0,G0,tn0)
+    (cx_tops cx) cx st0 source (ee,s0,G0,tn0)
     (\H res mid G tn t. mid.gas_obs = [] /\ ?cenv''.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
@@ -592,7 +593,8 @@ val _ = if null (free_vars final_local_consumer_contract) andalso
    remain outside all valid-H conclusions. Closure binds their free variables,
    not their existential endpoints. The two private body contracts are
    RangeBody:64-85 minus size=32, and bodySimFull:198-254 specialized to stmts
-   and bc, with ONLY mid.gas_obs=[] added to the normal post. The handler is
+   and bc (source kept general as in the delivered eliminator), with ONLY
+   mid.gas_obs=[] added to the normal post. The handler is
    Rounds:327-359 with the two rich exception predicate replacements.
    restricted_for_fragment adds bd/name and the local-Name equality to the
    literal frozen root. Final and proposed internal terms have respectively
