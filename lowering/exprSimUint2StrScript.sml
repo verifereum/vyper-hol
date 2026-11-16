@@ -2944,7 +2944,8 @@ Proof
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
+  >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >>
+      gvs[expr_exit_def, halt_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -2964,7 +2965,10 @@ Proof
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  `builtin_result cx ee.accounts ann bt [expr_type e] [v] <> INR HaltException` by
+    (simp[builtin_result_def] >> CASE_TAC >> simp[]) >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+  gvs[halt_exit_def]
 QED
 
 Theorem vv_post_prefix_frag:
