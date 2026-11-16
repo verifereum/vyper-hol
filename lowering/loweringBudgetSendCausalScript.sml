@@ -140,8 +140,14 @@ Proof
   >- metis_tac[] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   `n = 1` by decide_tac >> gvs[] >>
+  `active_inst q.bp_fn ai q.bp_state` by
+    (drule embedded_current_active_inst >>
+     disch_then (qspecl_then [`q.bp_state`,`ai`] mp_tac) >>
+     simp[EL_APPEND, Abbr `ai`]) >>
+  rename1 `eval_operand (Var ov) q.bp_state = SOME 0w` >>
   irule lower_budget_path_assert_zero >>
-  conj_tac >- (qexistsl_tac [`ai`,`Var out`] >> simp[Abbr `ai`, mk_inst_def]) >>
-  `?i. active_inst q.bp_fn i q.bp_state` by metis_tac[lower_budget_path_cases] >>
-  metis_tac[]
+  reverse conj_tac >- metis_tac[] >>
+  qexistsl_tac [`ai`,`Var ov`] >>
+  gvs[Abbr `ai`, mk_inst_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
 QED
