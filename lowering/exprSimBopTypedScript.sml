@@ -260,7 +260,11 @@ Resume compile_bop_typed_sim[right_normal]:
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ out _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
      disch_then (qspec_then `[]` mp_tac) >>
-     strip_tac >> gvs[bop_result_def, AllCaseEqs()]) >>
+     strip_tac >>
+     qpat_x_assum `_ = (bop_result _ _ _ _ _ _ _, _)`
+       (fn th => qpat_x_assum `_ = (out, _)` (mp_tac o TRANS (SYM th))) >>
+     rpt (pop_assum kall_tac) >>
+     simp[bop_result_def, AllCaseEqs()]) >>
   qexistsl_tac [`out`, `end_es`, `end_r`] >>
   fs[halt_exit_def] >> metis_tac[]
 QED
