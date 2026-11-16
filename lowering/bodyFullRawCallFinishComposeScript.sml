@@ -556,9 +556,62 @@ Proof
      strip_tac >>
      gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
          venomStateTheory.update_var_def]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+    valid_horizon cx st0 H esK.storage_trace /\
+    storage_well_formed_on cx es2 (FST H)` by
+    (qx_gen_tac `H` >> strip_tac >>
+     `valid_horizon cx st0 H esK.storage_trace` by
+       (qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _`
+          (mp_then (Pat `_ _ = (_,_)`) mp_tac valid_horizon_frame) >>
+        simp[vyperStorageTraceTheory.storage_trace_frame_raw_call]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `!H. _ ==> expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`eval_raw_call _ _ _ _ _ _ esK = _`,
+        `valid_horizon cx st0 H es2.storage_trace`,
+        `storage_well_formed_on cx esK (FST H)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`)
+       vyperFiniteStoragePreservationTheory.eval_raw_call_preserves_storage_well_formed_on >>
+     disch_then irule >> fs[valid_horizon_def]) >>
+  `(!aid lb sz. aid < sa.cs_next_id /\ FLOOKUP t7.vs_allocas aid=SOME(lb,sz) ==>
+     regions_disjoint (if flags.rcf_max_outsize=0 then ob else ob+32)
+       (LENGTH (TAKE flags.rcf_max_outsize outcome.co_returnData)) lb sz) /\
+   (!name lb sz. local_region cenv es.scopes s0 name lb sz ==>
+     regions_disjoint (if flags.rcf_max_outsize=0 then ob else ob+32)
+       (LENGTH (TAKE flags.rcf_max_outsize outcome.co_returnData)) lb sz)` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ci_mono sa s1`, `ci_mono s1 s2`, `ci_mono s2 s3`,
+        `ci_mono s3 s4`, `ci_mono s4 s5`, `ci_mono s5 s6`,
+        `stmt_state_rel _ ctx func cenv cx esK t7`,
+        `FLOOKUP t7.vs_allocas s6.cs_next_id = _`,
+        `flags.rcf_max_outsize <= _`, `wb_frame cenv es esK sa s0 t7`,
+        `local_ptrs_reserved cenv sa`,
+        `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==> lb+sz <= _ \/ _ <= lb`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac
+     >- (Cases_on `flags.rcf_max_outsize=0` >>
+         fs[loweringStateRelDefsTheory.regions_disjoint_def,
+            exprLoweringPropsTheory.ci_mono_def] >>
+         `aid <> s6.cs_next_id` by decide_tac >>
+         `ob + (((flags.rcf_max_outsize+31) DIV 32)*32+32) <= lb \/ lb+sz <= ob` by
+           (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+               venomMemDefsTheory.alloca_inv_def,
+               venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]) >>
+         simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+     `local_region cenv esK.scopes t7 name lb sz` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        goal_assum (drule_at Any) >>
+        fs[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >>
+        metis_tac[]) >>
+     first_x_assum drule >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
+     decide_tac) >>
   qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _` mp_tac >>
+  qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-  FAIL_TAC "source outcome packaging"
+  FAIL_TAC "frame and branch assembly"
 QED
 
 Resume raw_call_finish_from_result_bridges[static_value_abort]:
