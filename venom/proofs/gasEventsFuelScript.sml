@@ -90,3 +90,75 @@ Resume gas_events_fuel_extension[blocks]:
 QED
 
 Finalise gas_events_fuel_extension
+
+Theorem gas_events_current_fuel_prefix:
+  n <= m ==>
+  ?extra.
+    (case lookup_block s.vs_current_bb func.fn_blocks of
+       NONE => []
+     | SOME bb =>
+         gas_events_block m ctx func.fn_name bb s ++
+         (case exec_block m ctx bb s of
+            OK u => if u.vs_halted then []
+                    else gas_events_blocks m ctx func u
+          | _ => [])) =
+    (case lookup_block s.vs_current_bb func.fn_blocks of
+       NONE => []
+     | SOME bb =>
+         gas_events_block n ctx func.fn_name bb s ++
+         (case exec_block n ctx bb s of
+            OK u => if u.vs_halted then []
+                    else gas_events_blocks n ctx func u
+          | _ => [])) ++ extra
+Proof
+  strip_tac >>
+  Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >> simp[] >>
+  rename1 `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` >>
+  drule (cj 2 gas_events_fuel_extension) >>
+  disch_then (qspecl_then [`ctx`, `func.fn_name`, `bb`, `s`]
+    strip_assume_tac) >>
+  Cases_on `exec_block n ctx bb s` >> gvs[]
+  >- (Cases_on `v.vs_halted` >> simp[gas_events_fuel_extension]) >>
+  simp[APPEND_ASSOC] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Theorem gas_events_current_nonterminator:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst n ctx inst s = OK u /\
+  ~is_terminator inst.inst_opcode ==>
+  (case lookup_block s.vs_current_bb func.fn_blocks of
+     NONE => []
+   | SOME bb =>
+       gas_events_block n ctx func.fn_name bb s ++
+       (case exec_block n ctx bb s of
+          OK v => if v.vs_halted then []
+                  else gas_events_blocks n ctx func v
+        | _ => [])) =
+  gas_events_step n ctx func.fn_name inst s ++
+  (case lookup_block (u with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
+          func.fn_blocks of
+     NONE => []
+   | SOME bb =>
+       gas_events_block n ctx func.fn_name bb
+         (u with vs_inst_idx := SUC s.vs_inst_idx) ++
+       (case exec_block n ctx bb
+               (u with vs_inst_idx := SUC s.vs_inst_idx) of
+          OK v => if v.vs_halted then []
+                  else gas_events_blocks n ctx func v
+        | _ => []))
+Proof
+  strip_tac >>
+  drule_all venomInstProofsTheory.step_preserves_control_flow >>
+  strip_tac >>
+  `gas_events_block n ctx func.fn_name bb s =
+     gas_events_step n ctx func.fn_name inst s ++
+     gas_events_block n ctx func.fn_name bb
+       (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule gas_events_block_nonterminator >> simp[]) >>
+  `exec_block n ctx bb s =
+     exec_block n ctx bb (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (CONV_TAC (LHS_CONV (REWR_CONV exec_block_def)) >> simp[]) >>
+  simp[APPEND_ASSOC]
+QED
