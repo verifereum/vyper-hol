@@ -456,7 +456,7 @@ Proof
       conj_tac
       >- (irule gas_marked_exec_bind_exception >> goal_assum drule) >>
       simp[GSYM expr_exit_exception_transport] >>
-      disj2_tac >> rpt strip_tac >> metis_tac[]) >>
+      disj2_tac >> rpt strip_tac >> fs[halt_exit_def] >> metis_tac[]) >>
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[force_exempt_cert]
 QED
