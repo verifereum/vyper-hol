@@ -1,6 +1,7 @@
 Theory o1FmpOpcodePreservation
 Ancestors
-  fmpLowerDefs fmpStepPredicateTransport fmpStepRewrite
+  fmpLowerDefs fmpStepPredicateTransport
+  fmpStepRewrite fmpStepRewriteSupply fmpStepRewriteOrigin
   fmpStepRestrictionClosure callLayoutDefs venomInst list
 
 Theorem fmp_lower_inst_opcode_absence[local]:

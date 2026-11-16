@@ -3019,12 +3019,13 @@ Proof
 QED
 
 Theorem compile_create_blueprint_check_labels:
-  !target offset s.
-    cs_extends s (SND (compile_create_blueprint_check target offset s)) /\
+  !is_lit target offset s.
+    cs_extends s (SND (compile_create_blueprint_check is_lit target offset s)) /\
     EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_create_blueprint_check target offset s)))
+      (SND (compile_create_blueprint_check is_lit target offset s)))
 Proof
-  rpt gen_tac >> rewrite_tac[builtinCreateTheory.compile_create_blueprint_check_def] >>
+  rpt gen_tac >> Cases_on `is_lit` >>
+  simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
@@ -3180,8 +3181,9 @@ Proof
             compile_create_dispatch_labels, compile_create_copy_labels,
             compile_create_salt_labels, compile_create_blueprint_check_labels,
             compile_create_blueprint_args_labels, compile_create_blueprint_append_labels]) >>
+  rpt CASE_TAC >>
   simp[pairTheory.ELIM_UNCURRY, compile_create_blueprint_append_labels,
-       compile_raw_create_labels]
+       compile_raw_create_labels, lower_value_labels, comp_return_labels]
 QED
 
 Theorem compile_raw_revert_labels:

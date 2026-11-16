@@ -9,6 +9,9 @@ Ancestors
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* ===== The event's metadata ===== *)
 
 Theorem supported_event_fields_some[local]:
@@ -113,7 +116,7 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
+    irule_body_pre stmt_expr_body_pre >> simp[] >> metis_tac[]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;

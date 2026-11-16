@@ -39,7 +39,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
-  immutableLocationProps exprSimMapDefs
+  immutableLocationProps exprSimMapDefs supportedNameRoot
 Libs
   monadsyntax
 
@@ -165,6 +165,58 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* A name const_name_root marks is a constant declaration of tops: neither a
+   place root, storage nor an immutable, so supported code never names one. *)
+Theorem body_inv_const_name_decl:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ?vis c ty slot.
+    supported_variable_decl tops nsid = SOME (vis,Constant c,ty,slot)
+Proof
+  strip_tac >>
+  `cx_tops cx = tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def, gasContextTheory.cx_tops_module] >>
+  PairCases_on `nsid` >> gvs[cx_const_name_def] >>
+  drule_all distinct_module_consts_env_names_constant >> simp[]
+QED
+
+Theorem body_inv_const_name_not_root:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ~supported_place_root tops nsid /\
+  (!ty. ~supported_storage_value tops nsid ty) /\
+  supported_immutable_type tops nsid = NONE
+Proof
+  strip_tac >> drule_all body_inv_const_name_decl >> strip_tac >>
+  drule supported_constant_decl_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_root:
+  body_inv tops ctx cenv cx ==>
+  !x. const_name_root cx x ==>
+    ?ty id. x = TopLevelName ty id /\
+      ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
+      supported_immutable_type tops id = NONE
+Proof
+  rpt strip_tac >> Cases_on `x` >> gvs[const_name_root_def] >>
+  drule_all body_inv_const_name_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_expr tops e ==>
+  ~supported_expr_exists (const_name_root cx) e
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  drule_all supported_expr_no_name_root >> simp[]
+QED
+
+Theorem body_inv_target_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_target_info tops bindings bt <> NONE ==>
+  ~supported_target_exists (const_name_root cx) bt
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  irule (cj 2 supported_target_info_no_name_root) >> metis_tac[]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose

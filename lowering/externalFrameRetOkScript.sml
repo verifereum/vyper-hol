@@ -3,15 +3,15 @@
 Theory externalFrameRetOk
 Ancestors
   e2eDefs bodySimFull supportedProgram compileVyper moduleLowering
-  vyperInterpreter
+  vyperInterpreter externalReturnNoneFullFrag externalReturnValuedFull
+  externalReturnPackage exprSimHypsDefs vyperState vyperContext vyperTypeCallGraph
+  entryReachBodyFmp
 
 val _ = Parse.hide "body";
 
 (* The selected frame's two Return producers, NONE and valued, discharge
    the frame's return continuation at every valid horizon.
-   STAGED HEADER: the proof is the Cases_on `eo` composition of
-   return_selected_none_frag_full and return_selected_valued_frag_full,
-   added once those producers land. *)
+   Both producers share the selected package and actual return endpoint. *)
 Theorem external_frame_ret_ok_full:
   !DF lo d shadow_ctx PG func shadow_func tops rpolicy unit am tx ret vs
    mut args fbody env lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
@@ -45,5 +45,55 @@ Theorem external_frame_ret_ok_full:
             ee.requests) r)
       cenv ret
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    metis_tac[entry_runtime_no_dalloca] >>
+  drule source_deployment_context >> strip_tac >>
+  simp_tac std_ss [frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  `ut' = T` by
+    (drule return_package_target_inversion >> strip_tac >>
+     drule return_package_metadata >> simp[]) >> gvs[] >>
+  `cenv'.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
+      tx.function_name External tops` by
+    (drule return_package_target_inversion >> strip_tac >>
+     drule return_package_metadata >> strip_tac >>
+     drule return_register_metadata >> strip_tac >>
+     drule return_same_frame_metadata >> simp[]) >>
+  Cases_on `eo` >> simp[]
+  >- (mp_tac (Q.INST [`DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`,
+      `ctx` |-> `unit.cu_context`, `shadow_ctx` |-> `shadow_ctx`,
+      `PG` |-> `PG`, `func` |-> `func`, `shadow_func` |-> `shadow_func`,
+      `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+      `target` |-> `rpolicy.rpol_target`, `ut` |-> `T`,
+      `nkey_map` |-> `K global_nonreentrant_slot`,
+      `rr` |-> `lookup_raw_return_or_F (NONE:num option)
+                  tx.function_name External tops`,
+      `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
+      `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
+      `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
+      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
+      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_none_frag_full) >>
+      impl_tac
+      >- (simp[initial_evaluation_context_def] >>
+          fs[initial_evaluation_context_def]) >> simp[]) >>
+  rename1 `stmt_exprs_ok cenv' (Return (SOME e))` >>
+  mp_tac (Q.INST [`DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`,
+      `ctx` |-> `unit.cu_context`, `shadow_ctx` |-> `shadow_ctx`,
+      `PG` |-> `PG`, `func` |-> `func`, `shadow_func` |-> `shadow_func`,
+      `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+      `target` |-> `rpolicy.rpol_target`, `ut` |-> `T`,
+      `nkey_map` |-> `K global_nonreentrant_slot`,
+      `rr` |-> `lookup_raw_return_or_F (NONE:num option)
+                  tx.function_name External tops`,
+      `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
+      `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
+      `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
+      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
+      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_valued_frag_full) >>
+  impl_tac
+  >- (simp[initial_evaluation_context_def, get_tenv_def] >>
+      fs[initial_evaluation_context_def, get_tenv_def,
+         int_calls_stmt_def, int_calls_expr_def]) >> simp[]
 QED

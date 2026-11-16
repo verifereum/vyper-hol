@@ -12,12 +12,16 @@ Ancestors
   supportedExprs vyperTypeSystem exprSimHyps allocLimits gasContext
   vyperAST vyperTypeCallGraph compileEnv exprSimHypsDefs vyperState
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* The reason simulates where the condition is false: both are pure, so
    the condition's evaluation keeps expr_sim_inv (expr_sim_pre_eval). *)
 Theorem assert_reason_vv_sim_mem[local]:
   !cx e se tops ctx func cenv env es gs es1.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_mem_ok cx se) /\
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
+    supported_string_reason tops se /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\ ~is_extcode se /\
     ~supported_expr_exists call_operands_effect_root se /\
@@ -36,6 +40,9 @@ Proof
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
   `body_expr_mem_ok cx se` by metis_tac[] >>
+  `~supported_expr_exists (const_name_root cx) se` by
+    (drule bodySimTheory.body_inv_const_name_root >> strip_tac >>
+     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
   `byte_widths_expr se /\ alloc_limits_expr cenv se` by
     (CCONTR_TAC >>
      qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
@@ -78,7 +85,7 @@ Proof
    ~supported_expr_exists call_operands_effect_root se` by
     simp[] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def, body_inv_def] >>
      qexists_tac `int_calls_assert_reason (AssertReason se)` >> simp[]) >>
