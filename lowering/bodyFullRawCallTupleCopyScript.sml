@@ -134,7 +134,16 @@ Proof
 QED
 
 Resume raw_call_tuple_copy_checked[checked]:
-  cheat
+  gen_tac >>
+  `~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
+   ~is_terminator i3.inst_opcode` by
+    simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+  simp[Abbr `G1`, Abbr `G2`, Abbr `G3`, Abbr `tn1`, Abbr `tn2`, Abbr `tn3`] >>
+  simp[inst_seq_ptr_def, instIdxIndepTheory.step_inst_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def] >>
+  conj_tac >- suspend "store_check" >>
+  conj_tac >- suspend "add_check" >>
+  suspend "copy_check"
 QED
 Resume raw_call_tuple_copy_checked[cover]:
   `FLOOKUP s.vs_vars p = SOME (n2w b)` by fs[lookup_var_def] >>
@@ -144,11 +153,13 @@ Resume raw_call_tuple_copy_checked[cover]:
        FLOOKUP_UPDATE]
 QED
 Resume raw_call_tuple_copy_checked[robust]:
-  simp[Abbr `w`, Abbr `v`, mcopy_update_var, update_var_def] >>
-  irule bool_pair_mstore_mcopy_robust >>
+  simp[Abbr `w`, Abbr `v`, Abbr `u`, mcopy_update_var, update_var_def] >>
+  MATCH_MP_TAC (SIMP_RULE (boss_ss()) [valueEncodingTheory.val_to_w256_def] bool_pair_mstore_mcopy_robust) >>
   simp[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
-       valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def, Abbr `u`, Abbr `cnt`] >>
-  decide_tac
+       valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def, Abbr `cnt`] >>
+  mp_tac (Q.SPEC `32` arithmeticTheory.DIVISION) >>
+  rewrite_tac [DECIDE ``0 < 32``] >>
+  disch_then (qspec_then `n+31` strip_assume_tac) >> decide_tac
 QED
 Resume raw_call_tuple_copy_checked[mask]:
   simp[]
@@ -171,5 +182,23 @@ QED
 Resume raw_call_tuple_copy_checked[state]:
   simp[Abbr `w`, Abbr `v`, mcopy_update_var, update_var_reset_vars,
        GSYM mcopy_reset_vars, Abbr `u`, GSYM mstore_reset_vars]
+QED
+Resume raw_call_tuple_copy_checked[store_check]:
+  irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >> simp[Abbr `i1`] >>
+  irule ptr_inst_ok_mstore >> simp[] >>
+  qpat_x_assum `ptr_covers G tn p s _` mp_tac >>
+  simp[bodyPtrDefsTheory.ptr_covers_def] >> rpt strip_tac >>
+  goal_assum (drule_at Any) >> simp[Abbr `cnt`] >> decide_tac
+QED
+Resume raw_call_tuple_copy_checked[add_check]:
+  irule ptr_inst_ok_lower_bound_transport >>
+  conj_tac >- (fs[Abbr `u`, allocas_from_def, mstore_def] >> metis_tac[]) >>
+  qexists_tac `0` >> simp[Abbr `i2`] >>
+  irule literal_add_ptr_inst_ok >> simp[] >>
+  qpat_x_assum `ptr_covers G tn p s _` mp_tac >>
+  simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def]
+QED
+Resume raw_call_tuple_copy_checked[copy_check]:
+  cheat
 QED
 Finalise raw_call_tuple_copy_checked
