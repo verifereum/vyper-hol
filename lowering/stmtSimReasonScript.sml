@@ -506,43 +506,6 @@ Proof
   simp[reason_vv_def, contextTheory.base_ptr_def]
 QED
 
-Theorem reason_prefix_revert_run[local]:
-  !is ds es s id off len.
-    reason_prefix ds is es /\ reason_known ds s /\
-    reason_operand es off /\ reason_operand es len ==>
-    ?t. run_inst_seq (is ++ [mk_inst id REVERT [off; len] []]) s =
-          Abort Revert_abort t /\ t.vs_labels = s.vs_labels
-Proof
-  rpt strip_tac >> drule_all reason_prefix_sound >> strip_tac >>
-  `?ow. eval_operand off t = SOME ow` by metis_tac[reason_operand_defined] >>
-  `?lw. eval_operand len t = SOME lw` by metis_tac[reason_operand_defined] >>
-  qpat_assum `run_inst_seq is s = OK t`
-    (mp_tac o MATCH_MP run_inst_seq_append) >>
-  disch_then (qspec_then `[mk_inst id REVERT [off; len] []]` mp_tac) >>
-  simp[run_inst_seq_def] >>
-  `step_inst_base (mk_inst id REVERT [off; len] []) t =
-    Abort Revert_abort (revert_state (set_returndata
-      (TAKE (w2n lw) (DROP (w2n ow) t.vs_memory ++ REPLICATE (w2n lw) 0w)) t))`
-    by (simp[venomInstTheory.mk_inst_def] >> irule step_revert_behavior >> simp[]) >>
-  simp[revert_state_def, set_returndata_def]
-QED
-
-Theorem compile_revert_reason_run[local]:
-  !cenv msg_ty buf msg_type msg_size sa sb s ds.
-    ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
-    reason_known ds s /\
-    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
-      msg_type msg_size sa = ((), sb) ==>
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    same_blocks sa sb /\
-    ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
-        t.vs_labels = s.vs_labels
-Proof
-  rpt strip_tac >>
-  drule_all compile_revert_reason_buf_certificate >> strip_tac >> simp[] >>
-  irule reason_prefix_revert_run >> metis_tac[]
-QED
-
 Theorem reason_prefix_revert_frag:
   !ctx sa sb ds es is id off len R.
     same_blocks sa sb /\

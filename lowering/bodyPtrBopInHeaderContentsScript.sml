@@ -72,7 +72,8 @@ Proof
   qpat_assum `vv_at _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[val_footprint_def, type_memory_size_def] >>
   qexistsl_tac [`fn`, `ctx`] >> simp[] >>
-  fs[ptr_vv_ok_def, wordsTheory.WORD_ADD_0]
+  fs[ptr_vv_ok_def, wordsTheory.WORD_ADD_0] >>
+  qexists_tac `H` >> first_assum ACCEPT_TAC
 QED
 
 Theorem membership_located_slot_header:

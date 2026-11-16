@@ -1558,6 +1558,10 @@ Definition lower_vyper_runtime_unit_def:
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+       EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+       EVERY no_neg_exp_fn
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       if EXISTS external_has_defaults ext_fns then
@@ -1588,26 +1592,33 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
   classify_functions tops = (ext_fns,int_fns,fb_fn,ctor_fn) /\
   ~EXISTS external_has_defaults ext_fns ==>
   lower_vyper_runtime_unit tops rpolicy =
-    let tenv = type_env tops in
-    let nkey_map = (K global_nonreentrant_slot : string -> num) in
-    let use_trans = T in
-    let selectors = build_selectors tenv ext_fns in
-    let external_fns = MAP
-      (set_external_package_target rpolicy.rpol_target o
-       package_external_fn tops use_trans nkey_map) ext_fns in
-    let runtime_int_fns = MAP
-      (set_internal_package_target rpolicy.rpol_target o
-       package_internal_fn tops use_trans nkey_map F 0) int_fns in
-    let fallback_fn = set_fallback_package_target rpolicy.rpol_target
-      (package_fallback_fn tops use_trans nkey_map fb_fn) in
     if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
          tops < 0x6000 ∧
-       EVERY external_return_buffer_ok external_fns ∧
+       EVERY external_return_buffer_ok
+         (MAP (set_external_package_target rpolicy.rpol_target o
+           package_external_fn tops T
+             (K global_nonreentrant_slot : string -> num)) ext_fns) ∧
        EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+       EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+       EVERY no_neg_exp_fn
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
-      run_lowering selectors external_fns runtime_int_fns fallback_fn rpolicy
-        0 0 ([]:dense_bucket list) (build_dense_entry_info selectors external_fns)
+      run_lowering
+        (build_selectors (type_env tops) ext_fns)
+        (MAP (set_external_package_target rpolicy.rpol_target o
+          package_external_fn tops T (K global_nonreentrant_slot : string -> num)) ext_fns)
+        (MAP (set_internal_package_target rpolicy.rpol_target o
+          package_internal_fn tops T (K global_nonreentrant_slot : string -> num) F 0) int_fns)
+        (set_fallback_package_target rpolicy.rpol_target
+          (package_fallback_fn tops T
+            (K global_nonreentrant_slot : string -> num) fb_fn)) rpolicy
+        0 0 ([]:dense_bucket list)
+        (build_dense_entry_info (build_selectors (type_env tops) ext_fns)
+          (MAP (set_external_package_target rpolicy.rpol_target o
+            package_external_fn tops T
+              (K global_nonreentrant_slot : string -> num)) ext_fns))
         "__entry"
     else NONE
 Proof
@@ -1640,6 +1651,21 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+(* A unit that lowers has its constants free of Sha256 and of negative
+   literal exponents, and so have its substituted functions. *)
+Theorem lower_vyper_runtime_unit_consts_guard:
+  ∀tops rpolicy unit exts ints fb ctor.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+    EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+    EVERY no_neg_exp_fn
+      (exts ++ ints ++ (case fb of NONE => [] | SOME f => [f]))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()]
+QED
+
 (* Only __init__ may be a Deploy function, as the constructor.
    Mirrors Python: vyper/semantics/types/function.py
    (ContractFunctionT.from_FunctionDef: "Only constructors can be marked as
@@ -1670,6 +1696,10 @@ Definition lower_vyper_deploy_unit_def:
           else [] in
     if ¬(immutables_len < 0x6000) ∨
        ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
+       ¬EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∨
+       ¬EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∨
+       ¬EVERY no_neg_exp_fn
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
        ¬ctor_named_init ctor_fn
     then NONE else
@@ -1704,6 +1734,20 @@ Theorem lower_vyper_deploy_unit_ctor_named_init:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
+
+(* A deploy unit that lowers has its constants free of Sha256 and of
+   negative literal exponents, and so have its substituted functions. *)
+Theorem lower_vyper_deploy_unit_consts_guard:
+  ∀tops rpolicy bytes unit exts ints fb ctor.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+    EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+    EVERY no_neg_exp_fn (ints ++ (case ctor of NONE => [] | SOME f => [f]))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs(), combinTheory.o_DEF, SF ETA_ss]
 QED
 
 (* A deploy unit that lowers has the constructor's and every internal

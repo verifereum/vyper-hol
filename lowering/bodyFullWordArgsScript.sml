@@ -47,7 +47,7 @@ Theorem lower_word_args_sim_full:
         ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
         EVERY (\x. op_taint tn x = {}) xs)
-      (\H rr mid gt r. wb_args_exit rr r)
+      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil] >> rpt strip_tac >>
@@ -133,7 +133,8 @@ Proof
       goal_assum (drule_at Any) >> conj_tac
       >- simp[] >>
       simp[Abbr `headR`, wb_args_exit_def] >>
-      Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+      Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def,
+        exprSimDefsTheory.halt_exit_def]) >>
   BETA_TAC >> rpt gen_tac >> strip_tac >>
   `?v. res = INL v` by
     (qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
@@ -191,7 +192,7 @@ Proof
         ghost_inv_at (DF H) lo d cenv cx fin G tn u /\
         ghost_kept_at lo cenv mid s1 G1 tn1 t G tn /\
         EVERY (\x. op_taint tn x = {}) ys)
-      (\H rr fin gt r. wb_args_exit rr r)` by
+      (\H rr fin gt r. wb_args_exit rr r /\ halt_exit H cx fin rr r)` by
     (first_x_assum irule >> simp[] >>
      rpt conj_tac
      >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
@@ -227,7 +228,7 @@ Proof
     (fn th => irule_at Any th) >>
   reverse conj_tac
   >- (simp[Abbr `Rtail`] >> rpt strip_tac >>
-      Cases_on `res'` >> gvs[wb_args_exit_def]) >>
+      Cases_on `res'` >> gvs[wb_args_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   simp[Abbr `Qtail`] >> rpt strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
     (`valid_horizon cx st0 H (mid with gas_obs := xs).storage_trace` suffices_by simp[] >>

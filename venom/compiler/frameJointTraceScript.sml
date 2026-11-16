@@ -160,3 +160,15 @@ Proof
   qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
   rewrite_tac[joint_transition_return] >> metis_tac[]
 QED
+
+Theorem joint_chain_endpoint:
+  !es q qs r. joint_chain ctx q es qs r ==> EL (LENGTH es) (q::qs) = r
+Proof
+  Induct >> Cases_on `qs` >> simp[joint_chain_def] >> metis_tac[]
+QED
+
+Theorem joint_trace_endpoint:
+  joint_trace vs0 ctx q0 es qs q ==> EL (LENGTH es) (q0::qs) = q
+Proof
+  simp[joint_trace_def] >> metis_tac[joint_chain_endpoint]
+QED

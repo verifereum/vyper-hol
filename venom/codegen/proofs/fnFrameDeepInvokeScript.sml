@@ -12,7 +12,7 @@
 Theory fnFrameDeepInvoke
 Ancestors
   deepResidualSim deepResidualBudget fnPlanPrefix fnFrameBoundary fnFrameBoundaryInvoke
-  fnFrameBoundaryGenRet
+  fnFrameBoundaryGenRet venomOperandProps
   fnFrameBoundaryEntryParams fnFrameTerminalPrep genFrameSim frameRel contextCodegenRel
   codegenRel regularPostfixSim preparedPrefixSim asmFrame prefixSim stackOpSim
   doSwapSim cleanOpsSim planAlign foldlSim strongPrefixSim prefixExec blockSimHelpers unitShapeDefs genBlockSim

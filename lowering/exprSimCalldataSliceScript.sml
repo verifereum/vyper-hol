@@ -16,7 +16,7 @@
  * Also exported: bytes_buffer_write_encoding, bytes_buffer_write_state_rel,
  *   bytes_buffer_write_frame (a bytes value written into a fresh buffer);
  *   mstore_equal_memory, write_memory_with_expansion_equal_memory;
- *   vv_at_start_mono, vv_post_prefix_frame;
+ *   vv_post_prefix_frame;
  *   compile_unary_builtin_rel_vv_sim (a unary builtin whose counted suffix
  *   also has the entry state relation).
  *)
@@ -30,7 +30,7 @@ Ancestors
   exprSimProps
   exprSimHypsDefs
   exprSimDefs
-  loweringPosts
+  loweringPosts vvOrigin
   exprSimAlloc
   allocLimits
   list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
@@ -958,55 +958,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[]
 QED
 
-Theorem slice_calldata_frag[local]:
-  !ctx func cenv cx e es sa sb op p n a s0 res.
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
-    (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
-  expr_type e = BaseT (BytesT (Dynamic n)) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ context_well_typed cx /\
-  0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
-  32 + 32 * word_size n < 2 ** 64 /\
-  (!x. op = Var x ==> not_fresh_at sa x) /\ storage_well_formed_on cx es (FST H) /\
-  res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
-           INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
-         eval_operand op s = SOME (n2w a))
-    (\t. ?tv. res = INL tv /\ vv_post H ctx func cenv cx e es sa sb s0 es tv
-           (LocatedValue (expr_type e) p) t)
-    (expr_exit res)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule slice_calldata_shape >> strip_tac >>
-  gvs[same_blocks_def] >>
-  irule frag_exec_run_inst_seq >>
-  simp[rich_listTheory.IS_PREFIX_APPEND] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
-    [wordsTheory.dimword_def] slice_calldata_run) >>
-  Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
-  gns[wordsTheory.dimword_def] >> strip_tac
-  >- (disj2_tac >> qexistsl_tac [`Revert_abort`,`t`] >> simp[] >>
-      Cases_on `dimword (:256) <= a+n` >>
-      fs[wordsTheory.dimword_def] >>
-      simp[CONV_RULE numLib.REDUCE_CONV
-        evaluate_calldata_slice_uint, expr_exit_def]) >>
-  disj1_tac >> qexists_tac `t` >> simp[] >>
-  `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  simp[evaluate_calldata_slice_uint] >>
-  qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
-  asm_rewrite_tac[] >>
-  `t = t with vs_inst_idx := t.vs_inst_idx` by
-    simp[venom_state_component_equality] >>
-  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule slice_calldata_vv_post >> simp[] >>
-  conj_tac >- (rpt strip_tac >> first_x_assum irule >>
-                qexists_tac `aid` >> simp[]) >>
-  qexists_tac `sa.cs_next_id + 7` >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> qexists_tac `nm` >> simp[]
-QED
-
 Theorem slice_calldata_path[local]:
   !ctx func cenv cx e es sa sb op p n a s0 bres st0 tr.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
@@ -1080,21 +1031,6 @@ Proof
   >- first_assum ACCEPT_TAC >>
   first_assum ACCEPT_TAC) >>
   gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
-QED
-
-Theorem vv_at_start_mono:
-  sa.cs_next_id <= sm.cs_next_id /\
-  vv_at cenv cx ty sm sb es tv vv u ==>
-  vv_at cenv cx ty sa sb es tv vv u
-Proof
-  Cases_on `vv` >> simp[vv_at_def, expr_val_at_def] >>
-  rpt strip_tac >> gvs[]
-  >>~- ([`FLOOKUP u.vs_allocas aid = SOME (b,sz)`],
-        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
-        first_assum ACCEPT_TAC)
-  >>~- ([`local_region cenv es.scopes u n b sz`],
-        disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[])
-  >> metis_tac[]
 QED
 
 Theorem vv_own_start_mono:

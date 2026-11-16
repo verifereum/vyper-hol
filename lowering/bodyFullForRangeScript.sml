@@ -2927,16 +2927,22 @@ Resume body_for_range_checked_full[selected_second]:
          else INR (Error (RuntimeError "For too long"))`,`tc`] >>
       simp[fragExecTheory.exit_result_def] >>
       (conj_tac >-
-        (qunabbrev_tac `bad1` >> qunabbrev_tac `bad2` >>
-         Cases_on `n2 < n1` >>
-         fs[GSYM integerTheory.INT_NOT_LE,get_range_limits_def,
-            lift_sum_def,bind_def,ignore_bind_def,return_def,raise_def,
-            check_def,assert_def,compatible_bound_def] >>
-         `~(Num (n2 - n1) <= n)` by
-           (qpat_assum `w2n _ > _` mp_tac >>
-            qpat_assum `w2n _ = Num (n2 - n1)` (fn th => rewrite_tac[th]) >>
-            `n MOD dimword (:256) = n` by simp[arithmeticTheory.LESS_MOD] >>
-            simp[] >> decide_tac) >> simp[])) >>
+        (map_every (fn pat => qpat_assum pat mp_tac)
+           [`bad1 \/ bad2`, `Abbrev (bad1 = _)`, `Abbrev (bad2 = _)`,
+            `n1 <= n2 ==> _`, `n < dimword (:256)`] >>
+         POP_ASSUM_LIST (K ALL_TAC) >> ntac 5 disch_tac >>
+         qunabbrev_tac `bad1` >> qunabbrev_tac `bad2` >>
+         Cases_on `n2 < n1`
+         >- fs[GSYM integerTheory.INT_NOT_LE,get_range_limits_def,
+                 lift_sum_def,bind_def,ignore_bind_def,return_def,raise_def,
+                 check_def,assert_def,compatible_bound_def] >>
+         `n1 <= n2` by intLib.COOPER_TAC >>
+         `w2n (i2w n2 - i2w n1 : bytes32) = Num (n2 - n1)` by
+           metis_tac[] >>
+         `n MOD dimword (:256) = n` by simp[arithmeticTheory.LESS_MOD] >>
+         `~(Num (n2 - n1) <= n)` by gvs[] >>
+         simp[get_range_limits_def,lift_sum_def,bind_def,ignore_bind_def,
+              return_def,raise_def,check_def,assert_def,compatible_bound_def])) >>
       gen_tac >> disch_tac >>
       (reverse conj_tac >-
         (Cases_on `bad1` >>
