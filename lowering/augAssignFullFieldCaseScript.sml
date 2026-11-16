@@ -477,7 +477,7 @@ Proof
   conj_tac
   >- (BETA_TAC >> irule gas_outcome_full_post_source >>
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-      simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+      simp[] >> rpt strip_tac >> gvs[exprSimDefsTheory.halt_exit_def]) >>
   qx_genl_tac [`marks`, `rhs`, `mid`, `Gr`, `tnr`, `u`] >>
   BETA_TAC >> strip_tac >>
   qabbrev_tac `H2 = storage_trace_horizon mid.storage_trace` >>
@@ -681,15 +681,61 @@ Proof
       (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
          stmt_state_rel H _ _ _ _ _ operated /\ _`
          (qspec_then `H2` mp_tac) >> simp[]) >>
-    `alloca_inv u /\ ~cx.txn.is_static /\ ~operated.vs_call_ctx.cc_static /\
+    `alloca_inv operated /\
+     (operated.vs_call_ctx.cc_static <=> cx.txn.is_static) /\
      operated.vs_call_ctx.cc_address = cx.txn.target` by
-      fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      (qpat_assum `stmt_state_rel H2 _ _ _ _ _ operated` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >>
+       simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+    Cases_on `cx.txn.is_static`
+    >- (`write_storage_slot cx tr field_key ftv result (mid with gas_obs := []) =
+           (INR (Error (RuntimeError "write in static context")),
+            mid with gas_obs := [])` by simp[write_storage_slot_eq] >>
+        `!D. gas_origin_ptr_path
+           (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+           (operated,Gop,tnop) []
+           (Abort ExHalt_abort (halt_state (set_returndata [] operated)),Gop,tnop)` by
+          (gen_tac >> irule storage_emit_static_origin_ptr >> simp[] >>
+           qexistsl_tac [`field_key`, `Var dv`, `s3`, `sb`, `tr`, `res_op`,
+             `val_to_w256 result`] >> simp[]) >>
+        irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+        qexistsl_tac [`Gop`, `mid with gas_obs := []`,
+          `Abort ExHalt_abort (halt_state (set_returndata [] operated))`,
+          `INR (Error (RuntimeError "write in static context"))`, `tnop`] >>
+        conj_tac
+        >- (gen_tac >>
+            qspecl_then [`cx`, `tr`, `field_key`, `ftv`, `result`,
+              `mid with gas_obs := []`, `tail`] mp_tac write_storage_slot_gas_obs >>
+            simp[lift_sum_def, bind_def, return_def, write_place_def]) >>
+        reverse conj_tac >- simp[exit_result_def] >>
+        simp[exit_result_def] >>
+        qx_gen_tac `H` >> strip_tac >>
+        conj_tac
+        >- (`gas_origin_ptr_path
+               (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+               (u,Gr,tnr) [] (OK operated,Gop,tnop)` by
+              (qpat_assum `!D lo. allocas_from lo u /\ lo <= u.vs_alloca_next ==> _`
+                 (qspecl_then [`DF H`, `lo`] mp_tac) >> simp[Abbr `operated`]) >>
+            qpat_assum `gas_origin_ptr_path _ (u,Gr,tnr) [] (OK operated,Gop,tnop)`
+              (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+            disch_then (qspecl_then [`operated`, `Gop`, `tnop`, `[]`,
+              `Abort ExHalt_abort (halt_state (set_returndata [] operated))`,
+              `Gop`, `tnop`] mp_tac) >> simp[]) >>
+        simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
+             exprSimDefsTheory.halt_exit_def, exit_result_def]) >>
+    `~operated.vs_call_ctx.cc_static` by simp[] >>
+    `alloca_inv u` by
+      (qpat_assum `expr_post H2 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >>
+       simp[expr_post_def, stmt_state_rel_def]) >>
+    `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s2 s3)` by
+      (irule augAssignPtrScalarCertificateTheory.scalar_code_nonterminators >>
+       goal_assum drule) >>
     `alloca_history func operated` by
       (simp[Abbr `operated`] >>
        qspecl_then [`emitted_insts s2 s3`, `s2`, `s3`, `u`, `oprun`]
          mp_tac bodyFullUnwrapRunTheory.emitted_alloca_history >>
-       simp[] >>
-       metis_tac[augAssignPtrScalarCertificateTheory.scalar_code_nonterminators]) >>
+       simp[]) >>
     Cases_on `write_storage_slot cx tr field_key ftv result (mid with gas_obs := [])` >>
     rename1 `write_storage_slot _ _ _ _ _ _ = (store_res,fin)` >>
     `store_res = INL ()` by
@@ -894,5 +940,5 @@ Proof
     `Abort Revert_abort (abort_state with vs_inst_idx := abort_idx)`,
     `INR (Error (RuntimeError msg))`, `tnabort`] >>
   simp[lift_sum_def, bind_def, raise_def, exit_result_def, stmt_exit_ptr_def,
-       exprSimDefsTheory.expr_exit_def]
+       exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
 QED
