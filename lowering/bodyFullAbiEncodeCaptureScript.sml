@@ -137,30 +137,6 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem capture_post_store_bound[local]:
-  expr_body_pre ce cx env e es_pre /\ ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rty /\
-  (!v. read_result cx raw ee = (INL v,ee) ==> value_has_type rty v) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv u ==>
-  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv u
-Proof
-  strip_tac >>
-  `post_value_type ce e = expr_type e \/
-   post_value_type ce e = lowered_value_type ce e` by
-    (Cases_on `e` >> simp[post_value_type_def] >>
-     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
-     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
-     IF_CASES_TAC >> simp[]) >>
-  Cases_on `post_value_type ce e = expr_type e` >- gvs[] >>
-  `post_value_type ce e = lowered_value_type ce e` by metis_tac[] >>
-  `~is_word_type (post_value_type ce e)` by metis_tac[post_value_type_nonword] >>
-  gvs[exprSimMemDefsTheory.vv_store_bound_def] >>
-  rpt strip_tac >> gvs[] >>
-  `val_store_size rty v <= type_memory_size rty` by
-    metis_tac[val_store_size_le, valueEncodingTypingTheory.value_has_type_val_wf] >>
-  decide_tac
-QED
-
 Theorem abi_encode_capture_endpoint_origin:
   compile_expr ce ety e sa = (vv,sm) /\
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
@@ -187,7 +163,7 @@ Theorem abi_encode_capture_endpoint_origin:
     vv_post H ctx func ce cx e es sa sm s0 ee raw vv s /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s) /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -272,7 +248,7 @@ Proof
       ptr_buf_ok ce e op Ga u) /\
     (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
       ptr_buf_ok ce e p.ptr_operand Ga u) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv u /\
+    vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv u /\
     (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
       ?v. read_result cx raw ee = (INL v,ee) /\
         !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
@@ -306,8 +282,6 @@ Proof
      simp[venomStateTheory.venom_state_component_equality]) >>
   `is_word_type (post_value_type ce e) ==> is_word_type (expr_type e)` by
     metis_tac[post_value_type_nonword] >>
-  `vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv u` by
-    (irule capture_post_store_bound >> metis_tac[]) >>
   drule_all unwrap_value_origin_ptr >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `~is_word_type (lowered_value_type ce e)` by
@@ -604,7 +578,7 @@ Theorem abi_encode_capture_origin:
     vv_post H ctx func ce cx e es sa sm s0 ee raw vv s /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s) /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\

@@ -62,7 +62,7 @@ Theorem abi_encode_capture_alloc_resources:
     ptr_buf_ok ce e op G s) /\
   (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv s /\
   (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
     ?v. read_result cx raw ee = (INL v,ee) /\
       !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
@@ -88,7 +88,7 @@ Theorem abi_encode_capture_alloc_resources:
     ptr_buf_ok ce e op Ga u) /\
   (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand Ga u) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv u /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv u /\
   (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
     ?v. read_result cx raw ee = (INL v,ee) /\
       !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
