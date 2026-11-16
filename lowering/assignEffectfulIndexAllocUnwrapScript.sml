@@ -70,8 +70,10 @@ Proof
   `sm.cs_next_id <= sn.cs_next_id` by decide_tac >>
   `vv_post H ctx func ce cx e es sa sn s0 ee tv vv t` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`,`sm`] >> simp[] >>
-     rpt strip_tac >> first_x_assum irule >>
-     irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `sn.cs_current_bb = sm.cs_current_bb /\
    sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)

@@ -92,7 +92,9 @@ Resume compile_bytes_ifexp_post_frag[allocation]:
   `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl [`s`, `sa`] >> simp[] >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
-     Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
+     conj_tac
+     >- (Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `val_wf tvt v` by metis_tac[cj 1 value_has_type_val_wf] >>
   irule frag_exec_seq >>
   qexistsl [`\r. expr_post H ctx func ce cx e ee

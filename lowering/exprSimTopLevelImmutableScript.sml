@@ -107,6 +107,10 @@ Proof
     (`(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `vv_place_ptr cenv cx es s0 (PlaceR (ImmutablePlace src id []))
+     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode))` by
+    gvs[vv_place_ptr_def, contextTheory.mk_ptr_def, eval_operand_def,
+        mem_path_offset_def] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def, locals_kept_mem,
        vyperASTTheory.expr_type_def] >>

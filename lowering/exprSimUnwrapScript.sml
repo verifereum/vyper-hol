@@ -1786,7 +1786,7 @@ Proof
   first_x_assum (qspecl_then [`next`, `t`] mp_tac) >> simp[]
 QED
 
-Theorem compile_imm_load_word_ctor_path_fields[local]:
+Theorem compile_imm_load_word_ctor_path_fields:
   !ctx func cenv cx es pop sm op sb s0 w.
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\

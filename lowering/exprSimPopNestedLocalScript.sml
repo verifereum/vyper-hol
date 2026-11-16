@@ -289,15 +289,14 @@ Resume pop_nested_local_sim[nonempty]:
   `stmt_state_rel H ctx func cenv cx (tend with gas_obs := []) t /\
    storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
     fs[target_post_def] >>
+  qpat_x_assum `Abbrev (result = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   irule (pop_memory_live_suffix_post |> Q.INST [`mid` |-> `tend with gas_obs := []`, `e` |-> `Pop ann bt`]
     |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
              loweringPostsTheory.expr_has_effect_thm]) >>
   goal_assum (drule_at Any) >>
   simp[] >> conj_tac >- metis_tac[] >>
-  qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
-  qpat_assum `FLOOKUP cenv.ce_vars id = _` (irule_at Any) >>
-  qpat_assum `wb_frame cenv es _ sa s0 t` (irule_at Any) >>
-  qpat_assum `local_ptrs_reserved cenv sm` (irule_at Any) >>
+  qexistsl_tac [`t`, `sm`] >>
   fs[record_pop_def] >>
   gvs[Abbr `scopes'`] >>
   drule exprSimMemorySourceTheory.read_result_gas_obs >>

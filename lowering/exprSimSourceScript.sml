@@ -18,6 +18,32 @@ Ancestors
 Libs
   pairLib monadsyntax
 
+Theorem expr_sim_inv_nocalls_copies_subscript_base:
+  expr_sim_inv cenv cx env es /\
+  int_calls_expr obj = [] /\ int_calls_expr idx = [] ==>
+  copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
+Proof
+  strip_tac >>
+  `!src. ALOOKUP cenv.ce_modules src = get_module_code cx src` by
+    fs[expr_sim_inv_def, bare_globals_layout_def] >>
+  `!src. ALOOKUP cenv.ce_modules src =
+     ALOOKUP (case ALOOKUP cx.sources cx.txn.target of
+                NONE => [] | SOME mods => mods) src` by
+    (Cases_on `ALOOKUP cx.sources cx.txn.target` >>
+     fs[vyperContextTheory.get_module_code_def]) >>
+  `nonconstant_reads cenv.ce_modules (accesses_expr obj) =
+   nonconstant_reads (case ALOOKUP cx.sources cx.txn.target of
+                       NONE => [] | SOME mods => mods)
+     (accesses_expr obj)` by
+    (irule vyperSubscriptOverlapTheory.nonconstant_reads_lookup_cong >>
+     simp[]) >>
+  simp[exprLoweringTheory.copies_subscript_base_def,
+       subscript_reads_base_def,
+       vyperSubscriptOverlapTheory.subscript_overlap_def,
+       vyperSubscriptOverlapTheory.expr_accesses_def,
+       vyperSubscriptOverlapTheory.reached_functions_def]
+QED
+
 Theorem expr_sim_pre_gas_obs[simp]:
   expr_sim_pre cenv cx env e (es with gas_obs := gs) <=>
   expr_sim_pre cenv cx env e es

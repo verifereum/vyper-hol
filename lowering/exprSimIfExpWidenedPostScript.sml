@@ -10,6 +10,8 @@ Theorem normalized_ifexp_root_vv_post:
     es1 sc sd (jump_to lbl tt) ee v aop u /\
   (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
     (LocatedValue ann (mk_ptr aop LocMemory)) u) /\
+  (~is_word_type ann ==> vv_place_ptr ce cx ee u tv
+    (LocatedValue ann (mk_ptr aop LocMemory))) /\
   eval_operand aop u = SOME w /\
   read_result cx tv ee = (INL v,ee) /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
@@ -35,6 +37,8 @@ Proof
   irule (SIMP_RULE (srw_ss()) [expr_type_def]
     (Q.INST [`e` |-> `IfExp ann c a b`] ifexp_root_vv_post_of_expr_post_read)) >>
   simp[post_value_type_def, expr_type_def] >>
+  conj_tac
+  >- (strip_tac >> irule ifexp_place_ptr_root_var >> fs[] >> metis_tac[]) >>
   rpt strip_tac >> irule vv_at_assigned_root_frame >>
   simp[] >> conj_tac >- metis_tac[] >>
   qexistsl [`aop`, `sc`, `sd`] >> simp[] >> decide_tac

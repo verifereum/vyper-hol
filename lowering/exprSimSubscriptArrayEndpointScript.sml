@@ -79,6 +79,27 @@ Proof
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`t`, `sb`, `u`] >> fs[wb_frame_def]) >>
   `storage_well_formed_on cx t' (FST H)` by fs[expr_post_def] >>
+  `vv_place_ptr cenv cx t' q r (LocatedValue (ArrayT et bd) p)` by
+    (`vv_place_ptr cenv cx t u r (LocatedValue (ArrayT et bd) p)` by
+       fs[vv_post_def] >>
+     `vv_place_ptr cenv cx t' u r (LocatedValue (ArrayT et bd) p)` by
+       (pop_assum mp_tac >> simp[vv_place_ptr_def]) >>
+     `?w. eval_operand p.ptr_operand u = SOME w` by
+       fs[vv_post_def, vv_holds_def] >>
+     `!w. eval_operand p.ptr_operand u = SOME w ==>
+          eval_operand p.ptr_operand q = SOME w` by
+       (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+         simp[] >>
+         qexistsl_tac [`sb`,`u`] >> simp[] >>
+         qpat_x_assum `wb_frame cenv t t' sb u q` mp_tac >>
+         simp[wb_frame_def] >> metis_tac[]) >>
+     `eval_operand p.ptr_operand q = eval_operand p.ptr_operand u` by
+       metis_tac[] >>
+     irule vv_place_ptr_vars_frame >> qexists_tac `u` >>
+     simp[contextTheory.vv_operand_def] >> rpt strip_tac >>
+     qpat_x_assum `wb_frame cenv t t' sb u q` mp_tac >>
+     simp[wb_frame_def] >> strip_tac >>
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
   irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED

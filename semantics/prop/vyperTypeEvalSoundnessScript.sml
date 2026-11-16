@@ -12,7 +12,7 @@ Theory vyperTypeEvalSoundness
 Ancestors
   list rich_list sorting pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperCreate vyperCreateFrame vyperInterpreter vyperCallOutcomeFrame vyperState vyperContext vyperStorage vyperTyping vyperLookup
+  vyperCreate vyperCreateFrame vyperCallFrame vyperInterpreter vyperCallOutcomeFrame vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperImmutableMetadataFrame[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
@@ -9443,41 +9443,6 @@ Resume eval_scc_type_sound_results_mutual[Trace_Base_Attribute_Selection]:
   gvs[typed_scope_transition_def] >> goal_assum drule >> simp[]
 QED
 
-Theorem eval_create_success_value[local]:
-  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INL pv,st') ==>
-  ?v. pv = Value v
-Proof
-  Cases_on `dest_create_args kind has_salt vs` >>
-  simp[vyperCreateTheory.eval_create_def, bind_apply, ignore_bind_apply,
-       lift_option_type_def, get_accounts_def, update_accounts_def,
-       get_pending_deletions_def, get_transient_storage_def, check_def, assert_def,
-       vyperCreateTheory.create_soft_failure_def, return_def, raise_def] >>
-  Cases_on `create_arg_ctor_types kind has_salt arg_tys` >>
-  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-  Cases_on `build_create_code (get_tenv cx) kind x st.accounts x' blueprint_size` >>
-  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-  Cases_on `IS_SOME st.outcomes`
-  >- (rpt (IF_CASES_TAC >>
-        simp[bind_apply, ignore_bind_apply, check_def, assert_def,
-             return_def, raise_def]) >>
-      rpt strip_tac >> drule vyperCreateTheory.create_oracle_result_address >>
-      metis_tac[]) >>
-  rpt (IF_CASES_TAC >>
-    simp[bind_apply, ignore_bind_apply, get_transient_storage_def,
-         get_pending_deletions_def, update_accounts_def,
-         check_def, assert_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  qmatch_asmsub_abbrev_tac `run_create_evm ca cb cc cd ce cf cg ch` >>
-  (Cases_on `run_create_evm ca cb cc cd ce cf cg ch`
-   >- gvs[ignore_bind_apply, update_accounts_def, return_def, raise_def]) >>
-  rename1 `run_create_evm ca cb cc cd ce cf cg ch = SOME adapter` >>
-  PairCases_on `adapter` >>
-  Cases_on `adapter0` >>
-  gvs[ignore_bind_apply, update_accounts_def, update_transient_def,
-      record_storage_backend_def, record_storage_event_def, ignore_bind_def, bind_def,
-      update_pending_deletions_def, append_logs_def, return_def, raise_def]
-QED
-
 Resume eval_scc_type_sound_results_mutual[Live_Create_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9487,28 +9452,6 @@ Resume eval_scc_type_sound_results_mutual[Live_Create_Returned_Result]:
        AllCaseEqs(), live_memory_result_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   drule eval_create_success_value >> strip_tac >> gvs[]
-QED
-
-Theorem eval_ext_call_success_value[local]:
-  eval_ext_call cx static skip sigt opts vs st = (INL pv,st') ==>
-  ?v. pv = Value v
-Proof
-  PairCases_on `sigt` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply,
-       lift_option_type_def, type_check_def, check_def, assert_def,
-       return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `eval_ext_call_effects ca cb cc cd ce cf cg` >>
-  Cases_on `eval_ext_call_effects ca cb cc cd ce cf cg` >>
-  gvs[bind_apply, ignore_bind_apply, lift_sum_runtime_def,
-      return_def, raise_def, get_accounts_def, check_def, assert_def,
-      AllCaseEqs()] >>
-  Cases_on `if returnData = [] then
-    ext_call_kwarg EKDefault opts (DROP (LENGTH sigt1) t) else NONE` >>
-  gvs[bind_apply, ignore_bind_apply, return_def, raise_def,
-      get_accounts_def, assert_def, AllCaseEqs()] >>
-  Cases_on `evaluate_abi_decode_return (get_tenv ca) sigt2 returnData` >>
-  gvs[bind_apply, return_def, raise_def]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_ExtCall_Returned_Result]:
@@ -9545,32 +9488,6 @@ Resume eval_scc_type_sound_results_mutual[Live_SelfDestruct_Returned_Result]:
   simp[selfdestruct_no_success]
 QED
 
-Theorem eval_send_success_value[local]:
-  eval_send cx has_gas vs st = (INL pv,st') ==> ?v. pv = Value v
-Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
-  simp[eval_send_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply, type_check_def,
-       check_def, assert_def, return_def, raise_def, lift_option_type_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  Cases_on `st.outcomes` >>
-  gvs[bind_apply, ignore_bind_apply, return_def, raise_def, AllCaseEqs(),
-      get_accounts_def, get_transient_storage_def, lift_option_def,
-      bind_def, ignore_bind_def, check_def, assert_def] >>
-  rpt strip_tac >> gvs[] >>
-  (* static frame: the outcomes case is on the post-check state *)
-  TRY (qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
-       simp[bind_apply, ignore_bind_apply, return_def, raise_def,
-            AllCaseEqs(), get_accounts_def, get_transient_storage_def,
-            lift_option_def, bind_def, ignore_bind_def, check_def,
-            assert_def] >>
-       rpt strip_tac >> gvs[]) >>
-  pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
-                       return_def, raise_def, AllCaseEqs()]
-QED
-
 Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9580,16 +9497,6 @@ Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
        raise_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   drule eval_send_success_value >> strip_tac >> gvs[]
-QED
-
-Theorem eval_raw_call_success_value[local]:
-  eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
-  ?v. pv = Value v
-Proof
-  (* Only the final return builds pv: keep the call steps folded. *)
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def, raise_def,
-       COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
-  rw[] >> gvs[]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:

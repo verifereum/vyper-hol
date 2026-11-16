@@ -284,6 +284,14 @@ Proof
   `post_value_type cenv obj = expr_type obj` by
     (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >>
      simp[]) >>
+  `eval_result_typed (env,cx,ee) tv (Type (StructT sid)) /\
+   expr_sim_inv cenv cx env ee` by
+    (drule attr_pre_base >> strip_tac >>
+     `expr_body_pre cenv cx env obj (es with gas_obs := gs)` by simp[] >>
+     drule_all exprSimSourceTheory.expr_body_pre_eval_result >> gvs[]) >>
+  `select_result cx (StructT sid) tv (AttrSubscript fld) ee = (INL tv',ee)` by
+    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
        (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
@@ -296,6 +304,16 @@ Proof
         conj_tac
         >- (qexistsl_tac [`sm`, `t`] >> simp[]) >>
         qexists_tac `H0` >> simp[]) >>
+     `!t' op. bvv = StackValue t' op ==> !pl. tv <> PlaceR pl` by
+       (rpt strip_tac >> gvs[] >>
+        qpat_x_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ u` mp_tac >>
+        simp[vv_post_def, vv_at_def, compileEnvTheory.is_word_type_def]) >>
+     `vv_place_ptr cenv cx ee u tv bvv` by fs[vv_post_def] >>
+     `vv_place_ptr cenv cx ee u tv'
+        (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
+       (irule attr_place_ptr >>
+        qexistsl_tac [`env`, `ee`, `tv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
+        simp[]) >>
      qpat_assum `!tail. select_result _ _ _ _ _ = _`
        (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
      irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>

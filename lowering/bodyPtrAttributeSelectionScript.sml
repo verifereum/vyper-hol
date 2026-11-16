@@ -87,6 +87,20 @@ Proof
   `post_value_type cenv obj = expr_type obj` by
     (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
+  `eval_result_typed (env,cx,ee) btv (Type (StructT sid)) /\
+   expr_sim_inv cenv cx env ee` by
+    (drule attr_pre_base >> strip_tac >>
+     drule_all exprSimSourceTheory.expr_body_pre_eval_result >> gvs[]) >>
+  `!t' op. bvv = StackValue t' op ==> !pl. btv <> PlaceR pl` by
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ t` mp_tac >>
+     simp[vv_post_def, vv_at_def, compileEnvTheory.is_word_type_def]) >>
+  `vv_place_ptr cenv cx ee t btv bvv` by fs[vv_post_def] >>
+  `vv_place_ptr cenv cx ee t tv'
+     (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
+    (irule attr_place_ptr >>
+     qexistsl_tac [`env`, `ee`, `btv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
+     simp[]) >>
   qpat_assum `select_result _ _ _ _ _ = _`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   irule attr_vv_post >> conj_tac >- gs[] >>
