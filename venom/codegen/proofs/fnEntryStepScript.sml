@@ -117,6 +117,169 @@ Proof
   gvs[venomInstTheory.get_instruction_def, AllCaseEqs(), venomInstTheory.is_param_opcode_def]
 QED
 
+Theorem entry_body_frame_sim_resource_at_lo:
+  !safe q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
+   Inv ra pc_ret rest mem0.
+  (gen_fn_sim_at_reloc safe q fuel \/
+   (lo = SND (compute_label_offsets prog) /\ gen_fn_sim_at safe q fuel)) /\
+  (gen_fn_frame_sim_at_reloc safe q fuel \/
+   (lo = SND (compute_label_offsets prog) /\ gen_fn_frame_sim_at safe q fuel)) /\
+  ctx = unit.cu_context /\ code_labels_agree prog lo /\
+  o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+  EL i cp.cp_regions = r /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  (!f inst callee_name args callee.
+    MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+    MEM inst (fn_insts f) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label callee_name :: args /\
+    lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+    fn_has_retpc callee) /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+  (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
+  (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\
+  ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+         (fcg_analyze ctx) fn.fn_name /\
+  growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+  ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+  ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  dfs_block_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0 /\
+  generate_block_plan liveness dfg cfg fn (HD fn.fn_blocks) ps0 =
+    SOME (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops, ps_after) /\
+  block_plan_state liveness dfg cfg fn (HD fn.fn_blocks) ps0
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+  generate_block_insts_plan liveness dfg cfg fn (HD fn.fn_blocks).bb_label
+    (bb_is_halting (HD fn.fn_blocks))
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+    (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+    (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
+  vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+  asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
+  as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps1 vs as /\
+  (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+  body_result safe (OPTION_MAP (\F.
+    (LENGTH (HD fn.fn_blocks).bb_instructions -
+     LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + 1) *
+    (LENGTH prog + F unit cp prog + 8)) q)
+    lo o2pc prog cp ctx fn mem0 pc_ret rest as
+    (block_rest fuel ctx fn (HD fn.fn_blocks) vs)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `fn_reachable fn (HD fn.fn_blocks).bb_label` by
+    metis_tac[entry_step_reachable] >>
+  drule_all entry_step_shape >> strip_tac >>
+  drule entry_step_phi_bound >> strip_tac >>
+  `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
+    metis_tac[lineage_state_rules] >>
+  `!i j. revert_forward_pair (HD fn.fn_blocks) i j ==>
+         LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
+         j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[revert_forward_pair_past_params] >>
+  `!xs L. ?prefixL prefixD core.
+     xs = prefixL ++ core /\ xs = prefixD ++ core /\
+     (!v. MEM v L ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
+    (rpt gen_tac >> qexistsl_tac [`[]`, `[]`, `xs`] >> simp[]) >>
+  irule block_body_frame_sim_resource_at_lo >>
+  rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
+  conj_tac >- simp[] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `rpolicy` >> simp[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qexists_tac `Inv` >>
+      qpat_x_assum `ctx = unit.cu_context` SUBST_ALL_TAC >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops`,
+    `cfg`, `ch`, `dfg`, `r.sr_plan`, `growth`, `ps0.ps_cleanup_height`,
+    `i`, `lbl_ctr`,
+    `liveness`, `pc_bb`, `param_ops`, `ps0.ps_cleanup_promised`, `ps1`,
+    `ps_after`, `ps0`, `ps_after`, `ps_end`, `ps0`, `r`, `ra`, `body_ops`,
+    `r.sr_spill_base`] >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem entry_body_frame_sim_resource_reloc:
+  !safe q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
+   Inv ra pc_ret rest mem0.
+  gen_fn_sim_at_reloc safe q fuel /\ gen_fn_frame_sim_at_reloc safe q fuel /\
+  ctx = unit.cu_context /\ code_labels_agree prog lo /\
+  o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+  EL i cp.cp_regions = r /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  (!f inst callee_name args callee.
+    MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+    MEM inst (fn_insts f) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label callee_name :: args /\
+    lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+    fn_has_retpc callee) /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+  (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
+  (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\
+  ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+         (fcg_analyze ctx) fn.fn_name /\
+  growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+  ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+  ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  dfs_block_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0 /\
+  generate_block_plan liveness dfg cfg fn (HD fn.fn_blocks) ps0 =
+    SOME (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops, ps_after) /\
+  block_plan_state liveness dfg cfg fn (HD fn.fn_blocks) ps0
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+  generate_block_insts_plan liveness dfg cfg fn (HD fn.fn_blocks).bb_label
+    (bb_is_halting (HD fn.fn_blocks))
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+    (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+    (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
+  vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+  asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
+  as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps1 vs as /\
+  (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+  body_result safe (OPTION_MAP (\F.
+    (LENGTH (HD fn.fn_blocks).bb_instructions -
+     LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + 1) *
+    (LENGTH prog + F unit cp prog + 8)) q)
+    lo o2pc prog cp ctx fn mem0 pc_ret rest as
+    (block_rest fuel ctx fn (HD fn.fn_blocks) vs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule entry_body_frame_sim_resource_at_lo >> gvs[] >> metis_tac[]
+QED
+
 Theorem entry_body_frame_sim_resource[local]:
   !safe q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
@@ -178,39 +341,7 @@ Theorem entry_body_frame_sim_resource[local]:
     (block_rest fuel ctx fn (HD fn.fn_blocks) vs)
 Proof
   rpt gen_tac >> strip_tac >>
-  `fn_reachable fn (HD fn.fn_blocks).bb_label` by
-    metis_tac[entry_step_reachable] >>
-  drule_all entry_step_shape >> strip_tac >>
-  drule entry_step_phi_bound >> strip_tac >>
-  `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
-    metis_tac[lineage_state_rules] >>
-  `!i j. revert_forward_pair (HD fn.fn_blocks) i j ==>
-         LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
-         j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
-    metis_tac[revert_forward_pair_past_params] >>
-  `!xs L. ?prefixL prefixD core.
-     xs = prefixL ++ core /\ xs = prefixD ++ core /\
-     (!v. MEM v L ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
-    (rpt gen_tac >> qexistsl_tac [`[]`, `[]`, `xs`] >> simp[]) >>
-  irule block_body_frame_sim_resource >>
-  rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
-  conj_tac >- simp[] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexists_tac `rpolicy` >> simp[]) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (qexists_tac `Inv` >>
-      qpat_x_assum `ctx = unit.cu_context` SUBST_ALL_TAC >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops`,
-    `cfg`, `ch`, `dfg`, `r.sr_plan`, `growth`, `ps0.ps_cleanup_height`,
-    `i`, `lbl_ctr`,
-    `liveness`, `pc_bb`, `param_ops`, `ps0.ps_cleanup_promised`, `ps1`,
-    `ps_after`, `ps0`, `ps_after`, `ps_end`, `ps0`, `r`, `ra`, `body_ops`,
-    `r.sr_spill_base`] >>
-  gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
-  first_assum ACCEPT_TAC
+  irule entry_body_frame_sim_resource_at_lo >> gvs[] >> metis_tac[]
 QED
 
 (* As for fn_block_frame_step, but for the entry block, which
@@ -235,13 +366,57 @@ QED
    block context, code and prev-hash clauses hold because the run never
    changes those fields (fnRunFields$run_blocks_intret_fields) and
    fn_entry_state_rel equates them with as's. *)
-Theorem fn_entry_block_step_resource:
-  !safe q fuel. gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel ==>
-    gen_fn_sim_at safe (OPTION_MAP (\F unit cp prog.
-      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
+Theorem fn_entry_block_step_resource_at_lo:
+  !safe q fuel rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
+    (gen_fn_sim_at_reloc safe q fuel \/
+     (lo = SND (compute_label_offsets prog) /\ gen_fn_sim_at safe q fuel)) /\
+    (gen_fn_frame_sim_at_reloc safe q fuel \/
+     (lo = SND (compute_label_offsets prog) /\ gen_fn_frame_sim_at safe q fuel)) /\
+    ctx = unit.cu_context /\ code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs as ra rest /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+    (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s)
+    ==>
+    (!vs'. run_blocks (SUC fuel) ctx fn vs = Halt vs' ==>
+       ?n as'. cost_le (OPTION_MAP (\F.
+                 fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. run_blocks (SUC fuel) ctx fn vs = Abort a vs' ==>
+       ?n as'. cost_le (OPTION_MAP (\F.
+                 fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as') /\
+    (!ret vs'. run_blocks (SUC fuel) ctx fn vs = IntRet ret vs' ==>
+       ?n as'. cost_le (OPTION_MAP (\F.
+                 fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE ret.iret_values ++ rest /\
+               fn_return_state_rel ctx cp fn vs' as as')
 Proof
-  rpt gen_tac >> strip_tac >>
-  rewrite_tac[gen_fn_sim_at_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all entry_step_shape >> strip_tac >>
   drule_all region_fn_plan >> strip_tac >>
   drule_all entry_block_plan >> strip_tac >>
@@ -269,12 +444,12 @@ Proof
           (fcg_analyze ctx) fn.fn_name)
        (cleanup_growth_table ctx (fcg_analyze ctx)) r.sr_spill_base lbl_ctr`,
     `param_ops`, `ps1`, `r`, `vs`, `as`, `ra`, `rest`, `Inv`]
-    mp_tac entry_prefix_frame_sim >>
+    mp_tac entry_prefix_frame_sim_reloc >>
   impl_tac >- (unabbrev_all_tac >> simp[]) >>
   strip_tac >> suspend "body"
 QED
 
-Resume fn_entry_block_step_resource[body]:
+Resume fn_entry_block_step_resource_at_lo[body]:
   `run_blocks (SUC fuel) ctx fn vs = block_rest fuel ctx fn (HD fn.fn_blocks) vs_p`
     by (irule entry_step_run_rest >> unabbrev_all_tac >> metis_tac[]) >>
   `n <= LENGTH prog` by metis_tac[asmSemTheory.asm_block_at_length] >>
@@ -283,26 +458,25 @@ Resume fn_entry_block_step_resource[body]:
      conj_tac
      >- (drule livenessTransferProofsTheory.lookup_block_mem >> simp[]) >>
      metis_tac[listTheory.EL_MEM]) >>
-  qspecl_then [`safe`, `q`, `fuel`, `rpolicy`, `unit`, `cplan`, `prog`, `ctx`, `lo`, `o2pc`,
-    `i`, `fn`, `r`, `liveness_analyze fn`, `dfg_build_function fn`,
-    `cfg_analyze fn`,
-    `cleanup_caller_height (LENGTH ctx.ctx_functions) ctx (fcg_analyze ctx)
-       fn.fn_name`,
-    `cleanup_growth_table ctx (fcg_analyze ctx)`, `lbl_ctr`, `ps_end`,
-    `init_cleanup_plan_state
-       (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
-          (fcg_analyze ctx) fn.fn_name)
-       (cleanup_growth_table ctx (fcg_analyze ctx)) r.sr_spill_base lbl_ctr`,
-    `param_ops`, `ps1`, `body_ops`, `ps_after`, `as.as_pc`, `vs_p`, `as'`,
-    `Inv`, `ra`, `pc_ret`, `rest`, `as.as_memory`]
-    mp_tac entry_body_frame_sim_resource >>
-
-  impl_tac
-  >- (unabbrev_all_tac >> gvs[fn_entry_state_rel_def] >> metis_tac[]) >>
+  `body_result safe (OPTION_MAP (\F.
+     (LENGTH (HD fn.fn_blocks).bb_instructions -
+      LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + 1) *
+     (LENGTH prog + F unit cplan prog + 8)) q)
+     lo o2pc prog cplan ctx fn as.as_memory pc_ret rest as'
+     (block_rest fuel ctx fn (HD fn.fn_blocks) vs_p)` by
+    (irule entry_body_frame_sim_resource_at_lo >>
+     unabbrev_all_tac >> gnvs[fn_entry_state_rel_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (qexists_tac `Inv` >> metis_tac[]) >>
+     qexistsl_tac [`body_ops`, `i`, `lbl_ctr`, `param_ops`, `as.as_pc`,
+                  `ps1`, `ps_after`, `ps_end`, `ra`] >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `body_result _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac std_ss [body_result_def] >> strip_tac >> suspend "outcomes"
 QED
 
-Resume fn_entry_block_step_resource[outcomes]:
+Resume fn_entry_block_step_resource_at_lo[outcomes]:
   `!m. cost_le (OPTION_MAP (\F.
       (LENGTH (HD fn.fn_blocks).bb_instructions -
        LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + 1) *
@@ -310,7 +484,7 @@ Resume fn_entry_block_step_resource[outcomes]:
     cost_le (OPTION_MAP (\F.
       fn_sim_coefficient unit.cu_context prog * (F unit cplan prog + 1)) q) (n + m)` by
     (Cases_on `q` >> simp[cost_le_def] >> rpt strip_tac >>
-     rename1 `gen_fn_sim_at safe (SOME budget) fuel` >>
+     rename1 `_ <= (budget unit cplan prog + 1) * fn_sim_coefficient _ _` >>
      qspecl_then [`LENGTH (HD fn.fn_blocks).bb_instructions -
        LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`,
        `context_inst_count ctx`, `LENGTH prog`, `budget unit cplan prog`, `7`]
@@ -346,8 +520,40 @@ Resume fn_entry_block_step_resource[outcomes]:
       >- (irule entry_step_return >> metis_tac[]))
 QED
 
-Finalise fn_entry_block_step_resource
+Finalise fn_entry_block_step_resource_at_lo
 
+
+Theorem fn_entry_block_step_resource_reloc:
+  !safe q fuel.
+    gen_fn_sim_at_reloc safe q fuel /\ gen_fn_frame_sim_at_reloc safe q fuel ==>
+    gen_fn_sim_at_reloc safe (OPTION_MAP (\F unit cp prog.
+      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[gen_fn_sim_at_reloc_def] >> rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF] >>
+  irule fn_entry_block_step_resource_at_lo >> simp[] >> metis_tac[]
+QED
+
+Theorem fn_entry_block_step_resource:
+  !safe q fuel. gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel ==>
+    gen_fn_sim_at safe (OPTION_MAP (\F unit cp prog.
+      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[gen_fn_sim_at_def] >> rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF] >>
+  irule fn_entry_block_step_resource_at_lo >> simp[] >> metis_tac[]
+QED
+
+Theorem fn_entry_block_step_reloc:
+  !fuel. gen_fn_sim_at_simple_reloc fuel /\ gen_fn_frame_sim_at_simple_reloc fuel ==>
+         gen_fn_sim_at_simple_reloc (SUC fuel)
+Proof
+  mp_tac (Q.SPECL [`F`, `NONE`] fn_entry_block_step_resource_reloc) >>
+  simp[GSYM gen_fn_sim_at_simple_reloc_def,
+       GSYM gen_fn_frame_sim_at_simple_reloc_def]
+QED
 
 Theorem fn_entry_block_step:
   !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel ==>
