@@ -3,7 +3,7 @@ Ancestors
   pair list rich_list vyperAST vyperState vyperInterpreter vyperContext
   vyperMisc vyperValue vyperCallOutcome vyperCallOutcomeProps vyperCall
   supportedExprTraverse supportedStmtTraverse supportedDecls supportedProgram
-  bodyStorageCases evalNoHalt vyperTypeCallGraph
+  bodyStorageCases evalNoHalt vyperTypeCallGraph exprSimWordArgs
 Libs
   pairLib monadsyntax
 
@@ -120,19 +120,49 @@ Resume source_no_create_error_call_cases[IntCall]:
   rename1 `_ = SOME tup` >> PairCases_on `tup` >>
   drule_all supported_callable_storage_syntax >> strip_tac >> gvs[] >>
   Cases_on `LENGTH es = LENGTH tup2`
-  >- (drule_all eval_expr_intcall_empty_defaults >>
+  >- (gvs(syn_ss @ case_ss @ [eval_exprs_nil, finally_def, bind_def,
+                              push_function_def]) >>
+      drule_all eval_expr_intcall_empty_defaults >>
       disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _`
         (mp_tac o REWRITE_RULE [th])) >>
-      simp case_ss >> FAIL_TAC "live intcall") >>
+      simp(case_ss @ [push_function_def]) >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `bind_arguments (get_tenv cx) tup2 vs` >>
+      simp[return_def, raise_def] >> strip_tac >>
+      Cases_on `evaluate_type (get_tenv cx) tup4` >>
+      simp[return_def, raise_def] >>
+      conj_tac >- (Cases_on `tup1` >>
+        Cases_on `cx.nonreentrant_slot` >>
+        simp([acquire_nonreentrant_lock_def, check_not_static_def,
+              bind_def] @ tl case_ss) >> rpt (IF_CASES_TAC >> simp[])) >>
+      rpt gen_tac >> strip_tac >>
+      reverse conj_tac >- (rpt gen_tac >> strip_tac >>
+        Cases_on `safe_cast x' rv` >> simp[return_def, raise_def]) >>
+      strip_tac >>
+      qpat_x_assum `!s0 vs t0 s1 env t1 s2 rtv t2 s3 t3. _`
+        (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+      simp[return_def, raise_def] >>
+      goal_assum (drule_at Any) >>
+      simp[LEFT_EXISTS_AND_THM, RIGHT_EXISTS_AND_THM] >>
+      conj_tac >- (gvs[EVERY_MEM, get_module_code_def] >> metis_tac[]) >>
+      qmatch_asmsub_abbrev_tac `finally_unless_halt _ _ initial = _` >>
+      Cases_on `eval_stmts (cx with stk updated_by CONS (NONE,fn)) tup5 initial` >>
+      rename1 `_ = (body_res,body_st)` >> Cases_on `body_res` >>
+      qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+      simp([finally_unless_halt_def, finally_def, pop_function_def,
+            try_def, bind_def, release_nonreentrant_lock_def] @ tl case_ss) >>
+      Cases_on `cx.nonreentrant_slot` >>
+      simp([COND_RATOR, bind_def] @ tl case_ss) >>
+      rpt (IF_CASES_TAC >> simp[]) >>
+      rename1 `eval_stmts _ _ initial = (INR exc,body_st)` >>
+      Cases_on `exc` >> simp[handle_function_def, return_def, raise_def] >>
+      rpt strip_tac >> gvs[] >> qexistsl [`initial`, `body_st`] >> simp[]) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp([Once evaluate_def] @ case_ss)
 QED
 Resume source_no_create_error_call_cases[ExtCall]:
   FAIL_TAC "ExtCall"
-QED
-Resume source_no_create_error_call_cases[Send]:
-  FAIL_TAC "Send"
 QED
 Resume source_no_create_error_call_cases[RawCall]:
   FAIL_TAC "RawCall"
