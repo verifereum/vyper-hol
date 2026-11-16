@@ -4489,7 +4489,73 @@ Proof
   >- (map_every (fn pat => qpat_assum pat mp_tac)
         [`LENGTH newcut = LENGTH Mcut`,`LENGTH Mcut = LENGTH Kcut`] >>
       POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-  FAIL_TAC "cut lengths proved"
+  `LIST_REL (\old new. old = NONE \/ old = new) (AM []) (newAM [])` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`,
+       `AM = _`,`AK = _`,`newAM [] = if _ then _ else _`,
+       `ALL_DISTINCT (AK [])`,`LENGTH (AM []) = LENGTH (AK [])`,
+       `FLOOKUP blocks (p,d) = SOME
+         (bb,bt,ps,xs,ys,sched,in_state,h0,SOME (be,hbe),n,OK s,F,NONE)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     Cases_on `inst.inst_opcode = GAS`
+     >- (drule_all dft_packet_current_gas_key >> strip_tac >>
+         `newAM [] = LUPDATE (SOME (HD s.vs_gas_readings)) n' (AM [])` by
+           metis_tac[dft_key_substitute_lupdate] >>
+         qpat_x_assum `newAM [] = LUPDATE _ _ _` SUBST1_TAC >>
+         simp[LIST_REL_EL_EQN,EL_LUPDATE] >> metis_tac[]) >>
+     qpat_x_assum `newAM [] = if _ then _ else _` mp_tac >>
+     qpat_assum `inst.inst_opcode <> GAS` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[LIST_REL_EL_EQN]) >>
+  `LIST_REL (\old new. old = NONE \/ old = new) Mcut newcut` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`LIST_REL (\old new. old = NONE \/ old = new) (AM []) (newAM [])`,
+       `newcut = TAKE (LENGTH Mcut) (newAM [])`,`AM [] = Mcut ++ mr`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     drule EVERY2_TAKE >> disch_then (qspec_then `LENGTH Mcut` mp_tac) >>
+     simp[TAKE_APPEND]) >>
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`LIST_REL (\old new. old = NONE \/ old = new) Mcut newcut`,
+       `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) newcut gs`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  qpat_x_assum `!F gs tail. N <= F /\ LIST_REL _ Mcut gs ==> _` drule_all >>
+  disch_then (qspec_then `tail` mp_tac) >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `extra` >> first_assum ACCEPT_TAC) >>
+  Cases_on `SND (rooted_eval F' C7 levels
+    (root_entry with vs_gas_readings := gs ++ tail))`
+  >- (qpat_x_assum `case _ of OK _ => _ | Halt _ => _ | Abort _ _ => _ | IntRet _ _ => _ | Error _ => _`
+        mp_tac >> simp[NoAsms] >> strip_tac >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac
+      >- (qpat_assum `IS_SOME cbody` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> Cases_on `cbody` >> simp[]) >>
+      strip_tac >>
+      qpat_x_assum `a = p` SUBST_ALL_TAC >>
+      qpat_x_assum `e = d` SUBST_ALL_TAC >>
+      `cb = bb /\ ct = bt /\ cps = ps /\ cxs = xs /\ cys = ys /\
+       crho = sched /\ cin = in_state /\ ch0 = h0 /\ cbody = SOME (be,hbe) /\
+       oldcount = n /\ oldfront = OK s` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+          [`FLOOKUP blocks (p,d) = SOME
+             (cb,ct,cps,cxs,cys,crho,cin,ch0,cbody,oldcount,oldfront,cclosed,cbrest)`,
+           `FLOOKUP blocks (p,d) = SOME
+             (bb,bt,ps,xs,ys,sched,in_state,h0,SOME (be,hbe),n,OK s,F,NONE)`] >>
+         POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+      map_every (fn pat => qpat_x_assum pat SUBST_ALL_TAC)
+        [`cb = bb`,`ct = bt`,`cps = ps`,`cxs = xs`,`cys = ys`,
+         `crho = sched`,`cin = in_state`,`ch0 = h0`,`cbody = SOME (be,hbe)`,
+         `oldcount = n`,`oldfront = OK s`] >>
+      `rooted_eval F' C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+        (Ecut,OK v)` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+          [`SND (rooted_eval _ _ _ _) = OK v`,`FST (rooted_eval _ _ _ _) = Ecut`] >>
+         POP_ASSUM_LIST (K all_tac) >> metis_tac[pairTheory.PAIR]) >>
+      drule_at (Pat `FLOOKUP blocks _ = _`) dft_packet_cut_row_trace >>
+      FAIL_TAC "cut adapter matching") >>
+  qpat_x_assum `case _ of OK _ => _ | Halt _ => _ | Abort _ _ => _ | IntRet _ _ => _ | Error _ => _`
+    mp_tac >> simp[NoAsms]
 QED
 
 Theorem dft_focus_packet_step:
