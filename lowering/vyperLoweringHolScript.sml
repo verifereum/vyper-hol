@@ -51,3 +51,4 @@ Ancestors
   finalizerContractOwn
   asmSpliceOwn
   asmOptOwnPruneUnused
+  asmOptOwnPruneJumps
