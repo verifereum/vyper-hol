@@ -13,6 +13,13 @@
  *                                    reverts exactly on MIN_INT
  *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
+ *   emit_op_NUMBER_correct         — an emitted NUMBER reads the block number
+ *   emit_op_BLOCKHASH_correct      — an emitted BLOCKHASH reads the block hash
+ *   compile_blockhash_run          — compiled blockhash outputs the hash, or reverts
+ *                                    outside the 256-block window
+ *   compile_blockhash_frame        — the blockhash code changes only fresh variables
+ *   compile_prevhash_run           — compiled prevhash outputs the parent block's hash
+ *   compile_prevhash_frame         — the prevhash code changes only fresh variables
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -59,27 +66,6 @@ val emitted_insts_tac =
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM listTheory.APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND];
 
-(* Unconditional eval_operand through update_var for Var operands.
-   Rewrites to if-then-else so simp can resolve name equality/inequality. *)
-Theorem eval_operand_update_var_if[local]:
-  ∀ v v' (w:bytes32) ss.
-    eval_operand (Var v) (update_var v' w ss) =
-    if v = v' then SOME w else eval_operand (Var v) ss
-Proof
-  simp[eval_operand_def, update_var_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >> rw[]
-QED
-
-(* eval_operand is preserved through mstore (NOT_NONE form for metis) *)
-Theorem eval_operand_mstore_not_none[local]:
-  ∀ op addr (val:bytes32) ss.
-    eval_operand op ss ≠ NONE ⇒
-    eval_operand op (mstore addr val ss) ≠ NONE
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, mstore_def, lookup_var_def, LET_THM]
-QED
-
 (* eval_operand ignores vs_allocas and vs_alloca_next —
    only depends on vs_vars and vs_labels. Used after ALLOCA. *)
 Theorem eval_operand_alloca_fields[local]:
@@ -90,27 +76,6 @@ Theorem eval_operand_alloca_fields[local]:
 Proof
   Cases_on `op` >>
   simp[eval_operand_def, lookup_var_def]
-QED
-
-(* ALLOCA always succeeds: both FLOOKUP branches produce OK.
-   The resulting state preserves eval_operand for non-output operands,
-   and the output variable becomes defined. *)
-Theorem step_ALLOCA[local]:
-  ∀ id size out ss.
-    ∃ ss'.
-      step_inst_base (mk_inst id ALLOCA [Lit size] [out]) ss = OK ss' ∧
-      (∀ op v. eval_operand op ss = SOME v ∧ (∀ x. op = Var x ⇒ x ≠ out) ⇒
-               eval_operand op ss' = SOME v) ∧
-      eval_operand (Var out) ss' ≠ NONE
-Proof
-  rw[step_inst_base_opcode_eqs, exec_alloca_def, mk_inst_def, LET_THM] >>
-  Cases_on `FLOOKUP ss.vs_allocas id` >>
-  simp[eval_operand_alloca_fields, eval_operand_update_var] >>
-  TRY (rename1 `SOME p` >> PairCases_on `p` >>
-       simp[eval_operand_alloca_fields, eval_operand_update_var]) >>
-  rw[] >> Cases_on `op` >>
-  gvs[eval_operand_def, update_var_def, lookup_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* SHA3 step lemma: given two defined operands, SHA3 computes the hash
@@ -447,51 +412,6 @@ Proof
   qexistsl [`st.cs_next_var`, `st`] >> simp[]
 QED
 
-(* Chain of 3 fresh update_vars: preserves operands and advances fresh_vars_wrt.
-   Uses eval_operand_fresh_step which handles one step at a time. *)
-Theorem fresh_update_chain3[local]:
-  ∀ cst ss (w0 w1 w2 : bytes32).
-    fresh_vars_wrt cst ss
-    ⇒
-    let v0 = STRING #"%" (toString cst.cs_next_var) in
-    let v1 = STRING #"%" (toString (cst.cs_next_var + 1)) in
-    let v2 = STRING #"%" (toString (cst.cs_next_var + 2)) in
-    let ss3 = update_var v2 w2
-                (update_var v1 w1
-                  (update_var v0 w0 ss)) in
-    fresh_vars_wrt (cst with cs_next_var := cst.cs_next_var + 3) ss3 ∧
-    (∀ op v. eval_operand op ss = SOME v ⇒ eval_operand op ss3 = SOME v)
-Proof
-  rpt gen_tac >> strip_tac >> simp[] >>
-  (* Rename to avoid shadowing: cst is our compile state *)
-  qabbrev_tac `n = cst.cs_next_var` >>
-  (* fresh_vars_wrt: 3 applications of fresh_vars_wrt_advance *)
-  `fresh_vars_wrt (cst with cs_next_var := n + 1)
-    (update_var (STRING #"%" (toString n)) w0 ss)` by (
-    mp_tac (Q.SPECL [`cst`,`cst with cs_next_var := n + 1`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  `fresh_vars_wrt (cst with cs_next_var := n + 2)
-    (update_var (STRING #"%" (toString (n + 1))) w1
-      (update_var (STRING #"%" (toString n)) w0 ss))` by (
-    mp_tac (Q.SPECL [`cst with cs_next_var := n + 1`,
-                      `cst with cs_next_var := n + 2`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  conj_tac >- (
-    mp_tac (Q.SPECL [`cst with cs_next_var := n + 2`,
-                      `cst with cs_next_var := n + 3`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  (* eval_operand: use DEP_REWRITE, then provide witnesses *)
-  rpt strip_tac >>
-  DEP_REWRITE_TAC[eval_operand_update_fresh] >>
-  rpt conj_tac
-  >- (qexistsl [`n`, `cst`] >> simp[Abbr `n`])
-  >- (qexistsl [`n + 1`, `cst with cs_next_var := n + 1`] >> simp[Abbr `n`])
-  >> qexistsl [`n + 2`, `cst with cs_next_var := n + 2`] >> simp[Abbr `n`]
-QED
-
 (* ===== Definedness-propagation framework for long pure chains ===== *)
 
 (* For pure opcodes (1-operand and 2-operand), step_inst_base produces
@@ -711,20 +631,6 @@ Definition check_chain_def:
       else NONE
 End
 
-(* Helper: extract check_chain conditions cleanly *)
-Theorem check_chain_cons[local]:
-  check_chain (i::is) known ≠ NONE ⇒
-  ∃n. pure_opc_arity i.inst_opcode = SOME n ∧
-      LENGTH i.inst_operands = n ∧
-      LENGTH i.inst_outputs = 1 ∧
-      EVERY (λop. case op of Lit _ => T | Var v => MEM v known
-                  | Label _ => T) i.inst_operands ∧
-      check_chain is (HD i.inst_outputs :: known) ≠ NONE
-Proof
-  simp[Once check_chain_def] >>
-  BasicProvers.every_case_tac >> simp[]
-QED
-
 (* Helper: label eval_operand is preserved through update_var *)
 Theorem eval_operand_label_update_var[local]:
   ∀ lbl v w ss.
@@ -756,17 +662,6 @@ Proof
   >> (strip_tac >>
       first_x_assum (qspecl_then [`known`, `ss`] mp_tac) >>
       impl_tac >- fs[] >> simp[])
-QED
-
-(* All label operands in a chain remain defined after update_var *)
-Theorem labels_preserved_by_update_var[local]:
-  ∀ ops v w ss.
-    EVERY (λop. case op of Label _ => eval_operand op ss ≠ NONE | _ => T) ops
-    ⇒
-    EVERY (λop. case op of Label _ => eval_operand op (update_var v w ss) ≠ NONE | _ => T) ops
-Proof
-  rw[listTheory.EVERY_MEM] >> res_tac >>
-  Cases_on `op` >> gvs[eval_operand_label_update_var]
 QED
 
 (* Collect all label-definedness requirements from an instruction chain *)
@@ -1666,19 +1561,6 @@ Resume compile_shift_correct[shr_case]:
 QED
 
 Finalise compile_shift_correct;
-
-(* Generic step lemma for exec_read1-based opcodes *)
-Theorem step_read1[local]:
-  ∀ f opc op1 v1 id out ss.
-    eval_operand op1 ss = SOME v1 ∧
-    (∀ inst s. inst.inst_opcode = opc ⇒
-       step_inst_base inst s = exec_read1 f inst s)
-    ⇒
-    step_inst_base (mk_inst id opc [op1] [out]) ss =
-      OK (update_var out (f v1 ss) ss)
-Proof
-  rw[exec_read1_def, mk_inst_def]
-QED
 
 Theorem step_MLOAD_result[local]:
   ∀ op1 v1 id out ss.
