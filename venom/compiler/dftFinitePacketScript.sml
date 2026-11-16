@@ -3236,6 +3236,89 @@ Proof
   asm_rewrite_tac[] >> (metis_tac[dft_slot_fill_observation])
 QED
 
+Theorem dft_packet_closed_row_key[local]:
+  !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d q8 raw_slots sites unused a e bb bt ps xs ys rho hin h0
+    bentry count front brest ks key.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FLOOKUP blocks (a,e) =
+    SOME (bb,bt,ps,xs,ys,rho,hin,h0,bentry,count,front,T,brest) /\
+  FLOOKUP ks_tab (a,e) = SOME ks /\ MEM key (FLAT ks) ==>
+  (?cid. key = (a,e,cid)) \/
+  ?cid sf tf inc entry order r8 rest.
+    FLOOKUP acts ((e,cid)::a) = SOME (sf,tf,inc,entry,order,SOME r8,SOME rest) /\
+    MEM key (FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab ((e,cid)::a,f)))) order))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+        FLOOKUP blocks (a,e) = _ ==> _`,
+     `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+        _ ==> _`,
+     `!a e cid q h b0 done_at_call child_entry ret. FLOOKUP calls (a,e,cid) = _ ==> _`,
+     `!a sf tf inc entry order res nrest.
+        FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _`,
+     `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest.
+        _ ==> !q. _`,
+     `FDOM blocks = FDOM ms_tab`, `FDOM blocks = FDOM es_tab`,
+     `AK = _`, `FLOOKUP blocks (a,e) = SOME _`,
+     `FLOOKUP ks_tab (a,e) = SOME ks`, `MEM key (FLAT ks)`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` drule >> strip_tac >>
+  Cases_on `bentry`
+  >- (qpat_x_assum `case NONE of NONE => _ | SOME v => _` mp_tac >> simp[] >>
+      strip_tac >> gvs[]) >>
+  PairCases_on `x` >>
+  qpat_x_assum `case SOME _ of NONE => _ | SOME v => _`
+    (strip_assume_tac o SRULE []) >>
+  Cases_on `FLOOKUP ms_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  rename1 `FLOOKUP ms_tab (a,e) = SOME ms` >>
+  Cases_on `FLOOKUP es_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  rename1 `FLOOKUP es_tab (a,e) = SOME ess` >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` drule >> simp[] >> strip_tac >>
+  `?q. q < LENGTH xs /\ MEM key (EL q ks)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`MEM key (FLAT ks)`, `LENGTH xs = LENGTH ys`,
+        `LENGTH ms = LENGTH ys`, `LENGTH ks = LENGTH ms`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[MEM_FLAT, MEM_EL] >> metis_tac[]) >>
+  qpat_x_assum `!q. q < _ ==> _` (qspec_then `q` mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `(EL q xs).inst_opcode = GAS`
+  >- (disj1_tac >> gvs[]) >>
+  Cases_on `(EL q xs).inst_opcode = INVOKE`
+  >- (`MEM q (TAKE count' rho')` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+           [`PERM rho' (COUNT_LIST (LENGTH xs))`, `q < LENGTH xs`,
+            `count' = LENGTH ys`, `LENGTH xs = LENGTH ys`] >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         drule sortingTheory.PERM_LENGTH >> drule sortingTheory.PERM_MEM_EQ >>
+         simp[MEM_COUNT_LIST] >> rpt strip_tac >>
+         gvs[rich_listTheory.LENGTH_COUNT_LIST, TAKE_LENGTH_TOO_LONG]) >>
+      qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest.
+        _ ==> !q. _` drule >> disch_then (qspec_then `q` mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `!a e cid q h b0 done_at_call child_entry ret. _ ==> _` drule >>
+      strip_tac >>
+      qpat_x_assum `!a sf tf inc entry order res nrest. _ ==> _`
+        (qspec_then `(e,(EL q xs).inst_id)::a` mp_tac) >>
+      simp[] >> strip_tac >>
+      map_every (fn pat => qpat_assum pat mp_tac)
+        [`MEM key (EL q ks)`, `(EL q xs).inst_opcode = INVOKE`,
+         `(EL q xs).inst_opcode = INVOKE ==> _`,
+         `FLOOKUP calls (a,e,(EL q xs).inst_id) = _`,
+         `FLOOKUP acts ((e,(EL q xs).inst_id)::a) = _`,
+         `case SOME (ir,child_out,caller_post) of NONE => _ | SOME v => _`,
+         `child_res = NONE <=> child_rest = NONE`] >>
+      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+      Cases_on `child_rest` >> gvs[] >> metis_tac[]) >>
+  gvs[]
+QED
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
