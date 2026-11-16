@@ -265,14 +265,19 @@ Resume compile_log_ready_stmt_frag_widen[args_summary]:
   `?H1. valid_horizon cx st0 H1 es_end.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `?ex. res = INR ex` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H1` mp_tac) >> simp[] >>
      strip_tac >> Cases_on `res` >> gvs[]) >> gvs[] >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> rpt (pop_assum kall_tac) >> strip_tac >> conj_tac
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
+      metis_tac[expr_exit_INR_type]) >>
+  fs[halt_exit_def]
 QED
 
 Resume compile_log_ready_stmt_frag_widen[args_value]:
@@ -390,7 +395,7 @@ Resume compile_log_ready_stmt_frag_widen[static_suffix]:
         mp_tac >>
       qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
       simp[Excl "enc_def"]) >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def]
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Resume compile_log_ready_stmt_frag_widen[suffix]:
