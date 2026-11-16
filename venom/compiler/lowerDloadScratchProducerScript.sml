@@ -55,6 +55,8 @@ Theorem ld_scratch_certificate_structure:
   allocas_from f t /\ f <= t.vs_alloca_next /\
   t.vs_alloca_next < dimword (:256) /\
   (a.inst_id NOTIN A ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t.vs_alloca_next + 32 <= fl) /\
+  t.vs_alloca_next <= fl /\
   ld_frame_bound t.vs_alloca_next H BP BH /\
   ld_stack_bound t.vs_alloca_next gstk /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
@@ -67,7 +69,7 @@ Theorem ld_scratch_certificate_structure:
     lookup_var av t1 = SOME(n2w p) /\
     ((FLOOKUP t.vs_allocas a.inst_id = NONE /\ p = t.vs_alloca_next) \/
       FLOOKUP t.vs_allocas a.inst_id = SOME(p,32)) /\
-    (!aa bb. ((aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb) ==>
+    (!aa bb. ((aa=bb /\ aa<lo) \/ (aa=bb /\ fl <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb) ==>
       bb < p \/ p+32 <= bb) /\
     ld_alloc_account keys d (a.inst_id INSERT A) s t1 /\
     ld_frame_embedding E L H s t1 /\

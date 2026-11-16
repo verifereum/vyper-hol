@@ -216,6 +216,7 @@ Theorem make_ssa_lockstep_entry_states:
   enters_block fn st st /\ post' = st
 Proof
   strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
   drule_all make_ssa_current_fn_first_block_no_phi >> strip_tac >>
   drule o1MakeSsaCfgTheory.make_ssa_current_fn_entry_label >> strip_tac >>
   `fn_entry_state fn' st` by gvs[fn_entry_state_def] >>

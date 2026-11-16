@@ -20,7 +20,7 @@ Proof
     AllCaseEqs(), sstore_def, tstore_def]
 QED
 
-Theorem dload_joint_tracked_storage_read_next:
+val dload_joint_tracked_storage_read_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -28,7 +28,7 @@ Theorem dload_joint_tracked_storage_read_next:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -69,7 +69,7 @@ Theorem dload_joint_tracked_storage_read_next:
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -106,7 +106,15 @@ Theorem dload_joint_tracked_storage_read_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_storage_read_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_storage_read_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -131,7 +139,7 @@ Proof
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t1 with vs_inst_idx := SUC t0.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -145,7 +153,7 @@ Proof
     (conj_tac
      >- (qpat_x_assum `s1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
      qpat_x_assum `t1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_unchanged_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>
@@ -154,7 +162,7 @@ Proof
   (impl_tac >- fs[EVERY_MEM]) >> simp[]
 QED
 
-Resume dload_joint_tracked_storage_read_next[semantic]:
+Resume dload_joint_tracked_storage_read_next_static[semantic]:
   rpt strip_tac >>
   `fn_ptr_ok P f` by
     (qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >> simp[EVERY_MEM]) >>
@@ -178,13 +186,13 @@ Resume dload_joint_tracked_storage_read_next[semantic]:
   disch_then (qspecl_then [`set (fn_ir_vars f)`,`C`] mp_tac) >>
   simp[] >> strip_tac >> qexists `s'` >> simp[lookup_var_def] >>
   conj_tac >- gvs[lookup_var_def] >>
-  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
+  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
     (mp_then Any mp_tac dload_boundary_core_index_update) >> simp[]
 QED
 
-Finalise dload_joint_tracked_storage_read_next
+Finalise dload_joint_tracked_storage_read_next_static
 
-Theorem dload_joint_tracked_storage_write_next:
+val dload_joint_tracked_storage_write_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -192,7 +200,7 @@ Theorem dload_joint_tracked_storage_write_next:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -233,7 +241,7 @@ Theorem dload_joint_tracked_storage_write_next:
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -270,7 +278,15 @@ Theorem dload_joint_tracked_storage_write_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_storage_write_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_storage_write_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -295,7 +311,7 @@ Proof
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t1 with vs_inst_idx := SUC t0.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -309,7 +325,7 @@ Proof
   qpat_assum `step_inst fuel C' i t0 = OK t1`
     (mp_then Any mp_tac dload_storage_write_step_fields) >> simp[] >> strip_tac >>
   drule_all dload_singleton_reachable_next_fields >> strip_tac >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_unchanged_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>
@@ -318,7 +334,7 @@ Proof
   (impl_tac >- fs[EVERY_MEM]) >> simp[]
 QED
 
-Resume dload_joint_tracked_storage_write_next[semantic]:
+Resume dload_joint_tracked_storage_write_next_static[semantic]:
   rpt strip_tac >>
   `fn_ptr_ok P f` by
     (qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >> simp[EVERY_MEM]) >>
@@ -352,11 +368,11 @@ Resume dload_joint_tracked_storage_write_next[semantic]:
        (mp_then Any mp_tac dload_storage_write_step_fields) >> simp[]) >>
   qexists `s'` >> simp[lookup_var_def] >>
   conj_tac >- gvs[lookup_var_def] >>
-  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
+  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
     (mp_then Any mp_tac dload_boundary_core_index_update) >> simp[]
 QED
 
-Resume dload_joint_tracked_storage_write_next[outputs]:
+Resume dload_joint_tracked_storage_write_next_static[outputs]:
   rpt strip_tac >>
   `fn_inst_wf f` by fs[o1_fn_shape_def] >>
   `inst_wf i` by
@@ -364,4 +380,22 @@ Resume dload_joint_tracked_storage_write_next[outputs]:
   fs[] >> gvs[inst_wf_def]
 QED
 
-Finalise dload_joint_tracked_storage_write_next
+Finalise dload_joint_tracked_storage_write_next_static
+
+Theorem dload_joint_tracked_storage_read_next:
+  ^dload_joint_tracked_storage_read_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_storage_read_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+Theorem dload_joint_tracked_storage_write_next:
+  ^dload_joint_tracked_storage_write_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_storage_write_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED

@@ -89,10 +89,14 @@ QED
 
 Theorem dload_headroom_mem_inv_decrease:
   ctx_dload_count C' <= ctx_dload_count C /\
+  (EXISTS (\f. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f))
+     C'.ctx_functions ==>
+   EXISTS (\f. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f))
+     C.ctx_functions) /\
   mem_inv (\ctx fn inst s. dload_headroom_ok C fn inst s) C' vs ==>
   mem_inv dload_headroom_ok C' vs
 Proof
   strip_tac >> irule mem_inv_mono >>
   qexists_tac `\ctx fn inst s. dload_headroom_ok C fn inst s` >>
-  simp[dload_headroom_ok_def] >> rpt strip_tac >> decide_tac
+  simp[dload_headroom_ok_def] >> rpt strip_tac >> fs[] >> res_tac >> decide_tac
 QED

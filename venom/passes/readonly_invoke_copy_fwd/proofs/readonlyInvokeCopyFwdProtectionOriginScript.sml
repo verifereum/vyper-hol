@@ -193,7 +193,7 @@ Proof
     metis_tac[occurrence_alias_reachable_available, ircf_alias_refl] >>
   `FLOOKUP B (a,da.inst_id) = SOME (db,w2n sz) /\
    FLOOKUP B (a,sa.inst_id) = SOME (sb,w2n sz)` by
-    metis_tac[occ_frame_reachable_annotation, occurrence_annotation_ok_def,
+    metis_tac[occ_frame_reachable_annotation_static, occurrence_annotation_ok_def,
               occurrence_allocas_ok_def] >>
   rpt (qpat_x_assum `!P. boundary_pred _ _ _ P ==> _` kall_tac) >>
   qexists_tac `<| rpe_event := e; rpe_block := bb; rpe_fn := fn;

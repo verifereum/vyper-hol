@@ -24,13 +24,13 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem layout_canonical_corridor_success:
+Theorem layout_canonical_corridor_success_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
@@ -64,13 +64,45 @@ Proof
   simp[layout_phase_origin_def] >> fs[layout_corridor_entry_def]
 QED
 
-Theorem layout_canonical_corridor_exit:
+Theorem layout_canonical_corridor_success:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INR g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  i.inst_opcode <> INVOKE /\
+  step_inst_base i s = OK post ==>
+  ~is_terminator i.inst_opcode /\
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INR g) post tpost
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_corridor_success_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem layout_canonical_corridor_exit_headroom_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
@@ -102,4 +134,35 @@ Proof
   `i.inst_opcode = ASSIGN` by gvs[] >>
   qpat_x_assum `step_inst_base i s = r` mp_tac >>
   simp[Once step_inst_base_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem layout_canonical_corridor_exit:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INR g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  i.inst_opcode <> INVOKE /\
+  step_inst_base i s = r /\ (!p. r <> OK p) /\ (!e. r <> Error e) ==>
+  ?r'. step_inst_base j t = r' /\
+    layout_canonical_result D lo vs0 C C' q0 es qs ass qend q n r r'
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_corridor_exit_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

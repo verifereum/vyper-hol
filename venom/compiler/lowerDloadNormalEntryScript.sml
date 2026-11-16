@@ -67,7 +67,8 @@ Proof
       sx tx astk live keys d A suspended gstk f` by
     simp[NoAsms, ld_normal_data_def, ld_frame_data_def,
       ld_frame_embedding_def, ld_shared_state_def, ld_owned_vars_def,
-      lookup_var_def, ld_alloc_account_def, allocas_from_def, read_memory_def] >>
+      lookup_var_def, ld_alloc_account_def, allocas_from_def, read_memory_def,
+      dyn_floor_def] >>
   qsuff_tac `ld_normal_data CS fn V {v | v IN V /\ ~retpc_var fn v} lo E L H AP BP
     (ld_entry_prov fn s AG) (ld_entry_prov fn t BH)
     (entry_taint_vars fn s tn) (entry_taint_vars fn t un)

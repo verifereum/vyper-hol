@@ -41,7 +41,6 @@ QED
 
 Theorem ptr_source_tagged_owner_call_liveset:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack /\ EL (SUC n) tokens = owner /\
   FLOOKUP TG v = SOME (owner,aid) /\ fn = (EL n a.po_stack).cf_fn /\
   fn_ptr_ok P fn /\ ssa_form fn /\ wf_function fn /\ all_reachable fn /\
@@ -81,11 +80,11 @@ Proof
   simp[ml_used_gen_def, ml_read_gen_def] >> metis_tac[]
 QED
 
-Theorem ptr_output_tagged_ancestor_destination_separation:
+Theorem ptr_output_tagged_ancestor_destination_separation_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   ptr_chrono_history vs C h endpoint /\ t < LENGTH h /\
   stk = (EL t h).po_stack /\ n < LENGTH stk /\ k <= n /\
@@ -108,7 +107,6 @@ Theorem ptr_output_tagged_ancestor_destination_separation:
     ~MEM c (MAP (\i. Allocation i.inst_id)
       (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
   ptr_source_ownership vs C prefix (EL t h) tokens registry births PT TG saved /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EL (SUC n) tokens = owner /\ FLOOKUP TG v = SOME (owner,aid) /\
   ssa_form fn /\ all_reachable fn /\ fn_inst_wf fn /\ EVERY inst_wf (fn_insts fn) ==>
   ?pb. MEM (Allocation bid,pb,sb) (imported_mems_used observed.cu_context fn) /\
@@ -119,14 +117,47 @@ Proof
     metis_tac[] >>
   drule_all ptr_source_tagged_owner_call_liveset >>
   disch_then (qspec_then `observed.cu_context` strip_assume_tac) >>
-  irule ptr_output_suspended_descendant_separation >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- metis_tac[]) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
-  asm_rewrite_tac[] >> metis_tac[]
+  irule ptr_output_suspended_descendant_separation_static >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (qexists `P` >> first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
+       asm_rewrite_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ptr_output_tagged_ancestor_destination_separation:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  ptr_chrono_history vs C h endpoint /\ t < LENGTH h /\
+  stk = (EL t h).po_stack /\ n < LENGTH stk /\ k <= n /\
+  EL k (((EL t h).po_fn,(EL t h).po_state) ::
+    MAP (\f. (f.cf_fn,f.cf_state)) stk) = (desc,ds) /\
+  FLOOKUP ds.vs_allocas bid = SOME (db,sb) /\
+  fn = (EL n stk).cf_fn /\
+  addr = ((EL n stk).cf_state.vs_current_bb,(EL n stk).cf_state.vs_inst_idx) /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  fn.fn_eom = NONE /\ fn_ptr_ok P fn /\
+  wf_function fn /\ ptr_history_cfg_ok fn (cfg_analyze fn) /\
+  concretize_function_fuel_in_context (concretize_memloc_fuel fn)
+    observed.cu_context reserved fn = SOME fn' /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  fn' = out.fpo_function /\
+  static_alloca_items fn = SOME items /\ MEM (Allocation aid,sa) items /\
+  MEM (Allocation aid,pa,sa) fn'.fn_mems_used /\ 0 < sa /\ 0 < sb /\
+  (!c p sz. MEM (c,p,sz) (imported_mems_used observed.cu_context fn) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
+  ptr_source_ownership vs C prefix (EL t h) tokens registry births PT TG saved /\
+  EL (SUC n) tokens = owner /\ FLOOKUP TG v = SOME (owner,aid) /\
+  ssa_form fn /\ all_reachable fn /\ fn_inst_wf fn /\ EVERY inst_wf (fn_insts fn) ==>
+  ?pb. MEM (Allocation bid,pb,sb) (imported_mems_used observed.cu_context fn) /\
+    reserved_intervals_disjoint (pa,sa) (pb,sb)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_output_tagged_ancestor_destination_separation_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

@@ -29,10 +29,11 @@ Theorem dload_store_region:
   eval_operand a s = SOME x /\ eval_operand v s = SOME val /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G a) q x y ==>
+  dload_value_word fl fs {} (op_prov G a) q x y ==>
   (w2n x = w2n y /\ w2n x + len <= lo) \/
   (?owner id b c n d. dload_live_site fs owner id b c n /\
-    w2n x = b+d /\ w2n y = c+d /\ d+len <= n)
+    w2n x = b+d /\ w2n y = c+d /\ d+len <= n) \/
+  (w2n x = w2n y /\ fl <= w2n x /\ w2n x + len < dimword (:256))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `(lo < w2n x + len \/ op_prov G a <> NONE) ==>

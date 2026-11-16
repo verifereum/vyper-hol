@@ -19,7 +19,7 @@ Theorem layout_stage_row_produce:
   lookup_function name C.ctx_functions = SOME fn /\ fn.fn_eom = NONE ==>
   ?out observed layout.
     lookup_function name C'.ctx_functions = SOME out /\
-    walk_view rpolicy (DROP 3 o1_fn_passes) C' fn observed /\
+    walk_view o1_fn_row rpolicy 3 (DROP 3 o1_fn_passes) C' fn observed /\
     layout_stage_row observed.cu_context observed.cu_context.ctx_global_reserved
       fn out layout
 Proof

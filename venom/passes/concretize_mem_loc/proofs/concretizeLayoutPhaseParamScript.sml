@@ -33,9 +33,11 @@ Proof
     fs[layout_ordinary_trace_def] >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
-  `PG = MAP (OPTION_MAP SND) rp /\
+  `(LENGTH PG = LENGTH rp /\
+    (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e))) /\
    resolution (resolved_cache birth s.vs_allocas) rp om rv` by
-    fs[resolved_config_ok_def, resolved_frame_ok_def] >>
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_parameters >> fs[resolved_frame_ok_def]) >>
   rule_assum_tac (REWRITE_RULE[ETA_AX]) >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`)
     (REWRITE_RULE[GSYM concretizeLayoutSupplementTheory.concretize_local_obs_def, ETA_AX]
@@ -57,7 +59,8 @@ Proof
     (simp[origin_out_def, resolved_out_def, resolve_tag_def,
        resolved_parameter_entry_def, EL_MAP] >>
      Cases_on `w2n idx < LENGTH rp` >> simp[] >>
-     Cases_on `EL (w2n idx) rp` >> simp[] >> PairCases_on `x` >> simp[]) >>
+     Cases_on `EL (w2n idx) PG` >> Cases_on `EL (w2n idx) rp` >> simp[] >>
+     res_tac >> gvs[]) >>
   `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>
   `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
     k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\

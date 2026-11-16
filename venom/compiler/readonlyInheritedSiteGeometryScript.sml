@@ -7,7 +7,7 @@ Ancestors
 
 Theorem inherited_site_current_alloca_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   MEM owner (MAP (\u. u.of_owner) U) /\
   FLOOKUP B (owner,aid) = SOME (b,z) /\ 0 < z ==>
   !local_id. FLOOKUP s.vs_allocas local_id <> SOME (b,z)
@@ -23,7 +23,7 @@ QED
 (* The successful-step boundary does not require a following active instruction. *)
 Theorem inherited_site_alloca_step_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   MEM owner (MAP (\u. u.of_owner) U) /\
   FLOOKUP B (owner,aid) = SOME (b,z) /\ 0 < z /\
   lo <= s.vs_alloca_next /\ inst.inst_opcode = ALLOCA /\
@@ -49,7 +49,7 @@ QED
 (* Direct interface for provenance support at an ALLOCA step. *)
 Theorem inherited_site_out_prov_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   MEM owner (MAP (\u. u.of_owner) U) /\
   FLOOKUP B (owner,aid) = SOME (b,z) /\ 0 < z /\
   lo <= s.vs_alloca_next /\ inst.inst_opcode = ALLOCA /\
@@ -69,7 +69,7 @@ Theorem frame_reachable_inherited_site_exclusion:
   frame_reachable vs C stk PG G tn fn active s ==>
   ?n a U B HP H.
     occ_frame_reachable vs C stk PG G tn fn active s n a U B HP H /\
-    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
     occurrence_natural_geometry 0 a U B stk s /\
     !owner aid b z.
       MEM owner (MAP (\u. u.of_owner) U) /\
@@ -82,7 +82,7 @@ Proof
   strip_tac >>
   `?n a U B HP H.
     occ_frame_reachable vs C stk PG G tn fn active s n a U B HP H /\
-    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
     occurrence_natural_geometry 0 a U B stk s` by
     (irule frame_reachable_occurrence_geometry >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`n`, `a`, `U`, `B`, `HP`, `H`] >> simp[] >>

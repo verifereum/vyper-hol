@@ -42,15 +42,17 @@ Proof
        write_memory_with_expansion_def]
 QED
 
-Theorem concretize_istore_local_complete:
+Theorem concretize_istore_local_complete_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
@@ -89,7 +91,7 @@ Theorem concretize_istore_local_complete:
 Proof
   strip_tac >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
-  drule_all concretize_istore_demand_execution >> strip_tac >>
+  drule_all concretize_istore_demand_execution_headroom_static >> strip_tac >>
   qexists_tac `istore (w2n dst) valueT t` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "local" >>
@@ -100,7 +102,7 @@ Proof
       mstore_def, write_memory_with_expansion_def]
 QED
 
-Resume concretize_istore_local_complete[local]:
+Resume concretize_istore_local_complete_headroom_static[local]:
   `concretize_local_obs s t` by metis_tac[local_rel_observation] >>
   `concretize_local_obs post (istore (w2n dst) valueT t)` by
     metis_tac[istore_observation] >>
@@ -118,7 +120,7 @@ Resume concretize_istore_local_complete[local]:
   conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC
 QED
 
-Resume concretize_istore_local_complete[supplement]:
+Resume concretize_istore_local_complete_headroom_static[supplement]:
   drule_all istore_supplement >>
   disch_then (qspec_then `w2n dst` assume_tac) >>
   irule concretize_supplement_fields >>
@@ -126,8 +128,8 @@ Resume concretize_istore_local_complete[supplement]:
   simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]
 QED
 
-Resume concretize_istore_local_complete[taint]:
-  drule_all concretize_istore_demand_geometry >> strip_tac >>
+Resume concretize_istore_local_complete_headroom_static[taint]:
+  drule_all concretize_istore_demand_geometry_headroom_static >> strip_tac >>
   `demand_taint (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
     (step_taint inst s post tn).t_mem
     (step_taint inst t (istore (w2n dst) valueT t) un).t_mem` by
@@ -143,4 +145,56 @@ Resume concretize_istore_local_complete[taint]:
   fs[relocation_taint_le_def, key_update_def, SUBSET_DEF, op_taint_def,
      FLOOKUP_DRESTRICT] >> rpt strip_tac >> metis_tac[]
 QED
-Finalise concretize_istore_local_complete
+Finalise concretize_istore_local_complete_headroom_static
+
+Theorem concretize_istore_local_complete:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ MEM inst (fn_insts fn) /\
+  relocation_env s t /\ relocation_reader_context s t /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
+    concretize_local_obs s t /\ concretize_supplement D tn s t /\
+  relocation_taint_le
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un /\
+  op_taint un opv SUBSET {k | k < 32} /\
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [opd;opv] /\
+  inst.inst_outputs = [] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    local_rel (\u. F)
+      (guarded_ptr (retpc_var fn)
+        (activation_lookup (0:num) (concretize_positions C')
+          (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+      (guarded_bytes (retpc_var fn) rv (step_taint inst s post tn))
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      concretize_local_obs post tpost /\
+    step_prov PG (SND o_f rv) inst post = SND o_f rv /\
+    relocation_taint_le
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (step_taint inst s post tn) (step_taint inst t tpost un) /\
+    concretize_supplement D (step_taint inst s post tn) post tpost /\
+    relocation_env post tpost /\ relocation_reader_context post tpost
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_istore_local_complete_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

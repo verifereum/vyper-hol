@@ -17,6 +17,8 @@ Ancestors
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Theorem mm_local_payload_opcodes[local,simp]:
   mode IN {CalldataMerge; DloadMerge} ==>
   mode_copy_opcode mode <> MSTORE /\
@@ -677,7 +679,7 @@ Proof
   gvs[mm_local_payload_capture_def, mode_copy_opcode_def,
     mm_local_write_capture_def, AllCaseEqs()] >>
   qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
     codegenRelTheory.fixed_source_write_range_def,
     codegenRelTheory.sized_source_write_range_def,
@@ -1537,7 +1539,7 @@ Proof
      gvs[mm_local_payload_cut_def, mm_local_nonmemory_frame_def] >>
      rpt strip_tac >> Cases_on `op` >>
      gvs[venomStateTheory.eval_operand_def]) >>
-  gvs[unitMemInvTheory.static_mem_ok_def] >> metis_tac[]
+  gvs[mmTraceProofsTheory.mm_static_mem_ok_def] >> metis_tac[]
 QED
 
 Theorem mm_local_payload_bulk_static[local]:
@@ -1547,7 +1549,7 @@ Theorem mm_local_payload_bulk_static[local]:
   static_mem_ok eom ctx fn (mk_bulk_copy_inst mode inst g) t
 Proof
   Cases_on `mode` >> simp[] >> strip_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     mk_bulk_copy_inst_def, mode_copy_opcode_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -1561,7 +1563,7 @@ Theorem mm_local_payload_word_static[local]:
   static_mem_ok eom ctx fn (mk_mstore_from_load inst dst v) u
 Proof
   Cases_on `mode` >> simp[] >> strip_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     mk_load_inst_def, mode_load_opcode_def, mk_mstore_from_load_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -2463,7 +2465,7 @@ Proof
                AllCaseEqs()]) >>
           gnvs[apply_groups_inst_supply_def] >> gvs[] >>
           Cases_on `lookup_var sv w` >>
-          simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+          simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
             contextCodegenRelTheory.source_memory_read_ranges_def,
             codegenRelTheory.source_memory_write_ranges_def,
             codegenRelTheory.fixed_source_write_range_def,
@@ -2571,7 +2573,7 @@ Proof
          qexists `t with vs_inst_idx := SUC pc` >> gvs[arithmeticTheory.ADD1]) >>
       qexists `t'` >> simp[] >> irule mm_local_safe_exec_prefix_universal >>
       conj_tac
-      >- simp[mk_nop_from_def, unitMemInvTheory.static_mem_ok_def,
+      >- simp[mk_nop_from_def, mmTraceProofsTheory.mm_static_mem_ok_def,
         unitMemInvTheory.inst_mem_ranges_def,
         contextCodegenRelTheory.source_memory_read_ranges_def,
         codegenRelTheory.source_memory_write_ranges_def] >> gvs[]) >>

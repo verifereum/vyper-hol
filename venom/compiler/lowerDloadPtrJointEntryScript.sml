@@ -4,7 +4,7 @@ Ancestors
   lowerDloadPtrPhi lowerDloadPtrRel o1ContractLowerDload
   lowerDloadPtrStatic o1PassLift o1PassContract venomPassSchedule
   lowerDloadPtrEntry lowerDloadPtrAggregate ptrDiscipline venomWf
-  unitTransformDefs irSupply
+  unitTransformDefs irSupply o1LowerDloadSourceEntry
   contextCodegenRel venomExecSemantics venomExecProofs venomInst lowerDloadDefs list rich_list
 
 Theorem dload_insts_entry_control[local]:
@@ -135,25 +135,9 @@ Proof
   Cases_on `lookup_function name C.ctx_functions` >> simp[] >> metis_tac[]
 QED
 
-Theorem dload_no_phi_entry:
-  first_block_no_phi f /\ fn_entry_label f = SOME lbl ==>
-  (enters_block f
-    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t <=>
-   t = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-Proof
-  Cases_on `f.fn_blocks` >> simp[fn_entry_label_def, entry_block_def] >> strip_tac >> gvs[] >>
-  `phi_prefix_length h.bb_instructions = 0 /\
-   (!s. eval_phis s h.bb_instructions = OK s)` by
-    (qpat_x_assum `first_block_no_phi f` mp_tac >>
-     simp[first_block_no_phi_def] >>
-     Cases_on `h.bb_instructions` >>
-     simp[phi_prefix_length_def, eval_phis_def]) >>
-  simp[enters_block_def, lookup_block_def, FIND_thm] >> metis_tac[]
-QED
-
-Theorem dload_actual_joint_entry:
+Theorem dload_actual_joint_entry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
@@ -170,7 +154,7 @@ Theorem dload_actual_joint_entry:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
     (!v. lookup_var v s = lookup_var v t) /\
@@ -209,22 +193,95 @@ Proof
   `vs.vs_alloca_next < dimword (:256)` by
     (irule dload_active_entry_frontier_bound >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
-  `o1_run_state_ok t` by
-    (qpat_x_assum `o1_run_state_ok vs` mp_tac >>
-     simp[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]) >>
+  `o1_initial_state_ok t /\ t.vs_fmp = t.vs_initial_fmp /\ code_layout_valid t` by
+    (gvs[o1_initial_state_ok_def, code_layout_valid_def]) >>
   `lo <= t.vs_alloca_next` by
     (qpat_x_assum `ptr_discipline lo C vs` mp_tac >> simp[ptr_discipline_def]) >>
   `t.vs_alloca_next < dimword (:256)` by simp[] >>
+  `vs.vs_alloca_next <= dyn_floor C vs` by
+    (irule dload_active_entry_dyn_floor >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `t.vs_alloca_next <= dyn_floor C vs` by simp[] >>
   `t.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `?k. k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f` by
     metis_tac[MEM_EL] >>
   qexistsl [`f`,`q`,`q'`,`i`,`emitted`,`t`,`k`] >> simp[] >>
   conj_tac >- metis_tac[] >>
-  irule dload_boundary_initial >> metis_tac[]
+  irule dload_boundary_initial_static >> metis_tac[]
+QED
+
+Theorem dload_actual_joint_entry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
+  fn_entry_label g = SOME lbl /\
+  enters_block g
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
+  active_inst g j t ==>
+  ?f q q' i emitted s k.
+    C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME f /\
+    fn_entry_label f = SOME lbl /\
+    enters_block f
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s /\
+    frame_reachable vs C [] [] FEMPTY entry_taint f i s /\
+    ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
+    dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
+    k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
+    dload_boundary_core (dyn_floor C vs) lo
+      [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+      {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
+    (!v. lookup_var v s = lookup_var v t) /\
+    s.vs_allocas = FEMPTY /\ t.vs_allocas = FEMPTY /\
+    ({} = FDOM t.vs_allocas DIFF {id | ?ci. MEM ci (fn_insts f) /\ ci.inst_id = id})
+Proof
+  strip_tac >> irule dload_actual_joint_entry_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 (* The original-variable boundary used by the strengthened invariant.  Opaque
    variables are retained for definedness, but excluded from value matching. *)
+Theorem dload_actual_joint_entry_tracked_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
+  fn_entry_label g = SOME lbl /\
+  enters_block g
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
+  active_inst g j t ==>
+  ?f q q' i emitted s k.
+    C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME f /\
+    frame_reachable vs C [] [] FEMPTY entry_taint f i s /\
+    ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
+    dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
+    k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
+    dload_boundary_core (dyn_floor C vs) lo
+      [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+      ({v | ?ci. MEM ci (fn_insts f) /\
+          (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}
+        DIFF {v | retpc_var f v})
+      [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
+    (!v. (?ci. MEM ci (fn_insts f) /\
+          (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)) ==>
+       (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+    FDOM FEMPTY SUBSET fn_pv P f /\
+    (!n b sz. n < LENGTH ([]:(num # num) option list) /\
+       EL n [] = SOME (b,sz) ==> n IN P f.fn_name) /\
+    s.vs_allocas = FEMPTY /\ t.vs_allocas = FEMPTY /\
+    ({} = FDOM t.vs_allocas DIFF {id | ?ci. MEM ci (fn_insts f) /\ ci.inst_id = id}) /\
+    (!n. n < LENGTH ([]:call_frame list) ==> F)
+Proof
+  strip_tac >> drule_all dload_actual_joint_entry_static >> strip_tac >>
+  qexistsl [`f`,`q`,`q'`,`i`,`emitted`,`s`,`k`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (irule dload_boundary_vars_restrict >>
+       goal_assum (drule_at Any) >> simp[pred_setTheory.SUBSET_DEF] >> NO_TAC) >>
+  simp[NoAsms] >> metis_tac[]
+QED
+
 Theorem dload_actual_joint_entry_tracked:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -241,7 +298,7 @@ Theorem dload_actual_joint_entry_tracked:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       ({v | ?ci. MEM ci (fn_insts f) /\
           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}
@@ -257,10 +314,6 @@ Theorem dload_actual_joint_entry_tracked:
     ({} = FDOM t.vs_allocas DIFF {id | ?ci. MEM ci (fn_insts f) /\ ci.inst_id = id}) /\
     (!n. n < LENGTH ([]:call_frame list) ==> F)
 Proof
-  strip_tac >> drule_all dload_actual_joint_entry >> strip_tac >>
-  qexistsl [`f`,`q`,`q'`,`i`,`emitted`,`s`,`k`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (irule dload_boundary_vars_restrict >>
-       goal_assum (drule_at Any) >> simp[pred_setTheory.SUBSET_DEF] >> NO_TAC) >>
-  simp[NoAsms] >> metis_tac[]
+  strip_tac >> irule dload_actual_joint_entry_tracked_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

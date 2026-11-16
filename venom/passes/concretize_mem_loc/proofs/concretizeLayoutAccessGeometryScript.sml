@@ -61,28 +61,48 @@ Theorem memory_offset_taint_empty:
   (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) ==>
   op_taint tn ops.iao_ofst = {}
 Proof
-  strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[mem_write_ops_def] >>
-  gvs[mem_read_ops_def, AllCaseEqs()] >>
-  fs[taint_ok_def] >>
+  simp[mem_write_ops_def, mem_read_ops_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[taint_ok_def] >>
   spose_not_then assume_tac >>
   qmatch_asmsub_rename_tac `op_taint tn addr <> {}` >>
   qpat_x_assum `!op. _` (qspec_then `addr` mp_tac) >> simp[] >>
   metis_tac[MEM_REVERSE, MEM]
 QED
 
-Theorem concretize_memory_access_geometry:
+(* Without DALLOCA every pointer is resolved, so an access through an
+   unresolved operand stays in the fixed region. *)
+Theorem access_ok_complete_static[local]:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\ SND o_f rv = G /\
+  (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE) /\ len <> 0 /\
+  ((MEM (off,len) (source_memory_write_ranges inst s) /\
+    mem_write_ops inst = SOME ops) \/
+   (MEM (off,len) (source_memory_read_ranges inst s) /\
+    mem_read_ops inst = SOME ops)) ==>
+  off + len <= lo
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >> gvs[access_ok_def]
+  >- (qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges inst s) /\ _ ==> _`
+        (qspecl_then [`off`, `len`] mp_tac) >> fs[] >> rpt strip_tac >>
+      gvs[FLOOKUP_o_f]) >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges inst s) /\ _ ==> _`
+    (qspecl_then [`off`, `len`] mp_tac) >> fs[] >> rpt strip_tac >>
+  gvs[FLOOKUP_o_f]
+QED
+
+Theorem concretize_memory_access_geometry_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -99,7 +119,8 @@ Theorem concretize_memory_access_geometry:
    (MEM (w2n off,len) (source_memory_read_ranges inst s) /\
     mem_read_ops inst = SOME ops)) ==>
   ?offT. eval_operand opd t = SOME offT /\
-    ((w2n off+len <= lo /\ w2n offT = w2n off) \/
+    (((w2n off+len <= lo \/ dyn_floor C s <= w2n off) /\
+      w2n offT = w2n off) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n off /\
@@ -119,15 +140,29 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
+  `(!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)) /\
+   (!v site. FLOOKUP G v = SOME site /\ FLOOKUP rv v = NONE ==>
+      w2n s.vs_initial_fmp <= FST site)` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
-  `((w2n off+len <= lo /\ (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE)) \/
+  Q.SUBGOAL_THEN `(((w2n off+len <= lo \/ w2n s.vs_initial_fmp <= w2n off) /\
+     (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE)) \/
     (?u tok b sz. ops.iao_ofst = Var u /\ FLOOKUP rv u = SOME (tok,(b,sz)) /\
-      b <= w2n off /\ w2n off+len <= b+sz))` by
-    (irule resolved_memory_access >> metis_tac[]) >>
-  pop_assum strip_assume_tac
-  >- (`op_taint tn ops.iao_ofst = {}` by
+      b <= w2n off /\ w2n off+len <= b+sz))`
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN assume_tac) strip_assume_tac)
+  >- (irule resolved_memory_access >> metis_tac[])
+  >- (`w2n off + len <= lo \/ dyn_floor C s <= w2n off` by
+        (Cases_on `ctx_has_dalloca C` >- fs[dyn_floor_def] >> disj1_tac >>
+         `SND o_f rv = G` by
+           (qpat_x_assum `~ctx_has_dalloca C ==> _` mp_tac >>
+            simp[resolved_complete_def]) >>
+         irule (INST_TYPE [alpha |-> ``:num # num``] access_ok_complete_static) >>
+         conj_tac >- fs[] >>
+         qexistsl_tac [`G`, `fn`, `inst`, `ops`, `rv`, `s`] >>
+         asm_rewrite_tac[]) >>
+      `op_taint tn ops.iao_ofst = {}` by
         (irule memory_offset_taint_empty >> metis_tac[]) >>
       `!v. ops.iao_ofst = Var v ==> ~retpc_var fn v /\ FLOOKUP rv v = NONE` by
         (rpt strip_tac >>
@@ -135,17 +170,17 @@ Proof
       drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_masked_operand >>
       disch_then drule_all >> strip_tac >> gvs[] >>
       `off = y` by metis_tac[frameRelocationGuardedValuesTheory.word_agree_except_empty] >>
-      gvs[] >> qexists_tac `y` >> simp[]) >>
+      gvs[] >> qexists_tac `y` >> fs[]) >>
   `~retpc_var fn u` by
     (drule disciplined_memory_offset_not_retpc >>
      disch_then drule >> disch_then drule >>
      disch_then irule >> metis_tac[]) >>
   PairCases_on `tok` >> gvs[] >>
   `w2n off+len <= b+sz` by decide_tac >>
-  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range >>
+  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range_static >>
   disch_then drule_all >> strip_tac >>
   `?d owner.
-    activation_cache (JointConfig stk PG (SND o_f rv) tn fn inst s oms om hs h)
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
       d owner tok1 (b,sz) /\
     activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (tok0,tok1) =
@@ -155,6 +190,88 @@ Proof
   `gas_cut ncut vs0 s` by (drule_all layout_cut_safe_frame >> simp[]) >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
-  qexists_tac `y` >> simp[] >>
+  qexists_tac `y` >> simp[] >> disj2_tac >>
   qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]
+QED
+
+Theorem concretize_memory_access_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  len <> 0 /\ ops.iao_ofst = opd /\ eval_operand opd s = SOME off /\
+  ((MEM (w2n off,len) (source_memory_write_ranges inst s) /\
+    mem_write_ops inst = SOME ops) \/
+   (MEM (w2n off,len) (source_memory_read_ranges inst s) /\
+    mem_read_ops inst = SOME ops)) ==>
+  ?offT. eval_operand opd t = SOME offT /\
+    (((w2n off+len <= lo \/ dyn_floor C s <= w2n off) /\
+      w2n offT = w2n off) \/
+     (?d owner aid b sz.
+       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+         d owner aid (b,sz) /\ lo <= b /\ b <= w2n off /\
+       w2n off+len <= b+sz /\
+       w2n offT = concretize_positions C' owner aid + (w2n off-b)))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_memory_access_geometry_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+(* Every byte of an access the geometry places relocates as a pair: fixed
+   and dynamic-region bytes to themselves, cached bytes by displacement. *)
+Theorem access_geometry_relocation_pairs:
+  joint_trace vs0 C q0 es qs q /\ EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ c <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  ((((w2n (off:bytes32) + len <= lo \/ dyn_floor C s <= w2n off) /\
+     offT = w2n off) \/
+   (?d owner aid b sz.
+     activation_cache (EL c (q0::qs)) d owner aid (b,sz) /\ lo <= b /\
+     b <= w2n off /\ w2n off + len <= b + sz /\
+     offT = positions owner aid + (w2n off - b)))) ==>
+  !i. i < len ==>
+    relocation_pair lo positions (EL c (q0::qs)) (w2n off + i) (offT + i)
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo ncut C vs0 /\
+   gas_cut ncut vs0 (joint_state q)` by fs[layout_cut_safe_def] >>
+  rpt strip_tac
+  >- (gvs[] >> irule relocation_pair_static >> decide_tac)
+  >- (`ctx_has_dalloca C` by
+        (spose_not_then assume_tac >> fs[dyn_floor_def] >>
+         `w2n off < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+         decide_tac) >>
+      `dyn_floor C s = joint_initial_fmp (EL c (q0::qs))` by
+        fs[dyn_floor_def, joint_initial_fmp_def] >>
+      `joint_initial_fmp (EL c (q0::qs)) = w2n vs0.vs_initial_fmp` by
+        (irule joint_initial_fmp_trace >> metis_tac[]) >>
+      Cases_on `w2n off + i < lo`
+      >- (gvs[] >> irule relocation_pair_static >> decide_tac) >>
+      gvs[] >> irule relocation_pair_dynamic >> rpt conj_tac
+      >~ [`activation_cache _ _ _ _ _`]
+      >- (rpt strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
+          qexists_tac `w2n vs0.vs_initial_fmp` >> conj_tac
+          >- (irule joint_cache_below_initial_fmp_upto >> metis_tac[]) >>
+          fs[]) >>
+      decide_tac) >>
+  gvs[] >> irule relocation_pair_cached >> conj_tac >- decide_tac >>
+  qexistsl_tac [`aid`, `b`, `d`, `owner`, `sz`] >> simp[]
 QED

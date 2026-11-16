@@ -91,7 +91,7 @@ Proof
      drule_all ricf_history_origin_original_allocas >> strip_tac >> gvs[] >>
      drule_all ricf_located_event_source_descriptor >> strip_tac >> gvs[] >>
      `occurrence_allocas_ok B p.rpe_owner p.rpe_before` by
-       (drule occ_frame_reachable_annotation >>
+       (drule occ_frame_reachable_annotation_static >>
         simp[occurrence_annotation_ok_def]) >>
      drule_all ricf_history_origin_endpoints >> strip_tac >>
      `da = da' /\ sa = sa'` by metis_tac[ssa_alloca_output_unique, MEM] >>

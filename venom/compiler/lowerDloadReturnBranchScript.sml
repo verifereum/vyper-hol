@@ -9,8 +9,8 @@ Ancestors
 Libs
   lowerDloadReturnPackageLib
 
-Theorem ld_return_point_branch_entry:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_return_point_branch_entry_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
   get_instruction bb t.vs_inst_idx = SOME ti /\
   MEM ti.inst_opcode [JMP; JNZ; DJMP] /\
@@ -19,7 +19,7 @@ Theorem ld_return_point_branch_entry:
     (^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names) q
 Proof
   strip_tac >>
-  drule_all ld_point_alignment >> strip_tac >>
+  drule_all ld_point_alignment_static >> strip_tac >>
   qpat_x_assum `^ld_probe_point _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `ti = EL h X` by metis_tac[optionTheory.SOME_11] >>
   `o1_ctx_shape C` by fs[] >>
@@ -100,7 +100,7 @@ Proof
      drule ld_phis_only_vars >> disch_then SUBST1_TAC >>
      simp[NoAsms] >> asm_rewrite_tac[]) >>
   qunabbrev_tac `Point` >> simp[NoAsms] >>
-  qexistsl_tac [`PG`,`ld_erase A o_f H'`,`entry_taint_vars fn (jump_to lbl s) tn`,
+  qexistsl_tac [`PG`,`G'`,`entry_taint_vars fn (jump_to lbl s) tn`,
     `ni`,`s1`,`tentry`,`A`,`g::fs`,`N`,`X'`,`tentry.vs_inst_idx`,`0`] >>
   qpat_x_assum `^ld_probe_stable _ _ _ _ _ _ _ _ (g::fs)` mp_tac >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ s1 tentry _ _ _` mp_tac >>
@@ -113,3 +113,18 @@ Proof
   rpt (pop_assum kall_tac) >>
   simp[NoAsms] >> rpt strip_tac >> asm_rewrite_tac[] >> metis_tac[]
 QED
+
+Theorem ld_return_point_branch_entry:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
+  get_instruction bb t.vs_inst_idx = SOME ti /\
+  MEM ti.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst_base ti t = OK q /\ ~q.vs_halted ==>
+  ^ld_probe_entry C' fn'
+    (^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names) q
+Proof
+  strip_tac >> irule ld_return_point_branch_entry_static >>
+  simp[] >> rpt conj_tac >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def] >> metis_tac[]
+QED
+

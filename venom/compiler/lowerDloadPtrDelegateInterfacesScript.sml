@@ -51,7 +51,7 @@ Theorem dload_delegate_scalar_equal:
   i.inst_opcode = DELEGATECALL /\
   i.inst_operands = [gas;addr;a;sz;r;rs] /\ MEM op [gas;addr;sz;rs] /\
   ptr_use_ok P pv i /\ FDOM G SUBSET pv /\ taint_ok f tn i s /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) ==>
   eval_operand op s = eval_operand op t

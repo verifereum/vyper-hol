@@ -100,6 +100,7 @@ Proof
   >- suspend "frame"
   >- suspend "saved"
   >- suspend "memory"
+  >- suspend "dyn"
   >- suspend "shared"
   >> suspend "returndata"
 QED
@@ -140,6 +141,9 @@ Resume ld_joint_boundary_call[saved]:
   simp[ld_joint_saved_def] >> metis_tac[]
 QED
 Resume ld_joint_boundary_call[memory]:
+  gvs[setup_callee_def]
+QED
+Resume ld_joint_boundary_call[dyn]:
   gvs[setup_callee_def]
 QED
 Resume ld_joint_boundary_call[shared]:

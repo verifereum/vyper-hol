@@ -16,6 +16,8 @@ Ancestors
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Definition mm_local_zero_cut_def:
   mm_local_zero_cut dfg is gs H n excluded pc t <=>
     t.vs_inst_idx = pc /\
@@ -191,7 +193,7 @@ Proof
      drule_all memSafeRunTheory.revert_forward_at_opcode >>
      gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
   qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     EVERY_APPEND] >> strip_tac >>
   gvs[is_calldatasize_copy_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -289,7 +291,7 @@ Theorem mm_local_zero_store_static[local]:
   dst < dimword (:256) /\ dst + 32 <= eom ==>
   static_mem_ok eom ctx fn (mk_zero_store_inst inst dst) t
 Proof
-  strip_tac >> simp[unitMemInvTheory.static_mem_ok_def,
+  strip_tac >> simp[mmTraceProofsTheory.mm_static_mem_ok_def,
     unitMemInvTheory.inst_mem_ranges_def, mk_zero_store_inst_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -303,7 +305,7 @@ Theorem mm_local_zero_copy_static[local]:
   static_mem_ok eom ctx fn (mk_memzero_calldatacopy inst g v) u
 Proof
   strip_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     mk_memzero_calldatacopy_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -432,7 +434,7 @@ Proof
       Cases_on `fresh_ir_var es1` >>
       gvs[apply_memzero_inst_supply_def] >> rpt gen_tac >>
       simp[mm_local_zero_copy_static] >>
-      simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+      simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def,
            codegenRelTheory.source_memory_write_ranges_def]) >>
   Cases_on `g.cg_length = 32`
@@ -765,7 +767,7 @@ Proof
         (gvs[] >> metis_tac[mm_local_zero_selected_member, EL_MEM]) >>
       drule_all mm_local_zero_erased_actual_transition >>
       disch_then (qspec_then `es` strip_assume_tac) >>
-      gvs[] >> simp[mk_nop_from_def, unitMemInvTheory.static_mem_ok_def,
+      gvs[] >> simp[mk_nop_from_def, mmTraceProofsTheory.mm_static_mem_ok_def,
         unitMemInvTheory.inst_mem_ranges_def,
         contextCodegenRelTheory.source_memory_read_ranges_def,
         codegenRelTheory.source_memory_write_ranges_def, arithmeticTheory.ADD1] >>
@@ -1544,7 +1546,7 @@ Proof
   Cases_on `(EL j is).inst_opcode = MCOPY`
   >- (qpat_x_assum `!q. h <= q /\ q <= r ==> _` kall_tac >>
       qpat_x_assum `static_mem_ok _ _ _ (EL j is) _` mp_tac >>
-      simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+      simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
         EVERY_APPEND] >> strip_tac >>
       gvs[mm_local_write_footprint_def, contextCodegenRelTheory.source_memory_read_ranges_def,
         codegenRelTheory.source_memory_write_ranges_def,
@@ -1584,7 +1586,7 @@ Proof
   qpat_x_assum `!q. phi_prefix_length bb.bb_instructions <= q /\ q <= r ==> _` kall_tac >>
   qpat_x_assum `static_mem_ok _ _ _ (EL l _) _` mp_tac >>
   qpat_x_assum `static_mem_ok _ _ _ (EL j _) _` mp_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     EVERY_APPEND] >> rpt strip_tac >>
   gvs[mm_local_write_footprint_def, contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
@@ -1609,7 +1611,7 @@ Proof
      gvs[mm_local_cut_def, mm_local_nonmemory_frame_def] >>
      rpt strip_tac >> Cases_on `op` >>
      gvs[venomStateTheory.eval_operand_def]) >>
-  gvs[unitMemInvTheory.static_mem_ok_def] >> metis_tac[]
+  gvs[mmTraceProofsTheory.mm_static_mem_ok_def] >> metis_tac[]
 QED
 
 Theorem mm_local_zero_retained_static_if_forward[local]:
@@ -1625,7 +1627,7 @@ Proof
      gvs[mm_local_zero_cut_def, mm_local_nonmemory_frame_def] >>
      rpt strip_tac >> Cases_on `op` >>
      gvs[venomStateTheory.eval_operand_def]) >>
-  gvs[unitMemInvTheory.static_mem_ok_def] >> metis_tac[]
+  gvs[mmTraceProofsTheory.mm_static_mem_ok_def] >> metis_tac[]
 QED
 
 Definition mm_local_safe_exec_prefix_def:
@@ -1689,7 +1691,7 @@ Proof
   simp[apply_groups_inst_supply_def] >>
   Cases_on `MEM i.inst_id ns`
   >- (simp[] >> strip_tac >> gvs[mk_nop_from_def] >>
-      simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+      simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
         contextCodegenRelTheory.source_memory_read_ranges_def,
         codegenRelTheory.source_memory_write_ranges_def]) >>
   Cases_on `ALOOKUP rs i.inst_id` >> simp[] >>
@@ -1705,7 +1707,7 @@ Proof
       Cases_on `fresh_ir_var es1` >> rename1 `fresh_ir_var es1 = (v,es2)` >>
       simp[] >> strip_tac >> gvs[] >> qx_gen_tac `st` >>
       simp[mk_load_inst_def, mk_mstore_from_load_def, mode_load_opcode_def,
-        unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+        mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
         contextCodegenRelTheory.source_memory_read_ranges_def,
         codegenRelTheory.source_memory_write_ranges_def,
         codegenRelTheory.fixed_source_write_range_def,
@@ -1713,7 +1715,7 @@ Proof
       Cases_on `lookup_var v st` >> gvs[]) >>
   strip_tac >> gvs[] >>
   simp[mk_bulk_copy_inst_def, mode_copy_opcode_def,
-    unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
     codegenRelTheory.sized_source_write_range_def,

@@ -7,8 +7,8 @@ Ancestors
   memLocDefs finite_map list pred_set words contextCodegenRel
 
 Theorem dload_boundary_core_jump[local]:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
-  dload_boundary_core lo fs V Ws PG PH G H tn un
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un
     (jump_to lbl s) (jump_to lbl t) cs ds
 Proof
   simp[dload_boundary_core_def, jump_to_def,
@@ -53,21 +53,21 @@ Theorem dload_boundary_core_branch_tracked:
   taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1 lbl. step_inst fuel Cs i s = OK s1 /\
     s1 = jump_to lbl s /\ t1 = jump_to lbl t /\
     s1.vs_current_bb = t1.vs_current_bb /\ s1.vs_prev_bb = t1.vs_prev_bb /\
     (s1.vs_halted <=> t1.vs_halted) /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH G H tn un s1 t1 cs ds
+    dload_boundary_core fl lo fs V Ws PG PH G H tn un s1 t1 cs ds
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `s.vs_labels = t.vs_labels /\ s.vs_current_bb = t.vs_current_bb /\
    (s.vs_halted <=> t.vs_halted)` by
     (drule dload_boundary_environment >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >>
@@ -112,7 +112,7 @@ Theorem dload_actual_branch_block_tracked:
     resolve_phi lbl a.inst_operands = SOME op /\ op = Var w ==> w IN V) /\
   lower_dload_function_supply q f = (g,q') /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\ ~t1.vs_halted /\
@@ -125,7 +125,7 @@ Theorem dload_actual_branch_block_tracked:
     dload_control_match q f g s2 t2 i' emitted' 0 /\ j = HD emitted' /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v s2 = NONE <=> lookup_var v t2 = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (entry_prov f s1 G) (entry_prov g t1 H)
       (entry_taint_vars f s1 tn) (entry_taint_vars g t1 un) s2 t2 cs ds
 Proof
@@ -140,7 +140,7 @@ Proof
   drule_all (Q.INST [`U` |-> `set (fn_ir_vars f)`] dload_boundary_core_branch_tracked) >>
   disch_then (qspec_then `C` strip_assume_tac) >>
   `s1.vs_labels = t1.vs_labels` by
-    (drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 t1 _ _`)
+    (drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s1 t1 _ _`)
        dload_boundary_environment >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
   `!a v. MEM a (fn_insts f) /\ MEM (Var v) a.inst_operands ==>
@@ -166,14 +166,14 @@ Theorem dload_boundary_core_branch:
   taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1 lbl. step_inst fuel Cs i s = OK s1 /\
     s1 = jump_to lbl s /\ t1 = jump_to lbl t /\
     s1.vs_current_bb = t1.vs_current_bb /\ s1.vs_prev_bb = t1.vs_prev_bb /\
     (s1.vs_halted <=> t1.vs_halted) /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s1 t1 cs ds
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s1 t1 cs ds
 Proof
   strip_tac >> irule dload_boundary_core_branch_tracked >> simp[] >> metis_tac[]
 QED
@@ -186,7 +186,7 @@ Theorem dload_actual_branch_block:
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   lower_dload_function_supply q f = (g,q') /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\ ~t1.vs_halted /\
@@ -199,7 +199,7 @@ Theorem dload_actual_branch_block:
     dload_control_match q f g s2 t2 i' emitted' 0 /\ j = HD emitted' /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v s2 = NONE <=> lookup_var v t2 = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (entry_prov f s1 G) (entry_prov g t1 H)
       (entry_taint_vars f s1 tn) (entry_taint_vars g t1 un) s2 t2 cs ds
 Proof

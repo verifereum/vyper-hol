@@ -10,7 +10,7 @@ Theorem layout_request_call_return_certificate_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\
   layout_cut_safe D lo ncut vs0 C qend /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -61,7 +61,7 @@ Theorem layout_request_call_exit_certificate_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\
   layout_cut_safe D lo ncut vs0 C qend /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\

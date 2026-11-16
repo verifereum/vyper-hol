@@ -27,9 +27,9 @@ Proof
   metis_tac[ld_ctx_shape_lookup_wf]
 QED
 
-Theorem ld_joint_segment_layout:
+Theorem ld_joint_segment_layout_static:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs ==>
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) ==>
   code_layout_valid t
 Proof
   strip_tac >> drule_all ld_joint_raw_reachable >> strip_tac >>
@@ -37,6 +37,15 @@ Proof
     (fs[o1_run_state_ok_def] >> drule_all ld_raw_code_layout >> simp[]) >>
   gvs[ld_joint_boundary_def, ld_joint_frame_def,
       ld_joint_local_fields_def, code_layout_valid_def]
+QED
+
+Theorem ld_joint_segment_layout:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs ==>
+  code_layout_valid t
+Proof
+  strip_tac >> irule ld_joint_segment_layout_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_segment_offset:

@@ -139,7 +139,7 @@ Proof
     (drule occ_frame_reachable_geometry >>
      disch_then (qspec_then `0` mp_tac) >> simp[]) >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   `?v. step_inst fuel Ct inst t = OK v /\
     ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next

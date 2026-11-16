@@ -29,6 +29,8 @@ Theorem ld_configured_load_next_backward:
   a.inst_id IN keys /\ allocas_non_overlapping t0 /\ alloca_next_valid t0 /\
   t0.vs_alloca_next < dimword (:256) /\
   (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 <= dyn_floor CS s) /\
+  t0.vs_alloca_next <= dyn_floor CS s /\
   lower_dload_block_supply a0 bb = (gb,bend) /\
   lower_dload_insts_supply a0 pre = (p,a1) /\
   lower_dload_inst_supply a1 i = ([a;b;c;d],a2) /\

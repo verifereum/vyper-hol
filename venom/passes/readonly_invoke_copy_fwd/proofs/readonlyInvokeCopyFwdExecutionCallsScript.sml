@@ -78,8 +78,8 @@ Proof
         combinTheory.o_DEF] >> metis_tac[]) >>
   `occurrence_natural_geometry lo a U B stk s` by
     metis_tac[occ_frame_reachable_geometry, ptr_discipline_def] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `occurrence_syntax_origin fn a H` by
     metis_tac[occ_frame_reachable_origin_certificate,
       occurrence_origin_certificate_current] >>

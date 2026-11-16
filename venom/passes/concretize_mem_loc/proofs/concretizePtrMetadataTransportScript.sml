@@ -185,8 +185,8 @@ Theorem ptr_o1_walk_callee_mems:
   ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
       g.fn_mems_used = g'.fn_mems_used
 Proof
-  simp[o1_walk_view_def, walk_view_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  simp[o1_walk_view_def] >> rpt strip_tac >>
+  drule_all walk_view_fn_steps >> strip_tac >>
   drule ptr_o1_suffix_mems >> strip_tac >>
   goal_assum drule >> simp[]
 QED

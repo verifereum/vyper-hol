@@ -47,8 +47,8 @@ Proof
    dfg_get_def (dfg_build_function p.rpe_fn) sv = SOME sa` by
     (conj_tac >> irule dfg_build_function_ssa_def >> simp[]) >>
   gvs[] >>
-  drule_all occ_frame_reachable_annotation >> strip_tac >>
-  `occurrence_annotation_ok n p.rpe_owner U B HP H stk PG G s` by metis_tac[] >>
+  drule_all occ_frame_reachable_annotation_static >> strip_tac >>
+  `occurrence_annotation_ok (dimword (:256)) n p.rpe_owner U B HP H stk PG G s` by metis_tac[] >>
   `FLOOKUP s.vs_allocas da.inst_id = SOME (p.rpe_db,p.rpe_size) /\
    FLOOKUP s.vs_allocas sa.inst_id = SOME (p.rpe_sb,p.rpe_size) /\
    (!k. k < LENGTH ops /\ op_prov G (EL k ops) = SOME (p.rpe_db,p.rpe_size)

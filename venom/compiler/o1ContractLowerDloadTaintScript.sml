@@ -726,6 +726,41 @@ QED
 
 Finalise ld_candidate_final_observation
 
+Theorem ld_reachable_final_observation_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions ==>
+  !t_h un R.
+    final_taint vs0 CT t_h un R ==>
+    un.t_stor SUBSET D.d_stor t_h.vs_call_ctx.cc_address
+      (t_h.vs_accounts t_h.vs_call_ctx.cc_address).storage /\
+    un.t_trans SUBSET D.d_trans t_h.vs_call_ctx.cc_address
+      (t_h.vs_transient t_h.vs_call_ctx.cc_address) /\
+    un.t_imm SUBSET D.d_imm t_h.vs_immutables /\
+    R SUBSET D.d_ret t_h.vs_returndata
+Proof
+  strip_tac >>
+  `ptr_discipline vs0.vs_alloca_next CS vs0` by
+    metis_tac[ld_o1_src_inv_frontier_discipline_static] >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  `taint_within D CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_src_inv_def]) >>
+  rpt gen_tac >> simp[final_taint_def] >> strip_tac >>
+  mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage_static) >>
+  (impl_tac >- (rpt conj_tac >> simp[])) >>
+  disch_then (qspecl_then [`stk`, `PG`, `G`, `T0`, `fn`, `inst`, `s`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> disch_tac >>
+  qpat_x_assum `un = _` SUBST_ALL_TAC >>
+  qpat_x_assum `R = _` SUBST_ALL_TAC >>
+  irule ld_candidate_final_observation >>
+  rpt conj_tac >> goal_assum (drule_at Any) >>
+  qexistsl [`P`, `fuel`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem ld_reachable_final_observation:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -739,29 +774,28 @@ Theorem ld_reachable_final_observation:
     un.t_imm SUBSET D.d_imm t_h.vs_immutables /\
     R SUBSET D.d_ret t_h.vs_returndata
 Proof
-  strip_tac >>
-  `ptr_discipline vs0.vs_alloca_next CS vs0` by
-    metis_tac[ld_o1_src_inv_frontier_discipline] >>
-  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
-    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
-     metis_tac[]) >>
-  `taint_within D CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_src_inv_def]) >>
-  rpt gen_tac >> simp[final_taint_def] >> strip_tac >>
-  mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage) >>
-  (impl_tac >- (rpt conj_tac >> simp[])) >>
-  disch_then (qspecl_then [`stk`, `PG`, `G`, `T0`, `fn`, `inst`, `s`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> disch_tac >>
-  qpat_x_assum `un = _` SUBST_ALL_TAC >>
-  qpat_x_assum `R = _` SUBST_ALL_TAC >>
-  irule ld_candidate_final_observation >>
-  rpt conj_tac >> goal_assum (drule_at Any) >>
-  qexistsl [`P`, `fuel`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> match_mp_tac ld_reachable_final_observation_static >>
+  gvs[o1_run_state_ok_def]
 QED
 
 (* The output's taint reaches only the dead bytes D. *)
+Theorem lower_dload_stage_taint_static:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    taint_within D C' vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
+    ld_reachable_request_observation_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
+    ld_reachable_final_observation_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  rewrite_tac[taint_within_def] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -769,12 +803,7 @@ Theorem lower_dload_stage_taint:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     taint_within D C' vs
 Proof
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
-    ld_reachable_request_observation) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
-  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
-    ld_reachable_final_observation) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
-  rewrite_tac[taint_within_def] >> conj_tac >> first_assum ACCEPT_TAC
+  rpt gen_tac >> strip_tac >> irule lower_dload_stage_taint_static >>
+  gvs[o1_run_state_ok_def] >>
+  qexistsl [`C`, `names`, `rpolicy`, `view`] >> simp[]
 QED

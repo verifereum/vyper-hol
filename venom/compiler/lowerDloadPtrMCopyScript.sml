@@ -19,15 +19,17 @@ Proof
 QED
 
 Theorem dload_memory_match_mcopy_region:
-  dload_memory_match lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\
+  dload_memory_match fl lo fs tn un s t /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   ((src = tsrc /\ src + len <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     src = b+d /\ tsrc = c+d /\ d+len <= n)) /\
+     src = b+d /\ tsrc = c+d /\ d+len <= n) \/
+   (src = tsrc /\ fl <= src /\ src + len < dimword (:256))) /\
   ((dst = tdst /\ dst + len <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     dst = b+d /\ tdst = c+d /\ d+len <= n)) ==>
-  dload_memory_match lo fs
+     dst = b+d /\ tdst = c+d /\ d+len <= n) \/
+   (dst = tdst /\ fl <= dst /\ dst + len < dimword (:256))) ==>
+  dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | dst <= p /\ p < dst+len})
       UNION {dst+k | k < len /\ src+k IN tn.t_mem})
     (un with t_mem := (un.t_mem DIFF {p | tdst <= p /\ p < tdst+len})
@@ -108,8 +110,8 @@ Proof
 QED
 
 Theorem dload_memory_match_mcopy_zero[local]:
-  dload_memory_match lo fs tn un s t ==>
-  dload_memory_match lo fs tn un (mcopy dst src 0 s) (mcopy tdst tsrc 0 t)
+  dload_memory_match fl lo fs tn un s t ==>
+  dload_memory_match fl lo fs tn un (mcopy dst src 0 s) (mcopy tdst tsrc 0 t)
 Proof
   simp[mcopy_def] >> strip_tac >>
   `!a p:num. (a <= p /\ p < a) = F` by decide_tac >>
@@ -123,10 +125,11 @@ Theorem dload_mcopy_memory[local]:
   eval_operand dst s = SOME dx /\ eval_operand src s = SOME sx /\
   eval_operand sz s = SOME z /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
-  dload_live_layout lo sf tf fs /\ dload_memory_match lo fs tn un s t /\
-  dload_value_word fs {} (op_prov G dst) pd dx tx /\
-  dload_value_word fs {} (op_prov G src) ps sx ty ==>
-  dload_memory_match lo fs
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
+  dload_memory_match fl lo fs tn un s t /\
+  dload_value_word fl fs {} (op_prov G dst) pd dx tx /\
+  dload_value_word fl fs {} (op_prov G src) ps sx ty ==>
+  dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | w2n dx <= p /\ p < w2n dx+w2n z})
       UNION {w2n dx+k | k < w2n z /\ w2n sx+k IN tn.t_mem})
     (un with t_mem := (un.t_mem DIFF {p | w2n tx <= p /\ p < w2n tx+w2n z})
@@ -147,10 +150,10 @@ Proof
     (metis_tac[dload_mcopy_contained]) >>
   irule dload_memory_match_mcopy_region >>
   conj_tac
-  >- (qpat_x_assum `dload_value_word _ _ _ ps _ _` kall_tac >>
+  >- (qpat_x_assum `dload_value_word _ _ _ _ ps _ _` kall_tac >>
       qpat_x_assum `lo < w2n sx + _ \/ _ ==> _` kall_tac >>
       drule_all dload_value_contained_region >> simp[]) >>
-  qpat_x_assum `dload_value_word _ _ _ pd _ _` kall_tac >>
+  qpat_x_assum `dload_value_word _ _ _ _ pd _ _` kall_tac >>
   qpat_x_assum `lo < w2n dx + _ \/ _ ==> _` kall_tac >>
   drule_all dload_value_contained_region >> simp[] >> metis_tac[]
 QED
@@ -180,11 +183,11 @@ Theorem dload_boundary_core_mcopy:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s'.vs_current_bb = s.vs_current_bb /\ s'.vs_prev_bb = s.vs_prev_bb /\
@@ -206,19 +209,20 @@ Proof
   rename1 `eval_operand dst s = SOME xs` >>
   rename1 `eval_operand src s = SOME ys` >>
   rename1 `eval_operand sz s = SOME zs` >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `op_prov G sz = NONE /\ op_taint tn dst = {} /\
    op_taint tn src = {} /\ op_taint tn sz = {}` by
     metis_tac[dload_mcopy_size_clean] >>
   `eval_operand sz s = eval_operand sz t` by
     (irule scalar_operand_equal >> metis_tac[MEM]) >>
   `zs = z` by gvs[] >> gvs[] >>
-  `dload_value_word fs (op_taint tn dst) (op_prov G dst) (op_prov H dst) xs x /\
-   dload_value_word fs (op_taint tn src) (op_prov G src) (op_prov H src) ys y` by
+  `dload_value_word fl fs (op_taint tn dst) (op_prov G dst) (op_prov H dst) xs x /\
+   dload_value_word fl fs (op_taint tn src) (op_prov G src) (op_prov H src) ys y` by
     (conj_tac >> irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+   dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   suspend "mcopy_finish"
 QED
 
@@ -231,7 +235,7 @@ Resume dload_boundary_core_mcopy[mcopy_finish]:
     un with t_mem := (un.t_mem DIFF {p | w2n x <= p /\ p < w2n x+w2n z})
       UNION {w2n x+k | k < w2n z /\ w2n y+k IN un.t_mem}` by
     metis_tac[dload_mcopy_ghosts] >>
-  `dload_memory_match lo fs
+  `dload_memory_match fl lo fs
     (step_taint i s (mcopy (w2n xs) (w2n ys) (w2n z) s) tn)
     (step_taint i t (mcopy (w2n x) (w2n y) (w2n z) t) un)
     (mcopy (w2n xs) (w2n ys) (w2n z) s)
@@ -272,7 +276,7 @@ Theorem dload_actual_mcopy_next:
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -285,7 +289,7 @@ Theorem dload_actual_mcopy_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

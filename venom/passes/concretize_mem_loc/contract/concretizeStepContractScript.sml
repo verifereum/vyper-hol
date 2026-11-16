@@ -113,7 +113,7 @@ QED
    the label map is []; and the output has no ALLOCA (row 3).  A function
    with a static layout is returned as it is, and the rewrite keeps the
    blocks' shape and adds no FMP operation, so the output is still a
-   MakeSSA input without raw FMP operations; the FMP convention is kept. *)
+   MakeSSA input with pre-FmpLowering opcodes; the FMP convention is kept. *)
 Theorem concretize_step_contract_at:
   o1_step_contract_at 2 rpolicy (CFP_Simple VP_ConcretizeMemLoc)
 Proof
@@ -124,10 +124,7 @@ Proof
   `wf_function fn /\ fn_inst_wf fn` by fs[o1_fn_shape_def] >>
   `make_ssa_input_ok out.fpo_function` by
     metis_tac[concretize_step_make_ssa_input_ok] >>
-  `no_raw_fmp_ops out.fpo_function` by metis_tac[concretize_step_no_raw_fmp] >>
-  `fmp_sig_no_param out.fpo_function` by
-    (drule fn_pass_step_fmp_sig_no_param >>
-     simp[fn_pass_tag_def] >> metis_tac[]) >>
+  `pre_fmp_ops out.fpo_function` by metis_tac[concretize_step_pre_fmp_ops] >>
   qpat_x_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
   simp[fn_pass_step_def, execute_configured_fn_pass_concretize, AllCaseEqs()] >>
   strip_tac >> gvs[] >>

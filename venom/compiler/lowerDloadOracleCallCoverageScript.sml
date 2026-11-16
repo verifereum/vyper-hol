@@ -29,7 +29,8 @@ Proof
     (qpat_assum `MEM inst.inst_opcode _` mp_tac >>
      simp[is_terminator_def] >> strip_tac >> gvs[is_terminator_def]) >>
   drule_all ld_sync_oracle_call_effect >> strip_tac >>
-  `active_inst (ld_image f) ti (ts with vs_inst_idx := SUC t.vs_inst_idx)` by
+  drule_all lowerDloadSafetyAmbientTheory.ld_sync_ghost_step >> strip_tac >>
+    `active_inst (ld_image f) ti (ts with vs_inst_idx := SUC t.vs_inst_idx)` by
     simp[ld_image_def] >>
   drule_all ld_sync_ordinary_coverage >> simp[]
 QED

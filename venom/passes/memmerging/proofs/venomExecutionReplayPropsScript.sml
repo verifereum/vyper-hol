@@ -11,6 +11,8 @@ Ancestors
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Theorem trace_step_every:
   reachability_closed Inv ctx ==>
   EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
@@ -736,7 +738,7 @@ Proof
          execution_equiv_def] >> metis_tac[]) >>
   `in_revert_forward fn s <=> in_revert_forward fn' t` by
     (gvs[contextCodegenRelTheory.in_revert_forward_def] >> metis_tac[]) >>
-  gvs[unitMemInvTheory.static_mem_ok_def]
+  gvs[mmTraceProofsTheory.mm_static_mem_ok_def]
 QED
 
 Theorem same_block_exec_result:

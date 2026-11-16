@@ -5,6 +5,17 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadSafetyAdvance ptrDiscipline o1PassContract
   unitShapeDefs venomExecProofs venomState venomInst finite_map list pred_set
 
+(* A block entry moves the ghosts as it moves their selected erasure. *)
+Theorem ld_ghost_ok_entry_prov[local]:
+  ld_ghost_ok fl A H G /\
+  entry_prov fn s (ld_erase A o_f H) = ld_erase A o_f H' ==>
+  ld_ghost_ok fl A H' (entry_prov fn s G)
+Proof
+  rewrite_tac[ld_ghost_ok_erased] >> strip_tac >>
+  qpat_x_assum `entry_prov _ _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule o1LowerDloadGhostTheory.ld_ghost_entry_prov >> metis_tac[]
+QED
+
 Theorem ld_sync_control_entry:
   EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
     j IN P f.lf_fn.fn_name) (f::fs) ==>
@@ -17,12 +28,12 @@ Theorem ld_sync_control_entry:
   (!j k. j < k /\ k < LENGTH (f::fs) ==>
     list_precedes (EL j (f::fs)).lf_fn.fn_name
                   (EL k (f::fs)).lf_fn.fn_name names) ==>
-  ?lbl H' ni s1 g X.
+  ?lbl H' G' ni s1 g X.
     ts = jump_to lbl t /\ step_inst fuel C inst s = OK (jump_to lbl s) /\
     enters_block fn (jump_to lbl s) s1 /\
     g = f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
       lf_tv := (entry_taint_vars fn (jump_to lbl s) tn).t_var|> /\
-    ld_sync lo P C vs0 stk PG (ld_erase A o_f H')
+    ld_sync lo P C vs0 stk PG G'
       (entry_taint_vars fn (jump_to lbl s) tn) fn ni s1 t1 A (g::fs) N /\
     ld_global lo A (g::fs) /\
     EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
@@ -77,11 +88,12 @@ Proof
      simp[ld_image_def] >> metis_tac[pairTheory.PAIR]) >>
   `~(jump_to lbl s).vs_halted` by
     fs[lowerDloadSafetyKernelTheory.ld_nonghost_def] >>
-  `frame_reachable vs0 C stk PG (ld_erase A o_f H')
+  `frame_reachable vs0 C stk PG (entry_prov fn (jump_to lbl s) G)
     (entry_taint_vars fn (jump_to lbl s) tn) fn ni s1` by
-    (qpat_x_assum `entry_prov _ _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
-     irule frame_reachable_block >>
+    (irule frame_reachable_block >>
      metis_tac[MEM, is_terminator_def]) >>
+  `ld_ghost_ok (dyn_floor C vs0) A H' (entry_prov fn (jump_to lbl s) G)` by
+    (irule ld_ghost_ok_entry_prov >> metis_tac[]) >>
   qabbrev_tac `g = f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
     lf_tv := (entry_taint_vars fn (jump_to lbl s) tn).t_var|>` >>
   `s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas /\
@@ -90,11 +102,19 @@ Proof
     (qpat_x_assum `s1 = jump_to lbl s with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
      qpat_x_assum `t1 = jump_to lbl t with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
      simp[jump_to_def]) >>
-  `ld_sync lo P C vs0 stk PG (ld_erase A o_f H')
+  `ld_dyn_agree (dyn_floor C vs0)
+     (entry_taint_vars fn (jump_to lbl s) tn).t_mem s1.vs_memory t1.vs_memory` by
+    (`(entry_taint_vars fn (jump_to lbl s) tn).t_mem = tn.t_mem` by
+       (simp[entry_taint_vars_def] >> CASE_TAC >> simp[]) >>
+     pop_assum (fn th => rewrite_tac[th]) >>
+     qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+     simp[jump_to_def] >> metis_tac[ld_sync_dyn_agree]) >>
+  `ld_sync lo P C vs0 stk PG (entry_prov fn (jump_to lbl s) G)
      (entry_taint_vars fn (jump_to lbl s) tn) fn ni s1 t1 A (g::fs) N /\
    ld_global lo A (g::fs)` by
     (irule ld_sync_head_update >> simp[Abbr `g`] >> metis_tac[]) >>
-  qexistsl_tac [`lbl`,`H'`,`ni`,`s1`,`X`] >>
+  qexistsl_tac [`lbl`,`H'`,`entry_prov fn (jump_to lbl s) G`,`ni`,`s1`,`X`] >>
   qpat_x_assum `MEM inst.inst_opcode [JMP; JNZ; DJMP]` kall_tac >>
   gvs[Abbr `g`, ld_image_def] >>
   conj_tac
@@ -131,7 +151,7 @@ Theorem ld_sync_control_owned_coverage:
       j IN P f.lf_fn.fn_name) frames
 Proof
   rpt strip_tac >> drule_all ld_sync_control_entry >> strip_tac >>
-  qexistsl_tac [`stk`,`PG`,`ld_erase A o_f H'`,
+  qexistsl_tac [`stk`,`PG`,`G'`,
     `entry_taint_vars fn (jump_to lbl s) tn`,`fn`,`ni`,`s1`,`t1`,
     `A`,`g::fs`,`N`,`X`,`t1.vs_inst_idx`,`0`] >>
   qpat_x_assum `MEM inst.inst_opcode [JMP; JNZ; DJMP]` kall_tac >>

@@ -5,7 +5,8 @@ Ancestors
   concretizeAnalysisMetadataOwnership concretizeLayoutMetadata
   concretizeAnalysisCollection staticLayoutAllocatorProofs
   ctxLookupAgreeHelpers contextCodegenRel o1PassContract o1ScheduleDecomp o1ScheduleDecompHelpers
-  venomWf venomInst ptrDiscipline staticLayoutDefs frameJointTrace list pair finite_map words
+  venomWf venomInst ptrDiscipline staticLayoutDefs frameJointTrace concretizePtrStageBounds
+  list pair finite_map words
 
 Definition concretize_positions_def:
   concretize_positions C' owner aid =
@@ -50,6 +51,20 @@ Proof
   simp[]
 QED
 
+Theorem concretize_positions_activation_cache_static[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) ==>
+  canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz
+Proof
+  strip_tac >>
+  `MEM owner C.ctx_functions` by metis_tac[activation_cache_source_owner] >>
+  drule_all activation_cache_source_static_item_static >> strip_tac >>
+  metis_tac[concretize_positions_static_item]
+QED
+
 Theorem concretize_positions_activation_cache:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -58,10 +73,23 @@ Theorem concretize_positions_activation_cache:
   joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) ==>
   canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz
 Proof
-  strip_tac >>
-  `MEM owner C.ctx_functions` by metis_tac[activation_cache_source_owner] >>
-  drule_all activation_cache_source_static_item >> strip_tac >>
-  metis_tac[concretize_positions_static_item]
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_cache_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_positions_activation_numeric_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) ==>
+  concretize_positions C' owner aid + sz < dimword (:256) /\
+  (0 < sz ==> EVERY (reserved_intervals_disjoint
+    (concretize_positions C' owner aid,sz)) C.ctx_global_reserved)
+Proof
+  strip_tac >> drule_all concretize_positions_activation_cache_static >> strip_tac >>
+  metis_tac[concretize_canonical_numeric]
 QED
 
 Theorem concretize_positions_activation_numeric:
@@ -74,8 +102,9 @@ Theorem concretize_positions_activation_numeric:
   (0 < sz ==> EVERY (reserved_intervals_disjoint
     (concretize_positions C' owner aid,sz)) C.ctx_global_reserved)
 Proof
-  strip_tac >> drule_all concretize_positions_activation_cache >> strip_tac >>
-  metis_tac[concretize_canonical_numeric]
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_numeric_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem reserved_positive_position_lower_bound:
@@ -90,6 +119,18 @@ Proof
   first_x_assum drule >> decide_tac
 QED
 
+Theorem concretize_positions_activation_lower_bound_static[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ fixed_region_reserved lo C /\
+  joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) /\
+  0 < sz ==> lo <= concretize_positions C' owner aid
+Proof
+  strip_tac >> drule_all concretize_positions_activation_numeric_static >> strip_tac >>
+  irule reserved_positive_position_lower_bound >> metis_tac[]
+QED
+
 Theorem concretize_positions_activation_lower_bound:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -98,8 +139,29 @@ Theorem concretize_positions_activation_lower_bound:
   joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) /\
   0 < sz ==> lo <= concretize_positions C' owner aid
 Proof
-  strip_tac >> drule_all concretize_positions_activation_numeric >> strip_tac >>
-  irule reserved_positive_position_lower_bound >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_lower_bound_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_positions_trace_cache_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ fixed_region_reserved lo C /\
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz /\
+  (0 < sz ==> lo <= concretize_positions C' owner aid)
+Proof
+  strip_tac >>
+  `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
+  `k < LENGTH (q0::qs)` by simp[] >>
+  `joint_config_reachable vs0 C (EL k (q0::qs))` by
+    (drule joint_trace_prefix_reachable >> strip_tac >>
+     Cases_on `k` >> fs[EVERY_EL]) >>
+  metis_tac[concretize_positions_activation_cache_static,
+            concretize_positions_activation_lower_bound_static]
 QED
 
 Theorem concretize_positions_trace_cache:
@@ -112,12 +174,42 @@ Theorem concretize_positions_trace_cache:
   canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz /\
   (0 < sz ==> lo <= concretize_positions C' owner aid)
 Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_trace_cache_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+(* A live cache's relocated slot ends below the stage's live memory end. *)
+Theorem concretize_positions_cache_room_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ fixed_region_reserved lo C /\
+  callee_first names C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  concretize_positions C' owner aid + sz <= eom
+Proof
   strip_tac >>
-  `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
-  `k < LENGTH (q0::qs)` by simp[] >>
-  `joint_config_reachable vs0 C (EL k (q0::qs))` by
-    (drule joint_trace_prefix_reachable >> strip_tac >>
-     Cases_on `k` >> fs[EVERY_EL]) >>
-  metis_tac[concretize_positions_activation_cache,
-            concretize_positions_activation_lower_bound]
+  drule_all concretize_positions_trace_cache_static >> strip_tac >>
+  fs[canonical_metadata_def] >>
+  qpat_x_assum `FIND _ _ = _` (assume_tac o MATCH_MP FIND_MEM) >>
+  qpat_x_assum `lookup_function _ C'.ctx_functions = _`
+    (assume_tac o MATCH_MP lookup_function_MEM) >>
+  drule_all ptr_stage_mems_endpoint_bound >> simp[]
+QED
+
+Theorem concretize_positions_cache_room:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\ fixed_region_reserved lo C /\
+  callee_first names C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  concretize_positions C' owner aid + sz <= eom
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_cache_room_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

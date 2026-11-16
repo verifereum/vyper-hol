@@ -302,7 +302,7 @@ Theorem concretize_joint_cached_no_kill[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ all_reachable fn /\
@@ -326,7 +326,7 @@ Proof
   `EVERY (fn_ptr_ok P) C.ctx_functions` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
   `access_ok lo G fn inst s` by metis_tac[] >>
-  drule_all concretize_protected_cached_byte_no_kill >> simp[]
+  drule_all concretize_protected_cached_byte_no_kill_static >> simp[]
 QED
 
 Theorem trace_config_at:
@@ -349,7 +349,7 @@ Theorem concretize_cached_interval_guard[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   layout_cut_safe D lo ncut vs0 C q /\ all_reachable fn /\
   o1_walk_view rpolicy 2 C' fn observed /\
@@ -397,7 +397,7 @@ QED
 Theorem joint_local_read_base[local]:
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs0 /\ EVERY ssa_form C.ctx_functions /\
-  all_reachable fn /\ ~ctx_has_dalloca C /\ FLOOKUP om v = SOME (OriginLocal aid,site) /\
+  all_reachable fn /\ FLOOKUP om v = SOME (OriginLocal aid,site) /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v ==>
   MEM (Allocation aid) (find_base_allocas_opt
     (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) (inst_read_op inst))
@@ -405,7 +405,7 @@ Proof
   strip_tac >> fs[joint_config_reachable_def] >>
   drule joint_origin_history_erasure >> strip_tac >>
   drule origin_frame_erasure >> strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `EVERY wf_function C.ctx_functions /\ wf_function fn /\ ssa_form fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   fs[layout_cut_safe_def, ptr_discipline_upto_def] >>
@@ -431,11 +431,11 @@ Proof
   Cases_on `q` >> rw[activation_location_def] >> gvs[]
 QED
 
-Theorem concretize_cached_generator_liveat:
+Theorem concretize_cached_generator_liveat_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   layout_cut_safe D lo ncut vs0 C q /\ wf_function fn /\ all_reachable fn /\
   o1_walk_view rpolicy 2 C' fn observed /\
@@ -480,13 +480,46 @@ Proof
   qexistsl_tac [`bb`,`s.vs_inst_idx`] >> gvs[]
 QED
 
-Theorem concretize_cached_read_liveat:
+Theorem concretize_cached_generator_liveat:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ wf_function fn /\ all_reachable fn /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  activation_cache (EL n (q0::qs)) d fn aid (b,sz) /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  activation_location (EL j (q0::qs)) d fn (s.vs_current_bb,s.vs_inst_idx) /\
+  active_inst fn inst s /\ ml_read_gen (Allocation aid) bp mems inst /\
+  b <= byte /\ byte < b + sz /\
+  (!k. n <= k /\ k <= j ==> d <= activation_depth (EL k (q0::qs))) /\
+  (!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d) /\
+  (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  activation_guard (EL j (q0::qs)) d
+    (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst) ==>
+  MEM (Allocation aid) (ml_lookup la p)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_cached_generator_liveat_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_cached_read_liveat_headroom_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn
@@ -514,7 +547,7 @@ Proof
     gvs[joint_config_reachable_def] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[joint_origin_history_erasure, origin_frame_erasure] >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `wf_function fn /\ all_reachable fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `MEM (Allocation aid) (find_base_allocas_opt bp (inst_read_op inst))` by
@@ -529,7 +562,7 @@ Proof
     metis_tac[joint_origin_history_projection, frame_history_active] >>
   `activation_location (EL j (q0::qs)) d fn (s.vs_current_bb,s.vs_inst_idx)` by
     gvs[activation_location_def] >>
-  irule concretize_cached_generator_liveat >>
+  irule concretize_cached_generator_liveat_static >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
@@ -539,13 +572,45 @@ Proof
   gvs[ml_read_gen_def]
 QED
 
-Theorem concretize_untainted_local_read_liveat_at_location:
+Theorem concretize_cached_read_liveat:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  activation_cache (EL n (q0::qs)) d fn aid (b,sz) /\
+  EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\ LENGTH stk = d /\
+  FLOOKUP om v = SOME (OriginLocal aid,(b,sz)) /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  b <= byte /\ byte < b + sz /\ byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
+  (!k. n <= k /\ k <= j ==> d <= activation_depth (EL k (q0::qs))) /\
+  (!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d) /\
+  (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
+  MEM (Allocation aid) (ml_lookup la p)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_cached_read_liveat_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_untainted_local_read_liveat_at_location_headroom_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn
@@ -591,7 +656,7 @@ Proof
         qexistsl_tac [`byte`,`j`] >> simp[joint_nonrevert_def]) >>
      Cases_on `EL k (q0::qs)` >>
      gvs[joint_nonrevert_def, activation_nonrevert_def]) >>
-  irule concretize_cached_read_liveat >>
+  irule concretize_cached_read_liveat_headroom_static >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
@@ -604,13 +669,43 @@ Proof
   qexists_tac `byte` >> simp[] >> metis_tac[]
 QED
 
+Theorem concretize_untainted_local_read_liveat_at_location:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\ LENGTH stk = d /\
+  FLOOKUP om v = SOME (OriginLocal aid,(b,sz)) /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  b <= byte /\ byte < b + sz /\ byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
+  byte NOTIN joint_mem_taint (EL j (q0::qs)) /\ ~in_revert_forward fn s /\
+  (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
+  MEM (Allocation aid) (ml_lookup la p)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_untainted_local_read_liveat_at_location_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
 Theorem concretize_untainted_local_read_liveat:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn

@@ -27,7 +27,6 @@ Theorem ptr_paired_block_prefix_normalize[local]:
   MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP] /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -209,7 +208,6 @@ Theorem ptr_paired_jump_prefix_normalize:
   a.po_inst.inst_opcode = JMP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -254,7 +252,6 @@ Theorem ptr_paired_jnz_prefix_normalize:
   op_prov TG cond = NONE /\ op_taint a.po_taint cond = {} /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -298,7 +295,6 @@ Theorem ptr_paired_djmp_prefix_normalize:
   opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>

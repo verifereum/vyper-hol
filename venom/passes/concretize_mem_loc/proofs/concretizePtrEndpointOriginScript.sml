@@ -6,7 +6,7 @@ Ancestors concretizePtrLifetime concretizePtrChronologicalHistory
   venomMemProps list rich_list finite_map
 
 Theorem ptr_step_lookup_origin[local]:
-  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> INVOKE /\
   step_inst fuel ctx inst s = OK s' /\
   FLOOKUP s'.vs_allocas aid = SOME site ==>
   FLOOKUP s.vs_allocas aid = SOME site \/
@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem ptr_chrono_lookup_origin_step:
-  ptr_chrono_step ctx a b /\ a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_chrono_step ctx a b /\
   d <= LENGTH b.po_stack /\
   FLOOKUP (ptr_bottom_state d b).vs_allocas aid = SOME site ==>
   d <= LENGTH a.po_stack /\
@@ -59,7 +59,6 @@ Theorem ptr_chrono_endpoint_birth:
   !vs0 ctx h endpoint. ptr_chrono_history vs0 ctx h endpoint ==>
   !j d aid site.
     vs0.vs_allocas = FEMPTY /\
-    (!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
     j < LENGTH h /\ d <= LENGTH (EL j h).po_stack /\
     FLOOKUP (ptr_bottom_state d (EL j h)).vs_allocas aid = SOME site ==>
     ?i fuel sa'. i < j /\ LENGTH (EL i h).po_stack = d /\
@@ -76,9 +75,6 @@ Proof
       gvs[ptr_bottom_state_def, ptr_obs_states_def, ptr_observe_def] >>
       drule enters_block_allocas >> strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA` by
-    (rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >>
-     simp[EL_APPEND_EQN]) >>
   Cases_on `j < LENGTH h`
   >- (qpat_x_assum `!j d aid site. _` (qspecl_then [`j`,`d`,`aid`,`site`] mp_tac) >>
       fs[EL_APPEND_EQN] >> strip_tac >> qexistsl [`i`,`fuel`,`sa'`] >>
@@ -90,7 +86,6 @@ Proof
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
     (Cases_on `h` >> gvs[LAST_EL]) >>
-  `endpoint.po_inst.inst_opcode <> DALLOCA` by metis_tac[] >>
   drule_all ptr_chrono_lookup_origin_step >> strip_tac
   >- (qpat_x_assum `!j d aid site. _`
         (qspecl_then [`PRE (LENGTH h)`,`d`,`aid`,`site`] mp_tac) >>

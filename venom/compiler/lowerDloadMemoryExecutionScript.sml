@@ -76,22 +76,28 @@ Theorem ld_owned_mload_live_range:
   i.inst_opcode = MLOAD /\ i.inst_operands = [op] /\
   ld_owned_vars V E AG AH tn un s t /\
   (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   eval_operand op s = SOME x /\ eval_operand op t = SOME y /\
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)) /\
   (!a. a < lo ==> R a a) /\
+  (!a. fl <= a /\ a < dimword (:256) ==> R a a) /\
   (!a b. ld_site_bytes E live a b ==> R a b) ==>
   !k. k < 32 ==> R (w2n x+k) (w2n y+k)
 Proof
   strip_tac >>
   `MEM (w2n x,32) (source_memory_read_ranges i s)` by
     simp[source_memory_read_ranges_def] >>
-  drule ld_access_read_classification >>
-  disch_then (qspecl_then [`w2n x`,`32`] mp_tac) >>
-  simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n (x:bytes32)`, `len` |-> `32`, `inst` |-> `i`]
+    ld_access_read_classification) >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+  strip_tac
   >- (`op_prov (ld_erase AG) op = NONE` by
         (qpat_x_assum `!ops. mem_read_ops i = SOME ops ==> _` mp_tac >>
          simp[mem_read_ops_def]) >>
@@ -100,38 +106,47 @@ Proof
                                 optionTheory.OPTION_MAP_EQ_NONE]) >>
       drule_all ld_owned_operand_clean >> strip_tac >>
       `x = y` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
-      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+      rpt strip_tac >> first_x_assum irule >> decide_tac)
+  >- (gvs[mem_read_ops_def] >>
+      `owner IN live /\ bs+sz < dimword(:256)` by metis_tac[] >>
+      `!bt. ld_site_entry E owner bs bt sz ==> bt+sz < dimword(:256)` by metis_tac[] >>
+      `0 < (32:num)` by simp[] >>
+      drule_all ld_owned_address_transport >> strip_tac >>
+      rpt strip_tac >>
+      qpat_x_assum `!a b. ld_site_bytes E live a b ==> R a b` irule >>
+      simp[ld_site_bytes_def] >>
+      qexistsl_tac [`owner`,`bs`,`bt`,`sz`,`w2n x-bs+k`] >>
+      simp[] >> decide_tac) >>
   gvs[mem_read_ops_def] >>
-  `owner IN live /\ bs+sz < dimword(:256)` by metis_tac[] >>
-  `!bt. ld_site_entry E owner bs bt sz ==> bt+sz < dimword(:256)` by metis_tac[] >>
-  `0 < (32:num)` by simp[] >>
-  drule_all ld_owned_address_transport >> strip_tac >>
-  rpt strip_tac >>
-  qpat_x_assum `!a b. ld_site_bytes E live a b ==> R a b` irule >>
-  simp[ld_site_bytes_def] >>
-  qexistsl_tac [`owner`,`bs`,`bt`,`sz`,`w2n x-bs+k`] >>
-  simp[] >> decide_tac
+  `ld_op_prov AG (Var v) = NONE` by simp[ld_op_prov_def] >>
+  `x = y` by
+    (mp_tac (Q.INST [`op` |-> `Var v`] ld_owned_operand_clean) >> simp[]) >>
+  gvs[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
 Theorem ld_owned_mload_range:
   i.inst_opcode = MLOAD /\ i.inst_operands = [op] /\
   ld_owned_vars V E AG AH tn un s t /\
   (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   eval_operand op s = SOME x /\ eval_operand op t = SOME y /\
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
   (!owner bs bt sz. ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)) /\
   (!a. a < lo ==> R a a) /\
+  (!a. fl <= a /\ a < dimword (:256) ==> R a a) /\
   (!a b. ld_site_bytes E live a b ==> R a b) ==>
   !k. k < 32 ==> R (w2n x+k) (w2n y+k)
 Proof
   strip_tac >>
   `!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)` by metis_tac[] >>
-  rpt strip_tac >> irule ld_owned_mload_live_range >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rpt strip_tac >> drule_all ld_owned_mload_live_range >> simp[]
 QED
 
 Theorem ld_owned_mload_access_backward:
@@ -139,12 +154,17 @@ Theorem ld_owned_mload_access_backward:
   i.inst_outputs = [out] /\
   ld_owned_vars V E AG AH tn un s t /\
   (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
   (!owner bs bt sz. ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)) /\
   (!a. a < lo ==> R a a) /\
+  (!a. fl <= a /\ a < dimword (:256) ==> R a a) /\
   (!a b. ld_site_bytes E live a b ==> R a b) /\
   ld_byte_rel R tn.t_mem un.t_mem
     (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\

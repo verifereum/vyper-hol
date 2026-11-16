@@ -29,9 +29,9 @@ QED
 
 Theorem ptr_owned_affine_conditions:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  ~ctx_has_dalloca C /\
   (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
     taint_ok fn tn inst s) /\
   a.po_inst.inst_operands = [x;y] /\
@@ -48,10 +48,6 @@ Proof
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by metis_tac[] >>
   `op_taint a.po_taint x = {} /\ op_taint a.po_taint y = {}` by
     (gvs[taint_ok_def] >> metis_tac[]) >>
-
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions`
-    by (qpat_x_assum `~ctx_has_dalloca C` mp_tac >>
-        simp[ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -110,9 +106,9 @@ QED
 
 Theorem ptr_arithmetic_prefix_back_next[local]:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  ~ctx_has_dalloca C /\
   (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
     taint_ok fn tn inst s) /\
   MEM bb a.po_fn.fn_blocks /\ bb.bb_label = a.po_state.vs_current_bb /\
@@ -165,9 +161,9 @@ QED
 
 Theorem ptr_affine_prefix_back_next:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  ~ctx_has_dalloca C /\
   (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
     taint_ok fn tn inst s) /\
   MEM bb a.po_fn.fn_blocks /\ bb.bb_label = a.po_state.vs_current_bb /\
@@ -197,9 +193,9 @@ QED
 
 Theorem ptr_affine_prefix_aligned_next:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  ~ctx_has_dalloca C /\
   (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
     taint_ok fn tn inst s) /\
   fn_inst_wf a.po_fn /\ MEM sb a.po_fn.fn_blocks /\
@@ -271,9 +267,9 @@ QED
 Theorem ptr_affine_owned_prefix:
   !n a h TG j t u.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  ~ctx_has_dalloca C /\
   (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
     taint_ok fn tn inst s) /\
   fn_inst_wf a.po_fn /\ MEM sb a.po_fn.fn_blocks /\
