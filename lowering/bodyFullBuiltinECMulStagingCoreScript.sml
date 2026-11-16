@@ -1356,7 +1356,63 @@ Proof
       qunabbrev_tac `gi` >> qunabbrev_tac `ci` >> qunabbrev_tac `ai` >>
       qexistsl_tac [`ib`,`ob`,`ca`,`sp`,`sm`,`src`,`dst`,`wi`,`wo`,
         `sm.cs_next_id`,`gv`,`cv`,`packet_bb`,`u`,`Gu`,`tnu`] >>
-      pure_rewrite_tac [EVAL ``w2n (64w:256 word)``,
-                        EVAL ``w2n (96w:256 word)``] >>
-      asm_rewrite_tac[]
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      `96 MOD dimword (:256) = 96` by
+        (irule arithmeticTheory.LESS_MOD >> first_assum ACCEPT_TAC) >>
+      `64 MOD dimword (:256) = 64` by
+        (irule arithmeticTheory.LESS_MOD >>
+         qpat_assum `96 < dimword (:256)` mp_tac >> decide_tac) >>
+      `7 MOD dimword (:256) = 7` by
+        (irule arithmeticTheory.LESS_MOD >>
+         qpat_assum `96 < dimword (:256)` mp_tac >> decide_tac) >>
+      qpat_assum `96 MOD dimword (:256) = 96`
+        (pure_rewrite_tac o single) >>
+      qpat_assum `64 MOD dimword (:256) = 64`
+        (pure_rewrite_tac o single) >>
+      qpat_assum `7 MOD dimword (:256) = 7`
+        (pure_rewrite_tac o single) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >-
+        (qunabbrev_tac `payload` >>
+         qpat_assum `_ ca = ((),sp)` (fn payload =>
+         qpat_assum `ib.buf_operand = Var src` (fn operand =>
+           POP_ASSUM_LIST (K all_tac) >>
+           map_every assume_tac [payload,operand])) >>
+         gvs[]) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >-
+        (pure_rewrite_tac[venomStateTheory.eval_operand_def] >>
+         first_assum ACCEPT_TAC) >>
+      conj_tac >-
+        (pure_rewrite_tac[venomStateTheory.eval_operand_def] >>
+         first_assum ACCEPT_TAC) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >-
+        (qpat_assum `isPREFIX _ (DROP u.vs_inst_idx packet_bb.bb_instructions)`
+           (fn pref => POP_ASSUM_LIST (K all_tac) >> mp_tac pref) >>
+         simp[NoAsms,listTheory.isPREFIX]) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >-
+        (qpat_assum `eval_operand y t2 = SOME sw` (fn ev =>
+         qpat_assum `mem_word_at (w2n wi + 64) u.vs_memory = sw` (fn mem =>
+           POP_ASSUM_LIST (K all_tac) >> map_every assume_tac [ev,mem])) >>
+         gvs[]) >>
+      conj_tac >-
+        (qpat_assum `!z. not_fresh_at s2 z ==> _ /\ _ /\ _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+      qx_gen_tac `H` >> disch_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==> stmt_state_rel H ctx func cenv cx es2 u`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==> allocas_from lo u /\ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >- simp[NoAsms] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC
 QED
