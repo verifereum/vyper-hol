@@ -161,24 +161,42 @@ Proof
 QED
 
 Resume abi_decode_caller_allocation_joint[origin]:
-  rpt strip_tac >>
-  `allocas_from lo u` by metis_tac[ptrDisciplineTheory.ghost_inv_at_def] >>
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by
+    (qpat_x_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _`
+       (qspec_then `H'` mp_tac) >> simp[bodyPtrDefsTheory.ghost_inv_at_def]) >>
   `gas_origin_ptr_edge (DF H',lo,explicit,ctx,fn,PG) (u,Gh,tnh) []
     (OK (v with vs_inst_idx := SUC u.vs_inst_idx),G1,tn1)` by
-    (asm_rewrite_tac[] >> irule ifexp_alloca_origin_ptr_edge >> simp[] >>
-     metis_tac[]) >>
-  metis_tac[gas_origin_ptr_path_rules]
+    (qpat_x_assum `G1 = _` SUBST1_TAC >>
+     qpat_x_assum `tn1 = _` SUBST1_TAC >>
+     irule ifexp_alloca_origin_ptr_edge >> gvs[]) >>
+  drule_all bodyPtrIfExpAllocSourceTheory.alloca_step_contracts >> strip_tac >>
+  `~(v with vs_inst_idx := SUC u.vs_inst_idx).vs_halted` by simp[] >>
+  pop_assum mp_tac >>
+  qpat_x_assum `gas_origin_ptr_edge _ _ _ _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  metis_tac[gas_origin_ptr_path_rules, APPEND_NIL]
 QED
 
 Resume abi_decode_caller_allocation_joint[observer]:
-  rpt strip_tac >>
+  markerLib.RESUME_TAC >> rpt strip_tac >>
   `?bb. lookup_block u.vs_current_bb obs.fn_blocks = SOME bb /\
     get_instruction bb u.vs_inst_idx = SOME
       (mk_inst header_st.cs_next_id ALLOCA [Lit (n2w outsz)] [out])` by
     (drule_all fn_has_code_same_block >> strip_tac >>
      qexists_tac `bb'` >> simp[] >>
      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
-  FAIL_TAC "observer edge"
+  `gas_path_edge ctx obs u 0 (OK (v with vs_inst_idx := SUC u.vs_inst_idx))` by
+    (qpat_x_assum `step_inst_base _ u = OK v` mp_tac >>
+     qpat_x_assum `get_instruction bb' _ = _` mp_tac >>
+     qpat_x_assum `lookup_block _ obs.fn_blocks = _` mp_tac >>
+     qpat_x_assum `~u.vs_halted` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     drule_at (Pos last) tuple_straight_line_edge >>
+     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  pop_assum mp_tac >> rpt (pop_assum kall_tac) >> strip_tac >>
+  drule fragGasPathTheory.gas_path_edge_normal >> strip_tac >>
+  metis_tac[fragGasPathTheory.gas_path_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
 Resume abi_decode_caller_allocation_joint[owned]:
