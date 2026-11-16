@@ -921,15 +921,15 @@ Resume typed_copy_origin_ptr_dynarray_fast_data_path[transport]:
      qexists `n` >> simp[Abbr `u`, Abbr `s1`,
        valueEncodingPropsTheory.mcopy_mem_bytes_at_same,
        venomStateTheory.update_var_def]) >>
-  rpt strip_tac >>
-  `i * type_memory_size tv + i' < n` by decide_tac >>
+  qx_gen_tac `byte_offset` >> strip_tac >>
+  `i * type_memory_size tv + byte_offset < n` by decide_tac >>
   simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,
     pred_setTheory.GSPECIFICATION] >>
   eq_tac >-
-    (strip_tac >> gvs[] >>
-     `i'' = i' + i * type_memory_size tv` by decide_tac >>
+    (disch_then (qx_choose_then `copy_offset` strip_assume_tac) >> gvs[] >>
+     `copy_offset = byte_offset + i * type_memory_size tv` by decide_tac >>
      metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  strip_tac >> qexists `i * type_memory_size tv + i'` >>
+  strip_tac >> qexists `i * type_memory_size tv + byte_offset` >>
   conj_tac >- decide_tac >>
   conj_tac >- decide_tac >>
   metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
