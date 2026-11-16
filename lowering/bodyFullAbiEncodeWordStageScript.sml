@@ -2,9 +2,9 @@ Theory bodyFullAbiEncodeWordStage
 Ancestors
   bodyFullAbiEncodeAllocOrigin bodyFullAbiEncodeStore bodyFullPathHistory
   bodyPtrMakeArrayWordStore wordArgsPtr exprSimHash exprSimWordArgs
-  bodyFullAllocaFresh bodyFullUnwrapRun exprSimAlloc
+  bodyFullAllocaFresh bodyFullUnwrapRun exprSimAlloc abiEncodeOwnership
   abiBuiltinAllocation emitHelper emitHelperProps exprLoweringProps loweringHalt fragExec
-  fragGasOriginPtrLoop compileEnv
+  fragGasOriginPtrLoop compileEnv exprSimProps loweringPosts
   bodyPtrDefs loweringStateRelDefs ptrDiscipline venomMemDefs
   venomExecSemantics venomState venomInst finite_map pred_set
 
@@ -12,7 +12,11 @@ Theorem abi_encode_word_stage_origin:
   compile_alloc_buffer 32 sm = (buf,sn) /\
   emit_void MSTORE [buf.buf_operand;op] sn = ((),sh) /\
   fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce sm /\ cs_extends origin sm /\
+  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce sm /\
+  local_ptrs_reserved ce origin /\ cs_extends origin sm /\
+  origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list)
     ctx func ce cx ee s /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -134,6 +138,33 @@ Resume abi_encode_word_stage_origin[resources]:
   `ptr_covers G' tnu q u 32` by
     (fs[ptr_covers_def] >> metis_tac[op_taint_def]) >>
   `allocas_from lo u` by metis_tac[allocas_from_def] >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t with <|vs_vars := _; vs_allocas := _;
+      vs_alloca_next := _; vs_inst_idx := _|> = s`
+      (SUBST1_TAC o SYM) >> simp[]) >>
+  `!off len. regions_disjoint (w2n a) 32 off len ==>
+    mem_bytes_at off len u.vs_memory = mem_bytes_at off len s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory`
+       suffices_by simp[] >>
+     simp[NoAsms, Abbr `u`] >>
+     irule mstore_region_frame >> qexistsl_tac [`w2n a`, `32`] >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    fs[wb_frame_def, locals_kept_def] >>
+  `!n b sz. local_region ce ee.scopes s n b sz ==>
+    regions_disjoint (w2n a) 32 b sz` by
+    (rpt strip_tac >>
+     `local_region ce ee.scopes t n b sz` by
+       (irule local_region_frame_fwd >>
+        qexistsl_tac [`s`, `sm`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
+     metis_tac[]) >>
+  `!n b sz. local_region ce es.scopes s0 n b sz ==>
+    regions_disjoint (w2n a) 32 b sz` by
+    (rpt strip_tac >>
+     `local_region ce ee.scopes s n b sz` by
+       (irule local_region_frame_fwd >>
+        qexistsl_tac [`s0`, `origin`, `es.scopes`] >> simp[] >>
+        metis_tac[wb_frame_vars]) >> metis_tac[]) >>
   simp[eval_operand_def] >>
   conj_tac >- suspend "robust" >>
   conj_tac >- suspend "history" >>
@@ -175,22 +206,55 @@ QED
 Resume abi_encode_word_stage_origin[ghost]:
   rpt strip_tac >>
   `ghost_inv_at D lo ret ce cx ee G' tn' t` by
-    (irule alloc_buffer_ghost_inv_at >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloc_buffer_ghost_inv_at) >>
+     qpat_x_assum `local_ptrs_reserved ce origin` kall_tac >>
      rpt (first_assum (irule_at Any)) >> simp[] >>
-     FAIL_TAC "return pointer reservation diagnostic") >>
-  FAIL_TAC "store ghost"
+     qexists_tac `w2n a+32` >> simp[]) >>
+  `stmt_state_rel H ctx func ce cx ee t` by metis_tac[] >>
+  `local_ptrs_rel func ce ee.scopes t` by fs[stmt_state_rel_def, state_rel_def] >>
+  `lo <= w2n a` by (fs[allocas_from_def] >> metis_tac[]) >>
+  simp[NoAsms, Abbr `u`, Abbr `tnu`] >>
+  irule (cj 1 abi_encode_mstore_frame_at) >>
+  rpt (first_assum (irule_at Any)) >>
+  qexistsl_tac [`tn'`, `t`, `sm`, `G'`] >>
+  simp[ghost_kept_at_refl] >> metis_tac[]
 QED
 
 Resume abi_encode_word_stage_origin[kept]:
-  FAIL_TAC "kept"
+  `!x. not_fresh_at origin x ==> not_fresh_at sm x` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ghost_kept_at lo ce es origin G0 tn0 s0 G' tn'` by
+    (irule alloc_buffer_ghost_kept_at >>
+     qexistsl_tac [`G`, `w2n a+32`, `s`, `tn`] >> simp[] >>
+     conj_tac >- (rpt strip_tac >>
+       `b + sz <= s0.vs_alloca_next` by metis_tac[abi_encode_local_region_frontier] >>
+       decide_tac) >>
+     rpt strip_tac >>
+     `off + sz <= s0.vs_alloca_next` by
+       (qpat_assum `stmt_state_rel Hentry _ _ _ _ _ s0` mp_tac >>
+        simp[NoAsms, stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
+        metis_tac[]) >> decide_tac) >>
+  irule ghost_kept_at_clean_suffix >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  simp[pred_setTheory.SUBSET_DEF] >>
+  metis_tac[op_taint_def]
 QED
 
 Resume abi_encode_word_stage_origin[wb]:
-  FAIL_TAC "wb"
+  irule wb_frame_allocating_tail >> simp[] >>
+  qexistsl_tac [`s`, `ee.scopes`, `sm`] >>
+  simp[] >> metis_tac[]
 QED
 
 Resume abi_encode_word_stage_origin[pure]:
-  FAIL_TAC "pure"
+  reverse conj_tac >- metis_tac[op_taint_def] >>
+  strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  irule pure_frame_buffer_tail >>
+  qexistsl_tac [`w2n a`, `32`,
+    `mk_inst sm.cs_next_id ALLOCA [Lit 32w] [STRING #"%" (toString sm.cs_next_var)]`,
+    `s`] >>
+  simp[mk_inst_def] >>
+  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Finalise abi_encode_word_stage_origin
