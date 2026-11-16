@@ -1,7 +1,7 @@
 (* Kind boundaries shared by symbolic instruction and control-flow proofs. *)
 Theory symInstKinds
 Ancestors
-  codegenSymRel genFrameSim frameViewFacts unitShapeDefs
+  codegenSymRel codegenSymOwnRel genFrameSim frameViewFacts unitShapeDefs
   contextCodegenRel frameRel asmSymSem list
 
 Theorem op_kind_ok_word:
@@ -120,20 +120,30 @@ Proof
   simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
 QED
 
+Theorem ordinary_input_not_code_end_own:
+  label_flow_own_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> CODECOPY ==>
+  ~code_end_var fn x
+Proof
+  strip_tac >> strip_tac >>
+  qpat_x_assum `label_flow_own_ok ctx`
+    (mp_tac o REWRITE_RULE [label_flow_own_ok_def]) >>
+  disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
 Theorem ordinary_input_not_code_end:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands /\
   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> CODECOPY ==>
   ~code_end_var fn x
 Proof
-  strip_tac >> strip_tac >>
-  qpat_x_assum `label_flow_ok ctx`
-    (mp_tac o REWRITE_RULE [label_flow_ok_def]) >>
-  disch_then drule_all >> simp[] >> metis_tac[]
+  metis_tac[ordinary_input_not_code_end_own,
+            label_flow_ok_imp_label_flow_own_ok]
 QED
 
-Theorem phi_var_output_kind:
-  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+Theorem phi_var_output_kind_own:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_own_ok ctx /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
   MEM (Var y) inst.inst_operands ==>
@@ -144,10 +154,20 @@ Proof
     (drule_at (Pat `MEM inst (fn_insts fn)`) ordinary_output_not_code_end >>
      simp[] >> metis_tac[]) >>
   `~code_end_var fn y` by
-    (drule_at (Pat `MEM inst (fn_insts fn)`) ordinary_input_not_code_end >>
+    (drule_at (Pat `MEM inst (fn_insts fn)`) ordinary_input_not_code_end_own >>
      simp[] >> metis_tac[]) >>
   drule_all frameViewFactsTheory.phi_output_retpc >>
   simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
+QED
+
+Theorem phi_var_output_kind:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
+  MEM (Var y) inst.inst_operands ==>
+  (op_kind_ok fn ret (Var x) sv <=> op_kind_ok fn ret (Var y) sv)
+Proof
+  metis_tac[phi_var_output_kind_own, label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem op_kind_ok_numeric:
