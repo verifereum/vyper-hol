@@ -583,7 +583,7 @@ Resume compile_augassign_attr_storage_case[rhs_summary]:
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]
   >- suspend "rhs_normal" >>
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H2` mp_tac) >> simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
   simp[gas_summary_at_def] >>
@@ -598,7 +598,8 @@ Resume compile_augassign_attr_storage_case[rhs_summary]:
         `es_end with gas_obs := tail`]
         mp_tac augassign_storage_place_rhs_exception >>
       impl_tac >- simp[] >> simp[]) >>
-  disj2_tac >> rpt strip_tac >> fs[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
+  fs[halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -676,8 +677,8 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
           disch_then (qspecl_then [`ty`, `bop`] SUBST1_TAC) >>
           simp[bind_def, lift_sum_def, raise_def]) >>
       metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]) >>
-  disj2_tac >> rpt strip_tac >> simp[stmt_exit_def] >>
-  Cases_on `y` >> Cases_on `r` >> gvs[expr_exit_def]
+  disj2_tac >> simp[stmt_exit_def, halt_exit_def] >> rpt strip_tac >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Resume compile_augassign_attr_storage_case[store]:
@@ -758,11 +759,12 @@ Resume compile_augassign_attr_storage_case[store]:
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
         `es_end`, `Abort ExHalt_abort (halt_state (set_returndata [] u))`] >>
-      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def] >>
       fs[gas_marked_exec_def] >> conj_tac
       >- (gen_tac >>
           qspecl_then [`cx`, `AttributeTarget (TopLevelNameTarget (src,id)) fld`,
-            `tr`, `n2w slot + n2w off`, `ftv`, `es`, `fv`, `e`,
+            `tr`, `n2w slot + n2w off`, `ftv`,
+            `[StorageRoot tr slot (StructTV fs)]`, `es`, `fv`, `e`,
             `gas_explicit marks s0.vs_gas_readings ++ tail`, `v`,
             `es_end with gas_obs := tail`]
             mp_tac augassign_storage_place_rhs_normal >>

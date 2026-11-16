@@ -27,6 +27,9 @@ every suite.
 - `compilerNativeRuntime.sml`: native implementations of the HOL primitives
   the generated code calls (numbers, integers, words, characters, finite
   maps, sets).
+- `compilerNativeRuntimeTest.sml`: checks of those primitives against their
+  HOL definitions (`poly --script compilerNativeRuntimeTest.sml` in this
+  directory).
 - `compilerNativeParity.sml`: the runner. It compiles each fixture natively
   and compares the bytes with its oracle file.
 - `bytecode_parity_native.mlb`, `compilerNativeMLtonMain.sml`: the MLton

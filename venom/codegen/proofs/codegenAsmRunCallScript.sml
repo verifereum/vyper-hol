@@ -22,6 +22,55 @@ Ancestors
    runs out of gas or overflows the stack is frame_resource_starved; the
    assembly has no such limits.  The assembly semantics is
    deterministic, so each clause is about its one terminal state. *)
+
+Theorem codegen_asm_run_call_tail:
+  !rpolicy unit cp prog Inv vs es tail.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel_tail tail cp prog unit.cu_context vs es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ((!n a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          prog n (entry_asm_state vs es) = AsmHalt a' ==>
+           frame_outcome es r es' NONE a'.as_returndata a'.as_logs /\
+           es'.rollback.accounts = a'.as_accounts /\
+           es'.rollback.toDelete = a'.as_pending_deletions /\
+           es'.rollback.tStorage = a'.as_transient /\
+           a'.as_requests = call_requests es /\ a'.as_gas_readings = tail) /\
+        (!n a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          prog n (entry_asm_state vs es) = AsmRevert a' ==>
+           (?lgs. frame_outcome es r es' (SOME Reverted) a'.as_returndata lgs) /\
+           frame_inst_raises es Reverted Revert /\ a'.as_gas_readings = tail) /\
+        (!n a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          prog n (entry_asm_state vs es) = AsmFault a' ==>
+           (?exc lgs. exc <> Reverted /\
+             frame_outcome es r es' (SOME exc) [] lgs) /\
+           a'.as_gas_readings = tail)))
+Proof
+  rpt strip_tac >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  Q.SUBGOAL_THEN `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD es.contexts)).msgParams.callee
+       es.rollback.accounts)` assume_tac
+  >- (gvs[initial_ctx_rel_tail_def, initial_ctx_rel_def] >> metis_tac[]) >>
+  drule_all asm_frame_rel_entry_tail >> strip_tac >>
+  Cases_on `run_call es` >- fs[run_call_eq_tr] >>
+  rename1 `run_call es = SOME res` >> PairCases_on `res` >>
+  qexistsl_tac [`res0`, `res1`] >> simp[] >>
+  Cases_on `frame_resource_starved es res0 res1` >> simp[] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qspecl_then [`n`, `tail`, `prog`, `vs.vs_data_section`, `es`,
+               `entry_asm_state vs es`, `es`, `res0`, `res1`]
+    mp_tac asm_frame_run_tail >>
+  asm_simp_tac (srw_ss()) []
+QED
+
 Theorem codegen_asm_run_call:
   !rpolicy unit cp prog Inv vs es.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -51,19 +100,11 @@ Theorem codegen_asm_run_call:
                      frame_outcome es r es' (SOME exc) [] lgs)))
 Proof
   rpt strip_tac >>
-  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
-  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
-  Q.SUBGOAL_THEN `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
-     (lookup_account (FST (HD es.contexts)).msgParams.callee
-       es.rollback.accounts)` assume_tac
-  >- (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
-  drule_all asm_frame_rel_entry >> strip_tac >>
-  Cases_on `run_call es` >- fs[run_call_eq_tr] >>
-  rename1 `run_call es = SOME res` >> PairCases_on `res` >>
-  qexistsl_tac [`res0`, `res1`] >> simp[] >>
-  Cases_on `frame_resource_starved es res0 res1` >> simp[] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  qspecl_then [`n`, `prog`, `vs.vs_data_section`, `es`, `entry_asm_state vs es`,
-               `es`, `res0`, `res1`] mp_tac asm_frame_run >>
-  asm_simp_tac (srw_ss()) []
+  fs[GSYM initial_ctx_rel_tail_nil] >>
+  drule_all codegen_asm_run_call_tail >> strip_tac >>
+  rename1 `run_call es = SOME (r, es1)` >>
+  qexistsl_tac [`r`, `es1`] >> asm_simp_tac (srw_ss()) [] >>
+  disj2_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> res_tac >> gvs[] >>
+  metis_tac[]
 QED
