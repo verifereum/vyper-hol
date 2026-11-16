@@ -1,7 +1,7 @@
 (* Fixed-byte MethodId hashing with a shared finite-horizon endpoint. *)
 Theory bodyFullBuiltinEnvMethodIdHashFixed
 Ancestors
-  bodyFullHashKeccakFixed bodyFullGhostFrame bodyFullUnwrapSlotPost
+  bodyMemBiMethodIdEndpoint bodyFullHashKeccakFixed bodyFullGhostFrame bodyFullUnwrapSlotPost
   exprSimHash exprOperandVar exprSimAlloc fragGasSeqPtr
   allocaHistoryFragment bodyPtrHashBuiltinsKeccakFixedRun
   bodyPtrHashBuiltinsCursor bodyPtrHashBuiltinsAllocFrame
@@ -108,39 +108,85 @@ Proof
    DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sh ++ rest` by
    suspend "code" >>
  `run_inst_seq_mem_ok (emitted_insts sm sh) s` by suspend "memory" >>
- `?u Gh tnh.
-    run_inst_seq (emitted_insts sm sh) s = OK u /\
-    u.vs_current_bb = s.vs_current_bb /\
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sh)),Gh,tnh)) /\
-    eval_operand hash u = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 payload)) /\
-    op_taint tnh hash = {} /\ op_prov Gh hash = NONE /\
-    (!p. not_fresh_at sm p ==> lookup_var p u = lookup_var p s) /\
-    s.vs_alloca_next <= u.vs_alloca_next /\
-    (!H D. stmt_state_rel H ctx func cenv cx mid s /\
-       ghost_inv_at D lo d cenv cx mid G tn s ==>
-       stmt_state_rel H ctx func cenv cx mid u /\
-       ghost_inv_at D lo d cenv cx mid Gh tnh u /\
-       ghost_kept_at lo cenv mid sm G tn s Gh tnh)` by
-   (`isPREFIX (emitted_insts sm sh) (DROP s.vs_inst_idx bb.bb_instructions)` by
-      simp[IS_PREFIX_APPEND] >>
-    drule_all (Q.SPEC `storage_trace_horizon mid.storage_trace` hash_fixed_keccak_joint_run) >>
-    FAIL_TAC "joint interface") >>
- `typed_end = u` by metis_tac[] >> gvs[] >>
+ `isPREFIX (emitted_insts sm sh) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+ `compile_keccak256_bytesm x (LENGTH payload) sm = (hash,sh)` by simp[] >>
+ `LENGTH payload <= 32` by simp[] >>
+ drule_all (Q.SPEC `storage_trace_horizon mid.storage_trace` hash_fixed_keccak_joint_run) >>
+ disch_then (qspecl_then [`explicit`, `d`, `PG`, `G`] strip_assume_tac) >>
+ rename1 `run_inst_seq (emitted_insts sm sh) s = OK u` >>
+ `typed_end = u` by
+   (qpat_x_assum `run_inst_seq _ _ = OK typed_end` mp_tac >> simp[]) >> gvs[] >>
  suspend "finish"
 QED
 
 Resume method_id_hash_fixed_full_run[code]:
  gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
- qexistsl_tac [`l`, `l'`] >> simp[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]
+ metis_tac[APPEND_ASSOC, DROP_LENGTH_APPEND]
 QED
 
 Resume method_id_hash_fixed_full_run[memory]:
- cheat
+ irule (INST_TYPE [alpha |-> ``:256``] method_id_fixed_hash_mem_ok_any_block) >>
+ conj_tac >- (qexistsl_tac [`m`, `hash`, `x`, `w`] >> simp[]) >>
+ qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `cenv`, `ctx`, `cx`, `mid`, `func`] >> simp[]
 QED
 
 Resume method_id_hash_fixed_full_run[finish]:
- cheat
+ drule_all (INST_TYPE [alpha |-> ``:256``] compile_keccak256_bytesm_frame) >>
+ strip_tac >> gvs[] >>
+ rename1 `run_inst_seq (emitted_insts sm sh) s = OK typed_end` >>
+ `~typed_end.vs_halted` by
+   (drule_all fragExecTheory.run_inst_seq_preserves_halted >> simp[]) >>
+ `ghost_kept_at lo cenv mid sm G tn s Gf tnf` by metis_tac[] >>
+ `sm.cs_next_var <= sh.cs_next_var` by metis_tac[method_id_hash_grows] >>
+ `local_ptrs_reserved cenv sh` by
+   (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
+ qabbrev_tac `fin = typed_end with vs_inst_idx := LENGTH sh.cs_current_insts` >>
+ `alloca_history func fin` by suspend "history" >>
+ `return_buf_frame d cenv sh fin` by suspend "return" >>
+ `locals_kept cenv mid mid s fin /\ pure_frame cenv func mid sm s fin` by
+   ((simp[Abbr `fin`, pure_frame_def] >> irule locals_kept_regions >> simp[] >> (metis_tac[Abbr `fin`, pure_frame_def, locals_kept_regions]))) >>
+ qexistsl_tac [`fin`, `Gf`, `tnf`, `bs`] >>
+ simp[Abbr `fin`, same_blocks_def, lookup_var_def] >>
+ suspend "post"
+QED
+
+Resume method_id_hash_fixed_full_run[history]:
+ `alloca_inv s` by metis_tac[stmt_state_rel_def] >>
+ simp[NoAsms, Abbr `fin`] >>
+ irule bodyFullUnwrapRunTheory.emitted_alloca_history >> simp[] >>
+ qexistsl_tac [`emitted_insts sm sh`, `s`, `sm`] >>
+ fs[same_blocks_def, EVERY_MEM]
+QED
+
+Resume method_id_hash_fixed_full_run[return]:
+ irule return_buf_frame_frame >>
+ qexistsl_tac [`cenv`, `s`, `sm`] >>
+ simp[Abbr `fin`, lookup_var_def] >> rpt strip_tac >>
+ qpat_x_assum `!x. not_fresh_at sm x ==> _` drule >>
+ simp[lookup_var_def]
+QED
+
+Resume method_id_hash_fixed_full_run[post]:
+ simp[ghostPcTransportPtrTheory.eval_operand_inst_idx,
+   ghostPcTransportPtrTheory.ghost_inv_at_inst_idx, stmt_state_rel_inst_idx] >>
+ conj_tac >- fs[same_blocks_def] >>
+ conj_tac >-
+   (gen_tac >> disch_tac >>
+    qpat_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o PURE_REWRITE_RULE [ghost_kept_at_def]) >>
+    simp[] >>
+    qpat_x_assum `!x. not_fresh_at sm x ==> lookup_var _ _ = _` drule >>
+    simp[lookup_var_def]) >>
+ conj_tac >- metis_tac[] >>
+ gen_tac >> disch_tac >>
+ qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `H` mp_tac) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ `stmt_state_rel H ctx func cenv cx mid s /\
+  storage_well_formed_on cx mid (FST H)` by fs[expr_post_def] >>
+ qpat_x_assum `!H D. _` drule >>
+ disch_then (qspec_then `DF H` mp_tac) >> simp[]
 QED
 
 Finalise method_id_hash_fixed_full_run
