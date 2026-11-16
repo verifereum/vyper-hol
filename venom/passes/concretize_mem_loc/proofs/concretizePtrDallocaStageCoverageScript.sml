@@ -19,7 +19,7 @@ Theorem ptr_dalloca_stage_history_coverage_safe_static:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\
@@ -62,7 +62,7 @@ Theorem ptr_dalloca_stage_history_coverage_safe:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\
@@ -93,7 +93,7 @@ Theorem ptr_dalloca_stage_history_coverage:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\
@@ -127,7 +127,7 @@ Theorem ptr_dalloca_stage_frame_coverage_safe_static:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\
@@ -176,7 +176,7 @@ Theorem ptr_dalloca_stage_frame_coverage_safe:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\
@@ -211,7 +211,7 @@ Theorem ptr_dalloca_stage_frame_coverage:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   ?R lp positions.
     ptr_stage_placements C' positions /\

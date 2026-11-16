@@ -41,14 +41,14 @@ Theorem concretize_stage_frame_ptr_ok_static:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   !stk PG G tn fn inst s.
     frame_reachable vs C' stk PG G tn fn inst s ==>
     access_ok eom G fn inst s /\ taint_ok fn tn inst s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `eom <= w2n vs.vs_initial_fmp` by metis_tac[] >>
+  `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by metis_tac[] >>
   `EVERY wf_function C'.ctx_functions /\
    EVERY (\fn. EVERY inst_wf (fn_insts fn)) C'.ctx_functions` by
     (mp_tac ptr_stage_paired_bridge_static >>
@@ -183,7 +183,7 @@ Theorem concretize_stage_frame_ptr_ok:
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> !eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
   max_live_eom C' = SOME eom ==>
   !stk PG G tn fn inst s.
     frame_reachable vs C' stk PG G tn fn inst s ==>
