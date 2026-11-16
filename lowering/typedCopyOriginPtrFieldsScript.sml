@@ -32,7 +32,7 @@ Theorem typed_copy_origin_ptr_fields_path_from_offset:
     (w2n sw + soff + type_memory_size stv <= w2n dw + doff \/
      w2n dw + doff + type_memory_size dtv <= w2n sw + soff) /\
     ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -82,7 +82,7 @@ Theorem typed_copy_origin_ptr_fields_path_from_offset:
     (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
      w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
     ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -191,6 +191,8 @@ Proof
   `ptr_covers Gf tnf xs t stotal /\ ptr_covers Gf tnf xd t dtotal` by
     (asm_x "offset" kall_tac >> asm_x "ih" kall_tac >>
      gvs[ptr_covers_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   `allocas_from lo t` by
     (qpat_assum `allocas_from lo s` mp_tac >>
      pure_rewrite_tac [allocas_from_def] >> asm_rewrite_tac []) >>
@@ -276,7 +278,7 @@ Theorem typed_copy_origin_ptr_add_path:
   not_fresh_at sa root /\ lookup_var root s = SOME a /\
   ptr_covers G tn root s total /\ off + n <= total /\
   w2n a + off < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -414,7 +416,7 @@ Theorem typed_copy_origin_ptr_byte_offset_path:
   not_fresh_at sa root /\ lookup_var root s = SOME a /\
   ptr_covers G tn root s total /\ off + n <= total /\
   w2n a + off < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -468,7 +470,7 @@ Theorem typed_copy_origin_ptr_offset_path:
   (w2n sw + soff + type_memory_size stv <= w2n dw + doff \/
    w2n dw + doff + type_memory_size dtv <= w2n sw + soff) /\
   ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -510,6 +512,8 @@ Proof
     (gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   `lookup_var xs t = SOME sw /\ ptr_covers Gf tnf xs t stotal` by
     (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   qpat_assum `compile_with_byte_offset (Var xs) _ _ = _`
     (mp_then Any mp_tac typed_copy_origin_ptr_byte_offset_path) >>
   disch_then (qspecl_then [`type_memory_size stv`, `stotal`, `sw`,
@@ -526,6 +530,10 @@ Proof
     (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
   qpat_x_assum `dp = _` SUBST_ALL_TAC >>
   qpat_x_assum `sp = _` SUBST_ALL_TAC >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t')` by
+    (qpat_assum `typed_copy_state_frame _ _ _ t t'`
+       (mp_then Any (fn th => rewrite_tac[th])
+         typed_copy_state_frame_allocas_below_fmp) >> simp[]) >>
   drule typed_copy_origin_ptr_entry_run >>
   disch_then drule >>
   disch_then (qspecl_then [`tnf'`, `n2w (w2n sw + soff)`, `t'`,
@@ -578,7 +586,7 @@ Theorem typed_copy_origin_ptr_fields_path:
     (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
      w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
     ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -642,7 +650,7 @@ Theorem typed_copy_origin_ptr_tuple_entry_from_fields:
     (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
      w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
     ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -774,7 +782,7 @@ Theorem typed_copy_origin_ptr_struct_entry_from_fields:
     (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
      w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
     ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
