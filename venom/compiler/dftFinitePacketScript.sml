@@ -2848,6 +2848,35 @@ Proof
   first_x_assum irule >> first_x_assum irule >> simp[EL_MEM]
 QED
 
+Theorem dft_packet_suspended_prefix_bound:
+  !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d q8 raw_slots sites unused a e cid q call_h b0 done_at_call
+    child_entry bb bt ps xs ys rho in_state h0 be hbe count k.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FLOOKUP calls (a,e,cid) = SOME (q,call_h,b0,done_at_call,child_entry,NONE) /\
+  FLOOKUP blocks (a,e) =
+    SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK b0,F,NONE) /\
+  done_at_call = TAKE count rho /\
+  (!r. r < k /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)) ==>
+  q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\
+  ~MEM q (TAKE count rho) /\ k <= q
+Proof
+  rpt gen_tac >> strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `!a e cid q h b0 done child_entry ret.
+    FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,child_entry,ret) ==> _` mp_tac >>
+  qpat_x_assum `FLOOKUP calls (a,e,cid) = SOME _` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (a,e) = SOME _` mp_tac >>
+  qpat_x_assum `done_at_call = TAKE _ _` mp_tac >>
+  qpat_x_assum `!r. r < k /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  qpat_x_assum `!a e cid q h b0 done child_entry ret. _`
+    (drule_then strip_assume_tac) >> gvs[] >>
+  `~(q < k)` by metis_tac[] >> simp[]
+QED
+
 Theorem dft_packet_call_done_contained[local]:
   !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
     rooted_eval p d q8 raw_slots sites unused a e cid q call_h b0 done child_entry ret
