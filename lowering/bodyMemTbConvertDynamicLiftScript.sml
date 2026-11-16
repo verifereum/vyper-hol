@@ -107,21 +107,21 @@ Proof
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   `alloca_inv u` by
-    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+    (rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H0` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >>
      rewrite_tac[expr_post_def, stmt_state_rel_def] >> strip_tac >>
      first_assum ACCEPT_TAC) >>
   irule (Q.INST [`v` |-> `v`, `u` |-> `u`] convert_read_summary_bind) >>
-  simp[] >>
+  simp[] >> qexistsl_tac [`u`, `v`] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   qpat_assum `ee with gas_obs := [] = ee` (fn th =>
-    drule_at (Pat `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-      (Q.INST [`t` |-> `ann`, `ee` |-> `ee`] dynamic_continuation_summary_mem
+    mp_tac
+      (Q.INST [`t` |-> `ann`, `e1` |-> `e`, `v1` |-> `v`,
+               `t0` |-> `u`, `tenv` |-> `env.type_defs`]
+         dynamic_continuation_summary_mem
        |> REWRITE_RULE [th])) >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `well_formed_type _ _`)) >>
-  disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[]
 QED
@@ -179,10 +179,11 @@ Proof
     (gen_tac >> strip_tac >>
      drule_at (Pat `evaluate_type _ _ = SOME _`) expr_body_pre_copy_ok >>
      simp[] >> disch_then irule >> metis_tac[is_bytestring_word_type]) >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
-  drule_at (Pat `unwrap_value _ _ _ = _`)
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `env`, `e`, `es`, `sa`,
+               `sm`, `s1`, `s0`, `ee`, `tv`, `vv`, `x`, `t`, `st0`, `H0`]
+    mp_tac
     bodyMemTbConvertSourceUnwrapTheory.convert_unwrap_value_marked_read_mem_horizons >>
-  disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `?H. valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
   mp_tac dynamic_read_convert_summary >>
@@ -228,7 +229,8 @@ Proof
       MATCH_ACCEPT_TAC convert_read_continuation_frame)
   >~ [`expr_exit (INR _) _`]
   >- (rpt strip_tac >> TRY BETA_TAC >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      gvs[halt_exit_def]) >>
   qexists_tac `\H tv ee u.
     vv_post H ctx func cenv cx e es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\
@@ -244,13 +246,16 @@ Proof
    t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
-     metis_tac[]) >>
-  drule_at (Pat `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    dynamic_vv_convert_summary >>
-  disch_then (drule_at (Pat `well_formed_type _ _`)) >>
-  disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
-  disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
+    metis_tac[] >>
+  mp_tac dynamic_vv_convert_summary >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
-  simp[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
+  `res <> INR HaltException` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     gvs[convert_result_def, AllCaseEqs()] >>
+     metis_tac[evalNoHaltTheory.read_result_no_halt]) >>
+  qexistsl_tac [`res`, `es_end`, `r`] >>
+  gvs[halt_exit_def] >> metis_tac[]
 QED
