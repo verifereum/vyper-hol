@@ -127,6 +127,7 @@ Resume same_type_store_core[bytes]:
      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, exprLoweringPropsTheory.same_blocks_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all (SRULE [GSYM vfmConstantsTheory.word_size_def]
     (Q.INST [`n` |-> `32 + 32 * word_size len`]
       (SPEC_ALL compile_store_bytestring_origin_ptr_path))) >>
