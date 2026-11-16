@@ -160,8 +160,8 @@ Proof
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        lift_option_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def, bind_def]) >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
