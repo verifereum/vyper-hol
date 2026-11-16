@@ -5,7 +5,7 @@ Ancestors
   rawCallMemoryFramePtr oracleCallStepPtr bodyFullRawCallCallStorage
   emitHelperProps exprLoweringProps fragExec words finite_map pred_set list arithmetic
   emitHelper compileEnv venomState venomInst memLocDefs unitTransformDefs codegenRel contextCodegenRel
-  venomExecSemantics bodyPtrDefs loweringStateRelDefs decoderGhostFramePtr ptrDiscipline exprSafeOperand
+  venomCallOracleDefs venomExecSemantics bodyPtrDefs loweringStateRelDefs decoderGhostFramePtr ptrDiscipline exprSafeOperand
 
 Theorem raw_call_actual_call_from_interfaces:
   (!inst gas_op to_op val_op dp dl op rz s ao az ro rn G tn lo D ctx
@@ -148,16 +148,21 @@ Proof
     (simp[inst_mem_below_frontier_def] >>
      qpat_x_assum `w2n az = 0 \/ _` mp_tac >> simp[]) >>
   `exec_ext_call inst s gas aw (if stat then 0w else val_word)
-      ao az ro (n2w cap) stat = OK u` by
-    (qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+      ao az ro (n2w cap : 256 word) stat = OK u` by
+    (asm_x "origin" kall_tac >> asm_x "frame" kall_tac >>
+     qpat_x_assum `t = _` kall_tac >>
+     qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
      Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >>
      Cases_on `val_word = 0w` >>
-     simp[step_inst_base_opcode_eqs, eval_operand_def] >>
-     disch_then ACCEPT_TAC) >>
+     simp[step_inst_base_opcode_eqs, eval_operand_def, w2n_eq_0] >>
+     simp[exec_ext_call_def, venom_call_request_def]) >>
   `stor_taint_ok_at D (step_taint inst s u tn) u` by
-    (irule raw_call_exec_stor_taint_at >>
-     goal_assum (drule_at Any) >> simp[] >>
-     fs[ghost_inv_at_def] >> Cases_on `stat` >> simp[]) >>
+    (drule_at (Pat `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`)
+       raw_call_exec_stor_taint_at >>
+     disch_then (qspecl_then [`tn`,`D`] mp_tac) >>
+     impl_tac >- (Cases_on `stat` >> simp[] >>
+       qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+       simp[ghost_inv_at_def]) >> simp[]) >>
   `!x. not_fresh_at sa x ==>
     FLOOKUP (step_prov PG G inst u) x = FLOOKUP G x /\
     op_taint (step_taint inst s u tn) (Var x) = op_taint tn (Var x) /\
@@ -170,7 +175,9 @@ Proof
      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   `(step_taint inst s u tn).t_mem = tn.t_mem DIFF
     {j | w2n ro <= j /\ j < w2n ro + LENGTH (TAKE cap outcome.co_returnData)}` by
-    (drule oracle_call_write_taint >> simp[]) >>
+    (drule_at (Pat `source_memory_write_ranges _ _ = _`) oracle_call_write_taint >>
+     disch_then (qspecl_then [`tn`,`u`] mp_tac) >>
+     impl_tac >- (Cases_on `stat` >> simp[]) >> simp[]) >>
   pure_rewrite_tac[LET_THM] >>
   rpt conj_tac
   >- suspend "origin"
