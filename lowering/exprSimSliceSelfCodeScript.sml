@@ -55,7 +55,7 @@ val slice_frame_tac =
             slice_read_frame] >>
        rpt gen_tac);
 
-Theorem is_self_code_thm[local]:
+Theorem is_self_code_thm:
   is_self_code src <=>
   ?ct st. src = Builtin ct (Acc Code) [Builtin st (Env SelfAddr) []]
 Proof
@@ -732,7 +732,7 @@ Proof
        vyperStateTheory.raise_def, exit_result_def, exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
 QED
 
-Theorem slice_self_code_pipeline_context[local]:
+Theorem slice_self_code_pipeline_context:
   lower_value compile_expr cenv ty start sa = (start_op, s1) /\
   lower_value compile_expr cenv ty len s1 = (len_op, s2) /\
   emit_op CODESIZE [] s2 = (src_len, sc) /\

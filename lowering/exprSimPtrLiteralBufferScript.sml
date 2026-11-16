@@ -2,7 +2,7 @@
 Theory exprSimPtrLiteralBuffer
 Ancestors
   exprSimPtrLiteralPayload exprSimLiteralBuffer allocationPtr exprLowering
-  context emitHelper freshWrites vfmConstants loweringHalt
+  context emitHelper freshWrites vfmConstants loweringHalt bodyFullHashKeccakFixed
   exprSimPtrLiteralChunks robustCopyTransportPtr exprSimProps
   bodyPtrDefs compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   venomMemProofs venomState finite_map words list pred_set
@@ -118,7 +118,7 @@ Theorem literal_header_chunks_ptr:
   compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
   not_fresh_at sh p /\ lookup_var p s = SOME (n2w b) /\
   FLOOKUP G p = SOME (b,32+32*word_size (LENGTH bs)) /\
-  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var p) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   b + 32 + 32*word_size (LENGTH bs) < dimword (:256) ==>
   ?t G' tn'.
     run_inst_seq (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
@@ -153,6 +153,8 @@ Proof
   `lookup_var p uh = SOME (n2w b) /\ op_taint th (Var p) = {}` by
     (simp[Abbr `uh`, Abbr `th`, lookup_var_def, op_taint_def] >>
      fs[lookup_var_def, op_taint_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp uh)` by
+    (gvs[Abbr `uh`, Abbr `u`, mstore_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `?t G' tn'. run_inst_seq (emitted_insts sh sb) uh = OK t /\
     inst_seq_ptr D 0 ctx fn PG G th (emitted_insts sh sb) uh G' tn' /\
     tn'.t_mem = th.t_mem DIFF
@@ -308,7 +310,7 @@ Theorem literal_bytelike_ptr_run:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
   stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) ==>
+  32+32*word_size (LENGTH bs) < dimword (:256) ==>
   ?u t b p sh G' tn'.
     buf.buf_operand = Var p /\ not_fresh_at sh p /\
     (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
@@ -380,7 +382,8 @@ Resume literal_bytelike_ptr_run[payload]:
     tn'.t_stor = ta.t_stor /\ tn'.t_trans = ta.t_trans /\ tn'.t_imm = ta.t_imm /\
     (!v. not_fresh_at sh v ==> FLOOKUP G' v = FLOOKUP Ga v /\
       FLOOKUP tn'.t_var v = FLOOKUP ta.t_var v)` by
-    (irule literal_header_chunks_ptr >> simp[] >> metis_tac[]) >>
+    (irule literal_header_chunks_ptr >> simp[] >>
+     metis_tac[stmt_state_rel_allocas_below_fmp, stmt_state_rel_inst_idx]) >>
   drule run_inst_seq_inst_idx >>
   disch_then (qspecl_then [`u`, `SUC s.vs_inst_idx`] assume_tac) >>
   Cases_on `run_inst_seq
@@ -402,7 +405,8 @@ Resume literal_bytelike_ptr_run[assemble]:
       asm_simp_tac bool_ss [] >> simp[mk_inst_def, is_terminator_def]) >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >>
-      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok]) >>
+      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok] >>
+      metis_tac[literal_alloca_ptr_inst_ok, stmt_state_rel_allocas_below_fmp]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (qpat_x_assum `v with <|vs_vars := _; vs_memory := _|> = u` mp_tac >> simp[]) >>
@@ -747,7 +751,7 @@ Theorem literal_ptr_nonmemory_step[local]:
   (i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) /\
   step_inst_base i s = OK t ==>
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-  t.vs_transient = s.vs_transient
+  t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac
@@ -769,7 +773,7 @@ Theorem literal_ptr_nonmemory_seq[local]:
     EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) code /\
     run_inst_seq code s = OK t ==>
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-    t.vs_transient = s.vs_transient
+    t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables
 Proof
   Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
   rename1 `run_inst_seq code _ = _` >>
@@ -814,6 +818,19 @@ Theorem literal_bytelike_ptr_nonmemory_frame:
 Proof
   strip_tac >> drule literal_ptr_bytelike_shape >> strip_tac >>
   drule literal_ptr_chunks_nonmemory_shape >> strip_tac >>
-  irule literal_ptr_nonmemory_seq >> qexists_tac `emitted_insts sa sb` >>
-  simp[mk_inst_def]
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+              i.inst_opcode = MSTORE) (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  drule_all literal_ptr_nonmemory_seq >> simp[]
+QED
+
+Theorem literal_bytelike_ptr_immutables_frame:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t.vs_immutables = s.vs_immutables
+Proof
+  strip_tac >> drule literal_ptr_bytelike_shape >> strip_tac >>
+  drule literal_ptr_chunks_nonmemory_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+              i.inst_opcode = MSTORE) (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  drule_all literal_ptr_nonmemory_seq >> simp[]
 QED
