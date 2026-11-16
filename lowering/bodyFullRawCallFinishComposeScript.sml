@@ -608,6 +608,14 @@ Proof
      unabbrev_all_tac >>
      asm_simp_tac bool_ss [LET_THM, pairTheory.SND, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
      disch_then irule >>
+     qpat_x_assum `EVERY (\x. op_taint tn7 x={}) _`
+       (strip_assume_tac o SRULE [listTheory.EVERY_DEF, ptrDisciplineTheory.op_taint_def]) >>
+     qpat_x_assum `op_taint tn7 op={}`
+       (assume_tac o SRULE [ptrDisciplineTheory.op_taint_def]) >>
+     conj_tac >-
+       (qpat_assum `!name lb sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
      Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >>
      Cases_on `flags.rcf_max_outsize=0` >>
      simp[venomInstTheory.mk_inst_def, ptrDisciplineTheory.op_taint_def,
@@ -771,7 +779,9 @@ Proof
         `~t7.vs_halted`, `t7.vs_current_bb=s7.cs_current_bb`,
         `emit_op _ _ s7 = (ok,sc)`] >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-     qpat_x_assum `t=t7 with _`
+     qpat_x_assum `t=t7 with <| vs_outcomes := _; vs_requests := _;
+          vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+          vs_returndata := _; vs_memory := _ |>`
        (mp_tac o Q.AP_TERM `\s. (s.vs_halted,s.vs_current_bb,s.vs_allocas,s.vs_alloca_next)`) >>
      simp[] >> strip_tac >>
      gvs[Abbr `uc`, venomStateTheory.update_var_def] >>
@@ -786,13 +796,18 @@ Proof
        drule >> strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> stmt_state_rel _ _ _ _ _ es2 u /\ _`
        drule >> strip_tac >>
-     fs[Abbr `uc`]) >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`stmt_state_rel H ctx func cenv cx es2 u`,
+        `ghost_inv_at (DF H) lo dframe cenv cx es2 HG un _`, `Abbrev(uc=_)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     fs[Abbr `uc`, exprLoweringPropsTheory.stmt_state_rel_inst_idx]) >>
   `wb_frame cenv es es2 sa s0 uc` by
     (qpat_assum `wb_frame cenv es es2 sa s0 u` mp_tac >>
      qpat_assum `Abbrev(uc=_)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[Abbr `uc`, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
-          loweringPostsTheory.popped_kept_def]) >>
+          loweringPostsTheory.popped_kept_def, venomStateTheory.lookup_var_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success`
   >- suspend "revert_result" >>
   Cases_on `flags.rcf_max_outsize=0`
