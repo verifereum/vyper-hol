@@ -38,7 +38,7 @@ Proof
      `supported_program tops /\ get_module_code cx NONE = SOME tops` by
        gvs[body_inv_def] >>
      `cx_tops cx = tops` by simp[cx_tops_def] >>
-     irule stmt_expr_body_pre >>
+     bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
        supported_assignment_exists_def, int_calls_stmt_def,
        int_calls_atarget_def, int_calls_expr_def] >>

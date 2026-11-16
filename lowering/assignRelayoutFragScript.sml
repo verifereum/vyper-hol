@@ -183,7 +183,7 @@ Theorem assign_local_store_rhs_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0) Q
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee t. Q H res ee t ==> ?v. res = INL v) /\
   (!marks v ee t.
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -199,7 +199,8 @@ Theorem assign_local_store_rhs_outcome:
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (\H. stmt_post H ctx func cx lctx old c sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!marks. gas_bad_storage_at cx st0
@@ -234,7 +235,7 @@ Proof
           impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[] >>
+          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[halt_exit_def] >>
           irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -257,7 +258,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -306,8 +307,6 @@ Proof
     metis_tac[fn_has_code_split] >> gvs[]
 QED
 
-(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
-   Original theorem and proof retained; never deliver this stand-in.
 Theorem compile_assign_local_relayout_stmt_frag:
   !ctx func cx lctx RetQ cenv ret_ty id typ e es stv dtv p cap env.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
@@ -368,7 +367,7 @@ Proof
     (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\ t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_def] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   irule assign_local_store_rhs_outcome >>
@@ -386,41 +385,4 @@ Proof
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
   simp[] >> qexists_tac `H` >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem compile_assign_local_relayout_stmt_frag:
-  !ctx func cx lctx RetQ cenv ret_ty id typ e es stv dtv p cap env.
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
-    cenv.ce_var_type id = SOME typ /\
-    ~is_word_type typ /\ ~is_bytestring_type typ /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    lowered_value_type cenv e <> expr_type e /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
-    ~is_word_type (lowered_value_type cenv e) /\
-    ~is_bytestring_type (lowered_value_type cenv e) /\
-    lowered_value_type cenv e <> typ /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
-    post_value_type cenv e = lowered_value_type cenv e /\
-    evaluate_type (get_tenv cx) typ = SOME dtv /\
-    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
-    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
-    type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      ALL_DISTINCT (MAP FST fields) /\
-      EVERY (\(fname,fty,sz). !tv.
-        evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    (!gs v es1 entry. bind (eval_expr cx e) (read_result cx)
-       (es with gas_obs := gs) = (INL v,es1) /\
-       lookup_scopes id es1.scopes = SOME entry ==>
-       entry.type = dtv /\ value_has_type stv v /\ value_has_type dtv v /\
-       val_wf stv v /\ val_wf dtv v /\ val_footprint stv v = type_memory_size stv) /\
-    expr_body_pre cenv cx env e es /\
-    expr_sim ctx func cenv cx (expr_type e) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
-Proof
-  cheat
 QED

@@ -101,7 +101,9 @@ Theorem custom_error_allocate_store_ready:
               sa'.cs_next_id <= i.inst_id /\ FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
               regions_disjoint p n c sz) ==>
             mem_bytes_at p n r.vs_memory = mem_bytes_at p n t.vs_memory)))
-      (\H res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+      (\H res ee exit. ?exc. res = INR exc /\
+        expr_exit (INR exc : eval_result + exception) exit /\
+        halt_exit H cx ee res exit)
 Proof
   strip_tac >>
   `stmt_state_rel H0 ctx func ce cx es s0 /\
@@ -139,16 +141,23 @@ Proof
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
     (rpt strip_tac >>
-     irule (SRULE [] (Q.INST [`off` |-> `0`] custom_error_buffer_immutable_frame)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     gvs[] >> qexistsl_tac [`iv`,`name`] >> simp[]) >>
+     irule (SRULE [] (Q.INST [`off` |-> `0`]
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
+         custom_error_buffer_immutable_frame)))) >>
+     qexistsl_tac [`H0`, `buf`,
+       `type_memory_bytes ce (TupleT (MAP SND (params:(string # vyperAST$type) list)))`,
+       `ce`, `ctx`, `cx`, `es`, `func`, `iv`, `name`, `t`, `sa`, `sa'`] >>
+     asm_rewrite_tac[] >> fs[] >> metis_tac[]) >>
   gvs[] >>
   drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)
     (Q.INST [`st0` |-> `st0`] (SPEC_ALL custom_error_store_args_sim)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `_.inst_outputs = _`)) >> simp[] >>
+  disch_then (qspecl_then [`st0`, `func`, `es`, `ctx`] mp_tac) >>
   (impl_tac >- (conj_tac >- metis_tac[] >> metis_tac[])) >>
-  disch_tac >> qexistsl_tac [`inst`,`t`,`b`] >> simp[]
+  disch_tac >> qexistsl_tac [`inst`,`t`,`b`] >> fs[] >>
+  qpat_x_assum `!name p n. local_region ce es.scopes t name p n <=> _`
+    (fn frame => qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
+      (ACCEPT_TAC o REWRITE_RULE [frame]))
 QED

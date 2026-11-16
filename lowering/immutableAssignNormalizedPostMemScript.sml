@@ -62,7 +62,7 @@ QED
 
 Theorem immutable_normalized_actual_state[local]:
   compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sm /\ sz < dimword (:256) /\
   exec_alloca (mk_inst sm.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sm.cs_next_var)]) s (n2w sz : bytes32) =
@@ -77,7 +77,7 @@ Theorem immutable_normalized_actual_state[local]:
   (!q k. q+k <= b \/ b+sz <= q ==>
     mem_bytes_at q k r.vs_memory = mem_bytes_at q k s.vs_memory) /\
   gas_marked_path T ctx func u 0 (OK r) ==>
-  stmt_state_rel ctx func ce cx es r /\ alloca_frame ce es sm s ce es r /\
+  stmt_state_rel H ctx func ce cx es r /\ alloca_frame ce es sm s ce es r /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP r.vs_allocas aid = SOME entry)
 Proof
@@ -91,7 +91,7 @@ Proof
     (qpat_x_assum `run_inst_seq _ s = OK raw` mp_tac >>
      simp[emitted_insts_def,DROP_LENGTH_APPEND,run_inst_seq_def,
        step_inst_base_opcode_eqs,eval_operand_def]) >>
-  `stmt_state_rel ctx func ce cx es u` by
+  `stmt_state_rel H ctx func ce cx es u` by
     metis_tac[stmt_state_rel_inst_idx] >>
   `w2n w = b` by gvs[] >>
   `!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s` by
@@ -108,7 +108,7 @@ Proof
 QED
 
 Resume immutable_normalized_actual_state[restore]:
-  `stmt_state_rel ctx func ce cx es r` by
+  `stmt_state_rel H ctx func ce cx es r` by
     (irule place_typed_copy_alloca_state_frame >>
      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
      qexistsl_tac [`sz`, `mk_inst sm.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -144,7 +144,8 @@ Theorem immutable_assign_normalized_mem_stmt_post:
   compile_assign_value ce (Lit (n2w off)) LocCode src F sl dty sty
     (type_memory_bytes ce dty) sm = ((),sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\
+  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved ce sm /\
   expr_val_at ce cx sty sa sm es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\
@@ -178,8 +179,12 @@ Theorem immutable_assign_normalized_mem_stmt_post:
   write_place cx (ImmutablePlace ce.ce_module id []) v es = (INL (),fin)
   ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_post ctx func cx lctx ce ce sm sb es s (INL ()) fin t /\
-    s.vs_alloca_next <= t.vs_alloca_next
+    stmt_post H ctx func cx lctx ce ce sm sb es s (INL ()) fin t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\
+   t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_memory_bytes ce dty = type_memory_size dtv` by metis_tac[] >>
@@ -213,6 +218,22 @@ Proof
   `u.vs_inst_idx = LENGTH mid.cs_current_insts` by
     (qpat_assum `_ = u` (mp_tac o Q.AP_TERM `\z. z.vs_inst_idx`) >>
      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `exec_alloca _ s _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exec_alloca_def, AllCaseEqs(), update_var_def,
+          venom_state_component_equality] >> metis_tac[]) >>
+  `r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+   r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `u.vs_accounts = s.vs_accounts` mp_tac >>
+     qpat_assum `u.vs_transient = s.vs_transient` mp_tac >>
+     qpat_assum `u.vs_requests = s.vs_requests` mp_tac >>
+     qpat_assum `u.vs_call_ctx = s.vs_call_ctx` mp_tac >>
+     qpat_assum `r with <|vs_vars := _; vs_memory := _; vs_current_bb := _;
+       vs_inst_idx := _; vs_prev_bb := _|> = u` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[venom_state_component_equality]) >>
   drule_all immutable_normalized_actual_state >> strip_tac >>
   suspend "suffix"
 QED
@@ -238,7 +259,17 @@ Resume immutable_assign_normalized_mem_stmt_post[suffix]:
        mp_tac >> POP_ASSUM_LIST (K all_tac) >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def,
        venomMemDefsTheory.regions_disjoint_def] >> metis_tac[ADD_COMM]) >>
-  `stmt_post ctx func cx lctx ce ce sn sb es r (INL ()) fin t` by
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `r.vs_accounts = s.vs_accounts` mp_tac >>
+     qpat_assum `r.vs_transient = s.vs_transient` mp_tac >>
+     qpat_assum `r.vs_requests = s.vs_requests` mp_tac >>
+     qpat_assum `r.vs_call_ctx = s.vs_call_ctx` mp_tac >>
+     qpat_assum `t with <|vs_vars := _; vs_memory := _; vs_immutables := _;
+       vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = r` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[venom_state_component_equality]) >>
+  `stmt_post H ctx func cx lctx ce ce sn sb es r (INL ()) fin t` by
     (`t with vs_inst_idx := LENGTH sb.cs_current_insts = t` by
        (qpat_assum `t.vs_inst_idx = LENGTH sb.cs_current_insts` mp_tac >>
         POP_ASSUM_LIST (K all_tac) >> simp[venom_state_component_equality]) >>
@@ -248,8 +279,8 @@ Resume immutable_assign_normalized_mem_stmt_post[suffix]:
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`env`,`id`,`dtv`,`dty`,`off`,`v`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `t` >> asm_simp_tac bool_ss [] >>
+
   irule stmt_post_entry_frame >> qexistsl_tac [`es`,`r`,`sn`] >>
   conj_tac >- (rpt gen_tac >> strip_tac >> conj_tac
     >- metis_tac[compiler_ci_mono_not_fresh] >> metis_tac[]) >>

@@ -7,6 +7,9 @@ Ancestors
   vyperTypeSystem vyperTyping vyperState vyperInterpreter vyperTypeCallGraph
   supportedStmtTraverse supportedExprTraverse gasContext compileEnv list finite_map
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem body_augassign_attr_local_ptr:
   !cx ty id fld bop e tops ctx PG func cenv env env' ret_ty lctx RetQ es.
     (!s0 p s1 s2 cur s3 s4 ptv s5.
@@ -32,7 +35,7 @@ Proof
     (`cx_tops cx = tops` by metis_tac[cx_tops_module] >>
      `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
         is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def, optionTheory.IS_SOME_EXISTS] >>
      qexists_tac `[]` >> simp[]) >>

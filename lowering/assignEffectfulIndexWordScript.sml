@@ -13,18 +13,20 @@ Theorem assign_effectful_word_snapshot_path:
       evaluate_type (get_tenv cx) pty = SOME tv /\
       value_has_type tv v /\ val_wf tv v /\
       gas_marked_path F ctx func s 0 (OK u) /\
-      stmt_state_rel ctx func ce cx ee u /\
+      stmt_state_rel H ctx func ce cx ee u /\
       eval_operand op u = SOME (typed_val_to_w256 tv v) /\
       safe_operand sk op /\
       (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
       alloca_frame ce ee sm s ce ee u /\
       ~u.vs_halted /\ u.vs_current_bb = sk.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sk.cs_current_insts) ==>
+      u.vs_inst_idx = LENGTH sk.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx) ==>
   ?u tv w.
     evaluate_type (get_tenv cx) pty = SOME tv /\
     value_has_type tv v /\ val_wf tv v /\
     gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func ce cx ee u /\
+    stmt_state_rel H ctx func ce cx ee u /\
     eval_operand (vv_operand snap) u = SOME w /\
     (!x. vv_operand snap = Var x ==> not_fresh_at sb x) /\
     (!lbl. vv_operand snap <> Label lbl) /\
@@ -32,7 +34,9 @@ Theorem assign_effectful_word_snapshot_path:
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   `vv_type (vv_with_type pty vv0) = pty` by
     (Cases_on `vv0` >> simp[vv_with_type_def, vv_type_def]) >>

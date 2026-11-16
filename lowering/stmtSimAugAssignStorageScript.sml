@@ -737,8 +737,6 @@ QED
    outcome, given e's expr_sim_case (so e may make internal calls unless
    nocalls).  The statement's type ty is x's declared type, and the
    typing gives x that type (toplevel_vtypes). *)
-(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
-   Original theorem and proof retained; never deliver this stand-in.
 Theorem compile_augassign_toplevel_case:
   !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
@@ -910,8 +908,10 @@ Resume compile_augassign_toplevel_case[rhs_summary]:
   `?ex. res = INR ex` by (Cases_on `res` >> fs[expr_exit_def]) >> gvs[] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (drule_all augassign_toplevel_rhs_exception_exec >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac
+  >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  qpat_x_assum `!H. _ ==> halt_exit _ _ _ _ _` drule >>
+  simp[halt_exit_def, halt_rel_def, accounts_rel_def]
 QED
 
 Resume compile_augassign_toplevel_case[rhs_normal]:
@@ -1014,6 +1014,10 @@ Resume compile_augassign_toplevel_case[operator_normal]:
     metis_tac[word_type_slot_size] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 tvt result)` by
     simp[typed_val_to_w256_word_value] >>
+  `stmt_state_rel H2 ctx func cenv cx (ee with gas_obs := []) s` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==>
+                   stmt_state_rel H _ _ _ _ _ s /\ _`
+       (qspec_then `H2` mp_tac) >> simp[]) >>
   Cases_on `cx.txn.is_static`
   >- (`s.vs_call_ctx.cc_static` by
         fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -1033,13 +1037,9 @@ Resume compile_augassign_toplevel_case[operator_normal]:
                         `u`, `v`, `v0`] >> simp[] >>
           irule augassign_storage_continuation_exec >>
           simp[lift_sum_def, bind_def, return_def, write_storage_slot_eq]) >>
-      disj2_tac >> simp[stmt_exit_def, expr_exit_def, exit_result_def]) >>
+      disj2_tac >> simp[stmt_exit_def, expr_exit_def, exit_result_def, halt_exit_def]) >>
   `alloca_frame cenv (ee with gas_obs := []) s3 s cenv (ee with gas_obs := []) s` by
     (irule alloca_frame_same >> simp[]) >>
-  `stmt_state_rel H2 ctx func cenv cx (ee with gas_obs := []) s` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==>
-                   stmt_state_rel H _ _ _ _ _ s /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
   qspecl_then [`H2`, `ctx`, `func`, `cx`, `cenv`, `lctx`, `src`, `id`, `ts`,
                `tr`, `ty`, `id_str`, `slot`, `tvt`, `result`, `res_op`, `s3`,
                `sb`, `s`, `s3`, `s`, `ee with gas_obs := []`,
@@ -1191,32 +1191,9 @@ Resume compile_augassign_toplevel_case[operator_exit]:
                     `u`, `v`, `v0`] >> simp[] >>
       irule augassign_storage_continuation_exec >>
       simp[lift_sum_def, bind_def, raise_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  disj2_tac >> simp[stmt_exit_def, halt_exit_def] >> rpt strip_tac >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Finalise compile_augassign_toplevel_case
-*)
-Theorem compile_augassign_toplevel_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
-   ts tr id_str slot tvt vtyp.
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) ty = SOME tvt /\
-    FLOOKUP env.toplevel_vtypes (src, id) = SOME (Type ty) /\
-    well_formed_type env.type_defs ty /\
-    cenv.ce_hashmap_info (src, id) = NONE /\
-    cenv.ce_module_var_type (src, id) = SOME vtyp /\ is_word_type vtyp /\
-    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
-    bop <> In /\ bop <> NotIn ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty0
-         (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
-      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
-Proof
-  cheat
-QED
 

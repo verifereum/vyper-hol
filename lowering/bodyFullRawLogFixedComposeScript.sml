@@ -229,7 +229,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
         (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
           ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) G t) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r))
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r))
 Proof
   disch_then (mk_asm "alloc_endpoint") >>
   disch_then (mk_asm "tail_endpoint") >>
@@ -310,7 +310,8 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexists `\H res ee G tn t. Qdata H res ee G tn t /\ ~t.vs_halted` >>
   conj_tac >- simp[] >>
-  conj_tac >- (simp[] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
+  conj_tac >- (simp[] >> rpt gen_tac >> Cases_on `res` >>
+    simp[expr_exit_def, halt_exit_def]) >>
   conj_tac >- suspend "next_frame" >>
   conj_tac >- suspend "right_cert" >>
   conj_tac >- suspend "left_cert" >>
@@ -486,7 +487,7 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
       `INR (Error (RuntimeError "write in static context"))`, `tnf`] >>
     simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
          ignore_bind_def, type_check_def, assert_def, return_def,
-         fragExecTheory.exit_result_def, expr_exit_def]) >>
+         fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def]) >>
   asm_x "static_tail_endpoint" kall_tac >>
   `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)

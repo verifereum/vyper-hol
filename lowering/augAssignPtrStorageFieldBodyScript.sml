@@ -10,6 +10,9 @@ Ancestors
   augAssignPtrToplevelMetadata bodyStorageMetadata stmtSimAssignAttr
   supportedExprForms supportedDecls
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem augassign_supported_storage_field_write_decl:
   supported_storage_field_write tops (src,id) fld ==>
   src = NONE /\ find_var_decl_by_name id tops <> NONE /\
@@ -55,7 +58,7 @@ Proof
     (`cx_tops cx = tops` by metis_tac[cx_tops_module] >>
      `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
         is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def, optionTheory.IS_SOME_EXISTS] >>
      qexists_tac `[]` >> simp[]) >>

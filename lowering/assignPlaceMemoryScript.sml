@@ -1,19 +1,21 @@
 Theory assignPlaceMemory
 Ancestors
-  assignPlaceRelayoutProvenance assignPlaceStorage assignPlaceDirectCopy assignPlaceStaging assignPlaceStagedEndpoint
-  assignPlacePhysicalBytes assignPlaceLayout placeMemoryCopyEffect
+  assignPlaceRelayoutProvenance assignPlaceDirectCopy assignPlaceStaging assignPlaceStagedEndpoint
+  immutableDeployPhysicalSource assignPlaceLayout placeMemoryCopyEffect
   placeMemoryLiveRegion loweringPosts stmtLowering placeStore
   stmtSimDefs compileEnv exprLowering placeDestinationBounds context
   externalEntryShape exprLoweringProps exprSimProps loweringHalt
   abiTupleProps rich_list fragExec aggregateEvaluatedLayout vyperTypeSystem
-  targetPlaceSimCasesBase stmtSimReturn venomState fragGasMode
+  targetPlaceSimCasesBase stmtSimReturn venomState fragGasMode vyperStorageFootprint
 Libs monadsyntax
 
 Theorem assign_place_memory_from_expr_post:
   compile_assign_value cenv dst LocMemory src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
     (type_memory_bytes cenv dty) su = ((),sb) /\
-  expr_post ctx func cenv cx e es sa su s0 ee v src s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa su s0 ee v src s) /\
   expr_sim_inv cenv cx env ee /\
   type_widens_to (get_tenv cx) (post_value_type cenv e) dty /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv /\
@@ -43,7 +45,8 @@ Theorem assign_place_memory_from_expr_post:
    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
   0 < type_slot_size dtv /\ 0 < type_memory_size dtv ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -52,6 +55,11 @@ Theorem assign_place_memory_from_expr_post:
     alloca_frame cenv ee su s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa su s0 ee v src s` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s` by fs[expr_post_def] >>
   Cases_on `is_word_type dty`
   >- suspend "word" >>
   Cases_on `is_bytestring_type (lowered_value_type cenv e) /\ is_bytestring_type dty`
@@ -78,9 +86,14 @@ Resume assign_place_memory_from_expr_post[word]:
   `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
        typed_copy_effect ctx func su sb s t (w2n dw) (type_memory_size dtv)` by
     (irule assign_place_direct_copy_effect >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t /\
+  `stmt_state_rel H0 ctx func cenv cx ff t /\
    alloca_frame cenv ee su s cenv ff t` by
     (irule assign_place_copy_effect_state_frame >> simp[] >>
+     metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ff t` by
+    (rpt strip_tac >> irule (cj 1 assign_place_copy_effect_state_frame) >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
      metis_tac[]) >>
   qexists_tac `t` >> fs[typed_copy_effect_def]
 QED
@@ -100,7 +113,9 @@ Resume assign_place_memory_from_expr_post[aggregate]:
   Cases_on `src_loc = NONE \/ src_loc = SOME LocMemory`
   >- (irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
       simp[] >> (conj_tac >- metis_tac[]) >>
-      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      (conj_tac >- (qexists_tac `env` >> simp[])) >>
+      qexistsl_tac [`type_memory_bytes cenv dty`, `dst`, `dtv`, `dty`, `dw`,
+        `p`, `sa`, `su`, `src`, `src_loc`, `stv`, `post_value_type cenv e`, `v`] >>
       simp[] >> metis_tac[]) >>
   suspend "relayout_direct"
 QED
@@ -133,9 +148,14 @@ Resume assign_place_memory_from_expr_post[bytes]:
     (irule assign_place_bytes_copy_effect >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t /\
+  `stmt_state_rel H0 ctx func cenv cx ff t /\
    alloca_frame cenv ee su s cenv ff t` by
     (irule assign_place_copy_effect_state_frame >> simp[] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ff t` by
+    (rpt strip_tac >> irule (cj 1 assign_place_copy_effect_state_frame) >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
   qexists_tac `t` >> fs[typed_copy_effect_def]
 QED
 
@@ -154,9 +174,14 @@ Resume assign_place_memory_from_expr_post[same_layout]:
   `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
        typed_copy_effect ctx func su sb s t (w2n dw) (type_memory_size dtv)` by
     (irule assign_place_direct_copy_effect >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t /\
+  `stmt_state_rel H0 ctx func cenv cx ff t /\
    alloca_frame cenv ee su s cenv ff t` by
     (irule assign_place_copy_effect_state_frame >> simp[] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ff t` by
+    (rpt strip_tac >> irule (cj 1 assign_place_copy_effect_state_frame) >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
   qexists_tac `t` >> fs[typed_copy_effect_def]
 QED
 
@@ -178,8 +203,9 @@ Resume assign_place_memory_from_expr_post[bytes_staged]:
   `type_memory_size stv' < dimword (:256)` by decide_tac >>
   irule assign_place_staged_copy_endpoint >> simp[] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-  simp[] >> qexistsl_tac [`p`, `src`, `sw`, `v`] >> gvs[])
+  (conj_tac >- (qexists_tac `env` >> simp[])) >>
+  qexistsl_tac [`buf`, `dst`, `dtv`, `dty`, `dw`, `p`, `sm`, `sn`,
+    `src`, `stv'`, `lowered_value_type cenv e`, `sw`, `v`] >> gvs[])
 QED
 
 Resume assign_place_memory_from_expr_post[same_staged]:
@@ -197,11 +223,13 @@ Resume assign_place_memory_from_expr_post[same_staged]:
   simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_alloc_buffer _ su = (buf,sm)` >>
   rename1 `compile_copy_memory _ _ _ _ = (uu,sn)` >> Cases_on `uu` >>
   irule assign_place_staged_copy_endpoint >> simp[] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-  simp[] >> qexistsl_tac [`p`, `src`, `sw`, `v`] >> gvs[])
+  (conj_tac >- (qexists_tac `env` >> simp[])) >>
+  qexistsl_tac [`buf`, `dst`, `dtv`, `dty`, `dw`, `p`, `sm`, `sn`,
+    `src`, `dtv`, `dty`, `sw`, `v`] >> gvs[])
 QED
 
 Resume assign_place_memory_from_expr_post[relayout_direct]:
@@ -213,7 +241,9 @@ Resume assign_place_memory_from_expr_post[relayout_direct]:
      simp[compile_assign_value_def] >> metis_tac[]) >>
   irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
   simp[] >> (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  (conj_tac >- (qexists_tac `env` >> simp[])) >>
+  qexistsl_tac [`type_memory_bytes cenv dty`, `dst`, `dtv`, `dty`, `dw`,
+    `p`, `sa`, `su`, `src`, `NONE`, `stv`, `post_value_type cenv e`, `v`] >>
   simp[] >> metis_tac[])
 QED
 
