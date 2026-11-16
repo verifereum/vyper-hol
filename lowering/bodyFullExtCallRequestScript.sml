@@ -712,6 +712,7 @@ QED
 
 Finalise extcall_saved_nonmemory_add_origin_ptr
 *)
+
 Theorem extcall_saved_nonmemory_add_origin_ptr:
   saved = LocatedValue (post_value_type cenv e) p /\
   p.ptr_location <> LocMemory /\
@@ -782,8 +783,113 @@ Theorem extcall_saved_nonmemory_add_origin_ptr:
             (!mem. mem_agree_outside tn1.t_mem q.vs_memory mem ==>
                    val_in_memory rt v (w2n w) mem))
 Proof
-  cheat
+  strip_tac >>
+  `!out. step_inst_base (mk_inst su.cs_next_id ADD
+      [base_op; Lit (n2w off)] [out]) t =
+     OK (update_var out (bw + n2w off) t)` by
+    (simp[Once step_inst_base_def, venomInstTheory.mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+  `eval_operand (Lit (n2w off)) t = SOME (n2w off) /\
+   op_taint tn (Lit (n2w off)) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all (attribute_emit_binop_path_ptr |> Q.INST
+    [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`,`G`,`ARB`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `op_taint tf (Var out) = {}` >>
+  qmatch_asmsub_abbrev_tac `step_prov PG G inst u` >>
+  qabbrev_tac `HG = step_prov PG G inst u` >>
+  qabbrev_tac `q = (update_var out (bw + n2w off) t with
+    vs_inst_idx := SUC t.vs_inst_idx)` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (t,G,tn) [] (OK q,HG,tf)` by
+    (rpt strip_tac >>
+     `allocas_from lo t` by metis_tac[ghost_inv_at_def] >>
+     `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
+     drule_all (typed_copy_origin_ptr_binop_path |> Q.INST
+       [`opc` |-> `ADD`, `x` |-> `bw`, `y` |-> `n2w off`,
+        `w` |-> `bw + n2w off`] |> SRULE []) >>
+     disch_then (qspecl_then [`0`,`explicit`,`PG`,`G`,`DF H`] mp_tac) >>
+     simp[Abbr `q`, Abbr `HG`, Abbr `tf`, Abbr `inst`, Abbr `u`] >>
+     metis_tac[]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `~not_fresh_at su out` by
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `!x. not_fresh_at su x ==> x <> out` by metis_tac[] >>
+  `!x. not_fresh_at su x ==>
+     lookup_var x q = lookup_var x t /\ FLOOKUP HG x = FLOOKUP G x /\
+     op_taint tf (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> simp[Abbr `q`, Abbr `u`, lookup_var_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `eval_operand (vv_operand saved) q = eval_operand (vv_operand saved) t` by
+    (Cases_on `vv_operand saved` >>
+     simp[eval_operand_def, Abbr `q`, Abbr `u`, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `q.vs_memory = t.vs_memory /\ q.vs_allocas = t.vs_allocas /\
+   q.vs_alloca_next = t.vs_alloca_next /\ q.vs_call_ctx = t.vs_call_ctx /\
+   q.vs_accounts = t.vs_accounts /\ q.vs_transient = t.vs_transient /\
+   q.vs_immutables = t.vs_immutables` by simp[Abbr `q`, Abbr `u`, update_var_def] >>
+  qexistsl_tac [`out`,`q`,`HG`,`tf`] >>
+  simp[IgnAsm `saved = _`] >>
+  conj_tac >- gvs[] >>
+  conj_tac >- suspend "uniform" >>
+  suspend "remainder"
 QED
+
+Resume extcall_saved_nonmemory_add_origin_ptr[uniform]:
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon cx st0 H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+  rpt conj_tac
+  >- (simp[Abbr `q`, stmt_state_rel_inst_idx, Abbr `u`] >> irule stmt_state_rel_update_var >>
+      metis_tac[exprSimOperandsTheory.fresh_not_local_ptr])
+  >- (gvs[vv_storage_live_def, vv_operand_def] >> metis_tac[])
+  >- suspend "holds"
+  >- (irule ghost_inv_at_exterior_frame >> qexistsl_tac [`G`,`ee`,`t`,`su`,`tn`] >> simp[])
+QED
+
+Resume extcall_saved_nonmemory_add_origin_ptr[holds]:
+  qexists_tac `raw` >> simp[] >>
+  gvs[vv_holds_def, vv_operand_def] >>
+  Cases_on `p.ptr_location` >>
+  gvs[storage_holds_def, immutable_holds_def] >>
+  gvs[Abbr `q`, Abbr `u`, update_var_def, contract_storage_def, contract_transient_def,
+      contextTheory.vv_location_def] >> metis_tac[]
+QED
+
+Resume extcall_saved_nonmemory_add_origin_ptr[remainder]:
+  `STRING #"%" (toString su.cs_next_var) = out` by gvs[] >>
+  simp[] >>
+  conj_tac >- simp[Abbr `q`, update_var_def] >>
+  conj_tac >- (drule loweringShapeRulesTheory.emit_op_facts >>
+    strip_tac >> simp[Abbr `q`, update_var_def]) >>
+  conj_tac >- simp[Abbr `q`] >>
+  conj_tac >- simp[Abbr `q`, eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `HG`, Abbr `inst`, attribute_add_provenance] >>
+  conj_tac >-
+    (simp[Abbr `q`, Abbr `u`] >>
+     irule (SRULE [] assign_base_field_vv_update) >>
+     conj_tac >- (strip_tac >> gvs[] >> metis_tac[]) >>
+     qexistsl_tac [`G`,`tn`] >> simp[] >> gvs[]) >>
+  conj_tac >- simp[exprSimMemDefsTheory.vv_store_bound_nonmem] >>
+  conj_tac >- suspend "history" >>
+  simp[ghost_kept_at_def, Abbr `q`, Abbr `u`, update_var_def] >>
+  rpt strip_tac >>
+  `not_fresh_at su x` by (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+    qexists_tac `si` >> simp[]) >> metis_tac[]
+QED
+
+Resume extcall_saved_nonmemory_add_origin_ptr[history]:
+  drule_all bodyPtrMakeArrayEmissionTheory.emit_op_fetch_boundary >> strip_tac >>
+  qpat_x_assum `alloca_history func t` mp_tac >>
+  simp[allocaHistoryTheory.alloca_history_def, Abbr `q`, Abbr `u`, update_var_def] >>
+  strip_tac >> rpt strip_tac >>
+  `bb' = bb` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  Cases_on `k < LENGTH su.cs_current_insts` >- metis_tac[] >>
+  `k = LENGTH su.cs_current_insts` by decide_tac >>
+  gvs[Abbr `inst`, venomInstTheory.mk_inst_def]
+QED
+
+Finalise extcall_saved_nonmemory_add_origin_ptr
 
 (* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
