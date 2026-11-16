@@ -4553,7 +4553,99 @@ Proof
           [`SND (rooted_eval _ _ _ _) = OK v`,`FST (rooted_eval _ _ _ _) = Ecut`] >>
          POP_ASSUM_LIST (K all_tac) >> metis_tac[pairTheory.PAIR]) >>
       drule_at (Pat `FLOOKUP blocks _ = _`) dft_packet_cut_row_trace >>
-      FAIL_TAC "cut adapter matching") >>
+      disch_then (drule_at (Pat `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `rooted_eval _ _ _ _ = _`)) >>
+      disch_then (drule_at (Pat `FDOM _ = FDOM ms_tab`)) >>
+      disch_then (qspecl_then [`q`,`z`,`cuts`,`newcut`] mp_tac) >>
+      (impl_tac
+       >- (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+           conj_tac
+           >- (qpat_assum `!i ai ds ei qi zi. _` mp_tac >>
+               POP_ASSUM_LIST (K all_tac) >>
+               simp[pairTheory.pair_CASE_def]) >>
+           simp[NoAsms,Abbr `newcut`] >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+           first_assum ACCEPT_TAC)) >>
+      strip_tac >>
+      `?rowms rowks newms rowes. FLOOKUP ms_tab (p,d) = SOME rowms /\
+        FLOOKUP ks_tab (p,d) = SOME rowks /\ FLOOKUP work (p,d) = SOME newms /\
+        FLOOKUP es_tab (p,d) = SOME rowes` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+          [`FDOM blocks = FDOM ms_tab`,`FDOM blocks = FDOM ks_tab`,
+           `FDOM blocks = FDOM es_tab`,`FDOM work = FDOM ms_tab`,
+           `FLOOKUP blocks (p,d) = SOME
+             (bb,bt,ps,xs,ys,sched,in_state,h0,SOME (be,hbe),n,OK s,F,NONE)`] >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         metis_tac[FLOOKUP_DEF,optionTheory.NOT_NONE_SOME]) >>
+      `ALL_DISTINCT (FLAT rowks)` by
+        (qpat_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+           _ ==> _` (mp_tac o cj 6) >>
+         disch_then (drule_at (Pat `FLOOKUP ks_tab _ = _`)) >>
+         disch_then (drule_at (Pat `FLOOKUP ms_tab _ = _`)) >>
+         disch_then (drule_at (Pat `FLOOKUP blocks _ = _`)) >>
+         disch_then (drule_at (Pat `FLOOKUP es_tab _ = _`)) >>
+         strip_tac >> first_assum ACCEPT_TAC) >>
+      `LIST_REL (\key slot. slot = ALOOKUP nextobs key)
+        (FLAT (TAKE q rowks)) (FLAT (TAKE q newms))` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+          [`dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`,
+           `FLOOKUP ms_tab (p,d) = SOME rowms`,`FLOOKUP ks_tab (p,d) = SOME rowks`,
+           `FLOOKUP work (p,d) = SOME newms`,`Abbrev (work = _)`,
+           `nextobs = obs ++ _`] >>
+         POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+         Cases_on `inst.inst_opcode = GAS`
+         >- (drule dft_packet_gas_fresh >> disch_tac >>
+             drule_all dft_packet_retained_fresh_lookup >>
+             disch_then (qspecl_then [`HD s.vs_gas_readings`,`q`] mp_tac) >>
+             gvs[Abbr `work`,FLOOKUP_FMAP_MAP2]) >>
+         drule_all dft_packet_retained_prefix_lookup >>
+         disch_then (qspec_then `q` mp_tac) >> gvs[Abbr `work`]) >>
+      `ALL_DISTINCT (MAP FST nextobs)` by
+        (simp[NoAsms,Abbr `nextobs`] >>
+         irule dftGasFromListTraceNamesTheory.trace_gas_names_distinct >>
+         pure_rewrite_tac[MAP_TAKE] >>
+         irule listTheory.ALL_DISTINCT_TAKE >> first_assum ACCEPT_TAC) >>
+      `ALL_DISTINCT (FLAT (TAKE q rowks))` by
+        (qpat_assum `ALL_DISTINCT (FLAT rowks)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         `rowks = TAKE q rowks ++ DROP q rowks` by simp[TAKE_DROP] >>
+         metis_tac[FLAT_APPEND,ALL_DISTINCT_APPEND]) >>
+      `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+        (FLAT (TAKE q newms)) (FLAT kgss)` by
+        (qpat_assum `LIST_REL (LIST_REL _) (TAKE q (THE (FLOOKUP work (p,d)))) kgss` mp_tac >>
+         qpat_assum `FLOOKUP work (p,d) = SOME newms` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+         drule LIST_REL_LENGTH >> disch_tac >>
+         drule dft_packet_flat_prefix_lookup >>
+         disch_then (qspec_then `LENGTH kgss` mp_tac) >>
+         simp[TAKE_LENGTH_TOO_LONG]) >>
+      `EVERY (\kw. MEM kw nextobs)
+        (trace_gas (trace_block p d (N-d) C8 fn
+          (bt with bb_instructions := TAKE (LENGTH ps + SUC n) bt.bb_instructions) be))` by
+        (simp[NoAsms,Abbr `nextobs`] >>
+         drule_at (Pat `FLOOKUP blocks _ = _`) dft_packet_body_target_observations >>
+         disch_then (drule_at (Pat `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+         disch_then (qspecl_then [`fuel`,`post`,`t`] mp_tac) >>
+         simp[Abbr `t`]) >>
+      `?orc.
+        trace_agrees orc (trace_block p d (F'-d) C7
+          (FST (THE (FLOOKUP acts p)))
+          (bb with bb_instructions := TAKE (LENGTH ps + q) bb.bb_instructions)
+          (be with vs_gas_readings := FLAT kgss ++ tail)) /\
+        trace_agrees orc (trace_block p d (N-d) C8 fn
+          (bt with bb_instructions := TAKE (LENGTH ps + SUC n) bt.bb_instructions) be)` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+          [`ALL_DISTINCT (MAP FST nextobs)`,`ALL_DISTINCT (FLAT (TAKE q rowks))`,
+           `LIST_REL (\key slot. slot = ALOOKUP nextobs key) _ _`,
+           `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT (TAKE q newms)) (FLAT kgss)`,
+           `trace_gas (trace_block p d (F'-d) _ _ _ _) = _`,
+           `FLOOKUP ks_tab (p,d) = SOME rowks`,
+           `EVERY (\kw. MEM kw nextobs) _`] >>
+         POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+         gvs[] >> drule_all dft_packet_common_oracle >>
+         strip_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!F kgss tail q u orc.
+        _ ==> (_ /\ u.vs_initial_fmp = t.vs_initial_fmp)` drule_all >>
+      disch_then ACCEPT_TAC) >>
   qpat_x_assum `case _ of OK _ => _ | Halt _ => _ | Abort _ _ => _ | IntRet _ _ => _ | Error _ => _`
     mp_tac >> simp[NoAsms]
 QED
