@@ -36,6 +36,8 @@ Ancestors
   staticAbortDefs codegenStaticAbort o1PipelineMemoryLoweredAbort runtimeLabelEntry
   list
 
+val _ = Parse.hide "tops";
+
 (* =====================================================================
    Call-Level Correctness (Main Theorem)
    ===================================================================== *)
@@ -1090,10 +1092,7 @@ Proof
   qpat_x_assum `_ /\ _ ==> ?vs marks tail. _` mp_tac >>
   impl_tac >- fs[] >> strip_tac >>
   gvs[] >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `ret`, `es`,
-               `rpolicy`, `unit`, `out`, `prog`, `cp`, `vs`, `marks`] mp_tac
-    vyper_call_correct_at_marks >>
-  impl_tac >- fs[] >> strip_tac >> gvs[]
+  drule_all vyper_call_correct_at_marks >> strip_tac >> gvs[]
 QED
 
 Theorem vyper_call_correct_identity:
@@ -1134,7 +1133,7 @@ Proof
      `initial_venom_state_rel tops am tx vs` by
        metis_tac[gas_variant_initial_venom_state_rel] >>
      irule lower_vyper_runtime_unit_correct >>
-     qexists_tac `rpolicy` >> gvs[]) >>
+     gvs[] >> qexists_tac `rpolicy` >> fs[]) >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `unit`,
                `out`, `prog`, `cplan`, `am`, `tx`, `ret`, `es`, `r`, `es'`] mp_tac
     call_pipeline_gas_link >>
