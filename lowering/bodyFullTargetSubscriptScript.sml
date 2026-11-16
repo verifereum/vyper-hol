@@ -8,13 +8,41 @@
 Theory bodyFullTargetSubscript
 Ancestors
   bodyFullTargetDefs gasOutcomeFullCompose gasOutcomeFull bodyFullPreds
-  bodySimFull targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
+  bodySimFull bodyInvNoDalloca contextRawReachable ptrDiscipline unitMemInv
+  targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
   gasShadowCompile gasShadowCompileHelpers gasShadow gasShadowState
   gasExemptCert stmtLoweringMono exprLoweringProps fragExec freshWrites
   bodyMemoryDefs bodyPtrDefs loweringPosts exprSimHypsDefs exprSimDefs
   compileEnv exprLowering loweringStateRelDefs gasContext bodyFullShared
   vyperStorageTrace vyperStorageFootprint vyperTypeEnv vyperTypeSystem
-  vyperInterpreter vyperState vyperAST vyperValue list pair
+  vyperInterpreter vyperState vyperAST vyperValue evalNoHalt list pair
+
+Theorem gas_outcome_full_post_source_exit[local]:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R /\
+  (!H res ee gt r.
+     (?st st'. source st = (res, st')) /\ R H res ee gt r ==>
+     R' H res ee gt r) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R'
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
+      rpt conj_tac >- fs[] >- fs[] >>
+      `?st st'. source st = (res, st')` by
+        (qexistsl_tac
+           [`es with gas_obs := gas_explicit marks s.vs_gas_readings`,
+            `ee with gas_obs := []`] >>
+         qpat_x_assum `!tail. source _ = _`
+           (qspec_then `[]` mp_tac) >> simp[]) >>
+      rpt strip_tac >> res_tac >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
 
 (* New definition (proof-internal): what the element suffix must give, from
    the endpoint after the base and the index ran, for target_sim_full of
@@ -218,7 +246,7 @@ Resume target_subscript_sim_full[base]:
     (mp_tac o REWRITE_RULE [target_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `bvt`, `sa`, `sm`, `shadow_sa`,
                            `shadow_sm`, `rb`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
@@ -282,6 +310,12 @@ Resume target_subscript_sim_full[index]:
 QED
 
 Resume target_subscript_sim_full[index_run]:
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
+    dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >>
+     metis_tac[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
      Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>
@@ -306,7 +340,7 @@ Resume target_subscript_sim_full[index_run]:
   disch_then (qspecl_then [`st0`, `sm`, `sn`, `shadow_sm`, `shadow_sn`, `iop`,
                            `t1`, `G1`, `tn1`] mp_tac) >>
   impl_tac
-  >- (simp[] >> rpt conj_tac
+  >- (asm_rewrite_tac[] >> rpt conj_tac
       >- metis_tac[not_fresh_at_mono]
       >- metis_tac[not_fresh_at_mono] >>
       gen_tac >> strip_tac >>
@@ -337,7 +371,10 @@ Resume target_subscript_sim_full[index_run]:
   conj_tac >- simp[] >>
   simp[Abbr `idxR`, Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[expr_exit_def] >>
-  metis_tac[expr_exit_INR_retype]
+  conj_tac
+  >- (qpat_x_assum `expr_exit (INR _) _`
+        (MATCH_ACCEPT_TAC o MATCH_MP expr_exit_INR_retype)) >>
+  fs[halt_exit_def]
 QED
 
 Resume target_subscript_sim_full[tail]:
@@ -402,15 +439,13 @@ Resume target_subscript_sim_full[tail]:
                            `gas_explicit marks2 t1.vs_gas_readings`,
                            `mid1`, `t1`, `G1`, `tn1`, `mid2`, `t2`, `G2`,
                            `tn2`] mp_tac) >>
-  qunabbrev_tac `childR` >> disch_then irule >> simp[] >> rpt conj_tac
-  >- (gen_tac >> strip_tac >>
-      `valid_horizon cx st0 H mid1.storage_trace` by metis_tac[] >>
-      qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
-                        valid_horizon _ _ H mid1.storage_trace` kall_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> _`
-        drule >>
-      qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-        drule >> simp[])
+  qunabbrev_tac `childR` >>
+  disch_then assume_tac >>
+  irule gas_outcome_full_post_source_exit >>
+  qpat_x_assum `_ ==> gas_outcome_full _ _ _ _ (extend_place _ _ _) _ _ _`
+    (irule_at Any) >>
+  simp[] >> rpt conj_tac
+  >~ [`gas_admissible (extend_place _ _ _) _ _`]
   >- (simp[gas_admissible_def] >> rpt strip_tac >>
       qpat_x_assum `gas_admissible (bind (eval_base_place _ _) _) _ _`
         (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
@@ -427,8 +462,17 @@ Resume target_subscript_sim_full[tail]:
             (res, ee)` by asm_simp_tac (srw_ss()) [Once bind_def, th])) >>
       qpat_assum `!tail. eval_base_place _ _ _ = _`
         (qspec_then `gas_explicit marks2 t1.vs_gas_readings ++ gs`
-           (fn th => asm_simp_tac (srw_ss()) [Once bind_def, th]))) >>
-  fs[target_post_def]
+           (fn th => asm_simp_tac (srw_ss()) [Once bind_def, th])))
+  >- (gen_tac >> strip_tac >>
+      `valid_horizon cx st0 H mid1.storage_trace` by metis_tac[] >>
+      qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
+                        valid_horizon _ _ H mid1.storage_trace` kall_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> _`
+        drule >>
+      qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
+        drule >> simp[]) >>
+  rpt strip_tac >> simp[halt_exit_def] >>
+  metis_tac[extend_place_nh]
 QED
 
 Finalise target_subscript_sim_full
