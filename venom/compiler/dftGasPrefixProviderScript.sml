@@ -2,7 +2,7 @@
 Theory dftGasPrefixProvider
 Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
-  dftGasSimSwap dftGasSimLocalBoundary
+  dftGasSimSwap dftGasSimLocalBoundary dftGasSimSchedule
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
   dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
@@ -4465,6 +4465,179 @@ Resume native_successful_cut_inventory[extension]:
   cheat
 QED
 Finalise native_successful_cut_inventory
+
+Theorem native_lookup_fill_schedule_result:
+  !body K g.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\ ~t.vs_call_ctx.cc_static /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
+  ctx_inst_ids_distinct C' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) ==>
+  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
+      orc = (\key. case ALOOKUP (obs ++ ZIP (K,g)) key of
+        NONE => 0w | SOME w => w)
+  in dft_res_rel
+    (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+    (restore_result [] (exec_block b C' bt t))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `ev_suffix orc` >>
+  `ALL_DISTINCT (MAP FST (trace_gas
+     (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))` by
+    (irule trace_gas_names_distinct >> irule native_inventory_suffix_distinct >> simp[] >>
+     qpat_x_assum `ctx_inst_ids_distinct C'` mp_tac >>
+     simp_tac bool_ss [ctx_inst_ids_distinct_def] >> strip_tac >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> BETA_TAC >> strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  `trace_agrees orc (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)` by
+    (simp_tac pure_ss [Abbr `orc`] >>
+     irule (cj 1 native_lookup_fill_subtrace_agreement) >> simp[EVERY_MEM]) >>
+  `restore_rel [] (exec_block b C' bt t)
+     (ev_block orc p d b C' bt (t with vs_gas_readings := []))` by
+    (irule (cj 2 dftGasFromListReplayTheory.trace_replay) >> qexists_tac `fn'` >> simp[]) >>
+  `dft_remaining_inv fn bb todo (t with vs_gas_readings := [])` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     simp[dft_remaining_inv_def, venomWfPropsTheory.strict_dom_vars_defined_def] >>
+     metis_tac[]) >>
+  `dft_res_rel
+     (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+     (ev_suffix orc p d b C' scheduled (t with vs_gas_readings := []))` by
+    (drule dftGasSimScheduleTheory.ev_head_bubbles >>
+     disch_then irule >> simp[] >> qexists_tac `fn` >> simp[]) >>
+  `EVERY (\i. MEM i bb.bb_instructions) scheduled` by
+    (drule native_bubbles_perm >>
+     disch_then (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
+  `ev_suffix orc p d b C' scheduled (t with vs_gas_readings := []) =
+   ev_suffix orc p d b C' actual_body (t with vs_gas_readings := [])` by
+    (irule dftGasSimScheduleTheory.ev_normalized_suffix_eq >> metis_tac[]) >>
+  `ev_suffix orc p d b C' actual_body (t with vs_gas_readings := []) =
+   ev_block orc p d b C' bt (t with vs_gas_readings := [])` by
+    (irule dftGasSimBoundaryTheory.ev_suffix_block >> simp[DROP_APPEND]) >>
+  qpat_x_assum `dft_res_rel _ _` mp_tac >>
+  qpat_x_assum `restore_rel [] _ _` mp_tac >>
+  simp[] >>
+  Cases_on `exec_block b C' bt t` >>
+  simp[restore_result_def, dft_res_rel_def, restore_rel_cases] >>
+  rpt strip_tac >> gvs[dft_res_rel_def]
+QED
+
+Theorem native_selected_child_stopped_transport:
+  !K.
+  ^native_inventory_Rq
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+    i Kc Sc (SOME (a,nm,ops,args,cf,cf',cs,ct,Uc)) /\
+  i.inst_opcode = INVOKE /\
+  ALL_DISTINCT (A ++ i::srcpost) /\
+  dft_head_bubbles R (A ++ i::srcpost) (consumed ++ i::later) /\
+  (!x y. R x y ==> dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) /\
+  inv_ev_trace orc p d b C' A
+    (t with vs_gas_readings := []) (q with vs_gas_readings := []) /\
+  inv_ev_trace orc p d b C' consumed
+    (t with vs_gas_readings := []) (a with vs_gas_readings := []) /\
+  K = Kpre ++ Kc ++ Kpost /\ g = gpre ++ gc ++ gpost /\
+  LENGTH Kpre = LENGTH gpre /\ LENGTH Kc = LENGTH gc /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+    (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) K) g /\
+  q.vs_gas_readings = gc ++ gpost ++ tail /\
+  ~(?u. step_inst n C i q = OK u) ==>
+  (?k. k <= LENGTH Kc /\
+    trace_gas (dftGasFromListTraceDefs$trace_step p d n C fn i q) =
+      ZIP (TAKE k Kc, TAKE k gc) /\
+    gas_events_step n C fn.fn_name i q = TAKE k Sc) /\
+  (terminates (step_inst n C i q) ==>
+    terminates (step_inst b C i q) /\
+    ~(?u. step_inst b C i q = OK u) /\
+    dft_res_rel (restore_result [] (step_inst b C i q))
+      (restore_result [] (step_inst b C' i a)))
+Proof
+  gen_tac >> BETA_TAC >> strip_tac >>
+  `(!op. MEM op i.inst_operands ==>
+      eval_operand op (q with vs_gas_readings := []) =
+      eval_operand op (a with vs_gas_readings := [])) /\
+   (!callee vals. setup_callee callee vals (q with vs_gas_readings := []) =
+      setup_callee callee vals (a with vs_gas_readings := []))` by
+    (irule native_successful_cut_call_inputs >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `eval_operands ops q = SOME args /\
+   setup_callee cf args q = SOME (cs with vs_gas_readings := gc ++ gpost ++ tail)` by
+    suspend "setup" >>
+  qpat_x_assum `(if _ then _ else _)` mp_tac >>
+  simp[LET_THM] >> strip_tac >>
+  gvs[MAP_APPEND, LIST_REL_APPEND_EQ] >>
+  qpat_x_assum `!g' tail'. LIST_REL _ _ g' ==> _`
+    (qspecl_then [`gc`, `gpost ++ tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  conj_tac >- suspend "prefix" >>
+  suspend "result"
+QED
+Resume native_selected_child_stopped_transport[setup]:
+  qpat_x_assum `(if _ then _ else _)` mp_tac >> simp[] >> strip_tac >>
+  `!op. MEM op ops ==> MEM op i.inst_operands` by
+    (fs[decode_invoke_def, AllCaseEqs()] >> metis_tac[MEM]) >>
+  `eval_operands ops q = eval_operands ops a` by
+    (irule eval_operands_agree >> rpt strip_tac >> metis_tac[gas_eval_operand]) >>
+  simp[] >>
+  qpat_x_assum `!callee vals. _` (qspecl_then [`cf`, `args`] mp_tac) >>
+  simp[gas_setup_callee] >>
+  Cases_on `setup_callee cf args q` >> simp[] >> strip_tac >>
+  drule gas_setup_callee_readings >> strip_tac >>
+  qpat_x_assum `_ with vs_gas_readings := [] = _`
+    (mp_tac o Q.AP_TERM `\z. z with vs_gas_readings := x.vs_gas_readings`) >>
+  simp[venom_state_component_equality]
+QED
+Resume native_selected_child_stopped_transport[prefix]:
+  qpat_x_assum `!n'. ?k. _ /\ _ /\ _` (qspec_then `n` strip_assume_tac) >>
+  qexists_tac `k` >>
+  simp[Once (cj 1 dftGasFromListTraceDefsTheory.trace_defs),
+       Once gas_events_step_def]
+QED
+Resume native_selected_child_stopped_transport[result]:
+  strip_tac >>
+  `terminates (run_blocks n C cf (cs with vs_gas_readings := gc ++ gpost ++ tail))` by
+    (qpat_x_assum `terminates (step_inst _ _ _ _)` mp_tac >>
+     simp[Once step_inst_def] >>
+     Cases_on `run_blocks n C cf (cs with vs_gas_readings := gc ++ gpost ++ tail)` >>
+     simp[passSimulationDefsTheory.terminates_def, AllCaseEqs()]) >>
+  qpat_x_assum `(?n'. terminates _) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  `run_blocks n C cf (cs with vs_gas_readings := gc ++ gpost ++ tail) =
+   run_blocks b C cf (cs with vs_gas_readings := gc ++ gpost ++ tail)` by
+    (Cases_on `n <= b`
+     >- (sym_tac >> irule (cj 3 venomExecProofsTheory.fuel_mono) >>
+         conj_tac
+         >- (Cases_on `run_blocks n C cf (cs with vs_gas_readings := gc ++ gpost ++ tail)` >>
+             gvs[passSimulationDefsTheory.terminates_def]) >>
+         qexists_tac `n` >> simp[]) >>
+     irule (cj 3 venomExecProofsTheory.fuel_mono) >> conj_tac
+     >- (Cases_on `run_blocks b C cf (cs with vs_gas_readings := gc ++ gpost ++ tail)` >>
+         gvs[passSimulationDefsTheory.terminates_def]) >>
+     qexists_tac `b` >> simp[]) >>
+  `step_inst b C i q = step_inst n C i q` by simp[step_inst_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  Cases_on `run_blocks b C cf (cs with vs_gas_readings := gc ++ gpost ++ tail)` >>
+  gvs[step_inst_def, passSimulationDefsTheory.terminates_def,
+      restore_result_def, dft_res_rel_def, AllCaseEqs()]
+QED
+Finalise native_selected_child_stopped_transport
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
