@@ -450,7 +450,13 @@ Proof
   qexists_tac `update_var out w2 r2` >>
   gvs[Excl "consume_call_outcome_eq"] >>
   `s.vs_halted = t.vs_halted` by fs[fmp_stage_rel_def] >>
-  gvs[update_var_def, consume_call_outcome_eq, FLOOKUP_UPDATE] >>
+  qpat_x_assum `consume_call_outcome _ _ _ s = _`
+    (SUBST1_TAC o SYM o PURE_REWRITE_RULE [consume_call_outcome_eq, pairTheory.SND] o
+     AP_TERM ``SND:bytes32 # venom_state -> venom_state``) >>
+  qpat_x_assum `consume_call_outcome _ _ _ t = _`
+    (SUBST1_TAC o SYM o PURE_REWRITE_RULE [consume_call_outcome_eq, pairTheory.SND] o
+     AP_TERM ``SND:bytes32 # venom_state -> venom_state``) >>
+  simp[update_var_def, FLOOKUP_UPDATE, Excl "consume_call_outcome_eq"] >>
   simp[step_prov_def, out_prov_def, set_prov_def, step_taint_def,
        op_taint_def, set_var_taint_def, fmp_value_rel_def, ld_value_agree_def,
        FLOOKUP_DRESTRICT, MEM] >>
