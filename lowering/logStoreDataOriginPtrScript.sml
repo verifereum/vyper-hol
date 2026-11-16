@@ -17,7 +17,7 @@ Ancestors
   robustCopyTransportPtr valueEncoding valueEncodingDefs codegenRel
   typedCopyOriginPtr layoutStoreProps memoryLayoutSource memoryLayoutRel
   memoryValueEncoding exprSimProps typedCopyOriginPtrDynArray
-  bodyPtrBopInMachineMemory memoryValueFrame
+  valueEncodingProofs list memoryValueFrame
 
 (* compile_copy_memory copies n bytes holding a robust value to a disjoint
    destination; the copy holds the value robustly. *)
@@ -317,6 +317,20 @@ Proof
 QED
 
 (* compile_store_memory of a word: one MSTORE of a clean operand. *)
+Theorem mem_agree_outside_window:
+  !dead m m' a n.
+    mem_agree_outside dead m m' /\
+    (!i. a <= i /\ i < a+n ==> i NOTIN dead) ==>
+    mem_bytes_at a n m = mem_bytes_at a n m'
+Proof
+  rpt strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  rename1 `j < n` >>
+  `mem_bytes_at (a+j) 1 m = mem_bytes_at (a+j) 1 m'` by
+    (fs[mem_agree_outside_def] >> metis_tac[]) >>
+  qpat_x_assum `mem_bytes_at _ 1 _ = _` mp_tac >>
+  simp[LIST_EQ_REWRITE, EL_mem_bytes_at]
+QED
+
 Theorem compile_store_memory_word_origin_ptr_path:
   compile_store_memory cenv src (Var xd) dty sty sa = ((),sb) /\
   is_word_type dty /\ evaluate_type tenv dty = SOME dtv /\ value_has_type dtv v /\
