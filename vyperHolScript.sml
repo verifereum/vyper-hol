@@ -24,6 +24,7 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
+  constSubstStmts constSubstStmtsPreserve
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
   staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
@@ -39,6 +40,7 @@ Ancestors
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
+  gasFocusPrefixDriver focusFrontierBudget
   fnStaticAbortSim
   contextStaticAbortRel
   staticAbortMemDefs
@@ -70,3 +72,4 @@ Ancestors
   bodyCustomErrorCases
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
+  codegenSymOwnRel

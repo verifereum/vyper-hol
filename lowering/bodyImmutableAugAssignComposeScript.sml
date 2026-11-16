@@ -155,14 +155,18 @@ Resume immutable_deploy_augassign_frag[rhs_summary]:
   simp[gas_summary_at_def]
   >- suspend "rhs_normal" >>
   `expr_exit res r` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
       (qspec_then `H2` mp_tac) >> simp[]) >>
   `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
   qexistsl_tac [`INR ex`,`es_end`,`r`] >> conj_tac
   >- (irule immutable_augassign_rhs_exception_exec >> conj_tac
       >- metis_tac[] >> qexists_tac `t` >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> rpt gen_tac >> strip_tac >>
+  simp[stmt_exit_def] >> (conj_tac
+  >- (gen_tac >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> halt_exit _ _ _ _ _`
+    (qspec_then `H` (mp_tac o REWRITE_RULE [halt_exit_def])) >>
+  simp[halt_exit_def])
 QED
 
 Resume immutable_deploy_augassign_frag[rhs_normal]:
@@ -348,7 +352,7 @@ Resume immutable_deploy_augassign_frag[operator_exit]:
       simp[] >> irule immutable_augassign_continuation_exec >>
       simp[lift_sum_def,bind_def,raise_def]) >>
   disj2_tac >> simp[] >> rpt strip_tac >>
-  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  simp[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Finalise immutable_deploy_augassign_frag

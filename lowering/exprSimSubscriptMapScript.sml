@@ -323,6 +323,9 @@ Proof
       Once supported_expr_exists_def] >>
   conj_tac >- metis_tac[call_evaluation_safe_append_left] >>
   rpt strip_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists (const_name_root _) (Subscript _ _ _)`
+         mp_tac >>
+       simp[Once supported_expr_exists_def] >> NO_TAC) >>
   qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _` irule >>
   simp[Once supported_expr_exists_def]
 QED
@@ -616,7 +619,7 @@ Theorem forced_then_outcome_exec:
   gas_outcome memory tops (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\H res ee t. ?v. res = INL v /\ P H v ee t)
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!marks v mid t.
     gas_marked_exec memory (ctx,func)
       (bind (eval_expr cx e) (read_result cx)) (es,s0)
@@ -634,7 +637,8 @@ Theorem forced_then_outcome_exec:
        (exit_result r /\
         !H. valid_horizon cx st0 H ee'.storage_trace ==>
           R H res (ee' with gas_obs := []) r))) /\
-  (!H ex ee r. expr_exit (INR ex : value + exception) r ==>
+  (!H ex ee r. expr_exit (INR ex : value + exception) r /\
+             halt_exit H cx ee (INR ex : value + exception) r ==>
              R H (INR ex) ee r) /\
   (!v. storage_trace_frame (k v)) ==>
   gas_outcome memory tops (ctx,func) cx st0
@@ -643,7 +647,7 @@ Proof
   strip_tac >>
   match_mp_tac (Q.SPECL
     [`\H res ee t. ?v. res = INL v /\ P H v ee t`,
-     `\H res ee r. expr_exit res r`]
+     `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`]
     (Q.GENL [`P`, `Exit`] counted_outcome_bind_exec)) >>
   BETA_TAC >> rpt conj_tac
   >- first_assum ACCEPT_TAC
@@ -732,7 +736,7 @@ Theorem compile_mapping_subscript_outcome:
           pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
@@ -891,7 +895,11 @@ Proof
   conj_tac >- (simp[Abbr `start`] >> first_assum ACCEPT_TAC) >>
   reverse conj_tac
   >- (simp[storage_trace_frame_select] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      rpt gen_tac >> Cases_on `ex` >> Cases_on `r` >>
+      simp[expr_exit_def, halt_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >>
+      simp[expr_exit_def, halt_exit_def]) >>
   simp[Abbr `start`] >>
   map_every qx_gen_tac [`imarks`, `kv`, `fin`, `it`] >> strip_tac >>
   `expr_sim_inv cenv cx env (fin with gas_obs := []) /\

@@ -1,7 +1,6 @@
 Theory bodyFullPathHistory
 Ancestors
-  fragGasOriginPtr allocaHistory venomMemProofs venomExecProofs
-  venomExecSemantics venomState venomMemDefs fragExec
+  fragGasOriginPtr allocaHistory fragExec venomMemDefs venomMemProofs venomExecProofs venomState
 
 Theorem body_full_edge_alloca_history[local]:
   gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
@@ -10,13 +9,17 @@ Theorem body_full_edge_alloca_history[local]:
   alloca_history func u /\ alloca_inv u
 Proof
   strip_tac >> drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
-  gvs[exit_result_def] >>
-  TRY (qpat_x_assum `OK _ = _` (assume_tac o SYM) >>
-       gvs[exit_result_def] >> NO_TAC) >>
+  gvs[exit_result_def]
+  >~ [`OK u = step_inst fuel ctx inst s`]
+  >- (qpat_x_assum `OK _ = _` (assume_tac o SYM) >> gvs[exit_result_def])
+  >~ [`OK u = step_inst fuel ctx inst s`]
+  >- (qpat_x_assum `OK _ = _` (assume_tac o SYM) >> gvs[exit_result_def]) >>
   drule_all alloca_history_step >> simp[] >> strip_tac >>
-  drule_all alloca_inv_step_inst_proof >> strip_tac >>
-  TRY (drule_all history_phi_entry >> strip_tac >>
-       drule eval_phis_preserves_alloca_fields >> strip_tac) >>
+  drule_all alloca_inv_step_inst_proof >> strip_tac
+  >>~- ([`alloca_history func (_ with vs_inst_idx := phi_prefix_length _)`],
+    drule_all history_phi_entry >> strip_tac >>
+    drule eval_phis_preserves_alloca_fields >> strip_tac >>
+    gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >> metis_tac[]) >>
   gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
   metis_tac[]
 QED

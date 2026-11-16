@@ -332,3 +332,43 @@ Theorem current_inst_trace_entry_name:
 Proof
   simp[current_env_realizes_def]
 QED
+
+Theorem current_outputs_trace_owner_alignment:
+  !anns s rs H E names s' rs' H' E' R.
+    current_outputs_trace anns s rs H E names s' rs' H' E' /\
+    EVERY (\(token,v,n). R n v) H /\
+    LIST_REL (\a n. R n (SND a)) anns names ==>
+    EVERY (\(token,v,n). R n v) H'
+Proof
+  Induct >- simp[current_outputs_trace_def] >>
+  gen_tac >> rename1 `(annotation::_)` >> PairCases_on `annotation` >>
+  simp[current_outputs_trace_def] >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[EVERY_APPEND]
+QED
+
+Theorem current_inst_trace_owner_alignment:
+  current_inst_trace anns inst s rs H E inst' s' rs' H' E' /\
+  EVERY (\(token,v,n). R n v) H /\
+  LIST_REL (\v n. R n v) inst.inst_outputs inst'.inst_outputs ==>
+  EVERY (\(token,v,n). R n v) H'
+Proof
+  simp[current_inst_trace_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
+  drule current_outputs_trace_owner_alignment >>
+  disch_then irule >>
+  qpat_x_assum `MAP SND anns = _` (SUBST_ALL_TAC o SYM) >>
+  fs[LIST_REL_MAP1, combinTheory.o_DEF]
+QED
+
+Theorem current_local_trace_owner_alignment:
+  !annss insts s rs H E insts' s' rs' H' E' R.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  EVERY (\(token,v,n). R n v) H /\
+  LIST_REL (\i j. LIST_REL (\v n. R n v)
+    i.inst_outputs j.inst_outputs) insts insts' ==>
+  EVERY (\(token,v,n). R n v) H'
+Proof
+  Induct >> simp[current_local_trace_def] >> rpt strip_tac >> gvs[] >>
+  drule_all current_inst_trace_owner_alignment >> strip_tac >>
+  first_x_assum drule >> disch_then irule >> simp[]
+QED

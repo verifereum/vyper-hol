@@ -23,7 +23,7 @@ Theorem ifexp_arm_finish_full:
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ dead_lo_ok H D lo cenv cx /\
+  fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ dead_lo_ok H D lo cenv cx /\
   (* the condition's posts at tt *)
   expr_post H ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   s0.vs_alloca_next <= tt.vs_alloca_next /\
@@ -139,7 +139,8 @@ Proof
      (OK (jump_to xl (u1 with vs_inst_idx := k)), step_prov PG G i0 u1,
       step_taint i0 u u1 tn)` by
     (irule emit_jmp_origin_ptr >> simp[Abbr `k`] >>
-     gvs[allocas_from_def, Abbr `u1`, update_var_def] >>
+     gvs[allocas_from_def, allocas_below_fmp_def, Abbr `u1`, update_var_def] >>
+     conj_tac >- metis_tac[] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`sy`, `sz`] >> gvs[]) >>
   qexistsl_tac [`jump_to xl (u1 with vs_inst_idx := k)`,
@@ -289,7 +290,7 @@ Theorem ifexp_arm_finish_full_family:
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (* the posts at every valid horizon: the root's, the condition's at tt,
      and the selected arm's at u *)
   (!H. valid_horizon cx st0 H tr ==>

@@ -353,8 +353,11 @@ Resume compile_extract32_sim_mem[stage2]:
      drule_all extract32_operands_pure_frame >> simp[]) >>
   `well_formed_type (get_tenv cx) (BaseT bt)` by
     (`env.type_defs = get_tenv cx` by
-       fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-          env_context_consistent_def] >>
+       (qpat_assum `expr_body_pre cenv cx env _ es`
+          (strip_assume_tac o PURE_REWRITE_RULE
+            [expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+             env_context_consistent_def]) >>
+        first_assum ACCEPT_TAC) >>
      fs[expr_body_pre_def, well_typed_expr_def]) >>
   `alloca_room ctx func t2` by
     (qpat_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2`

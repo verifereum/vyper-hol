@@ -4,7 +4,7 @@ Ancestors
   targetMemoryContracts targetSubscriptMemory exprSimSubscriptArrayFramed
   exprSimArrayIndex fragGasFresh freshWrites varsExt
   emitHelper exprSimUnopProps fragExec compileEnv loweringPosts
-  bodyDeclMemoryCounted bodyUnopFragMemory entryDecoderHistoryFrame
+  bodyDeclZeroGasPath bodyDeclMemoryCounted bodyUnopFragMemory entryDecoderHistoryFrame
   fragGasSeqMem fragGasSeqAbort fragGasMode fragGasPathMem
   fragExecMem instMemFrontier memSafeRun allocaHistoryFragment
   exprSimProps exprLowering exprLoweringProps loweringStateRelDefs
@@ -58,7 +58,7 @@ Theorem target_array_check_ptr_path_mem:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -70,7 +70,7 @@ Theorem target_array_check_ptr_path_mem:
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
     eval_operand dst t =
       SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
       lookup_var x t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -78,7 +78,9 @@ Theorem target_array_check_ptr_path_mem:
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `straight_fresh (comp_ignore_bind (array_bounds_check idx_op len_op sgn)
@@ -98,7 +100,9 @@ Proof
   `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
   qexists `t' with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[] >>
-  qpat_x_assum `t' = _` (fn th => simp[Once th])
+  qpat_x_assum `t' = s with vs_vars := _`
+    (mp_tac o Q.AP_TERM `\z. (z.vs_alloca_next,z.vs_accounts,z.vs_transient,z.vs_requests,z.vs_call_ctx)`) >>
+  simp[]
 QED
 
 Theorem target_array_check_ptr_abort_path_mem:
@@ -145,7 +149,7 @@ Theorem target_memory_dynamic_array_path_mem:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op T ws esz) sm = (dst,sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -157,7 +161,7 @@ Theorem target_memory_dynamic_array_path_mem:
   fn_inst_ids_distinct func /\ alloca_history func s ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
     eval_operand dst t = SOME (b + n2w ws + i * n2w esz) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
       lookup_var x t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -165,7 +169,9 @@ Theorem target_memory_dynamic_array_path_mem:
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule target_memory_header_compile >> strip_tac >>
@@ -189,7 +195,7 @@ Theorem target_memory_dynamic_array_abort_path_mem:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op T ws esz) sm = (dst,sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. idx_op = Var x ==> not_fresh_at sa x) /\
@@ -217,7 +223,7 @@ Theorem target_memory_array_path_mem:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -229,7 +235,7 @@ Theorem target_memory_array_path_mem:
   fn_inst_ids_distinct func /\ alloca_history func s ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
     eval_operand dst t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
       lookup_var x t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -237,7 +243,9 @@ Theorem target_memory_array_path_mem:
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   reverse (Cases_on `dyn`) >>
   simp[compile_array_subscript_split, comp_bind_def, comp_return_def]
@@ -260,7 +268,7 @@ Theorem target_memory_array_abort_path_mem:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. idx_op = Var x ==> not_fresh_at sa x) /\ (!l. idx_op <> Label l) /\
@@ -288,7 +296,7 @@ Proof
 QED
 
 Theorem target_memory_array_error_suffix_mem:
-  target_post ctx func cenv cx es0 sa sm s0 es
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -313,7 +321,7 @@ Theorem target_memory_array_error_suffix_mem:
   err = Error (RuntimeError "evaluate_subscripts array_index") /\ es' = es
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    ?b. eval_operand (FST rb) s = SOME b /\
        place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
          (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))` by
@@ -328,8 +336,8 @@ Proof
   drule_all target_memory_array_abort_path_mem >> simp[]
 QED
 
-Theorem target_memory_array_suffix_mem:
-  target_post ctx func cenv cx es0 sa sm s0 es
+Theorem target_memory_array_suffix_mem_at[local]:
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -351,14 +359,16 @@ Theorem target_memory_array_suffix_mem:
   extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
     (INL pv',es') /\ fn_inst_ids_distinct func /\ alloca_history func s ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
-      target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
+      target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
         (dst,SOME LocMemory,SOME (ValPT ety)) u /\
       ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next
+      alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    (?b. eval_operand (FST rb) s = SOME b /\
         place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
           (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))) /\
@@ -379,4 +389,51 @@ Proof
   `eval_operand dst t = SOME (b + n2w k)` by metis_tac[] >>
   drule_all target_post_memory_step >> strip_tac >>
   qexists `t` >> simp[]
+QED
+
+(* The counted endpoint is selected before the observation horizon. *)
+Theorem target_memory_array_suffix_mem:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+    target_post H ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (MemoryPlace id path))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand idx s = SOME (i2w i) /\
+  compile_array_subscript (FST rb) idx dyn cnt 32 (type_memory_bytes cenv ety)
+    (is_signed_type ity)
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sm = (dst,sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. idx = Var x ==> not_fresh_at sm x) /\
+  (!l. idx <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. dst = Var x ==> not_fresh_at sb x) /\
+  extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
+    (INL pv',es') /\ fn_inst_ids_distinct func /\ alloca_history func s ==>
+  ?u. gas_marked_path T ctx func s 0 (OK u) /\
+      (!H. valid_horizon cx st0 H es'.storage_trace ==>
+        target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
+        (dst,SOME LocMemory,SOME (ValPT ety)) u) /\
+      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sm s0 es
+     (PlaceR (MemoryPlace id path))
+     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
+  drule_all target_memory_array_suffix_mem_at >> strip_tac >>
+  qexists_tac `u` >> simp[] >> rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es' s /\
+   storage_well_formed_on cx es' (FST H)` by
+    metis_tac[target_post_extend_start_rel] >>
+  qpat_assum `target_post H0 _ _ _ _ _ _ sb _ es' _ _ _ _`
+    (mp_then (Pos hd) irule target_post_fields_transport) >>
+  simp[] >> qexists_tac `s` >> simp[]
 QED

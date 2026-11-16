@@ -506,8 +506,9 @@ End
 
 (* Vyper accepts a default argument only from its RUNTIME_CONSTANT class
    (check_modifiability in vyper/semantics/analysis/utils.py, required by
-   _parse_args in vyper/semantics/types/function.py).  Folded values arrive as
-   literals.  It admits operators (BinOp/Compare/UnaryOp, and BoolOp, which the
+   _parse_args in vyper/semantics/types/function.py). Compile-time builtin
+   calls can arrive unfolded, so admit them when their arguments are constant.
+   It admits operators (BinOp/Compare/UnaryOp, and BoolOp, which the
    frontend turns into an IfExp with a literal branch), tuple, list and struct
    literals, environment reads other than `self`, account reads of such an
    address, constants, immutables and their subscripts and fields, and
@@ -552,7 +553,8 @@ Definition runtime_constant_expr_def:
      runtime_constant_expr mods c /\ runtime_constant_expr mods a /\
      runtime_constant_expr mods b) /\
   runtime_constant_expr mods (Builtin _ bt es) =
-    (runtime_constant_builtin bt /\ EVERY (runtime_constant_expr mods) es) /\
+    ((runtime_constant_builtin bt /\ EVERY (runtime_constant_expr mods) es) \/
+     (constant_builtin bt /\ EVERY (constant_expr mods) es)) /\
   runtime_constant_expr mods (TypeBuiltin _ tb _ es) =
     (constant_type_builtin tb /\ EVERY (runtime_constant_expr mods) es) /\
   runtime_constant_expr mods _ = F
@@ -1059,6 +1061,7 @@ Definition check_function_body_def:
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
+      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

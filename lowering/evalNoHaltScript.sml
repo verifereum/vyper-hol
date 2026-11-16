@@ -260,7 +260,7 @@ Proof
        nh_base)
 QED
 
-Theorem extend_place_nh[local]:
+Theorem extend_place_nh:
   extend_place cx pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def]
@@ -270,7 +270,7 @@ Proof
   CASE_TAC >> simp nh_base
 QED
 
-Theorem select_result_nh[local]:
+Theorem select_result_nh:
   select_result cx ty pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp([select_result_def, extend_place_nh] @ nh_base)
@@ -299,7 +299,7 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[return_def]
 QED
 
-Theorem pop_place_nh[local]:
+Theorem pop_place_nh:
   !cx p s s'. pop_place cx p s = (INR HaltException, s') ==> F
 Proof
   ho_match_mp_tac pop_place_ind >> rpt gen_tac >>
@@ -727,18 +727,6 @@ Proof
       metis_tac[cj 6 eval_no_halt_every])
   >- metis_tac[cj 1 eval_no_halt_every] >>
   metis_tac[cj 2 eval_no_halt_every]
-QED
-
-Theorem lookup_external_MEM[local]:
-  !tops. lookup_function src name External tops =
-           SOME (mut,nr,args,dflts,ret,fbody) ==>
-  (?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops) \/
-  (?pnr m ty x. MEM (VariableDecl (Public pnr) m name ty x) tops) \/
-  (?pnr b kt vt x. MEM (HashMapDecl (Public pnr) b name kt vt x) tops)
-Proof
-  Induct >- rw[lookup_function_def] >>
-  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
-  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
 QED
 
 Theorem build_getter_no_evm_run[local]:

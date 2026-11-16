@@ -11,7 +11,7 @@
 Theory o1ContractSueStep
 Ancestors
   o1PassContract singleUseExpansionSupplyProofs singleUseExpansionSupplySim singleUseExpansionDefs
-  venomPassDispatcher venomWf venomWfProps venomInst unitShapeDefs
+  venomPassDispatcher venomWf venomWfProps venomInst unitShapeDefs fmpStepFlagTransport
 
 Theorem sue_label_projection_nonlabels:
   MAP get_label xs = MAP get_label ys ==>
@@ -431,41 +431,6 @@ Proof
   Cases_on `x0` >> gvs[venomStateTheory.get_label_def] >> metis_tac[]
 QED
 
-Theorem sue_flag_fails_mono[local]:
-  (!v. MEM v vs ==> MEM v ws) /\ flag_fails bbs vs inst ==>
-  flag_fails bbs ws inst
-Proof
-  rpt strip_tac >> Cases_on `inst.inst_opcode` >> gvs[flag_fails_def]
-  >- (Cases_on `inst.inst_operands` >> gvs[] >>
-      Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
-      Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-      Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]) >>
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
-QED
-
-Theorem sue_flag_path_mono[local]:
-  !insts bbs vs ws.
-  (!v. MEM v vs ==> MEM v ws) /\ flag_path bbs vs insts ==>
-  flag_path bbs ws insts
-Proof
-  Induct >- simp[flag_path_def] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `flag_path _ _ _` mp_tac >> simp[flag_path_def] >>
-  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
-  disch_then DISJ_CASES_TAC
-  >- metis_tac[sue_flag_fails_mono] >>
-  simp[] >> disj2_tac >> first_x_assum irule >>
-  goal_assum (drule_at Any) >>
-  Cases_on `write_effects h.inst_opcode = empty_effects` >> simp[] >>
-  Cases_on `h.inst_opcode` >> simp[listTheory.MEM_FILTER] >>
-  Cases_on `h.inst_operands` >> simp[listTheory.MEM_FILTER] >>
-  Cases_on `h'` >> simp[listTheory.MEM_FILTER] >>
-  Cases_on `t` >> simp[listTheory.MEM_FILTER] >>
-  Cases_on `MEM s vs` >> Cases_on `MEM s ws` >>
-  gvs[listTheory.MEM_FILTER] >> metis_tac[]
-QED
-
 Theorem sue_copy_prefix_flags[local]:
   !assigns vs tail.
   EVERY (\a. a.inst_opcode = ASSIGN /\
@@ -487,7 +452,7 @@ Proof
   disj2_tac >> Cases_on `op` >> gvs[] >>
   Cases_on `MEM s vs` >> gvs[] >>
   first_x_assum irule >> conj_tac >- (simp[] >> metis_tac[]) >>
-  irule sue_flag_path_mono >> goal_assum (drule_at Any) >>
+  irule flag_path_mono >> goal_assum (drule_at Any) >>
   simp[listTheory.MEM_FLAT, listTheory.MEM_MAP,
        listTheory.MEM_FILTER] >> metis_tac[]
 QED
@@ -516,7 +481,7 @@ Proof
       rpt strip_tac >> gvs[] >>
       simp[Abbr `endpoint`, listTheory.MEM_FLAT, listTheory.MEM_MAP,
            listTheory.MEM_FILTER] >> metis_tac[listTheory.MEM]) >>
-  rpt strip_tac >> irule sue_flag_path_mono >>
+  rpt strip_tac >> irule flag_path_mono >>
   qexists_tac `vs` >> simp[] >>
   irule sue_copy_prefix_flags >>
   gvs[Abbr `endpoint`, listTheory.EVERY_MEM] >> metis_tac[]
