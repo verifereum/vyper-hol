@@ -1,6 +1,7 @@
 (* The SHA bytes header read preserves the complete bounded ghost. *)
 Theory bodyFullHashShaPrefix
 Ancestors
+  bodyFullHashShaFixed bodyFullHashKeccakFixed context
   bodyFullGhostFrame bodyPtrHashBuiltinsShaPrefix bodyPtrHashBuiltinsGhostFrame
   bodyPtrHashBuiltinsKeccakBytesRun instSeqPtrLo fragGasSeqPtr
   fragGasOriginPtr fragExecMem exprSimHash exprSimHashBoundary exprSimProps
@@ -16,7 +17,7 @@ Theorem sha_bytes_prepare_frame_at:
   FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
   b+32 < dimword (:256) /\ n < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-  mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+  mem_word_at b s.vs_memory = n2w n /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq_mem_ok (emitted_insts sa sm) s /\
@@ -48,7 +49,11 @@ Proof
   `!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem` by
     (rpt gen_tac >> strip_tac >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
-  drule_all hash_bytes_prepare_counted >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  drule_all (Q.SPECL [`D`, `ctx with ctx_functions := []`]
+    hash_bytes_prepare_counted) >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   drule_all hash_bytes_prepare_emission >> strip_tac >>
   `!z. not_fresh_at sa z ==> FLOOKUP G1 z = FLOOKUP G z /\
@@ -69,10 +74,14 @@ Proof
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts sa sm) s G1 tn1` by
     (gen_tac >>
-     `inst_seq_ptr D' 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1` by
+     `inst_seq_ptr D' 0 (ctx with ctx_functions := []) fn PG G tn
+       (emitted_insts sa sm) s G1 tn1` by
        (gvs[] >> irule hash_bytes_prepare_inst_seq >>
         simp[ALL_DISTINCT, toString_inj] >>
         qexistsl_tac [`b`, `n`] >> simp[] >> decide_tac) >>
+     `inst_seq_ptr D' 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1` by
+       (irule inst_seq_ptr_restore_ctx >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
      irule (Q.SPECL [`emitted_insts sa sm`, `D'`, `D'`, `lo`,
        `ctx`, `fn`, `PG`, `G`, `tn`, `s`, `G1`, `tn1`] inst_seq_ptr_zero_to_lo) >>
      fs[ghost_inv_at_def]) >>
