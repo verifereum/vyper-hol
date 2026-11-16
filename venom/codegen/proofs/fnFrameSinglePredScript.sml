@@ -340,6 +340,5 @@ Theorem single_pred_prefix_frame_sim:
          operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
       create_safe_prefix lo o2pc prog n as
 Proof
-  rpt strip_tac >> irule single_pred_prefix_frame_sim_reloc >>
-  goal_assum (drule_at Any) >> simp[]
+  rpt strip_tac >> drule_all single_pred_prefix_frame_sim_reloc >> simp[]
 QED
