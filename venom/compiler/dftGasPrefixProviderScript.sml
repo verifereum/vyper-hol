@@ -6389,6 +6389,131 @@ Resume native_residual_schedule_packet[compose]:
 QED
 Finalise native_residual_schedule_packet
 
+Theorem native_pseudo_fold_cases[local]:
+  !xs s. EVERY (\i. is_pseudo i.inst_opcode) xs ==>
+    (?t. FOLDR (dft_exec_cons b C) OK xs s = OK t) \/
+    (?e. FOLDR (dft_exec_cons b C) OK xs s = Error e)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  `~is_terminator h.inst_opcode /\
+   ((?u. step_inst b C h s = OK u) \/ (?e. step_inst b C h s = Error e))` by
+    (Cases_on `h.inst_opcode = PHI`
+     >- simp[step_inst_non_invoke, step_inst_base_def, is_terminator_def] >>
+     `is_param_opcode h.inst_opcode` by
+       (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_param_opcode_def]) >>
+     conj_tac
+     >- (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
+     metis_tac[step_inst_param_ok_or_error]) >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def] >> metis_tac[]
+QED
+
+Theorem native_pseudo_suffix_skip[local]:
+  !xs a bb t br rest.
+    EVERY (\i. is_pseudo i.inst_opcode) xs /\
+    DROP a.vs_inst_idx bb.bb_instructions = xs ++ rest /\
+    DROP t.vs_inst_idx br.bb_instructions = rest /\
+    FOLDR (dft_exec_cons n C) OK xs a = OK t ==>
+    exec_block n C bb a = exec_block n C br t /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb a) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br t) /\
+    gas_events_block n C fn.fn_name bb a = gas_events_block n C fn.fn_name br t
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[] >> conj_tac
+      >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[]) >>
+      conj_tac
+      >- (AP_TERM_TAC >> irule native_trace_block_suffix_cong >> simp[]) >>
+      irule gas_events_block_suffix_cong >> simp[]) >>
+  `a.vs_inst_idx < LENGTH bb.bb_instructions /\
+   get_instruction bb a.vs_inst_idx = SOME h` by
+    (conj_asm1_tac
+     >- (qpat_x_assum `DROP _ _ = (h::xs) ++ rest`
+           (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+         simp[LENGTH_DROP]) >>
+     qpat_x_assum `DROP _ _ = (h::xs) ++ rest`
+       (mp_tac o AP_TERM ``HD:instruction list -> instruction``) >>
+     simp[get_instruction_def, HD_DROP]) >>
+  `h.inst_opcode <> GAS /\ h.inst_opcode <> INVOKE /\
+   ~is_terminator h.inst_opcode` by
+    (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >>
+  `DROP (SUC a.vs_inst_idx) bb.bb_instructions =
+     xs ++ DROP t.vs_inst_idx br.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = h::_`
+       (mp_tac o AP_TERM ``DROP 1:instruction list -> instruction list``) >>
+     simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD1]) >>
+  `exec_block n C bb (t' with vs_inst_idx := SUC a.vs_inst_idx) = exec_block n C br t /\
+   trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb
+      (t' with vs_inst_idx := SUC a.vs_inst_idx)) =
+     trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br t) /\
+   gas_events_block n C fn.fn_name bb (t' with vs_inst_idx := SUC a.vs_inst_idx) =
+     gas_events_block n C fn.fn_name br t` by
+    (first_x_assum irule >> simp[]) >>
+  conj_tac
+  >- (CONV_TAC (LAND_CONV (REWR_CONV exec_block_def)) >> simp[]) >>
+  conj_tac
+  >- (CONV_TAC (LAND_CONV (RAND_CONV
+        (REWR_CONV (cj 2 dftGasFromListTraceDefsTheory.trace_defs)))) >>
+      simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def]) >>
+  CONV_TAC (LAND_CONV (REWR_CONV gas_events_block_def)) >>
+  simp[gas_events_step_def]
+QED
+
+Theorem native_pseudo_entry_bridge[local]:
+  bb.bb_instructions = pre ++ rest /\
+  EVERY (\i. is_pseudo i.inst_opcode) pre /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) rest /\
+  eval_phis s pre = OK sp /\
+  FOLDR (dft_exec_cons b D) OK (DROP (phi_prefix_length pre) pre)
+    (sp with vs_inst_idx := phi_prefix_length pre) = OK t /\
+  t.vs_inst_idx = LENGTH pre ==>
+  !n W C pad fn p d.
+    let br = bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest in
+    run_block n C bb (s with vs_gas_readings := W) =
+      exec_block n C br (t with vs_gas_readings := W) /\
+    (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
+       OK u => gas_count_block n C bb
+         (u with vs_inst_idx := phi_prefix_length bb.bb_instructions) | _ => 0) =
+      gas_count_block n C br (t with vs_gas_readings := W) /\
+    (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
+       OK u => trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb
+         (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)) | _ => []) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br
+        (t with vs_gas_readings := W)) /\
+    (case eval_phis (s with vs_gas_readings := W) bb.bb_instructions of
+       OK u => gas_events_block n C fn.fn_name bb
+         (u with vs_inst_idx := phi_prefix_length bb.bb_instructions) | _ => []) =
+      gas_events_block n C fn.fn_name br (t with vs_gas_readings := W)
+Proof
+  strip_tac >> drule_all native_pseudo_phase_readings >> strip_tac >>
+  map_every qx_gen_tac [`n`, `ws`, `C`, `pad`, `fn`, `p`, `d`] >>
+  simp_tac pure_ss [LET_THM] >>
+  `EVERY (\i. i.inst_opcode <> PHI) rest` by
+    (fs[EVERY_MEM] >> metis_tac[is_pseudo_def]) >>
+  `phi_prefix_length pre <= LENGTH pre` by
+    simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  `exec_block n C bb ((sp with vs_gas_readings := W) with
+      vs_inst_idx := phi_prefix_length pre) =
+      exec_block n C (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
+        (t with vs_gas_readings := W) /\
+   trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bb
+      ((sp with vs_gas_readings := W) with vs_inst_idx := phi_prefix_length pre)) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+        (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
+        (t with vs_gas_readings := W)) /\
+   gas_events_block n C fn.fn_name bb
+      ((sp with vs_gas_readings := W) with vs_inst_idx := phi_prefix_length pre) =
+      gas_events_block n C fn.fn_name
+        (bb with bb_instructions := REPLICATE (LENGTH pre) pad ++ rest)
+        (t with vs_gas_readings := W)` by
+    (irule native_pseudo_suffix_skip >>
+     qexistsl_tac [`DROP (phi_prefix_length pre) pre`, `rest`] >>
+     simp[DROP_APPEND, rich_listTheory.EVERY_DROP]) >>
+  simp[run_block_def, dftIndexedExecTheory.dft_phi_prefix_append,
+       dftIndexedExecTheory.dft_eval_phis_append] >>
+  metis_tac[gas_events_length]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
