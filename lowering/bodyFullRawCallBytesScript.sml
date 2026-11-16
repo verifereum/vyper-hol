@@ -2,7 +2,7 @@ Theory bodyFullRawCallBytes
 Ancestors
   exprSimRawCall fragGasSeqPtr wordLoadStorePtr bodyFullGhostFrame
   rawCallBufferPtr representationCleanPtr builtinSimple emitHelper compileEnv
-  venomState venomInst fragExec exprLoweringProps list
+  venomState venomInst fragExec exprLoweringProps list ptrDisciplineEmptyTaint
 Libs
   monadsyntax
 
@@ -97,7 +97,7 @@ Proof
   qmatch_asmsub_abbrev_tac `mstore b capword u = t` >>
   `capword = n2w (MIN (LENGTH s.vs_returndata) n)` by
     (simp[Abbr `capword`] >> Cases_on `LENGTH s.vs_returndata < n` >>
-     simp[bool_to_word_def, arithmeticTheory.MIN_DEF] >>
+     simp[venomExecSemanticsTheory.bool_to_word_def, arithmeticTheory.MIN_DEF] >>
      wordsLib.WORD_DECIDE_TAC) >>
   qabbrev_tac `Gf = DRESTRICT G (COMPL {a0;a1;a2;a3;a4})` >>
   qabbrev_tac `tp = tn with t_var :=
@@ -110,6 +110,7 @@ Proof
      simp[Abbr `u`, Abbr `Gf`, Abbr `tp`, lookup_var_def,
        ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
        finite_mapTheory.FLOOKUP_DRESTRICT]) >>
+  qmatch_asmsub_abbrev_tac `fn_has_code sa sc func` >>
   `!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sc) s Gf tf` by
     suspend "checks" >>
   qexistsl_tac [`Gf`, `tf`] >>
@@ -131,25 +132,94 @@ Proof
 QED
 
 Resume raw_call_bytes_success_full_path[checks]:
-  FAIL_TAC "checks"
+  gen_tac >> simp[emitted_insts_def, Abbr `sc`] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once inst_seq_ptr_def, raw_call_returndatasize_step_base] >>
+  conj_tac >- (
+    simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+      ptrDisciplineTheory.taint_ok_def, mk_inst_def,
+      codegenRelTheory.source_memory_write_ranges_def,
+      contextCodegenRelTheory.source_memory_read_ranges_def,
+      venomExecSemanticsTheory.step_inst_non_invoke,
+      raw_call_returndatasize_step_base, update_var_def] >>
+    rpt strip_tac >> gvs[]) >>
+  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+    ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.step_taint_def,
+    ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+    ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+    ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+    ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+    ptrDisciplineTheory.imm_taint_def, mk_inst_def, update_var_def] >>
+  simp[Once inst_seq_ptr_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+    mk_inst_def, venomExecSemanticsTheory.exec_pure2_def, eval_operand_def,
+    lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, update_var_def] >>
+  conj_tac >- suspend "ltcheck" >>
+  suspend "ltghost"
 QED
 
-Resume raw_call_bytes_success_full_path[path]: cheat QED
-Resume raw_call_bytes_success_full_path[halted]: cheat QED
-Resume raw_call_bytes_success_full_path[block]: cheat QED
-Resume raw_call_bytes_success_full_path[history]: cheat QED
-Resume raw_call_bytes_success_full_path[allocas]: cheat QED
-Resume raw_call_bytes_success_full_path[next]: cheat QED
-Resume raw_call_bytes_success_full_path[lookup]: cheat QED
-Resume raw_call_bytes_success_full_path[covers]: cheat QED
-Resume raw_call_bytes_success_full_path[memtaint]: cheat QED
-Resume raw_call_bytes_success_full_path[stor]: cheat QED
-Resume raw_call_bytes_success_full_path[trans]: cheat QED
-Resume raw_call_bytes_success_full_path[imm]: cheat QED
-Resume raw_call_bytes_success_full_path[old]: cheat QED
-Resume raw_call_bytes_success_full_path[robust]: cheat QED
-Resume raw_call_bytes_success_full_path[frame]: cheat QED
+Resume raw_call_bytes_success_full_path[path]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[halted]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[block]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[history]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[allocas]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[next]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[lookup]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[covers]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[memtaint]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[stor]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[trans]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[imm]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[old]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[robust]:
+  cheat
+QED
+Resume raw_call_bytes_success_full_path[frame]:
+  cheat
+QED
+
+Resume raw_call_bytes_success_full_path[ltcheck]:
+  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+    venomExecSemanticsTheory.exec_pure2_def, eval_operand_def, lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE, ptrDisciplineTheory.op_taint_def] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `op` >> gvs[]) >>
+  fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
+QED
+Resume raw_call_bytes_success_full_path[ltghost]:
+  FAIL_TAC "ltghost"
+QED
 
 Finalise raw_call_bytes_success_full_path
-(* suffix *)
-QED
+
