@@ -1,7 +1,7 @@
 (* Concrete balances HashMap lifecycle: mint 100, transfer 7, retain 93. *)
 Theory e2eERC20Witness
 Ancestors
-  e2eWitness e2eCompose e2eDefs e2eDeployDefs compileVyper venomPipelineDriver supportedProgram
+  e2eWitnessCompute e2eWitness e2eCompose e2eDefs e2eDeployDefs compileVyper venomPipelineDriver supportedProgram
   concretizeMemLocDefs codegenReadyCompute alist integer_word
   vyperInterpreter vyperHashMapStorage vfmCompute e2eLifecycle accountsRelProps
   callTrace frameOutcome asmOptimizer
