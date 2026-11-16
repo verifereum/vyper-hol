@@ -96,3 +96,60 @@ val _ = List.app (fn t =>
   [exact_decoder_contract, array_child_contract, struct_child_contract,
    positional_child_contract];
 val _ = print "Exact decoder and three expanded child contracts typechecked (not proved).\n";
+
+(* Catch accidental free parser variables, in addition to checking boolean type. *)
+val _ = let val vs = free_vars exact_decoder_contract in
+  if length vs = 5 andalso List.all
+    (fn v => List.exists (fn n => fst (dest_var v) = n)
+      ["ce","env","sf","ty","tv"]) vs
+  then List.app (fn v => print (term_to_string v ^ "\n")) vs
+  else raise Fail "unintended free variable in exact decoder schema"
+end;
+
+(* Bounded interface tests inspect existing kernel theorem statements. They do
+   not use theorem constructors and do not assert the unproved exact schema. *)
+local
+  fun has_const name tm =
+    can (find_term (fn t => is_const t andalso
+      #Name (dest_thy_const t) = name)) tm;
+  fun check msg b = if b then print (msg ^ "\n") else raise Fail msg;
+  fun parts th = dest_imp (#2 (strip_forall (concl th)));
+  val (clamp_in,clamp_out) = parts
+    calldata_clamp_overwrite_prefix_uniform_origin;
+  val (bulk_in,bulk_out) = parts
+    calldata_bulk_decoder_endpoint_ptr_uniform_origin;
+  val (_,recursive_out) = parts calldata_coherent_owned_run;
+  val (_,positional_out) = parts registration_positional_owned_run;
+in
+  val _ = check "Scalar residual: successful run_inst_seq is an INPUT, not constructed."
+    (has_const "run_inst_seq" clamp_in andalso
+     not (has_const "cd_decode" clamp_out));
+  val _ = check "Bulk residual: successful run_inst_seq is an INPUT; no source exactness."
+    (has_const "run_inst_seq" bulk_in andalso
+     has_const "gas_origin_ptr_path" bulk_out andalso
+     not (has_const "cd_decode" bulk_out));
+  val _ = check "Recursive owned result: typed memory, but no source or pointer observation."
+    (has_const "val_in_memory" recursive_out andalso
+     not (has_const "cd_decode" recursive_out) andalso
+     not (has_const "gas_origin_ptr_path" recursive_out));
+  val _ = check "Struct child: both env and sf descend; ambient limit remains quantified."
+    (not (aconv struct_child_contract exact_decoder_contract) andalso
+     has_const "fresh_vars_wrt" struct_child_contract);
+  val _ = check "Positional owned result: outputs allocated, but no decode-list rejection observation."
+    (has_const "FLOOKUP" positional_out andalso
+     has_const "val_in_memory" positional_out andalso
+     not (has_const "calldata_decode_args" positional_out) andalso
+     not (has_const "gas_origin_ptr_path" positional_out));
+end;
+
+(* Universal closure is the proposed higher-order child hypothesis. No logical
+   constant or named theorem is introduced by forming these ML terms. *)
+val universal_array_child = list_mk_forall
+  (free_vars array_child_contract, array_child_contract);
+val universal_struct_child = list_mk_forall
+  (free_vars struct_child_contract, struct_child_contract);
+val universal_positional_child = list_mk_forall
+  (free_vars positional_child_contract, positional_child_contract);
+val _ = List.app (fn t =>
+  if null (free_vars t) then () else raise Fail "open child hypothesis")
+  [universal_array_child,universal_struct_child,universal_positional_child];
