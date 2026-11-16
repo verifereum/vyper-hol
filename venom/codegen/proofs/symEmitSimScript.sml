@@ -1808,6 +1808,44 @@ Proof
   simp[] >> metis_tac[sym_emit_run_endpoint]
 QED
 
+Theorem sym_assert_prepared_nonzero_core:
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel vlo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ inst.inst_operands /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) vlo op) ==>
+  ?w tail. ss.sym_stack = Val w :: tail /\ w <> 0w
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all genBlockSimTheory.step_inst_assert_ok >> strip_tac >>
+  `eval_operands (REVERSE inst.inst_operands) vs =
+     SOME (TAKE (LENGTH inst.inst_operands) cs.as_stack)` by
+    (irule ordinary_prepared_source_evaluation >> simp[] >>
+     qexistsl [`fn`, `inst`, `vlo`, `m`, `ps`, `ra`, `residual`] >> fs[]) >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (`label_positions_ok inst` by
+       metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
+                 unitShapeDefsTheory.inst_shape_ok_def] >>
+     irule label_positions_ok_other >> fs[]) >>
+  `LENGTH inst.inst_operands <= LENGTH ss.sym_stack /\
+   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH inst.inst_operands) ss.sym_stack)` by
+    (irule ordinary_prepared_selected_numeric_mode >>
+     qexistsl [`allow_own`, `cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
+     fs[EVERY_MEM]) >>
+  drule_all asm_sym_numeric_take_core >>
+  fs[venomStateTheory.eval_operands_def] >>
+  Cases_on `ss.sym_stack` >> gvs[venomStateTheory.eval_operands_def] >>
+  strip_tac >> gvs[]
+QED
+
 Theorem sym_assert_prepared_nonzero:
   (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
   step_inst fuel ctx inst vs = OK vs' /\
@@ -1822,26 +1860,11 @@ Theorem sym_assert_prepared_nonzero:
     operand_val (frame_view fn ra vs with vs_memory := m) lo op) ==>
   ?w tail. ss.sym_stack = Val w :: tail /\ w <> 0w
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all genBlockSimTheory.step_inst_assert_ok >> strip_tac >>
-  `eval_operands (REVERSE inst.inst_operands) vs =
-     SOME (TAKE (LENGTH inst.inst_operands) cs.as_stack)` by
-    (irule ordinary_prepared_source_evaluation >> simp[] >>
-     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >> fs[]) >>
-  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
-    (`label_positions_ok inst` by
-       metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
-                 unitShapeDefsTheory.inst_shape_ok_def] >>
-     irule label_positions_ok_other >> fs[]) >>
-  `LENGTH inst.inst_operands <= LENGTH ss.sym_stack /\
-   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH inst.inst_operands) ss.sym_stack)` by
-    (irule ordinary_prepared_selected_numeric >>
-     qexistsl [`cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
-     fs[EVERY_MEM]) >>
-  drule_all asm_sym_numeric_take >>
-  fs[venomStateTheory.eval_operands_def] >>
-  Cases_on `ss.sym_stack` >> gvs[venomStateTheory.eval_operands_def] >>
-  strip_tac >> gvs[]
+  strip_tac >>
+  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+    ss.sym_stack cs.as_stack` by fs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  (metis_tac[Q.INST [`allow_own` |-> `F`] sym_assert_prepared_nonzero_core |>
+    SIMP_RULE std_ss []])
 QED
 
 Theorem sym_emit_kinds_pop:
@@ -1855,6 +1878,57 @@ Proof
   qexistsl [`k`, `[]`, `ps`, `ss`, `[]`] >>
   simp[rich_listTheory.BUTLASTN_TAKE_UNCOND, rich_listTheory.DROP_REVERSE,
        stackModelTheory.stack_pop_def]
+QED
+
+Theorem sym_assert_source_emit_core:
+  (!cs ss. R cs ss ==>
+    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
+  (!n cs ss cs' ss'. R cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' /\
+    asm_steps slo (build_offset_to_pc p) p n cs = AsmOK cs' ==> R cs' ss') /\
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  R cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel vlo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ inst.inst_operands /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) vlo op) /\
+  qs = ps with ps_stack := stack_pop 1 ps.ps_stack /\
+  (inst.inst_opcode = ASSERT ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"]) /\
+  (inst.inst_opcode = ASSERT_UNREACHABLE ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
+    INDEX_OF (AsmLabel lbl) p = SOME (ss.sym_base.as_pc + 3)) /\
+  asm_steps slo (build_offset_to_pc p) p 3 cs = AsmOK cs' ==>
+  ?ss'. sym_steps_mode allow_own p env own 3 ss = SymOK ss' /\ R cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
+    metis_tac[] >>
+  `?w tail. ss.sym_stack = Val w :: tail /\ w <> 0w` by
+    (drule_all sym_assert_prepared_nonzero_core >> simp[]) >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule_all genBlockSimTheory.step_inst_assert_ok >> strip_tac >> simp[]) >>
+  `?final. sym_steps_mode allow_own p env own 3 ss = SymOK final /\
+      final.sym_mem_labels = ss.sym_mem_labels /\
+      final.sym_stack = DROP 1 ss.sym_stack` by
+    (Cases_on `inst.inst_opcode = ASSERT` >> fs[]
+     >- (drule_all (Q.SPECL [`allow_own`, `own`] sym_assert_success_run_mode) >> simp[]) >>
+     qpat_x_assum `inst.inst_opcode = ASSERT_UNREACHABLE ==> _` mp_tac >>
+     simp[] >> strip_tac >>
+     drule_all (Q.SPECL [`allow_own`, `own`] sym_assert_unreachable_success_run_mode) >> simp[]) >>
+  qexists `final` >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  irule sym_emit_kinds_pop >> metis_tac[]
 QED
 
 Theorem sym_assert_source_emit:
@@ -1885,21 +1959,14 @@ Theorem sym_assert_source_emit:
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `?w tail. ss.sym_stack = Val w :: tail /\ w <> 0w` by
-    (irule sym_assert_prepared_nonzero >> metis_tac[]) >>
-  `1 <= LENGTH ps.ps_stack` by
-    (drule_all genBlockSimTheory.step_inst_assert_ok >> strip_tac >> simp[]) >>
-  `?final. sym_steps p env 3 ss = SymOK final /\
-      final.sym_mem_labels = ss.sym_mem_labels /\
-      final.sym_stack = DROP 1 ss.sym_stack` by
-    (Cases_on `inst.inst_opcode = ASSERT` >> fs[]
-     >- (drule_all sym_assert_success_run >> simp[]) >>
-     qpat_x_assum `inst.inst_opcode = ASSERT_UNREACHABLE ==> _`
-       (mp_tac) >> simp[] >> strip_tac >>
-     drule_all sym_assert_unreachable_success_run >> simp[]) >>
-  qexists `final` >> simp[] >> conj_tac
-  >- (irule sym_emit_run_endpoint >> metis_tac[]) >>
-  irule sym_emit_kinds_pop >> metis_tac[]
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`,
+                  `R` |-> `asm_sym_rel p env`,
+                  `slo` |-> `SND (compute_label_offsets p)`, `vlo` |-> `lo`]
+    sym_assert_source_emit_core) >>
+  simp[sym_steps_mode_def] >> disch_then irule >>
+  simp[] >> conj_tac
+  >- simp[asmSymBridgeTheory.asm_sym_rel_def] >>
+  metis_tac[sym_emit_run_endpoint]
 QED
 
 Theorem sym_bump_source_emit:
