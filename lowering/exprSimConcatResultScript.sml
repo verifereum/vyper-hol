@@ -10,6 +10,7 @@
  *)
 Theory exprSimConcatResult
 Ancestors
+  exprSimConcatShapeRun
   exprSimConcatArgs exprSimConcatSource exprSimConcatStep exprSimLiteralBuffer
   exprSimHash exprSimHyps exprSimSource exprSimAlloc exprSimWordArgs
   exprSimHypsDefs exprSimProps exprSimDefs exprBopSimProps exprBopLowering
@@ -162,11 +163,7 @@ Theorem concat_prefix_code:
         (emitted_insts s2 s3 ++ emitted_insts s3 s4)) /\
     s4.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa s4
 Proof
-  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def,
-       comp_ignore_bind_def, emit_op_def, emit_void_def, fresh_id_def,
-       fresh_var_def, emit_def, comp_return_def] >>
-  strip_tac >> gvs[] >>
-  simp[emitted_insts_def, DROP_LENGTH_APPEND, DROP_APPEND, DROP_LENGTH_TOO_LONG]
+  ACCEPT_TAC exprSimConcatShapeRunTheory.concat_prefix_code
 QED
 
 Theorem concat_suffix_code:
@@ -182,10 +179,7 @@ Theorem concat_suffix_code:
          [Var bv; Var (STRING #"%" (toString sa.cs_next_var))] []] /\
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb
 Proof
-  simp[comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  strip_tac >> gvs[] >>
-  simp[emitted_insts_def, DROP_LENGTH_APPEND, DROP_APPEND, DROP_LENGTH_TOO_LONG]
+  ACCEPT_TAC exprSimConcatShapeRunTheory.concat_suffix_code
 QED
 
 (* ===== Straight-line runs ===== *)
@@ -499,23 +493,7 @@ Theorem concat_suffix_run:
       OK (mstore (w2n bw) (mload (w2n ow) s)
             (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n ow) s) s))
 Proof
-  rpt strip_tac >>
-  drule_all concat_suffix_code >> strip_tac >>
-  qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
-  `bv <> (STRING #"%" (toString sa.cs_next_var))` by fs[not_fresh_at_def] >>
-  `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var ov] [(STRING #"%" (toString sa.cs_next_var))]) s =
-   OK (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n ow) s) s)` by
-    (irule step_MLOAD >> simp[eval_operand_def]) >>
-  qabbrev_tac `s' = update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n ow) s) s` >>
-  `eval_operand (Var bv) s' = SOME bw /\
-   eval_operand (Var (STRING #"%" (toString sa.cs_next_var))) s' = SOME (mload (w2n ow) s)` by
-    simp[Abbr `s'`, eval_operand_def, lookup_var_update_var] >>
-  `step_inst_base (mk_inst (sa.cs_next_id + 1) MSTORE [Var bv; Var (STRING #"%" (toString sa.cs_next_var))] []) s' =
-   OK (mstore (w2n bw) (mload (w2n ow) s) s')` by
-    (irule step_MSTORE >> conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_assum `step_inst_base _ s = _` (fn th1 =>
-    qpat_assum `step_inst_base _ s' = _` (fn th2 =>
-      simp[run_inst_seq_def, th1, th2]))
+  ACCEPT_TAC exprSimConcatShapeRunTheory.concat_suffix_run
 QED
 
 (* ===== Composition ===== *)
