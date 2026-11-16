@@ -577,7 +577,7 @@ QED
 
 Theorem external_package_bare_globals:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_deployment_rel tops am tx /\
+  source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\
   es0.immutables = am.immutables /\
   env_consistent env_t
@@ -587,7 +587,10 @@ Theorem external_package_bare_globals:
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
-  !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+  !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty /\
+    (~cx_const_name (initial_evaluation_context am.sources am.layouts tx NONE)
+       (src,id) \/
+     IS_SOME (FLOOKUP env_t.bare_global_assignable (src,id))) ==>
     src = cenv.ce_module /\
     ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
       !tv. evaluate_type (get_tenv
@@ -612,19 +615,22 @@ Proof
   >- (gvs[env_consistent_def, env_immutables_consistent_def,
           initial_evaluation_context_def, get_source_immutables_def] >>
       rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+  `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty /\
+     (~cx_const_name (initial_evaluation_context am.sources am.layouts tx NONE)
+        (src,id) \/
+      IS_SOME (FLOOKUP env_t.bare_global_assignable (src,id))) ==>
      src = (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module /\
      ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module_vars
        (src,id) = SOME (ImmutableLoc off) /\
        !tv. evaluate_type (get_tenv
          (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
          off + type_memory_size tv < dimword (:256)` by
-    (drule_at (Pat `supported_program _`) build_compile_env_bare_globals >>
-     simp[] >>
-     disch_then (drule_at (Pat `env_consistent _ _ _`)) >>
-     gvs[account_immutables_def, initial_evaluation_context_def,
-         build_compile_env_module_vars] >>
-     disch_tac >> metis_tac[]) >>
+    (drule_at (Pat `env_consistent _ _ _`)
+       (INST_TYPE [alpha |-> ``:string``] build_compile_env_bare_globals) >>
+     simp[] >> strip_tac >> rpt gen_tac >> strip_tac >>
+     first_x_assum irule >>
+     gvs[account_immutables_def, initial_evaluation_context_def] >>
+     metis_tac[]) >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   gvs[package_external_fn_def, set_external_package_target_def] >>
   Cases_on `ret = NoneT` >>
@@ -770,9 +776,14 @@ Proof
   `EVERY (\(n,ty). assignable_type env_t.type_defs ty) args` by
     (`supported_declaration_headers tops` by fs[supported_program_def] >>
      drule_all source_typing_ok_params_ok >>
-     gvs[params_ok_def, get_tenv_def, checked_contract_runtime_ready_def,
-         initial_evaluation_context_def, type_env_all_modules_def,
-         type_env_def]) >>
+     `env_t.type_defs = type_env tops` by
+       (qpat_x_assum `env_t.type_defs = _` SUBST1_TAC >>
+        qpat_x_assum `checked_contract_runtime_ready _ _ _ _` mp_tac >>
+        simp[checked_contract_runtime_ready_def, get_tenv_def,
+             initial_evaluation_context_def, type_env_all_modules_def,
+             type_env_def]) >>
+     disch_then (strip_assume_tac o REWRITE_RULE [params_ok_def]) >>
+     ASM_REWRITE_TAC []) >>
   `cenv.ce_struct_fields = make_struct_fields_map tops /\
    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
     gvs[body_inv_def] >>
@@ -808,17 +819,23 @@ Proof
       irule external_signature_return >>
       qexistsl [`initial_evaluation_context am.sources am.layouts tx NONE`,
                 `art.cta_fn_sigs`, `tops`] >> simp[] >>
+      qpat_assum `env_consistent _ _ _` (strip_assume_tac o
+        SIMP_RULE std_ss [env_consistent_def, env_context_consistent_def]) >>
+      qpat_assum `body_inv _ _ _ _`
+        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
       rpt conj_tac
-      >- (qpat_x_assum `source_deployment_rel _ _ _` mp_tac >>
-          POP_ASSUM_LIST (K all_tac) >>
-          simp[source_deployment_rel_def, get_module_code_def,
-               initial_evaluation_context_def] >> rpt strip_tac >> gvs[])
-      >- simp[initial_evaluation_context_def]
-      >- (qpat_x_assum `body_inv _ _ _ _` mp_tac >>
-          POP_ASSUM_LIST (K all_tac) >> simp[body_inv_def])
-      >- (qpat_x_assum `env_context_consistent _ _` mp_tac >>
-          qpat_x_assum `env_t.fn_sigs = art.cta_fn_sigs` mp_tac >>
-          POP_ASSUM_LIST (K all_tac) >> simp[env_context_consistent_def]))
+      >- (rpt gen_tac >> strip_tac >>
+          `src = NONE` by res_tac >>
+          qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
+          qpat_assum `get_module_code (initial_evaluation_context _ _ _ _) NONE =
+                      SOME tops` mp_tac >>
+          qpat_x_assum `get_module_code (initial_evaluation_context _ _ _ _) NONE =
+                        SOME ts` (fn th => rewrite_tac[th]) >>
+          simp_tac (srw_ss()) [])
+      >- simp_tac (srw_ss()) [initial_evaluation_context_def]
+      >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `env_t.fn_sigs = art.cta_fn_sigs` (SUBST_ALL_TAC o SYM) >>
+      first_assum ACCEPT_TAC)
   >- (rpt strip_tac >> irule external_source_flag_member_id >>
       gvs[body_inv_def] >> metis_tac[source_typing_ok_type_def_keys_distinct])
   >- gvs[dec_cenv_agrees_def]
@@ -830,14 +847,15 @@ Proof
   >- (`!src ts. get_module_code
          (initial_evaluation_context am.sources am.layouts tx NONE) src =
          SOME ts ==> src = NONE` by
-        gvs[source_deployment_rel_def, get_module_code_def,
-            initial_evaluation_context_def] >>
+        (qpat_assum `body_inv _ _ _ _`
+           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
+         first_assum ACCEPT_TAC) >>
       drule body_inv_storage_var_types >> disch_then drule >>
       strip_tac >> rpt gen_tac >> strip_tac >>
       first_x_assum drule_all >> simp[])
   >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
   >- (rpt strip_tac >>
-      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
+      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\ _ ==> _`
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
   >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
@@ -846,9 +864,15 @@ Proof
   >~ [`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel _) _))`]
   >- metis_tac[body_inv_modules_aligned]
   >- (rpt strip_tac >>
-      `cenv_module_pins tops cenv` by fs[body_inv_def] >>
+      `cenv_module_pins tops cenv` by
+        (qpat_assum `body_inv _ _ _ _`
+           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
+         first_assum ACCEPT_TAC) >>
       `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
-         NONE = SOME tops` by fs[body_inv_def] >>
+         NONE = SOME tops` by
+        (qpat_assum `body_inv _ _ _ _`
+           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
+         first_assum ACCEPT_TAC) >>
       `bare_globals_complete env_t.bare_globals
          (initial_evaluation_context am.sources am.layouts tx NONE)` by
         fs[env_context_consistent_def] >>
@@ -857,8 +881,9 @@ Proof
       >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
       gvs[bare_globals_complete_def] >> metis_tac[])
   >- (rpt strip_tac >>
-      gvs[env_consistent_def, env_context_consistent_def,
-          bare_global_assignable_complete_def, initial_evaluation_context_def])
+      qpat_assum `body_inv _ _ _ _`
+        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
+      first_assum ACCEPT_TAC)
   >- (rpt strip_tac >>
       `FLOOKUP env_t.bare_globals (src,id) = SOME ty` by simp[] >>
       drule_all body_inv_bare_global_type >> simp[]) >>
@@ -876,13 +901,16 @@ Proof
      disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >> simp[]) >>
   `get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
    type_env tops` by
-    gvs[get_tenv_def, initial_evaluation_context_def,
+    (qpat_assum `source_deployment_rel _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [get_tenv_def, initial_evaluation_context_def,
         source_deployment_rel_def, type_env_all_modules_def, type_env_def,
-        FUNION_FEMPTY_2] >>
+        FUNION_FEMPTY_2]) >>
   `cenv_module_pins tops cenv /\
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
-    fs[body_inv_def] >>
+    (qpat_assum `body_inv _ _ _ _`
+       (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
 QED
 

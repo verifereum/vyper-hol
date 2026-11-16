@@ -1011,3 +1011,35 @@ Proof
     (irule current_initial_state_valid >> simp[]) >>
   drule_all current_provenance_tree_names >> simp[]
 QED
+
+Theorem current_tree_trace_owner_alignment:
+  (!tree A sm s rs bbs H E visited ct s' bbs' H' visited' events R.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ct s' bbs' H' visited' events /\
+    EVERY (\(token,v,n). R n v) H /\
+    EVERY (\(l,bb,s,rs,H,E,is,s1,rs1,H1,E1,bbs1,bbs2).
+      LIST_REL (\i j. LIST_REL (\v n. R n v)
+        i.inst_outputs j.inst_outputs) bb.bb_instructions is) events ==>
+    EVERY (\(token,v,n). R n v) H') /\
+  (!trees A sm s ct stacks bbs H E visited ct' s' bbs' H' visited' events R.
+    current_children_trace A sm trees s ct stacks bbs H E visited
+      ct' s' bbs' H' visited' events /\
+    EVERY (\(token,v,n). R n v) H /\
+    EVERY (\(l,bb,s,rs,H,E,is,s1,rs1,H1,E1,bbs1,bbs2).
+      LIST_REL (\i j. LIST_REL (\v n. R n v)
+        i.inst_outputs j.inst_outputs) bb.bb_instructions is) events ==>
+    EVERY (\(token,v,n). R n v) H')
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      drule_all current_local_trace_owner_alignment >> strip_tac >>
+      first_x_assum drule >> disch_then irule >> simp[])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def, EVERY_APPEND] >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A sm s rs bbs H E visited ct s' bbs' H' visited' events R. _`
+    drule_all >> strip_tac >>
+  first_x_assum drule >> disch_then irule >> simp[]
+QED

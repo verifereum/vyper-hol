@@ -82,6 +82,11 @@ current series contains:
   an active recursion path and guarded memoization, so shared multi-origin PHIs
   cannot disappear from a sibling operand. The pass is used by O2/O3/Os; the O1
   fixture schedule does not run it.
+- `5375-annotation-size-typecheck.patch`, vyperlang/vyper#5375 (open): annotation
+  sizes are type-checked before AST export, including references to constants
+  declared later. Overflowing and incompatible intermediate expressions reject;
+  accepted bounds stay unchanged and their syntax receives type metadata. The
+  backport preserves the pin's positive-size rule and absent ternary folding.
 - `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it
