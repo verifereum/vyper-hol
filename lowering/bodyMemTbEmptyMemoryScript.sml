@@ -20,6 +20,10 @@ Theorem memory_value_post_gas_obs:
     (Value v) (LocatedValue ty p) t
 Proof
   strip_tac >>
+  `storage_well_formed_on cx (ee with gas_obs := gs) (FST H) <=>
+   storage_well_formed_on cx ee (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
   `locals_kept cenv es (ee with gas_obs := gs) s0 t <=>
    locals_kept cenv es ee s0 t` by
     simp[NoAsms, locals_kept_def, popped_kept_def] >>
@@ -65,9 +69,6 @@ Proof
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
   Cases_on `evaluate_type (get_tenv cx) typ`
   >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
       simp[gas_admissible_def, Once evaluate_def, bind_def, ignore_bind_def,
@@ -90,6 +91,9 @@ Proof
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[dimword_def] >> decide_tac) >>
   drule_all empty_type_buffer_size >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
   drule_all compile_empty_buffer_mem_path >> strip_tac >>
   drule_all empty_type_default_memory >> strip_tac >>
@@ -136,15 +140,17 @@ Proof
   `vv_post H0 ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
      (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (drule_then ACCEPT_TAC)) >>
+       (qspec_then `H0` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `vv_store_bound cx typ typ es (Value (default_value tv))
       (LocatedValue typ (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule (SRULE [expr_type_def]
       (Q.INST [`e` |-> `TypeBuiltin typ Empty typ []`]
-        (SPEC_ALL vv_store_bound_capacity))) >>
+        (SPEC_ALL (INST_TYPE [alpha |-> ``:256``] vv_store_bound_capacity)))) >>
      simp[] >> reverse conj_tac
-     >- (goal_assum (drule_at Any)) >>
+     >- (qexistsl_tac [`H0`, `cenv`, `ctx`, `es`, `func`, `s0`, `sa`, `sb`] >>
+         first_assum ACCEPT_TAC) >>
      qexists_tac `w` >> simp[base_ptr_def, ADD_COMM]) >>
   drule compile_builtin_empty_complex_shape >> strip_tac >>
   `t.vs_current_bb = s0.vs_current_bb` by
