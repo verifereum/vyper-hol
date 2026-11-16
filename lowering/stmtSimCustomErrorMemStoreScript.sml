@@ -66,6 +66,12 @@ Theorem custom_error_store_args_sim_mem:
     (\H res ee exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  match_mp_tac custom_error_store_args_sim_mem_using_head >>
-  rpt gen_tac >> MATCH_ACCEPT_TAC custom_error_store_head_path_mem
+  rpt gen_tac >> strip_tac >>
+  mp_tac custom_error_store_args_sim_mem_using_head >>
+  impl_tac
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC custom_error_store_head_path_mem) >>
+  disch_then (drule_all_then
+    (irule o MATCH_MP exprSimAggregateLoopsTheory.aggregate_tuple_gas_outcome_mono)
+    o SPEC_ALL) >>
+  simp[] >> rpt strip_tac >> metis_tac[]
 QED
