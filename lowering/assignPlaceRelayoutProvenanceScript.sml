@@ -1,6 +1,6 @@
 Theory assignPlaceRelayoutProvenance
 Ancestors
-  assignPlaceProvenance assignPlaceSourceBounds
+  assignPlaceProvenance assignPlaceSourceBounds assignPlaceMemoryCopy
   placeRelayoutMemoryRun exprSimHyps annassignRelayoutSource
   exprSimTypedAlloc valueTypingMemoryProps loweringPosts stmtSimDefs
   stmtLowering compileEnv words placeStore vyperStorageFootprint
