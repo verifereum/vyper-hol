@@ -3,6 +3,7 @@ Theory bodyFullRawLogDynamic
 Ancestors
   bodyFullRawLogDynamicTail bodyFullRawLogDynamicTailPath
   bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  contextRawReachable ptrDiscipline unitMemInv
   gasShadowState gasShadow bodyFullShared exprLoweringProps exprOperandVar
   exprSimMemDefs exprSimDefs gasExemptCert vyperStorageTrace vyperStorageFootprint
   loweringPosts bodyPtrDefs loweringShapeDefs
@@ -80,11 +81,15 @@ Theorem raw_log_dynamic_data_full:
     (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
     `data_op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ dataQ dataR` >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -221,7 +226,7 @@ Resume raw_log_dynamic_data_full[selected]:
   simp[lift_option_type_def, lift_option_def, dest_BytesV_def,
        bind_def, ignore_bind_def, type_check_def, push_log_def, return_def] >>
   conj_tac >- simp[assert_def, return_def] >>
-  gen_tac >> strip_tac >> disj1_tac >>
+  gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
