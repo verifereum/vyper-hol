@@ -1233,8 +1233,47 @@ Proof
          compileEnvTheory.comp_return_def] >> pairarg_tac >> gvs[]) >>
   irule (Q.INST [`s1` |-> `t7`, `G1` |-> `G7`, `tn1` |-> `tn7`, `n` |-> `0`]
     raw_call_generated_prefix_full) >> simp[] >>
-  qexistsl_tac [`G7`,`0`,`t7`,`tn7`] >>
+  qexistsl_tac [`G7`,`t7`,`tn7`] >>
   (conj_tac >- simp[]) >>
   qpat_assum `!gsA av esA gsD bs esD gsK kvs esK b ob gw tA tD t4 tk t7 G7 tn7. _` irule >>
-  FAIL_TAC "callback inputs"
+  simp[] >>
+  qexistsl_tac [`b`,`esA`,`esD`,`gas_explicit marksA s0.vs_gas_readings`,
+    `gas_explicit marksD tA.vs_gas_readings`,`gas_explicit marksK t4.vs_gas_readings`,
+    `gw`,`b'`,`t4`,`tA`,`tD`,`tk`] >>
+  simp[] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H esD.storage_trace` by
+    (qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> valid_horizon _ _ H esD.storage_trace` irule >> simp[]) >>
+  `valid_horizon cx st0 H esA.storage_trace` by
+    (qpat_assum `bind (eval_expr cx d) (read_result cx) _ = _` mp_tac >>
+     qpat_assum `valid_horizon cx st0 H esD.storage_trace` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `storage_trace_frame (bind (eval_expr cx d) (read_result cx))` by
+       simp[evaluate_storage_trace_frame,storage_trace_frame_bind,storage_trace_frame_read_result] >>
+     drule_all storage_trace_frame_prefix >> simp[] >> strip_tac >>
+     gvs[] >> metis_tac[gasOutcomeFullTheory.valid_horizon_append]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `bind (eval_expr cx a) (read_result cx) _ = _` mp_tac >>
+     qpat_assum `valid_horizon cx st0 H esA.storage_trace` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `storage_trace_frame (bind (eval_expr cx a) (read_result cx))` by
+       simp[evaluate_storage_trace_frame,storage_trace_frame_bind,storage_trace_frame_read_result] >>
+     drule_all storage_trace_frame_prefix >> simp[] >> strip_tac >>
+     gvs[] >> metis_tac[gasOutcomeFullTheory.valid_horizon_append]) >>
+  fs[Abbr `P`] >>
+  conj_tac >-
+    (qpat_assum `expr_store_bound cx (expr_type d) _ _ _` mp_tac >>
+     qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  conj_tac >-
+    (qpat_assum `EVERY (safe_operand s5) xs` mp_tac >>
+     qpat_assum `!x. safe_operand s5 x ==> eval_operand x t7 = eval_operand x tk /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `!mem. mem_agree_outside tnK.t_mem tk.vs_memory mem ==> _` mp_tac >>
+     disch_then (qspec_then `tk.vs_memory` mp_tac) >>
+     simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  conj_tac >-
+    (qpat_assum `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==> _` mp_tac >> simp[]) >>
+  qpat_assum `cenv.ce_is_ctor ==> !name tv v off. _` mp_tac >> simp[]
 QED
