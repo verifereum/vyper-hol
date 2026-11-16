@@ -435,7 +435,8 @@ Proof
              qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u2`
                (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                   exprSimUnwrapTheory.expr_post_fields_transport) th)) >>
-             simp[] >> qexists_tac `t1` >> simp[]) >>
+             simp[] >> qexists_tac `t1` >>
+             fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
           `marks = marks ++ []` by simp[] >>
