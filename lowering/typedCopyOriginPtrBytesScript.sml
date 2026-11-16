@@ -7,7 +7,7 @@ Ancestors
   valueCopy venomInstProofs context emitHelper compileEnv fragExec rich_list
   contextCodegenRel memLocDefs
 
-Theorem compile_store_bytestring_inst_seq_ptr[local]:
+Theorem compile_store_bytestring_inst_seq_ptr:
   compile_store_bytestring (Var xs) (Var xd) sa = ((),sb) /\
   not_fresh_at sa xs /\ not_fresh_at sa xd /\
   lookup_var xs s = SOME a /\ lookup_var xd s = SOME b /\
