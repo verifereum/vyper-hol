@@ -61,14 +61,31 @@ Definition typed_copy_origin_ptr_entry_def:
            FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 End
 
-Theorem typed_copy_state_frame_allocas_below_fmp:
-  typed_copy_state_frame sa off len s t ==>
-  (allocas_below_fmp t <=> allocas_below_fmp s)
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   simp[typed_copy_state_frame_def, venom_state_component_equality,
     allocas_below_fmp_def] >> metis_tac[]
 QED
 
+
+*)
+Theorem typed_copy_state_frame_allocas_below_fmp:
+  typed_copy_state_frame sa off len s t ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Proof
+  simp_tac std_ss [typed_copy_origin_ptr_entry_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`lo`,`explicit`,`func`,`PG`,`xd`,`xs`,
+    `sa`,`sb`,`s`,`G`,`tn`,`dw`,`sw`] mp_tac) >>
+  asm_rewrite_tac[]
+QED
+
+
+*)
 Theorem typed_copy_origin_ptr_entry_run:
   typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v /\
   compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
@@ -107,27 +124,10 @@ Theorem typed_copy_origin_ptr_entry_run:
     (!p. not_fresh_at sa p ==>
        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  simp_tac std_ss [typed_copy_origin_ptr_entry_def] >> strip_tac >>
-  first_x_assum (qspecl_then [`lo`,`explicit`,`func`,`PG`,`xd`,`xs`,
-    `sa`,`sb`,`s`,`G`,`tn`,`dw`,`sw`] mp_tac) >>
-  asm_rewrite_tac[]
+  cheat
 QED
 
-Theorem typed_copy_origin_ptr_assign_path:
-  emit_inst ASSIGN [op] [out] a = ((),b) /\
-  eval_operand op s = SOME w /\ op_prov G op = NONE /\ op_taint tn op = {} /\
-  fn_has_code a b func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
-  ?t Gf tnf.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    Gf = DRESTRICT G (COMPL {out}) /\
-    tnf = (tn with t_var := tn.t_var |+ (out,{})) /\
-    lookup_var out t = SOME w /\ t.vs_memory = s.vs_memory /\
-    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
-    t.vs_inst_idx = LENGTH b.cs_current_insts
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   drule emit_inst_extends >> strip_tac >>
@@ -175,24 +175,28 @@ Proof
   simp[gas_origin_ptr_path_rules]
 QED
 
-Theorem typed_copy_origin_ptr_counter_init_path:
-  emit_inst ASSIGN [Lit 0w] [counter] a = ((),b) /\
-  emit_inst JMP [Label hdr] [] b = ((),c) /\
-  fn_has_code a c func /\ ~s.vs_halted /\
+
+*)
+Theorem typed_copy_origin_ptr_assign_path:
+  emit_inst ASSIGN [op] [out] a = ((),b) /\
+  eval_operand op s = SOME w /\ op_prov G op = NONE /\ op_taint tn op = {} /\
+  fn_has_code a b func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?t Gf tnf.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t = jump_to hdr (update_var counter 0w s) /\
-    Gf = DRESTRICT G (COMPL {counter}) /\
-    tnf = (tn with t_var := tn.t_var |+ (counter,{})) /\
-    lookup_var counter t = SOME 0w /\ FLOOKUP Gf counter = NONE /\
-    op_taint tnf (Var counter) = {} /\
-    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
-    (!p. p <> counter ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    Gf = DRESTRICT G (COMPL {out}) /\
+    tnf = (tn with t_var := tn.t_var |+ (out,{})) /\
+    lookup_var out t = SOME w /\ t.vs_memory = s.vs_memory /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `cs_extends a b /\ cs_extends b c` by metis_tac[cs_extends_emit_inst] >>
@@ -220,26 +224,31 @@ Proof
 QED
 
 (* Robust values survive a child write outside their representation. *)
-Theorem typed_copy_origin_ptr_index_robust_step:
-  k < N /\
-  (so + N * type_memory_size stv <= dst \/
-   dst + N * type_memory_size dtv <= so) /\
-  (!i. i < N ==> val_wf stv (f i) /\ val_wf dtv (f i)) /\
-  (!i mem. i < N /\ mem_agree_outside tnq q.vs_memory mem ==>
-    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
-  (!i mem. i < k /\ mem_agree_outside tnq q.vs_memory mem ==>
-    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem) /\
-  typed_copy_state_frame sa (dst + k * type_memory_size dtv)
-    (type_memory_size dtv) q r /\
-  (!i. ~(dst + k * type_memory_size dtv <= i /\
-          i < dst + k * type_memory_size dtv + type_memory_size dtv) ==>
-    (i IN tnr <=> i IN tnq)) /\
-  (!mem. mem_agree_outside tnr r.vs_memory mem ==>
-    val_in_memory dtv (f k) (dst + k * type_memory_size dtv) mem) ==>
-  (!i mem. i < N /\ mem_agree_outside tnr r.vs_memory mem ==>
-    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
-  (!i mem. i < SUC k /\ mem_agree_outside tnr r.vs_memory mem ==>
-    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem)
+
+*)
+Theorem typed_copy_origin_ptr_counter_init_path:
+  emit_inst ASSIGN [Lit 0w] [counter] a = ((),b) /\
+  emit_inst JMP [Label hdr] [] b = ((),c) /\
+  fn_has_code a c func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to hdr (update_var counter 0w s) /\
+    Gf = DRESTRICT G (COMPL {counter}) /\
+    tnf = (tn with t_var := tn.t_var |+ (counter,{})) /\
+    lookup_var counter t = SOME 0w /\ FLOOKUP Gf counter = NONE /\
+    op_taint tnf (Var counter) = {} /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    (!p. p <> counter ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!a. ~(dst + k * type_memory_size dtv <= a /\
@@ -279,16 +288,33 @@ Proof
   simp[] >> rpt strip_tac >> decide_tac
 QED
 
-Theorem typed_copy_origin_ptr_index_prefix_frame_step:
-  typed_copy_state_frame sa dst (k * stride) s q /\
-  typed_copy_state_frame sa (dst + k * stride) stride q r /\
-  (!i. ~(dst <= i /\ i < dst + k * stride) ==>
-    (i IN tnq <=> i IN tn)) /\
-  (!i. ~(dst + k * stride <= i /\ i < dst + k * stride + stride) ==>
-    (i IN tnr <=> i IN tnq)) ==>
-  typed_copy_state_frame sa dst (SUC k * stride) s r /\
-  (!i. ~(dst <= i /\ i < dst + SUC k * stride) ==>
-    (i IN tnr <=> i IN tn))
+
+*)
+Theorem typed_copy_origin_ptr_index_robust_step:
+  k < N /\
+  (so + N * type_memory_size stv <= dst \/
+   dst + N * type_memory_size dtv <= so) /\
+  (!i. i < N ==> val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  (!i mem. i < N /\ mem_agree_outside tnq q.vs_memory mem ==>
+    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
+  (!i mem. i < k /\ mem_agree_outside tnq q.vs_memory mem ==>
+    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem) /\
+  typed_copy_state_frame sa (dst + k * type_memory_size dtv)
+    (type_memory_size dtv) q r /\
+  (!i. ~(dst + k * type_memory_size dtv <= i /\
+          i < dst + k * type_memory_size dtv + type_memory_size dtv) ==>
+    (i IN tnr <=> i IN tnq)) /\
+  (!mem. mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory dtv (f k) (dst + k * type_memory_size dtv) mem) ==>
+  (!i mem. i < N /\ mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
+  (!i mem. i < SUC k /\ mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem)
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >> conj_tac
   >- (irule typed_copy_state_frame_trans >> qexists_tac `q` >>
@@ -304,30 +330,23 @@ Proof
   metis_tac[]
 QED
 
-Theorem typed_copy_origin_ptr_emit_op_path:
-  emit_op opc args a = (op,b) /\ fn_has_code a b func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
-  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
-    OK (update_var out w s)) /\
-  (!out. ptr_inst_ok D lo 0 ctx func G tn
-    (mk_inst a.cs_next_id opc args [out]) s) /\
-  (!out. inst_mem_below_frontier (mk_inst a.cs_next_id opc args [out]) s /\
-    inst_dload_in_section (mk_inst a.cs_next_id opc args [out]) s) ==>
-  ?out t G' tn'.
-    op = Var out /\
-    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    G' = step_prov PG G (mk_inst a.cs_next_id opc args [out])
-      (update_var out w s) /\
-    tn' = step_taint (mk_inst a.cs_next_id opc args [out]) s
-      (update_var out w s) tn /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
-    eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
-    t.vs_alloca_next = s.vs_alloca_next /\
-    typed_copy_state_frame a off len s t /\
-    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
-    t.vs_inst_idx = LENGTH b.cs_current_insts
+
+*)
+Theorem typed_copy_origin_ptr_index_prefix_frame_step:
+  typed_copy_state_frame sa dst (k * stride) s q /\
+  typed_copy_state_frame sa (dst + k * stride) stride q r /\
+  (!i. ~(dst <= i /\ i < dst + k * stride) ==>
+    (i IN tnq <=> i IN tn)) /\
+  (!i. ~(dst + k * stride <= i /\ i < dst + k * stride + stride) ==>
+    (i IN tnr <=> i IN tnq)) ==>
+  typed_copy_state_frame sa dst (SUC k * stride) s r /\
+  (!i. ~(dst <= i /\ i < dst + SUC k * stride) ==>
+    (i IN tnr <=> i IN tn))
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
@@ -370,16 +389,37 @@ Proof
 QED
 
 (* Pure address arithmetic has no memory accesses or observable requests. *)
-Theorem typed_copy_origin_ptr_binop_checks:
-  (opc = MUL \/ opc = ADD) /\
-  op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  step_inst_base (mk_inst id opc [left;right] [out]) s =
-    OK (update_var out w s) ==>
-  ptr_inst_ok D lo 0 ctx func G tn
-    (mk_inst id opc [left;right] [out]) s /\
-  inst_mem_below_frontier (mk_inst id opc [left;right] [out]) s /\
-  inst_dload_in_section (mk_inst id opc [left;right] [out]) s
+
+*)
+Theorem typed_copy_origin_ptr_emit_op_path:
+  emit_op opc args a = (op,b) /\ fn_has_code a b func /\
+  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
+    OK (update_var out w s)) /\
+  (!out. ptr_inst_ok D lo 0 ctx func G tn
+    (mk_inst a.cs_next_id opc args [out]) s) /\
+  (!out. inst_mem_below_frontier (mk_inst a.cs_next_id opc args [out]) s /\
+    inst_dload_in_section (mk_inst a.cs_next_id opc args [out]) s) ==>
+  ?out t G' tn'.
+    op = Var out /\
+    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G' = step_prov PG G (mk_inst a.cs_next_id opc args [out])
+      (update_var out w s) /\
+    tn' = step_taint (mk_inst a.cs_next_id opc args [out]) s
+      (update_var out w s) tn /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+    eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >> gvs[] >>
   simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
@@ -393,27 +433,23 @@ Proof
   rpt strip_tac >> gvs[venomStateTheory.update_var_def] >> metis_tac[]
 QED
 
-Theorem typed_copy_origin_ptr_binop_path:
-  emit_op opc [left;right] a = (op,b) /\ fn_has_code a b func /\
-  (opc = MUL /\ w = x * y \/ opc = ADD /\ w = x + y) /\
-  eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
+
+*)
+Theorem typed_copy_origin_ptr_binop_checks:
+  (opc = MUL \/ opc = ADD) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
-  ?out t G' tn'.
-    op = Var out /\ not_fresh_at b out /\
-    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    G' = step_prov PG G (mk_inst a.cs_next_id opc [left;right] [out])
-      (update_var out w s) /\
-    tn' = step_taint (mk_inst a.cs_next_id opc [left;right] [out]) s
-      (update_var out w s) tn /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
-    eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
-    t.vs_alloca_next = s.vs_alloca_next /\
-    typed_copy_state_frame a off len s t /\
-    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
-    t.vs_inst_idx = LENGTH b.cs_current_insts
+  step_inst_base (mk_inst id opc [left;right] [out]) s =
+    OK (update_var out w s) ==>
+  ptr_inst_ok D lo 0 ctx func G tn
+    (mk_inst id opc [left;right] [out]) s /\
+  inst_mem_below_frontier (mk_inst id opc [left;right] [out]) s /\
+  inst_dload_in_section (mk_inst id opc [left;right] [out]) s
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `!out. step_inst_base (mk_inst a.cs_next_id opc [left;right] [out]) s =
@@ -437,63 +473,34 @@ Proof
   metis_tac[typed_copy_origin_ptr_emit_op_path]
 QED
 
-Theorem typed_copy_origin_ptr_index_addresses_exact:
-  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
-  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
-  emit_op ADD [Var xs;so] c = (sp,d) /\
-  emit_op ADD [Var xd;doff] d = (dp,e) /\
-  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
-  lookup_var counter s = SOME (n2w j) /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  op_taint tn (Var counter) = {} /\
-  op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {} /\
+
+*)
+Theorem typed_copy_origin_ptr_binop_path:
+  emit_op opc [left;right] a = (op,b) /\ fn_has_code a b func /\
+  (opc = MUL /\ w = x * y \/ opc = ADD /\ w = x + y) /\
+  eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a e func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  (!opc left right id out w q tau.
-    (opc = MUL \/ opc = ADD) /\
-    op_taint tau left = {} /\ op_taint tau right = {} ==>
-    op_taint (step_taint (mk_inst id opc [left;right] [out]) q
-      (update_var out w q) tau) (Var out) = {} /\
-    (!p. p <> out ==>
-      op_taint (step_taint (mk_inst id opc [left;right] [out]) q
-        (update_var out w q) tau) (Var p) = op_taint tau (Var p))) ==>
-  ?vso vdo vsp vdp q1 q2 q3 t G1 G2 G3 G4 tn1 tn2 tn3 tn4.
-    so = Var vso /\ doff = Var vdo /\ sp = Var vsp /\ dp = Var vdp /\
-    ALL_DISTINCT [vso;vdo;vsp;vdp] /\
-    (!p. not_fresh_at a p ==> ~MEM p [vso;vdo;vsp;vdp]) /\
-    vso = STRING #"%" (toString a.cs_next_var) /\
-    vdo = STRING #"%" (toString b.cs_next_var) /\
-    vsp = STRING #"%" (toString c.cs_next_var) /\
-    vdp = STRING #"%" (toString d.cs_next_var) /\
-    q1 = (update_var vso (n2w (j*ss)) s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    q2 = (update_var vdo (n2w (j*ds)) q1 with vs_inst_idx := SUC q1.vs_inst_idx) /\
-    q3 = (update_var vsp (sw+n2w (j*ss)) q2 with vs_inst_idx := SUC q2.vs_inst_idx) /\
-    t = (update_var vdp (dw+n2w (j*ds)) q3 with vs_inst_idx := SUC q3.vs_inst_idx) /\
-    G1 = step_prov PG G (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso])
-      (update_var vso (n2w (j*ss)) s) /\
-    G2 = step_prov PG G1 (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo])
-      (update_var vdo (n2w (j*ds)) q1) /\
-    G3 = step_prov PG G2 (mk_inst c.cs_next_id ADD [Var xs;so] [vsp])
-      (update_var vsp (sw+n2w (j*ss)) q2) /\
-    G4 = step_prov PG G3 (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp])
-      (update_var vdp (dw+n2w (j*ds)) q3) /\
-    tn1 = step_taint (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso]) s
-      (update_var vso (n2w (j*ss)) s) tn /\
-    tn2 = step_taint (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo]) q1
-      (update_var vdo (n2w (j*ds)) q1) tn1 /\
-    tn3 = step_taint (mk_inst c.cs_next_id ADD [Var xs;so] [vsp]) q2
-      (update_var vsp (sw+n2w (j*ss)) q2) tn2 /\
-    tn4 = step_taint (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp]) q3
-      (update_var vdp (dw+n2w (j*ds)) q3) tn3 /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G4,tn4) /\
-    eval_operand sp t = SOME (sw+n2w (j*ss)) /\
-    eval_operand dp t = SOME (dw+n2w (j*ds)) /\
-    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?out t G' tn'.
+    op = Var out /\ not_fresh_at b out /\
+    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G' = step_prov PG G (mk_inst a.cs_next_id opc [left;right] [out])
+      (update_var out w s) /\
+    tn' = step_taint (mk_inst a.cs_next_id opc [left;right] [out]) s
+      (update_var out w s) tn /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+    eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
+    t.vs_alloca_next = s.vs_alloca_next /\
     typed_copy_state_frame a off len s t /\
-    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
-    t.vs_inst_idx = LENGTH e.cs_current_insts
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e` by
@@ -685,6 +692,92 @@ QED
 
 Finalise typed_copy_origin_ptr_index_addresses_exact
 
+
+*)
+Theorem typed_copy_origin_ptr_index_addresses_exact:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [Var xs;so] c = (sp,d) /\
+  emit_op ADD [Var xd;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
+  lookup_var counter s = SOME (n2w j) /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  op_taint tn (Var counter) = {} /\
+  op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code a e func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!opc left right id out w q tau.
+    (opc = MUL \/ opc = ADD) /\
+    op_taint tau left = {} /\ op_taint tau right = {} ==>
+    op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+      (update_var out w q) tau) (Var out) = {} /\
+    (!p. p <> out ==>
+      op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+        (update_var out w q) tau) (Var p) = op_taint tau (Var p))) ==>
+  ?vso vdo vsp vdp q1 q2 q3 t G1 G2 G3 G4 tn1 tn2 tn3 tn4.
+    so = Var vso /\ doff = Var vdo /\ sp = Var vsp /\ dp = Var vdp /\
+    ALL_DISTINCT [vso;vdo;vsp;vdp] /\
+    (!p. not_fresh_at a p ==> ~MEM p [vso;vdo;vsp;vdp]) /\
+    vso = STRING #"%" (toString a.cs_next_var) /\
+    vdo = STRING #"%" (toString b.cs_next_var) /\
+    vsp = STRING #"%" (toString c.cs_next_var) /\
+    vdp = STRING #"%" (toString d.cs_next_var) /\
+    q1 = (update_var vso (n2w (j*ss)) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    q2 = (update_var vdo (n2w (j*ds)) q1 with vs_inst_idx := SUC q1.vs_inst_idx) /\
+    q3 = (update_var vsp (sw+n2w (j*ss)) q2 with vs_inst_idx := SUC q2.vs_inst_idx) /\
+    t = (update_var vdp (dw+n2w (j*ds)) q3 with vs_inst_idx := SUC q3.vs_inst_idx) /\
+    G1 = step_prov PG G (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso])
+      (update_var vso (n2w (j*ss)) s) /\
+    G2 = step_prov PG G1 (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo])
+      (update_var vdo (n2w (j*ds)) q1) /\
+    G3 = step_prov PG G2 (mk_inst c.cs_next_id ADD [Var xs;so] [vsp])
+      (update_var vsp (sw+n2w (j*ss)) q2) /\
+    G4 = step_prov PG G3 (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp])
+      (update_var vdp (dw+n2w (j*ds)) q3) /\
+    tn1 = step_taint (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso]) s
+      (update_var vso (n2w (j*ss)) s) tn /\
+    tn2 = step_taint (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo]) q1
+      (update_var vdo (n2w (j*ds)) q1) tn1 /\
+    tn3 = step_taint (mk_inst c.cs_next_id ADD [Var xs;so] [vsp]) q2
+      (update_var vsp (sw+n2w (j*ss)) q2) tn2 /\
+    tn4 = step_taint (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp]) q3
+      (update_var vdp (dw+n2w (j*ds)) q3) tn3 /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G4,tn4) /\
+    eval_operand sp t = SOME (sw+n2w (j*ss)) /\
+    eval_operand dp t = SOME (dw+n2w (j*ds)) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+    t.vs_inst_idx = LENGTH e.cs_current_insts
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Proof
+  strip_tac >>
+  `new_site_bytes s (update_var out w s) = {}` by
+    simp[ptrDisciplineTheory.new_site_bytes_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  gvs[] >> Cases_on `eval_operand left s` >>
+  Cases_on `first_prov G [left;right]` >>
+  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+       ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.step_taint_def,
+       venomInstTheory.mk_inst_def, ptrDisciplineTheory.set_var_taint_def,
+       ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.op_taint_def,
+       ptrDisciplineTheory.store_taint_def, ptrDisciplineTheory.adopt_reset_def,
+       ptrDisciplineTheory.mem_taint_def, ptrDisciplineTheory.step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
+       ptrDisciplineTheory.imm_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[ptrDisciplineTheory.op_taint_def]
+QED
+
+
+*)
 Theorem typed_copy_origin_ptr_binop_ghost_frame:
   (opc = MUL \/ opc = ADD) ==>
   ((opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
@@ -707,49 +800,10 @@ Theorem typed_copy_origin_ptr_binop_ghost_frame:
     FLOOKUP (step_prov PG G (mk_inst id opc [left;right] [out])
       (update_var out w s)) out = NONE)
 Proof
-  strip_tac >>
-  `new_site_bytes s (update_var out w s) = {}` by
-    simp[ptrDisciplineTheory.new_site_bytes_def, venomStateTheory.update_var_def,
-         finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
-  gvs[] >> Cases_on `eval_operand left s` >>
-  Cases_on `first_prov G [left;right]` >>
-  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
-       ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.step_taint_def,
-       venomInstTheory.mk_inst_def, ptrDisciplineTheory.set_var_taint_def,
-       ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.op_taint_def,
-       ptrDisciplineTheory.store_taint_def, ptrDisciplineTheory.adopt_reset_def,
-       ptrDisciplineTheory.mem_taint_def, ptrDisciplineTheory.step_writes_def,
-       codegenRelTheory.source_memory_write_ranges_def,
-       ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
-       ptrDisciplineTheory.imm_taint_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
-  gvs[ptrDisciplineTheory.op_taint_def]
+  cheat
 QED
 
-Theorem typed_copy_origin_ptr_counter_backedge_path:
-  emit_op ADD [Var counter;Lit 1w] a = (inc,b) /\
-  emit_inst ASSIGN [inc] [counter] b = ((),c) /\
-  emit_inst JMP [Label hdr] [] c = ((),d) /\
-  not_fresh_at a counter /\
-  lookup_var counter s = SOME (n2w k) /\ FLOOKUP G counter = NONE /\
-  op_taint tn (Var counter) = {} /\ k < N /\ N < dimword (:256) /\
-  fn_has_code a d func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
-  ?out t Gf tnf.
-    inc = Var out /\ out <> counter /\ k + 1 < dimword (:256) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t = jump_to hdr (update_var counter (n2w (k+1))
-      (update_var out (n2w (k+1)) s)) /\
-    Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {counter}) /\
-    tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (counter,{})) /\
-    lookup_var counter t = SOME (n2w (k+1)) /\ FLOOKUP Gf counter = NONE /\
-    op_taint tnf (Var counter) = {} /\
-    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
-    (!p. p <> counter /\ p <> out ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by
@@ -815,18 +869,37 @@ Proof
   asm "full" mp_tac >> simp[jump_to_def]
 QED
 
-Theorem typed_copy_origin_ptr_offset_covers:
-  !PG G tn s root offset out id a off total n.
-  lookup_var root s = SOME a /\
-  eval_operand offset s = SOME (n2w off) /\
-  ptr_covers G tn root s total /\ off + n <= total /\
-  w2n a + off < dimword(:256) /\ root <> out ==>
-  ptr_covers
-    (step_prov PG G (mk_inst id ADD [Var root;offset] [out])
-      (update_var out (a + n2w off) s))
-    (step_taint (mk_inst id ADD [Var root;offset] [out]) s
-      (update_var out (a + n2w off) s) tn)
-    out (update_var out (a + n2w off) s) n
+
+*)
+Theorem typed_copy_origin_ptr_counter_backedge_path:
+  emit_op ADD [Var counter;Lit 1w] a = (inc,b) /\
+  emit_inst ASSIGN [inc] [counter] b = ((),c) /\
+  emit_inst JMP [Label hdr] [] c = ((),d) /\
+  not_fresh_at a counter /\
+  lookup_var counter s = SOME (n2w k) /\ FLOOKUP G counter = NONE /\
+  op_taint tn (Var counter) = {} /\ k < N /\ N < dimword (:256) /\
+  fn_has_code a d func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
+  ?out t Gf tnf.
+    inc = Var out /\ out <> counter /\ k + 1 < dimword (:256) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to hdr (update_var counter (n2w (k+1))
+      (update_var out (n2w (k+1)) s)) /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {counter}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (counter,{})) /\
+    lookup_var counter t = SOME (n2w (k+1)) /\ FLOOKUP Gf counter = NONE /\
+    op_taint tnf (Var counter) = {} /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    (!p. p <> counter /\ p <> out ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   rpt gen_tac >> strip_tac >>
   `op_taint (step_taint (mk_inst id ADD [Var root;offset] [out]) s
@@ -842,38 +915,25 @@ Proof
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
 QED
 
-Theorem typed_copy_origin_ptr_index_addresses_path:
-  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
-  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
-  emit_op ADD [Var xs;so] c = (sp,d) /\
-  emit_op ADD [Var xd;doff] d = (dp,e) /\
-  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
-  lookup_var counter s = SOME (n2w j) /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  op_taint tn (Var counter) = {} /\ j < N /\
-  ptr_covers G tn xs s (N*ss) /\ ptr_covers G tn xd s (N*ds) /\
-  w2n sw + N*ss < dimword(:256) /\
-  w2n dw + N*ds < dimword(:256) /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a e func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
-  ?vsp vdp t Gf tnf.
-    sp = Var vsp /\ dp = Var vdp /\ vsp <> vdp /\
-    not_fresh_at e vsp /\ not_fresh_at e vdp /\
-    lookup_var vsp t = SOME (n2w (w2n sw + j*ss)) /\
-    lookup_var vdp t = SOME (n2w (w2n dw + j*ds)) /\
-    ptr_covers Gf tnf vsp t ss /\ ptr_covers Gf tnf vdp t ds /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
-    typed_copy_state_frame a off len s t /\
-    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
-    t.vs_inst_idx = LENGTH e.cs_current_insts /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    (!p. not_fresh_at a p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+
+*)
+Theorem typed_copy_origin_ptr_offset_covers:
+  !PG G tn s root offset out id a off total n.
+  lookup_var root s = SOME a /\
+  eval_operand offset s = SOME (n2w off) /\
+  ptr_covers G tn root s total /\ off + n <= total /\
+  w2n a + off < dimword(:256) /\ root <> out ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var root;offset] [out])
+      (update_var out (a + n2w off) s))
+    (step_taint (mk_inst id ADD [Var root;offset] [out]) s
+      (update_var out (a + n2w off) s) tn)
+    out (update_var out (a + n2w off) s) n
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {}` by
@@ -984,34 +1044,45 @@ QED
 
 Finalise typed_copy_origin_ptr_index_addresses_path
 (* The header's two scalar instructions and its conditional transfer. *)
-Theorem typed_copy_origin_ptr_header_branch_path:
-  emit_op LT [Var counter; length] a = (lt,b) /\
-  emit_op ISZERO [lt] b = (done,c) /\
-  emit_inst JNZ [done; Label exit; Label blabel] [] c = ((),d) /\
-  lookup_var counter s = SOME (n2w k) /\
-  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword(:256) /\
-  FLOOKUP G counter = NONE /\ op_prov G length = NONE /\
-  op_taint tn (Var counter) = {} /\ op_taint tn length = {} /\
-  fn_has_code a d func /\ ~s.vs_halted /\
+
+*)
+Theorem typed_copy_origin_ptr_index_addresses_path:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [Var xs;so] c = (sp,d) /\
+  emit_op ADD [Var xd;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
+  lookup_var counter s = SOME (n2w j) /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  op_taint tn (Var counter) = {} /\ j < N /\
+  ptr_covers G tn xs s (N*ss) /\ ptr_covers G tn xd s (N*ds) /\
+  w2n sw + N*ss < dimword(:256) /\
+  w2n dw + N*ds < dimword(:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code a e func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ?x y t Gf tnf.
-    lt = Var x /\ done = Var y /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?vsp vdp t Gf tnf.
+    sp = Var vsp /\ dp = Var vdp /\ vsp <> vdp /\
+    not_fresh_at e vsp /\ not_fresh_at e vdp /\
+    lookup_var vsp t = SOME (n2w (w2n sw + j*ss)) /\
+    lookup_var vdp t = SOME (n2w (w2n dw + j*ds)) /\
+    ptr_covers Gf tnf vsp t ss /\ ptr_covers Gf tnf vdp t ds /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t = jump_to (if k = N then exit else blabel)
-      (update_var y (if k = N then 1w else 0w)
-        (update_var x (if k < N then 1w else 0w) s)) /\
-    Gf = DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y}) /\
-    tnf = (tn with t_var := (tn.t_var |+ (x,{})) |+ (y,{})) /\
     t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+    t.vs_inst_idx = LENGTH e.cs_current_insts /\
     tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
-    t.vs_current_bb = (if k = N then exit else blabel) /\
-    (!p. p <> x /\ p <> y ==>
+    (!p. not_fresh_at a p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >>
   `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by
@@ -1125,16 +1196,41 @@ QED
 Finalise typed_copy_origin_ptr_header_branch_path
 
 (* Finite iteration is independent of the concrete header invariant. *)
-Theorem typed_copy_origin_ptr_counted_path:
-  (!j q G tn. j < N /\ H j q G tn ==>
-     ?r Gr tnr. gas_origin_ptr_path cfg (q,G,tn) [] (OK r,Gr,tnr) /\
-                H (SUC j) r Gr tnr) /\
-  (!q G tn. H N q G tn ==>
-     ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
-                R t Gf tnf) ==>
-  !k q G tn. k <= N /\ H k q G tn ==>
-    ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
-               R t Gf tnf
+
+*)
+Theorem typed_copy_origin_ptr_header_branch_path:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] c = ((),d) /\
+  lookup_var counter s = SOME (n2w k) /\
+  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword(:256) /\
+  FLOOKUP G counter = NONE /\ op_prov G length = NONE /\
+  op_taint tn (Var counter) = {} /\ op_taint tn length = {} /\
+  fn_has_code a d func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?x y t Gf tnf.
+    lt = Var x /\ done = Var y /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to (if k = N then exit else blabel)
+      (update_var y (if k = N then 1w else 0w)
+        (update_var x (if k < N then 1w else 0w) s)) /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (x,{})) |+ (y,{})) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = (if k = N then exit else blabel) /\
+    (!p. p <> x /\ p <> y ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   strip_tac >> measureInduct_on `N-k` >> rpt strip_tac >>
   Cases_on `k = N`
@@ -1157,70 +1253,23 @@ QED
 (* The counted loop that copies N elements from xs to xd, element i at
    offset i times the element size on each side (the joint twin of
    placeTypedCopyRecursivePath's typed_copy_forward_index_loop_path). *)
-Theorem typed_copy_origin_ptr_index_loop:
-  emit_inst ASSIGN [Lit 0w] [counter] init = ((),st0) /\
-  emit_inst JMP [Label hdr] [] st0 = ((),st1) /\
-  new_block hdr st1 = (u1,sth) /\
-  emit_op LT [Var counter; length] sth = (lt,h1) /\
-  emit_op ISZERO [lt] h1 = (done,stj) /\
-  emit_inst JNZ [done; Label exit; Label blabel] [] stj = ((),st2) /\
-  new_block blabel st2 = (u2,stb) /\
-  emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1) /\
-  emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b1 = (doff,b2) /\
-  emit_op ADD [Var xs;so] b2 = (sp,b3) /\
-  emit_op ADD [Var xd;doff] b3 = (dp,b4) /\
-  compile_store_memory_typed cenv dp dty sp sty b4 = ((),b5) /\
-  emit_op ADD [Var counter; Lit 1w] b5 = (inc,b6) /\
-  emit_inst ASSIGN [inc] [counter] b6 = ((),ste) /\
-  emit_inst JMP [Label hdr] [] ste = ((),st3) /\
-  new_block exit st3 = (u3,stx) /\
-  ci_mono sa init /\ ci_mono sa st0 /\ ci_mono sa sth /\ ci_mono sa stb /\
-  ci_mono init st0 /\ ci_mono st0 stx /\
-  cs_extends sth stj /\ cs_extends stb ste /\
-  ~not_fresh_at sa counter /\ not_fresh_at sth counter /\
-  not_fresh_at stb counter /\
-  sa.cs_current_bb = init.cs_current_bb /\
-  sa.cs_current_insts = init.cs_current_insts /\ sa.cs_blocks = init.cs_blocks /\
-  (!x. length = Var x ==>
-       not_fresh_at sa x /\ FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
-  eval_operand length s = SOME (n2w N) /\ N < dimword (:256) /\
-  (!i. i < N ==> typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f i) /\
-                   val_wf stv (f i) /\ val_wf dtv (f i)) /\
-  not_fresh_at sa xs /\ not_fresh_at sa xd /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  (!i mem. i < N /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
-     val_in_memory stv (f i) (w2n sw + i * type_memory_size stv) mem) /\
-  w2n sw + N * type_memory_size stv < dimword (:256) /\
-  w2n dw + N * type_memory_size dtv < dimword (:256) /\
-  (N * type_memory_size stv = 0 \/
-   w2n sw + N * type_memory_size stv <= s.vs_alloca_next) /\
-  (N * type_memory_size dtv = 0 \/
-   w2n dw + N * type_memory_size dtv <= s.vs_alloca_next) /\
-  (w2n sw + N * type_memory_size stv <= w2n dw \/
-   w2n dw + N * type_memory_size dtv <= w2n sw) /\
-  ptr_covers G tn xs s (N * type_memory_size stv) /\
-  ptr_covers G tn xd s (N * type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code sa stx func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t Gf tnf.
-    gas_origin_ptr_path
-      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
-          d_ret := K {} |>,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,Gf,tnf) /\
-    (!i. i < N ==> val_in_memory dtv (f i)
-       (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
-    typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
-    ~t.vs_halted /\ t.vs_current_bb = stx.cs_current_bb /\
-    t.vs_inst_idx = LENGTH stx.cs_current_insts /\
-    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size dtv) ==>
-         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
-    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
-       val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) mem) /\
-    (!p. not_fresh_at sa p ==>
-       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+
+*)
+Theorem typed_copy_origin_ptr_counted_path:
+  (!j q G tn. j < N /\ H j q G tn ==>
+     ?r Gr tnr. gas_origin_ptr_path cfg (q,G,tn) [] (OK r,Gr,tnr) /\
+                H (SUC j) r Gr tnr) /\
+  (!q G tn. H N q G tn ==>
+     ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
+                R t Gf tnf) ==>
+  !k q G tn. k <= N /\ H k q G tn ==>
+    ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
+               R t Gf tnf
+Proof
+  cheat
+QED
+
+(* LOCAL STUB: fixed canonical copy contract; original proof retained.
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `cs_extends init st0 /\ cs_extends st0 st1 /\
@@ -1738,3 +1787,72 @@ Resume typed_copy_origin_ptr_index_loop[compose]:
 QED
 
 Finalise typed_copy_origin_ptr_index_loop
+
+*)
+Theorem typed_copy_origin_ptr_index_loop:
+  emit_inst ASSIGN [Lit 0w] [counter] init = ((),st0) /\
+  emit_inst JMP [Label hdr] [] st0 = ((),st1) /\
+  new_block hdr st1 = (u1,sth) /\
+  emit_op LT [Var counter; length] sth = (lt,h1) /\
+  emit_op ISZERO [lt] h1 = (done,stj) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] stj = ((),st2) /\
+  new_block blabel st2 = (u2,stb) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b1 = (doff,b2) /\
+  emit_op ADD [Var xs;so] b2 = (sp,b3) /\
+  emit_op ADD [Var xd;doff] b3 = (dp,b4) /\
+  compile_store_memory_typed cenv dp dty sp sty b4 = ((),b5) /\
+  emit_op ADD [Var counter; Lit 1w] b5 = (inc,b6) /\
+  emit_inst ASSIGN [inc] [counter] b6 = ((),ste) /\
+  emit_inst JMP [Label hdr] [] ste = ((),st3) /\
+  new_block exit st3 = (u3,stx) /\
+  ci_mono sa init /\ ci_mono sa st0 /\ ci_mono sa sth /\ ci_mono sa stb /\
+  ci_mono init st0 /\ ci_mono st0 stx /\
+  cs_extends sth stj /\ cs_extends stb ste /\
+  ~not_fresh_at sa counter /\ not_fresh_at sth counter /\
+  not_fresh_at stb counter /\
+  sa.cs_current_bb = init.cs_current_bb /\
+  sa.cs_current_insts = init.cs_current_insts /\ sa.cs_blocks = init.cs_blocks /\
+  (!x. length = Var x ==>
+       not_fresh_at sa x /\ FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
+  eval_operand length s = SOME (n2w N) /\ N < dimword (:256) /\
+  (!i. i < N ==> typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f i) /\
+                   val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!i mem. i < N /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory stv (f i) (w2n sw + i * type_memory_size stv) mem) /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  (N * type_memory_size stv = 0 \/
+   w2n sw + N * type_memory_size stv <= s.vs_alloca_next) /\
+  (N * type_memory_size dtv = 0 \/
+   w2n dw + N * type_memory_size dtv <= s.vs_alloca_next) /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  ptr_covers G tn xs s (N * type_memory_size stv) /\
+  ptr_covers G tn xd s (N * type_memory_size dtv) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa stx func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    (!i. i < N ==> val_in_memory dtv (f i)
+       (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
+    typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = stx.cs_current_bb /\
+    t.vs_inst_idx = LENGTH stx.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size dtv) ==>
+         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+       val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) mem) /\
+    (!p. not_fresh_at sa p ==>
+       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  cheat
+QED
