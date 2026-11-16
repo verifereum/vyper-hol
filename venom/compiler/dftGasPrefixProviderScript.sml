@@ -5,6 +5,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasSimSwap dftGasSimLocalBoundary dftGasSimSchedule
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
   dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
+  dftGasFromListTracePrefix[qualified,ignore_grammar]
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
   dftGasToListReachWitness dftGasToListVisitReplay
   dftGasFromListLocator dftGasFromListContextReach
@@ -7316,6 +7317,169 @@ Resume uniform_native_prefix_packet[guarded_join]:
 QED
 
 Finalise uniform_native_prefix_packet
+
+Theorem dft_prefix_witnesses:
+  !fuel C C' fn fn' s.
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\
+    MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+    dft_fn_rel fn fn' /\ strict_dom_vars_defined fn s /\
+    fn_reachable fn s.vs_current_bb /\
+    ctx_labels_bound C s.vs_labels /\
+    ctx_labels_bound C' s.vs_labels /\ ~s.vs_call_ctx.cc_static /\
+    terminates (run_blocks fuel C' fn' s) /\
+    gas_count_blocks fuel C' fn' s <= LENGTH s.vs_gas_readings
+    ==>
+    ?raw_slots sites unused.
+      LENGTH raw_slots = LENGTH sites /\
+      PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) s.vs_gas_readings /\
+      (!t.
+        (?ir. run_blocks fuel C' fn' s = IntRet ir t) ==>
+        EVERY IS_SOME raw_slots /\ unused = t.vs_gas_readings) /\
+      (!gobs tail.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+        (?extra.
+          sites = gas_events_blocks fuel C fn
+            (s with vs_gas_readings := gobs ++ tail) ++ extra) /\
+        ((?fuel_src. terminates
+          (run_blocks fuel_src C fn (s with vs_gas_readings := gobs ++ tail)))
+         ==>
+        terminates
+          (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)) /\
+        dft_res_rel
+          (restore_result []
+            (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)))
+          (restore_result [] (run_blocks fuel C' fn' s)) /\
+        (!vs' nm lbl.
+          C.ctx_entry = SOME nm /\ C'.ctx_entry = SOME nm /\
+          lookup_function nm C.ctx_functions = SOME fn /\
+          lookup_function nm C'.ctx_functions = SOME fn' /\
+          fn_entry_label fn = SOME lbl /\ fn_entry_label fn' = SOME lbl /\
+          s = vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                         vs_inst_idx := 0 |> /\ o1_run_state_ok vs' ==>
+          ?orc.
+            (!f. gas_res_rel
+              (run_context f C (vs' with vs_gas_readings := gobs ++ tail))
+              (ev_context orc f C vs')) /\
+            (!f. gas_res_rel (run_context f C' vs')
+                            (ev_context orc f C' vs')) /\
+            (!p d f inst t. ev_reachable orc vs' C p d f inst t ==>
+               ?ws. raw_reachable (vs' with vs_gas_readings := gobs ++ tail)
+                         C f inst (t with vs_gas_readings := ws)) /\
+            (!f inst t. raw_reachable vs' C' f inst t ==>
+               ?p d. ev_reachable orc vs' C' p d f inst
+                         (t with vs_gas_readings := vs'.vs_gas_readings))) /\
+        (!t.
+          (?ir. run_blocks fuel C' fn' s = IntRet ir t) ==>
+          gas_events_blocks fuel C fn
+            (s with vs_gas_readings := gobs ++ tail) = sites /\
+          residual_result tail (run_blocks fuel C' fn' s)
+            (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail))))) /\
+      (!gobs tail f_src.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+        ?extra.
+          sites = gas_events_blocks f_src C fn
+            (s with vs_gas_readings := gobs ++ tail) ++ extra)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all uniform_native_prefix_packet >>
+  disch_then (qspecl_then [`[]`, `0`] mp_tac) >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  disch_then (qx_choose_then `keys` (qx_choose_then `sites`
+    (qx_choose_then `unused` strip_assume_tac))) >>
+  qpat_x_assum `fn' = _` SUBST_ALL_TAC >>
+  qexistsl_tac [`MAP (ALOOKUP (trace_gas
+    (dftGasFromListTraceDefs$trace_blocks [] 0 fuel C' (dft_fn fn) s))) keys`, `sites`, `unused`] >>
+  asm_rewrite_tac [LENGTH_MAP] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- suspend "fillings" >>
+  rpt strip_tac >>
+  qpat_x_assum `!g tail. _` drule >>
+  disch_then (qspec_then `tail` strip_assume_tac) >>
+  qpat_x_assum `!n. ?k. _` (qspec_then `f_src` strip_assume_tac) >>
+  qexists_tac `DROP k sites` >> simp[TAKE_DROP]
+QED
+
+Resume dft_prefix_witnesses[fillings]:
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!g tail. _` drule >>
+  disch_then (qspec_then `tail` strip_assume_tac) >>
+  conj_tac
+  >- (qpat_x_assum `!n. ?k. _` (qspec_then `fuel` strip_assume_tac) >>
+      qexists_tac `DROP k sites` >> simp[TAKE_DROP]) >>
+  strip_tac >>
+  qpat_x_assum `(?n. terminates _) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  asm_rewrite_tac[] >> conj_tac >- suspend "entry_oracle" >> metis_tac[]
+QED
+
+Resume dft_prefix_witnesses[entry_oracle]:
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `MAP (ALOOKUP obs) keys` >>
+  `LENGTH keys = LENGTH gobs` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  `EVERY wf_function C.ctx_functions /\ EVERY wf_function C'.ctx_functions` by
+    (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST obs)` by
+    (qsuff_tac `ALL_DISTINCT (MAP FST (trace_gas
+       (dftGasFromListTraceDefs$trace_context fuel C' vs')))`
+     >- simp[Abbr `obs`, dftGasFromListTraceDefsTheory.trace_context_def,
+             dftGasFromListTraceDefsTheory.trace_function_def] >>
+     irule trace_context_gas_names_distinct >>
+     qpat_x_assum `o1_ctx_shape C'` mp_tac >>
+     simp_tac bool_ss [o1_ctx_shape_def, ctx_inst_ids_distinct_def] >>
+     strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+     BETA_TAC >> strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  qabbrev_tac `orc = (\key. case ALOOKUP (obs ++ ZIP (keys,gobs)) key of
+    NONE => 0w | SOME w => w)` >>
+  qexists_tac `orc` >> irule fixed_shared_oracle_replay >>
+  asm_rewrite_tac[] >> conj_tac >- suspend "target_agreement" >>
+  suspend "source_agreement"
+QED
+
+Resume dft_prefix_witnesses[source_agreement]:
+  gen_tac >>
+  `trace_agrees orc (dftGasFromListTraceDefs$trace_blocks [] 0 n C fn
+    (s with vs_gas_readings := gobs ++ tail))` by
+    (simp_tac pure_ss [Abbr `orc`] >>
+     irule (cj 2 native_lookup_fill_subtrace_agreement) >>
+     simp[] >>
+     qpat_x_assum `!n. ?k. _` (qspec_then `n` strip_assume_tac) >>
+     gvs[rich_listTheory.ZIP_TAKE, EVERY_MEM] >>
+     metis_tac[rich_listTheory.MEM_TAKE]) >>
+  drule (cj 3 native_trace_oracle_agreement) >>
+  disch_then (qspec_then `vs'.vs_gas_readings` mp_tac) >>
+  simp[dftGasToListTraceTheory.trace_context_def,
+       dftGasToListTraceTheory.trace_function_def]
+QED
+
+Resume dft_prefix_witnesses[target_agreement]:
+  gen_tac >>
+  qsuff_tac `trace_agrees orc
+    (dftGasFromListTraceDefs$trace_blocks [] 0 n C' (dft_fn fn) s)`
+  >- simp[dftGasFromListTraceDefsTheory.trace_context_def,
+          dftGasFromListTraceDefsTheory.trace_function_def] >>
+  simp_tac pure_ss [Abbr `orc`] >>
+  irule (cj 1 native_lookup_fill_subtrace_agreement) >>
+  asm_rewrite_tac[] >>
+  simp_tac pure_ss [Abbr `obs`] >>
+  Cases_on `n <= fuel`
+  >- (`?suffix. dftGasFromListTraceDefs$trace_blocks [] 0 fuel C' (dft_fn fn) s =
+        dftGasFromListTraceDefs$trace_blocks [] 0 n C' (dft_fn fn) s ++ suffix` by
+        (irule (cj 3 dftGasFromListTracePrefixTheory.trace_prefix) >> simp[]) >>
+      asm_rewrite_tac[trace_gas_append] >> simp[EVERY_MEM, MEM_APPEND]) >>
+  `dftGasFromListTraceDefs$trace_blocks [] 0 n C' (dft_fn fn) s =
+   dftGasFromListTraceDefs$trace_blocks [] 0 fuel C' (dft_fn fn) s` by
+    (irule (cj 3 dftGasFromListTracePrefixTheory.trace_stable) >>
+     reverse conj_tac >- decide_tac >>
+     Cases_on `run_blocks fuel C' (dft_fn fn) s` >>
+     fs[passSimulationDefsTheory.terminates_def]) >>
+  gvs[EVERY_MEM]
+QED
+
+Finalise dft_prefix_witnesses
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
