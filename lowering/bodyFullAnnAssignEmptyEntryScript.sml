@@ -2,7 +2,7 @@
 Theory bodyFullAnnAssignEmptyEntry
 Ancestors
   annAssignPtrEmptyLayout annAssignPtrFacts bodyFullPreds bodySimFull
-  exprSimDeclEnv bodySim exprSimHypsDefs
+  bodySim exprSimHypsDefs
   gasShadowCompileStmtHelpers gasShadowCompileStmtBase gasShadowCompile
   stmtSimDecl stmtSimProps exprLoweringProps emitHelperProps loweringSlice
   compileEnv exprLowering stmtLowering loweringPosts vyperTypeSystem
