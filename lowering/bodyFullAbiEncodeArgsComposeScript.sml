@@ -2,6 +2,7 @@
 Theory bodyFullAbiEncodeArgsCompose
 Ancestors
   bodyFullAbiEncodeArgsFrame bodyFullAbiEncodeReadResources
+  bodyFullAbiEncodeOutcomeFrame bodyFullAbiEncodeArgsPost
   bodyFullPreds abiEncodeArgsSim abiEncodeArgsCase gasOutcomeFullCompose
   gasShadowCompile gasShadowCompileHelpers gasShadowState gasShadowCompileConvert
   exprLoweringProps exprLowering compileEnv
@@ -58,7 +59,7 @@ Theorem abi_encode_args_full_from_step:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. op = Var x ==> not_fresh_at sb x) /\
       (~(~is_word_type (expr_type e) /\ exprs_can_mutate ce rest) ==>
-        expr_store_bound cx (expr_type e) v op t /\
+        expr_store_bound cx (post_value_type ce e) v op t /\
         ptr_val_ok cx (post_value_type ce e) v op G tn t /\
         (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op G t) /\
         (~is_word_type (post_value_type ce e) ==> !w.
@@ -294,7 +295,7 @@ Resume abi_encode_args_full_from_step[tail_bind]:
   disch_then (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
   disch_then drule_all >>
   disch_then (qspec_then `PG` assume_tac) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ (eval_exprs cx args) _ _ _` mp_tac >>
+  dxrule abi_encode_outcome_labels >>
   qmatch_abbrev_tac `gas_outcome_full _ _ _ _ _ _ tailQ tailR ==> _` >>
   disch_tac >>
   qabbrev_tac `cons_res = (\res : value list + exception. case res of INL vs => INL (v::vs) | INR ex => INR ex)` >>
@@ -328,6 +329,44 @@ Resume abi_encode_args_full_from_step[cons_resources]:
   `val_wf tv v` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id <= sb.cs_next_id /\
    sm.cs_next_var <= sb.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
+  `storage_trace_domain cx st0 es.storage_trace` by
+    (`storage_trace_frame (bind (eval_expr cx h) (read_result cx))` by
+       (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+             vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+     qpat_x_assum `storage_trace_frame _` mp_tac >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+     disch_then (qspecl_then
+       [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`, `es.storage_trace`] mp_tac) >>
+     Cases_on `bind (eval_expr cx h) (read_result cx)
+       (es with <|gas_obs := gas_explicit marks s0.vs_gas_readings; storage_trace := []|>)` >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `!tail. bind (eval_expr cx h) _ _ = _` (qspec_then `[]` mp_tac) >>
+     pure_rewrite_tac[APPEND_NIL] >>
+     qpat_x_assum `bind _ _ (es with gas_obs := _) = _` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >> strip_tac >>
+     qpat_x_assum `storage_trace_domain cx st0 mid'.storage_trace` mp_tac >>
+     qpat_x_assum `r with storage_trace := _ = _`
+       (mp_tac o AP_TERM ``\s:evaluation_state. s.storage_trace``) >>
+     simp_tac (srw_ss()) [] >> disch_then (fn th => rewrite_tac[GSYM th]) >>
+     strip_tac >> drule storage_trace_domain_prefix >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es s0` by
+    (qpat_x_assum `!H. valid_horizon _ _ _ es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     fs[storage_trace_domain_def]) >>
+  `~exprs_can_mutate ce args ==> ee.scopes = mid'.scopes` by
+    (strip_tac >>
+     qpat_x_assum `!tail. bind (eval_exprs cx args) _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     Cases_on `eval_exprs cx args (mid' with gas_obs := xs)` >>
+     Cases_on `q` >> simp[bind_def, return_def] >> strip_tac >> gvs[] >>
+     drule_all abiEncodeArgsScopesTheory.eval_exprs_no_mutation_scopes >> simp[]) >>
+  `~is_word_type (expr_type h) /\ exprs_can_mutate ce args ==>
+    ?x w. op = Var x /\ lookup_var x t = SOME w /\
+      val_footprint tv v <= type_memory_size tv /\
+      (!n b k. local_region ce mid'.scopes t n b k ==>
+        w2n w + type_memory_size tv <= b \/ b+k <= w2n w) /\
+      mid.cs_next_id < sm.cs_next_id` by suspend "owned_frame_facts" >>
   qexists `tv::tvs` >> simp[] >>
   conj_asm1_tac >- suspend "cons_post" >>
   conj_tac >- suspend "cons_indexed" >>
@@ -388,12 +427,7 @@ Resume abi_encode_args_full_from_step[positive_borrowed]:
        val_in_memory tv v (w2n w) mem)` by
     (irule (INST_TYPE [alpha |-> ``:256``] (cj 2 abi_encode_arg_positive_resources)) >>
      simp[] >> metis_tac [NOT_LESS, EQ_LESS_EQ]) >>
-  `ee.scopes = mid'.scopes` by
-    (qpat_x_assum `!tail. bind (eval_exprs cx args) _ _ = _`
-       (qspec_then `[]` mp_tac) >>
-     Cases_on `eval_exprs cx args (mid' with gas_obs := xs)` >>
-     Cases_on `q` >> simp[bind_def, return_def] >> strip_tac >> gvs[] >>
-     drule_all abiEncodeArgsScopesTheory.eval_exprs_no_mutation_scopes >> simp[]) >>
+  `ee.scopes = mid'.scopes` by simp[] >>
   `stmt_state_rel (storage_trace_horizon mid'.storage_trace) ctx func ce cx mid' t` by
     (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ mid' _ /\ _`
        (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
@@ -408,38 +442,13 @@ Resume abi_encode_args_full_from_step[positive_borrowed]:
     (fs[] >> qpat_x_assum `ptr_covers G1 tn1 x t _` mp_tac >> simp[])) >> simp[]
 QED
 
-Resume abi_encode_args_full_from_step[positive_owned]:
-  fs[] >>
+Resume abi_encode_args_full_from_step[owned_frame_facts]:
+  strip_tac >> fs[] >>
   `val_footprint tv v <= type_memory_size tv` by
     metis_tac[exprSimPropsTheory.val_footprint_le] >>
   `!n b k. local_region ce mid'.scopes t n b k ==>
     w2n w + type_memory_size tv <= b \/ b+k <= w2n w` by
     (rpt strip_tac >>
-     `storage_trace_domain cx st0 es.storage_trace` by
-       (`storage_trace_frame (bind (eval_expr cx h) (read_result cx))` by
-          (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
-           simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
-                vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
-        qpat_x_assum `storage_trace_frame _` mp_tac >>
-        simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
-        disch_then (qspecl_then
-          [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`, `es.storage_trace`] mp_tac) >>
-        Cases_on `bind (eval_expr cx h) (read_result cx)
-          (es with <|gas_obs := gas_explicit marks s0.vs_gas_readings; storage_trace := []|>)` >>
-        simp[] >> strip_tac >>
-        qpat_x_assum `!tail. bind (eval_expr cx h) _ _ = _` (qspec_then `[]` mp_tac) >>
-        pure_rewrite_tac[APPEND_NIL] >>
-        qpat_x_assum `bind _ _ (es with gas_obs := _) = _` (fn th => rewrite_tac[th]) >>
-        simp_tac (srw_ss()) [] >> strip_tac >>
-        qpat_x_assum `storage_trace_domain cx st0 mid'.storage_trace` mp_tac >>
-        qpat_x_assum `r with storage_trace := _ = _`
-          (mp_tac o AP_TERM ``\s:evaluation_state. s.storage_trace``) >>
-        simp_tac (srw_ss()) [] >> disch_then (fn th => rewrite_tac[GSYM th]) >>
-        strip_tac >> drule storage_trace_domain_prefix >> simp[]) >>
-     `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es s0` by
-       (qpat_x_assum `!H. valid_horizon _ _ _ es.storage_trace ==> _`
-          (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-        fs[storage_trace_domain_def]) >>
      `local_region ce es.scopes s0 n b k` by
        (irule (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.local_region_kept) >>
         conj_tac
@@ -461,6 +470,12 @@ Resume abi_encode_args_full_from_step[positive_owned]:
      simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
      pairarg_tac >> simp[] >> strip_tac >>
      drule emitted_insts_emit_op_local >> fs[ci_mono_def] >> decide_tac) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!n b k. local_region ce mid'.scopes t n b k ==> _` drule >> decide_tac
+QED
+
+Resume abi_encode_args_full_from_step[positive_owned]:
+  fs[] >>
   drule_at (Pat `wb_frame _ _ _ _ _ _`) abi_encode_owned_args_frame >>
   disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -475,11 +490,35 @@ Resume abi_encode_args_full_from_step[positive_owned]:
 QED
 
 Resume abi_encode_args_full_from_step[cons_post]:
-  FAIL_TAC "cons post"
+  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args`
+  >- (fs[] >>
+      `~is_word_type (lowered_value_type ce h)` by
+        metis_tac[expr_body_pre_lowered_fits, exprSimLayoutTransportTheory.compatible_word_type] >>
+      irule abi_args_post_cons_captured >>
+      qexistsl_tac [`storage_trace_horizon es.storage_trace`,
+        `storage_trace_horizon mid'.storage_trace`, `mid.cs_next_id`,
+        `w2n w`, `type_memory_size tv`, `t`, `tv`, `w`] >>
+      simp[eval_operand_def] >> metis_tac[]) >>
+  `~is_word_type (lowered_value_type ce h) ==> ee.scopes = mid'.scopes` by
+    (metis_tac[expr_body_pre_lowered_fits, exprSimLayoutTransportTheory.compatible_word_type]) >>
+  `?w. eval_operand op t = SOME w` by
+    (qpat_x_assum `expr_val_rel _ _ _ _ t` mp_tac >>
+     simp[expr_val_rel_def] >> metis_tac[]) >>
+  `eval_operand op t = eval_operand op t'` by
+    (Cases_on `op` >> simp[eval_operand_def] >>
+     metis_tac[abi_args_operand_kept, eval_operand_def]) >>
+  irule abi_encode_args_post_cons_uncaptured_eq >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`,
+    `storage_trace_horizon mid'.storage_trace`, `env`, `t`] >> simp[]
 QED
 
 Resume abi_encode_args_full_from_step[cons_ghost]:
-  FAIL_TAC "cons ghost"
+  irule wordArgsPtrTheory.ghost_kept_at_wb_trans >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`, `func`, `mid'`] >>
+  simp[] >> qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def]
 QED
 
 Finalise abi_encode_args_full_from_step
