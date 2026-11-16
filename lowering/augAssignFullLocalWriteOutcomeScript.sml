@@ -145,7 +145,9 @@ Theorem augassign_local_write_outcome_full:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>

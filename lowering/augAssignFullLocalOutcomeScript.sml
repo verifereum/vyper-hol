@@ -108,7 +108,9 @@ Theorem augassign_local_numeric_abort_full[local]:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `bop <> In /\ bop <> NotIn` by
@@ -128,7 +130,7 @@ Proof
   qexistsl [`Gf`, `mid`, `Abort Revert_abort (u with vs_inst_idx := j)`,
     `INR (Error (RuntimeError msg))`, `tf`] >>
   simp[bind_def, lift_sum_def, raise_def, exit_result_def,
-    stmt_exit_ptr_def, expr_exit_def] >>
+    stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
   rpt strip_tac >> first_x_assum irule >>
   metis_tac[ghost_inv_at_def]
 QED
@@ -211,7 +213,9 @@ Theorem augassign_local_numeric_success_full[local]:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   drule_all augassign_local_success_source_full >> strip_tac >>
@@ -344,7 +348,7 @@ Theorem augassign_local_continuation_ready_full[local]:
   storage_trace_domain cx st0 mid.storage_trace /\ ~t.vs_halted /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_post H ctx func cenv cx e es se sb s mid v rhs t /\
-    expr_store_bound cx (expr_type e) v rhs t /\
+    expr_store_bound cx (post_value_type cenv e) v rhs t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -371,7 +375,9 @@ Theorem augassign_local_continuation_ready_full[local]:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -470,7 +476,7 @@ Theorem augassign_local_continuation_full:
   storage_trace_domain cx st0 mid.storage_trace /\ ~t.vs_halted /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_post H ctx func cenv cx e es se sb s mid v rhs t /\
-    expr_store_bound cx (expr_type e) v rhs t /\
+    expr_store_bound cx (post_value_type cenv e) v rhs t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -497,7 +503,9 @@ Theorem augassign_local_continuation_full:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
