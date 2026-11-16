@@ -19,7 +19,7 @@ Theorem body_full_memory_copy_path:
   w2n sw + n < dimword (:256) /\ w2n dw + n < dimword (:256) /\
   (n = 0 \/ w2n sw + n <= s.vs_alloca_next) /\
   (n = 0 \/ w2n dw + n <= s.vs_alloca_next) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

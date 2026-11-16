@@ -1,6 +1,7 @@
 (* Stage an aggregate in a scratch allocation before relayout. *)
 Theory bodyFullMemoryStage
 Ancestors
+  bodyFullHashKeccakFixed
   bodyFullMemoryFrames bodyFullMemoryCopy bodyPtrMakeArrayCopyStateFrame
   robustCopyTransportPtr loweringPosts exprLoweringProps exprSimAlloc
   localPtrsProps compileEnv typedMemoryCopy fragGasOriginPtr fragGasSeqPtr
@@ -17,7 +18,7 @@ Theorem body_full_memory_stage_path:
   compile_copy_memory buf.buf_operand (Var xs) n sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -69,9 +70,25 @@ Theorem body_full_memory_stage_path:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all body_full_alloc_buffer_path >>
-  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
-  `b < dimword (:256)` by decide_tac >>
+  (* Input and output horizons have independent word types.  Use an
+     inhabited output horizon for resource facts, or its vacuity. *)
+  Cases_on `?K : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel K ctx func cenv cx es s` >>
+  IF (qpat_x_assum `?h. stmt_state_rel h ctx func cenv cx es s`
+        (qx_choose_then `hb` assume_tac))
+    (drule_all (INST_TYPE [``:'a`` |-> ``:'b``] body_full_alloc_buffer_path) >>
+     disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
+     `stmt_state_rel hb ctx func cenv cx es u` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
+     qpat_assum `stmt_state_rel hb ctx func cenv cx es u`
+       (assume_tac o MATCH_MP stmt_state_rel_allocas_below_fmp))
+    (drule_all (INST_TYPE [``:'b`` |-> ``:'a``] body_full_alloc_buffer_path) >>
+     disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
+     `stmt_state_rel H0 ctx func cenv cx es u` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
+     qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+       (assume_tac o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
+  (`b < dimword (:256)` by decide_tac >>
   `local_ptrs_reserved cenv sm /\ not_fresh_at sm xs` by
     metis_tac[] >>
   `lookup_var xs u = SOME sw` by metis_tac[] >>
@@ -82,7 +99,9 @@ Proof
     val_in_memory tv v (w2n sw) mem` by suspend "source" >>
   `u.vs_alloca_next >= s.vs_alloca_next` by suspend "frontier" >>
   `b+n <= u.vs_alloca_next` by
-    (`alloca_inv s` by fs[stmt_state_rel_def] >>
+    (`alloca_inv s` by
+       (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+          (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
      qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
        (qspec_then `cx_dead H0 cx` mp_tac) >>
      disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
@@ -124,7 +143,10 @@ Proof
     metis_tac[ptr_covers_lookup_frame] >>
   `!name a len. local_region cenv es.scopes t name a len <=>
     local_region cenv es.scopes u name a len` by
-    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
+    (qpat_assum `local_ptrs_reserved cenv sm` mp_tac >>
+     qpat_assum `!x. not_fresh_at sm x ==> _ /\ _ /\ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rw[local_region_def,local_ptrs_reserved_def] >> metis_tac[]) >>
   `!x. not_fresh_at sa x ==>
     not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
     FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)` by
@@ -163,11 +185,11 @@ Proof
         (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
       disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK t`,`Gf`,`tf`] mp_tac) >>
       simp[]) >>
-  conj_tac >- suspend "state" >> conj_tac >> first_assum ACCEPT_TAC
+  conj_tac >- suspend "state" >> conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Resume body_full_memory_stage_path[source]:
-  mp_tac (Q.SPECL [`tn.t_mem`,`tn1.t_mem`,`s.vs_memory`,`u.vs_memory`,
+  markerLib.RESUME_TAC >> (mp_tac (Q.SPECL [`tn.t_mem`,`tn1.t_mem`,`s.vs_memory`,`u.vs_memory`,
     `{i | b <= i /\ i < b+n}`,`tv`,`v`,`w2n (sw:bytes32)`]
     robust_val_in_memory_exterior_frame) >>
   (impl_tac
@@ -175,20 +197,22 @@ Resume body_full_memory_stage_path[source]:
        qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
          (mp_tac o Q.SPEC `tv` o REWRITE_RULE [expr_val_at_def]) >>
        simp[eval_operand_def] >> strip_tac >>
-       gvs[regions_disjoint_def] >> res_tac >> decide_tac)) >> simp[]
+       gvs[regions_disjoint_def] >> res_tac >> decide_tac)) >> simp[])
 QED
 
 Resume body_full_memory_stage_path[frontier]:
-  qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+  markerLib.RESUME_TAC >> (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
     (qspec_then `cx_dead H0 cx` mp_tac) >>
   disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
   drule gas_origin_path_erase >> strip_tac >>
   drule gas_marked_path_exec >> strip_tac >>
-  drule rest_word_path_frontier >> simp[]
+  drule rest_word_path_frontier >> simp[])
 QED
 
 Resume body_full_memory_stage_path[state]:
-  rpt strip_tac >>
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  TRY (qpat_x_assum `~(?K. stmt_state_rel K ctx func cenv cx es s)`
+    mp_tac >> simp[] >> NO_TAC) >>
   `copy_static t = copy_static u` by
     (qpat_assum `typed_copy_state_frame _ _ _ _ _`
        (mp_tac o AP_TERM ``copy_static`` o CONJUNCT1 o
@@ -202,14 +226,15 @@ Resume body_full_memory_stage_path[state]:
   irule literal_copy_window_stmt_state_rel >>
   qexistsl_tac [`sa.cs_next_id`,`b`,`n`,
     `STRING #"%" (toString sa.cs_next_var)`,`sa`,`sm`,`u`] >>
-  rpt conj_tac >> rpt strip_tac >> simp[] >> first_assum irule >> simp[] >>
+  rpt conj_tac >> rpt strip_tac >> simp[] >>
+  (first_assum irule ORELSE metis_tac[]) >> simp[] >>
   qexists_tac `name` >>
   qpat_assum `!name a len. local_region cenv es.scopes u name a len <=> _`
-    (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[]
+    (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[])
 QED
 
 Resume body_full_memory_stage_path[ghost]:
-  rpt strip_tac >>
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
   `ghost_inv_at D lo d cenv cx es G1 tn1 u` by metis_tac[] >>
   qpat_assum `w2n ((n2w b):bytes32) = b`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
@@ -255,7 +280,7 @@ Resume body_full_memory_stage_path[ghost]:
         (qspecl_then [`0`,`lo`] mp_tac) >>
       (impl_tac >- simp[]) >> simp[]) >>
   fs[typed_copy_state_frame_def,venom_state_component_equality,allocas_from_def] >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 Finalise body_full_memory_stage_path
