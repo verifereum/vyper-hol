@@ -29,7 +29,7 @@
 
 Theory codegenSymRel
 Ancestors
-  asmSpliceOwn
+  asmSpliceOwn asmSymOwnCode
   asmDataEnv asmSymBridge asmSplice asmSymSem asmSem frameRel contextCodegenRel codegenRel
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
   venomInst allocaRemapSSA dfgAnalysisProps dfgDefs list finite_map arithmetic
@@ -266,15 +266,34 @@ End
 
 
 
+Theorem sym_steps_mode_add:
+  !m n ss. sym_steps_mode allow_own p env own (m + n) ss =
+           case sym_steps_mode allow_own p env own m ss of
+             SymOK ss' => sym_steps_mode allow_own p env own n ss'
+           | r => r
+Proof
+  Induct >> Cases_on `allow_own` >>
+  fs[sym_steps_mode_def, sym_steps_def, sym_steps_own_def, ADD_CLAUSES] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
+  BasicProvers.CASE_TAC >> simp[]
+QED
+
 Theorem sym_steps_add:
   !m n ss. sym_steps p env (m + n) ss =
            case sym_steps p env m ss of
              SymOK ss' => sym_steps p env n ss'
            | r => r
 Proof
-  Induct >> simp[sym_steps_def, ADD_CLAUSES] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_steps_mode_add) >>
+  simp[sym_steps_mode_def]
+QED
+
+Theorem sym_steps_mode_compose:
+  sym_steps_mode allow_own p env own m ss = SymOK mid /\
+  sym_steps_mode allow_own p env own n mid = SymOK out ==>
+  sym_steps_mode allow_own p env own (m + n) ss = SymOK out
+Proof
+  simp[sym_steps_mode_add]
 QED
 
 Theorem sym_steps_compose:
@@ -322,13 +341,26 @@ Proof
   gvs[in_mem_range_def]
 QED
 
+Theorem sym_steps_mode_single:
+  asm_block_at p ss.sym_base.as_pc [inst] ==>
+  sym_steps_mode allow_own p env own 1 ss =
+    if allow_own then sym_step_own p env own inst ss
+    else sym_step p env inst ss
+Proof
+  Cases_on `allow_own` >> simp[sym_steps_mode_def] >> strip_tac >>
+  `ss.sym_base.as_pc < LENGTH p /\ EL ss.sym_base.as_pc p = inst` by
+    fs[asm_block_at_def] >>
+  pure_once_rewrite_tac[numLib.num_CONV ``1:num``] >>
+  pure_rewrite_tac[sym_steps_def, sym_steps_own_def] >> simp[] >>
+  BasicProvers.CASE_TAC >> simp[sym_steps_def, sym_steps_own_def]
+QED
+
 Theorem sym_steps_single:
   asm_block_at p ss.sym_base.as_pc [inst] ==>
   sym_steps p env 1 ss = sym_step p env inst ss
 Proof
-  simp[asm_block_at_def, sym_steps_compute] >>
-  Cases_on `sym_step p env inst ss` >>
-  simp[sym_steps_compute]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_steps_mode_single) >>
+  simp[sym_steps_mode_def]
 QED
 
 Theorem sym_step_dup_name:
@@ -454,7 +486,8 @@ Theorem sym_mstore_scratch_step:
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
   rpt gen_tac >> Cases_on `sv` >> strip_tac >>
-  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+  simp[sym_mstore_def, scratch_store_labels_def] >>
+  simp[sym_step_concrete_def, asm_op_arity_def,
        sval_val_def, asm_op_arity_table_def, asmSemTheory.log_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def,
        mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
@@ -465,17 +498,55 @@ Proof
 QED
 
 (* A run of n steps that ends ends the run with more fuel. *)
+Theorem sym_steps_mode_terminal_run:
+  !n ss fuel.
+    sym_terminal (sym_steps_mode allow_own p env own n ss) ==>
+    (if allow_own then sym_run_own p env own (n + fuel) ss
+     else sym_run p env (n + fuel) ss) =
+    sym_steps_mode allow_own p env own n ss
+Proof
+  Induct >> Cases_on `allow_own` >>
+  fs[sym_steps_mode_def, sym_steps_def, sym_steps_own_def,
+     sym_terminal_def, ADD_CLAUSES] >>
+  rpt gen_tac >>
+  simp[sym_run_SUC, Once sym_run_own_def] >>
+  IF_CASES_TAC >> simp[sym_terminal_def] >>
+  BasicProvers.CASE_TAC >> simp[sym_terminal_def] >>
+  ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
+QED
+
 Theorem sym_steps_terminal_run:
   !n ss fuel.
     sym_terminal (sym_steps p env n ss) ==>
     sym_run p env (n + fuel) ss = sym_steps p env n ss
 Proof
-  Induct >> simp[sym_steps_def, sym_terminal_def, ADD_CLAUSES] >>
-  rpt gen_tac >> simp[sym_run_SUC] >>
-  IF_CASES_TAC >> simp[sym_terminal_def] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
-  simp[sym_terminal_def] >>
-  ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_steps_mode_terminal_run) >>
+  simp[sym_steps_mode_def]
+QED
+
+(* The execution induction is independent of the state relation. *)
+Theorem asm_sym_steps_mode_lockstep:
+  (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
+  (!cs ss out.
+     R cs ss /\ cs.as_pc < LENGTH p /\
+     (if allow_own then sym_step_own p env own (EL cs.as_pc p) ss
+      else sym_step p env (EL cs.as_pc p) ss) = SymOK out ==>
+     ?cs'. asm_step lo (build_offset_to_pc p) (EL cs.as_pc p) cs = AsmOK cs' /\
+           R cs' out) ==>
+  !n cs ss ss'.
+    R cs ss /\ sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\ R cs' ss'
+Proof
+  strip_tac >> Induct >> Cases_on `allow_own` >>
+  fs[sym_steps_mode_def, sym_steps_def, sym_steps_own_def, asm_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+  qpat_x_assum `!cs ss. R cs ss ==> _` kall_tac >>
+  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> gvs[] >>
+  `cs.as_pc < LENGTH p` by simp[] >>
+  gvs[AllCaseEqs()] >>
+  qpat_assum `!cs ss out. _` drule_all >> strip_tac >> gvs[] >>
+  first_x_assum drule_all >> simp[]
 QED
 
 (* A symbolic run that stays OK is shadowed by the concrete run, step for
@@ -488,14 +559,16 @@ Theorem asm_sym_steps_lockstep:
             p n cs = AsmOK cs' /\
           asm_sym_rel p env cs' ss'
 Proof
-  Induct >> simp[sym_steps_def, asm_steps_def] >> rpt gen_tac >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by gvs[asm_sym_rel_def] >>
-  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> gvs[] >>
-  `cs.as_pc < LENGTH p` by simp[] >>
-  drule_all asm_sym_step >>
-  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
-  gvs[asm_sym_step_rel_def] >> strip_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  rpt strip_tac >>
+  mp_tac (Q.INST [`allow_own` |-> `F`, `R` |-> `asm_sym_rel p env`,
+                  `lo` |-> `SND (compute_label_offsets p)`]
+    asm_sym_steps_mode_lockstep) >>
+  simp[sym_steps_mode_def] >> impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> fs[asm_sym_rel_def]) >>
+      rpt strip_tac >> drule_all asm_sym_step >>
+      simp[asm_sym_step_rel_def]) >>
+  disch_then drule_all >> simp[]
 QED
 
 Theorem LIST_REL_select_indices:
@@ -505,6 +578,24 @@ Theorem LIST_REL_select_indices:
 Proof
   simp[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL,
        listTheory.EL_MAP]
+QED
+
+(* Region-local stores preserve the saved labels outside the frame closure. *)
+Theorem sym_frame_region_labels_transfer:
+  !ctx cp fn r labs labs0 labs'.
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+       FLOOKUP labs b = FLOOKUP labs0 b) /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP labs' b = FLOOKUP labs b) ==>
+  !b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+      FLOOKUP labs' b = FLOOKUP labs0 b
+Proof
+  rpt strip_tac >>
+  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
+    (strip_tac >> fs[closure_spill_byte_def] >>
+     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
+  metis_tac[]
 QED
 
 Theorem sym_frame_inv_region_transfer:
@@ -517,9 +608,96 @@ Theorem sym_frame_inv_region_transfer:
        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
   sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
 Proof
-  rw[sym_frame_inv_def] >>
-  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
-    (strip_tac >> fs[closure_spill_byte_def] >>
-     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
-  metis_tac[]
+  simp[sym_frame_inv_def] >> rpt strip_tac >>
+  metis_tac[sym_frame_region_labels_transfer]
+QED
+
+(* Successful old observations are unchanged by enabling own-code reads. *)
+Theorem sym_codecopy_own_nonbad:
+  (!msg. sym_codecopy p env ss <> SymBad msg) ==>
+  sym_codecopy_own p env own ss = sym_codecopy p env ss
+Proof
+  Cases_on `ss.sym_stack` >> simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  rename1 `h::t` >> Cases_on `h` >>
+  simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  Cases_on `t` >> simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  rename1 `h::t'` >> Cases_on `h` >>
+  simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  Cases_on `t'` >> simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  rename1 `h::rest` >> Cases_on `h` >>
+  simp[sym_codecopy_def, sym_codecopy_own_def]
+QED
+
+Theorem sym_step_own_nonbad:
+  (!msg. sym_step p env inst ss <> SymBad msg) ==>
+  sym_step_own p env own inst ss = sym_step p env inst ss
+Proof
+  Cases_on `inst` >> simp[sym_step_own_def, sym_step_def] >>
+  rename1 `sym_step_op p env name ss` >>
+  Cases_on `name = "CODESIZE"`
+  >- simp[sym_step_op_def] >>
+  Cases_on `name = "CODECOPY"`
+  >- simp[sym_step_op_def, sym_step_op_own_def, sym_codecopy_own_nonbad] >>
+  simp[sym_step_op_own_def]
+QED
+
+Theorem sym_steps_mode_nonbad:
+  !n ss.
+    (!msg. sym_steps p env n ss <> SymBad msg) ==>
+    sym_steps_mode allow_own p env own n ss = sym_steps p env n ss
+Proof
+  Cases_on `allow_own` >> simp[sym_steps_mode_def] >>
+  Induct >> simp[sym_steps_def, sym_steps_own_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[] >>
+  rpt strip_tac >>
+  `sym_step_own p env own (EL ss.sym_base.as_pc p) ss =
+   sym_step p env (EL ss.sym_base.as_pc p) ss` by
+    (irule sym_step_own_nonbad >> simp[]) >>
+  simp[]
+QED
+
+Theorem sym_steps_mode_ok:
+  sym_steps p env n ss = SymOK ss' ==>
+  sym_steps_mode allow_own p env own n ss = SymOK ss'
+Proof
+  strip_tac >>
+  `sym_steps_mode allow_own p env own n ss = sym_steps p env n ss` by
+    (irule sym_steps_mode_nonbad >> simp[]) >> simp[]
+QED
+
+(* The supplier obligation mentions only in-bounds, successful steps.  The
+   relation in its conclusion keeps the same fixed own-code bytes. *)
+Theorem asm_sym_steps_mode_lockstep_from_step:
+  (!cs ss out.
+     asm_sym_rel_own lo p env own cs ss /\ cs.as_pc < LENGTH p /\
+     (if allow_own then
+        sym_step_own p env own (EL cs.as_pc p) ss
+      else sym_step p env (EL cs.as_pc p) ss) = SymOK out ==>
+     ?cs'. asm_step lo (build_offset_to_pc p) (EL cs.as_pc p) cs = AsmOK cs' /\
+           asm_sym_rel_own lo p env own cs' out) ==>
+  !n cs ss ss'.
+    asm_sym_rel_own lo p env own cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+          asm_sym_rel_own lo p env own cs' ss'
+Proof
+  strip_tac >> ho_match_mp_tac asm_sym_steps_mode_lockstep >>
+  conj_tac
+  >- (rpt strip_tac >> fs[asm_sym_rel_own_def]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem sym_frame_inv_own_region_transfer:
+  !lo p env own ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 ps cs ss /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  asm_sym_rel_own lo p env own cs' ss' /\
+  sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  simp[sym_frame_inv_own_def] >> rpt strip_tac >>
+  metis_tac[sym_frame_region_labels_transfer]
 QED
