@@ -31,6 +31,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_suffix_run[local]:
+  ~cx.txn.is_static /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = (u,sb) /\
@@ -50,7 +51,6 @@ Theorem raw_log_dynamic_suffix_run[local]:
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
   strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
   `?t'. step_inst_base (mk_inst s2.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t = OK t' /\
@@ -68,6 +68,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_tail_mem_counted:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op,s2) /\
@@ -191,6 +192,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_suffix_run[local]:
+  ~cx.txn.is_static /\
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
@@ -211,7 +213,6 @@ Theorem raw_log_fixed_suffix_run[local]:
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
   strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all raw_log_fixed_store_frame >> strip_tac >>
   `?t. step_inst_base (mk_inst s1.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [])
@@ -230,6 +231,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_tail_mem_counted:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
