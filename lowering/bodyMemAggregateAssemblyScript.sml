@@ -32,6 +32,30 @@ Proof
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
+Theorem aggregate_outcome_no_halt_mem:
+  (!si sf. source si <> (INR HaltException,sf)) /\
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q
+    (\H res ee r. R H res ee r /\ exprSimDefs$halt_exit H cx ee res r)
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac[gas_summary_at_def] >> strip_tac >>
+      `res <> INR HaltException` by
+        (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+         first_x_assum (qspec_then `[]` assume_tac) >> metis_tac[]) >>
+      qexistsl_tac [`res`, `es_end`, `r`] >>
+      fs[gas_summary_at_def, exprSimDefsTheory.halt_exit_def] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ _ (err,ee) (leaf,target_end)` >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `target_end`] >> first_assum ACCEPT_TAC
+QED
+
 Theorem aggregate_struct_action_mem:
   eval_expr cx (StructLit ann nsid fields) =
   bind (eval_exprs cx (MAP SND fields))
