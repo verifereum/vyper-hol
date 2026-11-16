@@ -4,12 +4,16 @@ Ancestors
 
 Theorem jump_delete_prefix_chunk:
   !pre x rest env ss.
-    let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest in
-    asm_static_wf p /\ ss.sym_base.as_pc = LENGTH pre /\
+    asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) /\ ss.sym_base.as_pc
+      = LENGTH pre /\
     ss.sym_base.as_stack = [] ==>
-    sym_steps p env 2 ss = SymOK (sym_with_pc (LENGTH pre + 2) ss) /\
-    (!i a. i < 2 /\ sym_steps p env i ss = SymOK a ==>
-       a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p <> AsmOp "GAS")
+    sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) env 2 ss = SymOK
+      (sym_with_pc (LENGTH pre + 2) ss) /\
+    (!i a. i < 2 /\ sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) env i ss
+      = SymOK a ==>
+       a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) /\ EL
+         a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) <> AsmOp
+         "GAS")
 Proof
   simp_tac bool_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
   `~MEM (AsmLabel x) pre`

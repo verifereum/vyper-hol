@@ -14,36 +14,35 @@ val transport = ``\p q.
        b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)``;
 
 val site = ``!pre pat repl post D.
-  let p = pre ++ pat ++ post in
-  let q = pre ++ repl ++ post in
-  let k = LENGTH pre in
-  let w = LENGTH pat in
-  let f = splice_pc k w (LENGTH repl) in
-  asm_splice_ok pat repl /\ asm_static_wf p /\
-  (!l. MEM (AsmLabel l) pat ==> ~MEM l (asm_label_refs p)) /\
-  (!env u. u.sym_base.as_pc = k /\ u.sym_base.as_stack = [] /\
-      sym_state_labels_in (asm_label_refs p) u ==>
+  asm_splice_ok pat repl /\ asm_static_wf (pre ++ pat ++ post) /\
+  (!l. MEM (AsmLabel l) pat ==> ~MEM l (asm_label_refs (pre ++ pat ++ post))) /\
+  (!env u. u.sym_base.as_pc = (LENGTH pre) /\ u.sym_base.as_stack = [] /\
+      sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
     ?d. 0 < d /\ d <= D /\
-      (!i a. i < d /\ sym_steps p env i u = SymOK a ==>
-        ~(a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS")) /\
-      (!a. sym_steps p env d u = SymOK a ==>
-        ?e. sym_steps q env e u = SymOK (sym_with_pc (f a.sym_base.as_pc) a) /\
-          (a.sym_base.as_pc <= k \/ k+w <= a.sym_base.as_pc) /\
-          (e = 0 ==> k+w <= a.sym_base.as_pc))) ==>
-  ^transport p q``;
+      (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
+        ~(a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\ EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS")) /\
+      (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
+        ?e. sym_steps (pre ++ repl ++ post) env e u = SymOK (sym_with_pc ((splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)) a.sym_base.as_pc) a) /\
+          (a.sym_base.as_pc <= (LENGTH pre) \/ (LENGTH pre)+(LENGTH pat) <= a.sym_base.as_pc) /\
+          (e = 0 ==> (LENGTH pre)+(LENGTH pat) <= a.sym_base.as_pc))) ==>
+  ^transport (pre ++ pat ++ post) (pre ++ repl ++ post)``;
 
 val transitive = ``!p q r. ^transport p q /\ ^transport q r ==> ^transport p r``;
 
 Theorem inefficient_jump_window[local]:
   !pre x y rest env u.
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest in
-  let q = pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest in
-  asm_static_wf p /\ u.sym_base.as_pc = LENGTH pre /\ u.sym_base.as_stack = [] ==>
+  asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x
+    :: rest) /\ u.sym_base.as_pc = LENGTH pre /\ u.sym_base.as_stack = [] ==>
   ?d. 0 < d /\ d <= 4 /\
-    (!i a. i < d /\ sym_steps p env i u = SymOK a ==>
-      ~(a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS")) /\
-    (!a. sym_steps p env d u = SymOK a ==>
-      ?e. sym_steps q env e u = SymOK (sym_with_pc
+    (!i a. i < d /\ sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"]
+      ++ AsmLabel x :: rest) env i u = SymOK a ==>
+      ~(a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp
+        "JUMP"] ++ AsmLabel x :: rest) /\ EL a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp
+        "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) = AsmOp "GAS")) /\
+    (!a. sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel
+      x :: rest) env d u = SymOK a ==>
+      ?e. sym_steps (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)
+        env e u = SymOK (sym_with_pc
         (splice_pc (LENGTH pre) 4 3 a.sym_base.as_pc) a) /\
         (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre+4 <= a.sym_base.as_pc) /\
         (e = 0 ==> LENGTH pre+4 <= a.sym_base.as_pc))
@@ -127,7 +126,8 @@ QED
 Theorem inefficient_jump_site[local]:
   ^site ==>
   !pre x y rest.
-    asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
+    asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel
+      x :: rest) ==>
     ^transport
       (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest)
       (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)

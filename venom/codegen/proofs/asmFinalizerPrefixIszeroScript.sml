@@ -7,12 +7,12 @@ Theorem iszero_pair_prefix_window:
   !pre x rest env ss.
     asm_returns_zero_or_one x /\ ss.sym_base.as_pc = LENGTH pre /\
     ss.sym_base.as_stack = [] ==>
-    let p = pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest in
-    let q = pre ++ [x] ++ rest in
-    (!i a. i < 3 /\ sym_steps p env i ss = SymOK a ==>
-       ~(a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS")) /\
-    (!a. sym_steps p env 3 ss = SymOK a ==>
-       sym_steps q env 1 ss =
+    (!i a. i < 3 /\ sym_steps (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) env i ss = SymOK
+      a ==>
+       ~(a.sym_base.as_pc < LENGTH (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) /\ EL
+         a.sym_base.as_pc (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) = AsmOp "GAS")) /\
+    (!a. sym_steps (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) env 3 ss = SymOK a ==>
+       sym_steps (pre ++ [x] ++ rest) env 1 ss =
          SymOK (sym_with_pc (splice_pc (LENGTH pre) 3 1 a.sym_base.as_pc) a) /\
        LENGTH pre + 3 <= a.sym_base.as_pc)
 Proof
@@ -61,13 +61,15 @@ QED
 Theorem iszero_jumpi_prefix_window:
   !pre l rest env ss.
     ss.sym_base.as_pc = LENGTH pre /\ ss.sym_base.as_stack = [] ==>
-    let p = pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
-                    AsmPushLabel l :: AsmOp "JUMPI" :: rest in
-    let q = pre ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest in
-    (!i a. i < 4 /\ sym_steps p env i ss = SymOK a ==>
-       ~(a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS")) /\
-    (!a. sym_steps p env 4 ss = SymOK a ==>
-       sym_steps q env 2 ss =
+    (!i a. i < 4 /\ sym_steps (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
+                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) env i ss = SymOK a ==>
+       ~(a.sym_base.as_pc < LENGTH (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
+                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) /\ EL a.sym_base.as_pc (pre ++ [AsmOp
+                      "ISZERO"; AsmOp "ISZERO"] ++
+                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) = AsmOp "GAS")) /\
+    (!a. sym_steps (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
+                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) env 4 ss = SymOK a ==>
+       sym_steps (pre ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest) env 2 ss =
          SymOK (sym_with_pc (splice_pc (LENGTH pre) 2 0 a.sym_base.as_pc) a) /\
        (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + 2 <= a.sym_base.as_pc))
 Proof
