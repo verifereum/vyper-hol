@@ -27,7 +27,11 @@ Theorem extcall_call_source_boundary:
   t.vs_call_ctx.cc_static = cx.txn.is_static /\
   (is_static <=> IS_NONE value_opt)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  fs[extcall_request_ready_def] >>
+  first_x_assum drule >> strip_tac >>
+  fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  Cases_on `value_opt` >> gvs[]
 QED
 
 (* Expose each compiler action without unfolding instruction emission. *)
