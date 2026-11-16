@@ -16,7 +16,7 @@ Theorem guard_processed_backend_well_formed[local]:
     (empty_state with <|accounts := e'.rollback.accounts;
                        tStorage := e'.rollback.tStorage|>) (FST H)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fs[] >>
   `storage_well_formed_on cx
     (empty_state with <|accounts := process_deletions e'.rollback.toDelete
                            e'.rollback.accounts;
@@ -26,7 +26,7 @@ Proof
        `st` |-> `initial_state am' []`,
        `st'` |-> `empty_state with
          <|accounts := process_deletions e'.rollback.toDelete e'.rollback.accounts;
-           tStorage := e'.rollback.tStorage|>`]) >> simp[initial_state_def]) >>
+           tStorage := e'.rollback.tStorage|>`]) >> fs[initial_state_def]) >>
   `process_deletions e'.rollback.toDelete e'.rollback.accounts tx.target =
     e'.rollback.accounts tx.target` by
     (mp_tac (lookup_account_process_deletions_other |> Q.INST
