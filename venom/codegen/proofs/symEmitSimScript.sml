@@ -1000,9 +1000,12 @@ Proof
      gvs[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def]) >>
   `asm_block_at p ss.sym_base.as_pc [AsmOp name]` by metis_tac[] >>
   `sym_step_concrete name ss = SymOK ss'` by
-    ((drule sym_steps_mode_single >>
-     Cases_on `allow_own` >>
-     gvs[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def] >> (metis_tac[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def, sym_steps_mode_single]))) >>
+    (drule (Q.INST [`allow_own` |-> `allow_own`, `env` |-> `env`,
+       `own` |-> `own`] sym_steps_mode_single) >>
+     disch_then (fn th => qpat_x_assum `sym_steps_mode _ _ _ _ _ _ = SymOK _` mp_tac >>
+       rewrite_tac[th]) >>
+     Cases_on `allow_own` >> fs[] >>
+     simp[asmSymOwnCodeTheory.sym_step_own_def, sym_step_def]) >>
   qexists `ss'` >> simp[] >>
   metis_tac[sym_step_concrete_numeric_shape_core]
 QED
@@ -1727,10 +1730,23 @@ Theorem sym_named_numeric_source_emit:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  strip_tac >>
-  irule (Q.INST [`allow_own` |-> `F`] sym_named_numeric_source_emit_core |>
-    SIMP_RULE std_ss [sym_steps_mode_def]) >>
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `inst.inst_opcode <> CODESIZE` by metis_tac[label_flow_inst_not_codesize] >>
+  `!cs ss. asm_sym_rel p env cs ss ==>
+    ss.sym_base.as_pc = cs.as_pc /\
+    LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+      ss.sym_stack cs.as_stack` by
+    (rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]) >>
+  `!cs ss inst cs'. asm_sym_rel p env cs ss /\ asm_block_at p cs.as_pc [inst] /\
+    asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs = AsmOK cs' /\
+    (!msg. sym_step p env inst ss <> SymBad msg) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
+    (rpt strip_tac >> irule sym_single_step_replay_safe >> metis_tac[]) >>
+  drule_all (Q.INST [`allow_own` |-> `F`, `R` |-> `asm_sym_rel p env`,
+    `slo` |-> `SND (compute_label_offsets p)`]
+    sym_named_numeric_source_emit_core |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[]
 QED
 
 Theorem sym_emit_run_endpoint:
