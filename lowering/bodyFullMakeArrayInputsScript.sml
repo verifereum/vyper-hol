@@ -66,13 +66,13 @@ Theorem make_array_add_value_inputs:
   Ga = step_prov PG G ai au /\ tna = step_taint ai t au tn /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv t /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee tv vv t /\
   ptr_vv_ok cx (post_value_type ce e) tv vv ee G tn t /\
   (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type ce e) ==>
      ptr_buf_ok ce e op G t) /\
   (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
      ptr_buf_ok ce e p.ptr_operand G t) ==>
-  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv at /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee tv vv at /\
   ptr_vv_ok cx (post_value_type ce e) tv vv ee Ga tna at /\
   (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type ce e) ==>
      ptr_buf_ok ce e op Ga at) /\
