@@ -59,7 +59,8 @@ Theorem immutable_augassign_operator_mem[local]:
       s_entry.vs_alloca_next <= u.vs_alloca_next) \/
      (exit_result r /\
       !H. valid_horizon cx st0 H ff.storage_trace ==>
-        !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r))
+        (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+        halt_exit H cx (ff with gas_obs := []) res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
@@ -94,7 +95,9 @@ Proof
   rename1 `_ = INR err` >>
   qexistsl_tac [`INR (Error err)`, `ee`, `r`] >>
   simp[bind_def, lift_sum_def, return_def, raise_def] >>
-  gen_tac >> strip_tac >> gen_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
+  gen_tac >> strip_tac >>
+  simp[exprSimDefsTheory.halt_exit_def] >>
+  gen_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
     stmtSimPropsTheory.expr_exit_INR_type] >> gvs[]
 QED
@@ -161,7 +164,9 @@ Theorem immutable_augassign_rhs_mem:
     (\H res ff u. res = INL () /\
       stmt_post H ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
@@ -172,7 +177,8 @@ Proof
   conj_tac
   >- (rpt strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
       ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-        stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+        stmtSimPropsTheory.expr_exit_INR_type] >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   conj_tac
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[storage_trace_frame_lifts, storage_trace_frame_write_place]) >>
