@@ -199,7 +199,8 @@ Proof
     (qx_gen_tac `HH` >> disch_tac >>
      simp[Abbr `cc`,Abbr `e0`,stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >> simp[stmt_state_rel_jump_to] >>
-     qpat_assum `!H. stmt_state_rel H _ _ _ _ _ s0 ==> _` irule >>
+     qpat_assum `!hh. _ ==> stmt_state_rel hh _ _ _ _ _ t`
+       (qspec_then `HH` irule) >>
      qpat_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _ /\ _`
        (qspec_then `HH` mp_tac) >> simp[]) >>
   `return_buf_frame d cenv sa cc` by
