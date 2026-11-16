@@ -4,22 +4,13 @@
  * frame's call context.
  *
  * TOP-LEVEL:
- *   ptr_enters_block_call_ctx  - entering a block keeps the call context
  *   ptr_terminator_call_ctx    - a terminator's OK step keeps it
  *   ptr_reachable_stack_call_ctx - every saved frame has the active one
  *)
 Theory ptrDisciplineCallCtx
 Ancestors
-  ptrDiscipline contextCodegenRel venomExecProofs venomInstProofs
+  ptrDiscipline dftGasInvOracleFrame contextCodegenRel venomExecProofs venomInstProofs
   venomInstProofs1 venomExecSemantics venomState venomInst list
-
-Theorem ptr_enters_block_call_ctx:
-  enters_block fn s t ==> t.vs_call_ctx = s.vs_call_ctx
-Proof
-  simp[enters_block_def] >> strip_tac >> gvs[] >>
-  drule eval_phis_only_updates_vs_vars >>
-  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
-QED
 
 Theorem ptr_terminator_call_ctx:
   is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
@@ -39,8 +30,8 @@ Proof
   >- (rpt strip_tac >> drule_all venomInstProofsTheory.step_preserves_call_ctx >>
       strip_tac >> simp[])
   >- (rpt strip_tac >> drule_all ptr_terminator_call_ctx >>
-      drule ptr_enters_block_call_ctx >> metis_tac[])
-  >- (rpt strip_tac >> drule ptr_enters_block_call_ctx >>
+      drule dftGasInvOracleFrameTheory.inv_enters_block_call_ctx >> metis_tac[])
+  >- (rpt strip_tac >> drule dftGasInvOracleFrameTheory.inv_enters_block_call_ctx >>
       qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
       simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[])
   >> rpt strip_tac >>
