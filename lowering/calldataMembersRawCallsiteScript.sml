@@ -1,6 +1,7 @@
 (* Descriptor-directed navigation and physical framing for raw members. *)
 Theory calldataMembersRawCallsite
 Ancestors
+  calldataMembersRawSubregion
   decoderMemberJointModular calldataSourceCorrespondence abiDecoderCoherence
   calldataChildFrame bodyPtrBytestringBuiltinsWindowGhost assignTuplePtrCopyLen
   exprSimProps abiDecoderMemberSetup abiDecoderReentry abiDecoderDynamicLoopSetup
@@ -97,27 +98,5 @@ Theorem calldata_member_raw_prefix_frame:
   EVERY (\(tv,x,b). !m. mem_agree_outside u.t_mem t.vs_memory m ==>
     val_in_memory tv x b m) prefix
 Proof
-  strip_tac >>
-  `lookup_var root t = lookup_var root s /\
-   FLOOKUP H root = FLOOKUP G root /\
-   op_taint u (Var root) = op_taint tn (Var root)` by
-    (gvs[op_taint_def] >> metis_tac[eval_operand_def]) >>
-  `ptr_covers H u root t cap` by metis_tac[ptr_covers_lookup_frame] >>
-  `op_taint u src = {} /\ op_prov H src = NONE` by
-    (Cases_on `src` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
-  `t.vs_call_ctx = s.vs_call_ctx` by fs[abi_decode_footprint_frame_def] >>
-  simp[EVERY_MEM] >> qx_gen_tac `e` >> disch_tac >> PairCases_on `e` >>
-  qpat_x_assum `EVERY _ prefix` mp_tac >> rewrite_tac[EVERY_MEM] >>
-  disch_then (qspec_then `(e0,e1,e2)` mp_tac) >> simp[] >> strip_tac >>
-  `mem_bytes_at e2 (type_memory_size e0) t.vs_memory =
-   mem_bytes_at e2 (type_memory_size e0) s.vs_memory` by
-    (irule (cj 2 calldata_child_preserves_allocated_region) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`base_addr`,`cap`,`d`,`last.cs_next_id`,`st.cs_next_id`,
-       `oid`,`scratch`,`sz`] >> simp[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  irule robust_val_in_memory_window_transport >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`tn.t_mem`,`u.t_mem`,`type_memory_size e0`,`s.vs_memory`,`t.vs_memory`] >>
-  simp[val_footprint_le] >> fs[SUBSET_DEF] >> metis_tac[]
+  MATCH_ACCEPT_TAC calldata_member_raw_prefix_frame_subregion
 QED
