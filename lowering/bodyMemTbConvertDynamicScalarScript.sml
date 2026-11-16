@@ -179,28 +179,30 @@ Resume dynamic_continuation_summary_mem[empty]:
     metis_tac[dynamic_empty_scalar_convert] >>
   gvs[] >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INL vout`,`ee`,`OK t0`] >>
-  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
+       exit_result_def] >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then strip_assume_tac) >>
-  irule dynamic_expr_post_convert >> simp[eval_operand_def] >>
-  conj_tac >- fs[expr_post_def] >>
-  qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[]
+  irule dynamic_expr_post_convert >>
+  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[eval_operand_def] >> fs[expr_post_def]
 QED
 
 Resume dynamic_continuation_summary_mem[success]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL vout`,`ee`,`OK s`] >>
-  simp[gas_marked_exec_def] >>
+  simp[gas_marked_exec_def, exit_result_def] >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then strip_assume_tac) >>
   `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s` by
-    (irule stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H0`,`t0`] >> gvs[expr_post_def]) >>
-  irule dynamic_expr_post_convert >> simp[] >>
-  qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[]
+    (irule (INST_TYPE [``:'a`` |-> ``:256``] stmt_state_rel_fields_transport) >>
+     qpat_assum `stmt_state_rel H0 _ _ _ _ _ s` (irule_at Any) >>
+     qexists_tac `t0` >> gvs[expr_post_def]) >>
+  irule dynamic_expr_post_convert >>
+  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]
 QED
 
 Resume dynamic_continuation_summary_mem[abort]:
