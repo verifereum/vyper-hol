@@ -729,7 +729,8 @@ Resume compile_assign_attr_storage_mem[store]:
   conj_tac
   >- (REWRITE_TAC [stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
   irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`cenv`, `s0`, `sa`] >>
+  Cases_on `tr` >> fs[sstore_def, tstore_def, lookup_var_def]
 QED
 
 Finalise compile_assign_attr_storage_mem
