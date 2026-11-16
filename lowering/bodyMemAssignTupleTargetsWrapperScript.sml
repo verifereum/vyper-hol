@@ -60,6 +60,12 @@ Proof
      fs[tuple_targets_source_action]) >>
   pure_rewrite_tac [tuple_targets_source_action] >>
   irule forced_then_outcome >>
+  rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >~ [`expr_exit (INR _) _`]
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> fs[halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -67,10 +73,6 @@ Proof
     t.vs_inst_idx = LENGTH su.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
-  >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
@@ -110,15 +112,29 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[tail]:
   `post_value_type cenv e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_lowered] >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] assign_tuple_targets_suffix_mem) >>
-  disch_then (qspec_then `lctx` strip_assume_tac) >>
-  `s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac >>
-  qexistsl_tac [`INL ()`, `ee'`, `OK t'`] >>
+  disch_then (qspecl_then [`lctx`, `RetQ`]
+    (qx_choosel_then [`res`, `ee'`, `r`]
+      (map_every assume_tac o CONJUNCTS))) >>
+  qexistsl_tac [`res`, `ee'`, `r`] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[gas_marked_path_def] >>
+  qpat_x_assum `(?t'. r = OK t' /\ _) \/ _`
+    (DISJ_CASES_THEN2
+      (qx_choose_then `t'` (map_every assume_tac o CONJUNCTS))
+      (map_every assume_tac o CONJUNCTS))
+  >- suspend "post" >>
+  disj2_tac >> fs[halt_exit_def,
+    loweringStateRelDefsTheory.halt_rel_def,
+    loweringStateRelDefsTheory.accounts_rel_def]
+QED
+
+Resume compile_assign_tuple_targets_stmt_frag_mem[post]:
+  `s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac >>
   disj1_tac >> qexists_tac `t'` >> simp[] >>
   qx_gen_tac `H'` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H ee'.storage_trace ==> _` drule >>
   strip_tac >>
+  RULE_ASSUM_TAC (REWRITE_RULE [stmt_state_rel_start_gas_obs]) >>
   qexists_tac `cenv` >> simp[]
 QED
 
