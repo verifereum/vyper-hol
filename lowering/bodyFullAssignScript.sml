@@ -8,7 +8,7 @@
  *)
 Theory bodyFullAssign
 Ancestors
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts targetPlaceSim
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
@@ -57,7 +57,7 @@ Proof
   `lookup_scopes id mid.scopes = SOME entry` by
     metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME entry.type` by
-    (drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> simp[] >> metis_tac[]) >>
+    (drule_all targetPlaceSimTheory.expr_sim_inv_local >> simp[] >> metis_tac[]) >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
   `value_has_type entry.type v` by
@@ -307,7 +307,7 @@ Proof
      drule supported_expr_body_calls >> strip_tac >>
      fs[body_inv_def] >> metis_tac[]) >>
   drule_all assign_relayout_source_classify >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
