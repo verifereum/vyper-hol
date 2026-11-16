@@ -252,8 +252,8 @@ Resume log_data_field_origin_ptr_path[store]:
   conj_tac
   >- (qpat_x_assum `!mem. mem_agree_outside tn2.t_mem _ _ ==> _` mp_tac >>
       simp[]) >>
-  rpt strip_tac >>
-  `not_fresh_at s1 p'` by
+  qx_gen_tac `old_var` >> strip_tac >>
+  `not_fresh_at s1 old_var` by
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, ci_mono_def] >>
   simp[]
 QED
