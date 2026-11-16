@@ -4727,7 +4727,8 @@ Proof
        t.vs_inst_idx = LENGTH s2.cs_current_insts`] eval_exprs_suffix) >>
   simp[wb_args_exit_def] >>
   conj_tac >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >>
-    simp[expr_exit_def] >> rename1 `Error e` >> Cases_on `e` >> simp[expr_exit_def]) >>
+    simp[expr_exit_def, halt_exit_def] >> rename1 `Error e` >>
+    Cases_on `e` >> simp[expr_exit_def, halt_exit_def]) >>
   qexistsl_tac [`addr`, `addr_op`, `cenv`, `kws`, `ops`, `s2`, `sa`] >>
   reverse conj_tac >- gvs[wb_args_exit_def] >>
   rpt gen_tac >> strip_tac >>
