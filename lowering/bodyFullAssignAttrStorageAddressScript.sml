@@ -2,7 +2,7 @@
    Keep the expression's original compile boundary in its value post. *)
 Theory bodyFullAssignAttrStorageAddress
 Ancestors
-  bodyFullGhostFrame bodyFullUnwrapRun typedCopyOriginPtrBase
+  bodyFullGhostFrame bodyFullUnwrapRun typedCopyOriginPtrBase bodyFullHashKeccakFixed
   fragGasOriginPtrDead fragGasOriginPtr bodyPtrDefs exprSimVVFrame
   exprSimMemDefs loweringPosts exprOperandVar exprSimProps
   exprLoweringProps exprLowering emitHelperProps emitHelper freshWrites
@@ -19,11 +19,11 @@ Theorem storage_field_address_full:
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 ee.storage_trace /\
+  storage_trace_domain cx st0 ee.storage_trace /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee raw vv s /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv s /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv s /\
   ptr_vv_ok cx (post_value_type cenv e) raw vv ee G tn s /\
   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
    ?v. read_result cx raw ee = (INL v,ee) /\
@@ -45,7 +45,7 @@ Theorem storage_field_address_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee raw vv q /\
        ghost_inv_at (DF H) lo d cenv cx ee HG tf q) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv q /\
+    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv q /\
     ptr_vv_ok cx (post_value_type cenv e) raw vv ee HG tf q /\
     (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?v. read_result cx raw ee = (INL v,ee) /\
@@ -72,6 +72,10 @@ Proof
        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
      (impl_tac >- simp[]) >> strip_tac >>
      fs[ghost_inv_at_def, vv_post_def, stmt_state_rel_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel (storage_trace_horizon ee.storage_trace)
+        ctx func cenv cx ee s` by metis_tac[vv_post_def, expr_post_def] >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `?out q HG tf.
      dst = Var out /\ not_fresh_at sn out /\
      q = (update_var out (root + n2w off) s
@@ -135,7 +139,7 @@ Proof
    q.vs_alloca_next = s.vs_alloca_next /\ q.vs_memory = s.vs_memory /\
    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
    q.vs_call_ctx = s.vs_call_ctx` by simp[update_var_def] >>
-  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv q` by
+  `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv q` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`vv_store_bound _ _ _ _ _ _ s`,
         `eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s`,
