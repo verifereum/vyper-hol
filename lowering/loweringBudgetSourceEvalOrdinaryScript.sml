@@ -184,49 +184,194 @@ QED
 Resume source_no_create_error_ordinary_cases[struct]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs syn_defs >> FAIL_TAC "struct syntax"
+  rpt strip_tac >> gvs syn_defs >>
+  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+       get_module_code cx NONE = SOME tops /\
+       IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
+       (MAP SND kes)` by
+    (qpat_x_assum `~supported_fields_exists _ _` mp_tac >>
+     qpat_x_assum `EVERY _ (int_calls_named_exprs _)` mp_tac >>
+     qid_spec_tac `kes` >> Induct >> simp[supported_expr_exists_def,
+       int_calls_expr_def] >> Cases_on `h` >>
+     simp[supported_expr_exists_def, int_calls_expr_def, EVERY_APPEND] >>
+     metis_tac[]) >> metis_tac[]
 QED
 
 Resume source_no_create_error_ordinary_cases[target_place]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs syn_defs >> FAIL_TAC "target place"
+  rpt strip_tac >> gvs syn_defs >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]
 QED
 
 Resume source_no_create_error_ordinary_cases[raise_custom]:
-  FAIL_TAC "raise_custom"
+  Cases_on `err` >> rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, option_CASE_rator, ignore_bind_def, bind_def,
+    lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs syn_defs >>
+  gvs[lift_option_def, option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+    EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+      get_module_code cx NONE = SOME tops /\
+      IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
+      (custom_error_exprs (CustomError p l l0))` by
+    (qpat_x_assum `EVERY _ (int_calls_exprs _)` mp_tac >>
+     qpat_x_assum `EVERY _ (custom_error_exprs _)` mp_tac >>
+     qspec_tac (`custom_error_exprs (CustomError p l l0)`,`xs`) >>
+     Induct >> simp[int_calls_expr_def, EVERY_APPEND] >> metis_tac[]) >>
+  drule order_custom_error_args_perm >> strip_tac >>
+  drule sortingTheory.PERM_EVERY >> metis_tac[]
 QED
-Resume source_no_create_error_ordinary_cases[assert_bare]: FAIL_TAC "assert_bare" QED
-Resume source_no_create_error_ordinary_cases[assert_unreachable]: FAIL_TAC "assert_unreachable" QED
-Resume source_no_create_error_ordinary_cases[assert_reason]: FAIL_TAC "assert_reason" QED
-Resume source_no_create_error_ordinary_cases[assert_custom]: FAIL_TAC "assert_custom" QED
-Resume source_no_create_error_ordinary_cases[log]: FAIL_TAC "log" QED
-Resume source_no_create_error_ordinary_cases[annassign]: FAIL_TAC "annassign" QED
-Resume source_no_create_error_ordinary_cases[append]: FAIL_TAC "append" QED
-Resume source_no_create_error_ordinary_cases[assign_base]: FAIL_TAC "assign_base" QED
-Resume source_no_create_error_ordinary_cases[assign_tuple]: FAIL_TAC "assign_tuple" QED
-Resume source_no_create_error_ordinary_cases[augassign]: FAIL_TAC "augassign" QED
-Resume source_no_create_error_ordinary_cases[if]: FAIL_TAC "if" QED
-Resume source_no_create_error_ordinary_cases[for]: FAIL_TAC "for" QED
-Resume source_no_create_error_ordinary_cases[array]: FAIL_TAC "array" QED
-Resume source_no_create_error_ordinary_cases[range]: FAIL_TAC "range" QED
-Resume source_no_create_error_ordinary_cases[for_cons]: FAIL_TAC "for_cons" QED
-Resume source_no_create_error_ordinary_cases[topname]: FAIL_TAC "topname" QED
-Resume source_no_create_error_ordinary_cases[flag]: FAIL_TAC "flag" QED
-Resume source_no_create_error_ordinary_cases[ifexp]: FAIL_TAC "ifexp" QED
-Resume source_no_create_error_ordinary_cases[subscript]: FAIL_TAC "subscript" QED
-Resume source_no_create_error_ordinary_cases[attribute]: FAIL_TAC "attribute" QED
-Resume source_no_create_error_ordinary_cases[builtin]: FAIL_TAC "builtin" QED
-Resume source_no_create_error_ordinary_cases[pop]: FAIL_TAC "pop" QED
-Resume source_no_create_error_ordinary_cases[typebuiltin]: FAIL_TAC "typebuiltin" QED
-Resume source_no_create_error_ordinary_cases[name_target]: FAIL_TAC "name_target" QED
-Resume source_no_create_error_ordinary_cases[top_target]: FAIL_TAC "top_target" QED
-Resume source_no_create_error_ordinary_cases[attribute_target]: FAIL_TAC "attribute_target" QED
-Resume source_no_create_error_ordinary_cases[subscript_target]: FAIL_TAC "subscript_target" QED
-Resume source_no_create_error_ordinary_cases[tuple_base]: FAIL_TAC "tuple_base" QED
-Resume source_no_create_error_ordinary_cases[tuple_tuple]: FAIL_TAC "tuple_tuple" QED
-Resume source_no_create_error_ordinary_cases[tuple_cons]: FAIL_TAC "tuple_cons" QED
-Resume source_no_create_error_ordinary_cases[tuple_extra_values]: FAIL_TAC "tuple_extra_values" QED
-Resume source_no_create_error_ordinary_cases[tuple_extra_targets]: FAIL_TAC "tuple_extra_targets" QED
+Resume source_no_create_error_ordinary_cases[assert_bare]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  all_tac >>~- ([`read_result _ _ _ = (INR _,_)`], read_error_tac) >>
+  gvs[switch_BoolV_def, bind_def, COND_RATOR, return_def, raise_def,
+      AllCaseEqs()] >> read_error_tac
+QED
+Resume source_no_create_error_ordinary_cases[assert_unreachable]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  gvs[switch_BoolV_def, bind_def, COND_RATOR, return_def, raise_def,
+      AllCaseEqs()] >> read_error_tac
+QED
+Resume source_no_create_error_ordinary_cases[assert_reason]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, switch_BoolV_def, ignore_bind_def, bind_def,
+    COND_RATOR, lift_option_type_def, option_CASE_rator, return_def, raise_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  all_tac >>~- ([`read_result _ _ _ = (INR _,_)`], read_error_tac) >>
+  metis_tac[]
+QED
+Resume source_no_create_error_ordinary_cases[assert_custom]:
+  Cases_on `err` >> rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, switch_BoolV_def, option_CASE_rator, COND_RATOR,
+    ignore_bind_def, bind_def, lift_option_type_def, lift_option_def,
+    return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  all_tac >>~- ([`read_result _ _ _ = (INR _,_)`], read_error_tac) >>
+  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+    EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+      get_module_code cx NONE = SOME tops /\
+      IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
+      (custom_error_exprs (CustomError p l l0))` by
+    (qpat_x_assum `EVERY _ (int_calls_exprs _)` mp_tac >>
+     qpat_x_assum `EVERY _ (custom_error_exprs _)` mp_tac >>
+     qspec_tac (`custom_error_exprs (CustomError p l l0)`,`xs`) >>
+     Induct >> simp[int_calls_expr_def, EVERY_APPEND] >> metis_tac[]) >>
+  drule order_custom_error_args_perm >> strip_tac >>
+  drule sortingTheory.PERM_EVERY >> metis_tac[]
+QED
+Resume source_no_create_error_ordinary_cases[log]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+    type_check_def, assert_def, lift_option_type_def, option_CASE_rator,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  gvs[lift_option_def, option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+    EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+      get_module_code cx NONE = SOME tops /\
+      IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es` by
+    (qpat_x_assum `~supported_exprs_exists _ _` mp_tac >>
+     qpat_x_assum `EVERY _ (int_calls_exprs _)` mp_tac >>
+     qid_spec_tac `es` >> Induct >>
+     simp[supported_expr_exists_def, int_calls_expr_def, EVERY_APPEND] >>
+     metis_tac[]) >> metis_tac[]
+QED
+Resume source_no_create_error_ordinary_cases[annassign]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  gvs[lift_option_type_def, option_CASE_rator, return_def, raise_def,
+      AllCaseEqs()] >>
+  all_tac >>~- ([`read_result _ _ _ = (INR _,_)`], read_error_tac) >>
+  gvs[new_variable_def, get_scopes_def, type_check_def, assert_def,
+    ignore_bind_def, bind_def, return_def, raise_def, set_scopes_def,
+    list_CASE_rator, AllCaseEqs()]
+QED
+Resume source_no_create_error_ordinary_cases[append]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs syn_defs >>
+  all_tac >>~- ([`read_result _ _ _ = (INR _,_)`], read_error_tac) >>
+  FAIL_TAC "append primitive"
+QED
+Resume source_no_create_error_ordinary_cases[assign_base]:
+  FAIL_TAC "assign_base"
+QED
+Resume source_no_create_error_ordinary_cases[assign_tuple]:
+  FAIL_TAC "assign_tuple"
+QED
+Resume source_no_create_error_ordinary_cases[augassign]:
+  FAIL_TAC "augassign"
+QED
+Resume source_no_create_error_ordinary_cases[if]:
+  FAIL_TAC "if"
+QED
+Resume source_no_create_error_ordinary_cases[for]:
+  FAIL_TAC "for"
+QED
+Resume source_no_create_error_ordinary_cases[array]:
+  FAIL_TAC "array"
+QED
+Resume source_no_create_error_ordinary_cases[range]:
+  FAIL_TAC "range"
+QED
+Resume source_no_create_error_ordinary_cases[for_cons]:
+  FAIL_TAC "for_cons"
+QED
+Resume source_no_create_error_ordinary_cases[topname]:
+  FAIL_TAC "topname"
+QED
+Resume source_no_create_error_ordinary_cases[flag]:
+  FAIL_TAC "flag"
+QED
+Resume source_no_create_error_ordinary_cases[ifexp]:
+  FAIL_TAC "ifexp"
+QED
+Resume source_no_create_error_ordinary_cases[subscript]:
+  FAIL_TAC "subscript"
+QED
+Resume source_no_create_error_ordinary_cases[attribute]:
+  FAIL_TAC "attribute"
+QED
+Resume source_no_create_error_ordinary_cases[builtin]:
+  FAIL_TAC "builtin"
+QED
+Resume source_no_create_error_ordinary_cases[pop]:
+  FAIL_TAC "pop"
+QED
+Resume source_no_create_error_ordinary_cases[typebuiltin]:
+  FAIL_TAC "typebuiltin"
+QED
+Resume source_no_create_error_ordinary_cases[name_target]:
+  FAIL_TAC "name_target"
+QED
+Resume source_no_create_error_ordinary_cases[top_target]:
+  FAIL_TAC "top_target"
+QED
+Resume source_no_create_error_ordinary_cases[attribute_target]:
+  FAIL_TAC "attribute_target"
+QED
+Resume source_no_create_error_ordinary_cases[subscript_target]:
+  FAIL_TAC "subscript_target"
+QED
+Resume source_no_create_error_ordinary_cases[tuple_base]:
+  FAIL_TAC "tuple_base"
+QED
+Resume source_no_create_error_ordinary_cases[tuple_tuple]:
+  FAIL_TAC "tuple_tuple"
+QED
+Resume source_no_create_error_ordinary_cases[tuple_cons]:
+  FAIL_TAC "tuple_cons"
+QED
+Resume source_no_create_error_ordinary_cases[tuple_extra_values]:
+  FAIL_TAC "tuple_extra_values"
+QED
+Resume source_no_create_error_ordinary_cases[tuple_extra_targets]:
+  FAIL_TAC "tuple_extra_targets"
+QED
 
 Finalise source_no_create_error_ordinary_cases
