@@ -25,19 +25,6 @@ Proof
   res_tac >> fs[expr_body_pre_def, expr_has_evm_run_def]
 QED
 
-(* A target with such indices never halts: Pop evaluates exactly it first. *)
-Theorem target_indices_pre_no_halt[local]:
-  target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
-  eval_target_place cx bt st <> (INR HaltException, st')
-Proof
-  strip_tac >> drule_all target_indices_pre_static >> strip_tac >>
-  `eval_expr cx (Pop ty bt) st <> (INR HaltException, st')` by
-    (irule eval_expr_calls_no_halt >>
-     simp[expr_has_evm_run_def, supported_expr_exists_def,
-          expr_evm_run_root_def, int_calls_expr_def]) >>
-  strip_tac >> qpat_x_assum `eval_expr _ _ _ <> _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def]
-QED
 
 Theorem tuple_place_target_gas_admissible:
   expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
@@ -56,7 +43,6 @@ Proof
   Cases_on `res`
   >- simp[target_place_res_ok_def] >>
   rename1 `INR exc` >>
-  `exc <> HaltException` by metis_tac[target_indices_pre_no_halt] >>
   drule eval_target_place_no_control >>
   Cases_on `exc` >>
   gvs[no_control_exc_def, no_type_error_result_def, target_place_res_ok_def] >>
