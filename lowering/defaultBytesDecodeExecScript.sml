@@ -5,6 +5,7 @@ Ancestors abiEncoder abiDecoderGuards emitHelper exprLowering calldataSourceCorr
   abiDecoderContract abiDecoderClamp exprLoweringProps fragExecMem
   vyperValue vyperCalldata valueEncodingTyping venomState venomExecSemantics
   compileEnv words list rich_list arithmetic venomInst
+  abiDecoderBytesTyped valueEncodingDefs vyperTyping
 
 Theorem calldata_exact_bytestring_reconstruction[local]:
   (tv = BaseTV (BytesT (Dynamic maxn)) \/ tv = BaseTV (StringT maxn)) /\

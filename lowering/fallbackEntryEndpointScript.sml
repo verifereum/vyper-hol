@@ -76,7 +76,7 @@ Proof
      ce st 4 pa types s G tn [] /\
    EVERY (\tv. type_memory_size tv < dimword (:256)) types` by
     (Cases_on `ce = ce_ext`
-     >- (gvs[] >>
+     >- (qpat_x_assum `ce = ce_ext` SUBST_ALL_TAC >>
          drule_all default_registration_package_initial >>
          disch_then (qspec_then `G` assume_tac) >>
          drule_at (Pat `default_registration_invariant _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
@@ -86,7 +86,8 @@ Proof
          simp[] >> disch_tac >>
          Cases_on `classify_functions tops` >> PairCases_on `r` >>
          gvs[] >> metis_tac[]) >>
-     `args = [] /\ types = [] /\ pa = [] /\ ce.ce_vars = FEMPTY /\
+     ((qpat_x_assum `ce = ce_ext` (fn th => fs[th]) >> NO_TAC) ORELSE
+     (`args = [] /\ types = [] /\ pa = [] /\ ce.ce_vars = FEMPTY /\
       (ce_ext with <|ce_ret_enc_info := ce.ce_ret_enc_info;
                     ce_ret_dec_info := ce.ce_ret_dec_info;
                     ce_max_return_size := ce.ce_max_return_size|>) = ce` by
@@ -97,16 +98,17 @@ Proof
       storage_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
       transient_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
       immutable_section_layout ce tops` by
-       (qpat_assum `(_ with <|ce_ret_enc_info := _; ce_ret_dec_info := _;
+       (qpat_x_assum `ce_ext = if _ then _ else _` kall_tac >>
+        qpat_assum `(_ with <|ce_ret_enc_info := _; ce_ret_dec_info := _;
           ce_max_return_size := _|>) = ce`
           (fn th => once_rewrite_tac[GSYM th]) >>
-        fs[loweringStateRelDefsTheory.storage_vars_rel_def,
-           loweringStateRelDefsTheory.transient_vars_rel_def,
-           immutableRelationTheory.immutable_section_layout_def]) >>
+        gvs[loweringStateRelDefsTheory.storage_vars_rel_def,
+            loweringStateRelDefsTheory.transient_vars_rel_def,
+            immutableRelationTheory.immutable_section_layout_def]) >>
      conj_tac
      >- (irule defaultConcreteRegistrationDefsTheory.default_registration_invariant_initial >>
          simp[defaultConcreteRegistrationDefsTheory.default_registration_ptr_reservation_def] >>
-         metis_tac[]) >> simp[]) >>
+         metis_tac[]) >> simp[]))) >>
   pop_assum strip_assume_tac >>
   `~ctx_has_dalloca unit.cu_context` by
     metis_tac[entryReachBodyFmpTheory.entry_runtime_no_dalloca] >>
