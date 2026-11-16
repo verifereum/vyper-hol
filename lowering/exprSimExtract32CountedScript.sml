@@ -47,10 +47,9 @@ Proof
             metis_tac[gas_marked_exec_end_gas_obs] >>
           `gas_outcome memory tops (ctx,func) cx st0 (k v)
              (mid with gas_obs := [],t) Q R` by
-            (first_x_assum irule >> simp[] >> rpt conj_tac >>
-             TRY (metis_tac[] >> NO_TAC) >> rpt strip_tac >>
-             `?v'. INL v = INL v' /\ P H v' (mid with gas_obs := []) t` by
-               metis_tac[] >> gvs[]) >>
+            (first_x_assum irule >> simp[] >> conj_tac
+             >- (qexists_tac `storage_trace_horizon mid.storage_trace` >> simp[]) >>
+             qexists_tac `marks` >> simp[]) >>
           pop_assum (mp_tac o REWRITE_RULE [gas_outcome_def]) >>
           disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
           >- (strip_tac >> rewrite_tac[gas_outcome_def] >>
