@@ -5,7 +5,7 @@ Ancestors
   exprPtrUnwrapAllocSeparation exprSimAlloc exprPtrUnwrapAllocation
   slotCopyExecution copyExecution bodyPtrDefs context compileEnv loweringStateRelDefs
   exprLoweringProps emitHelper ASCIInumbers words arithmetic
-  venomState bufferAllocationExecution finite_map
+  venomState bufferAllocationExecution finite_map ptrDiscipline
 
 Theorem unwrap_slot_external_old:
   (!x. op = Var x ==> not_fresh_at cs x) ==>
@@ -48,6 +48,7 @@ Theorem unwrap_alloc_loop_entry:
     gas_path_ptr D 0 ctx func PG G tn s 0 G0 tn0 (OK a) /\
     a.vs_current_bb = sm.cs_current_bb /\
     a.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~a.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
     slot_copy_external sm src /\ slot_copy_external sm (Var root) /\
     eval_operand src a = SOME p /\ lookup_var root a = SOME d /\
     op_taint tn0 src = {} /\
@@ -60,6 +61,10 @@ Theorem unwrap_alloc_loop_entry:
 Proof
   strip_tac >> drule_all unwrap_alloc_entry >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (strip_tac >> drule_all unwrap_alloc_below_fmp >>
+     qpat_x_assum `a = _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def] >> metis_tac[]) >>
   `!x. src = Var x ==> x <> out` by
     metis_tac[unwrap_alloc_old_operand_distinct] >>
   drule_all unwrap_alloc_old_operand_ghost >>

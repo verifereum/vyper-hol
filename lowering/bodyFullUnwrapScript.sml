@@ -6,7 +6,8 @@ Theory bodyFullUnwrap
 Ancestors
   bodyFullUnwrapIdentity bodyFullUnwrapWord bodyFullUnwrapSlot
   bodyFullUnwrapCodeCopy exprSimUnwrap bodySimFull fragGasOriginPtr bodyPtrDefs loweringPosts exprSimMemDefs
-  vyperStorageFootprint exprLowering compileEnv allocaHistory context
+  vyperStorageFootprint exprLowering exprLoweringProps ptrDiscipline venomMemDefs
+  compileEnv allocaHistory context
 
 (* One piece per value form: its premises are this theorem's, so each
    closes from the assumptions, and the wrong pieces fail on their case. *)
@@ -14,35 +15,11 @@ val PIECE_TAC = fn th =>
   mp_tac th >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
-  disch_then ACCEPT_TAC;
+  simp[] >>
+  disch_then (qx_choose_then `v` (qx_choose_then `z`
+    (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
+  qexistsl [`v`, `z`, `G'`, `tn'`] >> simp[];
 
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
-Proof
-  strip_tac >>
-  Cases_on `is_word_type (post_value_type cenv e)`
-  >- PIECE_TAC unwrap_word_value_origin_ptr >>
-  Cases_on `vv`
-  >- (rename1 `StackValue t0 op0` >>
-      PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
-  rename1 `LocatedValue t p` >>
-  Cases_on `p.ptr_location = LocCalldata`
-  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-      impl_tac >- fs[storage_trace_domain_def] >>
-      simp[vv_post_calldata]) >>
-  Cases_on `p.ptr_location` >>
-  TRY (qpat_x_assum `p.ptr_location = LocCalldata`
-         (fn th => qpat_x_assum `p.ptr_location <> _`
-                     (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
-  TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
-  Cases_on `is_word_type t` >>
-  FIRST (map (fn th => PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
-    [unwrap_memory_origin_ptr, unwrap_memory_word_origin_ptr,
-     unwrap_slot_word_origin_ptr, unwrap_slot_copy_origin_ptr,
-     unwrap_code_word_origin_ptr, unwrap_code_copy_origin_ptr])
-QED
-
-*)
 Theorem unwrap_value_origin_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\
   sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
@@ -115,5 +92,40 @@ Theorem unwrap_value_origin_ptr:
     wb_frame cenv ee ee sb s z /\
     ghost_kept_at lo cenv ee sb G tn s G' tn'
 Proof
-  cheat
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (strip_tac >>
+     `stmt_state_rel (storage_trace_horizon ee.storage_trace)
+        ctx func cenv cx ee s` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+          (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+        impl_tac >- fs[storage_trace_domain_def] >>
+        simp[vv_post_def]) >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  Cases_on `is_word_type (post_value_type cenv e)`
+  >- PIECE_TAC unwrap_word_value_origin_ptr >>
+  Cases_on `vv`
+  >- (rename1 `StackValue t0 op0` >>
+      PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocCalldata`
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+      impl_tac >- fs[storage_trace_domain_def] >>
+      simp[vv_post_calldata]) >>
+  Cases_on `p.ptr_location` >>
+  TRY (qpat_x_assum `p.ptr_location = LocCalldata`
+         (fn th => qpat_x_assum `p.ptr_location <> _`
+                     (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
+  TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
+  Cases_on `is_word_type t` >>
+  FIRST (map (fn th => PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
+    [unwrap_memory_origin_ptr, unwrap_memory_word_origin_ptr,
+     unwrap_slot_word_origin_ptr, unwrap_slot_copy_origin_ptr,
+     unwrap_code_word_origin_ptr, unwrap_code_copy_origin_ptr])
 QED

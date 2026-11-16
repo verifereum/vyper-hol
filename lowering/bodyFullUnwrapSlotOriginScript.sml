@@ -13,7 +13,30 @@ Ancestors
   exprSimPtrTopLevelStorageCopy abiBufferAllocationCode fragExec
 
 
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+Theorem unwrap_ensure_slot_origin_loop:
+  (loc = LocStorage \/ loc = LocTransient) /\ n <> 1 /\
+  compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+  nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ op_taint tn src = {} ==>
+  ?root d a G0 tn0 Gf tnf t sm buf u cv ds.
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
+    op = Var root /\ d = n2w (buffer_allocation_base s sa.cs_next_id) /\
+    compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
+    toplevel_copy_inv cv ds root src loc p (w2n d) n a G0 tn0 n Gf tnf t /\
+    (!x. not_fresh_at sm x ==> ~MEM x ds) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_all ensure_slot_memory_loop_code >> strip_tac >>
@@ -26,6 +49,13 @@ Proof
   qpat_x_assum `out = root` SUBST_ALL_TAC >>
   `u1 = u` by fs[] >>
   qpat_x_assum `u1 = u` SUBST_ALL_TAC >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (strip_tac >> drule_all unwrap_alloc_below_fmp >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     qpat_x_assum `a = u with vs_inst_idx := _`
+       (fn th => REWRITE_TAC [th]) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `not_fresh_at sm root /\ (!x. src = Var x ==> not_fresh_at sm x)` by
     (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
      qpat_x_assum `!x. src = Var x ==> _` mp_tac >>
@@ -67,37 +97,30 @@ Proof
   qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >> simp[]
 QED
 
-
-*)
-Theorem unwrap_ensure_slot_origin_loop:
-  (loc = LocStorage \/ loc = LocTransient) /\ n <> 1 /\
-  compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
-  nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+Theorem unwrap_single_slot_origin_execution:
+  (load = SLOAD \/ load = TLOAD) /\
+  same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+  fn_has_code sa sb func /\
+  emitted_insts sa sb =
+    [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] /\
+  eval_operand src s = SOME key /\ op_taint tn src = {} /\ root <> out /\
+  ptr_covers G tn root s 32 /\ lookup_var root s = SOME addr /\
+  allocas_from lo s /\ w2n addr + 32 <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME p /\ op_taint tn src = {} ==>
-  ?root d a G0 tn0 Gf tnf t sm buf u cv ds.
-    fn_has_code sa sm func /\ fn_has_code sm sb func /\
-    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
-    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
-    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
-    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
-    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
-    op = Var root /\ d = n2w (buffer_allocation_base s sa.cs_next_id) /\
-    compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
-    toplevel_copy_inv cv ds root src loc p (w2n d) n a G0 tn0 n Gf tnf t /\
-    (!x. not_fresh_at sm x ==> ~MEM x ds) /\ ~t.vs_halted /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?Gf tnf t.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t = (mstore (w2n addr) (slot_copy_word load s key)
+      (update_var out (slot_copy_word load s key) s)
+        with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    tnf.t_mem =
+      (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) UNION
+        {w2n addr+k | k IN key_taint
+          (if load=SLOAD then tn.t_stor else tn.t_trans) key} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!x. x <> out ==> FLOOKUP Gf x = FLOOKUP G x /\
+       op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
@@ -130,37 +153,37 @@ Proof
   asm_rewrite_tac[] >> simp[mstore_def, write_memory_with_expansion_def, update_var_def]
 QED
 
-
-*)
-Theorem unwrap_single_slot_origin_execution:
-  (load = SLOAD \/ load = TLOAD) /\
-  same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\
-  fn_has_code sa sb func /\
-  emitted_insts sa sb =
-    [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] /\
-  eval_operand src s = SOME key /\ op_taint tn src = {} /\ root <> out /\
-  ptr_covers G tn root s 32 /\ lookup_var root s = SOME addr /\
-  allocas_from lo s /\ w2n addr + 32 <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+Theorem unwrap_ensure_slot_origin_single:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_ensure_in_memory src loc nb 1 ctor imm sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+  nb < dimword (:256) /\ 32 <= nb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?Gf tnf t.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ op_taint tn src = {} ==>
+  ?root d a G0 tn0 Gf tnf t sm buf u.
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
+    op = Var root /\ d = n2w (buffer_allocation_base s sa.cs_next_id) /\
+    compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t = (mstore (w2n addr) (slot_copy_word load s key)
-      (update_var out (slot_copy_word load s key) s)
-        with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    tnf.t_mem =
-      (tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) UNION
-        {w2n addr+k | k IN key_taint
-          (if load=SLOAD then tn.t_stor else tn.t_trans) key} /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!x. x <> out ==> FLOOKUP Gf x = FLOOKUP G x /\
-       op_taint tnf (Var x) = op_taint tn (Var x))
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+    t = (mstore (w2n d) (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p)
+      (update_var (STRING #"%" (toString sm.cs_next_var))
+        (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p) a)
+          with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    tnf.t_mem = (tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
+      {w2n d+k | k IN key_taint (if loc=LocStorage then tn0.t_stor else tn0.t_trans) p} /\
+    tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
+    (!x. x <> STRING #"%" (toString sm.cs_next_var) ==>
+       FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x))
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_all ensure_slot_memory_single_code >> strip_tac >>
@@ -219,14 +242,13 @@ Proof
 QED
 
 
-
-*)
-Theorem unwrap_ensure_slot_origin_single:
+Theorem unwrap_ensure_slot_origin_execution:
   (loc = LocStorage \/ loc = LocTransient) /\
-  compile_ensure_in_memory src loc nb 1 ctor imm sa = (op,sb) /\
+  compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
-  nb < dimword (:256) /\ 32 <= nb /\
+  nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  alloca_history func s /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -240,23 +262,24 @@ Theorem unwrap_ensure_slot_origin_single:
     tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
     op = Var root /\ d = n2w (buffer_allocation_base s sa.cs_next_id) /\
     compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
+    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
+    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
+    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t = (mstore (w2n d) (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p)
-      (update_var (STRING #"%" (toString sm.cs_next_var))
-        (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p) a)
-          with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    tnf.t_mem = (tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
-      {w2n d+k | k IN key_taint (if loc=LocStorage then tn0.t_stor else tn0.t_trans) p} /\
-    tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
-    (!x. x <> STRING #"%" (toString sm.cs_next_var) ==>
-       FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x))
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    (n <> 1 ==> ?cv ds.
+      toplevel_copy_inv cv ds root src loc p (w2n d) n a G0 tn0 n Gf tnf t /\
+      (!x. not_fresh_at sm x ==> ~MEM x ds) /\ ~t.vs_halted) /\
+    (n = 1 ==>
+      t = (mstore (w2n d) (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p)
+        (update_var (STRING #"%" (toString sm.cs_next_var))
+          (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p) a)
+            with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      tnf.t_mem = (tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
+        {w2n d+k | k IN key_taint (if loc=LocStorage then tn0.t_stor else tn0.t_trans) p} /\
+      tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
+      (!x. x <> STRING #"%" (toString sm.cs_next_var) ==>
+         FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)))
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   Cases_on `n=1`
@@ -348,46 +371,3 @@ Resume unwrap_ensure_slot_origin_execution[loop_frontier]:
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[]
 QED
 Finalise unwrap_ensure_slot_origin_execution
-
-*)
-Theorem unwrap_ensure_slot_origin_execution:
-  (loc = LocStorage \/ loc = LocTransient) /\
-  compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
-  nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  alloca_history func s /\ fn_inst_ids_distinct func /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME p /\ op_taint tn src = {} ==>
-  ?root d a G0 tn0 Gf tnf t sm buf u.
-    fn_has_code sa sm func /\ fn_has_code sm sb func /\
-    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
-    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
-    a = u with vs_inst_idx := SUC s.vs_inst_idx /\
-    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
-    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
-    op = Var root /\ d = n2w (buffer_allocation_base s sa.cs_next_id) /\
-    compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
-    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0) /\
-    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (a,G0,tn0) [] (OK t,Gf,tnf) /\
-    gas_origin_ptr_path (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    (n <> 1 ==> ?cv ds.
-      toplevel_copy_inv cv ds root src loc p (w2n d) n a G0 tn0 n Gf tnf t /\
-      (!x. not_fresh_at sm x ==> ~MEM x ds) /\ ~t.vs_halted) /\
-    (n = 1 ==>
-      t = (mstore (w2n d) (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p)
-        (update_var (STRING #"%" (toString sm.cs_next_var))
-          (slot_copy_word (if loc=LocStorage then SLOAD else TLOAD) a p) a)
-            with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-      tnf.t_mem = (tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
-        {w2n d+k | k IN key_taint (if loc=LocStorage then tn0.t_stor else tn0.t_trans) p} /\
-      tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
-      (!x. x <> STRING #"%" (toString sm.cs_next_var) ==>
-         FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)))
-Proof
-  cheat
-QED

@@ -7,14 +7,23 @@
  *)
 Theory bodyFullOfVV
 Ancestors
-  bodyFullUnwrap bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  bodyFullUnwrap bodyFullHashKeccakFixed bodySimFull gasOutcomeFullCompose gasOutcomeFull
   gasShadowCompile exprSimMemorySource exprSimDefs exprLowering
   exprLoweringProps loweringPosts compileEnv context vyperTypeSystem
   vyperAST vyperInterpreter vyperState venomState
 
 val _ = Parse.hide "body";
 
-(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+Theorem expr_sim_full_of_vv:
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+        ~is_word_type (post_value_type cenv e) ==>
+        type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+        type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
+  (!gs tv ee v. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+     read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es ==>
+  expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es
 Proof
   strip_tac >> rewrite_tac[expr_sim_full_def] >> rpt strip_tac >>
   qpat_x_assum `lower_value compile_expr cenv ty e sa = _` mp_tac >>
@@ -109,22 +118,9 @@ Resume expr_sim_full_of_vv[unwrap]:
   strip_tac >> irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`G'`,`ee`,`INL v`,`z`,`tn'`] >>
   conj_tac >- metis_tac[read_result_gas_obs] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee z` by fs[expr_post_def] >>
+  drule stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 Finalise expr_sim_full_of_vv
-
-*)
-Theorem expr_sim_full_of_vv:
-  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
-        ~is_word_type (post_value_type cenv e) ==>
-        type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
-        type_memory_size rt < 2**64) /\
-  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
-  (!gs tv ee v. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
-     read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
-  expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es ==>
-  expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es
-Proof
-  cheat
-QED
