@@ -39,6 +39,7 @@ Theorem body_full_memory_same_type_store_path:
     (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
       val_in_memory tv v (w2n dw) mem) /\
     typed_copy_state_frame sa (w2n dw) (type_memory_size tv) s t /\
+    t.vs_prev_bb = s.vs_prev_bb /\ t.vs_current_bb = s.vs_current_bb /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
@@ -120,6 +121,8 @@ Resume body_full_memory_same_type_store_path[finish]:
   simp[] >>
   conj_tac >- (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   conj_tac >- suspend "frame" >>
+  conj_tac >- (gvs[venom_state_component_equality]) >>
+  conj_tac >- (gvs[venom_state_component_equality]) >>
   conj_tac >- (gvs[venom_state_component_equality]) >>
   conj_tac >- (gvs[venom_state_component_equality, same_blocks_def]) >>
   rpt conj_tac
