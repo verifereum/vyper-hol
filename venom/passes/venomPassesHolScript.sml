@@ -29,7 +29,14 @@ Ancestors
   (* CFG structural passes *)
   tailMerge
   simplifyCfg
+  o1SimplifyCfgGasEvents
   cfgNorm
+  o1ContractCfgNormGas
+  o1ContractCfgNormCursorBlocks
+  o1ContractCfgNormCursorReturns
+  o1ContractCfgNormCursorProjection
+  o1ContractCfgNormJointCursors
+  o1ContractCfgNormJointTrace
   (* memory passes *)
   loadElim
   deadStoreElim
@@ -41,9 +48,10 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* configured pipeline runner structural guarantees *)
-  venomPipelineRunnerProps venomPipelineData
+  venomPipelineRunnerProps venomPipelineData o1PreDftStaticMem
   (* dead function traversal *)
   dftCorrectnessFinal
+  dftGasMaskRequests dftGasPrefixProvider
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs

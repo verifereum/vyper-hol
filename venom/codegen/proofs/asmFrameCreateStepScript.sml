@@ -1126,3 +1126,60 @@ Proof
   rename1 `as.as_stack = value::off::sz::salt::stk` >>
   first_x_assum (qspec_then `SOME salt` irule) >> simp[] >> metis_tac[]
 QED
+
+Theorem asm_frame_create_success_not_last:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2") /\
+  run_call es = SOME (r,final) /\ ~frame_resource_starved es0 r final /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 ==>
+  ~frame_last es
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 7 disch_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `!salt_opt value off sz stk.
+     EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+     a.as_stack = value::off::sz::
+       (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
+     ~frame_last es` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `c.msgParams.static`
+     >- (`a.as_call_ctx.cc_static` by
+           (fs[asm_frame_rel_def, asm_evm_rel_def]) >>
+         Cases_on `salt_opt` >>
+         gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+             asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+             asm_step_control_def, asm_step_extcall_def,
+             asm_exec_create_def, asm_exec_create2_def]) >>
+     Cases_on `step_create (IS_SOME salt_opt) es` >>
+     rename1 `step_create _ es = (result,mid)` >> Cases_on `result`
+     >- (Cases_on `x` >>
+         drule_all asm_frame_create_normal_step_ok >> disch_then strip_assume_tac >>
+         gvs[frameStepTheory.frame_next_def, frameStepTheory.frame_last_def]) >>
+     drule_all asm_frame_create_failure_starved >> disch_then strip_assume_tac >> gvs[]) >>
+  Cases_on `a.as_stack`
+  >- gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+      asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+      asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `t`
+  >- gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+      asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+      asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `t'`
+  >- gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+      asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+      asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  Cases_on `EL a.as_pc prog = AsmOp "CREATE"`
+  >- (first_x_assum (qspec_then `NONE` irule) >> simp[] >> metis_tac[]) >>
+  Cases_on `t`
+  >- gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+      asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+      asm_step_control_def, asm_step_extcall_def,
+      asm_exec_create_def, asm_exec_create2_def] >>
+  rename1 `a.as_stack = value::off::sz::salt::stk` >>
+  first_x_assum (qspec_then `SOME salt` irule) >> simp[] >> metis_tac[]
+QED
