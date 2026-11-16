@@ -755,7 +755,7 @@ Theorem const_subst_context_stk:
   (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
   const_subst_context roots (cx with stk := s) env E mods art
 Proof
-  simp[const_subst_context_def, get_tenv_stk, const_results_related_stk,
+  simp[const_subst_context_def, get_module_code_stk, get_tenv_stk, const_results_related_stk,
        lookup_global_stk] >>
   rpt strip_tac >> res_tac >> simp[] >>
   qexists `pv` >> simp[] >> rpt strip_tac >>
