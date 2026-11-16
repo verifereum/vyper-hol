@@ -413,9 +413,10 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          drule_at (Pat `emit_op _ _ _ = _`) vv_post_add_read_mem_src >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-          disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
+          mp_tac (Q.INST
+            [`H` |-> `storage_trace_horizon es_end.storage_trace`,
+             `ee` |-> `es_end with gas_obs := []`, `s` |-> `t1`]
+            (SPEC_ALL vv_post_add_read_mem_src)) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           `s0.vs_alloca_next <= u2.vs_alloca_next` by decide_tac >>
