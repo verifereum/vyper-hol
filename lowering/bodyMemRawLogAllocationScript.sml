@@ -51,6 +51,7 @@ Proof
      drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >> gvs[]) >>
   simp[] >>
   conj_tac
-  >- (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `s`] >> simp[]) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  >- (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `s`] >>
+      fs[lookup_var_def] >> metis_tac[]) >>
+  gvs[lookup_var_def] >> metis_tac[]
 QED
