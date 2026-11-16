@@ -1,8 +1,9 @@
 (* The source parameter phase before its compiled entry packet executes. *)
 Theory fnFramePrefixEntry
 Ancestors
+  codegenEntryFacts
   fnFramePrefix fnEntryParams fnEntryPlan fnEntryStep fnFrameBoundaryEntryParams
-  codegenEntrySim codegenEntryRel fnBlockBodyHelpers fnBlockBodySteps
+  codegenEntryRel fnBlockBodyHelpers fnBlockBodySteps
   contextCodegenRel frameRel unitShapeDefs stackPlanGen stackPlanTypes
   planExec stackOpSim asmSem venomExecSemantics venomInst venomState
   fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage list rich_list arithmetic
