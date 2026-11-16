@@ -4518,7 +4518,66 @@ Resume native_successful_cut_inventory[row_step]:
   suspend "plain_step"
 QED
 Resume native_successful_cut_inventory[append_rows]:
-  cheat
+  simp_tac bool_ss [LET_THM, LENGTH_APPEND, LENGTH] >>
+  conj_tac
+  >- (rewrite_tac[inv_ev_trace_append] >>
+      qexists_tac `u with vs_gas_readings := []` >> conj_tac
+      >- (asm_rewrite_tac[]) >>
+      simp[inv_ev_trace_def] >> qexists_tac `r with vs_gas_readings := []` >>
+      simp[] >> qpat_x_assum `ev_step _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  conj_tac
+  >- (simp[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp_tac list_ss [DROP_APPEND2]) >>
+  conj_tac
+  >- (drule_all (SRULE [] (Q.INST [`pre` |-> `[]`] (SPEC_ALL dft_remaining_inv_step))) >>
+      simp[]) >>
+  suspend "native_append"
+QED
+Resume native_successful_cut_inventory[native_append]:
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ (A ++ [i]))
+      (s with vs_gas_readings := g ++ tail)) =
+    ZIP (Kpre,TAKE (LENGTH Kpre) g) ++
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE u.vs_inst_idx pad ++ [i]) u) /\
+   gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ (A ++ [i]))
+      (s with vs_gas_readings := g ++ tail) =
+    FLAT (TAKE (LENGTH A) site_rows) ++
+    gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE u.vs_inst_idx pad ++ [i]) u` by
+    (mp_tac (Q.SPEC `A` native_prefix_cut) >>
+     disch_then (qspec_then `s with vs_gas_readings := g ++ tail` mp_tac) >>
+     disch_then (qspec_then `s.vs_inst_idx` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (qspecl_then [`n`, `C`, `fn`, `p`, `d`] mp_tac) >>
+     disch_then (qspecl_then [`[i]`, `bb`, `pad`] mp_tac) >>
+     simp_tac (srw_ss()) [LET_THM] >>
+     qpat_assum `FOLDR _ _ A _ = OK u` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >> strip_tac >>
+     asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]) >>
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE u.vs_inst_idx pad ++ [i]) u) = ZIP (Kc,gc) /\
+   gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE u.vs_inst_idx pad ++ [i]) u = Sc` by
+    (conj_tac
+     >- (once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+         simp[get_instruction_def, EL_APPEND_EQN] >>
+         simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+              get_instruction_def, trace_gas_append, trace_gas_cons] >>
+         qpat_x_assum `trace_gas (_::_) = ZIP (Kc,gc)` mp_tac >>
+         simp[trace_gas_cons]) >>
+     once_rewrite_tac[gas_events_block_def] >>
+     simp[get_instruction_def, EL_APPEND_EQN] >>
+     simp[Once gas_events_block_def, get_instruction_def]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  qpat_assum `trace_gas (dftGasFromListTraceDefs$trace_block _ _ _ _ _
+    (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ (A ++ [i])) _) = _`
+    (fn th => rewrite_tac[th]) >>
+  qpat_assum `gas_events_block _ _ _
+    (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ (A ++ [i])) _ = _`
+    (fn th => rewrite_tac[th]) >>
+  simp[rich_listTheory.ZIP_APPEND, rich_listTheory.TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+  `LENGTH gpre - (LENGTH gc + LENGTH gpre) = 0` by decide_tac >> simp[]
 QED
 Resume native_successful_cut_inventory[plain_step]:
   qpat_x_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` mp_tac >>
