@@ -4,7 +4,7 @@ Theory msgGasFull
 Ancestors
   bodyFullBuiltinCalldataSlice bodyFullBuiltinPrecompileRecoveryArgs
   bodyFullBuiltinPrecompileRecoveryBuffers bodyFullBuiltinECRecover
-  bodyFullBuiltinUint2Str
+  bodyFullBuiltinUint2Str bodyFullPop
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr bodyPtrDefs ptrSafeRun
