@@ -1765,6 +1765,31 @@ QED
 
 Finalise normal_frame_symbolic_joint_progress
 
+(* General symbolic simulation over agreeing code labels and fixed code bytes. *)
+Theorem normal_frame_symbolic_trace_prefix_own:
+  !allow_own lo own j.
+  joint_trace vs0 unit.cu_context q0 evs qs qlast /\ j <= LENGTH evs /\
+  code_labels_agree prog lo /\
+  generate_context_plan unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+  codegen_asm_entry_rel_reloc lo cpl prog vs0 (entry_asm_state vs0 es0) /\
+  vs0.vs_code = own /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env own /\ focus_s7_symbolic_context_own allow_own unit prog /\
+  (!i stk PG G tn fn inst s oms om hs h.
+    i < j /\ EL i (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h ==>
+      ~in_revert_forward fn s /\ focus_s7_symbolic_guard_own lo cpl fn inst s) ==>
+  ?n ast ss.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+    sym_steps_mode allow_own prog env own n (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
+    normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0
+      (EL j (q0::qs)) ast ss
+Proof
+  cheat
+QED
+
 Theorem normal_frame_symbolic_trace_prefix:
   !j.
   joint_trace vs0 unit.cu_context q0 evs qs qlast /\ j <= LENGTH evs /\

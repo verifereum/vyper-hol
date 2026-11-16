@@ -209,6 +209,30 @@ Proof
   drule_all codegen_entry_blocks_sim >> disch_then (qspec_then `fuel` mp_tac) >> simp[]
 QED
 
+(* General symbolic simulation over agreeing code labels and fixed code bytes. *)
+Theorem codegen_label_disciplined_mode:
+  !allow_own lo own fuel rpolicy unit cp prog Inv vs as env.
+    code_labels_agree prog lo /\
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    codegen_asm_entry_rel_reloc lo cp prog vs as /\
+    (if allow_own then label_flow_own_ok unit.cu_context else label_flow_ok unit.cu_context) /\ code_end_offset_ok Inv unit.cu_context /\
+    sym_unit_static_ok unit /\
+    (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+    asm_data_env_lo_ok lo prog env own /\
+    vs.vs_code = own /\
+    ((?vs'. run_context fuel unit.cu_context vs = Halt vs') \/
+     (?a vs'. run_context fuel unit.cu_context vs = Abort a vs'))
+    ==>
+    if allow_own then label_disciplined_own env own prog as
+    else label_disciplined env prog as
+Proof
+  cheat
+QED
+
 Theorem codegen_label_disciplined:
   !fuel rpolicy unit cp prog Inv vs as env.
     generate_context_plan unit.cu_context = SOME cp /\

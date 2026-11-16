@@ -1022,6 +1022,17 @@ QED
 
 Finalise sym_fn_block_frame_step
 
+(* General symbolic simulation over agreeing code labels and fixed code bytes. *)
+Theorem sym_fn_sims_all_own:
+  !allow_own fuel.
+    gen_fn_sim_at_reloc F NONE fuel /\
+    gen_fn_frame_sim_at_reloc F NONE fuel /\
+    sym_fn_sim_at_own allow_own fuel /\
+    sym_fn_frame_sim_at_own allow_own fuel
+Proof
+  cheat
+QED
+
 Theorem sym_fn_sims_all:
   !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel
