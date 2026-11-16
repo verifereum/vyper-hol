@@ -31,12 +31,25 @@ Proof
   drule aug_place_typing >> strip_tac >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
     (irule aug_place_target_admissible_mem >> goal_assum (drule_at Any)) >>
-  simp[Once evaluate_def] >> irule aug_place_target_ready_mem_continuation >>
+  `!p. storage_trace_frame (bind (read_place cx p) (\cur.
+      bind (place_type_value cx p) (\ptv.
+        bind (bind (eval_expr cx e) (read_result cx)) (\rhs.
+          bind (lift_sum (evaluate_binop
+            (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+            ptv bop cur rhs)) (write_place cx p)))))` by
+    (gen_tac >>
+     mp_tac (Q.SPEC `PlaceR p`
+       stmtSimAugAssignPlaceMemoryTheory.aug_place_rest_trace_frame) >>
+     simp[vyperStateTheory.get_place_def, vyperStateTheory.bind_return]) >>
+  qpat_x_assum `!p. storage_trace_frame _`
+    (assume_tac o REWRITE_RULE [vyperStateTheory.bind_assoc]) >>
+  simp[Once evaluate_def, SF ETA_ss] >> irule aug_place_target_ready_mem_continuation >>
   simp[] >> (conj_tac
   >- (rpt gen_tac >> strip_tac >> Cases_on `res`
       >- fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
-      simp[stmt_exit_def] >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type])) >>
+      gvs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type])) >>
   qexistsl_tac [`cenv`, `env`, `r`, `sa`, `s0'`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
@@ -46,6 +59,10 @@ Proof
   gnvs[] >>
   `~t.vs_halted` by
     metis_tac[stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_not_halted] >>
+  drule_all aug_place_target_horizon_state_rel >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `FST (SND r) = SOME (slot_loc tr)` by
     fs[loweringPostsTheory.target_post_def, loweringPostsTheory.place_ptr_rel_def] >>
   gnvs[] >> simp[SF ETA_ss] >>
@@ -54,15 +71,16 @@ Proof
      disch_then (mp_tac o MATCH_MP
        vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
      simp[]) >>
-  drule_all aug_place_target_horizon_state_rel >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H0` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
   drule_at (Pat `target_post`) stmtSimDefsTheory.target_post_alloca_frame >>
-  impl_tac >- simp[] >> strip_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (assume_tac o cj 1) >>
   irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss]
     (Q.INST [`es0` |-> `es`] aug_place_ready_storage_endpoint)) >>
-  simp[] >> goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`)) >>
+  simp[] >> goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `type_stmt`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>
   goal_assum (drule_at (Pat `lower_value`)) >> simp[] >>

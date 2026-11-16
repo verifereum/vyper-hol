@@ -67,7 +67,8 @@ Theorem aug_place_operator_write_path_mem[local]:
              res (ff with gas_obs := []) u)) \/
      (exit_result r /\
       !H. valid_horizon cx st0 H ff.storage_trace ==>
-          !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r))
+          (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+          halt_exit H cx (ff with gas_obs := []) res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
@@ -179,9 +180,11 @@ Proof
   qexistsl_tac [`INR (Error err)`, `ee`, `r`] >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  rpt gen_tac >> strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] stmtSimPropsTheory.expr_exit_INR_type] >>
-  gvs[]
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (simp[stmtSimDefsTheory.stmt_exit_def] >>
+      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
+        stmtSimPropsTheory.expr_exit_INR_type] >> gvs[]) >>
+  simp[exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem aug_place_rhs_operator_write_mem:
@@ -242,7 +245,9 @@ Theorem aug_place_rhs_operator_write_mem:
     (\H res ff u. res = INL () /\
       stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   strip_tac >>
   `!z. y = Var z ==> not_fresh_at s2 z` by
@@ -259,9 +264,11 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   irule forced_then_outcome >>
   conj_tac
-  >- (rpt strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
-      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-        stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+  >- (rpt gen_tac >> strip_tac >> BETA_TAC >> conj_tac
+      >- (simp[stmtSimDefsTheory.stmt_exit_def] >>
+          ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
+            stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+      gvs[exprSimDefsTheory.halt_exit_def]) >>
   conj_tac
   >- (gen_tac >> BETA_TAC >>
       irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
@@ -399,7 +406,7 @@ Resume aug_place_rhs_operator_write_mem[callback]:
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       gen_tac >> strip_tac >>
       qpat_x_assum `!H. valid_horizon cx st0 H ff.storage_trace ==>
-                        !tail. stmt_exit _ _ _ _`
+                        (!tail. stmt_exit _ _ _ _) /\ _`
         (qspec_then `H` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> simp[])
 QED

@@ -46,22 +46,25 @@ Theorem aug_place_storage_loaded:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
-  `contract_storage_well_formed cx (es with gas_obs := gs)` by
-    (qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := _)`
-       (mp_tac o PURE_REWRITE_RULE
-         [exprSimHypsDefsTheory.expr_body_pre_def,
-          exprSimHypsDefsTheory.expr_sim_inv_def]) >>
-     metis_tac[]) >>
   `target_post H ctx func cenv cx (es with gas_obs := gs) sa sp s0 mid
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r t` by
     (qpat_assum `target_post _ _ _ _ _ es _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule_at (Pat `target_post`) aug_place_storage_read_path >>
-  disch_then (drule_at (Pat `eval_target_place`)) >>
-  disch_then (drule_at (Pat `emit_op`)) >> simp[] >>
-  disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME tv /\
+   stmt_state_rel H ctx func cenv cx mid t /\
+   storage_well_formed_on cx mid (FST H) /\
+   eval_operand (FST r) t = SOME slot /\
+   (!x. FST r = Var x ==> not_fresh_at sp x)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  qspecl_then [`cx`, `st0`, `H`, `mid`, `ty`, `tv`, `bt`,
+    `es with gas_obs := gs`, `tr`, `slot`]
+    mp_tac aug_place_target_storage_ready >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all aug_place_storage_read_ready >> strip_tac >>
+  drule_all aug_place_storage_load_ready >> strip_tac >>
+  drule_all aug_place_storage_access_path >> strip_tac >>
   qpat_x_assum `target_post _ _ _ _ _ es _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
   `place_ptr_rel cenv cx u (PlaceR (StoragePlace tr slot tv)) slot
