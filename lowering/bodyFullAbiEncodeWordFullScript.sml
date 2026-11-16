@@ -154,10 +154,117 @@ Resume abi_encode_word_vv_full_from_packaging[word_continuation]:
   `fn_has_code sm sn func` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `32 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
-  drule_all abi_encode_alloc_origin_exact >>
+  drule_all (INST_TYPE [beta |-> ``:256``] abi_encode_alloc_origin_exact) >>
   disch_then (qspecl_then [`tn1`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G1`]
     strip_assume_tac) >>
-  FAIL_TAC "word allocation endpoint"
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (qpat_assum `lower_value _ _ _ e sa = _`
+       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >>
+     strip_tac >> fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ghost_inv_at (DF H) lo d ce cx ee G' tn' t'` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     irule (INST_TYPE [alpha |-> ``:256``]
+       bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`G1`, `H`, `ctx`, `w2n w + 32`, `func`, `t`, `sm`, `tn1`] >>
+     simp[] >> fs[expr_post_def] >> metis_tac[]) >>
+  `!x. op = Var x ==> not_fresh_at sm x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `op_taint tn1 op = {}` by fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
+  `?vw. eval_operand op t = SOME vw` by
+    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `t'.vs_labels = t.vs_labels` by
+    (qpat_assum `t' with <|vs_vars := _; vs_allocas := _;
+       vs_alloca_next := _; vs_inst_idx := _|> = t`
+       (SUBST1_TAC o SYM) >> simp[]) >>
+  `eval_operand op t' = SOME vw /\ op_taint tn' op = {}` by
+    (Cases_on `op` >> gvs[venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `fn_has_code sn sh func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `sh.cs_current_bb = sn.cs_current_bb /\
+   sh.cs_current_insts = sn.cs_current_insts ++
+     [mk_inst sn.cs_next_id MSTORE [buf.buf_operand;op] []] /\
+   sh.cs_blocks = sn.cs_blocks` by
+    ((qpat_assum `emit_void _ _ sn = _` mp_tac >>
+     simp[emit_void_def, emit_inst_def, comp_bind_def, fresh_id_def,
+          emit_def, comp_return_def] >> strip_tac >> gvs[] >> (gvs[emit_void_def, emit_inst_def, comp_bind_def, fresh_id_def, emit_def, comp_return_def]))) >>
+  `?bb. lookup_block t'.vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb t'.vs_inst_idx =
+          SOME (mk_inst sn.cs_next_id MSTORE [Var q;op] [])` by
+    (gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND,
+      venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN]) >>
+  qabbrev_tac `ts = (mstore (w2n w) vw t') with
+    vs_inst_idx := SUC t'.vs_inst_idx` >>
+  qabbrev_tac `tns = step_taint (mk_inst sn.cs_next_id MSTORE [Var q;op] [])
+    t' (mstore (w2n w) vw t') tn'` >>
+  `t'.vs_halted = t.vs_halted` by
+    (qpat_assum `t' with <|vs_vars := _; vs_allocas := _;
+       vs_alloca_next := _; vs_inst_idx := _|> = t`
+       (SUBST1_TAC o SYM) >> simp[]) >>
+  `~t'.vs_halted` by fs[] >>
+  `!D. gas_origin_ptr_path
+     (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t',G',tn') [] (OK ts,G',tns)` by
+    (gen_tac >> simp[NoAsms, Abbr `ts`, Abbr `tns`] >>
+     irule abi_encode_mstore_origin_path >> goal_assum (drule_at Any) >>
+     simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+       memSafeRunTheory.inst_dload_in_section_def, venomInstTheory.mk_inst_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def,
+       codegenRelTheory.fixed_source_write_range_def,
+       venomStateTheory.eval_operand_def] >>
+     gvs[venomInstTheory.mk_inst_def] >> decide_tac) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) es.storage_trace` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx es s0` by
+    metis_tac[] >>
+  `ghost_kept_at lo ce es sa G0 tn0 s0 G' tn'` by
+    (irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_kept_at >>
+     qexistsl_tac [`G1`,`w2n w + 32`,`t`,`tn1`] >> simp[] >>
+     conj_tac >- (rpt strip_tac >>
+       `b + sz <= s0.vs_alloca_next` by
+         metis_tac[abiArgsLabelBoundaryTheory.abi_args_local_region_frontier] >>
+       decide_tac) >>
+     rpt strip_tac >>
+     `off + sz <= s0.vs_alloca_next` by
+       (qpat_assum `stmt_state_rel _ _ _ _ _ es s0` mp_tac >>
+        simp[NoAsms, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+     decide_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv_at (DF H) lo d ce cx ee G' tns ts` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func ce cx ee t'` by
+       (qpat_assum `!H'. stmt_state_rel H' _ _ _ _ _ t ==> _`
+          (qspec_then `H` mp_tac) >>
+        (impl_tac >-
+          (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+             (qspec_then `H` mp_tac) >>
+           (impl_tac >- first_assum ACCEPT_TAC) >>
+           simp[NoAsms, expr_post_def])) >>
+        disch_then ACCEPT_TAC) >>
+     `local_ptrs_rel func ce ee.scopes t'` by
+       (qpat_assum `stmt_state_rel H _ _ _ _ _ t'` mp_tac >>
+        simp[NoAsms, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
+     `ghost_kept_at lo ce ee sn G' tn' t' G' tn'` by
+       simp[wordArgsPtrTheory.ghost_kept_at_refl] >>
+     simp[NoAsms, Abbr `ts`, Abbr `tns`] >>
+     irule (cj 1 abi_encode_mstore_frame_at) >>
+     simp[SF SFY_ss] >>
+     qpat_assum `allocas_from lo t'` mp_tac >>
+     simp[NoAsms, ptrDisciplineTheory.allocas_from_def] >>
+     disch_then drule >> simp[]) >>
+  FAIL_TAC "word store robust"
 QED
 
 Finalise abi_encode_word_vv_full_from_packaging
