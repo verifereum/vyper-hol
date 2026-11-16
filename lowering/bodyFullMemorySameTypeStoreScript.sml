@@ -57,7 +57,7 @@ Proof
   `val_store_size tv v = type_memory_size tv` by suspend "flat_size" >>
   `compile_copy_memory (Var xd) (Var xs) (type_memory_size tv) sa = ((),sb)` by
     gvs[compile_store_memory_def] >>
-  irule body_full_memory_copy_path >> simp[] >>
+  irule body_full_memory_copy_frame_path >> simp[] >>
   qexistsl_tac [`sw`,`xd`,`xs`] >> gvs[]
 QED
 

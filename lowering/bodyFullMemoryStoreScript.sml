@@ -83,11 +83,8 @@ Resume body_full_memory_store_path[flat]:
     (rpt strip_tac >> irule memory_value_rel_val_in_memory >> simp[] >>
      irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
      irule val_in_memory_memory_value_rel >> simp[]) >>
-  qpat_assum `type_memory_size dtv = type_memory_size stv`
-    (fn th => rule_assum_tac (PURE_REWRITE_RULE [GSYM th])) >>
-  drule_all (Q.INST [`tv` |-> `dtv`] (SPEC_ALL body_full_memory_copy_path)) >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`t`,`Gf`,`tf`] >> simp[]
+  irule body_full_memory_copy_path >> simp[] >>
+  qexistsl_tac [`sw`,`xd`,`xs`] >> fs[]
 QED
 
 Finalise body_full_memory_store_path
