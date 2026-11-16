@@ -76,5 +76,12 @@ Proof
       conj_tac >- metis_tac[pop_toplevel_compile_not_stack] >>
       goal_assum drule) >>
   rw[expr_sim_mem_def] >>
-  gvs[stmt_state_rel_def, state_rel_def]
+  gvs[stmt_state_rel_def, state_rel_def] >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_initial >>
+  simp[vyperStorageFootprintTheory.storage_trace_domain_def,
+       vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result]
 QED

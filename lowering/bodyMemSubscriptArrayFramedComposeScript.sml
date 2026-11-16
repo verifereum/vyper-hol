@@ -501,6 +501,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_summary]:
       gvs[exprSimPropsTheory.vv_post_initial_gas] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   disj2_tac >> simp[halt_exit_def] >> rpt strip_tac >>
   qpat_x_assum `!tail. select_result _ _ _ _ _ = _` (qspec_then `[]` mp_tac) >>
-  simp[] >> metis_tac[evalNoHaltTheory.select_result_nh]
+  simp[] >>
+  disch_then (mp_tac o MATCH_MP evalNoHaltTheory.select_result_nh) >> simp[]
 QED
 Finalise compile_subscript_array_framed_base_mem_case_from_suffix
