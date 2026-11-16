@@ -146,8 +146,10 @@ Proof
                 deploy_frame_supported_target_info_no_extcode]) >>
   all_tac >~ [`supported_append_target tops target`]
   >- (Cases_on `target` >>
-      simp[supported_append_target_def, supported_expr_exists_def] >>
-      metis_tac[deploy_frame_supported_pure_no_extcode]) >>
+      simp[supported_append_target_def, supported_target_pure_def,
+           supported_expr_exists_def] >>
+      metis_tac[deploy_frame_supported_pure_no_extcode,
+                supported_target_pure_expr_exclusion]) >>
   all_tac >~ [`supported_assert_reason tops reason`]
   >- (Cases_on `reason` >>
       simp[supported_assert_reason_def, supported_assert_exists_def] >>
