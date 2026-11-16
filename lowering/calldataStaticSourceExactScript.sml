@@ -4,6 +4,7 @@ Ancestors
   calldataReconstruction vyperCalldata vyperCalldataProps
   valueEncodingDefs valueEncoding valueEncodingProps valueEncodingTyping abiDecoderCoherence
   calldataRecursiveProducers compileEnv exprLowering abiEncoder words list arithmetic
+  typedMemoryCopy
 
 Theorem calldata_static_elems_lift[local]:
   ~tv_abi_dynamic tv /\
@@ -144,5 +145,42 @@ Resume calldata_static_source_exact[tuple]:
 QED
 
 Resume calldata_static_source_exact[struct]:
-  rpt strip_tac >> FAIL_TAC "struct"
+  rpt strip_tac >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  gvs[tv_abi_dynamic_def, tv_needs_clamp_def, tv_abi_dynamic_fields_map,
+      tv_needs_clamp_fields_map, MAP_ZIP, type_memory_size_def,
+      type_memory_size_fields_zip, tv_abi_dynamic_list_exists,
+      tv_needs_clamp_list_exists] >>
+  `EVERY (\tv. ~tv_abi_dynamic tv /\
+    !p d mem. mem_bytes_at d (type_memory_size tv) mem =
+       mem_bytes_at p (type_memory_size tv) cd ==>
+      ?v. cd_decode T cd tv p = SOME v /\ value_has_type tv v /\
+        val_in_memory tv v d mem) tvs` by
+    (gvs[EVERY_EL, LIST_REL_EL_EQN, EXISTS_MEM, MEM_EL] >> metis_tac[]) >>
+  drule calldata_static_list_lift >>
+  disch_then (qspecl_then [`p`,`0`,`d`,`mem`] mp_tac) >> simp[] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `StructTV (ZIP (names,tvs))` >>
+  `LENGTH names = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
+    (simp[Abbr `names`] >> metis_tac[LIST_REL_LENGTH]) >>
+  qexists_tac `StructV (ZIP (names,vs))` >>
+  simp[Once cd_decode_def, MAP_ZIP] >>
+  irule calldata_struct_values_typed_memory >>
+  conj_tac
+  >- (gvs[LIST_REL_EL_EQN, EL_ZIP] >> metis_tac[]) >>
+  simp[typed_copy_fields_tuple_zip]
+QED
+
+Finalise calldata_static_source_exact
+
+Theorem calldata_static_elems_source_exact:
+  !ce env sf ty tv cd p d mem n.
+    abi_decoder_coherent ce env sf ty tv /\
+    ~tv_abi_dynamic tv /\ ~tv_needs_clamp tv /\
+    mem_bytes_at d (n * type_memory_size tv) mem =
+      mem_bytes_at p (n * type_memory_size tv) cd ==>
+    ?vs. cd_decode_elems T cd tv p 0 n = SOME vs /\ LENGTH vs = n /\
+      EVERY (value_has_type tv) vs /\ elems_in_memory vs d tv mem
+Proof
+  rpt strip_tac >> irule calldata_static_elems_lift >> simp[] >>
+  rpt strip_tac >> drule_all calldata_static_source_exact >> metis_tac[]
 QED
