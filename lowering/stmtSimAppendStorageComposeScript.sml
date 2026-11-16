@@ -945,7 +945,7 @@ Resume compile_append_storage_word_stmt_frag[rhs]:
           simp[Abbr `es_rhs`]) >> simp[]) >>
   conj_tac >- simp[storage_trace_frame_append_place] >>
   conj_tac >- suspend "operand" >>
-  rpt strip_tac >> simp[stmt_exit_def] >>
+  rpt strip_tac >> gvs[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -987,11 +987,8 @@ Resume compile_append_storage_word_stmt_frag[operand]:
   Cases_on `cx.txn.is_static`
   >- (`t.vs_call_ctx.cc_static` by
         fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-      qpat_assum `t.vs_call_ctx.cc_static`
-        (fn th => assume_tac (DISJ2
-          ``cenv.ce_module_dynarray_capacity nid <=
-            w2n (if tr then tload slot t else sload slot t)`` th)) >>
-      drule_all append_storage_word_abort_path >> simp[] >>
+      drule append_storage_word_abort_path >> simp[] >>
+      disch_then drule >> disch_then drule >> simp[] >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
       rename1 `gas_marked_path F ctx func t 0 (Abort a ta)` >>
       `?m. !tail.
@@ -1002,20 +999,18 @@ Resume compile_append_storage_word_stmt_frag[operand]:
         (Cases_on `w2n (lookup_storage slot (get_storage cx es_end tr)) <
                     cenv.ce_module_dynarray_capacity nid`
          >- (qexists_tac `"write in static context"` >> gen_tac >>
-             irule append_storage_static >> simp[get_storage_gas_obs]) >>
+             irule append_storage_static >> gvs[get_storage_gas_obs]) >>
          qexists_tac `"append full storage array"` >> gen_tac >>
-         irule append_storage_full >> simp[get_storage_gas_obs] >> decide_tac) >>
+         irule append_storage_full >> gvs[get_storage_gas_obs]) >>
       `gas_marked_exec F (ctx,func)
         (append_place cx (StoragePlace tr slot
           (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v)
         (es_end with gas_obs := [], t) []
         (INR (Error (RuntimeError m))) es_end (Abort a ta)` by
-        simp[gas_marked_exec_def] >>
+        gvs[gas_marked_exec_def] >>
       qexistsl_tac [`INR (Error (RuntimeError m))`, `es_end`, `Abort a ta`] >>
-      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
-      irule (SIMP_RULE std_ss [APPEND_NIL]
-        (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
-      qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
+      gvs[exit_result_def, stmt_exit_def, expr_exit_def,
+          exprSimDefsTheory.halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all append_storage_word_suffix_path >>
@@ -1050,7 +1045,8 @@ Resume compile_append_storage_word_stmt_frag[full]:
   pop_assum SUBST_ALL_TAC >>
   qexistsl_tac [`INR (Error (RuntimeError "append full storage array"))`, `ee1`,
                 `Abort a ta`] >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def] >> gvs[]
+  gvs[exit_result_def, stmt_exit_def, expr_exit_def,
+      exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume compile_append_storage_word_stmt_frag[stored]:
@@ -1151,14 +1147,12 @@ QED
 Finalise compile_append_storage_word_stmt_frag
 
 Theorem append_storage_copy_success_post:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
-  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
-  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!mid' name' subs' slot' tv'.
-    declared_storage_region cx mid' name' subs' = SOME (tr,slot',tv') /\
-    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
-    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
-      (w2n slot') (type_slot_size tv')) /\
+  ~cx.txn.is_static /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  storage_well_formed_on cx es (FST H) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+  regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+  well_formed_type_value (ArrayTV tv (Dynamic cap)) /\
   0 < type_slot_size tv /\ well_formed_type_value tv /\ value_has_type tv v /\
   encode_value tv v = SOME writes /\ val_in_memory tv v (w2n b) s.vs_memory /\
   w2n b + 32 * type_slot_size tv <= dimword (:256) /\
@@ -1171,14 +1165,19 @@ Theorem append_storage_copy_success_post:
         (mem_word_at (w2n b+32*i) s.vs_memory) t) s ks) /\
   (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') ==>
-  res = INL () /\ stmt_state_rel ctx func cenv cx es' u
+  res = INL () /\ stmt_state_rel H ctx func cenv cx es' u /\
+  storage_well_formed_on cx es' (FST H)
 Proof
   strip_tac >>
   drule_all stmt_state_rel_append_storage_aggregate >> strip_tac >>
+  conj_tac >- simp[] >> conj_tac
+  >- (irule place_store_normalize_state >>
+      qexistsl_tac [`s`, `sb`] >> gvs[]) >>
+  irule append_subregion_preserves_storage_well_formed_on >>
   conj_tac >- simp[] >>
-  irule place_store_normalize_state >>
-  qexistsl_tac [`s`, `sb`] >> simp[] >>
-  gvs[]
+  goal_assum (drule_at (Pat `append_place _ _ _ _ = _`)) >>
+  qexistsl_tac [`0`, `[]`, `slot`, `ArrayTV tv (Dynamic cap)`] >>
+  simp[storage_subregion_def]
 QED
 
 
@@ -1190,12 +1189,15 @@ Theorem append_sparse_staging_frame[local]:
   val_wf tv v /\ val_in_memory tv v (w2n sw) s.vs_memory /\
   val_footprint tv v <= n /\ eval_operand raw s = SOME sw /\
   (!x. raw = Var x ==> not_fresh_at sb x) /\
-  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sb /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee s) /\ local_ptrs_reserved cenv sb /\
   fn_inst_ids_distinct func /\ fn_has_code sb sd func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?u w. gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx ee u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee u) /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
@@ -1226,6 +1228,7 @@ Proof
      strip_tac >> gvs[]) >>
   `~not_fresh_at sb p` by simp[not_fresh_at_def, Abbr `p`] >>
   `raw <> Var p` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by metis_tac[] >>
   `not_local_ptr cenv ee.scopes p` by metis_tac[fresh_not_local_ptr] >>
   `emit_void MCOPY [Var p; raw; Lit (n2w n)] sc = ((),sd)` by
     (Cases_on `n` >> gvs[compile_copy_memory_def]) >>
@@ -1234,7 +1237,23 @@ Proof
    s.vs_current_bb = pre.cs_current_bb /\
    s.vs_inst_idx = LENGTH pre.cs_current_insts` by
     gvs[Abbr `pre`, fn_has_code_def, emitted_blocks_def] >>
-  drule_all alloc_copy_memory_framed_bounded_path >> strip_tac >>
+  `?s2 w.
+     lookup_var p s2 = SOME w /\
+     FLOOKUP s2.vs_allocas pre.cs_next_id = SOME (w2n w,n) /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s2) /\
+     val_in_memory tv v (w2n w) s2.vs_memory /\
+     (!ad len. ad + len <= w2n w \/ w2n w + n <= ad ==>
+       mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s.vs_memory) /\
+     (!x. x <> p ==> lookup_var x s2 = lookup_var x s) /\
+     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP s2.vs_allocas aid = SOME entry) /\
+     ~s2.vs_halted /\ s2.vs_current_bb = sd.cs_current_bb /\
+     s2.vs_inst_idx = LENGTH sd.cs_current_insts /\
+     gas_marked_path F ctx func s 0 (OK s2) /\
+     w2n w + n < dimword (:256)` by
+    (irule alloc_copy_memory_framed_bounded_path >>
+     rpt conj_tac >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `not_fresh_at sd p` by
     (qpat_x_assum `emit_inst ALLOCA _ _ _ = _` mp_tac >>
      simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
@@ -1244,17 +1263,19 @@ Proof
      simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
           comp_ignore_bind_def, comp_return_def] >>
      strip_tac >> gvs[not_fresh_at_def, Abbr `p`] >> decide_tac) >>
+  `stmt_state_rel H ctx func cenv cx ee s2` by metis_tac[] >>
   `allocas_non_overlapping s2` by
     gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
   `alloca_frame cenv ee sb s cenv ee s2` by
-    (irule alloca_frame_owned_copy >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_owned_copy) >>
      conj_tac >- metis_tac[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
      >- (qexistsl_tac [`w2n w`, `pre.cs_next_id`, `n`] >> gvs[Abbr `pre`] >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     metis_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`s2`, `w`] >> simp[eval_operand_def] >> metis_tac[]
 QED
 
@@ -1304,7 +1325,9 @@ Theorem compile_append_storage_aggregate_stmt_frag:
       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
   eval_target_place cx (TopLevelNameTarget nid) es =
-    (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
+    (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),
+     es with storage_trace := es.storage_trace ++
+       [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]) /\
   declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
@@ -1317,10 +1340,15 @@ Theorem compile_append_storage_aggregate_stmt_frag:
   type_memory_bytes cenv elem = 32 * type_slot_size tv /\
   type_memory_bytes cenv elem < dimword (:256) /\ cap < dimword (:256) /\
   (!gs v ee.
-    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) ==>
+    bind (eval_expr cx e) (read_result cx)
+      (es with <|gas_obs := gs; storage_trace := es.storage_trace ++
+        [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]|>) = (INL v,ee) ==>
     value_has_type tv v /\ val_wf tv v /\ val_footprint tv v <= type_memory_bytes cenv elem) /\
-  (!ee s u sb (b:bytes32) len v writes ks res ee'.
-    stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sb /\
+  (!H ee s u sb (b:bytes32) len v writes ks res ee'.
+    stmt_state_rel H ctx func cenv cx ee s /\ local_ptrs_reserved cenv sb /\
+    storage_well_formed_on cx ee (FST H) /\ ~cx.txn.is_static /\
+    MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     value_has_type tv v /\ val_in_memory tv v (w2n b) s.vs_memory /\
     encode_value tv v = SOME writes /\
     (!i. MEM i ks <=> MEM i (MAP FST writes)) /\
@@ -1333,8 +1361,11 @@ Theorem compile_append_storage_aggregate_stmt_frag:
           (mem_word_at (w2n b+32*i) s.vs_memory) t) s ks) /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v ee = (res,ee') ==>
-    res = INL () /\ stmt_state_rel ctx func cenv cx ee' u) /\
-  expr_sim ctx func cenv cx elem e es ==>
+    res = INL () /\ stmt_state_rel H ctx func cenv cx ee' u /\
+    storage_well_formed_on cx ee' (FST H)) /\
+  expr_sim ctx func cenv cx elem e
+    (es with storage_trace := es.storage_trace ++
+      [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
@@ -1356,64 +1387,103 @@ Proof
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   drule append_toplevel_place_any >> strip_tac >>
   drule eval_append_storage_bind >> disch_then (qspec_then `e` assume_tac) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[append_forced_admissible] >>
+  qmatch_asmsub_abbrev_tac `expr_sim ctx func cenv cx elem e es_rhs` >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es_rhs` by
+    (simp[Abbr `es_rhs`] >> metis_tac[append_forced_admissible]) >>
   `!x. raw = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `sa.cs_next_var <= sB.cs_next_var` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
   `local_ptrs_reserved cenv sB` by metis_tac[local_ptrs_reserved_next_var] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sB`, `raw`, `s0`] mp_tac) >>
-  impl_tac >- fs[] >>
-  simp[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >> suspend "summary") >>
-  qexists_tac `marks` >> disj2_tac >>
-  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `fin`] >>
-  irule append_forced_exempt >> first_assum ACCEPT_TAC
+  qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
+  irule gas_outcome_record_storage_event >> simp[] >> suspend "rhs"
 QED
 
-Resume compile_append_storage_aggregate_stmt_frag[summary]:
-  qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_summary_at_def] >> strip_tac
-  >- suspend "operand" >>
-  `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
-  qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
-  >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >> simp[stmt_exit_def] >> disj1_tac >>
+Resume compile_append_storage_aggregate_stmt_frag[rhs]:
+  match_mp_tac (Q.INST [`P` |-> `\H v ee t.
+      expr_post H ctx func cenv cx e es_rhs sa sB s0 ee v raw t /\
+      t.vs_current_bb = sB.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+    (SPEC_ALL forced_then_outcome)) >>
+  conj_tac
+  >- (qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`st0`, `sa`, `sB`, `raw`, `s0`] mp_tac) >>
+      impl_tac
+      >- (simp[] >> rpt strip_tac >>
+          `valid_horizon cx st0 H es.storage_trace` by
+            fs[Abbr `es_rhs`, valid_horizon_def] >>
+          `stmt_state_rel H ctx func cenv cx es s0 /\
+           storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+          `storage_well_formed_on cx es_rhs (FST H) <=>
+           storage_well_formed_on cx es (FST H)` by
+            (irule storage_well_formed_on_backends >> simp[Abbr `es_rhs`]) >>
+          simp[Abbr `es_rhs`]) >> simp[]) >>
+  conj_tac >- simp[storage_trace_frame_append_place] >>
+  conj_tac >- suspend "operand" >>
+  rpt strip_tac >> gvs[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_append_storage_aggregate_stmt_frag[operand]:
-  gvs[] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es_end.storage_trace` >>
+  `es_end with gas_obs := [] = es_end` by
+    simp[evaluation_state_component_equality] >>
+  `expr_post H0 ctx func cenv cx e es_rhs sa sB s0 es_end v raw t /\
+   t.vs_current_bb = sB.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sB.cs_current_insts` by metis_tac[] >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+         storage_trace_frame_read_result] >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       valid_horizon cx st0 H es_rhs.storage_trace` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H (es_rhs with gas_obs := gs).storage_trace` by
+       metis_tac[valid_horizon_frame] >> fs[]) >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H es_rhs.storage_trace` by metis_tac[] >>
+     fs[Abbr `es_rhs`, valid_horizon_def, storage_observations_ok_def,
+        storage_trace_regions_def, EVERY_MEM]) >>
+  `MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0) /\
+   regions_consistent (FST H0)` by metis_tac[valid_horizon_def] >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es_end t` by
+    metis_tac[expr_post_def] >>
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `?sw. eval_operand raw t = SOME sw /\ val_in_memory tv v (w2n sw) t.vs_memory` by
-    (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  `~t.vs_halted` by
-    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >>
-     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-  `value_has_type tv v /\ val_wf tv v /\ val_footprint tv v <= 32 * type_slot_size tv` by
-    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >>
-     disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >>
-     qpat_x_assum `!gs v ee. bind (eval_expr cx e) (read_result cx) _ = _ ==> _` drule >> simp[]) >>
-  drule append_sparse_staging_frame >>
-  disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-  simp[] >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  impl_tac >- simp[] >> strip_tac >>
-  rename1 `gas_marked_path F ctx func t 0 (OK staged)` >>
+    (qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+     simp[expr_val_rel_def] >> metis_tac[]) >>
+  `value_has_type tv v /\ val_wf tv v /\ val_footprint tv v <= type_memory_bytes cenv elem` by
+    metis_tac[] >>
+  `?staged w. gas_marked_path F ctx func t 0 (OK staged) /\
+    (!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es_end staged) /\
+    eval_operand tmp.buf_operand staged = SOME w /\
+    val_in_memory tv v (w2n w) staged.vs_memory /\
+    (!x. not_fresh_at sB x ==> lookup_var x staged = lookup_var x t) /\
+    (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
+       FLOOKUP staged.vs_allocas aid = SOME entry) /\
+    ~staged.vs_halted /\ staged.vs_current_bb = sd.cs_current_bb /\
+    staged.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    (?p. tmp.buf_operand = Var p /\ not_fresh_at sd p) /\
+    w2n w + type_memory_bytes cenv elem < dimword (:256) /\
+    alloca_frame cenv es_end sB t cenv es_end staged` by
+    (irule append_sparse_staging_frame >> simp[] >>
+     conj_tac >- (qexists_tac `H0` >> simp[]) >>
+     qexistsl_tac [`elem`, `raw`, `sw`] >> simp[] >> metis_tac[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es_end staged` by metis_tac[] >>
   `(if tr then tload slot staged else sload slot staged) =
    lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr)` by
     (irule append_storage_header_agree >>
      metis_tac[]) >>
-  `~staged.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[vyperTypingTheory.value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `cx.txn.is_static` >- suspend "static" >>
+  `~staged.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
     append_storage_copy_suffix_path >>
   disch_then (drule_at (Pat `fn_has_code sd sb func`)) >>
@@ -1433,7 +1503,7 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
      conj_tac >- simp[] >>
      qexists_tac `cenv.ce_module_dynarray_capacity nid` >>
      simp[] >>
-     qpat_x_assum `type_slot_size (ArrayTV _ _) + _ <= _` mp_tac >>
+     qpat_x_assum `w2n slot + type_slot_size (ArrayTV _ _) <= _` mp_tac >>
      simp[type_slot_size_def, arithmeticTheory.MULT_COMM])) >>
   simp[eval_operand_def, LET_THM] >>
   Cases_on `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v (es_end with gas_obs := [])` >>
@@ -1450,6 +1520,8 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
 QED
 
 Resume compile_append_storage_aggregate_stmt_frag[stored]:
+  `w2n (lookup_storage (n2w offset) (get_storage cx es_end tr)) < cap` by
+    (qpat_x_assum `w2n (lookup_storage _ _) < _` mp_tac >> simp[]) >>
   simp[] >> strip_tac >>
   rename1 `gas_marked_path F ctx func staged 0 (OK fin)` >>
   `store_copy_normalize staged fin =
@@ -1459,35 +1531,51 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
         (slot+n2w (1+w2n (lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr))*type_slot_size tv)+n2w i)
         (mem_word_at (w2n w+32*i) staged.vs_memory) q) staged ks)` by
     (qpat_x_assum `store_copy_normalize staged fin = _` mp_tac >>
-     rpt (pop_assum kall_tac) >>
+     simp[] >> rpt (pop_assum kall_tac) >>
      pure_rewrite_tac[GSYM wordsTheory.word_add_n2w,
        GSYM wordsTheory.word_mul_n2w, wordsTheory.n2w_w2n] >>
      simp_tac bool_ss [valueEncodingPropsTheory.mem_word_at_eq_mload,
-       arithmeticTheory.ADD_COMM, wordsTheory.WORD_ADD_ASSOC]) >>
+       arithmeticTheory.ADD_COMM, wordsTheory.WORD_MULT_COMM] >>
+     simp_tac bool_ss [AC (GSYM wordsTheory.WORD_ADD_ASSOC) wordsTheory.WORD_ADD_COMM]) >>
   `local_ptrs_reserved cenv sd` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sB` >>
      simp[] >>
      `ci_mono sB sc /\ ci_mono sc sd` by
        metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_copy_memory, pairTheory.SND] >>
      fs[ci_mono_def]) >>
-  qpat_x_assum `!ee s u sb' b v' writes ks res ee'. _`
-    (qspecl_then [`es_end with gas_obs := []`, `staged`] mp_tac) >>
-  disch_then (qspecl_then [`fin`, `sd`, `w`, `v`] mp_tac) >>
-  disch_then (qspecl_then [`writes`, `ks`, `res1`, `ee1`] mp_tac) >>
-  impl_tac
-  >- (asm_simp_tac bool_ss [arithmeticTheory.MULT_COMM] >> simp[]) >>
-  strip_tac >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       res1 = INL () /\ stmt_state_rel H ctx func cenv cx ee1 fin /\
+       storage_well_formed_on cx ee1 (FST H)` by
+    (gen_tac >> disch_tac >>
+     `stmt_state_rel H ctx func cenv cx es_end staged /\
+      storage_well_formed_on cx es_end (FST H) /\
+      MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+      regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H)` by
+       metis_tac[expr_post_def, valid_horizon_def] >>
+     `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es_end = (res1,ee1)` by metis_tac[] >>
+     qpat_x_assum `!H ee s u sb b len v writes ks res ee'. _`
+       (qspec_then `H` mp_tac) >>
+     disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ es_end staged`)) >>
+     disch_then (drule_at (Pat `store_copy_normalize staged fin = _`)) >>
+     disch_then (drule_at (Pat `local_ptrs_reserved cenv sd`)) >>
+     disch_then (drule_at (Pat `encode_value tv v = SOME writes`)) >>
+     disch_then (drule_at (Pat `append_place _ _ _ es_end = (res1,ee1)`)) >>
+     disch_then irule >> asm_simp_tac bool_ss [] >> decide_tac) >>
+  `res1 = INL ()` by metis_tac[] >>
   `gas_marked_path F ctx func t 0 (OK fin)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
-  `gas_marked_exec F (ctx,func)
-     (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v)
-     (es_end with gas_obs := [],t) [] res1 ee1 (OK fin)` by
-    simp[gas_marked_exec_def] >>
-  qexistsl_tac [`res1`, `ee1`, `OK fin`] >> conj_tac
-  >- (irule (SIMP_RULE std_ss [APPEND_NIL]
-        (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
-      qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
-  disj1_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  qexistsl_tac [`res1`, `ee1`, `OK fin`] >>
+  conj_tac >- (qpat_x_assum `!tail. append_place _ _ _ _ = _` mp_tac >> simp[]) >>
+  conj_tac >- simp[] >>
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  `valid_horizon cx st0 H es_end.storage_trace` by
+    (irule (INST_TYPE [alpha |-> ``:unit``] valid_horizon_frame) >>
+     qexists_tac `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v` >>
+     qexistsl_tac [`res1`, `ee1`] >>
+     simp[storage_trace_frame_append_place] >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ee1 fin /\
+   storage_well_formed_on cx ee1 (FST H)` by metis_tac[] >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
   >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       rewrite_tac[append_storage_copy_suffix_parts] >> strip_tac >>
@@ -1512,7 +1600,8 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
       qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
       first_assum ACCEPT_TAC) >>
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
-    fs[loweringPostsTheory.locals_kept_def] >>
+    (qpat_x_assum `locals_kept cenv es_rhs es_end s0 t` mp_tac >>
+     simp[loweringPostsTheory.locals_kept_def, Abbr `es_rhs`]) >>
   `ee1.scopes = es_end.scopes` by
     (drule vyperScopePreservationTheory.append_storage_place_scopes_immutables >> simp[]) >>
   `sa.cs_next_id <= sB.cs_next_id /\ sB.cs_next_id <= sd.cs_next_id` by
@@ -1520,21 +1609,30 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
         metis_tac[ci_mono_lower_value_compile_expr, ci_mono_compile_alloc_buffer,
           ci_mono_compile_copy_memory, pairTheory.SND] >>
       fs[ci_mono_def] >> decide_tac) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (`valid_horizon cx st0 H es_rhs.storage_trace` by metis_tac[] >>
+     fs[Abbr `es_rhs`, valid_horizon_def]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   `alloca_frame cenv es sa s0 cenv es_end t` by
-    (irule alloca_frame_of_mem_frame >> simp[] >>
-     metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >> simp[] >>
+     conj_tac >-
+       (qpat_x_assum `!aid off sz. _ ==> mem_bytes_at off sz t.vs_memory = _` mp_tac >>
+        simp[Abbr `es_rhs`]) >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
   `alloca_frame cenv es_end sd staged cenv ee1 fin` by
-    (irule alloca_frame_of_mem_frame >> simp[] >>
-     qexistsl_tac [`ctx`, `cx`, `func`] >> simp[] >> gvs[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >> simp[] >>
+     qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv es_end staged` by
     (irule alloca_frame_trans >>
-     qexistsl_tac [`cenv`, `es_end`, `t`, `sB`] >> gvs[]) >>
+     qexistsl_tac [`cenv`, `es_end`, `t`, `sB`] >> simp[]) >>
   irule alloca_frame_trans >>
   qexistsl_tac [`cenv`, `es_end`, `staged`, `sd`] >> simp[] >>
   metis_tac[]
 QED
 
 Resume compile_append_storage_aggregate_stmt_frag[full]:
+  `~(w2n (lookup_storage (n2w offset) (get_storage cx es_end tr)) < cap)` by
+    (qpat_x_assum `~(_ < _)` mp_tac >> simp[]) >>
   simp[] >> strip_tac >>
   `cenv.ce_module_dynarray_capacity nid <= w2n (lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr))` by decide_tac >>
   rename1 `gas_marked_path F ctx func staged 0 (Abort Revert_abort fin)` >>
@@ -1542,18 +1640,112 @@ Resume compile_append_storage_aggregate_stmt_frag[full]:
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
   `res1 = INR (Error (RuntimeError "append full storage array"))` by
     (drule append_storage_full >>
-     disch_then (qspecl_then [`v`, `tv`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`v`, `tv`] mp_tac) >>
+     qpat_x_assum `append_place _ _ _ (es_end with gas_obs := []) = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
   pop_assum SUBST_ALL_TAC >>
-  `gas_marked_exec F (ctx,func)
-     (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v)
-     (es_end with gas_obs := [],t) []
-     (INR (Error (RuntimeError "append full storage array"))) ee1 (Abort Revert_abort fin)` by
-    simp[gas_marked_exec_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "append full storage array"))`, `ee1`, `Abort Revert_abort fin`] >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
-  irule (SIMP_RULE std_ss [APPEND_NIL]
-    (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
-  qexistsl_tac [`es_end`, `t`, `v`] >> simp[]
+  conj_tac >- (qpat_x_assum `!tail. append_place _ _ _ _ = _` mp_tac >> simp[]) >>
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, exprSimDefsTheory.halt_exit_def]
+QED
+
+Resume compile_append_storage_aggregate_stmt_frag[static]:
+  `staged.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [append_storage_copy_suffix_parts]) >>
+  `ci_mono sd s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+   ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
+   ci_mono s6 s7 /\ ci_mono s7 s8 /\ ci_mono s8 sb` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void,
+              ci_mono_compile_store_slots, pairTheory.SND] >>
+  `cs_extends sd s6 /\ cs_extends s6 s7 /\ cs_extends s7 sb /\
+   sd.cs_next_var <= s6.cs_next_var` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `fn_has_code sd s6 func /\ fn_has_code s6 s7 func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_at (Pat `emit_op (if tr then TLOAD else SLOAD) _ sd = _`)
+    append_storage_copy_prefix_path >>
+  disch_then (drule_at (Pat `fn_has_code sd s6 func`)) >>
+  disch_then (drule_at (Pat `eval_operand vop s = SOME b`)) >>
+  disch_then (drule_at (Pat `emit_op ADD [dop; off] _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op LT _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_void ASSERT _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op ADD [bop; Lit 1w] _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op MUL _ _ = _`)) >>
+  disch_then (qspecl_then [`slot`, `ctx`] mp_tac) >>
+  (impl_tac >- (simp[eval_operand_def] >> metis_tac[])) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  Cases_on `w2n (lookup_storage slot (get_storage cx es_end tr)) < cap`
+  >- suspend "static_store" >>
+  suspend "static_full"
+QED
+
+Resume compile_append_storage_aggregate_stmt_frag[static_full]:
+  `~(w2n (if tr then tload slot staged else sload slot staged) < cap)` by
+    metis_tac[] >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  rename1 `gas_marked_path F ctx func staged 0 (Abort Revert_abort fin)` >>
+  `gas_marked_path F ctx func t 0 (Abort Revert_abort fin)` by
+    metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
+  qexistsl_tac [`INR (Error (RuntimeError "append full storage array"))`, `es_end`, `Abort Revert_abort fin`] >>
+  conj_tac
+  >- (rpt strip_tac >> irule append_storage_full >>
+      qpat_x_assum `~(w2n (lookup_storage slot _) < cap)` mp_tac >>
+      simp[get_storage_gas_obs]) >>
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, exprSimDefsTheory.halt_exit_def]
+QED
+
+Resume compile_append_storage_aggregate_stmt_frag[static_store]:
+  `(w2n (if tr then tload slot staged else sload slot staged) < cap)` by
+    metis_tac[] >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  rename1 `gas_marked_path F ctx func staged 0 (OK pre)` >>
+  `pre.vs_memory = staged.vs_memory /\ pre.vs_call_ctx = staged.vs_call_ctx` by
+    (qpat_x_assum `store_copy_normalize staged pre = staged` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[stmtSimStoreCopyTheory.store_copy_normalize_def,
+          venom_state_component_equality]) >>
+  `!x. tmp.buf_operand = Var x \/ pop = Var x ==> not_fresh_at s6 x` by
+    (gen_tac >> strip_tac
+     >- (gvs[] >> irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `sd` >> simp[]) >>
+     qpat_x_assum `!x. lop = Var x \/ pop = Var x ==> _` irule >> simp[]) >>
+  `w2n (slot + 1w + (if tr then tload slot staged else sload slot staged) *
+        n2w ((type_memory_bytes cenv elem + 31) DIV 32)) + type_slot_size tv <= dimword (:256)` by
+    (qspecl_then [`slot`, `w2n (lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr))`]
+       mp_tac append_sparse_destination_bound >>
+     simp[wordsTheory.n2w_w2n] >> disch_then irule >>
+     conj_tac >- simp[] >>
+     qexists_tac `cap` >> simp[] >>
+     qpat_x_assum `w2n slot + type_slot_size (ArrayTV _ _) <= _` mp_tac >>
+     simp[type_slot_size_def, arithmeticTheory.MULT_COMM] >> gvs[]) >>
+  `eval_operand tmp.buf_operand pre = SOME w` by simp[] >>
+  `val_in_memory tv v (w2n w) pre.vs_memory` by simp[] >>
+  drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)
+    placeStoreSlotsTheory.place_store_slots_static_exit >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `eval_operand src s = SOME sw`)) >>
+  disch_then (drule_at (Pat `eval_operand pop pre = SOME dw`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (qspecl_then [`es_end`, `ctx`, `RetQ H0`] mp_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac [] >>
+     simp[valueEncodingPropsTheory.type_memory_size_slots] >>
+     qpat_x_assum `w2n (_ + 1w + _) + type_slot_size tv <= _` mp_tac >>
+     simp[])) >>
+  strip_tac >>
+  `gas_marked_path F ctx func t 0 r` by
+    metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `es_end`, `r`] >>
+  conj_tac
+  >- (rpt strip_tac >> irule append_storage_static >>
+      qpat_x_assum `w2n (lookup_storage slot (get_storage cx es_end tr)) < cap` mp_tac >>
+      simp[get_storage_gas_obs]) >>
+  simp[] >> disj2_tac >> simp[exprSimDefsTheory.halt_exit_def] >>
+  qpat_x_assum `stmt_exit _ _ _ r` mp_tac >>
+  Cases_on `r` >> simp[stmt_exit_def, expr_exit_def]
 QED
 
 Finalise compile_append_storage_aggregate_stmt_frag

@@ -21,7 +21,7 @@ Theorem literal_full_ptr_transport[local]:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
   stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) /\
+  32+32*word_size (LENGTH bs) < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   inst_seq_ptr D0 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' ==>
   inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'
@@ -140,7 +140,7 @@ Theorem literal_bytelike_full_run:
   !bs sa buf sb DF lo d PG ctx func cenv cx st0 es s G tn.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     storage_trace_domain cx st0 es.storage_trace /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
