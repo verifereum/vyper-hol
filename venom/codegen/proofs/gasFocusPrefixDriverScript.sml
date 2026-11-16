@@ -4,6 +4,7 @@ Ancestors
   codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
   frameOutcome callTrace vfmExecution frameHistoryCfg frameOriginHistory
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
+  asmOptimizer codegenEntrySim codegenSymRel dftDefs unitMemInv finite_map
   list rich_list pred_set words arithmetic
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
@@ -51,8 +52,125 @@ val focus_producer_goal : term = ``
         o1_lowered_inv out.po_unit.cu_context vs0
 ``;
 
+(* Unproved parent header, kept verbatim with focus_producer_goal. *)
+(* Generic finalizers and the unchanged identity boundary share one run. *)
+Theorem focus_producer_finalizer:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+    (entry_asm_state vs0 es0 with
+      as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with vs_gas_readings := gs) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) ==>
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+        o1_lowered_inv out.po_unit.cu_context vs0
+Proof
+  cheat
+QED
+
+Theorem focus_producer:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  initial_ctx_rel_tail [] cpl prog out.po_unit.cu_context vs0 es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with vs_gas_readings := gs) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) ==>
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+        o1_lowered_inv out.po_unit.cu_context vs0
+Proof
+  cheat
+QED
+
 (* The actual execution component of the simultaneous motive. The empty
    tail belongs to the initial relation; the current tail is explicit. *)
+val focus_finalizer_prefix_bridge_goal : term = ``
+  \fin rpolicy unit cpl prog prog' vs0 es0 result final.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    generate_context_plan unit.cu_context = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    codegen_ready unit.cu_context /\
+    vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+    codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+    asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+      (entry_asm_state vs0 es0 with
+        as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+    label_flow_ok unit.cu_context /\ sym_unit_static_ok unit /\
+    run_call es0 = SOME (result,final) /\
+    ~frame_resource_starved es0 result final ==>
+    ?max_cost. !n ast.
+      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+      (?ss. sym_steps prog (asm_data_env prog vs0.vs_code) n
+        (sym_init (entry_asm_state vs0 es0)) = SymOK ss) ==>
+      n <= max_cost /\
+      (ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" ==>
+        ast.as_gas_readings <> [])
+``;
+
 val focus_execution_motive : term = ``
   \vs0 ctx prog data es0 ast0 result final tail q0 evs qs q n ast es.
     joint_trace vs0 ctx q0 evs qs q /\
@@ -76,18 +194,41 @@ val focus_block_rank : term = ``
    preservation theorem is claimed for arbitrary component predicates. *)
 val focus_joint_motive : term = ``
   \packet_rel cursor_rel frame_rel
-    rpolicy unit cpl prog vs0 es0 ast0 result final data tail
-    (N:num) (C7:venom_context) C8 C9
+    fin rpolicy unit cpl prog prog' vs0 es0 ast0 result final
+    (C7:venom_context) C8 C9
     (root_sf:ir_function) (root_tf:ir_function) (root_entry:venom_state)
-    packet cursors
-    q8 q0 evs qs q9 n ast es raw_slots sites unused.
-    packet_rel N C7 C8 root_sf root_tf root_entry packet q8 raw_slots sites unused /\
+    packet
+    (acts : ((num # num) list,
+      ir_function # ir_function # num # venom_state # num list #
+      exec_result option # bytes32 list option) fmap)
+    (blocks : (((num # num) list # num),
+      basic_block # basic_block # instruction list # instruction list #
+      instruction list # num list # venom_state # num #
+      (venom_state # num) option # num # exec_result # bool #
+      bytes32 list option) fmap)
+    (calls : (gas_event,
+      num # num # venom_state # num list # venom_state #
+      (internal_return # venom_state # venom_state) option) fmap)
+    (ms_tab : (((num # num) list # num), bytes32 option list list) fmap)
+    (es_tab : (((num # num) list # num), (string # num) list list) fmap)
+    (ks_tab : (((num # num) list # num), gas_event list list) fmap)
+    rooted_eval p d cursors
+    q8 q0 evs qs q9 n ast ss raw_slots sites unused.
+    ?N:num. packet_rel N C7 C8 root_sf root_tf root_entry packet
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     cursor_rel C8 C9 cursors q8 q9 /\
-    frame_rel rpolicy unit cpl prog vs0 es0 q9 ast /\
+    frame_rel (asm_data_env prog vs0.vs_code)
+      rpolicy unit cpl prog vs0 es0 q9 ast ss /\
     joint_trace vs0 C9 q0 evs qs q9 /\
     asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
       prog n ast0 = AsmOK ast /\
-    asm_frame_rel_tail tail prog data es0 ast es /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) n
+      (sym_init ast0) = SymOK ss /\
+    ast0 = entry_asm_state vs0 es0 /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    codegen_asm_entry_rel cpl prog vs0 ast0 /\
+    asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+      (ast0 with as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
     run_call es0 = SOME (result,final) /\
     ~frame_resource_starved es0 result final /\
     LENGTH raw_slots = LENGTH sites /\
@@ -97,19 +238,103 @@ val focus_joint_motive : term = ``
 val focus_dft_packet_step_goal : term = ``
   \packet_rel.
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
-    (root_entry:venom_state) packet es0 raw_slots sites unused
+    (root_entry:venom_state) packet
+    (acts : ((num # num) list,
+      ir_function # ir_function # num # venom_state # num list #
+      exec_result option # bytes32 list option) fmap)
+    (blocks : (((num # num) list # num),
+      basic_block # basic_block # instruction list # instruction list #
+      instruction list # num list # venom_state # num #
+      (venom_state # num) option # num # exec_result # bool #
+      bytes32 list option) fmap)
+    (calls : (gas_event,
+      num # num # venom_state # num list # venom_state #
+      (internal_return # venom_state # venom_state) option) fmap)
+    (ms_tab : (((num # num) list # num), bytes32 option list list) fmap)
+    (es_tab : (((num # num) list # num), (string # num) list list) fmap)
+    (ks_tab : (((num # num) list # num), gas_event list list) fmap)
+    rooted_eval p d cpl es0 raw_slots sites unused
     stk PG G tn fn inst s oms om hs h ev q8'.
     packet_rel N C7 C8 root_sf root_tf root_entry packet
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
       (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
     LENGTH raw_slots = LENGTH sites /\
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
     (inst.inst_opcode = GAS ==> s.vs_gas_readings <> []) /\
     joint_transition C8 (JointConfig stk PG G tn fn inst s oms om hs h) ev q8' ==>
-    ?packet' raw_slots' sites' unused'.
-      packet_rel N C7 C8 root_sf root_tf root_entry
-        packet' q8' raw_slots' sites' unused' /\
+    (?N' packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
+      raw_slots' sites' unused'.
+      packet_rel N' C7 C8 root_sf root_tf root_entry
+        packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d'
+        q8' raw_slots' sites' unused' /\
       LENGTH raw_slots' = LENGTH sites' /\
-      PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0)
+      PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0)) /\
+    ( (inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+       inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s ==>
+      ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z
+        cuts levels Mcut Ecut.
+        FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
+        LAST order = d /\
+        FLOOKUP blocks (p,d) =
+          SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME(be,hbe),count,OK s,F,NONE) /\
+        q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
+        z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+        (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+          MEM r (TAKE count rho)) /\
+        MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+          REVERSE (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
+        LENGTH cuts = LENGTH levels /\
+        (!i ai ds ei qi zi.
+          i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+          ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+            ini hi bei counti fronti closedi resti later.
+            FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+            FLOOKUP blocks (ai,ei) =
+              SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+            orderi = ds ++ ei::later /\
+            (if SUC i = LENGTH cuts then
+              ai = p /\ ei = d /\ qi = q /\ zi = z
+            else
+              ?cid call_h b0 done_at_call child_entry ret.
+                EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+                FLOOKUP calls (ai,ei,cid) =
+                  SOME (qi,call_h,b0,done_at_call,child_entry,ret) /\
+                qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+                zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+                EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+                (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==>
+                  MEM r done_at_call)) /\
+            EL i levels =
+              (sfi,
+               MAP (\f.
+                 (FST (THE (FLOOKUP blocks (ai,f))),f,
+                  DROP (phi_prefix_length
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+                 [(bbi,ei,zi)],
+               if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+        Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+        Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP es_tab (ai,ei))))) cuts) /\
+        LENGTH Mcut = LENGTH Ecut /\
+        (!F gs tail n u.
+          N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+          LENGTH Mcut < n /\
+          mem_inv (\ctx src_fn src_inst src_state.
+            gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
+              static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
+            C7 (root_entry with vs_gas_readings := gs ++ tail) /\
+          rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+            (Ecut,OK u) ==>
+          static_mem_ok cpl.cp_max_static_eom C7 sf inst u /\
+          ~in_revert_forward sf u /\
+          (inv_memory_observation inst.inst_opcode ==>
+            (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op s) /\
+            u.vs_initial_fmp = s.vs_initial_fmp)))
 ``;
 
 val focus_cfg_cursor_step_goal : term = ``
@@ -198,7 +423,7 @@ val _ = app
        type_of (snd (strip_abs tm)) = type_of ``T``
     then ()
     else raise Fail "focus component interface has free names or a non-Boolean body")
-  [focus_joint_motive, focus_dft_packet_step_goal,
+  [focus_finalizer_prefix_bridge_goal, focus_joint_motive, focus_dft_packet_step_goal,
    focus_cfg_cursor_step_goal, focus_s7_frame_step_goal, focus_s7_guard];
 
 val _ = app
