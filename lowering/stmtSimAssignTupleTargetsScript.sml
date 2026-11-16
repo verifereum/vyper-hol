@@ -52,7 +52,7 @@ Proof
   disch_then (qspec_then `cenv` strip_assume_tac) >> simp[]
 QED
 
-Theorem assign_tuple_targets_suffix[local]:
+Theorem assign_tuple_targets_suffix:
   !ctx func cx st0 lctx RetQ cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
     lowered_value_type cenv e = TupleT tys /\
     (?H. valid_horizon cx st0 H ee.storage_trace) /\
@@ -271,7 +271,7 @@ Resume assign_tuple_targets_suffix[frame]:
   simp[]
 QED
 
-Finalise assign_tuple_targets_suffix
+Finalise assign_tuple_targets_suffix[local]
 
 Theorem compile_assign_tuple_targets_stmt_frag:
   !ctx func cx lctx RetQ cenv ty gs e es tys tvs.
