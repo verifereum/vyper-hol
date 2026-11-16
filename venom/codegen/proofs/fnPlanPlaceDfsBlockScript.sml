@@ -192,14 +192,17 @@ Proof
   metis_tac[MEM_EL]
 QED
 
-Theorem asm_symbols_ok_label_index:
-  !prog k l.
-    asm_symbols_ok prog /\ k < LENGTH prog /\ EL k prog = AsmLabel l ==>
-    ?off. FLOOKUP (SND (compute_label_offsets prog)) l = SOME off /\
+Theorem asm_symbols_ok_label_index_reloc:
+  !prog lo k l.
+    asm_symbols_ok prog /\ k < LENGTH prog /\ EL k prog = AsmLabel l /\
+    code_labels_agree prog lo ==>
+    ?off. FLOOKUP lo l = SOME off /\
           off < dimword (:256) /\
           FLOOKUP (build_offset_to_pc prog) off = SOME k
 Proof
   rpt strip_tac >>
+  `FLOOKUP lo l = FLOOKUP (SND (compute_label_offsets prog)) l` by
+    (gvs[code_labels_agree_def] >> metis_tac[MEM_EL]) >>
   `ALL_DISTINCT (FLAT (MAP asm_defined_symbols prog))` by
     metis_tac[asm_symbols_ok_distinct] >>
   `!j. k < j /\ j < LENGTH prog ==>
@@ -220,6 +223,29 @@ Proof
 QED
 
 
+Theorem asm_symbols_ok_label_index:
+  !prog k l.
+    asm_symbols_ok prog /\ k < LENGTH prog /\ EL k prog = AsmLabel l ==>
+    ?off. FLOOKUP (SND (compute_label_offsets prog)) l = SOME off /\
+          off < dimword (:256) /\
+          FLOOKUP (build_offset_to_pc prog) off = SOME k
+Proof
+  metis_tac[asm_symbols_ok_label_index_reloc, code_labels_agree_refl]
+QED
+
+Theorem asm_slice_internal_labels_reloc:
+  !prog lo pre code post.
+    asm_symbols_ok prog /\ prog = pre ++ code ++ post /\
+    code_labels_agree prog lo ==>
+    !l j. j < LENGTH code /\ EL j code = AsmLabel l ==>
+    ?off. FLOOKUP lo l = SOME off /\
+          off < dimword (:256) /\
+          FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre + j)
+Proof
+  rpt strip_tac >> irule asm_symbols_ok_label_index_reloc >>
+  simp[EL_APPEND]
+QED
+
 Theorem asm_slice_internal_labels:
   !prog pre code post.
     asm_symbols_ok prog /\ prog = pre ++ code ++ post ==>
@@ -228,6 +254,5 @@ Theorem asm_slice_internal_labels:
           off < dimword (:256) /\
           FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre + j)
 Proof
-  rpt strip_tac >> irule asm_symbols_ok_label_index >>
-  simp[EL_APPEND]
+  metis_tac[asm_slice_internal_labels_reloc, code_labels_agree_refl]
 QED
