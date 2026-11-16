@@ -739,6 +739,7 @@ Proof
     decide_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `ta` >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  irule (SRULE [SF ETA_ss] raw_log_fixed_allocated_mem) >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rewrite_tac[ignore_bind_def] >>
+  drule_all_then ACCEPT_TAC
+    (REWRITE_RULE [ignore_bind_def] raw_log_fixed_allocated_mem)
 QED
