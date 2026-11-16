@@ -19,6 +19,7 @@ Ancestors
   fragGasOriginPtr fragGasFocus fragExec o1SafeUpto ptrSafeRun memSafeRun
   ptrDiscipline contextRawReachable contextCodegenRel
   concretizePtrCoverageStaticMemReachability lowerDloadPtrRawReachable
+  frameAllocationOwnership
   gasCount gasEvents gasOracleReplay unitMemInv unitTransformDefs
   lowerDloadDefs contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic

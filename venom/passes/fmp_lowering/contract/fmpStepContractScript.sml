@@ -12,8 +12,8 @@ Theory fmpStepContract
 Ancestors
   o1PassContract fmpLowerDefs venomPassDispatcher
   fmpStepBridge fmpStepShape fmpStepStructural fmpStepRestrictions fmpStepLayout
-  fmpWfDefs callLayoutDefs fmpAnalysisDefs fcgDefs venomWf venomInst list
-  rich_list
+  fmpWfDefs callLayoutDefs fmpAnalysisDefs fcgDefs venomWf venomInst
+  fmpStepMakeSsa list rich_list
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -270,8 +270,8 @@ Proof
               fmp_lower_function_first_block_no_phi, o1_fn_shape_def] >>
   drule fmp_lower_function_canonical_param_prefix >> strip_tac >>
   drule_all canonical_param_prefix_pseudos >> strip_tac >>
-  `fmp_sig_no_param out.fpo_function /\ make_ssa_input_ok out.fpo_function` by
-    (drule fmp_lower_function_no_param >> impl_tac >- fs[o1_fn_row_def] >>
-     strip_tac >> fs[o1_fn_row_def]) >>
+  `make_ssa_input_ok out.fpo_function` by
+    (drule fmp_lower_function_make_ssa_input_ok >> disch_then irule >>
+     fs[o1_fn_row_def]) >>
   fs[o1_fn_row_def] >> metis_tac[fmp_lower_function_no_alloca]
 QED

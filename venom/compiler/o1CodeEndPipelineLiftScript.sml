@@ -18,6 +18,7 @@ Theorem o1_code_end_pipeline_from_walk:
     (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
     (!k. k <= LENGTH o1_fn_passes ==>
       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+    (!k. k <= 3 ==> EVERY no_raw_fmp_ops (stage k).ctx_functions) /\
     dead_wf D /\ o1_run_state_ok vs_out /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
     ?vi. gas_variant vi vs_out /\

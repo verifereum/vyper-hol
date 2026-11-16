@@ -80,7 +80,7 @@ Theorem concretize_stage_lookup:
   lookup_function name C.ctx_functions = SOME fn ==>
   ?out observed.
     lookup_function name C'.ctx_functions = SOME out /\
-    walk_view rpolicy (DROP 3 o1_fn_passes) C' fn observed /\
+    walk_view o1_fn_row rpolicy 3 (DROP 3 o1_fn_passes) C' fn observed /\
     concretize_function_fuel_in_context (concretize_memloc_fuel fn)
       observed.cu_context observed.cu_context.ctx_global_reserved fn = SOME out
 Proof

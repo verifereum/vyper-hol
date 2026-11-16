@@ -62,7 +62,7 @@ Proof
     (drule_all ld_shared_state_vars_transport >> simp[]) >>
   dxrule ld_vars_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_vars_restore_normalize >> disch_then SUBST_ALL_TAC >>
-  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
+  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def, dyn_floor_def,
       ld_alloc_account_def, allocas_from_def, read_memory_def] >>
   asm_rewrite_tac[]
 QED
@@ -82,7 +82,7 @@ Theorem ld_normal_data_memory_complete:
   ld_frame_bound t'.vs_alloca_next H BP BH' /\
   (!v. op_taint tn' (Var v) SUBSET count 32) /\
   (!v. op_taint un' (Var v) SUBSET count 32) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn'.t_mem un'.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
   tn'.t_stor = tn.t_stor /\ un'.t_stor = un.t_stor /\
   tn'.t_trans = tn.t_trans /\ un'.t_trans = un.t_trans /\
@@ -97,7 +97,7 @@ Proof
     (drule_all ld_shared_state_memory_transport >> simp[]) >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
-  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
+  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def, dyn_floor_def,
       ld_alloc_account_def, allocas_from_def, lookup_var_def] >>
   asm_rewrite_tac[]
 QED
@@ -128,7 +128,7 @@ Proof
   strip_tac >>
   dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
-  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
+  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def, dyn_floor_def,
       ld_alloc_account_def, allocas_from_def, read_memory_def,
       ld_owned_vars_def, lookup_var_def, op_taint_def] >>
   asm_rewrite_tac[]

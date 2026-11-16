@@ -138,7 +138,7 @@ Theorem ricf_history_cursor_owner_write_ranges:
   ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts p.rpe_fn)) /\
   ricf_full_alloca_copies p.rpe_fn /\ ricf_src_alloca p.rpe_fn /\
   occurrence_syntax_origin fn p.rpe_owner H /\
-  occurrence_annotation_ok n p.rpe_owner U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n p.rpe_owner U B HP H stk PG G s /\
   occurrence_natural_geometry lo p.rpe_owner U B stk s /\
   FLOOKUP B p.rpe_dst = SOME (db,z) /\
   FLOOKUP B p.rpe_src = SOME (sb,z) /\ 0 < z /\
@@ -152,7 +152,7 @@ Proof
   drule_all ricf_history_cursor_owner_position >> strip_tac >>
   drule_all ricf_history_cursor_owner_copy_distinct >> strip_tac >>
   `fn_inst_ids_distinct p.rpe_fn` by fs[wf_function_def] >>
-  `occurrence_env_ok B (p.rpe_owner::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dimword (:256)) B (p.rpe_owner::MAP (\u. u.of_owner) U) H G` by
     fs[occurrence_annotation_ok_def] >>
   fs[ricf_history_cursor_def] >>
   drule_all ricf_history_origin_original_allocas >> strip_tac >>

@@ -13,7 +13,7 @@ Theorem ricf_history_inherited_access:
   EVERY (readonly_origin_contract (rma_is_readonly ctx0.icf_rma) V)
     C.ctx_functions /\
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
   FLOOKUP B p.rpe_dst = SOME (p.rpe_db,p.rpe_size) /\
   FLOOKUP B p.rpe_src = SOME (p.rpe_sb,p.rpe_size) /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s ==>

@@ -121,6 +121,14 @@ QED
 
 Finalise mm_trace_root_inv
 
+Definition mm_static_mem_ok_def:
+  mm_static_mem_ok eom (ctx:venom_context) fn inst s <=>
+    in_revert_forward fn s \/
+    EVERY (\(off,len). len = 0 \/ off + len <= eom) (inst_mem_ranges inst s)
+End
+
+Overload static_mem_ok = ``mmTraceProofs$mm_static_mem_ok``
+
 Theorem mm_entry_trace_bound:
   reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn s /\
   fn_entry_state fn s /\

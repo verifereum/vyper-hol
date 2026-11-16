@@ -70,6 +70,13 @@ Proof
           venomStateTheory.venom_state_component_equality]) >>
   Cases_on `p`
   >- (fs[] >> drule_all inst_mem_ranges_pair >> strip_tac >>
+      `dalloca_no_wrap inst st ==> dalloca_no_wrap inst' st'` by
+        (`LIST_REL (\op op'. op_rename sg op op' /\
+            eval_operand op' st' = eval_operand op st)
+            inst.inst_operands inst'.inst_operands` by
+           (irule LIST_REL_op_rename_eval >> fs[inst_pair_def, state_rel_def]) >>
+         fs[inst_pair_def, unitMemInvTheory.dalloca_no_wrap_def] >>
+         rpt strip_tac >> gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]) >>
       simp[mem_corr_def, call_corr_def] >>
       strip_tac >>
       `inst_wf inst` by
@@ -83,6 +90,7 @@ Proof
       `y = Label nm` by (Cases_on `y` >> gvs[op_rename_def]) >>
       gvs[] >> metis_tac[eval_operands_rel]) >>
   fs[] >> simp[mem_corr_def, call_corr_def,
+    unitMemInvTheory.dalloca_no_wrap_def,
     unitMemInvTheory.inst_mem_ranges_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def]
