@@ -456,6 +456,12 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_ready]:
 QED
 Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_summary]:
   markerLib.RESUME_TAC >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ obj _ _ _ _ _ _ _ _ /\ vv_store_bound _ _ _ _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  simp[] >> strip_tac >>
   `gas_summary_at T (ctx,func) []
     (select_result cx (ArrayT et bd) v (ValueSubscript (IntV i)))
     (mid' with gas_obs := [],t')
@@ -467,18 +473,34 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_summary]:
       q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func q /\ t'.vs_alloca_next <= q.vs_alloca_next)
     (\res ee' out. expr_exit res out)` by
-    (qpat_x_assum `!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb. _` irule >>
+    (qpat_x_assum `!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb. _`
+       (qspecl_then [`H`,`\HH. valid_horizon cx st0 HH mid'.storage_trace`] (irule o BETA_RULE)) >>
      asm_x "suffix_env" mp_tac >>
      asm_x "suffix_old" mp_tac >>
      asm_x "suffix_comp" mp_tac >>
-     simp[Abbr `em`, vv_operand_def] >> rpt strip_tac >> gvs[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
+     simp[Abbr `em`, vv_operand_def] >> rpt strip_tac
+     >- (qexistsl_tac [`op`,`iw'`,`sc`] >> simp[]) >>
+     qexists_tac `H` >> simp[]) >>
   qpat_x_assum `gas_summary_at T _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def] >>
   rpt strip_tac >>
   qexistsl_tac [`res`,`es_end`,`out`] >>
   simp[vv_location_def, vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def,
-      Abbr `e0`, exprSimPropsTheory.vv_post_initial_gas] >>
-  metis_tac[]
+      Abbr `e0`, exprSimPropsTheory.vv_post_initial_gas]
+  >- (disj1_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ (Subscript ann obj idx) _ _ _ _ _ _ _ _` mp_tac >>
+      qpat_x_assum `es_end with gas_obs := [] = mid' with gas_obs := []` mp_tac >>
+      qpat_x_assum `vv_store_bound cx ann ann _ _ _ q` mp_tac >>
+      qpat_x_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+      qpat_x_assum `t.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
+      qpat_x_assum `t'.vs_alloca_next <= q.vs_alloca_next` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+      `es_end.storage_trace = mid'.storage_trace` by
+        (qpat_x_assum `es_end with gas_obs := [] = _`
+           (mp_tac o AP_TERM ``\s:evaluation_state. s.storage_trace``) >> simp[]) >>
+      gvs[exprSimPropsTheory.vv_post_initial_gas] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  disj2_tac >> simp[halt_exit_def] >> rpt strip_tac >>
+  qpat_x_assum `!tail. select_result _ _ _ _ _ = _` (qspec_then `[]` mp_tac) >>
+  simp[] >> metis_tac[evalNoHaltTheory.select_result_nh]
 QED
 Finalise compile_subscript_array_framed_base_mem_case_from_suffix
