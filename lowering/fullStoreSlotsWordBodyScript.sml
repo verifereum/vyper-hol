@@ -1,7 +1,7 @@
 (* Uniform endpoints for the memory-to-slot loop body. *)
 Theory fullStoreSlotsWordBody
 Ancestors
-  fragGasCopyLoop fragGasSeqPtr ptrDiscipline bodyPtrDefs
+  fragGasCopyLoop fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtrLoop ptrDiscipline bodyPtrDefs
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopyLoop
   decoderGhostFramePtr finite_map pred_set
   venomInst venomExecSemantics venomState words list arithmetic
@@ -86,7 +86,9 @@ Theorem store_slots_body_jump_uniform:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) code /\
   run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK t /\
   (!D PG. inst_seq_ptr D 0 ctx func PG G tn code s Gf tnf) /\
   t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
@@ -97,19 +99,23 @@ Theorem store_slots_body_jump_uniform:
   allocas_from lo t
 Proof
   strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> gvs[EVERY_MEM]) >>
   `!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),Gf,tnf) /\
      allocas_from lo t` by
-    (rpt gen_tac >> irule run_inst_seq_origin_ptr_lift >> metis_tac[]) >>
+    (rpt gen_tac >> irule run_inst_seq_origin_ptr_lift >>
+     simp[] >> gvs[EVERY_MEM]) >>
   conj_tac >-
-    (rpt gen_tac >> irule origin_ptr_path_then >>
+    (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
      qexistsl_tac [`Gf`,`t with vs_inst_idx := s.vs_inst_idx + LENGTH code`,`tnf`] >>
      conj_tac >- simp[] >>
      irule copy_jmp_origin_ptr >> simp[allocas_from_def] >>
      conj_tac >- (qexists_tac `id` >> metis_tac[ADD_COMM]) >>
      qpat_x_assum `!D explicit PG. _`
        (qspecl_then [`D`,`explicit`,`PG`] strip_assume_tac) >>
-     gvs[allocas_from_def]) >>
+     gvs[allocas_from_def,allocas_below_fmp_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -183,8 +189,10 @@ Proof
     (simp[] >> irule body_mem_storage_iteration_mem_ok_modular >>
      metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
-    (simp[] >> Cases_on `loc = LocStorage` >> simp[mk_inst_def,is_terminator_def]) >>
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) code` by
+    (simp[] >> Cases_on `loc = LocStorage` >> simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
   drule_all_then strip_assume_tac store_slots_body_jump_uniform >>
   qexistsl_tac [`jump_to hdr (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)`,
     `Gf`,`tnf`] >>
