@@ -48,6 +48,7 @@ Ancestors
   asmDataEnv
   asmOptFinalizerCorrect
   asmSymOwnCode
+  asmOptOwnMergeIszero
   finalizerContractOwn
   asmSpliceOwn
   asmOptOwnPruneUnused
