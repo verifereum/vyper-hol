@@ -259,6 +259,20 @@ jobs:
           retention-days: 1
           overwrite: true
 
+  save-vyper-test-exports:
+    # Pull-request and merge-queue runs can restore a cache only from their own
+    # ref or from main, and export-vyper-tests is skipped on a push whose merge
+    # group passed, so this job keeps main's test-export cache: it restores it
+    # in seconds, or generates and saves it once per pin and export profile.
+    # holbuild-success doesn't need it.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-vyper-test-exports
+
   export-parity:
     # Compiles every contract of the Vyper test exports natively and compares
     # the bytes with the patched pinned Vyper's (tools/native_export_parity.py).
