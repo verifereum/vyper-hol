@@ -283,10 +283,15 @@ Proof
       raise_def, AllCaseEqs()]
   >>~- ([`eval_send`], metis_tac[exprSimSendTheory.eval_send_value])
   >>~- ([`eval_raw_call`],
-       gvs[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
-           raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM])
+       qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+            raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+       rw[] >> gvs[])
   >>~- ([`eval_create`],
-       gvs[vyperCreateTheory.eval_create_def,
+       qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[vyperCreateTheory.eval_create_def,
            vyperCreateTheory.create_soft_failure_def,
            bind_def, ignore_bind_def, return_def, raise_def,
            lift_option_type_def, check_def, assert_def,
@@ -295,6 +300,7 @@ Proof
            update_pending_deletions_def, append_logs_def,
            COND_RATOR, option_CASE_rator, prod_CASE_rator,
            sum_CASE_rator, AllCaseEqs(), UNCURRY, LET_THM] >>
+       rw[] >> gvs[] >>
        metis_tac[vyperCreateTheory.create_oracle_result_address]) >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
