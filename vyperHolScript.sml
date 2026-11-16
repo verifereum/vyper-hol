@@ -71,3 +71,4 @@ Ancestors
   bodyCustomErrorCases
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
+  asmFinalizerPrefix

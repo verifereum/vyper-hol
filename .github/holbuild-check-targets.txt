@@ -1,7 +1,7 @@
 # Selectors CI passes to one `holbuild check` after the build: each must stay
+# enforce a theorem or theory clean; never check tags or hypotheses in a script.
 # free of cheats, oracles, axioms and hypotheses. THEORY checks every stored
 # theorem of a theory; THEORY:THEOREM checks one. Add a selector here to
-# enforce a theorem or theory clean; never check tags or hypotheses in a script.
 abiBuiltinValidSourceTheory
 abiBuiltinValidUnwrapTheory
 abiDecodeBoundsTestTheory
@@ -21,6 +21,28 @@ allocaHistoryTheory:alloca_history_jump
 allocaHistoryTheory:alloca_history_pair
 allocaHistoryTheory:alloca_history_run_blocks
 allocaHistoryTheory:alloca_history_step
+asmFinalizerPrefixAssemblyTheory
+asmFinalizerPrefixComposeTheory
+asmFinalizerPrefixControlTheory
+asmFinalizerPrefixFrameTheory
+asmFinalizerPrefixInefficientTheory
+asmFinalizerPrefixIszeroTheory
+asmFinalizerPrefixJumpDeleteTheory
+asmFinalizerPrefixPeepCommTheory
+asmFinalizerPrefixPeepFixedTheory
+asmFinalizerPrefixPeepSwapTheory
+asmFinalizerPrefixPeepholeTheory
+asmFinalizerPrefixPruneJumpsTheory
+asmFinalizerPrefixRenameTheory
+asmFinalizerPrefixSpliceTheory
+asmFinalizerPrefixStaticTheory
+asmFinalizerPrefixTheory
+asmFinalizerPrefixUnreachableTheory
+asmFinalizerPrefixUnusedTheory
+asmOptMergeJumpdestsTheory
+asmOptPeepholeTheory
+asmOptPruneUnreachableTheory
+asmSpliceTheory
 bodyEnvMemoryTheory:body_env_mem_case
 bodyMemAssignTopCopyCompilerTheory:topcopy_code_certificate
 bodyMemAssignTopCopyPathsTheory:topcopy_compile_loop_path
@@ -564,6 +586,7 @@ loweringSliceTheory
 o1ContractLowerDloadMemTheory:lower_dload_stage_mem
 o1ContractLowerDloadSimTheory:ld_runner_simulation_events_fuel
 o1ContractLowerDloadSimTheory:lower_dload_stage_sim
+o1ContractSueTheory:sue_stage_mem_inv_rf
 o1LowerDloadForwardInversionTheory:assign_suffix_no_halt
 o1LowerDloadForwardInversionTheory:revert_forward_at_no_halt
 o1LowerDloadForwardInversionTheory:revert_forward_at_terminates_abort
@@ -576,7 +599,6 @@ o1LowerDloadRunnerEndpointsTheory:ld_runner_halt_endpoint
 o1LowerDloadRunnerEndpointsTheory:ld_runner_ret_endpoint
 o1LowerDloadRunnerExecTheory:ld_runner_exec_clause_events_fuel
 o1PreDftStaticMemTheory
-o1ContractSueTheory:sue_stage_mem_inv_rf
 o1SafeUptoTheory:raw_reachable_code_data
 placeTypingBuildPropsTheory
 placeTypingE2EPropsTheory
