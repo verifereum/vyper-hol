@@ -49,7 +49,8 @@ Theorem sym_code_end_add_prepared_safe_mode:
     (ss.sym_stack = Lab "code_end" 0 :: Val w :: tail \/
      ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
 Proof
-  MATCH_ACCEPT_TAC symEmitSimTheory.sym_code_end_add_prepared_safe_mode
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all symEmitSimTheory.sym_code_end_add_prepared_safe_mode >> simp[]
 QED
 
 Theorem sym_code_end_add_source_emit_mode_conditional:
