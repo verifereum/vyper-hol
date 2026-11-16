@@ -4,6 +4,7 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
+  fragGasOriginEvents
   bodyMemStorageCopyStage
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
