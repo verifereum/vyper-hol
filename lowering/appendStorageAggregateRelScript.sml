@@ -242,11 +242,9 @@ Proof
         `1 + w2n (lookup_storage slot (get_storage cx es tr)) * type_slot_size tv`, `tv`, `v`] >>
       simp[vyperStoragePlaceRegionTheory.storage_subregion_def] >>
       conj_tac >- (gvs[type_slot_size_def] >> decide_tac) >>
-      conj_asm1_tac
-      >- (gvs[type_slot_size_def] >> decide_tac) >>
       reverse conj_tac >- metis_tac[storage_copy_initial_agree] >>
       rpt strip_tac >>
-      `w2n dst < dimword (:256)` by simp[] >>
+      `w2n dst < dimword (:256)` by (simp_tac std_ss [wordsTheory.w2n_lt]) >>
       `EL b (word_to_bytes
           (lookup_storage (n2w (w2n dst+i))
             (apply_writes (n2w (w2n dst)) writes (get_storage cx es tr))) T) =
@@ -255,6 +253,7 @@ Proof
              valueEncodingPropsTheory.mem_word_at_eq_mload] >>
       irule placeStoreStorageTheory.place_store_memory_live_at >>
       simp[GSYM wordsTheory.word_add_n2w] >>
-      metis_tac[arithmeticTheory.ADD_COMM]) >>
+      qexistsl_tac [`tv`, `v`] >>
+      gvs[type_slot_size_def] >> decide_tac) >>
   metis_tac[]
 QED
