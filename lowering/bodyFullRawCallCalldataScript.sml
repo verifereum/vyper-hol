@@ -1,7 +1,7 @@
 (*
  * raw_call with calldata over the finite-horizon joint judgment: vacuous.
- * Its lowering emits a DALLOCA into the function, and the joint judgments
- * assume the context has none.
+ * Its lowering emits a DALLOCA into the function, whereas body_inv implies
+ * that the context has none (body_inv_no_dalloca).
  *
  * TOP-LEVEL:
  *   raw_call_calldata_expr_full_ok -- the raw_call-with-calldata case
