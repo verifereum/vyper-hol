@@ -86,7 +86,6 @@ Ancestors
   exprLoweringProps
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_alloca_immutable_sep:
   stmt_state_rel H ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
@@ -107,24 +106,7 @@ Proof
   qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
   goal_assum (drule_at Any) >> simp[]
 QED
-*)
-Theorem aggregate_alloca_immutable_sep:
-  stmt_state_rel H ctx func cenv cx es t /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
-  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
-  cenv.ce_is_ctor ==>
-  !name itv iv io.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
-      SOME (ImmutableLoc io) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name =
-      SOME (itv,iv) ==>
-    regions_disjoint io (type_memory_size itv) b sz
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_outcome_map[local]:
   gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
   (!H res ee t. Q H res ee t ==> Q' H (SUM_MAP f I res) ee t) /\
@@ -150,18 +132,7 @@ Proof
       Cases_on `res` >> gvs[] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
-*)
-Theorem aggregate_outcome_map[local]:
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
-  (!H res ee t. Q H res ee t ==> Q' H (SUM_MAP f I res) ee t) /\
-  (!H res ee r. R H res ee r ==> R' H (SUM_MAP f I res) ee r) ==>
-  gas_outcome memory tops (ctx,func) cx st0 (bind source (return o f)) (es,s)
-    Q' R'
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_struct_action[local]:
   eval_expr cx (StructLit ann nsid fields) =
   bind (eval_exprs cx (MAP SND fields))
@@ -173,16 +144,7 @@ Proof
   disch_then (qspecl_then [`nsid`,`ann`] mp_tac) >>
   Cases_on `q` >> simp[bind_def, return_def]
 QED
-*)
-Theorem aggregate_struct_action[local]:
-  eval_expr cx (StructLit ann nsid fields) =
-  bind (eval_exprs cx (MAP SND fields))
-    (return o (\vs. Value (StructV (ZIP (MAP FST fields,vs)))))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_tuple_action[local]:
   compatible_bound bnd (LENGTH args) ==>
   eval_expr cx (Builtin ann (MakeArray NONE bnd) args) =
@@ -194,16 +156,7 @@ Proof
   disch_then (qspec_then `ann` mp_tac) >>
   Cases_on `q` >> simp[bind_def, return_def]
 QED
-*)
-Theorem aggregate_tuple_action[local]:
-  compatible_bound bnd (LENGTH args) ==>
-  eval_expr cx (Builtin ann (MakeArray NONE bnd) args) =
-  bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (TupleV vs))))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_array_action[local]:
   compatible_bound bnd (LENGTH args) /\
   evaluate_type (get_tenv cx) et = SOME tv ==>
@@ -217,18 +170,7 @@ Proof
   disch_then (qspec_then `ann` mp_tac) >>
   Cases_on `q` >> simp[bind_def, return_def]
 QED
-*)
-Theorem aggregate_array_action[local]:
-  compatible_bound bnd (LENGTH args) /\
-  evaluate_type (get_tenv cx) et = SOME tv ==>
-  eval_expr cx (Builtin ann (MakeArray (SOME et) bnd) args) =
-  bind (eval_exprs cx args)
-    (return o (\vs. Value (ArrayV (make_array_value tv bnd vs))))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem aggregate_outcome_source_run[local]:
   gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R ==>
   gas_outcome memory tops (ctx,func) cx st0 source (es,s)
@@ -245,17 +187,7 @@ Proof
       gvs[] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
-*)
-Theorem aggregate_outcome_source_run[local]:
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R ==>
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s)
-    (\H res ee t. Q H res ee t /\
-       ?gs. source (es with gas_obs := gs) = (res,ee)) R
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -299,7 +231,7 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
-  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
+  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_full_exit_sim >>
   simp[] >> disch_then drule >> disch_then drule >>
   simp[] >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
@@ -320,7 +252,7 @@ Proof
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >>
   goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx (MAP SND fields) (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (StructLit ann nsid fields) (es with gas_obs := gs) =
@@ -391,19 +323,7 @@ Proof
   POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
-Theorem compile_struct_lit_vv_case:
-  !nocalls ctx func cenv cx ann nsid fields.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
-    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
-    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -415,19 +335,7 @@ Proof
   rpt gen_tac >> Cases_on `topt`
   >- suspend "tuple" >> suspend "array"
 QED
-*)
-Theorem compile_make_array_vv_case:
-  !nocalls ctx func cenv cx ann topt bnd args.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    exprs_case nocalls ctx func cenv cx args /\
-    (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -467,7 +375,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_sim >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_full_exit_sim >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
@@ -485,7 +393,7 @@ Resume compile_make_array_vv_case[tuple]:
   simp[aggregate_tuple_action] >>
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
@@ -551,9 +459,7 @@ Resume compile_make_array_vv_case[tuple]:
   POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume compile_make_array_vv_case[array]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -589,7 +495,7 @@ Resume compile_make_array_vv_case[array]:
   disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
-  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
+  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_full_exit_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -615,7 +521,7 @@ Resume compile_make_array_vv_case[array]:
   qpat_assum `eval_expr _ _ = bind _ _` (fn th => once_rewrite_tac[th]) >>
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
@@ -691,13 +597,9 @@ Resume compile_make_array_vv_case[array]:
       irule exprSimAggregateEncodingTheory.fixed_array_from_dense >> simp[]) >>
   gvs[vyperValueTheory.make_array_value_def, val_in_memory_def]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise compile_make_array_vv_case
-*)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -711,20 +613,7 @@ Proof
   `post_value_type cenv (StructLit ann nsid fields) = expr_type (StructLit ann nsid fields)` by simp[] >>
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
-*)
-Theorem compile_struct_lit_case:
-  !nocalls ctx func cenv cx ann nsid fields.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
-    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
-    expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
-    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -740,22 +629,7 @@ Proof
   `post_value_type cenv (Builtin ann (MakeArray topt bnd) args) = expr_type (Builtin ann (MakeArray topt bnd) args)` by simp[] >>
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
 QED
-*)
-Theorem compile_make_array_case:
-  !nocalls ctx func cenv cx ann topt bnd args.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    exprs_case nocalls ctx func cenv cx args /\
-    (~nocalls ==> !e. MEM e args ==>
-       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
-    expr_sim_case nocalls ctx func cenv cx
-      (Builtin ann (MakeArray topt bnd) args) /\
-    expr_vv_case nocalls ctx func cenv cx
-      (Builtin ann (MakeArray topt bnd) args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -766,17 +640,7 @@ Proof
   irule compile_struct_lit_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_struct_fields >> metis_tac[]
 QED
-*)
-Theorem compile_struct_lit_sim:
-  !cenv ann nsid fields.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
-    expr_vv_ok cenv (StructLit ann nsid fields)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_make_array_sim:
   !cenv ann topt bnd args.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -787,20 +651,10 @@ Proof
   irule compile_make_array_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_args >> first_assum ACCEPT_TAC
 QED
-*)
-Theorem compile_make_array_sim:
-  !cenv ann topt bnd args.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
-Proof
-  cheat
-QED
 
 
 (* ===== empty(T) ===== *)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_expr_empty:
   !cx ann t args es res es'.
     (do r <- eval_expr cx (TypeBuiltin ann Empty t args); read_result cx r od) es = (res, es') /\
@@ -820,19 +674,7 @@ Proof
   simp[return_def, raise_def, bind_def, read_result_def] >>
   rw[] >> gvs[expr_res_ok_def]
 QED
-*)
-Theorem eval_expr_empty:
-  !cx ann t args es res es'.
-    (do r <- eval_expr cx (TypeBuiltin ann Empty t args); read_result cx r od) es = (res, es') /\
-    expr_res_ok res ==>
-    es' = es /\ args = [] /\
-    ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-         res = INL (default_value tv)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem typed_val_to_w256_address_zero[local]:
   typed_val_to_w256 (BaseTV AddressT) (BytesV (word_to_bytes (0w:address) T)) =
   0w
@@ -844,16 +686,8 @@ Proof
             valueEncodingProofsTheory.val_to_w256_address) >>
   simp[val_to_w256_def, typed_val_to_w256_def]
 QED
-*)
-Theorem typed_val_to_w256_address_zero[local]:
-  typed_val_to_w256 (BaseTV AddressT) (BytesV (word_to_bytes (0w:address) T)) =
-  0w
-Proof
-  cheat
-QED
 
 (* The default value of a word type is the word 0 in its typed encoding. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem typed_val_to_w256_default_word:
   !tenv t tv.
     is_word_type t /\ evaluate_type tenv t = SOME tv ==>
@@ -873,18 +707,9 @@ Proof
        rich_listTheory.REPLICATE_APPEND] >>
   EVAL_TAC >> simp[]
 QED
-*)
-Theorem typed_val_to_w256_default_word:
-  !tenv t tv.
-    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
-    typed_val_to_w256 tv (default_value tv) = 0w
-Proof
-  cheat
-QED
 
 (* empty(T) reads no gas observation: once admissible, it has the same
    value whatever the observations. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem empty_read_all_tails[local]:
   !cx ann t args es.
     gas_admissible (bind (eval_expr cx (TypeBuiltin ann Empty t args))
@@ -907,22 +732,8 @@ Proof
   first_assum (qspec_then `[]` strip_assume_tac) >> simp[] >>
   gen_tac >> first_x_assum (qspec_then `gs` strip_assume_tac) >> gvs[]
 QED
-*)
-Theorem empty_read_all_tails[local]:
-  !cx ann t args es.
-    gas_admissible (bind (eval_expr cx (TypeBuiltin ann Empty t args))
-      (read_result cx)) expr_res_ok es ==>
-    args = [] /\
-    ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-      !gs. bind (eval_expr cx (TypeBuiltin ann Empty t args)) (read_result cx)
-             (es with gas_obs := gs) =
-           (INL (default_value tv), es with gas_obs := gs)
-Proof
-  cheat
-QED
 
 (* empty(T) of a word type: the literal 0, no code. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_empty_word_sim:
   !cenv ann t args.
     is_word_type t ==> expr_sim_ok cenv (TypeBuiltin ann Empty t args)
@@ -952,15 +763,7 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   metis_tac[typed_val_to_w256_default_word]
 QED
-*)
-Theorem compile_empty_word_sim:
-  !cenv ann t args.
-    is_word_type t ==> expr_sim_ok cenv (TypeBuiltin ann Empty t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_empty_word_case_sim:
   !cenv ann t args.
     is_word_type t ==> expr_ok cenv (TypeBuiltin ann Empty t args)
@@ -971,13 +774,6 @@ Proof
   rpt gen_tac >>
   simp[compile_expr_type_builtin_dispatch, Once compile_expr_def]
 QED
-*)
-Theorem compile_empty_word_case_sim:
-  !cenv ann t args.
-    is_word_type t ==> expr_ok cenv (TypeBuiltin ann Empty t args)
-Proof
-  cheat
-QED
 
 (* empty(T) of any other type: a buffer of its own, of type_memory_bytes
    bytes (a multiple of 32), with its length word zeroed for a bytestring
@@ -986,7 +782,6 @@ QED
    typed encoding is 0 (typed_val_to_w256_default_word), and a nested
    bytestring or dynamic array is empty, its length word 0. *)
 (* The value form of empty_read_all_tails, for the vv judgment. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem empty_eval_all_tails[local]:
   !cx ann t args es.
     gas_admissible (eval_expr cx (TypeBuiltin ann Empty t args))
@@ -1021,21 +816,7 @@ Proof
   first_assum (qspec_then `[]` strip_assume_tac) >> simp[] >>
   gen_tac >> first_x_assum (qspec_then `gs` strip_assume_tac) >> gvs[]
 QED
-*)
-Theorem empty_eval_all_tails[local]:
-  !cx ann t args es.
-    gas_admissible (eval_expr cx (TypeBuiltin ann Empty t args))
-      expr_vv_res_ok es ==>
-    args = [] /\
-    ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-      !gs. eval_expr cx (TypeBuiltin ann Empty t args)
-             (es with gas_obs := gs) =
-           (INL (Value (default_value tv)), es with gas_obs := gs)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem zero_words_no_gas[local]:
   !n pop sa sb.
     compile_zero_words pop n sa = ((),sb) ==>
@@ -1057,19 +838,9 @@ Proof
   simp[emitted_insts_def, DROP_APPEND, EVERY_APPEND] >>
   fs[emitted_insts_def, venomInstTheory.mk_inst_def]
 QED
-*)
-Theorem zero_words_no_gas[local]:
-  !n pop sa sb.
-    compile_zero_words pop n sa = ((),sb) ==>
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
-Proof
-  cheat
-QED
 
 (* empty(T)'s buffer code reads no gas: its run is a gas path of no
    readings. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem empty_complex_gas_path[local]:
   !sz header sa buf sb ctx func s t.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
@@ -1125,22 +896,7 @@ Proof
     (simp[FILTER_EQ_NIL] >> fs[EVERY_MEM]) >>
   simp[emitted_insts_def]
 QED
-*)
-Theorem empty_complex_gas_path[local]:
-  !sz header sa buf sb ctx func s t.
-    compile_builtin_empty_complex sz header sa = (buf,sb) /\
-    fn_has_code sa sb func /\ ~s.vs_halted /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    gas_path ctx func s 0
-      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    t.vs_current_bb = sb.cs_current_bb
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_empty_memory_sim:
   !cenv ann t args.
     ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
@@ -1218,15 +974,7 @@ Proof
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` drule >>
   simp[arithmeticTheory.ADD_COMM]
 QED
-*)
-Theorem compile_empty_memory_sim:
-  !cenv ann t args.
-    ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_empty_case:
   !nocalls ctx func cenv cx ann t args.
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Empty t args)
@@ -1238,17 +986,9 @@ Proof
   >- metis_tac[compile_empty_word_case_sim, expr_ok_def] >>
   simp[compile_empty_memory_sim]
 QED
-*)
-Theorem compile_empty_case:
-  !nocalls ctx func cenv cx ann t args.
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Empty t args)
-Proof
-  cheat
-QED
 
 (* ===== max_value, min_value, epsilon ===== *)
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_expr_bound_builtin:
   !cx ann tb t args es res es'.
     (do result <- eval_expr cx (TypeBuiltin ann tb t args); read_result cx result od) es = (res, es') /\
@@ -1272,19 +1012,8 @@ Proof
   Cases_on `evaluate_type_builtin cx tb t [] []` >>
   simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
 QED
-*)
-Theorem eval_expr_bound_builtin:
-  !cx ann tb t args es res es'.
-    (do result <- eval_expr cx (TypeBuiltin ann tb t args); read_result cx result od) es = (res, es') /\
-    expr_res_ok res /\ MEM tb [MaxValue; MinValue; Epsilon] ==>
-    es' = es /\ args = [] /\
-    ?v. res = INL v /\ evaluate_type_builtin cx tb t [] [] = INL v
-Proof
-  cheat
-QED
 
 (* max_value, min_value and epsilon read no gas observation either. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem bound_read_all_tails[local]:
   !cx ann tb t args es.
     gas_admissible (bind (eval_expr cx (TypeBuiltin ann tb t args))
@@ -1310,23 +1039,9 @@ Proof
   first_assum (qspec_then `[]` strip_assume_tac) >> simp[] >>
   gen_tac >> first_x_assum (qspec_then `gs` strip_assume_tac) >> gvs[]
 QED
-*)
-Theorem bound_read_all_tails[local]:
-  !cx ann tb t args es.
-    gas_admissible (bind (eval_expr cx (TypeBuiltin ann tb t args))
-      (read_result cx)) expr_res_ok es /\
-    MEM tb [MaxValue; MinValue; Epsilon] ==>
-    args = [] /\
-    ?v. evaluate_type_builtin cx tb t [] [] = INL v /\
-      !gs. bind (eval_expr cx (TypeBuiltin ann tb t args)) (read_result cx)
-             (es with gas_obs := gs) = (INL v, es with gas_obs := gs)
-Proof
-  cheat
-QED
 
 (* max_value, min_value and epsilon of a numeric type: a Lit of the bound,
    no code. *)
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_bound_builtin_word_sim:
   !cenv ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
@@ -1371,16 +1086,7 @@ Proof
      integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >>
   REFL_TAC
 QED
-*)
-Theorem compile_bound_builtin_word_sim:
-  !cenv ann tb t args.
-    MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_sim_ok cenv (TypeBuiltin ann tb t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_bound_builtin_case_sim:
   !cenv ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
@@ -1394,16 +1100,7 @@ Proof
   simp[compile_expr_type_builtin_dispatch, Once compile_expr_def] >>
   Cases_on `type_bounds t` >> simp[]
 QED
-*)
-Theorem compile_bound_builtin_case_sim:
-  !cenv ann tb t args.
-    MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_ok cenv (TypeBuiltin ann tb t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_bound_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
@@ -1418,16 +1115,7 @@ Proof
           vyperTypeCallGraphTheory.int_calls_expr_def]) >>
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def]
 QED
-*)
-Theorem compile_bound_builtin_case:
-  !nocalls ctx func cenv cx ann tb t args.
-    MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_max_value_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -1435,16 +1123,7 @@ Theorem compile_max_value_sim:
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
-*)
-Theorem compile_max_value_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann MaxValue t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_min_value_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -1452,30 +1131,13 @@ Theorem compile_min_value_sim:
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
-*)
-Theorem compile_min_value_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann MinValue t args)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_epsilon_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (TypeBuiltin ann Epsilon t args)
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
-QED
-*)
-Theorem compile_epsilon_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann Epsilon t args)
-Proof
-  cheat
 QED
 
 (* The conversions exprSimConvert does not cover: those to or from
@@ -1483,7 +1145,6 @@ QED
    (#548). *)
 Theorem compile_convert_other_case = exprSimConvertOtherTheory.compile_convert_other_case
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_convert_case:
   !nocalls ctx func cenv cx ann t args.
     exprs_case nocalls ctx func cenv cx args /\
@@ -1495,16 +1156,6 @@ Proof
   Cases_on `?e1. args = [e1] /\ int_convert_pair (expr_type e1) t`
   >- (gvs[] >> irule compile_convert_word_case >> simp[]) >>
   irule compile_convert_other_case >> metis_tac[]
-QED
-*)
-Theorem compile_convert_case:
-  !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args /\
-    (~nocalls ==> !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
-       lowered_value_type cenv e1 = expr_type e1) ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
-Proof
-  cheat
 QED
 
 Theorem compile_abi_encode_case = exprSimAbiEncodeTheory.compile_abi_encode_case

@@ -306,10 +306,14 @@ Proof
   `(MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label prog env "runtime_begin")` by
     metis_tac[codegen_sym_runtime_begin_label] >>
-  `!op w. inst.inst_opcode = ADD /\
-    inst.inst_operands = [op; Label "code_end"] /\ eval_operand op vs = SOME w ==>
-    w2n w < dimword (:256) DIV 2` by
-    metis_tac[code_end_offset_ok_def] >>
+  `!dst x sz w off. inst.inst_opcode = CODECOPY /\
+    inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
+    eval_operand (Var x) vs = SOME w /\
+    FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2` by
+    (rpt strip_tac >>
+     `FLOOKUP vs.vs_labels "code_end" = SOME (n2w off)` by simp[] >>
+     metis_tac[code_end_offset_ok_def]) >>
   `!dist prev val_op. inst.inst_opcode = PHI /\
     stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
     vs.vs_prev_bb = SOME prev /\ resolve_phi prev inst.inst_operands = SOME val_op ==>

@@ -56,16 +56,13 @@ End
 Definition sval_conc_def:
   sval_conc lo (Val w) = SOME w ∧
   sval_conc lo (Lab l d) =
-    if sym_delta_ok d then
-      OPTION_MAP (λoff. (n2w (off + d) : bytes32)) (FLOOKUP lo l)
-    else NONE
+    OPTION_MAP (λoff. (n2w (off + d) : bytes32)) (FLOOKUP lo l)
 End
 
 (* The concrete state cs against the symbolic state ss of program p: the
    same pc and everything else but the stack, memory and code; stacks of
    the same values; memory equal except at label bytes, which hold the
-   label's concrete bytes; the own code bytes the concrete code; and env
-   matching the concrete code. *)
+   label's concrete bytes; and env matching the concrete code. *)
 Definition asm_sym_rel_def:
   asm_sym_rel p env cs ss ⇔
     LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
@@ -79,7 +76,6 @@ Definition asm_sym_rel_def:
          i < LENGTH cs.as_memory ∧ j < 32 ∧
          ∃w. sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ∧
              EL i cs.as_memory = EL j (word_to_bytes w T)) ∧
-    ss.sym_own_code = cs.as_code ∧
     asm_data_env_ok p env cs.as_code
 End
 
@@ -1352,11 +1348,10 @@ Proof
 QED
 
 Theorem sval_conc_add[local]:
-  sval_conc lo (Lab l d) = SOME a ∧ sym_delta_ok (d + w2n w) ⇒
+  sval_conc lo (Lab l d) = SOME a ⇒
   sval_conc lo (Lab l (d + w2n w)) = SOME (a + w)
 Proof
   simp[sval_conc_def] >>
-  Cases_on `sym_delta_ok d` >> simp[] >>
   Cases_on `FLOOKUP lo l` >> simp[] >>
   rpt strip_tac >> gvs[] >>
   simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
@@ -1602,7 +1597,7 @@ QED
    concrete address off + d doesn't wrap. *)
 Theorem sym_codecopy_address[local]:
   asm_static_wf p /\ asm_data_env_ok p env code /\
-  sym_data_label p env l /\
+  sym_data_label p env l /\ sym_delta_ok d /\
   sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ==>
   ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
         env ' l = DROP off code /\ w2n w = off + d
@@ -1748,17 +1743,9 @@ Proof
       simp[sym_codecopy_def, asm_copy_to_mem_def, asm_sym_step_rel_def]) >>
   rename1 `ss.sym_stack = a::b::c::stk` >>
   Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
-  gvs[sym_codecopy_def, asm_sym_step_rel_def]
-  >~ [`asm_copy_to_mem (DROP (w2n src) ss.sym_own_code)`]
-  >- (`ss.sym_own_code = cs.as_code` by fs[asm_sym_rel_def] >>
-      gvs[sval_conc_def] >>
-      irule sym_copy_preserves >> simp[] >>
-      qmatch_goalsub_rename_tac `TAKE (w2n sz) (if sz = 0w then DROP (w2n src) _ else _)` >>
-      Cases_on `sz = 0w` >- simp[] >>
-      mp_tac (Q.INST [`n` |-> `w2n (sz:bytes32)`, `a` |-> `w2n (src:bytes32)`,
-                      `xs` |-> `cs.as_code`] sym_codecopy_slice) >>
-      simp[]) >>
+  gvs[sym_codecopy_def, asm_sym_step_rel_def] >>
   reverse IF_CASES_TAC >- simp[asm_sym_step_rel_def] >>
+  fs[] >>
   `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
   drule_all sym_codecopy_address >> strip_tac >>
   gvs[sval_conc_def] >>
@@ -1912,22 +1899,6 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
-Theorem sym_codesize_sim[local]:
-  asm_sym_rel p env cs ss ⇒
-  asm_sym_step_rel p env (sym_step_op p env "CODESIZE" ss)
-    (asm_step_op otp "CODESIZE" cs)
-Proof
-  strip_tac >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack ∧ ss.sym_own_code = cs.as_code`
-    by fs[asm_sym_rel_def] >>
-  simp[sym_step_op_def, asm_step_op_def, asm_step_arith_def,
-       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
-       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
-       asm_step_context_def, asm_push_val_def] >>
-  irule asm_sym_rel_next >> simp[sval_conc_def]
-QED
-
 Theorem sym_dup_sim[local]:
   asm_sym_rel p env cs ss ∧ ALOOKUP dup_table name = SOME n ⇒
   asm_sym_step_rel p env (sym_dup n ss) (asm_step_op otp name cs)
@@ -1989,7 +1960,7 @@ Proof
   Cases_on `name = "CODECOPY"`
   >- (simp[sym_step_op_def] >> irule sym_codecopy_sim >> simp[]) >>
   Cases_on `name = "CODESIZE"`
-  >- (gvs[] >> irule sym_codesize_sim >> simp[]) >>
+  >- simp[sym_step_op_def, asm_sym_step_rel_def] >>
   simp[sym_step_op_def] >>
   Cases_on `ALOOKUP dup_table name` >> simp[]
   >- (Cases_on `ALOOKUP swap_table name` >> simp[]
@@ -1999,7 +1970,7 @@ Proof
 QED
 
 (* Every label a push refers to has an offset. *)
-Theorem clo_FDOM[local]:
+Theorem clo_FDOM:
   ∀prog off0 (labels0:string|->num).
     l ∈ FDOM labels0 ∨ MEM (AsmLabel l) prog ∨ MEM (AsmDataHeader l) prog ⇒
     l ∈ FDOM (SND (FOLDL (λ(pc:num,labels:string|->num) inst.
@@ -2047,7 +2018,7 @@ Proof
   >- (`∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off`
         by metis_tac[asm_label_ref_defined] >>
       simp[sym_push_lab_def] >>
-      IF_CASES_TAC >> simp[asm_sym_step_rel_def] >>
+      simp[asm_sym_step_rel_def] >>
       irule asm_sym_rel_next >> simp[sval_conc_def] >>
       fs[asm_sym_rel_def]) >>
   gvs[sym_lift_def, asm_sym_step_rel_def, asm_next_def, asm_sym_rel_def,

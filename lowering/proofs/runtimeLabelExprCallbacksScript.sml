@@ -555,7 +555,10 @@ Resume rb_compile_create_call[blueprint]:
    Cases >> simp[] >>
    (rpt strip_tac >>
    irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-   reverse conj_tac >- (irule rb_lower_value >> gvs[] >> Cases_on `t` >> gvs[]) >>
+   reverse conj_tac
+   >- (rpt CASE_TAC >>
+       simp[rb_step_return, runtimeLabelInvariantTheory.rb_operand_ok_def] >>
+       irule rb_lower_value >> gvs[] >> Cases_on `t` >> gvs[]) >>
    gen_tac >> strip_tac >>
    irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_compile_create_blueprint_check] >>

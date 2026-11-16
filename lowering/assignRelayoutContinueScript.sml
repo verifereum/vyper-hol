@@ -10,7 +10,6 @@ Ancestors
   allocaSiteResource stmtFragPtr localMemoryStorePath stmtSimDefs
 Libs monadsyntax
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem assign_relayout_store_post_path:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p cap dw v stv dtv sty dty
    pre scope entry rest loc bytes st0.
@@ -98,56 +97,7 @@ Proof
    >- suspend "staged"
    >> suspend "direct")
 QED
-*)
-Theorem assign_relayout_store_post_path:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p cap dw v stv dtv sty dty
-   pre scope entry rest loc bytes st0.
-    (?H. valid_horizon cx st0 H es1.storage_trace) /\
-    (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       expr_post H ctx func cenv cx e es sa sb s0 es1 v op s) /\
-    post_value_type cenv e = sty /\ sty <> expr_type e /\
-    type_widens_to (get_tenv cx) sty (expr_type e) /\
-    ~is_word_type sty /\ val_footprint stv v = type_memory_size stv /\
-    (!x. op = Var x ==> not_fresh_at sb x) /\
-    local_ptrs_reserved cenv sb /\
-    ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-       ALL_DISTINCT (MAP FST fields) /\
-       EVERY (\(fname,fty,sz). !tv.
-         evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    type_widens_to (get_tenv cx) sty dty /\
-    evaluate_type (get_tenv cx) sty = SOME stv /\
-    evaluate_type (get_tenv cx) dty = SOME dtv /\ entry.type = dtv /\
-    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-    type_memory_bytes cenv sty = type_memory_size stv /\
-    type_memory_bytes cenv sty < dimword (:256) /\ type_memory_size dtv <= cap /\
-    compile_assign_value cenv (Var p) LocMemory op F loc
-      dty sty bytes sb = ((),sf) /\ (loc = NONE \/ loc = SOME LocMemory) /\
-    fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
-    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    find_containing_scope id es1.scopes = SOME (pre,scope,entry,rest) /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\ lookup_var p s = SOME dw ==>
-    ?t. (!H. valid_horizon cx st0 H es1.storage_trace ==>
-          stmt_state_rel H ctx func cenv cx
-            (es1 with scopes := pre ++
-              (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t) /\
-        ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-        (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
-        (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
-                     FLOOKUP t.vs_allocas aid = SOME ent) /\
-        gas_marked_path F ctx func s 0 (OK t) /\
-        alloca_frame cenv es1 sb s cenv
-          (es1 with scopes := pre ++
-            (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume assign_relayout_store_post_path[direct]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   `compile_store_memory cenv op (Var p) dty sty sb = ((),sf)` by
@@ -188,9 +138,7 @@ Resume assign_relayout_store_post_path[direct]:
   fs[typed_copy_effect_def, local_ptrs_reserved_def] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume assign_relayout_store_post_path[staged]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
@@ -308,8 +256,5 @@ Resume assign_relayout_store_post_path[staged]:
   qexists_tac `t` >> fs[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise assign_relayout_store_post_path
-*)

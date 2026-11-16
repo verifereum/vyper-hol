@@ -62,6 +62,7 @@ Proof
      >- (gvs[compile_store_memory_def] >>
          once_rewrite_tac[compile_store_memory_typed_def] >> simp[]) >>
      gvs[compile_store_memory_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all compile_store_memory_typed_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
