@@ -77,11 +77,10 @@ Proof
   qexists `\H res ee G tn t. childQ H res ee G tn t /\ ee.gas_obs = [] /\ ~t.vs_halted` >> reverse conj_tac
   >- (irule gas_outcome_full_post_source >>
       first_assum (irule_at Any) >> simp[Abbr `childR`] >>
-      rpt strip_tac >> Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
-      Cases_on `r` >> Cases_on `y` >>
-      fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-      FIRST [first_assum ACCEPT_TAC,
-        rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]]) >>
+      rpt gen_tac >> Cases_on `res` >>
+      simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] stmtSimPropsTheory.expr_exit_INR_type] >>
+      simp[]) >>
   suspend "read"
 QED
 

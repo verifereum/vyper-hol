@@ -391,7 +391,8 @@ Theorem array_code_body_outcome_mem:
     gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_stmts cx stmts) (ei,s_body)
       (\H. array_body_post_mem H d ctx func cx (InLoop exit incr) bc
         (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
-      (\H r ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr) /\
+      (\H r ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr) /\
+        halt_exit H cx ee r rr) /\
     s_body.vs_allocas = s.vs_allocas /\ s_body.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
       lookup_var x s_body = lookup_var x s)
@@ -438,9 +439,7 @@ Proof
   rewrite_tac[stmt_frag_mem_def] >>
   disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `t`,
     `FST (stmts_env bc (InLoop exit incr) ty stmts sb0)`] mp_tac) >>
-  simp[GSYM array_body_post_mem_def, SF ETA_ss] >>
-  pure_rewrite_tac[gasOutcomeTheory.gas_outcome_def,
-                   gasSummaryTheory.gas_summary_at_def] >> metis_tac[]
+  simp[GSYM array_body_post_mem_def, SF ETA_ss]
 QED
 
 Theorem array_body_round_restore_mem:
@@ -643,7 +642,8 @@ Theorem array_one_round_mem:
       (~b ==> array_round_inv d ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
         ainst cond caller orig (SUC k) ee t))
     (\H res ee rr. ?e. res = INR e /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR e) rr)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR e) rr) /\
+      halt_exit H cx ee (INR e) rr)
 Proof
   strip_tac >>
   drule array_for_code_condition >> strip_tac >>
@@ -675,7 +675,9 @@ Proof
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `\H. array_body_post_mem H d ctx func cx (InLoop exit incr) bc
        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body`,
-     `E` |-> `\H r ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr`]) >>
+     `E` |-> `\H r ee rr.
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr) /\
+       halt_exit H cx ee r rr`]) >>
   simp[] >> conj_tac
   >- suspend "nonhalt" >>
   conj_tac >- suspend "scopes" >>
@@ -719,11 +721,17 @@ QED
 Resume array_one_round_mem[exit]:
   rpt strip_tac >>
   qpat_x_assum `!gs r ee. _` drule >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _` mp_tac >>
+  qpat_assum `valid_horizon cx st0 H ee.storage_trace` mp_tac >>
+  qpat_assum `stmt_res_ok (InLoop exit incr) r` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
   `!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr` by metis_tac[] >>
   gvs[stmt_res_ok_def] >>
   gvs[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
       evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def] >> metis_tac[]
+  Cases_on `rr` >>
+  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def,
+      halt_rel_def] >> metis_tac[]
 QED
 
 Finalise array_one_round_mem
@@ -769,7 +777,8 @@ Theorem array_code_loop_outcome_mem:
       (\H res ee t. res = INL () /\
         array_round_done H d ctx func cenv cx caller orig exit ee t)
       (\H res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit H cx ee (INR ex) rr)
 Proof
   strip_tac >>
   qspecl_then [`T`, `cx_tops cx`, `ctx`, `func`, `cx`, `st0`, `tv`, `id`,
@@ -778,7 +787,9 @@ Proof
        array_round_inv d ctx func cenv cx st0 P vs id idx saved_base arr_base
          p dst sz ainst cond caller orig k es s`,
     `\H. array_round_done H d ctx func cenv cx caller orig exit`,
-    `\H ex ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr`]
+    `\H ex ee rr.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+      halt_exit H cx ee (INR ex) rr`]
     mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>
   simp[] >> impl_tac
   >- (conj_tac >- suspend "round" >> suspend "last") >>
