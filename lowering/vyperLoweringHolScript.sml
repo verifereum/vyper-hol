@@ -55,6 +55,7 @@ Ancestors
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
+  asmOptOwnMergeJumpdests
   asmSymOwnCode
   asmOptOwnMergeIszero
   finalizerContractOwn
@@ -62,6 +63,7 @@ Ancestors
   asmSpliceOwn
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
+  asmOptFinalizerOwn
   asmOptOwnPruneJumps
   (* reached here instead of as holproject.toml roots *)
   targetPtrFacts bodyFullTarget
