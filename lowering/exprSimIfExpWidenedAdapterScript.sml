@@ -248,7 +248,9 @@ Theorem vv_post_alloc_mono_frame:
     FLOOKUP u.vs_allocas aid = SOME entry) /\
   (!n b sz. local_region ce ee.scopes u n b sz <=>
             local_region ce ee.scopes s n b sz) /\
-  sm.cs_next_id <= sn.cs_next_id ==>
+  sm.cs_next_id <= sn.cs_next_id /\
+  (!id q sz w. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var q) sz) /\
+    lookup_var q s = SOME w ==> lookup_var q u = SOME w) ==>
   vv_post H ctx func ce cx e es sa sn s0 ee tv vv u
 Proof
   strip_tac >>
@@ -268,6 +270,8 @@ Proof
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `vv_place_ptr ce cx ee u tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -311,8 +315,10 @@ Proof
   `vv_post H ctx func ce cx e es sa sn s0 ee tv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >>
      qexistsl [`s`, `sm`] >> simp[] >>
-     rpt strip_tac >> first_x_assum irule >>
-     irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   irule frag_exec_seq >> qexistsl [`(\z. z = u)`, `sn`] >> simp[] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sm` >> simp[]) >>

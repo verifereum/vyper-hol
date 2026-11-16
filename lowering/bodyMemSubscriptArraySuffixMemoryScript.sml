@@ -72,6 +72,9 @@ Proof
      vv_post H' ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
        (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
     (rpt strip_tac >> qpat_assum `!H. P H ==> _` drule >> strip_tac >>
+     `vv_place_ptr cenv cx ee q r (LocatedValue (ArrayT et bd) p)` by
+       fs[vv_post_def] >>
+     drule_all array_element_place_ptr >> strip_tac >>
      drule_all vv_post_array_element >> simp[]) >>
   `vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
      (LocatedValue et (mk_ptr dst p.ptr_location)) q` by simp[] >>

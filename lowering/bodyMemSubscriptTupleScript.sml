@@ -145,6 +145,25 @@ Proof
    u.vs_alloca_next = t.vs_alloca_next` by
     simp[Abbr `u`, eval_operand_def, lookup_var_def] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `eval_result_typed (env,cx,ee) tv (Type (TupleT tys)) /\
+   expr_sim_inv cenv cx env ee` by
+    (`expr_body_pre cenv cx env obj (es with gas_obs := gs)` by simp[] >>
+     drule_all exprSimSourceTheory.expr_body_pre_eval_result >>
+     gvs[]) >>
+  `!t' op. bvv = StackValue t' op ==> !pl. tv <> PlaceR pl` by
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ u` mp_tac >>
+     simp[vv_post_def, vv_at_def, compileEnvTheory.is_word_type_def]) >>
+  `vv_place_ptr cenv cx ee u tv bvv` by fs[vv_post_def] >>
+  `select_result cx (TupleT tys) tv (ValueSubscript (IntV (&k))) ee =
+     (INL tv',ee)` by
+    (qpat_x_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+  `vv_place_ptr cenv cx ee u tv'
+     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv)))` by
+    (irule tuple_place_ptr >>
+     qexistsl_tac [`env`, `ee`, `tv`, `tys`, `tvs`, `k`, `ee`, `w`] >>
+     simp[]) >>
   `vv_post H ctx func cenv cx
     (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0 ee tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u` by
