@@ -17,7 +17,7 @@ Ancestors
   robustCopyTransportPtr valueEncoding valueEncodingDefs codegenRel
   typedCopyOriginPtr layoutStoreProps memoryLayoutSource memoryLayoutRel
   memoryValueEncoding exprSimProps typedCopyOriginPtrDynArray
-  bodyPtrBopInMachineMemory memoryValueFrame
+  memoryValueFrame
 
 (* compile_copy_memory copies n bytes holding a robust value to a disjoint
    destination; the copy holds the value robustly. *)
@@ -288,8 +288,7 @@ Proof
          fs[contextTheory.compile_store_memory_def]) >>
       drule compile_store_memory_typed_origin_ptr_path >>
       disch_then irule >> simp[] >>
-      qexistsl_tac [`stv`, `tenv`] >> rpt conj_tac >>
-      TRY (first_assum ACCEPT_TAC) >> fs[] >> decide_tac) >>
+      qexistsl_tac [`stv`, `tenv`] >> rpt conj_tac >> fs[] >> decide_tac) >>
   `~is_bytestring_type dty` by metis_tac[] >>
   `memory_layout_key dty = memory_layout_key sty` by
     metis_tac[bulk_store_layout_keys] >>
@@ -428,9 +427,13 @@ Resume compile_store_memory_word_origin_ptr_path[post]:
   >~ [`mem_agree_outside`]
   >- (rpt strip_tac >>
       `mem_bytes_at (w2n dw) 32 r.vs_memory = mem_bytes_at (w2n dw) 32 mem` by
-        (irule mem_agree_outside_window >>
-         qexists_tac `tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` >>
-         simp[]) >>
+        (irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >>
+         rename1 `j < 32` >>
+         `mem_bytes_at (w2n dw+j) 1 r.vs_memory =
+          mem_bytes_at (w2n dw+j) 1 mem` by
+           (fs[mem_agree_outside_def]) >>
+         pop_assum (mp_tac o Q.AP_TERM `EL 0`) >>
+         simp[valueEncodingProofsTheory.EL_mem_bytes_at]) >>
       qpat_x_assum `!mem. _ ==> val_in_memory _ _ _ mem` irule >>
       metis_tac[memoryValueFrameTheory.memory_word_agree,
                 arithmeticTheory.LESS_EQ_REFL]) >>
