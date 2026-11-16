@@ -4497,13 +4497,15 @@ Resume extcall_request_full[request_main]:
   Cases_on `args` >- gvs[] >>
   rename1 `ExtCall stat skip (fname,arg_types,ret_type) opts` >>
   fs[] >>
-  drule_all bodyFullExtCallRequestInterfacesTheory.extcall_request_operands_code_slice >>
-  strip_tac >>
+  qpat_assum `compile_expr cenv ty (Call _ _ _ _) sa = _`
+    (mp_tac o REWRITE_RULE [exprSimSendTheory.compile_expr_call]) >>
+  disch_then (mp_then Any strip_assume_tac
+    bodyFullExtCallRequestInterfacesTheory.extcall_request_operands_layout) >>
   qpat_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _`
-    (mp_tac o SIMP_RULE (srw_ss()) [gas_shadow_expr_def]) >>
-  disch_then (mp_then Any mp_tac
-    bodyFullExtCallRequestInterfacesTheory.extcall_request_operands_code_slice) >>
-  disch_then drule >> strip_tac >>
+    (mp_tac o SIMP_RULE (srw_ss())
+      [gas_shadow_expr_def,exprSimSendTheory.compile_expr_call]) >>
+  disch_then (mp_then Any strip_assume_tac
+    bodyFullExtCallRequestInterfacesTheory.extcall_request_operands_layout) >>
   rename1 `lower_value compile_expr cenv (BaseT AddressT)
      (gas_shadow_expr h) shadow_sa = (shadow_ao,shadow_s1)` >>
   qpat_assum `compile_external_call_kwargs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s5 = _`
@@ -4538,18 +4540,88 @@ Resume extcall_request_full[request_main]:
      fs[GSYM listTheory.MAP_TAKE,GSYM listTheory.MAP_DROP,
        listTheory.MAP_MAP_o,combinTheory.o_DEF,SF boolSimps.ETA_ss]) >>
   gvs[] >>
+  `ci_mono sa s1 /\ ci_mono shadow_sa shadow_s1` by
+    (imp_res_tac (cj 2 compile_expr_grows) >> simp[ci_mono_def]) >>
+  `ci_mono s1 s2` by
+    (qspec_then `TAKE (LENGTH arg_types) t` mp_tac ci_mono_compile_ext_call_args >>
+     disch_then (qspecl_then [`MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) t)`,
+       `compile_expr`,`cenv`,`DROP (LENGTH arg_types) t`,`s1`] mp_tac) >>
+     simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono shadow_s1 shadow_s2` by
+    (qspec_then `TAKE (LENGTH arg_types) (MAP gas_shadow_expr t)` mp_tac ci_mono_compile_ext_call_args >>
+     disch_then (qspecl_then [`MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) (MAP gas_shadow_expr t))`,
+       `compile_expr`,`cenv`,`DROP (LENGTH arg_types) (MAP gas_shadow_expr t)`,`shadow_s1`] mp_tac) >>
+     simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono s2 s3` by
+    (qspecl_then [`opts`,`DROP (LENGTH arg_types) t`,`compile_expr`,`cenv`,`ann`] mp_tac
+       ci_mono_compile_ext_call_kwargs >>
+     simp[cj 1 compile_expr_ci_mono] >>
+     disch_then (qspec_then `s2` mp_tac) >> simp[]) >>
+  `ci_mono shadow_s2 s3'` by
+    (qspecl_then [`opts`,`DROP (LENGTH arg_types) (MAP gas_shadow_expr t)`,`compile_expr`,`cenv`,`ann`] mp_tac
+       ci_mono_compile_ext_call_kwargs >>
+     simp[cj 1 compile_expr_ci_mono] >>
+     disch_then (qspec_then `shadow_s2` mp_tac) >> simp[]) >>
+  `ci_mono s3 s5` by
+    (qpat_x_assum `(case go of NONE => _ | SOME g => _) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >> strip_tac
+     >- (qspecl_then [`GAS`,`[]`,`s3`] mp_tac ci_mono_emit_op >> simp[]) >>
+     gvs[ci_mono_refl]) >>
+  `ci_mono s3' s5'` by
+    (qpat_x_assum `(case go' of NONE => _ | SOME g => _) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `go'` >> simp[] >> strip_tac
+     >- (qspecl_then [`GAS`,`[]`,`s3'`] mp_tac ci_mono_emit_op >> simp[]) >>
+     gvs[ci_mono_refl]) >>
+  `ci_mono s5 sb` by
+    (qpat_assum `compile_external_call_kwargs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s5 = (_,sb)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_external_call_kwargs,pairTheory.SND]) >>
+  `ci_mono s5' shadow_sb` by
+    (qpat_assum `compile_external_call_kwargs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s5' = (_,shadow_sb)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_external_call_kwargs,pairTheory.SND]) >>
+  `ci_mono s1 sb /\ ci_mono shadow_s1 shadow_sb` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ci_mono s1 s2`,`ci_mono s2 s3`,`ci_mono s3 s5`,`ci_mono s5 sb`,
+        `ci_mono shadow_s1 shadow_s2`,`ci_mono shadow_s2 s3'`,
+        `ci_mono s3' s5'`,`ci_mono s5' shadow_sb`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> metis_tac[ci_mono_trans]) >>
+  `fn_has_code sa s1 func /\ fn_has_code shadow_sa shadow_s1 shadow_func` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ci_mono sa s1`,`ci_mono shadow_sa shadow_s1`,
+        `ci_mono s1 sb`,`ci_mono shadow_s1 shadow_sb`,
+        `fn_has_code sa sb func`,`fn_has_code shadow_sa shadow_sb shadow_func`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ci_mono_def] >>
+     metis_tac[fn_has_code_split]) >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `MEM func ctx.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule contextRawReachableTheory.frag_reachable_members >> simp[] >> strip_tac >>
+     fs[ctx_has_dalloca_def,listTheory.EXISTS_MEM,unitMemInvTheory.dalloca_no_wrap_def] >>
+     metis_tac[]) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `expr_body_pre cenv cx env h es` by metis_tac[] >>
+  `expr_body_pre cenv cx env h es` by simp[] >>
   `gas_admissible (bind (eval_expr cx h) (read_result cx)) expr_res_ok es` by
-    metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
+    (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
+     goal_assum (drule_at Any)) >>
   once_rewrite_tac[exprSimExtCallCaseTheory.eval_extcall_stages] >>
   simp[Once TAKE_def, Once DROP_def] >>
-  mp_tac (Q.INST [`addr` |-> `h`, `ao` |-> `ao`, `cenv` |-> `cenv`, `d` |-> `d`,
-      `env` |-> `env`, `sa` |-> `sa`, `sb` |-> `s1`,
-      `shadow_func` |-> `shadow_func`, `shadow_sa` |-> `shadow_sa`,
-      `shadow_sb` |-> `shadow_s1`, `tops` |-> `tops`]
-    bodyFullExtCallRequestHeadTheory.extcall_request_head_outcome) >>
-  impl_tac >- simp[] >> strip_tac >>
+  `body_expr_full_ok cx h` by
+    fs[bodyFullPredsTheory.body_exprs_full_ok_def] >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (BaseT AddressT) h es` by
+    (qpat_x_assum `body_expr_full_ok cx h` mp_tac >>
+     qpat_x_assum `expr_body_pre cenv cx env h es` mp_tac >>
+     qpat_x_assum `body_inv tops ctx cenv cx` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[bodyFullPredsTheory.body_expr_full_ok_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
+    `ao`,`s0`,`G0`,`tn0`] mp_tac) >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ P _` >>
   drule (Q.INST [`Q'` |-> `\H res ee G tn t. P H res ee G tn t /\ ~t.vs_halted`,
       `R'` |-> `\H res ee gt r. expr_exit res r`] gas_outcome_full_post_path) >>
@@ -4557,9 +4629,24 @@ Resume extcall_request_full[request_main]:
   impl_tac
   >- (simp[] >> rpt strip_tac >>
       drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
-      metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]) >>
+      drule fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted >> simp[]) >>
   strip_tac >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ P _` kall_tac >>
+  drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
+    (Q.INST [`f` |-> `SUM_MAP (\v. [v]) I`,
+      `source'` |-> `eval_exprs cx [h]`]
+      (INST_TYPE [alpha |-> ``:value list``, beta |-> ``:value``]
+        gas_outcome_full_source_map)) >>
+  disch_then (qspec_then `h` mp_tac) >>
+  impl_tac
+  >- (simp[] >> gen_tac >>
+      rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+      Cases_on `bind (eval_expr cx h) (read_result cx) es'` >>
+      Cases_on `q` >>
+      simp[vyperStateTheory.bind_def,exprSimWordArgsTheory.eval_exprs_nil,
+        vyperStateTheory.return_def,GSYM vyperStateTheory.bind_def]) >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_exprs cx [h]) _ Psingle _` >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
   conj_tac
   >- (rpt gen_tac >> BETA_TAC >>
@@ -4575,17 +4662,17 @@ Resume extcall_request_full[request_main]:
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
       first_assum ACCEPT_TAC) >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  qexists `\H res ee G tn t. P H res ee G tn t /\ ~t.vs_halted` >>
+  qexists `Psingle` >>
   reverse conj_tac
-  >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >> Cases_on `res`
-      >- (qpat_x_assum `expr_exit _ _` mp_tac >>
-          simp[exprSimDefsTheory.expr_exit_def]) >>
-      qexists `y` >> simp[] >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+      simp[Abbr `Psingle`] >> rpt strip_tac >>
+      rename1 `expr_exit raw r` >>
+      qpat_x_assum `expr_exit raw r` mp_tac >>
+      qpat_x_assum `_ = SUM_MAP _ _ raw` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> Cases_on `raw` >>
+      simp[exprSimDefsTheory.expr_exit_def,stmtSimPropsTheory.expr_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >>
-  Q.UNABBREV_TAC `P` >> BETA_TAC >>
+  Q.UNABBREV_TAC `Psingle` >> Q.UNABBREV_TAC `P` >> BETA_TAC >>
   disj1_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
       mid.storage_trace` by
@@ -4594,19 +4681,27 @@ Resume extcall_request_full[request_main]:
     (mp_tac o BETA_RULE o Q.SPEC `storage_trace_horizon mid.storage_trace`) >>
   impl_tac >- first_assum ACCEPT_TAC >>
   strip_tac >>
-  qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+  `res = INL [v]` by
+    (qpat_x_assum `res = SUM_MAP _ _ raw` mp_tac >>
+     qpat_x_assum `raw = INL v` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  qpat_x_assum `res = INL [v]` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) [PULL_EXISTS]) >>
   qexists `[v]` >> conj_tac >- REFL_TAC >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func cenv cx mid t' /\
      storage_well_formed_on cx mid (FST H) /\
      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t'` by
-    (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-       (mp_tac o BETA_RULE o Q.SPEC `H`) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     simp[expr_post_def] >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[expr_post_def]) >>
   `expr_sim_inv cenv cx env mid` by
-    (`expr_sim_inv cenv cx env (mid with gas_obs := [])` suffices_by simp[] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`expr_sim_inv cenv cx env es`,
+        `!e st. (_ \/ MEM e t) /\ _ ==> expr_body_pre cenv cx env e st`,
+        `!tail. eval_exprs cx [h] _ = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `expr_sim_inv cenv cx env (mid with gas_obs := [])` suffices_by simp[] >>
      irule (cj 1 abiEncodeArgsTypingTheory.abi_encode_args_success_typed) >>
      qexistsl_tac [`[h]`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`, `[v]`] >>
      simp[] >>
@@ -4622,24 +4717,45 @@ Resume extcall_request_full[request_main]:
      simp[is_word_type_def] >>
      disch_then (qspecl_then [`cx`,`env`,`es`] mp_tac) >> simp[]) >>
   `local_ptrs_reserved cenv s1` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `return_buf_frame d cenv s1 t'` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-     qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[] >>
-     metis_tac[expr_post_def]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`return_buf_frame d cenv sa s0`,
+        `sa.cs_next_var <= s1.cs_next_var`,
+        `s0.vs_alloca_next <= t'.vs_alloca_next`,
+        `expr_post _ ctx func cenv cx h es sa s1 s0 mid v ao t'`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[bodyMemoryDefsTheory.return_buf_frame_frame,expr_post_def]) >>
   `EVERY (\e. ~expr_has_effect e) t` by
     (drule bodyFullExtCallRequestInterfacesTheory.extcall_request_tail_effect_free >> simp[]) >>
   `!e st. MEM e (TAKE (LENGTH arg_types) t) /\ expr_sim_inv cenv cx env st ==>
       expr_body_pre cenv cx env e st` by
-    metis_tac[rich_listTheory.MEM_TAKE] >>
+    (qpat_assum `!e st. (_ \/ MEM e t) /\ _ ==> expr_body_pre cenv cx env e st` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[rich_listTheory.MEM_TAKE]) >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`,
+        `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`,
+        `sa.cs_next_var <= s1.cs_next_var`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   qpat_assum `compile_ext_call_args compile_expr cenv _ _ _ shadow_s1 = (av,shadow_s2)`
     (assume_tac o REWRITE_RULE [GSYM MAP_TAKE, GSYM MAP_DROP]) >>
   `EVERY (\e. ~expr_has_effect e)
      (TAKE (LENGTH arg_types) t ++ DROP (LENGTH arg_types) t)` by
     (pure_rewrite_tac[TAKE_DROP] >> first_assum ACCEPT_TAC) >>
+  `fn_has_code s1 s2 func /\ fn_has_code shadow_s1 shadow_s2 shadow_func` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ci_mono sa s1`,`ci_mono s1 s2`,`ci_mono s2 s3`,`ci_mono s3 s5`,`ci_mono s5 sb`,
+        `ci_mono shadow_sa shadow_s1`,`ci_mono shadow_s1 shadow_s2`,
+        `ci_mono shadow_s2 s3'`,`ci_mono s3' s5'`,`ci_mono s5' shadow_sb`,
+        `fn_has_code sa sb func`,`fn_has_code shadow_sa shadow_sb shadow_func`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     `ci_mono s2 sb /\ ci_mono shadow_s2 shadow_sb` by metis_tac[ci_mono_trans] >>
+     fs[ci_mono_def] >> conj_tac
+     >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sa`] >> simp[]) >>
+     irule fn_has_code_mid >> simp[] >> qexistsl_tac [`shadow_sb`,`shadow_sa`] >> simp[]) >>
   drule_all extcall_request_positional_outcome >>
   disch_then (qspec_then `PG` assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Pargs _` >>
