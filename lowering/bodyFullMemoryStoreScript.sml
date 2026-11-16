@@ -31,7 +31,8 @@ Theorem body_full_memory_store_path:
   (type_memory_size dtv = 0 \/ w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= w2n sw) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
