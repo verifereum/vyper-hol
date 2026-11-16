@@ -629,11 +629,12 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint Log case. *)
+(* Log, by bodyFullLog's joint fragment. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  irule compile_log_frag_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
