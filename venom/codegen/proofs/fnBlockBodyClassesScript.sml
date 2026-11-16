@@ -71,8 +71,12 @@ val phi_tac =
 
 (* ===== The terminator's successor ===== *)
 
-Theorem body_plan_terminator_last:
-  body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+val unpack_plan_inv_reloc =
+  qhdtm_assum `body_plan_inv_reloc`
+    (strip_assume_tac o REWRITE_RULE [body_plan_inv_reloc_def]);
+
+Theorem body_plan_terminator_last_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
       ra pc_ret rest mem0 /\
@@ -85,8 +89,8 @@ Theorem body_plan_terminator_last:
       bb.bb_label ps = SOME (ops, ps') ==>
     ps' = ps_after
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >>
+  drule_all body_plan_inv_step_reloc >> strip_tac >>
   `k = PRE (LENGTH bb.bb_instructions)` by
     (qpat_x_assum `bb_well_formed bb`
        (strip_assume_tac o REWRITE_RULE [bb_well_formed_def]) >>
@@ -105,6 +109,42 @@ Proof
   simp[Once generate_block_insts_plan_def] >> fs[]
 QED
 
+Theorem body_terminator_last_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    is_terminator inst.inst_opcode /\
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') ==>
+    ps' = ps_after
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule_all body_plan_terminator_last_reloc >> disch_then ACCEPT_TAC
+QED
+
+Theorem body_plan_terminator_last:
+  body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    is_terminator inst.inst_opcode /\
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') ==>
+    ps' = ps_after
+Proof
+  pure_rewrite_tac [body_plan_inv_reloc_specialize] >>
+  metis_tac[body_plan_terminator_last_reloc]
+QED
+
 Theorem body_terminator_last:
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -119,8 +159,66 @@ Theorem body_terminator_last:
       bb.bb_label ps = SOME (ops, ps') ==>
     ps' = ps_after
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule_all body_plan_terminator_last >> disch_then ACCEPT_TAC
+  pure_rewrite_tac [body_inv_reloc_specialize] >>
+  metis_tac[body_terminator_last_reloc]
+QED
+
+Theorem body_plan_succ_placed_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    is_terminator inst.inst_opcode /\ MEM t (get_successors inst) ==>
+    ?tbb ps_tdfs tops tafter toff tpc.
+      lookup_block t fn.fn_blocks = SOME tbb /\ tbb.bb_label = t /\
+      fn_reachable fn t /\ tbb <> HD fn.fn_blocks /\
+      MEM t (cfg_succs_of cfg bb.bb_label) /\
+      dfs_block_state liveness dfg cfg fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) t ps_tdfs /\
+      generate_block_plan liveness dfg cfg fn tbb ps_tdfs =
+        SOME (tops, tafter) /\
+      FLOOKUP lo t = SOME toff /\ toff < dimword (:256) /\
+      FLOOKUP o2pc toff = SOME tpc /\
+      asm_block_at prog tpc (execute_plan cpl.cp_initial_fmp tops) /\
+      ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
+      ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >>
+  unpack_plan_inv_reloc >>
+  drule_all body_succ_block >> strip_tac >>
+  drule_all fnPlanCoverTheory.dfs_block_state_reachable >> strip_tac >>
+  qpat_x_assum `spill_base = _` SUBST_ALL_TAC >>
+  qpat_x_assum `fn_ops = r.sr_plan` SUBST_ALL_TAC >>
+  drule_all dfs_block_code_placed_reloc >> strip_tac >>
+  drule_all body_dfs_state_region >> strip_tac >>
+  qexistsl_tac [`tbb`, `ps_dfs'`, `block_ops'`, `ps_dfs_after'`, `off`, `pc`] >>
+  gvs[]
+QED
+
+Theorem body_succ_placed_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    is_terminator inst.inst_opcode /\ MEM t (get_successors inst) ==>
+    ?tbb ps_tdfs tops tafter toff tpc.
+      lookup_block t fn.fn_blocks = SOME tbb /\ tbb.bb_label = t /\
+      fn_reachable fn t /\ tbb <> HD fn.fn_blocks /\
+      MEM t (cfg_succs_of cfg bb.bb_label) /\
+      dfs_block_state liveness dfg cfg fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) t ps_tdfs /\
+      generate_block_plan liveness dfg cfg fn tbb ps_tdfs =
+        SOME (tops, tafter) /\
+      FLOOKUP lo t = SOME toff /\ toff < dimword (:256) /\
+      FLOOKUP o2pc toff = SOME tpc /\
+      asm_block_at prog tpc (execute_plan cpl.cp_initial_fmp tops) /\
+      ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
+      ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule_all body_plan_succ_placed_reloc >> disch_then ACCEPT_TAC
 QED
 
 Theorem body_plan_succ_placed:
@@ -144,26 +242,8 @@ Theorem body_plan_succ_placed:
       ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
       ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >> unpack_plan_inv >>
-  qspecl_then [`fn`, `bb`, `k`, `inst`, `t`] mp_tac body_succ_block >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
-               `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `t`, `tbb`]
-    mp_tac fnPlanCoverTheory.dfs_block_state_reachable >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `i`,
-               `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`, `lbl_ctr`,
-               `ps_end`, `t`, `tbb`, `ps_dfs'`, `block_ops'`,
-               `ps_dfs_after'`] mp_tac dfs_block_code_placed >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-  strip_tac >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`, `spill_base`,
-               `lbl_ctr`, `fn_ops`, `ps_end`, `t`, `ps_dfs'`, `tbb`,
-               `block_ops'`, `ps_dfs_after'`] mp_tac body_dfs_state_region >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qexistsl_tac [`tbb`, `ps_dfs'`, `block_ops'`, `ps_dfs_after'`, `off`,
-                `pc`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
+  pure_rewrite_tac [body_plan_inv_reloc_specialize] >>
+  metis_tac[body_plan_succ_placed_reloc]
 QED
 
 Theorem body_succ_placed:
@@ -187,11 +267,40 @@ Theorem body_succ_placed:
       ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
       ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule_all body_plan_succ_placed >> disch_then ACCEPT_TAC
+  pure_rewrite_tac [body_inv_reloc_specialize] >>
+  metis_tac[body_succ_placed_reloc]
 QED
 
 (* ===== The callee of an INVOKE ===== *)
+
+Theorem body_callee_placed_reloc:
+  !rpolicy unit cpl prog ctx lo o2pc Inv nm.
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv ctx cpl ==>
+    !j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+      ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
+               FLOOKUP o2pc off = SOME pc /\
+               asm_block_at prog pc
+                 (execute_plan cpl.cp_initial_fmp (EL j cpl.cp_regions).sr_plan)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `fn_entry_label (EL j ctx.ctx_functions) =
+     SOME (EL j ctx.ctx_functions).fn_name` by
+    (irule (cj 4 body_fn_shape) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `(HD (EL j ctx.ctx_functions).fn_blocks).bb_label = nm` by
+    (qpat_x_assum `fn_entry_label _ = _` mp_tac >>
+     simp[fn_entry_label_def, entry_block_def] >>
+     Cases_on `(EL j ctx.ctx_functions).fn_blocks` >> simp[]) >>
+  qpat_x_assum `(HD _).bb_label = nm` (SUBST1_TAC o SYM) >>
+  irule fn_region_placed_reloc >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
 
 Theorem body_callee_placed:
   !rpolicy unit cpl prog ctx lo o2pc Inv nm.
@@ -209,20 +318,8 @@ Theorem body_callee_placed:
                  (execute_plan cpl.cp_initial_fmp (EL j cpl.cp_regions).sr_plan)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `j`,
-               `EL j ctx.ctx_functions`, `EL j cpl.cp_regions`] mp_tac
-    fn_region_placed >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  strip_tac >>
-  qspecl_then [`ctx`, `unit`, `Inv`, `cpl`, `j`, `EL j ctx.ctx_functions`]
-    mp_tac body_fn_shape >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  strip_tac >>
-  `(HD (EL j ctx.ctx_functions).fn_blocks).bb_label = nm` by
-    (qpat_x_assum `fn_entry_label _ = _` mp_tac >>
-     simp[fn_entry_label_def, entry_block_def] >>
-     Cases_on `(EL j ctx.ctx_functions).fn_blocks` >> simp[]) >>
-  qexistsl_tac [`off`, `pc`] >> gvs[]
+  irule body_callee_placed_reloc >>
+  rpt (goal_assum (drule_at Any)) >> gvs[] >> metis_tac[]
 QED
 
 Theorem body_callee_sim_resource:
@@ -339,6 +436,87 @@ QED
 
 (* ===== Moving the invariant past an instruction ===== *)
 
+Theorem body_plan_advance_core_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+    vs1.vs_labels = vs.vs_labels /\ vs1.vs_call_ctx = vs.vs_call_ctx /\
+    vs1.vs_current_bb = vs.vs_current_bb /\
+    (!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+       operand_val (frame_view fn ra vs1) lo at =
+       operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+      generate_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+        (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+        bb.bb_label ps = SOME (ops, ps') /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (SUC k - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC k - LENGTH (get_params bb.bb_instructions))
+           (non_param_insts bb))
+        ps' = SOME (rest', ps_after) /\
+      rest_ops = ops ++ rest' /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) ==>
+    body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
+      pc0 (vs1 with vs_inst_idx := SUC k) as1 ra pc_ret rest mem0
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_static_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  `execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: (prefix_ops ++ ops)) =
+   execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops) ++
+   execute_plan cpl.cp_initial_fmp ops` by
+    REWRITE_TAC [GSYM execute_plan_append, APPEND] >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]) >>
+  PURE_REWRITE_TAC [body_plan_inv_reloc_def] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC)
+  >~ [`FLOOKUP (_ with vs_inst_idx := _).vs_labels`]
+  >- (simp[] >> qpat_x_assum `vs1.vs_labels = _` SUBST1_TAC >>
+      first_assum ACCEPT_TAC)
+  >~ [`lookup_block (_ with vs_inst_idx := _).vs_current_bb`]
+  >- (simp[] >> qpat_x_assum `vs1.vs_current_bb = _` SUBST1_TAC >>
+      first_assum ACCEPT_TAC)
+  >~ [`block_plan_state`]
+  >- (irule block_plan_state_step >> rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >> qexistsl_tac [`ops`, `ps`] >>
+      qpat_x_assum `EL k _ = inst` SUBST1_TAC >>
+      conj_tac >> first_assum ACCEPT_TAC)
+  >~ [`block_ops = _`]
+  >- (qpat_x_assum `block_ops = _` SUBST1_TAC >>
+      qpat_x_assum `rest_ops = _` SUBST1_TAC >> simp[])
+  >~ [`phi_prefix_length`]
+  >- (qpat_x_assum `phi_prefix_length _ <= k` mp_tac >> simp[])
+  >~ [`revert_forward_pair`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i j. revert_forward_pair bb i j ==> _` drule >>
+      rename1 `revert_forward_pair bb a b` >>
+      `a <> k` by
+        (strip_tac >> qpat_x_assum `a = k` SUBST_ALL_TAC >> res_tac) >> simp[])
+  >~ [`(_ with vs_inst_idx := _).vs_inst_idx`] >- simp[]
+  >~ [`as1.as_pc = _`]
+  >- (qpat_x_assum `execute_plan _ (SOLabel _ :: (_ ++ _)) = _` SUBST1_TAC >>
+      qpat_x_assum `as1.as_pc = _` SUBST1_TAC >>
+      qpat_x_assum `as.as_pc = _` SUBST1_TAC >> simp[])
+  >~ [`fn_frame_inv`]
+  >- (REWRITE_TAC [fn_frame_inv_inst_idx] >> first_assum ACCEPT_TAC)
+  >~ [`operand_val`]
+  >- (REWRITE_TAC [frame_view_inst_idx, operand_val_inst_idx] >> first_assum ACCEPT_TAC)
+QED
+
 Theorem body_plan_advance_core:
   body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -371,58 +549,53 @@ Theorem body_plan_advance_core:
       block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
       pc0 (vs1 with vs_inst_idx := SUC k) as1 ra pc_ret rest mem0
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule_all body_plan_inv_static >> strip_tac >>
-  unpack_plan_inv >>
-  `execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: (prefix_ops ++ ops)) =
-   execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops) ++
-   execute_plan cpl.cp_initial_fmp ops` by
-    REWRITE_TAC [GSYM execute_plan_append, APPEND] >>
-  Q.SUBGOAL_THEN `?prefixL prefixD core.
-     ps_after.ps_stack = prefixL ++ core /\
-     ps_dfs_after.ps_stack = prefixD ++ core /\
-     (!v. MEM v (live_vars_at liveness bb.bb_label
-                   (LENGTH bb.bb_instructions)) ==>
-        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
-  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
-      first_assum ACCEPT_TAC) >>
-  PURE_REWRITE_TAC [body_plan_inv_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC)
-  >~ [`FLOOKUP (_ with vs_inst_idx := _).vs_labels`]
-  >- (simp[] >> qpat_x_assum `vs1.vs_labels = _` SUBST1_TAC >>
-      first_assum ACCEPT_TAC)
-  >~ [`lookup_block (_ with vs_inst_idx := _).vs_current_bb`]
-  >- (simp[] >> qpat_x_assum `vs1.vs_current_bb = _` SUBST1_TAC >>
-      first_assum ACCEPT_TAC)
-  >~ [`block_plan_state`]
-  >- (irule block_plan_state_step >> rpt conj_tac >>
-      TRY (first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`ops`, `ps`] >>
-      qpat_x_assum `EL k _ = inst` SUBST1_TAC >>
-      conj_tac >> first_assum ACCEPT_TAC)
-  >~ [`block_ops = _`]
-  >- (qpat_x_assum `block_ops = _` SUBST1_TAC >>
-      qpat_x_assum `rest_ops = _` SUBST1_TAC >> simp[])
-  >~ [`phi_prefix_length`]
-  >- (qpat_x_assum `phi_prefix_length _ <= k` mp_tac >> simp[])
-  >~ [`revert_forward_pair`]
-  >- (rpt strip_tac >>
-      qpat_x_assum `!i j. revert_forward_pair bb i j ==> _` drule >>
-      rename1 `revert_forward_pair bb a b` >>
-      `a <> k` by
-        (strip_tac >> qpat_x_assum `a = k` SUBST_ALL_TAC >> res_tac) >>
-      simp[])
-  >~ [`(_ with vs_inst_idx := _).vs_inst_idx`] >- simp[]
-  >~ [`as1.as_pc = _`]
-  >- (qpat_x_assum `execute_plan _ (SOLabel _ :: (_ ++ _)) = _` SUBST1_TAC >>
-      qpat_x_assum `as1.as_pc = _` SUBST1_TAC >>
-      qpat_x_assum `as.as_pc = _` SUBST1_TAC >> simp[])
-  >~ [`fn_frame_inv`]
-  >- (REWRITE_TAC [fn_frame_inv_inst_idx] >> first_assum ACCEPT_TAC)
-  >~ [`operand_val`]
-  >- (REWRITE_TAC [frame_view_inst_idx, operand_val_inst_idx] >>
-      first_assum ACCEPT_TAC)
+  pure_rewrite_tac [body_plan_inv_reloc_specialize] >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  drule_all body_plan_advance_core_reloc >> simp[]
+QED
+
+Theorem body_plan_advance_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+    step_inst fuel ctx inst vs = OK vs1 /\
+      generate_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+        (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+        bb.bb_label ps = SOME (ops, ps') /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (SUC k - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC k - LENGTH (get_params bb.bb_instructions))
+           (non_param_insts bb))
+        ps' = SOME (rest', ps_after) /\
+      rest_ops = ops ++ rest' /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) ==>
+    body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
+      pc0 (vs1 with vs_inst_idx := SUC k) as1 ra pc_ret rest mem0
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_static_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  `vs1.vs_labels = vs.vs_labels /\ vs1.vs_call_ctx = vs.vs_call_ctx /\
+   vs1.vs_current_bb = vs.vs_current_bb` by
+    metis_tac[step_preserves_labels, step_preserves_call_ctx,
+              step_preserves_control_flow] >>
+  `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+     operand_val (frame_view fn ra vs1) lo at =
+     operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)` by
+    ((rpt strip_tac >>
+     drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) alias_step_preserve >>
+     disch_then irule >> simp[] >> rpt (goal_assum (drule_at Any)) >> simp[] >> (metis_tac[]))) >>
+  drule_all body_plan_advance_core_reloc >> simp[]
 QED
 
 Theorem body_plan_advance:
@@ -453,26 +626,48 @@ Theorem body_plan_advance:
       block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
       pc0 (vs1 with vs_inst_idx := SUC k) as1 ra pc_ret rest mem0
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule_all body_plan_inv_static >> strip_tac >> unpack_plan_inv >>
-  `vs1.vs_labels = vs.vs_labels /\ vs1.vs_call_ctx = vs.vs_call_ctx /\
-   vs1.vs_current_bb = vs.vs_current_bb` by
-    metis_tac[step_preserves_labels, step_preserves_call_ctx,
-              step_preserves_control_flow] >>
-  `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-     operand_val (frame_view fn ra vs1) lo at =
-     operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)` by
-    (qspecl_then [`fuel`, `ctx`, `lo`, `fn`, `ra`, `liveness`, `dfg`, `cfg`,
-                  `inst`, `live_vars_at liveness bb.bb_label (k + 1)`,
-                  `bb_is_halting bb`,
-                  `k + 1 < LENGTH bb.bb_instructions /\
-                   is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`,
-                  `bb.bb_label`, `ps`, `ops`, `ps'`, `vs`, `vs1`]
-       mp_tac alias_step_preserve >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
-  drule_all body_plan_advance_core >> simp[]
+  pure_rewrite_tac [body_plan_inv_reloc_specialize] >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  drule_all body_plan_advance_reloc >> simp[]
+QED
+
+Theorem body_inv_advance_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+    step_inst fuel ctx inst vs = OK vs1 /\
+      generate_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+        (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+        bb.bb_label ps = SOME (ops, ps') /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (SUC k - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC k - LENGTH (get_params bb.bb_instructions))
+           (non_param_insts bb))
+        ps' = SOME (rest', ps_after) /\
+      rest_ops = ops ++ rest' /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) ==>
+    body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
+      pc0 (vs1 with vs_inst_idx := SUC k) as1 Inv ra pc_ret rest mem0
+Proof
+  pure_rewrite_tac [body_inv_bundle_reloc] >> strip_tac >>
+  reverse conj_tac
+  >- (drule_all body_plan_inv_inst_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `reachability_closed _ _`
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [reachability_closed_def]) >>
+      disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+      disch_then assume_tac >> gvs[] >> first_x_assum irule >> simp[]) >>
+  drule_all body_plan_advance_reloc >> simp[]
 QED
 
 Theorem body_inv_advance:
@@ -503,83 +698,9 @@ Theorem body_inv_advance:
       block_ops ps_dfs_after ps_after (prefix_ops ++ ops) rest' (SUC k) ps'
       pc0 (vs1 with vs_inst_idx := SUC k) as1 Inv ra pc_ret rest mem0
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >>
-  drule_all body_inv_inst >> strip_tac >>
-  drule_all body_inv_static >> strip_tac >>
-  unpack_inv >>
-  `vs1.vs_labels = vs.vs_labels /\ vs1.vs_call_ctx = vs.vs_call_ctx /\
-   vs1.vs_current_bb = vs.vs_current_bb` by
-    metis_tac[step_preserves_labels, step_preserves_call_ctx,
-              step_preserves_control_flow] >>
-  `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-     operand_val (frame_view fn ra vs1) lo at =
-     operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)` by
-    (qspecl_then [`fuel`, `ctx`, `lo`, `fn`, `ra`, `liveness`, `dfg`, `cfg`,
-                  `inst`, `live_vars_at liveness bb.bb_label (k + 1)`,
-                  `bb_is_halting bb`,
-                  `k + 1 < LENGTH bb.bb_instructions /\
-                   is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`,
-                  `bb.bb_label`, `ps`, `ops`, `ps'`, `vs`, `vs1`]
-       mp_tac alias_step_preserve >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
-  `execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: (prefix_ops ++ ops)) =
-   execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops) ++
-   execute_plan cpl.cp_initial_fmp ops` by
-    REWRITE_TAC [GSYM execute_plan_append, APPEND] >>
-  Q.SUBGOAL_THEN `?prefixL prefixD core.
-     ps_after.ps_stack = prefixL ++ core /\
-     ps_dfs_after.ps_stack = prefixD ++ core /\
-     (!v. MEM v (live_vars_at liveness bb.bb_label
-                   (LENGTH bb.bb_instructions)) ==>
-        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
-  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
-      first_assum ACCEPT_TAC) >>
-  PURE_REWRITE_TAC [body_inv_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC)
-  >~ [`FLOOKUP (_ with vs_inst_idx := _).vs_labels`]
-  >- (simp[] >> qpat_x_assum `vs1.vs_labels = _` SUBST1_TAC >>
-      first_assum ACCEPT_TAC)
-  >~ [`Inv ctx fn _ (_ with vs_inst_idx := _)`]
-  >- (rpt strip_tac >>
-      qpat_x_assum `reachability_closed _ _`
-        (mp_tac o CONJUNCT1 o REWRITE_RULE [reachability_closed_def]) >>
-      disch_then (qspecl_then [`fn`, `inst`, `inst'`, `vs`, `vs1`, `fuel`]
-                    mp_tac) >>
-      qpat_x_assum `vs.vs_inst_idx = k` (fn th => REWRITE_TAC [th]) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      simp[])
-  >~ [`lookup_block (_ with vs_inst_idx := _).vs_current_bb`]
-  >- (simp[] >> qpat_x_assum `vs1.vs_current_bb = _` SUBST1_TAC >>
-      first_assum ACCEPT_TAC)
-  >~ [`block_plan_state`]
-  >- (irule block_plan_state_step >> rpt conj_tac >>
-      TRY (first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`ops`, `ps`] >>
-      qpat_x_assum `EL k _ = inst` SUBST1_TAC >>
-      conj_tac >> first_assum ACCEPT_TAC)
-  >~ [`block_ops = _`]
-  >- (qpat_x_assum `block_ops = _` SUBST1_TAC >>
-      qpat_x_assum `rest_ops = _` SUBST1_TAC >> simp[])
-  >~ [`phi_prefix_length`]
-  >- (qpat_x_assum `phi_prefix_length _ <= k` mp_tac >> simp[])
-  >~ [`revert_forward_pair`]
-  >- (rpt strip_tac >>
-      qpat_x_assum `!i j. revert_forward_pair bb i j ==> _` drule >>
-      rename1 `revert_forward_pair bb a b` >>
-      `a <> k` by
-        (strip_tac >> qpat_x_assum `a = k` SUBST_ALL_TAC >> res_tac) >>
-      simp[])
-  >~ [`(_ with vs_inst_idx := _).vs_inst_idx`] >- simp[]
-  >~ [`as1.as_pc = _`]
-  >- (qpat_x_assum `execute_plan _ (SOLabel _ :: (_ ++ _)) = _` SUBST1_TAC >>
-      qpat_x_assum `as1.as_pc = _` SUBST1_TAC >>
-      qpat_x_assum `as.as_pc = _` SUBST1_TAC >> simp[])
-  >~ [`fn_frame_inv`]
-  >- (REWRITE_TAC [fn_frame_inv_inst_idx] >> first_assum ACCEPT_TAC)
-  >~ [`operand_val`]
-  >- (REWRITE_TAC [frame_view_inst_idx, operand_val_inst_idx] >>
-      first_assum ACCEPT_TAC)
+  pure_rewrite_tac [body_inv_reloc_specialize] >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  drule_all body_inv_advance_reloc >> simp[]
 QED
 
 (* ===== Results ===== *)
