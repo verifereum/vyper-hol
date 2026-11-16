@@ -192,13 +192,31 @@ Resume raw_call_tuple_copy_checked[store_check]:
 QED
 Resume raw_call_tuple_copy_checked[add_check]:
   irule ptr_inst_ok_lower_bound_transport >>
-  conj_tac >- (fs[Abbr `u`, allocas_from_def, mstore_def] >> metis_tac[]) >>
+  conj_tac >- (fs[Abbr `u`, allocas_from_def, mstore_def] >> (gvs[])) >>
   qexists_tac `0` >> simp[Abbr `i2`] >>
   irule literal_add_ptr_inst_ok >> simp[] >>
   qpat_x_assum `ptr_covers G tn p s _` mp_tac >>
   simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def]
 QED
 Resume raw_call_tuple_copy_checked[copy_check]:
-  cheat
+  gnvs[] >>
+  irule ptr_inst_ok_lower_bound_transport >>
+  conj_tac >- (qpat_x_assum `allocas_from lo s` mp_tac >>
+    simp[Abbr `v`, Abbr `u`, allocas_from_def, update_var_def, mstore_def]) >>
+  qexists_tac `0` >> simp[Abbr `i3`] >>
+  irule ptr_inst_ok_mcopy >> simp[] >>
+  reverse conj_tac >-
+    (qpat_x_assum `ptr_covers G tn x s cnt` mp_tac >>
+     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
+       Abbr `v`, Abbr `u`, lookup_var_def, update_var_def, mstore_vars,
+       FLOOKUP_UPDATE] >>
+     strip_tac >> qexists_tac `n2w a` >>
+     simp[GSYM lookup_var_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `ptr_covers G tn p s _` mp_tac >>
+  PairCases_on `site` >>
+  simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
+    Abbr `v`, Abbr `u`, lookup_var_def, update_var_def, mstore_vars,
+    FLOOKUP_UPDATE] >>
+  simp[Abbr `cnt`]
 QED
 Finalise raw_call_tuple_copy_checked
