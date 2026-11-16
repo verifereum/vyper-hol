@@ -172,11 +172,13 @@ QED
 Resume raw_call_outbuf_tail_mem[tuple]:
   markerLib.RESUME_TAC >>
   fs[arithmeticTheory.GREATER_DEF, raw_call_return_type_def] >>
+  `stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t` by
+    metis_tac[] >>
   qpat_assum `expr_type e = _`
     (mp_then (Pat `expr_type _ = _`) mp_tac raw_call_nonrevert_positive_path_mem) >>
   simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.MULT_COMM] >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ t`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ t`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ t`)) >>
   disch_then (drule_at (Pat `do _ od _ = (_,_)`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `eval_operand ov t = _`)) >>
@@ -234,6 +236,8 @@ QED
 
 Resume raw_call_outbuf_tail_mem[revert_bytes]:
   fs[] >>
+  `stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t` by
+    metis_tac[] >>
   `!name lb lsz. local_region cenv (SND (adopt_call_outcome rq outcome es1)).scopes t name lb lsz ==>
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
@@ -242,18 +246,18 @@ Resume raw_call_outbuf_tail_mem[revert_bytes]:
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
+     metis_tac[stmt_state_rel_def, state_rel_def]) >>
   `!(H2 : (bool # 256 word # type_value) list # num list).
      stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t ==>
      stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
     (rpt strip_tac >>
-     irule (INST_TYPE [alpha |-> ``:256``] raw_call_finish_state_rel_aged) >>
+     irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] raw_call_finish_state_rel_aged) >>
      qexistsl_tac [`w`,`flags.rcf_max_outsize`,
        `n2w (MIN (LENGTH outcome.co_returnData) flags.rcf_max_outsize)`,`sc`,`t`] >>
      simp[] >> qexistsl_tac [`alloc`,`w2n w`,
        `32*((flags.rcf_max_outsize+31) DIV 32)+32`] >> gvs[] >> metis_tac[]) >>
   `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u` by
-    (irule (INST_TYPE [alpha |-> ``:256``] raw_call_finish_frame_aged) >>
+    (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] raw_call_finish_frame_aged) >>
      qexistsl_tac [`w`,`flags.rcf_max_outsize`,
        `n2w (MIN (LENGTH outcome.co_returnData) flags.rcf_max_outsize)`,`sc`,`t`] >>
      simp[] >> conj_tac
@@ -284,11 +288,11 @@ Resume raw_call_outbuf_tail_mem[revert_bytes_post]:
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
+     metis_tac[stmt_state_rel_def, state_rel_def]) >>
   qexists_tac `OK u` >>
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
   simp[] >>
-  rpt strip_tac >>
+  qx_gen_tac `H2` >> strip_tac >>
   `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t` by
     metis_tac[] >>
   `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by

@@ -231,9 +231,15 @@ Proof
      irule raw_call_oracle_frame >> simp[] >>
      goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
-     conj_tac >> rpt gen_tac >> strip_tac >>
-     first_x_assum (drule_all_then mp_tac) >>
-     simp[regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         qpat_x_assum `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==> _`
+           (drule_all_then mp_tac) >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!aid b sz. aid < initial.cs_next_id /\ _ ==> _`
+       (drule_all_then mp_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1))
     initial s0 u` by
     (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >> strip_tac >>

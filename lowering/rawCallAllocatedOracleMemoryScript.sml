@@ -92,10 +92,12 @@ Resume raw_call_allocated_oracle_mem[separation]:
     regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz` by
     (rpt strip_tac >>
      `aid <> sa.cs_next_id` by decide_tac >>
-     fs[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def] >>
-     first_x_assum (qspecl_then [`sa.cs_next_id`,`aid`,`w2n w`,
+     `allocas_non_overlapping t` by fs[stmt_state_rel_def, alloca_inv_def] >>
+     qpat_x_assum `allocas_non_overlapping t`
+       (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
+     disch_then (qspecl_then [`sa.cs_next_id`,`aid`,`w2n w`,
        `if cap=0 then 0 else ((cap+31) DIV 32)*32+32`,`b`,`sz`] mp_tac) >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+     simp[arithmeticTheory.MULT_COMM, loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
     regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz` by
     (rpt strip_tac >>
