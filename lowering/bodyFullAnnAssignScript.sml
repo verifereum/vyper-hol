@@ -13,6 +13,7 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodySimDeclCases bodyFullAnnAssignMemoryPost bodyFullMemoryValue
   bodyFullAnnAssignReserve bodyFullPathHistory bodyFullPathFrontier
+  bodyFullAnnAssignEmpty
   bodyFullAnnAssignCompose gasOutcomeFullStmts annassignRelayoutFrag
   annassignRelayoutSource annassignRelayoutPost bodyExprPreFacts
   supportedStmtTraverse supportedExprs supportedExprTraverse vyperTypeEnv
