@@ -3,7 +3,7 @@ Theory symEmitSim
 Ancestors
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
-  fnBlockBodyHelpers
+  fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
 
 Theorem sval_val_map:
   !ws. OPT_MMAP sval_val (MAP Val ws) = SOME ws
@@ -2392,17 +2392,30 @@ Proof
   drule sym_step_concrete_ok_stack_suffix >> simp[]
 QED
 
-Theorem sym_codecopy_ok_stack_suffix:
-  3 <= LENGTH ss.sym_stack /\ sym_codecopy p env ss = SymOK ss' ==>
-  sym_codecopy p env (ss with sym_stack := ss.sym_stack ++ tail) =
+Theorem sym_codecopy_ok_stack_suffix_mode:
+  3 <= LENGTH ss.sym_stack /\
+  (if allow_own then sym_codecopy_own p env own ss
+   else sym_codecopy p env ss) = SymOK ss' ==>
+  (if allow_own then
+     sym_codecopy_own p env own (ss with sym_stack := ss.sym_stack ++ tail)
+   else sym_codecopy p env (ss with sym_stack := ss.sym_stack ++ tail)) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
   Cases_on `ss.sym_stack` >- simp[] >> rename1 `a :: stk` >>
   Cases_on `stk` >- simp[] >> rename1 `a :: b :: stk'` >>
   Cases_on `stk'` >- simp[] >> rename1 `a :: b :: c :: stk''` >>
-  Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
-  simp[sym_codecopy_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `a` >> Cases_on `b` >> Cases_on `c` >> Cases_on `allow_own` >>
+  simp[sym_codecopy_def, sym_codecopy_own_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
   drule sym_lift_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_codecopy_ok_stack_suffix:
+  3 <= LENGTH ss.sym_stack /\ sym_codecopy p env ss = SymOK ss' ==>
+  sym_codecopy p env (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_codecopy_ok_stack_suffix_mode) >> simp[]
 QED
 
 Theorem sym_mstore_ok_stack_suffix:
@@ -2429,6 +2442,38 @@ Proof
   drule sym_step_concrete_ok_stack_suffix >> simp[]
 QED
 
+Theorem sym_named_op_ok_stack_suffix_mode:
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  (if allow_own then sym_step_op_own p env own name ss
+   else sym_step_op p env name ss) = SymOK ss' ==>
+  (if allow_own then
+     sym_step_op_own p env own name (ss with sym_stack := ss.sym_stack ++ tail)
+   else sym_step_op p env name (ss with sym_stack := ss.sym_stack ++ tail)) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  strip_tac >>
+  Cases_on `name = "ADD"`
+  >- (gvs[sym_step_op_own_def, sym_step_op_def,
+          asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_add_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "MSTORE"`
+  >- (gvs[sym_step_op_own_def, sym_step_op_def,
+          asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_mstore_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "MLOAD"`
+  >- (gvs[sym_step_op_own_def, sym_step_op_def,
+          asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_mload_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "CODECOPY"`
+  >- (gvs[sym_step_op_own_def, sym_step_op_def,
+          asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_codecopy_ok_stack_suffix_mode >> simp[]) >>
+  gvs[sym_step_op_own_def, sym_step_op_def, MEM] >>
+  irule sym_step_concrete_ok_stack_suffix >> simp[]
+QED
+
 Theorem sym_named_op_ok_stack_suffix:
   ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
   ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
@@ -2437,21 +2482,29 @@ Theorem sym_named_op_ok_stack_suffix:
   sym_step_op p env name (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >>
-  Cases_on `name = "ADD"`
-  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
-      irule sym_add_ok_stack_suffix >> simp[]) >>
-  Cases_on `name = "MSTORE"`
-  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
-      irule sym_mstore_ok_stack_suffix >> simp[]) >>
-  Cases_on `name = "MLOAD"`
-  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
-      irule sym_mload_ok_stack_suffix >> simp[]) >>
-  Cases_on `name = "CODECOPY"`
-  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
-      irule sym_codecopy_ok_stack_suffix >> simp[]) >>
-  gvs[sym_step_op_def, MEM] >>
-  irule sym_step_concrete_ok_stack_suffix >> simp[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_named_op_ok_stack_suffix_mode) >> simp[]
+QED
+
+Theorem sym_named_steps_ok_stack_suffix_mode:
+  asm_block_at p ss.sym_base.as_pc [AsmOp name] /\
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  sym_steps_mode allow_own p env own 1 ss = SymOK ss' ==>
+  sym_steps_mode allow_own p env own 1
+    (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  simp[asm_block_at_def] >> rpt strip_tac >>
+  Cases_on `allow_own` >>
+  gvs[sym_steps_mode_def, asmSpliceTheory.sym_steps_compute,
+      SRULE [] (Q.INST [`n` |-> `0`]
+                  (SPEC_ALL (CONJUNCT2 sym_steps_own_def))), sym_steps_own_def,
+      sym_step_def, sym_step_own_def, AllCaseEqs()] >>
+  simp[SRULE [] (Q.INST [`allow_own` |-> `F`]
+                  sym_named_op_ok_stack_suffix_mode),
+       SRULE [] (Q.INST [`allow_own` |-> `T`]
+                  sym_named_op_ok_stack_suffix_mode)]
 QED
 
 Theorem sym_named_steps_ok_stack_suffix:
@@ -2463,10 +2516,8 @@ Theorem sym_named_steps_ok_stack_suffix:
   sym_steps p env 1 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  simp[asm_block_at_def] >>
-  rpt strip_tac >>
-  gvs[asmSpliceTheory.sym_steps_compute, sym_step_def, AllCaseEqs()] >>
-  simp[sym_named_op_ok_stack_suffix]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_named_steps_ok_stack_suffix_mode) >>
+  simp[sym_steps_mode_def]
 QED
 
 Theorem sym_emit_restore_stack:
