@@ -57,7 +57,7 @@ Theorem abi_encode_arg_step_full:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. op = Var x ==> not_fresh_at sb x) /\
       (~(~is_word_type (expr_type e) /\ exprs_can_mutate ce rest) ==>
-        expr_store_bound cx (expr_type e) v op t /\
+        expr_store_bound cx (post_value_type ce e) v op t /\
         ptr_val_ok cx (post_value_type ce e) v op G tn t /\
         (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op G t) /\
         (~is_word_type (post_value_type ce e) ==> !w.
