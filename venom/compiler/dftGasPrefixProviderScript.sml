@@ -10,7 +10,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasFromListLocator dftGasFromListContextReach
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
-  dftGasInvResidualTrace dftGasInvFixedTrace venomInstProps venomInstProofs stateEquivProofs
+  dftGasInvResidualTrace dftGasInvFixedTrace dftGasInvExtraction venomInstProps venomInstProofs stateEquivProofs
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
   dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
@@ -2365,6 +2365,83 @@ Proof
   drule trace_step_block_disjoint >> metis_tac[]
 QED
 
+Theorem native_lookup_fill_subtrace_agreement:
+  !obs keys vals target source.
+    ALL_DISTINCT (MAP FST obs) ==>
+    (EVERY (\kw. MEM kw obs) (trace_gas target) ==>
+      trace_agrees
+        (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+          NONE => 0w | SOME w => w) target) /\
+    (ALL_DISTINCT keys /\ LENGTH keys = LENGTH vals /\
+     LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+       (MAP (ALOOKUP obs) keys) vals /\
+     EVERY (\kw. MEM kw (ZIP (keys,vals))) (trace_gas source) ==>
+      trace_agrees
+        (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+          NONE => 0w | SOME w => w) source)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (simp[trace_agrees_def, EVERY_MEM] >> strip_tac >>
+      qx_gen_tac `kw` >> Cases_on `kw` >> simp[] >> strip_tac >>
+      rename1 `MEM (key,w) (trace_gas target)` >>
+      `MEM (key,w) obs` by metis_tac[] >>
+      `ALOOKUP obs key = SOME w` by
+        metis_tac[alistTheory.ALOOKUP_ALL_DISTINCT_MEM] >>
+      simp[alistTheory.ALOOKUP_APPEND]) >>
+  strip_tac >>
+  `EVERY (\(key,w). ALOOKUP obs key = NONE \/ ALOOKUP obs key = SOME w)
+     (ZIP (keys,vals))` by
+    (gvs[LIST_REL_MAP1, LIST_REL_EVERY_ZIP, combinTheory.o_DEF]) >>
+  `ALL_DISTINCT (MAP FST (ZIP (keys,vals)))` by simp[MAP_ZIP] >>
+  fs[EVERY_MEM] >> simp[trace_agrees_def, EVERY_MEM] >>
+  qx_gen_tac `kw` >> Cases_on `kw` >> simp[] >> strip_tac >>
+  rename1 `MEM (key,w) (trace_gas source)` >>
+  `MEM (key,w) (ZIP (keys,vals))` by metis_tac[] >>
+  `ALOOKUP (ZIP (keys,vals)) key = SOME w` by
+    metis_tac[alistTheory.ALOOKUP_ALL_DISTINCT_MEM] >>
+  qpat_x_assum `!kw. MEM kw (ZIP _) ==> _`
+    (qspec_then `(key,w)` mp_tac) >> simp[] >> strip_tac >>
+  simp[alistTheory.ALOOKUP_APPEND]
+QED
+
+Theorem native_inventory_child_agreement:
+  ctx_inst_ids_distinct C' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) /\
+  MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) /\
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME cf' /\
+  eval_operands ops a = SOME args /\ setup_callee cf' args a = SOME ct ==>
+  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
+      child = dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C' cf' ct
+  in ALL_DISTINCT (MAP FST obs) /\
+     EVERY (\kw. MEM kw obs) (trace_gas child) /\
+     trace_agrees
+       (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+         NONE => 0w | SOME w => w) child
+Proof
+  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `ALL_DISTINCT (MAP FST obs)` >>
+  qmatch_goalsub_abbrev_tac `trace_gas child` >>
+  conj_asm1_tac
+  >- (simp_tac pure_ss [Abbr `obs`] >> irule trace_gas_names_distinct >>
+      irule native_inventory_suffix_distinct >> simp[] >>
+      qpat_x_assum `ctx_inst_ids_distinct C'` mp_tac >>
+      simp_tac bool_ss [ctx_inst_ids_distinct_def] >> strip_tac >>
+      simp[EVERY_MEM] >> rpt strip_tac >>
+      drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+      BETA_TAC >> strip_tac >>
+      drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  conj_asm1_tac
+  >- (`FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw))) obs =
+       trace_gas child` by
+        (simp_tac pure_ss [Abbr `obs`, Abbr `child`] >>
+         drule_all native_inventory_root_subtree >>
+         drule_all dftGasFromListTraceDefsTheory.trace_step_invoke >> simp[]) >>
+      pop_assum (SUBST1_TAC o SYM) >> simp[EVERY_MEM, MEM_FILTER]) >>
+  irule (cj 1 native_lookup_fill_subtrace_agreement) >> simp[]
+QED
+
 Theorem native_inventory_lookup_rows[local]:
   !keys obs. ALL_DISTINCT keys /\ ALL_DISTINCT (MAP FST obs) ==>
   PERM
@@ -2503,6 +2580,29 @@ Theorem native_bubbles_perm[local]:
 Proof
   ho_match_mp_tac dft_head_bubbles_ind >> simp[] >>
   rpt strip_tac >> (simp[sortingTheory.PERM_FUN_APPEND_CONS])
+QED
+
+Theorem native_bubbles_inversion[local]:
+  !src dst. dft_head_bubbles R src dst ==>
+    ALL_DISTINCT src ==>
+    !x z. id_before src x z /\ id_before dst z x ==> R x z
+Proof
+  ho_match_mp_tac dft_head_bubbles_strongind >> conj_tac
+  >- simp[id_before_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `dft_head_bubbles R (pre ++ post) rest` >>
+  `PERM (pre ++ post) rest` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (pre ++ post) /\ ~MEM y pre /\ ~MEM y post` by
+    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  Cases_on `z = y`
+  >- (gvs[dftSsaPreserveTheory.id_before_append, id_before_cons,
+          EVERY_MEM] >> metis_tac[id_before_mem]) >>
+  `~MEM y rest` by metis_tac[PERM_MEM_EQ, MEM_APPEND] >>
+  `x <> y` by
+    (gvs[id_before_cons] >> metis_tac[id_before_mem]) >>
+  first_x_assum irule >> simp[] >>
+  gvs[dftSsaPreserveTheory.id_before_append, id_before_cons] >>
+  metis_tac[]
 QED
 
 Theorem native_bubbles_filter[local]:
@@ -3597,6 +3697,187 @@ Resume native_successful_prefix_union[square]:
   gvs[inv_ev_trace_def]
 QED
 Finalise native_successful_prefix_union
+
+Theorem native_residual_completion_sort:
+  ALL_DISTINCT (A ++ i::srcpost) /\
+  dft_head_bubbles R (A ++ i::srcpost) (consumed ++ i::later) /\
+  (!x y. R x y ==> dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) /\
+  inv_ev_ftrace orc p d ctx
+    (consumed ++ FILTER (\x. ~MEM x consumed) A) s t ==>
+  inv_ev_ftrace orc p d ctx
+    (A ++ FILTER (\x. MEM x consumed) srcpost) s t
+Proof
+  strip_tac >>
+  `PERM (A ++ i::srcpost) (consumed ++ i::later)` by
+    metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (consumed ++ i::later)` by metis_tac[ALL_DISTINCT_PERM] >>
+  `EVERY (\x. MEM x (A ++ srcpost)) consumed` by
+    (gvs[ALL_DISTINCT_APPEND, EVERY_MEM] >> rpt strip_tac >>
+     drule PERM_MEM_EQ >> disch_then (qspec_then `x` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `ALL_DISTINCT (A ++ srcpost)` by gvs[ALL_DISTINCT_APPEND] >>
+  `PERM (consumed ++ FILTER (\x. ~MEM x consumed) A)
+        (A ++ FILTER (\x. MEM x consumed) srcpost)` by
+    (irule dftGasInvExtractionTheory.inv_completed_prefix_perm >>
+     gvs[ALL_DISTINCT_APPEND]) >>
+  irule dftGasInvExtractionTheory.inv_ftrace_source_sort >> conj_tac
+  >- (gvs[ALL_DISTINCT_APPEND] >>
+      simp[ALL_DISTINCT_APPEND, FILTER_ALL_DISTINCT, MEM_FILTER] >> metis_tac[]) >>
+  qexists_tac `consumed ++ FILTER (\x. ~MEM x consumed) A` >>
+  simp[] >> ntac 2 gen_tac >> strip_tac >>
+  `id_before (A ++ i::srcpost) x z` by
+    metis_tac[dftGasInvExtractionTheory.inv_completed_order_source] >>
+  `id_before (consumed ++ i::later) z x` by
+    metis_tac[dftGasInvExtractionTheory.inv_completion_inversion, PERM_SYM] >>
+  `R x z` by metis_tac[native_bubbles_inversion] >>
+  metis_tac[]
+QED
+
+(* Coinitial success: first construct a forward extension, then exchange it. *)
+Theorem native_coenabled_gas[local]:
+  dft_gas_swap_pair g i /\ g.inst_opcode = GAS /\
+  inst_wf g /\ inst_wf i /\
+  ev_step orc p d b C g s = OK sg /\
+  ev_step orc p d b C i s = OK si ==>
+  ?u. ev_step orc p d b C i sg = OK u
+Proof
+  strip_tac >>
+  `?out. g.inst_outputs = [out]` by metis_tac[ev_step_gas_shape] >>
+  `sg = update_var out (orc (p,d,g.inst_id)) s` by
+    (gvs[ev_step_def, ev_gas_def]) >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  drule_all dftGasSimSwapSuccessTheory.ev_step_independent_update_ok_iff >> metis_tac[]
+QED
+
+Theorem native_coenabled_invoke[local]:
+  dft_gas_swap_pair c i /\ c.inst_opcode = INVOKE /\
+  i.inst_opcode <> GAS /\ inst_wf c /\ inst_wf i /\
+  ev_step orc p d b C c s = OK sc /\
+  ev_step orc p d b C i s = OK si ==>
+  ?u. ev_step orc p d b C i sc = OK u
+Proof
+  strip_tac >>
+  drule dftGasSimInvokePartnerTheory.ev_invoke_partner_updates >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem native_coenabled_ordinary[local]:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  a.inst_opcode <> GAS /\ a.inst_opcode <> INVOKE /\
+  b.inst_opcode <> GAS /\ b.inst_opcode <> INVOKE /\
+  ~is_ext_call_op a.inst_opcode /\ ~is_ext_call_op b.inst_opcode /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u
+Proof
+  strip_tac >> gvs[ev_step_ordinary] >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode /\
+   ~is_alloca_op a.inst_opcode /\ ~is_alloca_op b.inst_opcode /\
+   effects_independent a.inst_opcode b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+  simp[step_inst_non_invoke] >>
+  irule passSharedTransferTheory.step_inst_base_ok_transfer >> simp[] >>
+  qexistsl_tac [`s`, `sb`] >> simp[] >>
+  `sa.vs_call_ctx = s.vs_call_ctx /\ sa.vs_prev_bb = s.vs_prev_bb /\
+   sa.vs_params = s.vs_params /\
+   (Eff_RETURNDATA NOTIN write_effects a.inst_opcode ==>
+      sa.vs_returndata = s.vs_returndata)` by
+    metis_tac[step_inst_preserves_eligible_fields] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> sym_tac >> irule eval_operand_step_pres >>
+      qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
+      metis_tac[dft_swap_output_frame]) >>
+  strip_tac >>
+  `Eff_RETURNDATA IN read_effects RETURNDATACOPY` by EVAL_TAC >>
+  gvs[effects_independent_def] >> metis_tac[pred_setTheory.IN_DISJOINT]
+QED
+
+Theorem native_coenabled_external[local]:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  a.inst_opcode <> GAS /\ a.inst_opcode <> INVOKE /\
+  b.inst_opcode <> GAS /\ b.inst_opcode <> INVOKE /\
+  is_ext_call_op a.inst_opcode /\ ~is_ext_call_op b.inst_opcode /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u
+Proof
+  strip_tac >> gvs[ev_step_ordinary] >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode /\
+   ~is_alloca_op b.inst_opcode /\
+   effects_independent a.inst_opcode b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  `b.inst_opcode <> RETURNDATACOPY` by
+    (strip_tac >> gvs[] >> Cases_on `a.inst_opcode` >>
+     gvs[is_ext_call_op_def, effects_independent_def,
+         read_effects_def, write_effects_def, all_effects_def,
+         empty_effects_def, pred_setTheory.DISJOINT_DEF,
+         pred_setTheory.EXTENSION]) >>
+  `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+  drule_all venomInstProofsTheory.step_ext_call_preserves >> strip_tac >>
+  simp[step_inst_non_invoke] >>
+  irule passSharedTransferTheory.step_inst_base_ok_transfer >> simp[] >>
+  qexistsl_tac [`s`, `sb`] >> simp[] >>
+  rpt strip_tac >> sym_tac >> irule eval_operand_step_pres >>
+  qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
+  metis_tac[dft_swap_output_frame]
+QED
+
+Theorem native_coenabled_step_square:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u /\
+      ev_step orc p d fuel C a sb = OK u
+Proof
+  strip_tac >>
+  `dft_gas_swap_pair b a` by metis_tac[dft_gas_swap_pair_sym] >>
+  `(?u. ev_step orc p d fuel C b sa = OK u) \/
+   (?u. ev_step orc p d fuel C a sb = OK u)` by
+    (Cases_on `a.inst_opcode = GAS`
+     >- (disj1_tac >> irule native_coenabled_gas >> metis_tac[]) >>
+     Cases_on `b.inst_opcode = GAS`
+     >- (disj2_tac >> irule native_coenabled_gas >> metis_tac[]) >>
+     Cases_on `a.inst_opcode = INVOKE`
+     >- (disj1_tac >> irule native_coenabled_invoke >> metis_tac[]) >>
+     Cases_on `b.inst_opcode = INVOKE`
+     >- (disj2_tac >> irule native_coenabled_invoke >> metis_tac[]) >>
+     `~(is_ext_call_op a.inst_opcode /\ is_ext_call_op b.inst_opcode)` by
+       (strip_tac >>
+        `effects_independent a.inst_opcode b.inst_opcode` by
+          gvs[dft_gas_swap_pair_def] >>
+        qpat_x_assum `effects_independent _ _` mp_tac >>
+        qpat_x_assum `is_ext_call_op a.inst_opcode` mp_tac >>
+        qpat_x_assum `is_ext_call_op b.inst_opcode` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        Cases_on `a.inst_opcode` >> simp[is_ext_call_op_def] >>
+        Cases_on `b.inst_opcode` >> simp[is_ext_call_op_def] >>
+        EVAL_TAC) >>
+     Cases_on `is_ext_call_op a.inst_opcode`
+     >- (disj1_tac >> irule native_coenabled_external >> metis_tac[]) >>
+     Cases_on `is_ext_call_op b.inst_opcode`
+     >- (disj2_tac >> irule native_coenabled_external >> metis_tac[]) >>
+     disj1_tac >> irule native_coenabled_ordinary >> metis_tac[]) >>
+  first_x_assum strip_assume_tac >>
+  drule_all dftGasSimSwapSuccessTheory.ev_pair_success >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem native_coenabled_indexed_square:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u v.
+    ev_step orc p d fuel C b (sa with vs_inst_idx := SUC s.vs_inst_idx) = OK u /\
+    ev_step orc p d fuel C a (sb with vs_inst_idx := SUC s.vs_inst_idx) = OK v /\
+    (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (v with vs_inst_idx := SUC (SUC s.vs_inst_idx))
+Proof
+  strip_tac >> drule_all native_coenabled_step_square >> strip_tac >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  metis_tac[dftGasSimLocalBoundaryTheory.ev_step_nonterminator_ok_idx]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
