@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeOwnedCopy
 Ancestors
+  bodyFullAbiDecodeOwnedCopyExact
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeCopyFrame
   typedCopyOriginPtrDynArray bodyFullGhostFrame abiDecodePtrMemberFrame
   allocaHistory bodyPtrDefs loweringStateRelDefs codegenRel freshWrites stateFrame
@@ -70,101 +71,10 @@ Theorem abi_decode_owned_mcopy_joint:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
-  BETA_TAC >> strip_tac >>
-  `local_ptrs_rel fn ce es.scopes s` by
-    metis_tac[stmt_state_rel_def, state_rel_def] >>
-  `eval_operand (Var dst) s = SOME (n2w b) /\
-   eval_operand (Var src) s = SOME (n2w a)` by simp[eval_operand_def] >>
-  `EVERY (\(aid,p,base,k,bytes).
-    FLOOKUP s.vs_allocas aid = SOME (base,k) /\
-    lookup_var p s = SOME (n2w base) /\ ptr_covers G tn p s k /\
-    op_taint tn (Var p) = {} /\ k = LENGTH bytes /\
-    mem_bytes_at base k s.vs_memory = bytes /\ base+k <= s.vs_alloca_next /\
-    (base+k <= b \/ b+n <= base)) live` by
-    (gvs[EVERY_MEM, FORALL_PROD] >> metis_tac[]) >>
-  `EVERY (\(base,bytes). mem_bytes_at base (LENGTH bytes) s.vs_memory = bytes /\
-    (base+LENGTH bytes <= b \/ b+n <= base)) protected` by
-    (gvs[EVERY_MEM, FORALL_PROD] >> metis_tac[]) >>
-  `lo <= b` by decide_tac >>
-  mp_tac (abi_decode_mcopy_frame_joint |>
-    Q.INST [`dst` |-> `Var dest`, `src` |-> `Var source`] |>
-    Q.INST [`dest` |-> `dst`, `source` |-> `src`, `id` |-> `sa.cs_next_id`] |>
-    Q.INST [`ob` |-> `output_base`, `cap` |-> `output_cap`, `iw` |-> `input_word`]) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  strip_tac >> rename1 `u = mcopy b a n s` >>
-  qabbrev_tac `copy_inst = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []` >>
-  `emit_inst MCOPY [Var dst;Var src;count_op] [] sa = ((),sb)` by
-    gvs[emit_void_def, emit_inst_def] >>
-  `step_inst_base copy_inst s = OK u` by
-    simp[Abbr `copy_inst`, Once step_inst_base_def, mk_inst_def,
-      eval_operand_def, w2n_n2w, LESS_MOD] >>
-  `inst_mem_below_frontier copy_inst s /\ inst_dload_in_section copy_inst s` by
-    simp[Abbr `copy_inst`, inst_mem_below_frontier_def, inst_dload_in_section_def,
-       mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
-       sized_source_write_range_def, eval_operand_def, w2n_n2w, LESS_MOD] >>
-  `allocas_from lo s` by metis_tac[ghost_inv_at_def] >>
-  `!D. ptr_inst_ok D lo 0 ctx fn G tn copy_inst s` by
-    (gen_tac >>
-     `step_inst 0 ctx copy_inst s = OK u` by
-       (qpat_x_assum `step_inst_base copy_inst s = _` (SUBST1_TAC o SYM) >>
-        simp[step_inst_non_invoke, Abbr `copy_inst`, mk_inst_def]) >>
-     `u.vs_requests = s.vs_requests` by simp[mcopy_def, write_memory_with_expansion_def] >>
-     gvs[ptr_covers_def] >> simp[ptr_inst_ok_def] >> rpt conj_tac
-     >- (simp[Abbr `copy_inst`, access_ok_def, mk_inst_def,
-           source_memory_write_ranges_def, fixed_source_write_range_def,
-           source_memory_read_ranges_def, sized_source_write_range_def,
-           eval_operand_def, mem_write_ops_def, mem_read_ops_def] >>
-          rpt strip_tac >> gvs[] >> metis_tac[])
-     >- (simp[Abbr `copy_inst`, taint_ok_def, mk_inst_def,
-           source_memory_read_ranges_def, sized_source_write_range_def,
-           eval_operand_def, w2n_n2w, LESS_MOD] >>
-         rpt strip_tac >>
-         Cases_on `op = Var dst` >- gvs[] >>
-         Cases_on `op = Var src` >- gvs[] >>
-         Cases_on `op = count_op` >> gvs[op_taint_def])) >>
-  qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-    (s,G,tn) [] (OK t,G',tf)` by
-    (gen_tac >>
-     mp_tac (Q.INST [`opc` |-> `MCOPY`, `args` |-> `[Var dst;Var src;count_op]`,
-       `outs` |-> `[]`, `func` |-> `fn`] typed_copy_emit_inst_origin_ptr_path) >>
-     simp[Abbr `t`, Abbr `copy_inst`, is_terminator_def] >> gvs[] >>
-     qpat_x_assum `G = step_prov _ _ _ _` (fn th => rewrite_tac[GSYM th])) >>
-  drule emit_inst_extends >> strip_tac >>
-  drule emitted_insts_emit_inst >> strip_tac >>
-  `~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-   t.vs_inst_idx = LENGTH sb.cs_current_insts /\ t.vs_allocas = s.vs_allocas` by
-    simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def] >>
-  `alloca_history fn t` by
-    (irule abi_decode_no_alloca_endpoint_history >>
-     qexistsl_tac [`s`, `sa`, `sb`] >>
-     simp[Abbr `copy_inst`, mk_inst_def, IS_PREFIX_APPEND]) >>
-  `!H. V H ==> stmt_state_rel H ctx fn ce cx es t /\
-    ghost_inv_at (DF H) lo delta ce cx es G' tf t /\
-    ghost_kept_at lo ce es0 origin G0 tn0 s0 G' tf` by
-    (ho_match_mp_tac (abi_decode_scalar_joint_frame |>
-       Q.INST [`s` |-> `u`, `G` |-> `G'`, `tn` |-> `tf`]) >>
-     simp[Abbr `t`, state_frame_def, lookup_var_def,
-       mcopy_def, write_memory_with_expansion_def] >>
-     qpat_x_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _` mp_tac >>
-     simp[mcopy_def, write_memory_with_expansion_def] >> metis_tac[]) >>
-  `!p. lookup_var p t = lookup_var p u` by simp[Abbr `t`, lookup_var_def, mcopy_def, write_memory_with_expansion_def] >>
-  `!p k. ptr_covers G' tf p t k = ptr_covers G' tf p u k` by
-    simp[ptr_covers_def, Abbr `t`, lookup_var_def] >>
-  `t.vs_alloca_next = u.vs_alloca_next /\ t.vs_memory = u.vs_memory` by simp[Abbr `t`] >>
-  `!name base k. local_region ce es.scopes t name base k =
-     local_region ce es.scopes s name base k` by
-    (rpt gen_tac >> irule local_region_lookup_cong >>
-     simp[Abbr `t`, lookup_var_def, mcopy_def, write_memory_with_expansion_def]) >>
-  `abi_decode_ptr_window G' tf t input input_word (LENGTH input_bytes)` by
-    (gvs[abi_decode_ptr_window_def] >> simp[abi_decode_ptr_window_def] >> metis_tac[]) >>
-  qexistsl_tac [`t`, `G'`, `tf`] >> asm_rewrite_tac[] >>
-  `!p. not_fresh_at sb p = not_fresh_at sa p` by simp[not_fresh_at_def] >>
-  gvs[EVERY_MEM, FORALL_PROD] >>
-  (conj_tac >- (rpt gen_tac >> disch_tac >>
-    qpat_x_assum `!aid p base k bytes. MEM (aid,p,base,k,bytes) live ==> aid < sa.cs_next_id /\ _` drule >>
-    qpat_x_assum `!aid p base k bytes. MEM (aid,p,base,k,bytes) live ==> FLOOKUP s.vs_allocas aid = _ /\ _` drule >>
-    simp[] >> rpt strip_tac >> simp[] >> decide_tac) >>
-   conj_tac >- (qexists_tac `inst` >> simp[]) >>
-   first_assum ACCEPT_TAC)
+  BETA_TAC >> disch_tac >>
+  mp_tac (BETA_RULE abi_decode_owned_mcopy_joint_exact) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `Gf`
+    (qx_choose_then `tnf` assume_tac))) >>
+  qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
