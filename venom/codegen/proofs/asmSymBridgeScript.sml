@@ -359,16 +359,39 @@ Proof
   Cases_on `t'` >> gvs[]
 QED
 
+Theorem related_memory_read_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range off sz) ==>
+  TAKE sz (DROP off (asm_expand_memory k ss.sym_base.as_memory)) =
+  TAKE sz (DROP off (asm_expand_memory k cs.as_memory))
+Proof
+  rw[] >> gvs[] >>
+  irule expand_memory_read >> simp[] >>
+  qexists_tac `FDOM ss.sym_mem_labels` >>
+  gvs[mem_labels_hit_def, in_mem_range_def] >> metis_tac[]
+QED
+
 Theorem related_memory_read[local]:
   asm_sym_rel p env cs ss /\
   ~mem_labels_hit ss.sym_mem_labels (in_mem_range off sz) ==>
   TAKE sz (DROP off (asm_expand_memory k ss.sym_base.as_memory)) =
   TAKE sz (DROP off (asm_expand_memory k cs.as_memory))
 Proof
-  rw[asm_sym_rel_def] >> gvs[] >>
-  irule expand_memory_read >> simp[] >>
-  qexists_tac `FDOM ss.sym_mem_labels` >>
-  gvs[mem_labels_hit_def, in_mem_range_def] >> metis_tac[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac related_memory_read_core >> simp[asm_sym_rel_core_canonical]
+QED
+
+Theorem related_call_request_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range off sz) ==>
+  asm_call_request (ss.sym_base with as_stack := args) addr value off sz st =
+  asm_call_request cs addr value off sz st
+Proof
+  rpt gen_tac >> strip_tac >>
+  `TAKE sz (DROP off (asm_expand_memory (off + sz) ss.sym_base.as_memory)) =
+   TAKE sz (DROP off (asm_expand_memory (off + sz) cs.as_memory))` by
+    (irule related_memory_read_core >> metis_tac[]) >>
+  gvs[] >> simp[asm_call_request_def]
 QED
 
 Theorem related_call_request[local]:
@@ -377,11 +400,21 @@ Theorem related_call_request[local]:
   asm_call_request (ss.sym_base with as_stack := args) addr value off sz st =
   asm_call_request cs addr value off sz st
 Proof
-  strip_tac >>
-  drule_all related_memory_read >>
-  disch_then (qspec_then `off + sz` assume_tac) >>
-  gvs[asm_sym_rel_def] >>
-  simp[asm_call_request_def]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac related_call_request_core >> simp[asm_sym_rel_core_canonical]
+QED
+
+Theorem related_create_request_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range off sz) ==>
+  asm_create_request (ss.sym_base with as_stack := args) value off sz salt =
+  asm_create_request cs value off sz salt
+Proof
+  rpt gen_tac >> strip_tac >>
+  `TAKE sz (DROP off (asm_expand_memory (off + sz) ss.sym_base.as_memory)) =
+   TAKE sz (DROP off (asm_expand_memory (off + sz) cs.as_memory))` by
+    (irule related_memory_read_core >> metis_tac[]) >>
+  gvs[] >> simp[asm_create_request_def]
 QED
 
 Theorem related_create_request[local]:
@@ -390,11 +423,8 @@ Theorem related_create_request[local]:
   asm_create_request (ss.sym_base with as_stack := args) value off sz salt =
   asm_create_request cs value off sz salt
 Proof
-  strip_tac >>
-  drule_all related_memory_read >>
-  disch_then (qspec_then `off + sz` assume_tac) >>
-  gvs[asm_sym_rel_def] >>
-  simp[asm_create_request_def]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac related_create_request_core >> simp[asm_sym_rel_core_canonical]
 QED
 
 Theorem sym_step_concrete_good_core:
