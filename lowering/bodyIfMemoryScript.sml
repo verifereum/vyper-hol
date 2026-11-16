@@ -9,6 +9,9 @@ Ancestors
   vyperTypeSystem vyperState vyperAST list finite_map
   stmtIfMemory
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 val _ = Parse.hide "body";
 
 (* Former successful proof (before counted source-action schema):
@@ -22,7 +25,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
+    (irule_body_pre stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `!ty. expr_sim_mem ctx func cenv cx ty e es /\
         expr_vv_sim_mem ctx func cenv cx ty e es` by
@@ -85,7 +88,7 @@ Proof
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
+    (irule_body_pre stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `!ty. expr_sim_mem ctx func cenv cx ty e es /\
         expr_vv_sim_mem ctx func cenv cx ty e es` by
