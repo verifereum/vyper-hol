@@ -79,7 +79,6 @@ Proof
     (drule_then strip_assume_tac) >>
   drule_all raw_call_prefix_source_ready >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `IS_SOME esK.outcomes /\ outcomes_accounts_typed esK.outcomes /\
    accounts_runtime_well_typed esK.accounts` by
     fs[expr_sim_inv_def,

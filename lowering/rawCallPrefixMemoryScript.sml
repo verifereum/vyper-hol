@@ -116,12 +116,15 @@ Resume raw_call_addr_data_sim_mem[data]:
        (drule_then strip_assume_tac) >>
      fs[expr_post_def]) >>
   `expr_sim_mem ctx func cenv cx (BaseT (BytesT (Dynamic n))) d ee` by metis_tac[] >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
   irule raw_call_mem_value_bind >>
   qpat_assum `lower_value _ _ _ d s1 = _` (irule_at Any) >> simp[] >>
   rpt strip_tac >> suspend "values"
 QED
 
 Resume raw_call_addr_data_sim_mem[values]:
+  markerLib.RESUME_TAC >>
   rename1 `valid_horizon cx st0 H2 ee'.storage_trace` >>
   `expr_body_pre cenv cx env d (ee with gas_obs := gs')` by simp[] >>
   `expr_sim_inv cenv cx env ee'` by
@@ -136,7 +139,7 @@ Resume raw_call_addr_data_sim_mem[values]:
      fs[body_exprs_mem_ok_def] >> metis_tac[]) >>
   `?bs. v' = BytesV bs` by
     (Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def]) >>
-  pop_assum strip_assume_tac >> TRY (rveq) >>
+  pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!gsA av esA tA gsD bs esD tD. _`
     (qspecl_then [`gs`,`v`,`ee`,`t`,`gs'`,`bs`,`ee'`,`t'`] mp_tac) >>
   impl_tac >-
@@ -222,7 +225,7 @@ Resume raw_call_data_endpoint_mem[counted]:
   `!(H' : (bool # 256 word # type_value) list # num list).
      stmt_state_rel H' ctx func cenv cx es2 td ==>
      stmt_state_rel H' ctx func cenv cx es2 t` by
-    (rpt strip_tac >> irule hash_readonly_state_rel >>
+    (rpt strip_tac >> irule exprSimHashBoundaryTheory.hash_readonly_state_rel >>
      qexistsl_tac [`td`, `s2`] >> simp[]) >>
   qexists_tac `b'` >>
   `b' + 32 < dimword (:256)` by decide_tac >> simp[] >>
@@ -488,8 +491,7 @@ Resume raw_call_prefix_sim_mem[keyword_endpoint]:
   `!g. go = SOME g ==> ?w. eval_operand g t = SOME w` by
     (rpt strip_tac >>
      `MEM g xs` by metis_tac[raw_call_kwarg_mem] >>
-     qpat_x_assum `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[typed_args_post_def] >> strip_tac >>
+     fs[typed_args_post_def] >>
      drule_all LIST_REL_MEM_IMP >> simp[] >> metis_tac[]) >>
   drule_all raw_call_optional_gas_run >> strip_tac >>
   suspend "optional_path"
@@ -497,10 +499,17 @@ QED
 
 Resume raw_call_prefix_sim_mem[optional_path]:
   `!H. stmt_state_rel H ctx func cenv cx ee t ==> stmt_state_rel H ctx func cenv cx ee t'` by
-    (drule_all raw_call_optional_gas_rel >> strip_tac >> first_assum ACCEPT_TAC) >>
+    (rpt strip_tac >> irule (raw_call_optional_gas_rel
+       |> Q.INST [`sa` |-> `s5`, `sb` |-> `s6`, `s` |-> `t`, `t` |-> `t'`,
+            `ctx` |-> `ctx`, `func` |-> `func`, `cx` |-> `cx`, `es` |-> `ee`,
+            `cenv` |-> `cenv`, `gas` |-> `gas`, `go` |-> `go`]) >>
+     qexistsl_tac [`gas`,`go`,`s5`,`s6`,`t`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `fn_has_code s5 s6 func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
-  `alloca_inv t` by fs[stmt_state_rel_def] >>
+  `alloca_inv t` by
+    (qpat_assum `stmt_state_rel Hk _ _ _ _ _ t` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def]) >>
   drule_all raw_call_optional_gas_counted_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qabbrev_tac `tf = t' with vs_inst_idx := LENGTH s6.cs_current_insts` >>
@@ -550,8 +559,8 @@ Resume raw_call_prefix_sim_mem[frames]:
      rpt (pop_assum kall_tac) >> simp[expr_post_def, wb_frame_def] >>
      rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   `wb_frame cenv es esD sa s0 tD` by
-    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >> conj_tac
-     >- (goal_assum (drule_at Any)) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >> reverse conj_tac
+     >- (goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ es s0`))) >>
      qexistsl_tac [`esA`,`s1`,`tA`] >> fs[ci_mono_def]) >>
   suspend "frame_slice"
 QED

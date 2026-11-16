@@ -23,7 +23,7 @@ Theorem raw_call_allocated_oracle_mem:
   safe_operand sa gas_op /\ safe_operand sa val_op /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\

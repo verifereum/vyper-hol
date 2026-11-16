@@ -139,7 +139,7 @@ Theorem raw_call_oracle_run_mem:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -188,7 +188,6 @@ Theorem raw_call_oracle_run_mem:
 Proof
   strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `w2n (n2w cap : bytes32) = cap` by simp[wordsTheory.w2n_n2w] >>
   drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
