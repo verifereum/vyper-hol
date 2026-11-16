@@ -705,7 +705,7 @@ QED
 (* The pointer check and ghost of one memory-to-storage iteration: the
    source offset stays inside the source pointer's region, the stored
    slot takes the loaded word's memory taint, and nothing else changes. *)
-Theorem memory_copy_body_ptr[local]:
+Theorem memory_copy_body_ptr:
   !loc ctx cv mv sv vv dv nv x dst G tn s n b k i.
   (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\ ~MEM x [cv;mv;sv;vv;dv;nv] /\

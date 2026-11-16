@@ -68,7 +68,10 @@ Theorem body_full_assign_local_memory_value_path:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `alloca_inv s` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
   Cases_on `loc = SOME LocMemory`
   >- suspend "staged" >>
   `compile_store_memory cenv (Var xs) (Var p) dty sty sa = ((),sb)` by
@@ -105,10 +108,26 @@ Resume body_full_assign_local_memory_value_path[staged]:
   `compile_alloc_buffer (type_memory_size stv) sa = (buf,sm) /\
    compile_copy_memory buf.buf_operand (Var xs) (type_memory_size stv) sm = ((),sc')` by
     metis_tac[] >>
-  drule_all (SRULE [] (Q.INST [`n` |-> `type_memory_size tv`]
-    (SPEC_ALL body_full_memory_stage_path))) >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  rename1 `ptr_covers Gf tf root t (type_memory_size stv)` >>
+  Cases_on `?K : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel K ctx func cenv cx es s` >>
+  IF (qpat_x_assum `?h. stmt_state_rel h ctx func cenv cx es s`
+        (qx_choose_then `hb` assume_tac))
+    (drule_all (SRULE [] (Q.INST [`n` |-> `type_memory_size tv`]
+       (SPEC_ALL body_full_memory_stage_path))) >>
+     disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+     `stmt_state_rel hb ctx func cenv cx es t` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+     disch_then assume_tac)
+    (drule_all (INST_TYPE [``:'b`` |-> ``:'a``]
+       (SRULE [] (Q.INST [`n` |-> `type_memory_size tv`]
+         (SPEC_ALL body_full_memory_stage_path)))) >>
+     disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+     `stmt_state_rel H0 ctx func cenv cx es t` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+     disch_then assume_tac) >>
+  (rename1 `ptr_covers Gf tf root t (type_memory_size stv)` >>
   rename1 `lookup_var root t = SOME (n2w b)` >>
   `lookup_var p t = SOME dw /\ not_fresh_at sc' p` by metis_tac[] >>
   `ptr_covers Gf tf p t (type_memory_size dtv)` by
@@ -141,30 +160,32 @@ Resume body_full_assign_local_memory_value_path[staged]:
   qexistsl_tac [`t'`,`Gf'`,`tf'`] >>
   conj_tac >- suspend "join" >>
   conj_tac >- suspend "post" >>
-  simp[] >> suspend "frame"
+  simp[] >> suspend "frame")
 QED
 
 Resume body_full_assign_local_memory_value_path[join]:
-  gen_tac >>
+  markerLib.RESUME_TAC >> (gen_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
     (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
-  disch_then (qspecl_then [`t`,`Gf`,`tf`,`[]`,`OK t'`,`Gf'`,`tf'`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`t`,`Gf`,`tf`,`[]`,`OK t'`,`Gf'`,`tf'`] mp_tac) >> simp[])
 QED
 
 Resume body_full_assign_local_memory_value_path[post]:
-  qx_genl_tac [`H`,`D`,`d`] >>
+  markerLib.RESUME_TAC >> (qx_genl_tac [`H`,`D`,`d`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  TRY (qpat_x_assum `~(?K. stmt_state_rel K ctx func cenv cx es s)`
+    mp_tac >> simp[] >> NO_TAC) >>
   irule body_full_local_copy_post >> simp[] >>
   conj_tac >- (qexists_tac `sb` >> simp[]) >>
   qexistsl_tac [`Gf`,`PG`,`dw`,`explicit`,`t`,`sc'`,`tf`] >>
   simp[] >> rpt conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
       fs[ci_mono_def] >> decide_tac) >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 Resume body_full_assign_local_memory_value_path[frame]:
-  `gas_marked_path T ctx func t 0 (OK t')` by
+  markerLib.RESUME_TAC >> (`gas_marked_path T ctx func t 0 (OK t')` by
     (qpat_assum `!D. gas_origin_ptr_path _ (t,Gf,tf) _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
      disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
      drule gas_origin_path_erase >> simp[]) >>
@@ -172,11 +193,10 @@ Resume body_full_assign_local_memory_value_path[frame]:
     (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
      disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
      drule gas_origin_path_erase >> strip_tac >>
-     `alloca_inv s` by fs[stmt_state_rel_def] >>
      drule_all rest_word_marked_alloca >> simp[]) >>
   drule_all rest_word_marked_allocation_posts >> strip_tac >>
   fs[typed_copy_state_frame_def,venom_state_component_equality] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> metis_tac[])
 QED
 
 Finalise body_full_assign_local_memory_value_path
