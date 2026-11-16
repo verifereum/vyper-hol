@@ -7,7 +7,6 @@ Ancestors
   exprLowering compileEnv vyperValue vyperAST vyperInterpreter
 Libs monadsyntax
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem nonbytes_evaluated_val_footprint:
   !tenv ty tv v.
     ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
@@ -20,16 +19,7 @@ Proof
   rename1 `BytesT bd` >> Cases_on `bd` >>
   gvs[evaluate_type_def, is_bytestring_type_def]
 QED
-*)
-Theorem nonbytes_evaluated_val_footprint:
-  !tenv ty tv v.
-    ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
-    val_footprint tv v = type_memory_size tv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_relayout_source_classify:
   !cenv cx env e es typ.
     expr_body_pre cenv cx env e es /\
@@ -75,27 +65,7 @@ Proof
     metis_tac[type_widens_from_bytestring] >>
   simp[]
 QED
-*)
-Theorem annassign_relayout_source_classify:
-  !cenv cx env e es typ.
-    expr_body_pre cenv cx env e es /\
-    supported_copy_types typ (expr_type e) /\ ~is_word_type typ /\
-    ~(lowered_value_type cenv e = expr_type e \/
-      is_bytestring_type (expr_type e) /\
-      is_bytestring_type (lowered_value_type cenv e) /\
-      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
-    expr_type e = typ /\ ~is_bytestring_type typ /\
-    ~is_word_type (lowered_value_type cenv e) /\
-    ~is_bytestring_type (lowered_value_type cenv e) /\
-    post_value_type cenv e = lowered_value_type cenv e /\
-    lowered_value_type cenv e <> expr_type e /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
-    ?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_relayout_read_layout:
   !cenv cx env e es tops typ stv tyv gs v es'.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
@@ -122,24 +92,7 @@ Proof
   irule nonbytes_evaluated_val_footprint >> goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `get_tenv cx` >> simp[]
 QED
-*)
-Theorem annassign_relayout_read_layout:
-  !cenv cx env e es tops typ stv tyv gs v es'.
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-    cenv.ce_func_return_type = build_func_return_type tops /\
-    supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    type_widens_to env.type_defs (expr_type e) typ /\
-    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
-    evaluate_type (get_tenv cx) typ = SOME tyv /\
-    ~is_bytestring_type (lowered_value_type cenv e) /\
-    (do r <- eval_expr cx e; read_result cx r od) (es with gas_obs := gs) = (INL v,es') ==>
-    value_has_type stv v /\ value_has_type tyv v /\
-    val_wf stv v /\ val_wf tyv v /\ val_footprint stv v = type_memory_size stv
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem arg_type_fits_memory_bytes_mono:
   (!sty dty. arg_type_fits sty dty ==>
     !cenv. type_memory_bytes cenv sty <= type_memory_bytes cenv dty) /\
@@ -156,18 +109,7 @@ Proof
     irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >>
   metis_tac[arithmeticTheory.LESS_MONO_MULT2, arithmeticTheory.LESS_EQ_LESS_EQ_MONO]
 QED
-*)
-Theorem arg_type_fits_memory_bytes_mono:
-  (!sty dty. arg_type_fits sty dty ==>
-    !cenv. type_memory_bytes cenv sty <= type_memory_bytes cenv dty) /\
-  (!sts dts. arg_types_fit sts dts ==>
-    !cenv. SUM (MAP (type_memory_bytes cenv) sts) <=
-           SUM (MAP (type_memory_bytes cenv) dts))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem widening_memory_layout_bound:
   !cenv cx env es sty typ stv tyv.
     expr_sim_inv cenv cx env es /\
@@ -188,19 +130,4 @@ Proof
    type_memory_bytes cenv typ = type_memory_size tyv` by
     metis_tac[expr_sim_inv_memory_size] >>
   gvs[wordsTheory.dimword_def] >> decide_tac
-QED
-*)
-Theorem widening_memory_layout_bound:
-  !cenv cx env es sty typ stv tyv.
-    expr_sim_inv cenv cx env es /\
-    type_widens_to (get_tenv cx) sty typ /\
-    evaluate_type (get_tenv cx) sty = SOME stv /\
-    evaluate_type (get_tenv cx) typ = SOME tyv /\
-    type_memory_bytes cenv typ < 2 ** 64 ==>
-    type_memory_bytes cenv sty = type_memory_size stv /\
-    type_memory_bytes cenv typ = type_memory_size tyv /\
-    type_memory_bytes cenv sty <= type_memory_bytes cenv typ /\
-    type_memory_bytes cenv sty < dimword (:256)
-Proof
-  cheat
 QED

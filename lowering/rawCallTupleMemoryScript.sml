@@ -139,7 +139,8 @@ Proof
   strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
   `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
-  drule_at (Pat `MEM _ (fn_insts _)`) raw_call_output_prefix_ready >>
+  drule_at (Pat `MEM _ (fn_insts _)`)
+    (INST_TYPE [alpha |-> ``:256``] raw_call_output_prefix_ready) >>
   simp[] >> disch_then drule >> simp[] >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[] >>

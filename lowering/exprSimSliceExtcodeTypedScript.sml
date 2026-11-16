@@ -25,7 +25,6 @@ val slice_frame_tac =
             slice_read_frame] >>
        rpt gen_tac);
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_two_reads_replay_success[local]:
   (!tail. bind (eval_expr cx start) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL sv,mid with gas_obs := tail)) /\
@@ -43,19 +42,7 @@ Proof
     (qspec_then `[]` assume_tac) >> fs[] >>
   gvs[bind_def, return_def]
 QED
-*)
-Theorem slice_two_reads_replay_success[local]:
-  (!tail. bind (eval_expr cx start) (read_result cx)
-    (es with gas_obs := xs ++ tail) = (INL sv,mid with gas_obs := tail)) /\
-  (!tail. bind (eval_expr cx len) (read_result cx)
-    ((mid with gas_obs := []) with gas_obs := ys ++ tail) =
-      (INL lv,fin with gas_obs := tail)) ==>
-  ?s vs t. eval_exprs cx [start;len] s = (INL vs,t)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_two_marked_reads_success:
   gas_marked_exec F (ctx,func) (bind (eval_expr cx start) (read_result cx))
     (es,s) marks (INL sv) mid (OK t) /\
@@ -67,18 +54,7 @@ Proof
   irule slice_two_reads_replay_success >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
-*)
-Theorem slice_two_marked_reads_success:
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx start) (read_result cx))
-    (es,s) marks (INL sv) mid (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx len) (read_result cx))
-    (mid with gas_obs := [],t) marks2 (INL lv) fin (OK r) ==>
-  ?s vs t. eval_exprs cx [start;len] s = (INL vs,t)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_extcode_actions:
   ~is_self_code (Builtin ct (Acc Code) [a]) ==>
   eval_expr cx (Builtin ann (Slice n) [Builtin ct (Acc Code) [a]; start; len]) =
@@ -107,25 +83,7 @@ Proof
     simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
   simp[bind_return, bind_assoc]
 QED
-*)
-Theorem slice_extcode_actions:
-  ~is_self_code (Builtin ct (Acc Code) [a]) ==>
-  eval_expr cx (Builtin ann (Slice n) [Builtin ct (Acc Code) [a]; start; len]) =
-  do st <- bind (eval_expr cx start) (read_result cx);
-     ln <- bind (eval_expr cx len) (read_result cx);
-     av <- bind (eval_expr cx a) (read_result cx);
-     code_acc <- get_accounts;
-     code_v <- lift_sum (evaluate_builtin cx code_acc ct (Acc Code) [expr_type a] [av]);
-     acc <- get_accounts;
-     v <- lift_sum (evaluate_builtin cx acc ann (Slice n)
-             (MAP expr_type [Builtin ct (Acc Code) [a]; start; len]) [code_v;st;ln]);
-     return (Value v)
-  od
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_extcode_typed_entry:
   ~is_self_code (Builtin ct (Acc Code) [a]) /\
   expr_body_pre cenv cx env
@@ -154,27 +112,7 @@ Proof
   drule_all slice_extcode_pipeline_context >> strip_tac >>
   suspend "reads"
 QED
-*)
-Theorem slice_extcode_typed_entry:
-  ~is_self_code (Builtin ct (Acc Code) [a]) /\
-  expr_body_pre cenv cx env
-    (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len]) es /\
-  expr_body_pre cenv cx env start es /\ expr_body_pre cenv cx env len es /\
-  expr_body_pre cenv cx env a es /\
-  expr_type start = BaseT (UintT 256) /\ expr_type len = BaseT (UintT 256) /\
-  expr_type a = BaseT AddressT /\
-  slice_operands_ok (Slice n) [Builtin ct (Acc Code) [a];start;len] /\
-  exprs_case nocalls ctx func cenv cx [start;len] /\
-  ((?s vs t. eval_exprs cx [start;len] s = (INL vs,t)) ==>
-    expr_sim_case nocalls ctx func cenv cx a) /\
-  (nocalls ==> int_calls_expr start = [] /\ int_calls_expr len = [] /\ int_calls_expr a = []) ==>
-  expr_vv_sim ctx func cenv cx ty
-    (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len]) es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - preserved suspension.
 Resume slice_extcode_typed_entry[reads]:
   `type_memory_bytes cenv (BaseT (BytesT (Dynamic n))) < dimword (:256)` by
     (fs[expr_body_pre_def, allocLimitsTheory.alloc_limits_expr_def,
@@ -198,9 +136,7 @@ Resume slice_extcode_typed_entry[reads]:
   qexistsl_tac [`cenv`, `start_op`, `sa`, `st1`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >> suspend "length"
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume slice_extcode_typed_entry[length]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -236,9 +172,7 @@ Resume slice_extcode_typed_entry[length]:
   qexistsl_tac [`cenv`, `len_op`, `st1`, `st2`, `ty`] >> gvs[] >>
   rpt gen_tac >> strip_tac >> suspend "address"
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume slice_extcode_typed_entry[address]:
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
@@ -328,9 +262,7 @@ Resume slice_extcode_typed_entry[address]:
   gvs[as_ptr_val_def] >>
   suspend "finish"
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume slice_extcode_typed_entry[finish]:
   `fn_has_code st2 r func` by
     (irule fragExecTheory.fn_has_code_mid >>
@@ -346,7 +278,7 @@ Resume slice_extcode_typed_entry[finish]:
         (mid' with gas_obs := []) st2 r t' ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
-    `\H res ee rr. expr_exit res rr`] >>
+    `\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr`] >>
   simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- suspend "entry" >>
   rpt strip_tac >> gvs[] >>
@@ -367,9 +299,7 @@ Resume slice_extcode_typed_entry[finish]:
   qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
   fs[ci_mono_def] >> metis_tac[]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Resume slice_extcode_typed_entry[entry]:
   irule (slice_extcode_continue_entry_seq |> SPEC_ALL |> Q.INST
     [`result` |-> `Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len]`,
@@ -382,8 +312,5 @@ Resume slice_extcode_typed_entry[entry]:
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `nocalls` >> simp[]
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise slice_extcode_typed_entry
-*)
