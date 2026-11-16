@@ -183,20 +183,61 @@ Resume raw_call_bytes_success_full_path[checks]:
       qpat_x_assum `H = _` SUBST1_TAC >>
       simp[Abbr `G0`, Abbr `Gf`, ptrDisciplineTheory.step_prov_def,
         ptrDisciplineTheory.set_prov_def, ptrDisciplineTheory.out_prov_def,
-        finite_mapTheory.DRESTRICT_DRESTRICT, pred_setTheory.EXTENSION] >>
-      metis_tac[]) >>
+        finite_mapTheory.DRESTRICT_DRESTRICT] >>
+      AP_TERM_TAC >> simp[NoAsms, pred_setTheory.EXTENSION] >> metis_tac[]) >>
     qpat_x_assum `tm = _` SUBST1_TAC >>
-    simp[Abbr `tn0`, Abbr `tp`,
-      ptrDisciplineTheory.step_taint_def,
-      ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
-      ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
-      ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
-      ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
-      ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
-      ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
-      ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.first_prov_def,
-      finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
-    suspend "metadata") >>
+    qmatch_goalsub_abbrev_tac `step_taint i1 s1 u1 tn0` >>
+    `step_taint i1 s1 u1 tn0 = tn0 with t_var := tn0.t_var |+ (a1,{})` by (
+      simp[Abbr `i1`, Abbr `s1`, Abbr `u1`, Abbr `tn0`,
+        eval_operand_def, lookup_var_def,
+        ptrDisciplineTheory.step_taint_def,
+        ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+        ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+        ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+        ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+        ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+        ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
+        finite_mapTheory.FLOOKUP_UPDATE]) >>
+    asm_rewrite_tac [] >>
+    qmatch_goalsub_abbrev_tac `step_taint i2 u1 u2 tn1` >>
+    `step_taint i2 u1 u2 tn1 = tn1 with t_var := tn1.t_var |+ (a2,{})` by (
+      simp[Abbr `i2`, Abbr `u1`, Abbr `u2`, Abbr `tn1`, Abbr `tn0`,
+        eval_operand_def, lookup_var_def,
+        ptrDisciplineTheory.step_taint_def,
+        ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+        ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+        ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+        ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+        ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+        ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
+        finite_mapTheory.FLOOKUP_UPDATE]) >>
+    asm_rewrite_tac [] >>
+    qmatch_goalsub_abbrev_tac `step_taint i3 u2 u3 tn2` >>
+    `step_taint i3 u2 u3 tn2 = tn2 with t_var := tn2.t_var |+ (a3,{})` by (
+      simp[Abbr `i3`, Abbr `u2`, Abbr `u3`, Abbr `tn2`, Abbr `tn1`, Abbr `tn0`,
+        eval_operand_def, lookup_var_def,
+        ptrDisciplineTheory.step_taint_def,
+        ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+        ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+        ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+        ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+        ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+        ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
+        finite_mapTheory.FLOOKUP_UPDATE]) >>
+    asm_rewrite_tac [] >>
+    simp[Abbr `tp`, Abbr `tn2`, Abbr `tn1`, Abbr `tn0`, Abbr `u3`,
+        eval_operand_def, lookup_var_def,
+        ptrDisciplineTheory.step_taint_def,
+        ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+        ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+        ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+        ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+        ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+        ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
+        finite_mapTheory.FLOOKUP_UPDATE] >>
+      simp[DB.fetch "ptrDiscipline" "taint_component_equality",
+        DB.fetch "ptrDiscipline" "taint_accfupds",
+        DB.fetch "ptrDiscipline" "taint_accessors"]) >>
   gvs[] >> suspend "middlejoin"
 QED
 
