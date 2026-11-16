@@ -4,6 +4,7 @@
    dead bytes, then holds at every valid horizon. *)
 Theory bodyFullUnwrapWord
 Ancestors
+  bodyFullHashKeccakFixed
   bodyFullUnwrapIdentity bodyFullUnwrapRun fragGasOriginPtrDead exprPtrCtorImmStore
   bodyFieldMemoryProps exprPtrUnwrapLoadSegment slotCopyExecution
   instMemFrontier fragExecMem exprPtrUnwrapCode exprPtrCodeCopySegments
@@ -49,6 +50,10 @@ val H0_TAC =
   `vv_post H0 ctx func cenv cx e es sa sb s0 ee tv (LocatedValue t p) s` by
     (first_assum (qspec_then `H0` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `ghost_inv_at (DF H0) lo d cenv cx ee G tn s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `H0` mp_tac) >>
@@ -180,7 +185,7 @@ Theorem unwrap_memory_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -351,7 +356,7 @@ Theorem unwrap_slot_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -523,7 +528,7 @@ Theorem unwrap_code_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -872,7 +877,7 @@ Theorem unwrap_word_value_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>

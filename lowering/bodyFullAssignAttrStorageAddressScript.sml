@@ -23,7 +23,7 @@ Theorem storage_field_address_full:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee raw vv s /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv s /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv s /\
   ptr_vv_ok cx (post_value_type cenv e) raw vv ee G tn s /\
   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
    ?v. read_result cx raw ee = (INL v,ee) /\
@@ -45,7 +45,7 @@ Theorem storage_field_address_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee raw vv q /\
        ghost_inv_at (DF H) lo d cenv cx ee HG tf q) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv q /\
+    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv q /\
     ptr_vv_ok cx (post_value_type cenv e) raw vv ee HG tf q /\
     (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?v. read_result cx raw ee = (INL v,ee) /\
@@ -139,7 +139,7 @@ Proof
    q.vs_alloca_next = s.vs_alloca_next /\ q.vs_memory = s.vs_memory /\
    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
    q.vs_call_ctx = s.vs_call_ctx` by simp[update_var_def] >>
-  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw vv q` by
+  `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw vv q` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`vv_store_bound _ _ _ _ _ _ s`,
         `eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s`,

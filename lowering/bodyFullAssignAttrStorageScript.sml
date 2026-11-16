@@ -2,7 +2,7 @@
 Theory bodyFullAssignAttrStorage
 Ancestors
   bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore augAssignFullStore
-  bodyFullUnwrapWord bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  bodyFullUnwrapWord bodyFullHashKeccakFixed bodySimFull gasOutcomeFullCompose gasOutcomeFull
   stmtSimAssignAttrStorage stmtSimAssignStorage stmtSimForced assignTuplePtrStorage
   stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   gasShadowCompileStmtHelpers gasShadowState gasShadow gasExemptCert
@@ -216,6 +216,8 @@ Resume compile_assign_attr_storage_full[continue]:
     metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase,
               gas_marked_path_exec, gas_path_normal] >>
   `alloca_inv z` by fs[stmt_state_rel_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `eval_operand op z = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `eval_operand dst z = SOME (n2w slot + n2w off) /\
@@ -261,7 +263,7 @@ Resume compile_assign_attr_storage_full[continue]:
           qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
           rpt (pop_assum kall_tac) >> rpt strip_tac >>
           metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
-      simp[stmt_exit_ptr_def, expr_exit_def]) >>
+      simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
   `~z.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `result = INL ()` by
@@ -369,9 +371,11 @@ Resume compile_assign_attr_storage_full[continue]:
      tstore_def, sstore_def, lookup_var_def] >>
   map_every (fn pat => qpat_assum pat mp_tac)
     [`!x. not_fresh_at sa x ==> FLOOKUP Gu x = FLOOKUP G0 x /\ _`,
+     `ctx_has_dalloca ctx ==> allocas_below_fmp z`,
      `(step_taint _ _ _ _).t_var = tu.t_var`, `dst = Var out`,
      `ftv = rty`, `off = struct_field_offset_slots _ fld`] >>
-  rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[allocas_below_fmp_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise compile_assign_attr_storage_full

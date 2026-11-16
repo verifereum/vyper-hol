@@ -62,7 +62,14 @@ Proof
   `FLOOKUP env.bare_global_assignable (src,id) = SOME ity` by
     (fs[Once well_typed_expr_def] >>
      Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> gvs[]) >>
-  fs[expr_sim_inv_def, bare_globals_layout_def] >> metis_tac[]
+  fs[expr_sim_inv_def, bare_globals_layout_def] >>
+  conj_tac
+  >- (qpat_x_assum
+        `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+        (qspecl_then [`src`, `id`, `ity`] mp_tac) >> simp[]) >>
+  qpat_x_assum
+    `!src' id' ty. FLOOKUP env.bare_global_assignable (src',id') = SOME ty ==> _`
+    (qspecl_then [`src`, `id`, `ity`] mp_tac) >> simp[]
 QED
 
 Theorem immutable_assignment_destination:

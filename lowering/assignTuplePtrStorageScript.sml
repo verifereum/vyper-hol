@@ -8,7 +8,6 @@ Ancestors
   stmtSimAssignStorage tupleTargetStoreProps stmtSimProps stmtSimDefs exprLoweringProps
   sourceUnitExecution
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem clean_storage_step_taint_ptr:
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
@@ -31,25 +30,7 @@ Proof
        DRESTRICT_UNIV] >>
   simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]
 QED
-*)
-Theorem clean_storage_step_taint_ptr:
-  eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
-  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
-  (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] [])
-    s t tn).t_mem = tn.t_mem /\
-  (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] [])
-    s t tn).t_var = tn.t_var /\
-  (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] [])
-    s t tn).t_imm = tn.t_imm /\
-  (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] [])
-    s t tn).t_stor = (if tr then tn.t_stor else {(k,b) | (k,b) IN tn.t_stor /\ k <> slot}) /\
-  (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] [])
-    s t tn).t_trans = (if tr then {(k,b) | (k,b) IN tn.t_trans /\ k <> slot} else tn.t_trans)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem clean_storage_stor_taint_ok_ptr:
   stor_taint_ok H cx tn s /\ eval_operand dst s = SOME slot /\
   op_taint tn value = {} /\
@@ -70,20 +51,7 @@ Proof
       lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
   simp[SUBSET_DEF] >> metis_tac[SUBSET_DEF]
 QED
-*)
-Theorem clean_storage_stor_taint_ok_ptr:
-  stor_taint_ok H cx tn s /\ eval_operand dst s = SOME slot /\
-  op_taint tn value = {} /\
-  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
-  stor_taint_ok H cx
-    (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
-      (if tr then tstore slot w s else sstore slot w s) tn)
-    (if tr then tstore slot w s else sstore slot w s)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem clean_storage_ghost_inv_ptr:
   ghost_inv H d cenv cx es G tn s /\ es'.scopes = es.scopes /\
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
@@ -110,20 +78,7 @@ Proof
   simp[] >> qexistsl [`es`, `s`, `tn`] >>
   Cases_on `tr` >> simp[op_taint_def, tstore_def, sstore_def, lookup_var_def]
 QED
-*)
-Theorem clean_storage_ghost_inv_ptr:
-  ghost_inv H d cenv cx es G tn s /\ es'.scopes = es.scopes /\
-  eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
-  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
-  ghost_inv H d cenv cx es' G
-    (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
-      (if tr then tstore slot w s else sstore slot w s) tn)
-    (if tr then tstore slot w s else sstore slot w s)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem clean_storage_ptr_inst_ok:
   ~ctx_has_dalloca ctx /\ op_taint tn value = {} /\ op_taint tn dst = {} ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
@@ -139,16 +94,7 @@ Proof
   simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[]
 QED
-*)
-Theorem clean_storage_ptr_inst_ok:
-  ~ctx_has_dalloca ctx /\ op_taint tn value = {} /\ op_taint tn dst = {} ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem emit_storage_zero_path_ptr:
   compile_store_at_loc imm dst value
     (SOME (if tr then LocTransient else LocStorage)) st = ((), st') /\
@@ -182,26 +128,7 @@ Proof
       gvs[compile_store_at_loc_def, emit_void_def, emit_inst_def]) >>
   irule clean_storage_ptr_inst_ok >> simp[]
 QED
-*)
-Theorem emit_storage_zero_path_ptr:
-  compile_store_at_loc imm dst value
-    (SOME (if tr then LocTransient else LocStorage)) st = ((), st') /\
-  fn_has_code st st' func /\ ~ctx_has_dalloca ctx /\
-  s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~s.vs_call_ctx.cc_static /\ eval_operand dst s = SOME slot /\
-  eval_operand value s = SOME w /\ op_taint tn dst = {} /\
-  op_taint tn value = {} ==>
-  gas_path_ptr D 0 ctx func PG G tn s 0 G
-    (step_taint (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
-       [dst;value] []) s (if tr then tstore slot w s else sstore slot w s) tn)
-    (OK ((if tr then tstore slot w s else sstore slot w s)
-      with vs_inst_idx := SUC s.vs_inst_idx))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem storage_word_endpoint_inv_ptr:
   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
@@ -217,33 +144,16 @@ Theorem storage_word_endpoint_inv_ptr:
 Proof
   strip_tac >>
   `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule tuple_target_storage_scope_frame >> strip_tac >>
   conj_tac >- simp[stmt_state_rel_inst_idx] >>
   simp[ghost_inv_inst_idx] >> irule clean_storage_ghost_inv_ptr >>
   simp[] >> qexists `es` >> simp[]
 QED
-*)
-Theorem storage_word_endpoint_inv_ptr:
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
-  eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
-  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) /\
-  write_storage_slot cx tr slot tv v es = (INL (),es') /\
-  encode_value tv v = SOME [(0,w)] ==>
-  stmt_state_rel H ctx func cenv cx es'
-    ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := idx) /\
-  ghost_inv H d cenv cx es' G
-    (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
-      (if tr then tstore slot w s else sstore slot w s) tn)
-    ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := idx)
-Proof
-  cheat
-QED
 
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem tuple_storage_store_head_path_ptr:
   compile_store_at_loc cenv.ce_imm_alloca dst op
     (SOME (if tr then LocTransient else LocStorage)) st = ((),st') /\
@@ -268,7 +178,11 @@ Theorem tuple_storage_store_head_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK t)
 Proof
   strip_tac >>
-  `~s.vs_call_ctx.cc_static` by gvs[stmt_state_rel_def, state_rel_def] >>
+  `~cx.txn.is_static` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all emit_storage_zero_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 G tn1 (OK t)` >>
@@ -291,30 +205,4 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def, emit_def]) >>
   simp[op_taint_def] >> simp[Abbr `t`] >>
   Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]
-QED
-*)
-Theorem tuple_storage_store_head_path_ptr:
-  compile_store_at_loc cenv.ce_imm_alloca dst op
-    (SOME (if tr then LocTransient else LocStorage)) st = ((),st') /\
-  eval_operand dst s = SOME slot /\
-  eval_operand op s = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
-  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) /\
-  write_storage_slot cx tr slot tv v es = (INL (),es') /\
-  encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
-  fn_has_code st st' func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
-  op_taint tn op = {} /\ op_taint tn dst = {} /\
-  s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t tn'. stmt_state_rel H ctx func cenv cx es' t /\
-    ghost_inv H d cenv cx es' G tn' t /\
-    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = st'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH st'.cs_current_insts /\
-    (!x. lookup_var x t = lookup_var x s) /\ t.vs_allocas = s.vs_allocas /\
-    tn'.t_mem = tn.t_mem /\
-    (!x. op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK t)
-Proof
-  cheat
 QED

@@ -182,12 +182,16 @@ Resume custom_error_store_head_path[frames]:
      qexistsl_tac [`sa`, `mid.scopes`, `r`] >> simp[] >> fs[vv_post_def]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q` by
-    (rpt strip_tac >>
-     `expr_post H ctx func ce cx e (mid with gas_obs := [])
+    (qx_gen_tac `H1` >> strip_tac >>
+     `expr_post H1 ctx func ce cx e (mid with gas_obs := [])
         (sa with cs_next_var := sm.cs_next_var) su r
         (mid with gas_obs := []) v op u` by metis_tac[] >>
-     irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H0`, `u`] >> fs[expr_post_def]) >>
+     mp_tac (Q.INST [`H0` |-> `H0`, `H` |-> `H1`,
+       `ctx` |-> `ctx`, `func` |-> `func`, `cenv` |-> `ce`, `cx` |-> `cx`,
+       `es` |-> `mid with gas_obs := []`, `u` |-> `q`, `s` |-> `u`]
+       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     (impl_tac >- fs[expr_post_def]) >> simp[]) >>
   qexistsl_tac [`v`, `q`] >> simp[] >>
   conj_tac >- gvs[] >>
   conj_tac >- metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
