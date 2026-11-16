@@ -1,0 +1,74 @@
+diff --git a/lowering/dispatchedEntryEndpointScript.sml b/lowering/dispatchedEntryEndpointScript.sml
+index e2d96b0fb..6b4db9455 100644
+--- a/lowering/dispatchedEntryEndpointScript.sml
++++ b/lowering/dispatchedEntryEndpointScript.sml
+@@ -12,6 +12,14 @@
+ Theory dispatchedEntryEndpoint
+ Ancestors
+   runtimeEntryEndpoint vyperCalldata calldataExact
++  dispatchedEntryFacts dispatchedEntryPrefix dispatchedRegistrationJoint
++  dispatchedEntryRelations entryValueRevertPtr acceptedContextPhi
++  entryDispatchProps abiDecoderCoherence entryRuntimePackageLayout
++  entryOwnedBodyResources entryRuntimeContextCode entryRuntimeStateBoundary
++  entryInitialResources abiAllocationHistory
++  entryOwnedEndpointObservations entryPrefixAllocationResources
++  sourceValueRejection dispatchedRegistrationSourceResources
++  words list arithmetic finite_map
+ 
+ Theorem dispatched_entry_endpoint_selected:
+   !tops rpolicy unit am tx ret vs mut args fbody env es0.
+@@ -33,6 +41,52 @@ Theorem dispatched_entry_endpoint_selected:
+       (INL (), es0) ==>
+     runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody
+ Proof
+-  (* SEQ-4939 leaf (open) *)
+-  cheat
++  rpt strip_tac >>
++  drule_all dispatched_entry_placement >> strip_tac >>
++  `~ctx_has_dalloca unit.cu_context` by
++    metis_tac[dispatched_registration_supported_no_dalloca] >>
++  drule_all initial_entry_dispatch_scalars >>
++  disch_then (qspecl_then [`0`, `elbl`, `ds`] strip_assume_tac) >>
++  `!label bb. lookup_block label func.fn_blocks = SOME bb ==>
++    phi_prefix_length bb.bb_instructions = 0` by
++    (drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry >>
++     strip_tac >> rpt strip_tac >>
++     metis_tac[lowering_context_ok_block_phi]) >>
++  `min_cds <= LENGTH vs.vs_call_ctx.cc_calldata` by suspend "min_cds" >>
++  Q.SUBGOAL_THEN `mut = Payable \/ vs.vs_call_ctx.cc_callvalue = 0w` assume_tac
++  >- (drule send_call_value_success_condition >>
++      simp[vyperInterpreterTheory.initial_evaluation_context_def] >> strip_tac >>
++      fs[vyperLoweringCorrectTheory.initial_venom_state_rel_def,
++         vyperLoweringCorrectTheory.venom_env_rel_def,
++         loweringStateRelDefsTheory.call_ctx_rel_def]) >>
++  qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
++    assume_tac linear_selectors_lt >>
++  drule dispatched_prefix_joint >>
++  disch_then (drule_at (Pat `compile_entry_checks _ _ _ = _`)) >>
++  disch_then (qspecl_then [`vs with <|vs_prev_bb := NONE;
++    vs_current_bb := elbl; vs_inst_idx := 0|>`, `func`, `unit.cu_context`] mp_tac) >>
++  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
++  drule_all dispatched_registration_joint >>
++  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
++  suspend "assemble"
+ QED
++
++Resume dispatched_entry_endpoint_selected[min_cds]:
++  `min_cds = min_calldata_size cenv0 args 0` by
++    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
++     simp[compileVyperTheory.package_external_fn_def,
++          compileVyperTheory.set_external_package_target_def] >>
++     strip_tac >> gvs[compileVyperTheory.min_calldata_size_def]) >>
++  `MAP (\(_,ty). abi_embedded_static_size cenv0.ce_struct_fields ty) args =
++   MAP tv_abi_size tvs` by
++    (qpat_x_assum `LIST_REL _ (MAP SND args) tvs` mp_tac >>
++     POP_ASSUM_LIST (K all_tac) >>
++     qid_spec_tac `tvs` >> Induct_on `args` >>
++     simp[pairTheory.FORALL_PROD] >> rpt strip_tac >> gvs[] >>
++     metis_tac[calldataSourceSizeTheory.calldata_coherent_embedded_size]) >>
++  gvs[compileVyperTheory.min_calldata_size_def]
++QED
++Resume dispatched_entry_endpoint_selected[assemble]:
++  FAIL_TAC "inspect fixed registration endpoint"
++QED
++Finalise dispatched_entry_endpoint_selected
