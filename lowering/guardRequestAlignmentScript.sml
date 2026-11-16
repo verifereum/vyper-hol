@@ -83,10 +83,10 @@ Theorem source_compiled_request_alignment:
    ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
   EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
   k < LENGTH vs.vs_outcomes /\
-  request_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
+  request_agree H tx.target
     rq (EL k ss.vs_requests) ==>
   MEM (EL k (call_requests es), EL k vs.vs_outcomes) (call_trace es) /\
-  request_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
+  request_agree H tx.target
     rq (EL k (call_requests es))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
