@@ -45,8 +45,8 @@ Proof
     simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
          pred_setTheory.EXTENSION, SF CONJ_ss] >>
   gvs[LENGTH_EQ_NUM_compute] >>
-  gvs[step_taint_def, set_var_taint_def, mk_inst_def, out_taint_def,
-      mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+  gvs[step_taint_def, set_var_taint_def, mk_inst_def, out_taint_def] >>
+  gvs[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
       written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
       range_bytes_def, taint_component_equality, DRESTRICT_UNIV] >>
   Cases_on `eval_operand h s` >> simp[]
