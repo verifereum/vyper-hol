@@ -4,9 +4,9 @@
  * The cases of evaluate_ind for internal and external calls, raw calls,
  * raw_log, raw_revert, selfdestruct and create, split from
  * bodySimExprCases so they can be worked on apart from the other
- * expression cases.  Each but create and selfdestruct is its piece in a
- * leaf theory bodySimCall*; those two hold vacuously (expr_body_pre
- * excludes them).
+ * expression cases.  Most cases use their piece in a leaf theory
+ * bodySimCall*; selfdestruct reuses the scalar producer in exprSimCalls,
+ * while create still holds vacuously (expr_body_pre excludes it).
  *)
 
 Theory bodySimCallCases
@@ -16,6 +16,7 @@ Ancestors
   vyperContext vyperTypeCallGraph
   bodySimCallExtcall bodySimCallIntcall bodySimCallRawCall
   bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert
+  exprSimCalls
 
 Theorem body_extcall_case:
   !cx v14 is_static skip_check sig opts es v15.
@@ -140,10 +141,9 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_intro >> conj_tac >- gvs[] >> simp[] >>
-  rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >>
+  conj_tac >- gvs[] >> simp[] >> rpt strip_tac >>
+  metis_tac[compile_selfdestruct_case, body_exprs_ok_case]
 QED
 
 Theorem body_create_case:
