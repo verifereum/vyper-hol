@@ -47,7 +47,7 @@ Theorem tuple_immutable_mutable_head_outcome:
       (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
         FLOOKUP t.vs_allocas id = SOME entry) /\
       alloca_frame cenv es sp s0 cenv ff t)
-    (\H res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (supported_expr tops) (target_indices bt)` by

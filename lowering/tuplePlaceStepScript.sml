@@ -143,7 +143,7 @@ QED
 
 (* A typed write through an observed place keeps storage well formed on every
    horizon valid after it; a memory or immutable write leaves storage alone. *)
-Theorem tuple_place_write_storage_wf[local]:
+Theorem tuple_place_write_storage_wf:
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   valid_horizon cx st0 H ee.storage_trace /\
   storage_well_formed_on cx ee (FST H) /\

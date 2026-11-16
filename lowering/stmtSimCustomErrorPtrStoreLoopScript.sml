@@ -375,7 +375,7 @@ Resume custom_error_store_args_sim_ptr_conditional[zero_store]:
   asm_x "store" kall_tac >> TRY (asm_x "tail" kall_tac) >>
   qexistsl_tac [`G1`,`tn1`,`u`] >> simp[] >>
   conj_tac >- metis_tac[cj 1 fragGasPathPtrTheory.gas_path_ptr_rules] >>
-  metis_tac[externalReturnBufferlessNormalizeTheory.return_zero_wf_memory]
+  metis_tac[valueEncodingProofsTheory.return_zero_wf_memory]
 QED
 
 Resume custom_error_store_args_sim_ptr_conditional[nonzero_store]:

@@ -63,6 +63,7 @@
 
 Theory codegenCorrectness
 Ancestors
+  fnFrameSymbolicPrefix
   fnFramePrefixDriver
   codegenEntryRel codegenEntrySim codegenAsmRunCall
   asmToBytecodeProps venomToAsmProps codegen vfmExecution

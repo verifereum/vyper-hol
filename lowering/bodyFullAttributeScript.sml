@@ -57,7 +57,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
                           `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
   `eval_expr cx (Attribute ann obj fld) =
    bind (eval_expr cx obj) (\r. select_result cx (expr_type obj) r (AttrSubscript fld))` by
@@ -85,7 +85,8 @@ Proof
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[Abbr `baseR`] >>
-  simp[Abbr `baseQ`, Abbr `baseR`]
+  simp[Abbr `baseQ`, Abbr `baseR`] >>
+  rpt gen_tac >> Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume attribute_vv_sim_full[selected]:
@@ -170,6 +171,10 @@ Resume attribute_vv_sim_full[endpoint_posts]:
   conj_tac >- suspend "current_bb" >>
   conj_tac >- suspend "inst_idx" >>
   conj_tac >- suspend "alloca_history" >>
+  conj_tac >- (strip_tac >>
+               fs[ptrDisciplineTheory.allocas_below_fmp_def,
+                  venomStateTheory.update_var_def] >>
+               first_assum ACCEPT_TAC) >>
   conj_tac >- simp[venomStateTheory.update_var_def] >>
   conj_tac >- suspend "ghost_inv" >>
   conj_tac >- suspend "selected_ptr" >>

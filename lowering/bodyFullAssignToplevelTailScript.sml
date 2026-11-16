@@ -2,7 +2,7 @@
 Theory bodyFullAssignToplevelTail
 Ancestors
   stmtSimAssignStorage augAssignFullStore augAssignFullStoreGhost
-  bodyMemoryDefs bodySimFull gasOutcomeFullCompose accountsRelProps stmtSimProps
+  bodyMemoryDefs bodySimFull gasOutcomeFull gasOutcomeFullCompose accountsRelProps stmtSimProps
   allocaHistory exprLoweringProps vyperTyping loweringPosts stmtSimDefs
   vyperStorageFootprint vyperStorageBackend vyperState emitHelper
   compileEnv context emitHelperProps venomInst loweringStateRelDefs stmtSimDeclMem
@@ -26,6 +26,42 @@ Proof
       fresh_id_def, emitted_insts_def, run_inst_seq_def,
       step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
       is_terminator_def, eval_operand_def, DROP_APPEND]
+QED
+
+Theorem body_assign_toplevel_word_full_static_store:
+  cx.txn.is_static /\ ee.gas_obs = [] /\
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);op] sb = ((),sf) /\
+  fn_has_code sb sf func /\ ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  eval_operand op t = SOME w /\ op_taint tn op = {} /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee t /\ allocas_from lo t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v)) (ee,t,G,tn) Q
+    (\H res ef gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) res gt r)
+Proof
+  strip_tac >> irule gas_outcome_full_exit >> simp[] >>
+  qexistsl_tac [`G`, `ee with storage_trace :=
+    ee.storage_trace ++ [StorageRoot tr slot tvt]`,
+    `Abort ExHalt_abort (halt_state (set_returndata [] t))`,
+    `INR (Error (RuntimeError "write in static context"))`, `tn`] >>
+  simp[ignore_bind_def, record_storage_event_def, bind_def, return_def,
+       write_storage_slot_eq, exit_result_def] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    metis_tac[valid_horizon_append] >>
+  first_x_assum drule >> strip_tac >>
+  `t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  conj_tac
+  >- (irule storage_emit_static_origin_ptr >> simp[] >>
+      qexistsl_tac [`n2w slot`, `Lit (n2w slot)`, `sb`, `sf`, `tr`, `op`, `w`] >>
+      simp[eval_operand_def, op_taint_def]) >>
+  simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
+       halt_state_def, set_returndata_def]
 QED
 
 Theorem body_assign_toplevel_word_full_store_post:
@@ -71,6 +107,11 @@ Proof
     by metis_tac[storage_dead_update_word_region] >>
   `stmt_state_rel H ctx func cenv cx ee t /\
    storage_well_formed_on cx ee (FST H)` by fs[expr_post_def] >>
+  `~cx.txn.is_static` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `cx.txn.is_static` >> simp[write_storage_slot_eq]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   `storage_well_formed_on cx ef (FST H)` by
     (drule (cj 1 evaluate_type_well_formed) >> strip_tac >>
@@ -114,6 +155,7 @@ Proof
 QED
 
 Theorem body_assign_toplevel_word_full_continue:
+  ~cx.txn.is_static /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -149,13 +191,13 @@ Proof
   `valid_horizon cx st0 (storage_trace_horizon
       (ee.storage_trace ++ [StorageRoot tr slot tvt]))
       (ee.storage_trace ++ [StorageRoot tr slot tvt])` by fs[storage_trace_domain_def] >>
-  `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
-    (first_x_assum drule >> simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+  `~t.vs_call_ctx.cc_static` by (first_x_assum drule >>
+    simp[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
   rename1 `write_storage_slot _ _ _ _ _ _ = (res,ef)` >>
   `res = INL ()` by
-    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >> simp[write_storage_slot_eq]) >>
-  gvs[] >>
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq]) >> gvs[] >>
   `ef.storage_trace = ee.storage_trace` by
     (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
      simp[write_storage_slot_eq] >> Cases_on `tr` >> simp[set_storage_def] >> strip_tac >> gvs[]) >>

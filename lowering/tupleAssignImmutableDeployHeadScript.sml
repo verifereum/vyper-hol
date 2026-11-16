@@ -41,11 +41,11 @@ Theorem tuple_immutable_head_gas_continuation_open:
       FLOOKUP t.vs_allocas aid = SOME entry) /\
     alloca_frame ce es sp s0 ce ff t ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0 next (ff with gas_obs := [],t) Q
-      (\H res ee r. expr_exit res r)) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx (TopLevelNameTarget (src,id)))
       (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>

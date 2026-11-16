@@ -195,7 +195,7 @@ Proof
   metis_tac[cfg_absent_fix, cfg_absent_remove, cfg_absent_map]
 QED
 
-Theorem cfg_absent_iter[local]:
+Theorem cfg_absent_iter:
   !n f. cfg_label_absent l f /\ ALL_DISTINCT (fn_labels f) ==>
   cfg_label_absent l (FST (simplify_cfg_iter_with_labels n f))
 Proof

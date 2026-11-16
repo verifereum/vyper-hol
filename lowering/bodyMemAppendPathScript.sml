@@ -74,6 +74,7 @@ Proof
 QED
 
 Theorem append_storage_word_success_post_mem[local]:
+  ~cx.txn.is_static /\
   state_frame u = state_frame
     (if tr then tstore slot (n2w len+1w) (tstore (slot+1w+n2w len) w s)
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
@@ -96,9 +97,6 @@ Proof
   qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `MEM _ (FST H)` kall_tac >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
-  `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
   `stmt_state_rel H1 ctx func cenv cx es' su` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ es' _` mp_tac >>
@@ -115,6 +113,7 @@ Proof
 QED
 
 Theorem append_storage_word_success_path_mem:
+  ~cx.txn.is_static /\
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
@@ -251,13 +250,66 @@ Proof
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x)` by simp[eval_operand_def] >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
-  >- (`?len. len = w2n (if tr then tload slot s else sload slot s) /\
+  >- (Cases_on `cx.txn.is_static`
+      >- (`s.vs_call_ctx.cc_static` by
+            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          `res = INR (Error (RuntimeError "write in static context")) /\ es' = es` by
+            (qpat_x_assum `append_place _ _ _ _ = _` mp_tac >>
+             simp[vyperStorageBackendTheory.append_storage_writes,
+                  vyperStorageBackendTheory.write_storage_slot_eq,
+                  ignore_bind_def, bind_def]) >>
+          `fresh_vars_wrt sb (drop_fresh sb s)` by
+            simp[fresh_vars_wrt_drop_fresh] >>
+          `eval_operand (Lit slot) (drop_fresh sb s) = SOME slot /\
+           eval_operand op (drop_fresh sb s) = SOME w` by
+            simp[eval_operand_drop_fresh] >>
+          `w2n (if tr then tload slot s else sload slot s) < cap` by
+            metis_tac[] >>
+          `(drop_fresh sb s).vs_call_ctx.cc_static /\
+           w2n (if tr then tload slot (drop_fresh sb s)
+                 else sload slot (drop_fresh sb s)) < cap` by
+            fs[drop_fresh_def, tload_def, sload_def,
+               contract_transient_def, contract_storage_def] >>
+          drule_all compile_dynarray_append_word_static >> strip_tac >>
+          `vars_ext_result
+             (run_inst_seq (emitted_insts sb sf) (drop_fresh sb s))
+             (run_inst_seq (emitted_insts sb sf) s)` by
+            (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+             drule append_storage_word_suffix_structure >> simp[EVERY_MEM]) >>
+          `?a t. run_inst_seq (emitted_insts sb sf) s = Abort a t` by
+            (qpat_x_assum `vars_ext_result _ _` mp_tac >> asm_rewrite_tac [] >>
+             Cases_on `run_inst_seq (emitted_insts sb sf) s` >>
+             simp[vars_ext_result_def]) >>
+          drule append_storage_word_suffix_footprint_mem >> strip_tac >>
+          `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode) (emitted_insts sb sf)` by
+            (qpat_x_assum `EVERY _ _` mp_tac >> rewrite_tac[EVERY_MEM] >>
+             disch_tac >> rpt strip_tac >> first_x_assum drule >>
+             simp[] >> strip_tac >> simp[is_terminator_def]) >>
+          `run_inst_seq_mem_ok (emitted_insts sb sf) s` by
+            metis_tac[append_storage_word_suffix_mem_ok] >>
+          `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+             DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sb sf ++ rest` by
+            (gvs[fn_has_code_def, same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
+                 emitted_insts_def] >> simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+          `isPREFIX (emitted_insts sb sf) (DROP s.vs_inst_idx bb.bb_instructions)` by
+            simp[IS_PREFIX_APPEND] >>
+          drule_all run_inst_seq_abort_zero_path_mem >>
+          disch_then (qspec_then `ctx` (qx_choose_then `abort_index` assume_tac)) >>
+          qexists_tac `Abort a (t with vs_inst_idx := abort_index)` >>
+          simp[stmt_exit_def, exit_result_def, expr_exit_def]) >>
+      `?len. len = w2n (if tr then tload slot s else sload slot s) /\
         len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap` by
         metis_tac[] >>
       `?H. stmt_state_rel H ctx func cenv cx es s /\
            MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` by metis_tac[] >>
-      drule_all append_storage_word_success_path_mem >>
-      disch_then (qspec_then `lctx` strip_assume_tac) >>
+      drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
+        append_storage_word_success_path_mem >>
+      disch_then (qspecl_then
+        [`w`, `v`, `tv`, `slot`, `s`, `res`, `n`, `mid`, `len`, `lctx`,
+         `func`, `es'`, `es`, `cx`, `ctx`] mp_tac) >>
+      impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[]) >>
+      strip_tac >>
       qexists_tac `OK t` >> simp[] >> metis_tac[]) >>
   `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
   drule append_storage_full >> strip_tac >>

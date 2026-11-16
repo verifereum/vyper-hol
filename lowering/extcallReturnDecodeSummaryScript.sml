@@ -30,6 +30,14 @@ Proof
      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   `vyper_valid_enc env rt (TAKE cap bs)` by
     metis_tac[evaluate_abi_decode_vyper_valid_enc] >>
+  `vyper_decode_valid_enc (vyper_to_abi_type env rt) (TAKE cap bs) /\
+   abi_to_vyper env rt (dec (vyper_to_abi_type env rt) (TAKE cap bs)) = SOME rv` by
+    (qpat_assum `evaluate_abi_decode env rt (TAKE cap bs) = INL rv` mp_tac >>
+     qpat_assum `vyper_valid_enc env rt (TAKE cap bs)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rw[evaluate_abi_decode_def, decode_abi_value_def, AllCaseEqs(),
+        Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+     fs[vyper_valid_enc_def, Excl "vyper_decode_valid_enc_def"]) >>
   `is_dynamic (vyper_to_abi_type env rt) \/
    static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs)` by
     metis_tac[vyper_valid_enc_static_length_lower] >>
@@ -39,7 +47,8 @@ Proof
   simp_tac bool_ss [abi_valid_allocated_entry_def] >>
   qexistsl_tac [`B`, `H`, `LENGTH (TAKE cap bs)`, `base_op`, `dst`, `env`,
     `hi`, `live`, `0`, `sf`, `Lit 0w`, `TAKE cap bs`] >>
-  fs[vyper_valid_enc_def, evaluate_abi_decode_def, decode_abi_value_def,
-     AllCaseEqs(), Excl "dec_def", Excl "enc_def",
-     Excl "vyper_decode_valid_enc_def"] >> gvs[]
+  qpat_x_assum `rt = _` kall_tac >>
+  qpat_x_assum `rv = _` kall_tac >>
+  qpat_x_assum `cap = _` kall_tac >>
+  asm_simp_tac bool_ss [DROP_0, ADD_CLAUSES, ZERO_LESS_EQ]
 QED

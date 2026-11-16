@@ -4612,7 +4612,8 @@ Resume source_ordinary_eval_cuts[extcall_consumed]:
   PairCases_on `sig` >> Cases_on `vs` >>
   gvs[source_ext_call_oracle_normal] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  gvs[AllCaseEqs()] >>
+  gvs[CaseEq "option"] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
   gvs[source_take_call_bind_normal] >>
   qmatch_asmsub_abbrev_tac `bind (take_request_outcome rq) k` >>
   `os = []` by

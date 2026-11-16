@@ -1,7 +1,8 @@
 (* Same-endpoint continuation and frame for direct typed place stores. *)
 Theory bodyMemPlaceDirectStore
 Ancestors
-  typedStoreEndpoint typedStoreAllocationFrame context compileEnv venomState
+  typedStorePathEndpoint typedStoreAllocationFrame context compileEnv venomState
+  fragGasPathFrameMem fragGasMode
   memContinuation valueEncodingDefs vyperTypeSystem exprLoweringProps
   typedCopyAgreement memoryLocalRhsProps bodyCopyMemory typedBytesArrayMem
   exprSimBufferStore rich_list bodyMemTypedStoreHistory bodyMemTupleLayoutTransport
@@ -45,7 +46,8 @@ Theorem place_direct_typed_store_cont:
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t
+    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_store_memory_typed ce dst dty src sty sa = ((),sb)` by
@@ -54,9 +56,12 @@ Proof
            (gvs[type_widens_to_def] >> metis_tac[arg_type_fits_bytestring_source]) >>
          gvs[compile_store_memory_def, compile_store_memory_typed_bytes]) >>
      gvs[compile_store_memory_def]) >>
-  drule_all typed_store_mem_cont >>
+  drule_all typed_store_mem_path >>
   disch_then (qspec_then `ctx`
     (qx_choose_then `t` (map_every assume_tac o CONJUNCTS))) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (fs[gas_marked_path_def] >>
+     metis_tac[gas_path_mem_memory_length]) >>
   drule typed_store_frame_allocations >> strip_tac >>
   `alloca_inv t /\ alloca_room ctx fn t` by
     (irule typed_store_frame_resources >> goal_assum (drule_at Any) >> simp[]) >>
@@ -88,14 +93,15 @@ Theorem place_direct_bulk_copy_cont:
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t
+    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all buffer_copy_memory_encoding >> strip_tac >>
   drule buffer_copy_memory_shape >> strip_tac >>
   drule copy_memory_body_code >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    (drule_all compile_copy_memory_body_mem_ok >> simp[]) >>
+    (drule_all bodyCopyMemoryBaseTheory.compile_copy_memory_body_mem_ok >> simp[]) >>
   `mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule typed_bytes_child_seq_cont >> fs[same_blocks_def, IS_PREFIX_APPEND] >>
      qexists_tac `sa` >> simp[IS_PREFIX_APPEND]) >>
@@ -110,6 +116,8 @@ Proof
     (irule typed_store_frame_resources >> goal_assum (drule_at Any) >>
      simp[] >> qexistsl_tac [`sa.cs_current_bb`, `LENGTH sa.cs_current_insts`,
        `s.vs_prev_bb`] >> gvs[venom_state_component_equality]) >>
+  `LENGTH s.vs_memory <= LENGTH q.vs_memory` by
+    metis_tac[run_inst_seq_memory_length] >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   qpat_x_assum `(q with vs_memory := _) = s` mp_tac >>
   simp[venom_state_component_equality, lookup_var_def, same_blocks_def] >>
@@ -156,7 +164,8 @@ Theorem place_direct_store_cont:
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t
+    alloca_inv t /\ alloca_room ctx fn t /\ alloca_history fn t /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_bytestring_type dty \/ dty <> sty /\ ~tuple_memory_layout_eq dty sty`

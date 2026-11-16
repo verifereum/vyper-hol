@@ -8,6 +8,7 @@ Ancestors
   stmtSimAssignStorage stmtSimAugAssignPlaceMemory compileEnv freshWrites
   vyperStorageFootprint vyperStorageTrace vyperStoragePlaceObserved
   vyperFiniteStoragePreservation vyperPlaceTyping vyperPlaceFrames
+  evalNoHalt exprSimDefs
 
 Theorem relayout_store_stmt_post:
   vv_post H ctx func cenv cx e es sa sv s0 mid (Value v) vv s1 /\
@@ -87,9 +88,11 @@ Theorem relayout_store_gas_outcome:
      stmt_exit (RetQ H) ff res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (write_place cx p v) (ee,s2)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r. (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `res <> INR HaltException` by metis_tac[cj 3 places_nh] >>
   qpat_assum `?H. valid_horizon _ _ H _`
     (qx_choose_then `H0` assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -115,7 +118,7 @@ Proof
       irule relayout_store_stmt_post >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >>
+  disj2_tac >> simp[halt_exit_def] >> rpt strip_tac >>
   `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
   `stmt_exit (RetQ H) ff res r` by metis_tac[] >>
   `expr_exit res r` suffices_by simp[stmt_exit_def] >>
@@ -161,7 +164,8 @@ Theorem widened_target_store_gas_outcome:
   s2.vs_inst_idx = LENGTH st.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (write_place cx p v) (ee,s2)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r. (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `?H. valid_horizon _ _ H _`

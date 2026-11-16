@@ -1,6 +1,6 @@
 Theory augAssignPtrMemoryStore
 Ancestors
-  bodySimAugPlaceStore augAssignPtrFieldStore augAssignPtrStore
+  bodySimAugPlaceStore augAssignPtrFieldStore mstoreRestorePtr augAssignPtrStore
   valueEncodingProofs robustCopyTransportPtr bodyPtrDefs
   augAssignPtrFieldStorePost exprSimProps localPtrsProps
   stmtSimAssignStore vyperLookup finite_map list compileEnv loweringStateRelDefs

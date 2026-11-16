@@ -44,7 +44,7 @@ Theorem tuple_mixed_suffix_from_steps:
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\H res ff r. expr_exit res r)) ==>
+      (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)) ==>
   !i es sp sf s0.
     i <= LENGTH tys /\ expr_sim_inv cenv cx env es /\ ~block_is_terminated sp /\
     tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -62,7 +62,7 @@ Theorem tuple_mixed_suffix_from_steps:
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\H res ff r. expr_exit res r)
+      (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`ctx`,`func`,`cenv`,`cx`,`st0`,`env`,`gs`,`tys`,`ltys`,`ltvs`,
@@ -95,7 +95,7 @@ Proof
       (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
         FLOOKUP t.vs_allocas id = SOME entry) /\
       alloca_frame cenv ee cs s cenv ff t)
-    (\H res ff r. expr_exit res r)` by
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)` by
     (qunabbrev_tac `a` >>
      qpat_x_assum `!i es sp ca cb s0 bt r. _`
        (qspecl_then [`j`,`ee`,`cs`,`ca`,`cb`,`s`,`bt`,`r`] mp_tac) >>
@@ -122,7 +122,7 @@ Proof
   simp[] >> rpt conj_tac
   >~ [`expr_exit _ _`]
   >- (rpt strip_tac >> Cases_on `res` >>
-      gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gvs[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_def]) >>
   rpt strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>

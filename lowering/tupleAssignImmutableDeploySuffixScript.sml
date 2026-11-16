@@ -42,11 +42,11 @@ Theorem tuple_mixed_suffix_from_heads:
       alloca_frame cenv es sp s0 cenv ff t ==>
       gas_outcome F (cx_tops cx) (ctx,func) cx st0 next (ff with gas_obs := [],t)
         (\H (res : unit + exception) ee u. Q H res ee u)
-        (\H res ee r. expr_exit res r)) ==>
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (eval_target_place cx bt)
         (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-      (\H res ee r. expr_exit res r)) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   !i es sp sf s0.
     i <= LENGTH tys /\ expr_sim_inv cenv cx env es /\ ~block_is_terminated sp /\
     tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -64,7 +64,7 @@ Theorem tuple_mixed_suffix_from_heads:
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\H res ff r. expr_exit res r)
+      (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH gs = LENGTH tys` by fs[LIST_REL_EL_EQN] >>

@@ -640,6 +640,7 @@ Resume return_selected_valued_frag_full[buffered_normalize_allocation]:
     (qspecl_then [`ce`,`ret`,`e`,`sa`] mp_tac
       (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
   qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
     (fn pre =>
       let
@@ -936,7 +937,11 @@ Resume return_selected_valued_frag_full[buffered_normalize_state]:
       [`ci_mono nalloc ncopy`,`nalloc.cs_next_id=sm.cs_next_id+1`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ci_mono_def] >> rpt strip_tac >> decide_tac) >>
   `val_footprint dtv v <= type_memory_bytes ce ret` by
-    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`val_wf dtv v`,`type_memory_bytes ce ret = type_memory_size dtv`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     asm_rewrite_tac[] >> irule exprSimPropsTheory.val_footprint_le >>
+     first_assum ACCEPT_TAC) >>
   suspend "buffered_normalize_ownership"
 QED
 
@@ -1109,6 +1114,7 @@ Resume return_selected_valued_frag_full[buffered_shared_allocation]:
       cs_extends_emit_inst] >>
   `fn_has_code src_st renc_st func /\ fn_has_code renc_st renc_en func /\
    fn_has_code renc_en sb func` by metis_tac[fn_has_code_split,cs_extends_trans] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp src_state)` by simp[] >>
   qpat_assum `stmt_state_rel _ ctx func ce cx mid src_state`
     (fn pre =>
       let
@@ -1197,7 +1203,12 @@ Resume return_selected_valued_frag_full[buffered_shared_source_prepare]:
      simp[ptr_val_ok_def,ptr_mem_ok_def] >> metis_tac[]) >>
   `0 < val_footprint dtv v ==>
     w2n source_w + val_footprint dtv v <= src_state.vs_alloca_next` by
-    (strip_tac >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`stmt_state_rel _ ctx func ce cx mid src_state`,
+        `expr_val_at ce cx ret own_start own_end mid v src src_state`,
+        `evaluate_type (get_tenv cx) ret = SOME dtv`,
+        `~is_word_type ret`,`eval_operand src src_state = SOME source_w`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule_all (Q.INST [`ty` |-> `ret`,`s` |-> `src_state`,`tv` |-> `dtv`]
        expr_val_at_frontier) >>
      disch_then (qx_choose_then `front_w` strip_assume_tac) >>
@@ -2152,6 +2163,7 @@ Resume return_selected_valued_frag_full[raw_allocation]:
     (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
   qpat_assum `expr_post _ ctx func ce cx e es sa sm s0 mid v op t`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
   drule_all (Q.INST
     [`G` |-> `G1`, `tn` |-> `tn1`,
      `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
@@ -2369,6 +2381,7 @@ Resume return_selected_valued_frag_full[raw_copy_joint]:
        i < w2n source_w + 32 + LENGTH bs ==> i NOTIN raw_tn.t_mem`
        (qspec_then `i` mp_tac) >>
      impl_tac >- decide_tac >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp raw_alloc)` by simp[] >>
   qspecl_then [`lo`,`gas_explicit_sites ctx shadow_ctx`,`ctx`,`func`,`PG`,
     `sr`,`sc`,`raw_src`,`raw_dst`,`raw_G`,`raw_tn`,`raw_alloc`,
     `source_w`,`raw_w`,`LENGTH bs`,`32 + 32 * word_size (LENGTH bs)`,`raw_bb`]

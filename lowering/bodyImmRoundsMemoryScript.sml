@@ -242,7 +242,8 @@ Theorem immutable_prepared_one_round_mem:
       (~b ==> array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
         p dst sz ainst cond caller orig (SUC k) ee t))
     (\H res ee rr. ?e. res = INR e /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR e) rr)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR e) rr) /\
+      halt_exit H cx ee (INR e) rr)
 Proof
   strip_tac >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
@@ -264,7 +265,8 @@ Proof
     (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes, s_body)
     (\H. array_body_post_mem H d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body)
-    (\H r ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr)` by
+    (\H r ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr) /\
+      halt_exit H cx ee r rr)` by
     suspend "body_outcome" >>
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ s _ _`)) >>
@@ -272,7 +274,8 @@ Proof
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ live _ _`)) >>
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `\H. array_body_post_mem H d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body`,
-     `E` |-> `\H r ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr`]) >>
+     `E` |-> `\H r ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr) /\
+       halt_exit H cx ee r rr`]) >>
   simp[] >> conj_tac >- suspend "scopes" >>
   conj_tac >- suspend "finish" >> suspend "exit"
 QED
@@ -287,7 +290,8 @@ Resume immutable_prepared_one_round_mem[body_outcome]:
   qhdtm_x_assum `stmt_frag_mem` mp_tac >>
   rewrite_tac[stmt_frag_mem_def] >>
   disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `s_body`, `bc'`] mp_tac) >>
-  simp[GSYM array_body_post_mem_def, evaluation_state_fn_updates, SF ETA_ss]
+  simp[GSYM array_body_post_mem_def, evaluation_state_fn_updates, SF ETA_ss] >>
+  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
 Resume immutable_prepared_one_round_mem[scopes]:
   rpt strip_tac >> qpat_x_assum `!gs r ee. _` drule >> metis_tac[]
@@ -306,9 +310,11 @@ QED
 Resume immutable_prepared_one_round_mem[exit]:
   rpt strip_tac >> qpat_x_assum `!gs r ee. _` drule >> strip_tac >>
   `!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) r rr` by metis_tac[] >>
-  gvs[stmt_res_ok_def] >>
-  gvs[stmt_exit_def, expr_exit_def, evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[expr_exit_def]
+  `r <> INL () /\ r <> INR BreakException /\ r <> INR ContinueException` by
+    metis_tac[stmt_exit_loop_ctl] >>
+  Cases_on `r` >> gvs[] >>
+  fs[stmt_exit_def, halt_exit_def, halt_rel_def, accounts_rel_def,
+     evaluation_state_fn_updates]
 QED
 Finalise immutable_prepared_one_round_mem
 
@@ -385,7 +391,8 @@ Theorem immutable_prepared_loop_outcome_mem:
       (\H res ee t. res = INL () /\
         array_round_done H d ctx func cenv cx caller orig exit ee t)
       (\H res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit H cx ee (INR ex) rr)
 Proof
   strip_tac >>
   qspecl_then [`T`, `cx_tops cx`, `ctx`, `func`, `cx`, `st0`, `tv`, `id`,
@@ -394,7 +401,8 @@ Proof
        array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
          p dst sz ainst cond caller orig k es s`,
     `\H. array_round_done H d ctx func cenv cx caller orig exit`,
-    `\H ex ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr`]
+    `\H ex ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+      halt_exit H cx ee (INR ex) rr`]
     mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>
   simp[] >> impl_tac
   >- (conj_tac >- suspend "round" >> suspend "last") >>
@@ -441,6 +449,9 @@ Resume immutable_prepared_loop_outcome_mem[last]:
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
      fs[array_round_inv_def, Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
        FLOOKUP_UPDATE] >> metis_tac[]) >>
-  fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
+  `!b. get_storage cx (es with gas_obs := []) b = get_storage cx es b` by
+    (Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs,
+     storage_well_formed_on_def] >> metis_tac[]
 QED
 Finalise immutable_prepared_loop_outcome_mem

@@ -36,7 +36,8 @@ Theorem aug_place_target_mem_continuation:
     gas_outcome T (cx_tops cx) (ctx,func) cx st0
       ((k p) : evaluation_state -> 'a evaluation_result) (mid,t) Q R) /\
   (!p. storage_trace_frame ((k p) : evaluation_state -> 'a evaluation_result)) /\
-  (!H res ee rr. expr_exit (res : eval_result + exception) rr ==>
+  (!H res ee rr. expr_exit (res : eval_result + exception) rr /\
+    halt_exit H cx ee res rr ==>
     ?ex. res = INR ex /\ R H (INR ex) ee rr) ==>
   gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx bt) k) (es,s0) Q R
