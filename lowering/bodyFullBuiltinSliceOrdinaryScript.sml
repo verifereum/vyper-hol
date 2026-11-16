@@ -1,6 +1,8 @@
 (* Full source/capture/start/length composition for ordinary Slice. *)
 Theory bodyFullBuiltinSliceOrdinary
 Ancestors
+  bodyFullBuiltinSliceDynamicCapture bodyFullBuiltinSliceFixedCapture
+  bodyFullBuiltinSliceMemoryTail
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose gasOutcomeFullStmts
   exprSimSliceOrdinary exprSimSliceSource
   bodyPtrSignedConvertSourceFixed exprSimSliceMemory builtinBytesMemory
@@ -2544,3 +2546,29 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
 QED
 
 Finalise slice_builtin_none_vv_full_from_runs
+
+Theorem slice_builtin_none_vv_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
+    (builtin_args_length_ok (Slice n) (LENGTH args) ==>
+       case code_slice_source (Slice n) args of
+         NONE => body_exprs_full_ok cx args
+       | SOME (code_ty,addr) =>
+           body_exprs_full_ok cx (TL args) /\
+           (!s tail_vs t.
+              eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
+              body_exprs_full_ok cx [addr])) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
+    code_slice_source (Slice n) args = NONE ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a (Slice n) args) es
+Proof
+  mp_tac slice_builtin_none_vv_full_from_runs >>
+  (impl_tac >-
+    (conj_tac
+     >- (rpt gen_tac >> MATCH_ACCEPT_TAC slice_dynamic_capture_full_run) >>
+     conj_tac
+     >- (rpt gen_tac >> MATCH_ACCEPT_TAC slice_fixed_capture_full_run) >>
+     rpt gen_tac >> MATCH_ACCEPT_TAC slice_memory_tail_full)) >>
+  disch_then ACCEPT_TAC
+QED
