@@ -2442,19 +2442,146 @@ Proof
      reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      gen_tac >> strip_tac >>
      qpat_assum `!i. i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
-     reverse conj_tac >-
-       (strip_tac >>
-        qpat_x_assum `SUC i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
+     ntac 13 (conj_tac >- (first_assum ACCEPT_TAC)) >>
+     conj_tac >- simp[Abbr `segments`] >>
+     strip_tac >>
+     qpat_x_assum `SUC i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     (
         `child_entry = HD (entries (SUC i))` by
           (qpat_assum `!i. SUC i < LENGTH cuts ==> _` (drule_then strip_assume_tac) >>
            qpat_x_assum `FLOOKUP acts _ = SOME (csf,_)` mp_tac >>
            qpat_x_assum `FLOOKUP acts _ = SOME (sfs (SUC i),_)` mp_tac >>
            POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[]) >>
         qexistsl_tac [`b0`,`nm'`,`ops`,`args`,`ctf`] >>
-        FAIL_TAC "child witnesses") >>
-     qunabbrev_tac `segments` >> rewrite_tac[] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  FAIL_TAC "rooted result"
+        qpat_x_assum `child_entry = _` (fn th => rewrite_tac[GSYM th]) >>
+        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  qexistsl_tac [`Mbefore`,`gpre`,`kgss`,`v`] >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`Mcut = Mbefore ++ _`, `gs = gpre ++ _`,
+     `LIST_REL _ Mbefore gpre`, `LIST_REL (LIST_REL _) _ kgss`,
+     `v = _`, `SND (row_eval _ _ _ _ _) = OK u`,
+     `FOLDR _ OK (TAKE (qs _) _) _ = OK u`,
+     `bbs (LENGTH cuts - 1) = bb`, `xss (LENGTH cuts - 1) = xs`,
+     `bes (LENGTH cuts - 1) = be`, `LAST (entries (LENGTH cuts - 1)) = hin`,
+     `depths (LENGTH cuts - 1) = e`, `qs (LENGTH cuts - 1) = q`,
+     `zs (LENGTH cuts - 1) = z`, `mss (LENGTH cuts - 1) = _`,
+     `row_eval = _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `eval_phis vin instructions` >>
+  Cases_on `eval_phis vin instructions` >> gvs[]
+QED
+
+Theorem dft_packet_cut_row_trace:
+  !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d q8 raw_slots sites unused W a e bb bt ps xs ys rho hin h0
+    be hbe count front closed brest q z cuts levels Mcut fuel gs tail events u.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FDOM W = FDOM ms_tab /\
+  (!key old new. FLOOKUP ms_tab key = SOME old /\ FLOOKUP W key = SOME new ==>
+    LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) old new) /\
+  FLOOKUP blocks (a,e) =
+    SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,closed,brest) /\
+  q < LENGTH xs /\ z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)) /\
+  MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+    REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+  LENGTH cuts = LENGTH levels /\
+  (!i ai ds ei qi zi.
+    i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+    ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+      ini hi bei counti fronti closedi resti later.
+      FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+      FLOOKUP blocks (ai,ei) =
+        SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+      orderi = ds ++ ei::later /\
+      (if SUC i = LENGTH cuts then
+        ai = a /\ ei = e /\ qi = q /\ zi = z
+      else
+        ?cid call_h b0 done_at_call child_entry ret.
+          EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+          FLOOKUP calls (ai,ei,cid) =
+            SOME (qi,call_h,b0,done_at_call,child_entry,ret) /\
+          qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+          zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+          EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+          (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==>
+            MEM r done_at_call)) /\
+      EL i levels =
+        (sfi,
+         MAP (\f. (FST (THE (FLOOKUP blocks (ai,f))),f,
+           DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+             (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+           [(bbi,ei,zi)],
+         if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+  Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP W (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP W (ai,ei))))) cuts) /\
+  N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+  rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+    (events,OK u) ==>
+  ?Mbefore gpre kgss v.
+    Mcut = Mbefore ++ FLAT (TAKE q (THE (FLOOKUP W (a,e)))) /\
+    gs = gpre ++ FLAT kgss /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mbefore gpre /\
+    LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+      (TAKE q (THE (FLOOKUP W (a,e)))) kgss /\
+    v = (hin with vs_gas_readings := FLAT kgss ++ tail) /\
+    (case eval_phis v bb.bb_instructions of
+      OK sp => FOLDR (dft_exec_cons (fuel-e) C7) OK z
+        (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+    | other => other) = OK u /\
+    FOLDR (dft_exec_cons (fuel-e) C7) OK (TAKE q xs)
+      (be with vs_gas_readings := FLAT kgss ++ tail) = OK u /\
+    dftGasFromListTraceDefs$trace_gas
+      (dftGasFromListTraceDefs$trace_block a e (fuel-e) C7
+        (FST (THE (FLOOKUP acts a)))
+        (bb with bb_instructions := TAKE (LENGTH ps + q) bb.bb_instructions)
+        (be with vs_gas_readings := FLAT kgss ++ tail)) =
+      ZIP (FLAT (TAKE q (THE (FLOOKUP ks_tab (a,e)))),FLAT kgss)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `FDOM work = FDOM ms_tab` >>
+  drule_all dft_packet_cut_row_alignment >> strip_tac >>
+  qexistsl_tac [`Mbefore`,`gpre`,`kgss`,`v`] >>
+  ntac 7 (conj_tac >- (first_assum ACCEPT_TAC)) >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  `?ms ess ks new. FLOOKUP ms_tab (a,e) = SOME ms /\
+    FLOOKUP es_tab (a,e) = SOME ess /\ FLOOKUP ks_tab (a,e) = SOME ks /\
+    FLOOKUP work (a,e) = SOME new` by
+    (qpat_x_assum `FDOM work = _` mp_tac >>
+     qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+     qpat_x_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+     qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+     qpat_x_assum `FLOOKUP blocks (a,e) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _`
+    (fn inv => qpat_assum `FLOOKUP blocks (a,e) = _`
+      (mp_then Any strip_assume_tac inv)) >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    FLOOKUP blocks (a,e) = _ /\ FLOOKUP ms_tab (a,e) = _ /\
+    FLOOKUP es_tab (a,e) = _ /\ FLOOKUP ks_tab (a,e) = _ ==> _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!sf tf inc entry order res nrest. _` (drule_then strip_assume_tac) >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`!F k kgss tail. _`,
+     `!key old new. FLOOKUP ms_tab key = SOME old /\ FLOOKUP work key = SOME new ==> _`,
+     `FLOOKUP acts a = _`, `FLOOKUP ms_tab (a,e) = _`,
+     `FLOOKUP ks_tab (a,e) = _`, `FLOOKUP work (a,e) = _`,
+     `N <= fuel`, `q < LENGTH xs`, `EVERY _ (TAKE q xs)`,
+     `!r. r < q /\ _ ==> _`,
+     `LIST_REL (LIST_REL _) (TAKE q (THE (FLOOKUP work (a,e)))) kgss`,
+     `FOLDR (dft_exec_cons (fuel-e) C7) OK (TAKE q xs) _ = OK u`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt (disch_then strip_assume_tac) >> gvs[] >>
+  `LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) ms new` by metis_tac[] >>
+  `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) kgss` by
+    (irule dft_packet_refined_take_compatible >> qexists_tac `new` >> simp[]) >>
+  qpat_x_assum `!F k kgss tail. _` (qspecl_then [`fuel`,`q`,`kgss`,`tail`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
 Theorem dft_focus_packet_step:
