@@ -38,6 +38,23 @@ Ancestors
    an Error, and the step is the entry block (fnEntryStep) or a later
    block (fnBlockStep), each given both theorems at the smaller fuel for
    the callees an INVOKE runs and for the rest of the run. *)
+(* General label-map form; proof seed retained for the migration. *)
+Theorem gen_fn_sims_resource_all_reloc:
+  !safe fuel.
+    gen_fn_sim_at_reloc safe
+      (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel /\
+    gen_fn_frame_sim_at_reloc safe
+      (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel
+Proof
+  gen_tac >> Induct
+  >- (simp[gen_fn_sim_at_reloc_def, gen_fn_frame_sim_at_reloc_def] >>
+      rpt strip_tac >> gvs[Once run_blocks_def]) >>
+  pop_assum strip_assume_tac >>
+  drule_all fn_entry_block_step_resource_reloc >> strip_tac >>
+  drule_all fn_block_frame_step_resource_reloc >>
+  gvs[fn_sim_budget_def]
+QED
+
 Theorem gen_fn_sims_resource_all:
   !safe fuel.
     gen_fn_sim_at safe
@@ -54,6 +71,30 @@ Proof
   gvs[fn_sim_budget_def]
 QED
 
+
+(* General label-map form; proof seed retained for the migration. *)
+Theorem gen_fn_sims_all_reloc[local]:
+  !fuel. gen_fn_sim_at_simple_reloc fuel /\ gen_fn_frame_sim_at_simple_reloc fuel
+Proof
+  gen_tac >> conj_tac
+  >- (mp_tac (CONJUNCT1 (Q.SPECL [`F`, `fuel`] gen_fn_sims_resource_all_reloc)) >>
+      PURE_REWRITE_TAC [gen_fn_sim_at_simple_reloc_def, gen_fn_sim_at_reloc_def,
+        optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
+      strip_tac >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest. _`
+        drule_all >> strip_tac >>
+      rpt conj_tac >> rpt gen_tac >> strip_tac >>
+      first_x_assum drule >> strip_tac >> metis_tac[]) >>
+  mp_tac (CONJUNCT2 (Q.SPECL [`F`, `fuel`] gen_fn_sims_resource_all_reloc)) >>
+  PURE_REWRITE_TAC [gen_fn_frame_sim_at_simple_reloc_def, gen_fn_frame_sim_at_reloc_def,
+    optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+     spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
+     vs as Inv ra pc_ret rest mem0. _` drule_all >> strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> metis_tac[]
+QED
 
 Theorem gen_fn_sims_all[local]:
   !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel
@@ -104,6 +145,53 @@ QED
    parameters, so PARAM's word ordinal doesn't wrap; an interim premise
    until the stack-height bound supplies it, as every parameter is on the
    entry stack. *)
+(* General label-map form; proof seed retained for the migration. *)
+Theorem gen_fn_simulation_reloc:
+  !fuel rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs as ra rest /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
+    ==>
+    (!vs'. run_blocks fuel ctx fn vs = Halt vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. run_blocks fuel ctx fn vs = Abort a vs' ==>
+       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as') /\
+    (!ret vs'. run_blocks fuel ctx fn vs = IntRet ret vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE ret.iret_values ++ rest /\
+               fn_return_state_rel ctx cp fn vs' as as')
+Proof
+  rpt gen_tac >>
+  mp_tac (CONJUNCT1 (SPEC_ALL gen_fn_sims_all_reloc)) >>
+  PURE_REWRITE_TAC [gen_fn_sim_at_simple_reloc_def, gen_fn_sim_at_reloc_def,
+    optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
+  disch_then MATCH_ACCEPT_TAC
+QED
+
 Theorem gen_fn_simulation:
   !fuel rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
     ctx = unit.cu_context /\
@@ -188,6 +276,82 @@ QED
    so the planner's alias-only reorder steps read the right word; it is
    stated on the planner's live entries only, which the block induction
    can re-establish at the successor. *)
+(* General label-map form; proof seed retained for the migration. *)
+Theorem gen_fn_frame_simulation_reloc:
+  !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
+   vs as Inv ra pc_ret rest mem0.
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps /\
+    vs.vs_prev_bb = SOME pred /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      vs.vs_current_bb ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp block_ops) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
+    ==>
+    (!vs'. run_blocks fuel ctx fn vs = Halt vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. run_blocks fuel ctx fn vs = Abort a vs' ==>
+       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as') /\
+    (!ret vs'. run_blocks fuel ctx fn vs = IntRet ret vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE ret.iret_values ++ rest /\
+               context_memory_rel cp vs'.vs_memory as'.as_memory /\
+               (!b. context_spill_byte cp b /\
+                    ~closure_spill_byte ctx cp fn.fn_name b ==>
+                    read_byte b as'.as_memory = read_byte b mem0) /\
+               shared_state_rel vs' as')
+Proof
+  rpt gen_tac >>
+  mp_tac (CONJUNCT2 (SPEC_ALL gen_fn_sims_all_reloc)) >>
+  PURE_REWRITE_TAC [gen_fn_frame_sim_at_simple_reloc_def, gen_fn_frame_sim_at_reloc_def,
+    optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
+  disch_then MATCH_ACCEPT_TAC
+QED
+
 Theorem gen_fn_frame_simulation:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after

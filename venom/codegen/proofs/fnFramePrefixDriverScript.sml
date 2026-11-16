@@ -472,6 +472,75 @@ QED
 
 (* Only the local range obligations at earlier occurrences are requested.
    Their source-cut producer is supplied by the joint pass simulation. *)
+(* General label-map form; proof seed retained for the migration. *)
+Theorem normal_frame_trace_prefix_reloc:
+  !j.
+  generate_context_plan unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+  code_labels_agree prog lo /\
+  (!l. FLOOKUP vs0.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  (!fe rest lbl.
+    unit.cu_context.ctx_functions = fe :: rest /\
+    get_params (HD fe.fn_blocks).bb_instructions = [] /\
+    fn_entry_label fe = SOME lbl ==>
+    fn_entry_state_rel cpl fe
+      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+      (entry_asm_state vs0 es0) 0w []) /\
+  joint_trace vs0 unit.cu_context q0 es qs
+    (JointConfig laststk lastPG lastG lasttn lastfn lastinst laststate
+      lastoms lastom lasths lasth) /\
+  active_inst lastfn lastinst laststate /\ lastinst.inst_opcode = GAS /\
+  (!k stk PG G tn fn inst s oms om hs h.
+    k < LENGTH es /\
+    EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    ~in_revert_forward fn s ==>
+    source_memory_reads_disjoint cpl inst s /\
+    context_source_memory_writes_disjoint cpl inst s) /\
+  j <= LENGTH es ==>
+  ?n ast.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+    normal_frame_plan_reloc lo rpolicy unit cpl prog vs0 es0 (EL j (q0::qs)) ast
+Proof
+  Induct >> rpt strip_tac
+  >- (qexistsl_tac [`0`, `entry_asm_state vs0 es0`] >>
+      simp[asm_steps_def] >> irule normal_frame_initial_reloc >>
+      metis_tac[joint_trace_def]) >>
+  `j < LENGTH es /\ j <= LENGTH es` by decide_tac >>
+  `?n ast.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+    normal_frame_plan_reloc lo rpolicy unit cpl prog vs0 es0 (EL j (q0::qs)) ast` by
+    (first_x_assum irule >> rpt conj_tac >>
+     TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  `?stk PG G tn fn inst s oms om hs h.
+    EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h` by
+    (Cases_on `EL j (q0::qs)` >> metis_tac[]) >>
+  `normal_frame_plan_reloc lo rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast` by metis_tac[] >>
+  drule normal_frame_fn_shape_reloc >> strip_tac >>
+  `~in_revert_forward fn s` by
+    (irule joint_trace_gas_nonrevert >> metis_tac[]) >>
+  `joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+   joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h)
+    (EL j es) (EL (SUC j) (q0::qs))` by
+    (drule joint_trace_edge_at >> disch_then (qspec_then `j` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst s /\
+    context_source_memory_writes_disjoint cpl inst s` by metis_tac[] >>
+  drule_all normal_frame_joint_step_reloc >>
+  disch_then (qx_choosel_then [`m`, `next`] strip_assume_tac) >>
+  qexistsl_tac [`n+m`, `next`] >> conj_tac
+  >- (irule asm_steps_compose_ok >> qexists_tac `ast` >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem normal_frame_trace_prefix:
   !j.
   generate_context_plan unit.cu_context = SOME cpl /\
