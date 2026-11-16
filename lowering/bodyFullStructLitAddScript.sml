@@ -57,7 +57,9 @@ Theorem structlit_child_add_full:
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
     ptr_covers G' tn' out t n /\ lookup_var out t = SOME (a+n2w off)
 Proof
-  strip_tac >> drule_all emit_op_fetch_boundary >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emit_op_fetch_boundary >> strip_tac >>
   `out = STRING #"%" (toString sm.cs_next_var)` by fs[] >>
   `!p. not_fresh_at sm p ==> p <> out` by metis_tac[] >>
   qabbrev_tac `i = mk_inst sm.cs_next_id ADD [Var root; Lit (n2w off)] [out]` >>
