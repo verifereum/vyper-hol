@@ -48,6 +48,7 @@ Ancestors
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
+  asmOptOwnMergeJumpdests
   asmSymOwnCode
   asmOptOwnMergeIszero
   finalizerContractOwn
