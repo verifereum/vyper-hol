@@ -143,7 +143,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[convert_operand_admissible,
       exprSimStackTheory.eval_expr_force_admissible, eval_expr_type_builtin_value] >>
-  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_buffer)) >>
+  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_post_buffer)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
@@ -311,7 +311,7 @@ Resume convert_dynamic_vv_sim_full[continuation]:
     `BaseT bt = BaseT BoolT \/ (?k. BaseT bt = BaseT (UintT k)) \/
      BaseT bt = BaseT AddressT \/ (?k. BaseT bt = BaseT (BytesT (Fixed k)))`
     assume_tac
-  >- (drule_all bodyPtrTypeBuiltinsBytesWordTypesTheory.bytestring_scalar_type_partition >>
+  >- (drule_all bodyPtrTypeBuiltinsBytesWordTypesTheory.bytestring_scalar_type_partition_cases >>
       qpat_x_assum `~((?k. bt = IntT k) \/ bt = DecimalT)` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
   Cases_on `v = BytesV [] \/ v = StringV []`

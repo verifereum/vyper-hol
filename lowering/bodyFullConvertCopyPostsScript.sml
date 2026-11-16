@@ -1,7 +1,7 @@
 (* Fixed endpoint semantic and ghost boundaries for Convert widening. *)
 Theory bodyFullConvertCopyPosts
 Ancestors
-  exprSimConvertBytes bodyFullAllocaFresh typedCopyPtr robustCopyTransportPtr
+  exprSimConvertBytes bodyFullAllocaFresh typedCopyPtr robustCopyTransportPtr fragExecPtr
   bodyPtrDefs exprSimDefs exprSimMemDefs exprSimProps loweringPosts loweringStateRelDefs
   venomInst exprLoweringProps ptrDiscipline venomExecSemantics venomState finite_map pred_set
 

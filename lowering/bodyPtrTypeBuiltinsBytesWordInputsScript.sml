@@ -44,7 +44,7 @@ Theorem bytes_word_source_length:
      (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
   (?str. v = StringV str /\ LENGTH str <= 32)
 Proof
-  strip_tac >> drule_all bodyPtrTypeBuiltinsBytesWordTypesTheory.bytestring_scalar_type_partition >> strip_tac >>
+  strip_tac >> drule_all bodyPtrTypeBuiltinsBytesWordTypesTheory.bytestring_scalar_type_partition_cases >> strip_tac >>
   drule_all bytestring_typed_value_view >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def,
       vyperTypeSystemTheory.well_formed_type_def] >> decide_tac
