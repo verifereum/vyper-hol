@@ -648,7 +648,7 @@ Proof
   `stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
      (cenv', shadow_sb)` by
     (mp_tac (Q.SPECL [`body`, `cenv`, `NoLoop`, `NoneT`] gas_shadow_stmts_env) >>
-     simp[gas_shadow_compiles_def] >> metis_tac[PAIR]) >>
+     simp[gas_shadow_compiles_def] >> metis_tac[pairTheory.PAIR]) >>
   `gas_admissible (eval_stmts (deploy_evaluation_context tops am tx) body)
      (stmt_res_ok NoLoop) (es0 with outcomes := SOME vs.vs_outcomes)` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
