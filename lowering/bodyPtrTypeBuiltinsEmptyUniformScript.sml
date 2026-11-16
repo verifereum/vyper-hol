@@ -56,7 +56,7 @@ Resume empty_zero_pair_cursor_frame[cursor]:
       (step_taint (mk_inst id ADD [Var p; Lit (n2w off)] [out]) s u tn)
       out u 32` by
     (simp[Abbr `u`] >> irule reasonPrefixResourcesPtrTheory.reason_encoder_offset_covers >>
-     metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
+     conj_tac >- decide_tac >> simp[] >> qexists_tac `sz` >> simp[]) >>
   simp[]
 QED
 Finalise empty_zero_pair_cursor_frame
