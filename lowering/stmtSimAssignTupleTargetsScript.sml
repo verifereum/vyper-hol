@@ -97,11 +97,11 @@ Theorem assign_tuple_targets_suffix[local]:
              (ee' with gas_obs := []) t') \/
        (exit_result r /\
         !H. valid_horizon cx st0 H ee'.storage_trace ==>
-          !tail. stmt_exit (RetQ H) (ee' with gas_obs := tail) res r))
+          (!tail. stmt_exit (RetQ H) (ee' with gas_obs := tail) res r) /\
+          halt_exit H cx ee' res r))
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
-    (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `expr_post H0 ctx func cenv cx e es sa su s0 ee v op sv` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
      simp[]) >>
@@ -198,10 +198,20 @@ Resume assign_tuple_targets_suffix[stores]:
        (strip_assume_tac o REWRITE_RULE
          [stmt_state_rel_def,state_rel_def,call_ctx_rel_def]) >>
      asm_rewrite_tac[]) >>
-  drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`gs`, `T`] tuple_store_targets_outcome)) >>
-  disch_then (qspec_then `RetQ`
-    (qx_choosel_then [`res`, `ee'`, `r`] (map_every assume_tac o CONJUNCTS))) >>
+  qspecl_then [`H0`, `gs`, `T`, `tys`, `tvs`, `vs`, `elems`, `w2n w`, `b`, `sz`,
+    `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `ss`, `sf`, `RetQ`]
+    mp_tac (GEN_ALL tuple_store_targets_outcome) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`res`, `ee'`, `r`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  `res <> INR HaltException` by
+    (drule_all tuple_source_list_outcome >>
+     disch_then (qx_choosel_then [`source_res`, `source_end`] strip_assume_tac) >>
+     qpat_x_assum `!tail. assign_tuple_target_list _ _ _ _ = (source_res,_)`
+       (qspec_then `[]` mp_tac) >>
+     qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = (res,_)`
+       (qspec_then `[]` mp_tac) >>
+     simp[] >> metis_tac[]) >>
   qexistsl [`res`, `ee'`, `r`] >> conj_tac
   >- simp[Once evaluate_def] >>
   conj_tac
@@ -211,13 +221,14 @@ Resume assign_tuple_targets_suffix[stores]:
       (CONJUNCTS_THEN2 SUBST_ALL_TAC
         (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)))
       (map_every assume_tac o CONJUNCTS))
-  >- (disj1_tac >> qexists_tac `sfv` >> conj_tac >- REFL_TAC >>
+  >- (disj1_tac >> qexists_tac `sfv` >> conj_tac >- first_assum ACCEPT_TAC >>
       `assign_tuple_target_list cx gs vs ee =
         (INL (),ee' with gas_obs := ee.gas_obs)` by
         (qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = _`
-           (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+           (qspec_then `ee.gas_obs` mp_tac) >>
+         simp[NoAsms, evaluation_state_component_equality]) >>
       qx_gen_tac `H'` >> strip_tac >> suspend "post") >>
-  disj2_tac >> simp[]
+  disj2_tac >> simp[halt_exit_def]
 QED
 
 Resume assign_tuple_targets_suffix[post]:
