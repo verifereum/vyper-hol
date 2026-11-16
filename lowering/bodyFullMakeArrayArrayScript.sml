@@ -139,11 +139,81 @@ Resume make_array_vv_sim_full_conditional[header]:
     make_array_header_full) >>
   (impl_tac >- suspend "header_pre") >>
   disch_then (qx_choosel_then [`sj`,`Gj`,`tnj`,`ps`] strip_assume_tac) >>
-  cheat
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `ci_mono shadow_sa ssm` by
+    (qpat_x_assum `compile_alloc_buffer _ shadow_sa = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_alloc_buffer,pairTheory.SND]) >>
+  `ci_mono ssm ssh` by
+    (Cases_on `header` >> gvs[compileEnvTheory.comp_return_def] >-
+      metis_tac[ci_mono_emit_void,pairTheory.SND] >> simp[ci_mono_refl]) >>
+  `ci_mono shadow_sa ssh` by
+    (irule ci_mono_trans >> qexists_tac `ssm` >> simp[]) >>
+  `ci_mono ssh shadow_sb` by
+    (qpat_assum `compile_make_array_elems _ _ (MAP _ args) _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `type_memory_bytes cenv et = _`
+       (fn th => pure_rewrite_tac[GSYM th,compile_make_array_elems_as_tuple]) >> strip_tac >>
+     qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_make_tuple_cfn,compile_expr_ci_mono,pairTheory.SND]) >>
+  `fn_has_code ssh shadow_sb shadow_func` by
+    (irule (cj 2 fragExecTheory.fn_has_code_split) >>
+     conj_tac >- fs[ci_mono_def] >> qexists_tac `shadow_sa` >> fs[ci_mono_def]) >>
+  mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
+    `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
+    `base` |-> `w2n (w:256 word)`, `cap` |-> `type_memory_bytes cenv (ArrayT et n)`]
+    make_array_elements_full) >>
+  disch_then (qspecl_then [`args`,`et`,`tv`,`header`,`if header then 32 else 0`,
+    `ps`,`sh`,`sb`,`ssh`,`shadow_sb`,`es`,`sj`,`Gj`,`tnj`] mp_tac) >>
+  (impl_tac >- suspend "elements_pre") >>
+  strip_tac >> suspend "outcome"
 QED
 
 Resume make_array_vv_sim_full_conditional[header_pre]:
-  simp[] >> FAIL_TAC "header pre"
+  simp[venomInstTheory.mk_inst_def] >>
+  conj_tac >-
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> fs[ci_mono_def] >> metis_tac[]) >>
+  conj_tac >-
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> fs[ci_mono_def] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]
+QED
+
+Resume make_array_vv_sim_full_conditional[elements_pre]:
+  fs[ci_mono_def] >> simp[arithmeticTheory.ADD_SYM] >>
+  conj_tac >-
+    (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]) >>
+  qpat_x_assum `EVERY _ ps` mp_tac >> simp[arithmeticTheory.ADD_SYM]
+QED
+
+Resume make_array_vv_sim_full_conditional[outcome]:
+  drule_at Any (Q.INST [
+    `f` |-> `\rr. case rr of INL vs => INL (Value (ArrayV (make_array_value tv n vs))) | INR ex => INR ex`]
+    (INST_TYPE [beta |-> ``:value list``, alpha |-> ``:eval_result``]
+      gas_outcome_full_source_map)) >>
+  disch_then (qspecl_then [`tv`,
+    `eval_expr cx (Builtin (ArrayT et n) (MakeArray (SOME et) n) args)`,`n`] mp_tac) >>
+  (impl_tac >-
+    (simp[] >> gen_tac >> Cases_on `eval_exprs cx args es'` >>
+     drule aggregate_eval_make_array >> simp[])) >>
+  strip_tac >>
+  irule gas_outcome_full_zero_prefix >>
+  qexistsl_tac [`Gi`,`si`,`tni`] >> simp[] >>
+  irule gas_outcome_full_zero_prefix >>
+  qexistsl_tac [`Gj`,`sj`,`tnj`] >> simp[] >>
+  irule gas_outcome_full_post_source >>
+  goal_assum (drule_at Any) >>
+  conj_tac >- suspend "package" >>
+  POP_ASSUM_LIST (K all_tac) >> BETA_TAC >> rpt strip_tac >>
+  gvs[oneline exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def,
+      AllCaseEqs()]
+QED
+
+Resume make_array_vv_sim_full_conditional[package]:
+  BETA_TAC >> rpt strip_tac >> gvs[] >>
+  rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
+  FAIL_TAC "package"
 QED
 
 Finalise make_array_vv_sim_full_conditional
