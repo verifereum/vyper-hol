@@ -7,6 +7,7 @@ Ancestors
   dftFinitePacketReachability dftGasFromListLookup dftContractGas
   dftPacketRootedAlignment dftPacketRefinementBoundary
   dftPacketNativeContinuation dftPacketNativeSlice
+  dftPacketKeyMap dftPacketKeySubstitution dftPacketSlotRefine dftPacketCommonOracle
 
 (* Retained native DFT packet and the semantic suspended callers. *)
 Definition dft_focus_packet_rel_def:
@@ -3062,6 +3063,63 @@ Proof
     (irule dft_packet_refined_take_compatible >> qexists_tac `new` >> simp[]) >>
   qpat_x_assum `!F k kgss tail. _` (qspecl_then [`fuel`,`q`,`kgss`,`tail`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem dft_packet_key_refines[local]:
+  !rows keys needle w.
+    LIST_REL (\ss kk. LENGTH ss = LENGTH kk) rows keys /\
+    (!v. MEM (needle,v) (ZIP (FLAT keys,FLAT rows)) ==> v = NONE) ==>
+    LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) rows
+      (MAP2 (\ss kk. MAP2 (\slot key. if key = needle then SOME w else slot) ss kk)
+        rows keys)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH rows = LENGTH keys /\
+   !i. i < LENGTH rows ==> LENGTH (EL i rows) = LENGTH (EL i keys)` by
+    gvs[LIST_REL_EL_EQN] >>
+  simp[Once LIST_REL_EL_EQN, EL_MAP2] >>
+  qx_gen_tac `i` >> strip_tac >>
+  `i < LENGTH keys /\ LENGTH (EL i rows) = LENGTH (EL i keys)` by metis_tac[] >>
+  simp[LIST_REL_EL_EQN] >>
+  qx_gen_tac `j` >> strip_tac >>
+  simp[EL_MAP2] >> Cases_on `EL j (EL i keys) = needle` >> simp[] >>
+  disj1_tac >> first_x_assum irule >> irule dft_packet_row_pair >>
+  goal_assum (drule_at Any) >> qexists_tac `i` >> simp[MEM_ZIP] >>
+  qexists_tac `j` >> simp[]
+QED
+
+Theorem dft_packet_keymap_refines[local]:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d stk PG G tn fn inst s oms om hs h raw_slots sites unused work w.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  work = FMAP_MAP2 (\(ae,rows).
+    MAP2 (\ss kk. MAP2 (\slot key.
+      if key = (p,d,inst.inst_id) then SOME w else slot) ss kk)
+      rows (THE (FLOOKUP ks_tab ae))) ms_tab ==>
+  FDOM work = FDOM ms_tab /\
+  (!ae old new. FLOOKUP ms_tab ae = SOME old /\ FLOOKUP work ae = SOME new ==>
+    LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) old new)
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- simp[FMAP_MAP2_THM] >>
+  rpt gen_tac >> PairCases_on `ae` >> strip_tac >>
+  `?keys. FLOOKUP ks_tab (ae0,ae1) = SOME keys` by
+    (qhdtm_assum `dft_focus_packet_rel` mp_tac >>
+     rewrite_tac[dft_focus_packet_rel_def] >> strip_tac >>
+     qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+     qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+     qpat_x_assum `FLOOKUP ms_tab (ae0,ae1) = SOME old` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[FLOOKUP_DEF,optionTheory.NOT_NONE_SOME]) >>
+  drule_all dft_packet_table_row_alignment >> strip_tac >>
+  drule dft_packet_current_gas_copies_none >> disch_tac >>
+  `new = MAP2 (\ss kk. MAP2 (\slot key.
+    if key = (p,d,inst.inst_id) then SOME w else slot) ss kk) old keys` by
+    gvs[FLOOKUP_FMAP_MAP2] >>
+  asm_rewrite_tac[] >> irule dft_packet_key_refines >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem dft_focus_packet_step:
