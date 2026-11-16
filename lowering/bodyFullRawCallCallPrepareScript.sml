@@ -178,7 +178,7 @@ Proof
     (drule_at (Pat `source_memory_write_ranges _ _ = _`) oracle_call_write_taint >>
      disch_then (qspecl_then [`tn`,`u`] mp_tac) >>
      impl_tac >- (Cases_on `stat` >> simp[]) >> simp[]) >>
-  pure_rewrite_tac[LET_THM] >>
+  simp_tac bool_ss [LET_THM] >>
   rpt conj_tac
   >- suspend "origin"
   >- suspend "frame"
@@ -192,25 +192,54 @@ Proof
 QED
 
 Resume raw_call_actual_call_from_interfaces[origin]:
-  cheat
+  qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SRULE [ghost_inv_at_def]) >>
+  asm_x "origin" irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >-
+    (qexists `bb` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl [`ao`,`az`,`dl`,`dp`,`gas_op`,`op`,`n2w cap`,`ro`,
+             `Lit (n2w cap)`,`to_op`,`val_op`] >>
+  Cases_on `stat` >> simp[eval_operand_def, w2n_n2w]
 QED
 Resume raw_call_actual_call_from_interfaces[frame]:
-  cheat
+  asm_x "origin" kall_tac >>
+  drule oracle_take_adoption_locals >> strip_tac >>
+  asm_x "frame" irule >>
+  conj_tac >-
+    (qpat_x_assum `stor_taint_ok_at _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [stor_taint_ok_at_def]) >>
+  qexistsl [`G`,`TAKE cap outcome.co_returnData`,`w2n ro`,`es`,`func`,`s`,`sa`,`tn`] >>
+  simp[] >>
+  reverse conj_tac >-
+    (qpat_x_assum `cap = 0 \/ lo <= _` mp_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` drule >>
+  simp[regions_disjoint_def, LENGTH_TAKE_EQ] >>
+  Cases_on `cap <= LENGTH outcome.co_returnData` >> simp[]
 QED
 Resume raw_call_actual_call_from_interfaces[kept]:
-  cheat
+  simp[ghost_kept_at_def]
 QED
 Resume raw_call_actual_call_from_interfaces[status]:
-  cheat
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 Resume raw_call_actual_call_from_interfaces[taint]:
-  cheat
+  asm_x "origin" kall_tac >> asm_x "frame" kall_tac >>
+  Cases_on `stat` >>
+  simp[step_taint_def, op_taint_def, set_var_taint_def,
+       out_taint_def, mk_inst_def, FLOOKUP_UPDATE]
 QED
 Resume raw_call_actual_call_from_interfaces[prov]:
-  cheat
+  qpat_assum `ok = _` (fn th => rewrite_tac[th]) >>
+  irule step_prov_out_none >>
+  Cases_on `stat` >> simp[out_prov_def]
 QED
 Resume raw_call_actual_call_from_interfaces[safe]:
-  cheat
+  Cases >> simp[safe_operand_def, eval_operand_def] >>
+  rpt strip_tac >>
+  `s' <> STRING #"%" (toString sa.cs_next_var)` by fs[not_fresh_at_def] >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Finalise raw_call_actual_call_from_interfaces
