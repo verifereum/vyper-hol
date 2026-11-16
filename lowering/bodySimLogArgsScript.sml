@@ -2,17 +2,207 @@
 Theory bodySimLogArgs
 Ancestors
   allocLimits allocLimitsProps
-  exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim bodySimStmtCases stmtSimLog exprSimHyps
+  exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
+  vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
+  aggregateEvaluatedLayout memoryLocalRhsProps vyperEventArgCompat
+  vyperTypeExprResult retAbiPlanProps abiDecoderMembers finite_map pred_set
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
+(* Expression readiness comes directly from exprSimSource; the statement
+   dispatcher is not needed here. *)
 (* ===== The event's metadata ===== *)
+
+Theorem log_type_env_namespace[local]:
+  !tops src sid name a.
+    FLOOKUP (type_env_for_module src tops) (sid,name) = SOME a ==> sid = src
+Proof
+  Induct >> simp[type_env_for_module_def] >>
+  Cases >> simp[type_env_for_module_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem module_type_env_submap:
+  !mods src tops. ALOOKUP mods src = SOME tops ==>
+    type_env_for_module src tops SUBMAP type_env_all_modules mods
+Proof
+  Induct >> simp[type_env_all_modules_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  Cases_on `h0 = src` >>
+  gvs[type_env_all_modules_def, finite_mapTheory.SUBMAP_FLOOKUP_EQN,
+      finite_mapTheory.FLOOKUP_FUNION] >>
+  rpt strip_tac >> PairCases_on `x` >>
+  drule log_type_env_namespace >> strip_tac >> gvs[] >>
+  Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,x1)`
+  >- (gvs[] >> metis_tac[]) >>
+  drule log_type_env_namespace >> simp[]
+QED
+
+Theorem log_type_env_module_exists[local]:
+  !mods src id a.
+    FLOOKUP (type_env_all_modules mods) (src,id) = SOME a ==>
+    ?ts. ALOOKUP mods src = SOME ts
+Proof
+  Induct >> simp[type_env_all_modules_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
+  Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,id)` >>
+  simp[] >> rpt strip_tac
+  >- (Cases_on `h0 = src` >> simp[] >> metis_tac[]) >>
+  drule log_type_env_namespace >> strip_tac >> gvs[]
+QED
+
+Theorem body_log_runtime_struct_namespace:
+  !tops ctx cenv cx k a.
+    body_inv tops ctx cenv cx /\
+    FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE
+Proof
+  rpt strip_tac >> PairCases_on `k` >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >>
+  gvs[get_tenv_def] >>
+  drule log_type_env_module_exists >> strip_tac >>
+  gvs[body_inv_def, get_module_code_def] >> metis_tac[]
+QED
+
+Theorem body_main_type_env_submap:
+  !cx tops. get_module_code cx NONE = SOME tops ==>
+    type_env tops SUBMAP get_tenv cx
+Proof
+  rw[get_module_code_def, get_tenv_def, type_env_def, AllCaseEqs()] >>
+  simp[module_type_env_submap]
+QED
+
+Theorem supported_nested_abi_env[local]:
+  !leaf fuel tops ty.
+    leaf = supported_scalar_type ==>
+    !large removed.
+      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large ==>
+      vyper_to_abi_type (DRESTRICT (type_env tops) (COMPL removed)) ty =
+      vyper_to_abi_type (DRESTRICT large (COMPL removed)) ty
+Proof
+  recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
+  Cases_on `supported_scalar_type ty`
+  >- (Cases_on `ty` >>
+      gvs[supported_scalar_type_def, supported_word_type_def,
+          supported_string_type_def]) >>
+  qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+  Cases_on `ty` >>
+  simp[Once supported_nested_type_def, supported_scalar_type_def,
+       supported_word_type_def, supported_string_type_def] >> strip_tac
+  >~ [`FLOOKUP _ p`]
+  >- (Cases_on `supported_struct_fields tops p` >> gvs[] >>
+      rename1 `supported_struct_fields tops p = SOME fields` >>
+      drule supported_struct_fields_type_env >> strip_tac >>
+      `FLOOKUP large p = SOME (StructArgs fields)` by
+        metis_tac[FLOOKUP_SUBMAP] >>
+      Cases_on `p IN removed` >>
+      simp[FLOOKUP_DRESTRICT] >>
+      simp[DRESTRICT_DOMSUB, vyper_to_abi_types_MAP] >>
+      `COMPL removed DELETE p = COMPL (p INSERT removed)` by
+        (simp[EXTENSION] >> metis_tac[]) >>
+      asm_rewrite_tac[] >> irule MAP_CONG >>
+      gvs[EVERY_MEM, combinTheory.o_DEF, MEM_MAP, PULL_EXISTS] >>
+      metis_tac[])
+  >~ [`vyper_to_abi_types _ tys`]
+  >- (gvs[vyper_to_abi_types_MAP, EVERY_MEM] >>
+      irule MAP_CONG >> simp[] >> metis_tac[]) >>
+  Cases_on `b` >> gvs[] >> metis_tac[]
+QED
+
+Theorem supported_nested_evaluated_assignable[local]:
+  !leaf fuel tops ty.
+    leaf = supported_scalar_type ==>
+    !large removed tv.
+      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
+      evaluate_type (DRESTRICT large (COMPL removed)) ty = SOME tv ==>
+      assignable_type (DRESTRICT large (COMPL removed)) ty
+Proof
+  recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
+  Cases_on `supported_scalar_type ty`
+  >- (irule supported_scalar_type_assignable >>
+      simp[well_formed_type_def]) >>
+  qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+  Cases_on `ty` >>
+  simp[Once supported_nested_type_def, supported_scalar_type_def,
+       supported_word_type_def, supported_string_type_def] >> strip_tac
+  >~ [`assignable_type _ (TupleT tys)`]
+  >- (`well_formed_type (DRESTRICT large (COMPL removed)) (TupleT tys)` by
+        simp[well_formed_type_def] >>
+      simp[assignable_type_def, GSYM NULL_EQ] >>
+      gvs[vyperValueTheory.evaluate_type_def,
+          vyperValueTheory.evaluate_types_OPT_MMAP, AllCaseEqs()] >>
+      `EVERY IS_SOME (MAP (evaluate_type (DRESTRICT large (COMPL removed))) tys)` by
+        (simp[GSYM IS_SOME_OPT_MMAP] >>
+         Cases_on `OPT_MMAP (evaluate_type (DRESTRICT large (COMPL removed))) tys` >>
+         gvs[]) >>
+      gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, optionTheory.IS_SOME_EXISTS] >> metis_tac[])
+  >~ [`assignable_type _ (ArrayT elem bd)`]
+  >- (`well_formed_type (DRESTRICT large (COMPL removed)) (ArrayT elem bd)` by
+        simp[well_formed_type_def] >>
+      simp[assignable_type_def] >> Cases_on `bd` >>
+      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  rename1 `supported_struct_fields tops p = SOME fields` >>
+  drule supported_struct_fields_type_env >> strip_tac >>
+  `FLOOKUP large p = SOME (StructArgs fields)` by metis_tac[FLOOKUP_SUBMAP] >>
+  `well_formed_type (DRESTRICT large (COMPL removed)) (StructT p)` by
+    simp[well_formed_type_def] >>
+  Cases_on `p IN removed` >>
+  gvs[vyperValueTheory.evaluate_type_def, FLOOKUP_DRESTRICT] >>
+  simp[assignable_type_def, FLOOKUP_DRESTRICT, GSYM NULL_EQ] >>
+  gvs[DRESTRICT_DOMSUB, vyperValueTheory.evaluate_types_OPT_MMAP, AllCaseEqs()] >>
+  `COMPL removed DELETE p = COMPL (p INSERT removed)` by
+    (simp[EXTENSION] >> metis_tac[]) >>
+  gvs[] >>
+  `EVERY IS_SOME
+     (MAP (evaluate_type (DRESTRICT large (COMPL (p INSERT removed))))
+          (MAP SND fields))` by
+    (simp[GSYM IS_SOME_OPT_MMAP] >>
+     Cases_on `OPT_MMAP (evaluate_type (DRESTRICT large (COMPL (p INSERT removed))))
+                  (MAP SND fields)` >> gvs[]) >>
+  gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, combinTheory.o_DEF,
+      optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+
+Theorem supported_place_evaluated_assignable:
+  !tops tenv ty tv.
+    supported_place_type tops ty /\ type_env tops SUBMAP tenv /\
+    evaluate_type tenv ty = SOME tv ==>
+    assignable_type tenv ty
+Proof
+  rpt strip_tac >>
+  qspecl_then [`supported_scalar_type`, `LENGTH tops`, `tops`, `ty`]
+    mp_tac supported_nested_evaluated_assignable >> simp[] >>
+  disch_then (qspecl_then [`tenv`, `{}`, `tv`] mp_tac) >>
+  gvs[supported_place_type_def, DRESTRICT_UNIV]
+QED
+
+Theorem supported_place_abi_env:
+  !tops cx ty.
+    get_module_code cx NONE = SOME tops /\ supported_place_type tops ty ==>
+    vyper_to_abi_type (type_env tops) ty = vyper_to_abi_type (get_tenv cx) ty
+Proof
+  rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>
+  qspecl_then [`supported_scalar_type`, `LENGTH tops`, `tops`, `ty`]
+    mp_tac supported_nested_abi_env >>
+  simp[supported_place_type_def] >>
+  disch_then (qspecl_then [`get_tenv cx`, `{}`] mp_tac) >>
+  gvs[supported_place_type_def, DRESTRICT_UNIV]
+QED
+
+Theorem supported_place_abi_types_env[local]:
+  !tys tops cx.
+    get_module_code cx NONE = SOME tops /\ EVERY (supported_place_type tops) tys ==>
+    vyper_to_abi_types (type_env tops) tys = vyper_to_abi_types (get_tenv cx) tys
+Proof
+  Induct >> simp[] >> metis_tac[supported_place_abi_env]
+QED
 
 Theorem supported_event_fields_some[local]:
   !tops id fields.
@@ -92,6 +282,43 @@ QED
 (* ===== The arguments ===== *)
 
 (* The argument's explicit body-safety facts supply the call preconditions. *)
+Theorem body_log_aggregate_metadata:
+  !tops ctx cenv cx id fields.
+    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
+    ?h. cenv.ce_event_info (nsid_to_string id) =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
+        EVERY (\f. if SND f then supported_scalar_type (SND (FST f))
+                    else supported_place_type tops (SND (FST f))) fields
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule supported_event_fields_some >> strip_tac >> gvs[] >>
+  `EVERY (\f. if SND f then supported_scalar_type (SND (FST f))
+              else supported_place_type tops (SND (FST f))) fields /\
+   LENGTH (FILTER I (MAP SND fields)) <= 3` by
+    (gvs[body_inv_def, supported_program_def,
+         supported_declaration_headers_def, EVERY_MEM] >>
+     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _` drule >>
+     simp[supported_declaration_header_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+     metis_tac[]) >>
+  `EVERY (supported_place_type tops) (MAP (SND o FST) fields)` by
+    (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, combinTheory.o_DEF] >>
+     rpt strip_tac >>
+     qpat_x_assum `!a b c. MEM ((a,b),c) fields ==> _` drule >>
+     Cases_on `p_2'` >> simp[] >>
+     simp[supported_place_type_def, Once supported_nested_type_def]) >>
+  `vyper_to_abi_types (type_env tops) (MAP (SND o FST) fields) =
+   vyper_to_abi_types (get_tenv cx) (MAP (SND o FST) fields)` by
+    (irule supported_place_abi_types_env >> gvs[body_inv_def]) >>
+  `event_decl_unique name tops` by
+    gvs[body_inv_def, supported_program_def,
+        supported_declaration_names_def, event_names_unique] >>
+  gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
+      lookup_event_metadata_def, get_module_code_def, AllCaseEqs(), event_hash_def]
+QED
+
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
     body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
@@ -187,4 +414,162 @@ Proof
   irule lowered_value_type_bytestring_iff >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
   qexists_tac `env` >> simp[]
+QED
+
+Theorem body_log_assignable_abi_plan:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  assignable_type (get_tenv cx) ty ==>
+  abi_enc_plan (get_tenv cx) ty
+    (type_to_abi_enc_info cenv.ce_struct_fields cenv ty)
+Proof
+  strip_tac >>
+  `!k a. FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE` by
+    metis_tac[body_log_runtime_struct_namespace] >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    gvs[expr_sim_inv_def] >>
+  irule type_to_abi_enc_info_plan >> simp[] >>
+  qexists_tac `get_tenv cx` >> simp[] >>
+  metis_tac[expr_sim_inv_memory_size]
+QED
+
+Theorem body_log_actual_tuple_abi_plan:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  tys <> [] /\ EVERY (supported_place_type tops) tys /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME tv ==>
+  abi_enc_plan (get_tenv cx) (TupleT tys)
+    (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys))
+Proof
+  strip_tac >> irule body_log_assignable_abi_plan >>
+  reverse conj_tac >- metis_tac[] >>
+  `type_env tops SUBMAP get_tenv cx` by
+    (irule body_main_type_env_submap >> gvs[body_inv_def]) >>
+  `well_formed_type (get_tenv cx) (TupleT tys)` by
+    simp[well_formed_type_def] >>
+  simp[assignable_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def,
+      vyperValueTheory.evaluate_types_OPT_MMAP, AllCaseEqs()] >>
+  `EVERY IS_SOME (MAP (evaluate_type (get_tenv cx)) tys)` by
+    (simp[GSYM IS_SOME_OPT_MMAP] >>
+     Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) tys` >> gvs[]) >>
+  gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[supported_place_evaluated_assignable]
+QED
+
+Theorem log_compatible_evaluated_widening:
+  !dty lty tenv ltv dtv.
+    event_arg_compatible dty lty /\
+    evaluate_type tenv lty = SOME ltv /\
+    evaluate_type tenv dty = SOME dtv ==>
+    type_widens_to tenv lty dty
+Proof
+  simp[event_arg_compatible_alias_def, type_widens_to_def,
+       well_formed_type_def]
+QED
+
+Theorem log_compatible_aggregate_source:
+  !dty lty.
+    event_arg_compatible dty lty /\
+    ~is_word_type dty /\ ~is_bytestring_type dty ==>
+    ~is_word_type lty /\ ~is_bytestring_type lty
+Proof
+  simp[event_arg_compatible_alias_def] >>
+  metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type,
+            memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]
+QED
+
+Theorem log_compatible_declared_value:
+  !dty lty tenv ltv dtv v.
+    event_arg_compatible dty lty /\
+    evaluate_type tenv lty = SOME ltv /\
+    evaluate_type tenv dty = SOME dtv /\ value_has_type ltv v ==>
+    value_has_type dtv v /\ val_wf dtv v
+Proof
+  rpt strip_tac >>
+  `type_widens_to tenv lty dty` by
+    metis_tac[log_compatible_evaluated_widening] >>
+  drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+  strip_tac >> gvs[] >>
+  metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]
+QED
+
+Theorem log_compatible_bounded_evaluation:
+  (!lty dty cenv cx env es ltv.
+    expr_sim_inv cenv cx env es /\ arg_type_fits lty dty /\
+    evaluate_type (get_tenv cx) lty = SOME ltv /\
+    type_memory_bytes cenv dty < 2 ** 64 ==>
+    IS_SOME (evaluate_type (get_tenv cx) dty)) /\
+  (!ltys dtys cenv cx env es ltvs.
+    expr_sim_inv cenv cx env es /\ arg_types_fit ltys dtys /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) ltys = SOME ltvs /\
+    SUM (MAP (type_memory_bytes cenv) dtys) < 2 ** 64 ==>
+    IS_SOME (OPT_MMAP (evaluate_type (get_tenv cx)) dtys))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, evaluate_type_def, type_memory_bytes_def,
+     AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  gvs[type_slot_size_def, vfmConstantsTheory.word_size_def,
+      wordsTheory.dimword_def, evaluate_type_def, evaluate_types_OPT_MMAP, ETA_THM] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV)
+  >~ [`m < 115792089237316195423570985008687907853269984665640564039457584007913129639936`]
+  >- (qspec_then `m` mp_tac le_word_size_mul >>
+      simp[vfmConstantsTheory.word_size_def] >> decide_tac)
+  >~ [`m < 115792089237316195423570985008687907853269984665640564039457584007913129639936`]
+  >- (qspec_then `m` mp_tac le_word_size_mul >>
+      simp[vfmConstantsTheory.word_size_def] >> decide_tac)
+  >~ [`ArrayTV _ (Dynamic m)`]
+  >- (`0 < m` by decide_tac >>
+      `type_memory_bytes cenv dty <= m * type_memory_bytes cenv dty` by
+        (Cases_on `m` >> gvs[MULT_CLAUSES]) >>
+      `type_memory_bytes cenv dty < 18446744073709551616` by decide_tac >>
+      `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tv`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `0 < type_slot_size dtv` by
+        metis_tac[cj 1 arg_type_fits_zero_slots, NOT_ZERO_LT_ZERO] >>
+      `type_memory_bytes cenv dty = 32 * type_slot_size dtv` by
+        metis_tac[expr_sim_inv_memory_size, cj 1 type_memory_size_slots] >>
+      `32 * (m * type_slot_size dtv) + 32 < 18446744073709551616` by
+        (qpat_x_assum `m * type_memory_bytes cenv dty + 32 < _` mp_tac >>
+         qpat_assum `type_memory_bytes cenv dty = _`
+           (fn th => simp_tac std_ss
+             [th, MULT_ASSOC, Q.SPECL [`m`, `32`] MULT_COMM])) >>
+      simp[] >> decide_tac)
+  >~ [`ArrayTV _ (Fixed m)`]
+  >- (`type_memory_bytes cenv dty <= m * type_memory_bytes cenv dty` by
+        (Cases_on `m` >> gvs[MULT_CLAUSES]) >>
+      `type_memory_bytes cenv dty < 18446744073709551616` by decide_tac >>
+      `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tv`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `0 < type_slot_size dtv` by
+        metis_tac[cj 1 arg_type_fits_zero_slots, NOT_ZERO_LT_ZERO] >>
+      `type_memory_bytes cenv dty = 32 * type_slot_size dtv` by
+        metis_tac[expr_sim_inv_memory_size, cj 1 type_memory_size_slots] >>
+      `32 * (m * type_slot_size dtv) < 18446744073709551616` by
+        (qpat_x_assum `m * type_memory_bytes cenv dty < _` mp_tac >>
+         qpat_assum `type_memory_bytes cenv dty = _`
+           (fn th => simp_tac std_ss
+             [th, MULT_ASSOC, Q.SPECL [`m`, `32`] MULT_COMM])) >>
+      simp[] >> decide_tac)
+  >~ [`TupleTV _`]
+  >- (`?dtvs. OPT_MMAP (evaluate_type (get_tenv cx)) dtys = SOME dtvs` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tvs`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `SUM (MAP (type_memory_bytes cenv) dtys) = type_memory_size_list dtvs` by
+        (irule tuple_memory_bytes_size >> qexists_tac `get_tenv cx` >>
+         simp[] >> metis_tac[expr_sim_inv_memory_size]) >>
+      `type_slot_size_list dtvs <=
+         115792089237316195423570985008687907853269984665640564039457584007913129639936` by
+        (gvs[cj 2 type_memory_size_slots] >> decide_tac) >>
+      simp[]) >>
+  `type_memory_bytes cenv dty < 18446744073709551616 /\
+   SUM (MAP (type_memory_bytes cenv) dtys) < 18446744073709551616` by
+    decide_tac >>
+  `IS_SOME (evaluate_type (get_tenv cx) dty) /\
+   IS_SOME (OPT_MMAP (evaluate_type (get_tenv cx)) dtys)` by
+    (conj_tac >> metis_tac[]) >>
+  Cases_on `evaluate_type (get_tenv cx) dty` >>
+  Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) dtys` >> gvs[]
+
 QED
