@@ -1731,6 +1731,20 @@ Proof
   simp[REVERSE_APPEND, TAKE_APPEND1, TAKE_LENGTH_TOO_LONG]
 QED
 
+Theorem codecopy_source_flow_mode:
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] ==>
+  (src = Label "runtime_begin" \/ (?x. src = Var x /\ code_end_var fn x) \/
+   (allow_own /\ ~is_label_operand src /\
+    !x. src = Var x ==> ~code_end_var fn x /\ ~retpc_var fn x)) /\
+  (!x. dst = Var x \/ sz = Var x ==> ~code_end_var fn x)
+Proof
+  Cases_on `allow_own` >>
+  simp[label_flow_ok_def, codegenSymOwnRelTheory.label_flow_own_ok_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> simp[MEM] >> metis_tac[]
+QED
+
 Theorem codecopy_source_flow:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = CODECOPY /\
@@ -1738,8 +1752,27 @@ Theorem codecopy_source_flow:
   (src = Label "runtime_begin" \/ ?x. src = Var x /\ code_end_var fn x) /\
   (!x. dst = Var x \/ sz = Var x ==> ~code_end_var fn x)
 Proof
-  simp[label_flow_ok_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> simp[MEM] >> metis_tac[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] codecopy_source_flow_mode) >> simp[] >> metis_tac[]
+QED
+
+Theorem codecopy_source_numeric_kind_mode:
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
+  label_positions_ok inst /\ (op = dst \/ op = sz) ==>
+  (op_kind_ok fn ret op sv <=> ?w. sv = Val w)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all codecopy_source_flow_mode >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  match_mp_tac op_kind_ok_numeric >> conj_tac
+  >- (Cases_on `src` >>
+      gvs[unitShapeDefsTheory.label_positions_ok_def, MEM,
+          stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]) >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (irule frameViewFactsTheory.ordinary_operand_not_retpc >> simp[] >>
+      qexists `inst` >> fs[MEM] >> metis_tac[]) >> metis_tac[]
 QED
 
 Theorem codecopy_source_numeric_kind:
@@ -1749,16 +1782,21 @@ Theorem codecopy_source_numeric_kind:
   (op = dst \/ op = sz) ==>
   (op_kind_ok fn ret op sv <=> ?w. sv = Val w)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all codecopy_source_flow >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  match_mp_tac op_kind_ok_numeric >> conj_tac
-  >- (Cases_on `src` >>
-      gvs[unitShapeDefsTheory.label_positions_ok_def, MEM,
-          stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]) >>
-  gen_tac >> disch_tac >> conj_tac
-  >- (irule frameViewFactsTheory.ordinary_operand_not_retpc >> simp[] >> qexists `inst` >> fs[MEM] >> metis_tac[]) >>
-  metis_tac[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] codecopy_source_numeric_kind_mode) >> simp[]
+QED
+
+Theorem codecopy_source_kind_mode:
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
+  retpc_shape_ok fn /\ op_kind_ok fn ret src sv ==>
+  (?d. sv = Lab "code_end" d) \/ sv = Lab "runtime_begin" 0 \/
+  (allow_own /\ ?w. sv = Val w)
+Proof
+  strip_tac >> drule_all codecopy_source_flow_mode >> strip_tac >>
+  gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def,
+      code_end_var_not_retpc_var, stackPlanTypesTheory.is_label_operand_def] >>
+  Cases_on `src` >> gvs[stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
 QED
 
 Theorem codecopy_source_label_kind:
@@ -1768,9 +1806,27 @@ Theorem codecopy_source_label_kind:
   op_kind_ok fn ret src sv ==>
   (?d. sv = Lab "code_end" d) \/ sv = Lab "runtime_begin" 0
 Proof
-  strip_tac >> drule_all codecopy_source_flow >> strip_tac >>
-  gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >>
-  metis_tac[code_end_var_not_retpc_var]
+  mp_tac (Q.INST [`allow_own` |-> `F`] codecopy_source_kind_mode) >> simp[]
+QED
+
+Theorem sym_codecopy_prepared_layout_mode:
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
+  label_positions_ok inst /\ retpc_shape_ok fn /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ [sz; src; dst] ==>
+  ?dw sw nw tail. ss.sym_stack = Val dw :: sw :: Val nw :: tail /\
+    ((?d. sw = Lab "code_end" d) \/ sw = Lab "runtime_begin" 0 \/
+     (allow_own /\ ?w. sw = Val w))
+Proof
+  strip_tac >>
+  `!sv. (op_kind_ok fn ret dst sv <=> ?w. sv = Val w) /\
+        (op_kind_ok fn ret sz sv <=> ?w. sv = Val w)` by
+    (gen_tac >> conj_tac >> irule codecopy_source_numeric_kind_mode >> metis_tac[]) >>
+  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1] >>
+  drule_all codecopy_source_kind_mode >> metis_tac[]
 QED
 
 Theorem sym_codecopy_prepared_layout:
@@ -1782,12 +1838,8 @@ Theorem sym_codecopy_prepared_layout:
   ?dw sw nw tail. ss.sym_stack = Val dw :: sw :: Val nw :: tail /\
     ((?d. sw = Lab "code_end" d) \/ sw = Lab "runtime_begin" 0)
 Proof
-  strip_tac >>
-  `!sv. (op_kind_ok fn ret dst sv <=> ?w. sv = Val w) /\
-        (op_kind_ok fn ret sz sv <=> ?w. sv = Val w)` by
-    (gen_tac >> conj_tac >> irule codecopy_source_numeric_kind >> metis_tac[]) >>
-  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1] >>
-  drule_all codecopy_source_label_kind >> metis_tac[]
+  mp_tac (Q.INST [`allow_own` |-> `F`] sym_codecopy_prepared_layout_mode) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem asm_sym_codecopy_values:
@@ -1811,6 +1863,70 @@ Theorem codecopy_source_range:
 Proof
   Cases_on `eval_operand src vs` >>
   simp[source_memory_write_ranges_def, sized_source_write_range_def]
+QED
+
+Theorem sym_codecopy_prepared_safe_core:
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; src; sz] /\
+  opaque_use_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  fn_shape_ok fn /\ MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel vlo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ [sz; src; dst] /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) vlo op) /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  sym_data_label p env "code_end" /\
+  (MEM (Label "runtime_begin") inst.inst_operands ==>
+    sym_data_label p env "runtime_begin") /\
+  (!x w off. src = Var x /\ code_end_var fn x /\
+    eval_operand src vs = SOME w /\ FLOOKUP slo "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2) ==>
+  ?dw sw nw tail. ss.sym_stack = Val dw :: sw :: Val nw :: tail /\
+    ((?l d. sw = Lab l d /\ sym_data_label p env l /\ sym_delta_ok d) \/
+     (allow_own /\ ?w. sw = Val w)) /\
+    (!b. b IN FDOM ss.sym_mem_labels ==>
+      ~in_mem_range (w2n dw) (w2n nw) b)
+Proof
+  strip_tac >>
+  `label_positions_ok inst /\ retpc_shape_ok fn` by
+    metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
+              unitShapeDefsTheory.inst_shape_ok_def] >>
+  drule_all sym_codecopy_prepared_layout_mode >> strip_tac >>
+  rename1 `ss.sym_stack = Val dw :: sw :: Val nw :: tail` >>
+  `eval_operands [dst; src; sz] vs = SOME (TAKE 3 cs.as_stack)` by
+    (mp_tac (Q.INST [`selected` |-> `[sz; src; dst]`, `st` |-> `cs`,
+                      `lo` |-> `vlo`] ordinary_prepared_source_evaluation) >>
+     simp[] >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
+  `eval_operand dst vs = SOME dw /\ eval_operand sz vs = SOME nw /\
+   sval_conc slo sw = eval_operand src vs /\ IS_SOME (eval_operand src vs)` by
+    gvs[LIST_REL_CONS1, asmSymBridgeTheory.sval_conc_def,
+        venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  `!b. b IN FDOM ss.sym_mem_labels ==>
+    ~in_mem_range (w2n dw) (w2n nw) b` by
+    (rpt strip_tac >>
+     `MEM (w2n dw,w2n nw) (source_memory_write_ranges inst vs)` by
+       (irule codecopy_source_range >> metis_tac[]) >>
+     metis_tac[source_write_ranges_no_labels]) >>
+  gvs[] >> drule_all codecopy_source_flow_mode >> strip_tac >>
+  Cases_on `src` >>
+  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
+      op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def,
+      stackPlanTypesTheory.is_label_operand_def] >>
+  gvs[code_end_var_not_retpc_var] >>
+  simp[sym_delta_ok_def, wordsTheory.dimword_def] >>
+  fs[asmSymBridgeTheory.sval_conc_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP slo "code_end"` >> gvs[] >>
+  rename1 `FLOOKUP slo "code_end" = SOME off` >>
+  qpat_x_assum `!w. eval_operand (Var x) vs = SOME w ==> _`
+    (qspec_then `n2w (d + off)` mp_tac) >>
+  impl_tac >- metis_tac[] >>
+  simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_COMM,
+       wordsTheory.WORD_ADD_SUB, arithmeticTheory.LESS_MOD,
+       wordsTheory.dimword_def]
 QED
 
 Theorem sym_codecopy_prepared_safe:
@@ -1838,40 +1954,12 @@ Theorem sym_codecopy_prepared_safe:
       ~in_mem_range (w2n dw) (w2n nw) b)
 Proof
   strip_tac >>
-  `label_positions_ok inst /\ retpc_shape_ok fn` by
-    metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
-              unitShapeDefsTheory.inst_shape_ok_def] >>
-  drule_all sym_codecopy_prepared_layout >> strip_tac >>
-  rename1 `ss.sym_stack = Val dw :: sw :: Val nw :: tail` >>
-  `eval_operands [dst; src; sz] vs = SOME (TAKE 3 cs.as_stack)` by
-    (mp_tac (Q.INST [`selected` |-> `[sz; src; dst]`, `st` |-> `cs`]
-      ordinary_prepared_source_evaluation) >> simp[] >>
-     disch_then irule >> gvs[MEM] >> metis_tac[]) >>
-  drule_all asm_sym_codecopy_values >> strip_tac >>
-  `sval_conc (SND (compute_label_offsets p)) sw = eval_operand src vs` by
-    gvs[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_CONS1,
-        venomStateTheory.eval_operands_def, AllCaseEqs()] >>
-  `!b. b IN FDOM ss.sym_mem_labels ==>
-    ~in_mem_range (w2n dw) (w2n nw) b` by
-    (rpt strip_tac >>
-     `MEM (w2n dw,w2n nw) (source_memory_write_ranges inst vs)` by
-       (irule codecopy_source_range >> metis_tac[]) >>
-     metis_tac[source_write_ranges_no_labels]) >>
-  gvs[] >> drule_all codecopy_source_flow >> strip_tac >>
-  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
-      op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >>
-  gvs[code_end_var_not_retpc_var] >>
-  simp[sym_delta_ok_def, wordsTheory.dimword_def] >>
-  fs[asmSymBridgeTheory.sval_conc_def, AllCaseEqs()] >>
-  Cases_on `FLOOKUP (SND (compute_label_offsets p)) "code_end"` >- gvs[] >>
-  rename1 `FLOOKUP (SND (compute_label_offsets p)) "code_end" = SOME off` >>
-  gvs[] >>
-  qpat_x_assum `!w. eval_operand (Var x) vs = SOME w ==> _`
-    (qspec_then `n2w (d + off)` mp_tac) >>
-  impl_tac >- metis_tac[] >>
-  simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_COMM,
-       wordsTheory.WORD_ADD_SUB, arithmeticTheory.LESS_MOD,
-       wordsTheory.dimword_def]
+  mp_tac (Q.INST [`allow_own` |-> `F`,
+                  `slo` |-> `SND (compute_label_offsets p)`,
+                  `vlo` |-> `lo`] sym_codecopy_prepared_safe_core) >>
+  simp[] >> impl_tac
+  >- (gvs[asmSymBridgeTheory.asm_sym_rel_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem sym_codecopy_data_replay:
