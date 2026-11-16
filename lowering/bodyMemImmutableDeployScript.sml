@@ -116,7 +116,7 @@ Resume body_assign_immutable_deploy_mem[outcome]:
   `!region x. cenv.ce_imm_alloca = SOME region /\ region = Var x ==>
     not_fresh_at su x` by metis_tac[local_ptrs_reserved_imm_base] >>
   simp[Once evaluate_def] >>
-  qmatch_goalsub_abbrev_tac `gas_outcome T _ _ _ _ Q R` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome T _ _ _ _ _ _ Q R` >>
   mp_tac (Q.INST [`ce` |-> `cenv`, `env` |-> `env`, `tops` |-> `tops`,
     `ity` |-> `ity`, `dtv` |-> `dtv`, `off` |-> `off`, `vv` |-> `vv`,
     `sm` |-> `sm`, `su` |-> `su`, `op` |-> `op`,
@@ -124,7 +124,8 @@ Resume body_assign_immutable_deploy_mem[outcome]:
     (SPEC_ALL immutable_assign_rhs_outcome)) >>
   impl_tac
   >- (simp[] >> reverse conj_tac
-      >- (rpt strip_tac >> simp[Abbr `R`, stmt_exit_def] >>
+      >- (rpt strip_tac >>
+          fs[Abbr `R`, stmt_exit_def, exprSimDefsTheory.halt_exit_def] >>
           metis_tac[expr_exit_INR_type]) >>
       rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       suspend "suffix") >>
@@ -133,7 +134,10 @@ QED
 
 Resume body_assign_immutable_deploy_mem[suffix]:
   markerLib.RESUME_TAC >> (
-  qmatch_goalsub_abbrev_tac `Q (INL ()) fin _` >>
+  qmatch_goalsub_abbrev_tac `Q _ (INL ()) fin _` >>
+  qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa su s0 ee v op u` by metis_tac[] >>
   `?mods old. ALOOKUP ee.immutables cx.txn.target = SOME mods /\
     FLOOKUP (get_source_immutables cenv.ce_module mods) id = SOME (dtv,old)` by
     metis_tac[immutableDeployAssignSourceFrameTheory.immutable_assign_source_lookup] >>
@@ -147,13 +151,24 @@ Resume body_assign_immutable_deploy_mem[suffix]:
     (INL v,ee)` by simp[bind_def] >>
   mp_tac (Q.INST [`ce` |-> `cenv`, `es` |-> `es with gas_obs := gs`,
     `ers` |-> `es`, `si` |-> `sa`, `s` |-> `u`, `itv` |-> `dtv`,
-    `loc` |-> `vv_location vv`]
-    (SPEC_ALL immutable_assign_value_mem_stmt_post)) >>
+    `loc` |-> `vv_location vv`, `H` |-> `H0`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+      immutable_assign_value_mem_stmt_post))) >>
   impl_tac >- simp[] >> strip_tac >>
   `s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
-  qexists_tac `q` >> simp[] >>
-  mp_tac (Q.INST [`ce` |-> `cenv`, `t` |-> `q`]
-    (SPEC_ALL immutable_assign_mem_entry_post)) >>
+  qexists_tac `q` >> simp[] >> gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa su s0 ee v op u` by metis_tac[] >>
+  `stmt_post H ctx func cx lctx cenv cenv su sb ee u (INL ()) fin q` by
+    (mp_tac (Q.INST [`H0` |-> `H0`, `ce` |-> `cenv`,
+       `sa` |-> `su`, `es` |-> `ee`, `s0` |-> `u`,
+       `ee` |-> `ee`, `u` |-> `u`, `src` |-> `cenv.ce_module`,
+       `id` |-> `id`, `v` |-> `v`]
+       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         immutableAssignComposeTheory.immutable_assign_stmt_post_transport)) >>
+     simp[] >> fs[loweringPostsTheory.expr_post_def]) >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `t` |-> `q`, `H` |-> `H`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+      immutable_assign_mem_entry_post))) >>
   impl_tac >- simp[] >> strip_tac >>
   simp[Abbr `Q`] >> qexists_tac `cenv` >> simp[])
 QED
