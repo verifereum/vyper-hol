@@ -7,6 +7,26 @@ Ancestors
   loweringStateRelDefs ptrDiscipline venomState bodyPtrDefs
   exprLoweringProps venomMemDefs bodyPtrIfExpAllocFrame
 
+Theorem raw_call_tuple_seq_ghost_cursor_unique:
+  !code s G tn G1 tn1 G2 tn2 k.
+    EVERY (\i. ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D1 lo ctx fn PG G tn code s G1 tn1 /\
+    inst_seq_ptr D2 lo ctx fn PG G tn code
+      (s with vs_inst_idx := k) G2 tn2 ==>
+    G1 = G2 /\ tn1 = tn2
+Proof
+  Induct_on `code` >- simp[inst_seq_ptr_def] >>
+  rpt gen_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[instIdxIndepTheory.step_inst_inst_idx_indep,
+      instIdxIndepTheory.exec_result_map_def] >>
+  first_x_assum irule >>
+  qexistsl_tac [`step_prov PG G h v`, `SUC k`,
+    `v with vs_inst_idx := SUC s.vs_inst_idx`, `step_taint h s v tn`] >>
+  simp[]
+QED
+
 Theorem raw_call_tuple_suffix_prepared:
   (!z sa s1 cmp n s2 cap s3 sb x s b G tn lo ctx func PG t.
     emit_op RETURNDATASIZE [] sa = (z,s1) /\
@@ -490,24 +510,271 @@ Resume raw_call_tuple_suffix_prepared[copy_scalar]:
      metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL]) >>
   `eval_operand ok u2 = SOME (if success then 1w else 0w)` by
     (`eval_operand ok u = SOME (if success then 1w else 0w)` by simp[] >>
+     qpat_assum `eval_operand ok u = _` mp_tac >>
+     qpat_assum `!x. not_fresh_at s4 x ==> lookup_var x u2 = _` mp_tac >>
+     qpat_assum `!x. ok = Var x ==> _` mp_tac >>
+     qpat_assum `safe_operand sa ok` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      Cases_on `ok` >> fs[eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
      metis_tac[]) >>
   `op_taint tn1 ok = {}` by
-    (Cases_on `ok` >> fs[ptrDisciplineTheory.op_taint_def,
-      exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+    (qpat_assum `op_taint tn ok = {}` mp_tac >>
+     qpat_assum `safe_operand sa ok` mp_tac >>
+     qpat_assum `!v. not_fresh_at sa v ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     Cases_on `ok` >> fs[ptrDisciplineTheory.op_taint_def,
+       exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+  `!x. ok = Var x ==> x <> out` by metis_tac[] >>
   `op_taint tn2 ok = {}` by
-    (simp[Abbr `tn2`, bodyPtrIfExpAllocSourceTheory.alloca_step_operand_taint]) >>
+    (drule bodyPtrIfExpAllocSourceTheory.alloca_step_operand_taint >>
+     simp[Abbr `tn2`]) >>
+  `emit_void MSTORE [Var out;ok] s5 = ((),s6) /\
+   emit_op ADD [Var out;Lit 32w] s6 = (dst,s7)` by
+    (qpat_assum `buf.buf_operand = Var out` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `32 + (n+31) DIV 32 * 32 = 32*((n+31) DIV 32)+32` by
+    metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.MULT_COMM] >>
+  qpat_assum `32 + (n+31) DIV 32 * 32 = _` (fn eq =>
+    qpat_assum `emit_void MCOPY _ s7 = _`
+      (mk_asm "copy_code" o PURE_ONCE_REWRITE_RULE [GSYM eq])) >>
+  `lookup_var out u2 = SOME (n2w b)` by fs[eval_operand_def] >>
   asm "copy" (fn cp =>
-    qpat_assum `emit_void MSTORE [buf.buf_operand;ok] s5 = _`
+    qpat_assum `emit_void MSTORE [Var out;ok] s5 = _`
       (mp_then (Pat `emit_void MSTORE _ _ = _`) mp_tac cp)) >>
   disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
-  disch_then (drule_at (Pat `emit_void MCOPY _ _ = _`)) >>
+  disch_then (qspecl_then [`ovx`,`n`,`sb`] mp_tac) >>
+  disch_then (fn cp =>
+    asm "copy_code" (mp_then (Pat `emit_void MCOPY _ _ = _`) mp_tac cp)) >>
+  disch_then (fn th => mk_asm "copy_matched" th >> mp_tac th) >>
   disch_then (qspecl_then [`TAKE n s.vs_returndata`,`w2n w`,`b`,`u2`] mp_tac) >>
+  disch_then (qspecl_then [`G2`,`tn2`,`success`] mp_tac) >>
+  disch_then (qspecl_then [`lo`,`ctx`] mp_tac) >>
   simp[arithmeticTheory.MULT_COMM, eval_operand_def, listTheory.LENGTH_TAKE_EQ] >>
-  disch_then drule_all >>
   disch_then (qspecl_then [`func`,`PG`] mp_tac) >>
   disch_then (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac)) >>
-  FAIL_TAC "copy applied"
+  asm_x "length" kall_tac >> asm_x "copy" kall_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s5 sb)` by
+    (qpat_assum `EVERY _ (emitted_insts sa sb)` mp_tac >>
+     qpat_assum `emitted_insts sa sb = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[listTheory.EVERY_APPEND, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `!k D. inst_seq_ptr D lo ctx func PG G2 tn2 (emitted_insts s5 sb)
+      (u2 with vs_inst_idx := k) G3 tn3` by
+    (rpt gen_tac >>
+     asm "copy_matched" (qspecl_then
+       [`TAKE n s.vs_returndata`,`w2n w`,`b`,`u2 with vs_inst_idx := k`] mp_tac) >>
+     disch_then (qspecl_then [`G2`,`tn2`,`success`] mp_tac) >>
+     disch_then (qspecl_then [`lo`,`ctx`] mp_tac) >>
+     simp[arithmeticTheory.MULT_COMM, eval_operand_def, lookup_var_def,
+       ptrDisciplineTheory.allocas_from_def, listTheory.LENGTH_TAKE_EQ,
+       fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+     disch_then (qspecl_then [`func`,`PG`] mp_tac) >>
+     (impl_tac >-
+       (qpat_assum `lookup_var ovx u2 = _` mp_tac >>
+        qpat_assum `lookup_var out u2 = _` mp_tac >>
+        qpat_assum `allocas_from lo u2` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[lookup_var_def, ptrDisciplineTheory.allocas_from_def] >> metis_tac[])) >>
+     disch_then (qx_choose_then `G4` (qx_choose_then `tn4` strip_assume_tac)) >>
+     `G3 = G4 /\ tn3 = tn4` by
+       (qpat_assum `!D. inst_seq_ptr D lo ctx func PG G2 tn2 _ u2 G3 tn3`
+          (qspec_then `D` mp_tac) >>
+        qpat_assum `!D. inst_seq_ptr D lo ctx func PG G2 tn2 _ _ G4 tn4`
+          (qspec_then `D` mp_tac) >>
+        qpat_assum `EVERY _ (emitted_insts s5 sb)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        metis_tac[raw_call_tuple_seq_ghost_cursor_unique]) >>
+     metis_tac[]) >>
+  asm_x "copy_matched" kall_tac >> suspend "copy_frame"
+QED
+
+Resume raw_call_tuple_suffix_prepared[copy_frame]:
+  markerLib.RESUME_TAC >>
+  `sf.cs_next_var <= s5.cs_next_var` by decide_tac >>
+  `!x. not_fresh_at sf x ==>
+     lookup_var x t = lookup_var x u2 /\ FLOOKUP G3 x = FLOOKUP G2 x /\
+     op_taint tn3 (Var x) = op_taint tn2 (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!v. not_fresh_at s5 v ==> _` irule >>
+     irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists_tac `sf` >> simp[]) >>
+  qpat_assum `t with vs_vars := _ = _`
+    (strip_assume_tac o
+     SIMP_RULE (srw_ss()) [venomExecSemanticsTheory.mcopy_def,
+       write_memory_with_expansion_def, mstore_def, LET_THM] o
+     Q.AP_TERM `\v. (v.vs_allocas,v.vs_alloca_next,v.vs_call_ctx,
+       v.vs_accounts,v.vs_transient,v.vs_immutables)`) >>
+  `t.vs_memory = (mcopy (b+32) (w2n w) (32*((n+31) DIV 32)+32)
+       (mstore b (val_to_w256 (BoolV success)) u2)).vs_memory` by
+    (qpat_assum `t with vs_vars := _ = _`
+      (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
+  asm "frame" (fn frame =>
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es u2`
+      (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac frame)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`t`,`G3`,`tn3`] mp_tac) >>
+  disch_then (qspecl_then [`{i | b <= i /\ i < b + (32*((n+31) DIV 32)+64)}`,`dep`] mp_tac) >>
+  (impl_tac >- (simp[IgnAsm `t.vs_memory = _`, IgnAsm `u2.vs_memory = _`,
+     IgnAsm `u.vs_memory = _`, IgnAsm `tn3.t_mem = _`] >>
+    conj_tac >-
+      (gen_tac >> disch_tac >>
+       qpat_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
+       irule EQ_TRANS >>
+       qexists_tac `mem_bytes_at i 1 (mstore b (val_to_w256 (BoolV success)) u2).vs_memory` >>
+       conj_tac >-
+         (irule valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint >> decide_tac) >>
+       irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+    conj_tac >-
+      (qpat_assum `tn3.t_mem = _` (fn th => pure_rewrite_tac[th]) >>
+       simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,
+         pred_setTheory.GSPECIFICATION] >> rpt strip_tac >>
+       (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+    conj_tac >- metis_tac[] >>
+    conj_tac >-
+      (rpt strip_tac >>
+       `FLOOKUP u2.vs_allocas aid = SOME (a,m)` by
+         metis_tac[loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
+    rpt strip_tac >>
+    `local_region cenv es.scopes u name a m` by
+      (irule exprSimPropsTheory.local_region_frame_fwd >>
+       qexistsl_tac [`s0`,`sf`,`es0.scopes`] >>
+       fs[loweringPostsTheory.wb_frame_def]) >>
+    `local_region cenv es.scopes u2 name a m` by
+      (irule exprSimPropsTheory.local_region_frame_fwd >>
+       qexistsl_tac [`u`,`s4`,`es.scopes`] >> simp[]) >>
+    metis_tac[])) >>
+  strip_tac >> suspend "package"
+QED
+
+Resume raw_call_tuple_suffix_prepared[package]:
+  markerLib.RESUME_TAC >> (
+  asm_x "separation" kall_tac >> asm_x "frame" kall_tac >>
+  `lookup_var out t = SOME (n2w b)` by
+    (qpat_assum `!v. not_fresh_at s5 v ==> _` (qspec_then `out` mp_tac) >>
+     fs[exprSafeOperandTheory.safe_operand_def]) >>
+  qexistsl_tac [`G3`,`tn3`] >>
+  conj_tac >- suspend "origin" >>
+  conj_tac >- simp[] >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  conj_tac >- suspend "ptr_value" >>
+  conj_tac >-
+    (qpat_assum `ptr_covers G3 tn3 out t _`
+       (strip_assume_tac o PURE_REWRITE_RULE [bodyPtrDefsTheory.ptr_covers_def]) >>
+     rename1 `FLOOKUP G3 out = SOME (bb0,cap0)` >>
+     simp[bodyPtrDefsTheory.ptr_buf_ok_def, eval_operand_def] >> strip_tac >>
+     qexistsl_tac [`bb0`,`cap0`] >> simp[] >> gvs[] >> decide_tac) >>
+  conj_tac >- simp[] >>
+  simp[ghostPcTransportPtrTheory.ghost_inv_at_inst_idx] >> metis_tac[])
+QED
+
+Resume raw_call_tuple_suffix_prepared[ptr_value]:
+  markerLib.RESUME_TAC >> (
+  qpat_assum `ptr_covers G3 tn3 out t _`
+    (strip_assume_tac o PURE_REWRITE_RULE [bodyPtrDefsTheory.ptr_covers_def]) >>
+  qpat_x_assum `tn3.t_mem = _` kall_tac >>
+  qpat_x_assum `t.vs_memory = _` kall_tac >>
+  `b < dimword (:256)` by decide_tac >>
+  `w2n (n2w b : bytes32) = b` by simp[wordsTheory.w2n_n2w] >>
+  simp[bodyPtrDefsTheory.ptr_vv_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def,
+    contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+    vyperStateTheory.return_def, eval_operand_def] >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  simp[exprSimPropsTheory.val_store_size_def,
+    valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def] >>
+  gvs[] >> decide_tac)
+QED
+
+Resume raw_call_tuple_suffix_prepared[origin]:
+  markerLib.RESUME_TAC >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1
+      (mk_inst s4.cs_next_id ALLOCA
+        [Lit (n2w (32*((n+31) DIV 32)+64))] [out])
+      (u with vs_inst_idx := k)` by
+    (qpat_assum `allocas_from lo u` mp_tac >>
+     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     fs[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+       taint_ok_def, op_taint_def, ptrDisciplineTheory.allocas_from_def,
+       venomInstTheory.mk_inst_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     pure_rewrite_tac[venomInstTheory.instruction_accessors,
+       venomInstTheory.instruction_accfupds, combinTheory.K_THM,
+       venomInstTheory.opcode_case_def] >>
+     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs(), update_var_def] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa s4)` by
+    (qpat_assum `EVERY _ (emitted_insts sa sb)` mp_tac >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => pure_once_rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[listTheory.EVERY_APPEND, listTheory.EVERY_MEM] >>
+     metis_tac[]) >>
+  `!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G3 tn3` by
+    (gen_tac >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule instSeqComposePtrTheory.inst_seq_ptr_append_ok >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`G1`,`u`,`tn1`] >> simp[] >>
+     qpat_assum `emitted_insts s4 s5 = _` (fn th => pure_once_rewrite_tac[th]) >>
+     simp[inst_seq_ptr_def, instIdxIndepTheory.step_inst_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def, venomInstTheory.mk_inst_def,
+       venomInstTheory.is_terminator_def, Abbr `G2`, Abbr `tn2`] >-
+       (qpat_assum `!k D. inst_seq_ptr D lo ctx func PG _ _ _ _ G3 tn3`
+          (qspecl_then [`SUC (LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa s4))`,`D`] mp_tac) >>
+        metis_tac[venomInstTheory.mk_inst_def])) >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    (qpat_assum `sa.cs_current_insts <<= sb.cs_current_insts` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exprLoweringPropsTheory.prefix_drop_equiv, emitted_insts_def]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `fn_has_code sa sb func` mp_tac >>
+     qpat_assum `sb.cs_current_insts = sa.cs_current_insts ++ _` mp_tac >>
+     qpat_assum `sb.cs_current_bb = sa.cs_current_bb` mp_tac >>
+     qpat_assum `s.vs_current_bb = sa.cs_current_bb` mp_tac >>
+     qpat_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[fragExecTheory.fn_has_code_def, exprLoweringPropsTheory.prefix_drop_equiv] >>
+     rpt strip_tac >> qexists_tac `bb` >> simp[] >>
+     qpat_x_assum `bb.bb_instructions = _`
+       (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+       rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_DROP_T] >>
+     simp[arithmeticTheory.ADD_COMM]) >>
+  strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (qpat_assum `emit_op RETURNDATASIZE [] sa = _` mp_tac >>
+     qpat_assum `emit_op LT _ s1 = _` mp_tac >>
+     qpat_assum `compile_select _ _ _ s2 = _` mp_tac >>
+     qpat_assum `emit_void MSTORE _ s3 = _` mp_tac >>
+     qpat_assum `compile_alloc_buffer _ s4 = _` mp_tac >>
+     qpat_assum `emit_void MSTORE _ s5 = _` mp_tac >>
+     qpat_assum `emit_op ADD _ s6 = _` mp_tac >>
+     qpat_assum `emit_void MCOPY _ s7 = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[builtinSimpleTheory.compile_select_def, contextTheory.compile_alloc_buffer_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_return_def, compileEnvTheory.fresh_var_def,
+       compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
+     rpt strip_tac >>
+     map_every (fn pat => qpat_x_assum pat (fn th =>
+       rewrite_tac[GSYM th]) >> simp[])
+       [`_ = sb`, `_ = s7`, `_ = s6`, `_ = s5`, `_ = s4`,
+        `_ = s3`, `_ = s2`, `_ = s1`] >>
+     simp[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (qpat_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts` mp_tac >>
+     qpat_assum `sb.cs_current_insts = sa.cs_current_insts ++ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  qpat_assum `!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G3 tn3`
+    (qspec_then `D` assume_tac) >>
+  drule_all fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path >>
+  simp[]
 QED
 
 Finalise raw_call_tuple_suffix_prepared
