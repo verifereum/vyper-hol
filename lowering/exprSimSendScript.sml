@@ -156,15 +156,12 @@ Theorem eval_send_value:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, update_pending_deletions_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       lift_option_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >>
-  gvs[CaseEq "bool", CaseEq "option", CaseEq "prod", CaseEq "sum", CaseEq "list"]
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
