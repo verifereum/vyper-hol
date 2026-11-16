@@ -644,6 +644,33 @@ Proof
             asmSymBridgeTheory.asm_sym_rel_def]
 QED
 
+Theorem sym_single_step_replay_safe_mode_conditional:
+  (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
+  (!cs ss cs'. R cs ss /\ cs.as_pc < LENGTH p /\
+    asm_step lo (build_offset_to_pc p) (EL cs.as_pc p) cs = AsmOK cs' /\
+    (!msg. (if allow_own then sym_step_own p env own (EL cs.as_pc p) ss
+            else sym_step p env (EL cs.as_pc p) ss) <> SymBad msg) ==>
+    ?ss'. (if allow_own then sym_step_own p env own (EL cs.as_pc p) ss
+           else sym_step p env (EL cs.as_pc p) ss) = SymOK ss' /\ R cs' ss') /\
+  R cs ss /\ asm_block_at p cs.as_pc [inst] /\
+  asm_step lo (build_offset_to_pc p) inst cs = AsmOK cs' /\
+  (!msg. (if allow_own then sym_step_own p env own inst ss
+          else sym_step p env inst ss) <> SymBad msg) ==>
+  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss'
+Proof
+  strip_tac >>
+  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
+    (fs[asm_block_at_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+  `?ss'. (if allow_own then sym_step_own p env own inst ss
+           else sym_step p env inst ss) = SymOK ss' /\ R cs' ss'` by
+    metis_tac[] >>
+  qexists `ss'` >> simp[] >>
+  `asm_block_at p ss.sym_base.as_pc [inst]` by metis_tac[] >>
+  drule sym_steps_mode_single >> simp[]
+QED
+
 Theorem sym_single_step_replay_safe:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   asm_block_at p cs.as_pc [inst] /\
@@ -652,14 +679,14 @@ Theorem sym_single_step_replay_safe:
   ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss'
 Proof
   strip_tac >>
-  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
-    (fs[asm_block_at_def] >>
-     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `ss.sym_base.as_pc = cs.as_pc` by
-    fs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  `?ss'. sym_step p env inst ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
-    metis_tac[asm_sym_step_success_from_safe] >>
-  qexists `ss'` >> simp[] >> irule sym_steps_single_emit >> metis_tac[]
+  irule (Q.INST [`allow_own` |-> `F`, `R` |-> `asm_sym_rel p env`,
+    `lo` |-> `SND (compute_label_offsets p)`]
+    sym_single_step_replay_safe_mode_conditional |>
+    SIMP_RULE std_ss [sym_steps_mode_def]) >>
+  conj_tac >- metis_tac[asm_sym_step_success_from_safe] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[asmSymBridgeTheory.asm_sym_rel_def]) >>
+  qexistsl [`cs`, `inst`] >> simp[]
 QED
 
 (* Ordinary operand lists may be evaluated in the source state even when
