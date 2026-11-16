@@ -71,7 +71,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
     (\H res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)) ==>
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+       halt_exit H cx ee (INR ex) r)) ==>
   !d ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P.
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
@@ -155,15 +156,15 @@ Proof
        check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
   asm_x "compiled" (mp_tac o Q.INST
     [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`, `s` |-> `s0`] o SPEC_ALL) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> metis_tac[])) >> strip_tac >>
   suspend "source_prefix"
 QED
 Resume compile_for_immutable_frag_mem_from_outcome[source_prefix]:
-  qmatch_asmsub_abbrev_tac `gas_outcome T _ _ _ _ _ Q R` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome T _ _ _ _ _ _ Q R` >>
   `gas_outcome T (cx_tops cx) (ctx,func) cx st0
      (eval_stmt cx (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))
      (es,s0) Q R` by
-    (qpat_x_assum `gas_outcome T _ _ _ _ _ Q R` mp_tac >>
+    (qpat_x_assum `gas_outcome T _ _ _ _ _ _ Q R` mp_tac >>
      rewrite_tac[gas_outcome_def] >> strip_tac >> qexists `marks`
      >- (disj1_tac >>
          qpat_x_assum `gas_bad_storage_at _ _ _ _ _ _` mp_tac >>
@@ -199,9 +200,10 @@ Resume compile_for_immutable_frag_mem_from_outcome[post]:
     (drule_all whitelistForIterImmLoopTheory.compile_for_immutable_entry_code_normalized >>
      strip_tac >> asm_rewrite_tac[]) >>
   irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
-  qpat_assum `gas_outcome T _ _ _ (eval_stmt _ _) _ Q R` (irule_at Any) >>
+  qpat_assum `gas_outcome T _ _ _ _ (eval_stmt _ _) _ Q R` (irule_at Any) >>
   conj_tac
-  >- (rpt gen_tac >> simp[Abbr `R`] >> metis_tac[]) >>
+  >- (rpt gen_tac >> simp[Abbr `R`] >> strip_tac >>
+      gvs[exprSimDefsTheory.halt_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> simp[Abbr `Q`] >> strip_tac >>
   simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
   qpat_x_assum `array_caller_frame _ _ _` mp_tac >>

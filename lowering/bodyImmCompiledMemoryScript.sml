@@ -73,7 +73,8 @@ Theorem immutable_compiled_loop_outcome_mem:
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
     (\H res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+       halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `valid_horizon cx st0 Hv es.storage_trace` >>
@@ -138,6 +139,7 @@ Proof
      qpat_x_assum `case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T` mp_tac >>
      qpat_x_assum `case bd of Fixed cap => T | Dynamic cap => _` mp_tac >>
      qpat_x_assum `evaluate_type _ et = SOME tv` mp_tac >>
+     qpat_assum `valid_horizon cx st0 Hv es.storage_trace` mp_tac >>
      rpt (pop_assum kall_tac) >>
      Cases_on `bd` >> simp[vyperASTTheory.bound_length_def] >> metis_tac[]) >>
   `st.cs_next_var <= st1.cs_next_var` by simp[cs_extends_def] >>
@@ -180,11 +182,13 @@ Resume immutable_compiled_loop_outcome_mem[round_premises]:
     (qpat_assum `!x. lvo = Var x ==> not_fresh_at st1 x` mp_tac >>
      rpt (pop_assum kall_tac) >> Cases_on `lvo` >> simp[copy_old_operand_def]) >>
   rpt gen_tac >> strip_tac >>
+  rename1 `stmt_state_rel Hcopy cxxctx fn ce cxx ee ss` >>
   qpat_assum `compile_iter_elem_copy ce _ _ _ _ _ _ _ cs = _`
-    (mp_then Any mp_tac immutable_iter_copy_mem_run) >>
+    (mp_then Any mp_tac (INST_TYPE [alpha |-> ``:256``]
+      immutable_iter_copy_mem_run)) >>
   simp[ADD_COMM] >>
   strip_tac >> first_x_assum irule >> simp[ADD_COMM] >>
-  qexistsl_tac [`cxxctx`, `cxx`, `ee`] >> simp[]
+  qexistsl_tac [`Hcopy`, `cxxctx`, `cxx`, `ee`] >> simp[]
 QED
 Resume immutable_compiled_loop_outcome_mem[round_execution]:
   simp[] >> impl_tac
