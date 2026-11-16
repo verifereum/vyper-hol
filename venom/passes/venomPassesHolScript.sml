@@ -55,3 +55,9 @@ Ancestors
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
+  (* SSA insertion for variables absent from liveness *)
+  o1LabelFlowPhiPruning
+  (* symbolic layout and label flow through the O1 pipeline *)
+  o1CodeEndOffset o1LabelFlowCompose o1SymStaticPipeline o1SymStaticData
+  (* symbolic assembly finalizers and their codegen correctness bridge *)
+  asmOptNonemptyFinalizer codegenAsmOpt
