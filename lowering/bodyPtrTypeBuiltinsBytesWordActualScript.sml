@@ -32,7 +32,7 @@ Theorem bytes_word_unsigned_code_frame:
              EVERY (\x. ~not_fresh_at sa x) i.inst_outputs)
         (emitted_insts sa sb)
 Proof
-  strip_tac >> drule_all bytestring_scalar_type_partition >> strip_tac >>
+  strip_tac >> drule_all bytestring_scalar_type_partition_cases >> strip_tac >>
   gvs[mk_convert_op_def, is_bytestring_type_def] >>
   irule bytes_word_code_frame >> goal_assum (drule_at Any) >> simp[]
 QED

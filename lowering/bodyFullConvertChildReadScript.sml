@@ -8,7 +8,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem expr_sim_full_of_vv_buffer:
+Theorem expr_sim_full_of_vv_post_buffer:
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
         ~is_word_type (post_value_type cenv e) ==>
@@ -41,7 +41,7 @@ Theorem expr_sim_full_of_vv_buffer:
       (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\
         expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
-        expr_store_bound cx (expr_type e) v op t /\
+        expr_store_bound cx (post_value_type cenv e) v op t /\
         t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
@@ -95,7 +95,7 @@ Proof
   suspend "bind"
 QED
 
-Resume expr_sim_full_of_vv_buffer[bind]:
+Resume expr_sim_full_of_vv_post_buffer[bind]:
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (eval_expr _ _)`]
   >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
@@ -116,7 +116,7 @@ Resume expr_sim_full_of_vv_buffer[bind]:
   suspend "read"
 QED
 
-Resume expr_sim_full_of_vv_buffer[read]:
+Resume expr_sim_full_of_vv_post_buffer[read]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -147,4 +147,4 @@ Resume expr_sim_full_of_vv_buffer[read]:
   gvs[]
 QED
 
-Finalise expr_sim_full_of_vv_buffer
+Finalise expr_sim_full_of_vv_post_buffer
