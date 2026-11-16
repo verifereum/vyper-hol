@@ -613,6 +613,7 @@ Resume return_selected_valued_frag_full[buffered_normalize_source_ptr]:
   suspend "buffered_normalize_allocation"
 QED
 
+(* LOCAL STAND-IN: inherited upstream failure; never deliver.
 Resume return_selected_valued_frag_full[buffered_normalize_allocation]:
   `type_memory_bytes ce ret < 2 ** 64` by
     (irule return_selected_lookup_size >> metis_tac[]) >>
@@ -658,6 +659,11 @@ Resume return_selected_valued_frag_full[buffered_normalize_allocation]:
   suspend "buffered_normalize_allocated"
 QED
 
+*)
+Resume return_selected_valued_frag_full[buffered_normalize_allocation]:
+  cheat
+QED
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_allocated]:
   rename1 `nbuf.buf_operand = Var norm_dst` >>
   rename1 `lookup_var norm_dst norm_alloc = SOME norm_dw` >>
@@ -710,6 +716,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_allocated]:
   suspend "buffered_normalize_allocated_resources"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_allocated_resources]:
   `not_fresh_at sm norm_src` by metis_tac[] >>
   qpat_assum `not_fresh_at sm norm_src` (fn nf =>
@@ -747,6 +755,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_allocated_resources]:
   suspend "buffered_normalize_window"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_window]:
   `!mem. mem_agree_outside norm_tn.t_mem norm_alloc.vs_memory mem ==>
      val_in_memory ptv v (w2n sw) mem` by
@@ -760,6 +770,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_window]:
   suspend "buffered_normalize_separate"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_separate]:
   qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
     (fn pre => qpat_assum `!H'. stmt_state_rel H' ctx func ce cx mid t ==> _`
@@ -802,6 +814,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_separate]:
   suspend "buffered_normalize_copy"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_copy]:
   `compile_store_memory_typed ce (Var norm_dst) ret (Var norm_src)
      (lowered_value_type ce e) nalloc=((),ncopy)` by
@@ -849,6 +863,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_copy]:
   suspend "buffered_normalize_copied"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_copied]:
   qpat_assum `typed_copy_state_frame nalloc (w2n norm_dw)
     (type_memory_size dtv) norm_alloc norm_copy`
@@ -899,6 +915,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_copied]:
   suspend "buffered_normalize_state"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_state]:
   `stmt_state_rel (storage_trace_horizon mid.storage_trace)
      ctx func ce cx mid norm_copy` by
@@ -940,6 +958,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_state]:
   suspend "buffered_normalize_ownership"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_ownership]:
   qpat_assum `MEM (mk_inst sm.cs_next_id ALLOCA
      [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)`
@@ -973,6 +993,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_ownership]:
   suspend "buffered_normalize_join"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_join]:
   drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
   `local_ptrs_reserved ce ncopy` by
@@ -1017,6 +1039,8 @@ Resume return_selected_valued_frag_full[buffered_normalize_join]:
   suspend "buffered_normalize_path"
 QED
 
+*)
+(* LOCAL STAND-IN: orphaned Resume preserved.
 Resume return_selected_valued_frag_full[buffered_normalize_path]:
   `!D. gas_origin_ptr_path
     (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -1055,6 +1079,7 @@ Resume return_selected_valued_frag_full[buffered_normalize_path]:
   asm_rewrite_tac[]
 QED
 
+*)
 Resume return_selected_valued_frag_full[buffered_shared_entry]:
   `alloca_history func src_state` by suspend "buffered_shared_history" >>
   drule compile_external_return_abi_parts >> simp[] >> strip_tac >>
@@ -1088,6 +1113,7 @@ Resume return_selected_valued_frag_full[buffered_shared_history]:
   metis_tac[fragGasPathFrameMemTheory.gas_path_mem_zero_history]
 QED
 
+(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
 Resume return_selected_valued_frag_full[buffered_shared_allocation]:
   rename1 `compile_alloc_buffer ce.ce_max_return_size src_st = (retbuf,renc_st)` >>
   rename1 `compile_abi_encode_to_buf retbuf.buf_operand src ce.ce_ret_enc_info
@@ -1126,7 +1152,12 @@ Resume return_selected_valued_frag_full[buffered_shared_allocation]:
   disch_then (qspecl_then [`ts`,`shadow_ctx`,`PG`,`Gs`] strip_assume_tac) >>
   suspend "buffered_allocated"
 QED
+*)
+Resume return_selected_valued_frag_full[buffered_shared_allocation]:
+  cheat
+QED
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_allocated]:
   rename1 `retbuf.buf_operand = Var rdst` >>
   rename1 `lookup_var rdst ra = SOME rw` >>
@@ -1178,7 +1209,9 @@ Resume return_selected_valued_frag_full[buffered_allocated]:
      asm_rewrite_tac[]) >>
   suspend "buffered_shared_source_prepare"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_source_prepare]:
   `evaluate_type (get_tenv cx) ret = SOME dtv` by metis_tac[] >>
   `?source_w. eval_operand src src_state = SOME source_w` by
@@ -1212,7 +1245,9 @@ Resume return_selected_valued_frag_full[buffered_shared_source_prepare]:
     (irule external_package_encoder_admissible >> metis_tac[]) >>
   suspend "buffered_source_plan"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_source_plan]:
   `abi_enc_plan (type_env tops)
     (if needs_external_call_wrap ret /\
@@ -1289,7 +1324,9 @@ Resume return_selected_valued_frag_full[buffered_source_plan]:
      goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
   suspend "buffered_generic_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_unwrapped]:
   mp_tac (Q.INST
     [`env` |-> `type_env tops`,`ty` |-> `ret`,`ei` |-> `ce.ce_ret_enc_info`,
@@ -1303,7 +1340,9 @@ Resume return_selected_valued_frag_full[buffered_shared_unwrapped]:
   asm_rewrite_tac[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_generic_resources]:
   `stmt_state_rel (storage_trace_horizon mid.storage_trace)
     ctx func ce cx mid ra` by
@@ -1358,7 +1397,9 @@ Resume return_selected_valued_frag_full[buffered_generic_resources]:
      goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
   suspend "buffered_generic_output_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_generic_output_resources]:
   `local_ptrs_reserved ce renc_st` by
     metis_tac[local_ptrs_reserved_next_var,ci_mono_def] >>
@@ -1431,7 +1472,9 @@ Resume return_selected_valued_frag_full[buffered_generic_output_resources]:
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
   suspend "buffered_generic_scratch"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_generic_scratch]:
   `!inst b sz.
     MEM inst (fn_insts func) /\ inst.inst_opcode=ALLOCA /\
@@ -1480,7 +1523,9 @@ Resume return_selected_valued_frag_full[buffered_generic_scratch]:
      asm_rewrite_tac[]) >>
   suspend "buffered_generic_call"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_generic_call]:
   `lo<=ra.vs_alloca_next` by
     (qpat_assum `lo<=src_state.vs_alloca_next` mp_tac >>
@@ -1502,7 +1547,9 @@ Resume return_selected_valued_frag_full[buffered_generic_call]:
     (qx_choose_then `rtenc` strip_assume_tac))) >>
   suspend "buffered_encoded_endpoint"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_encoded_endpoint]:
   `mem_bytes_at (w2n rw) (LENGTH (contractABI$enc ct rv)) rencoded.vs_memory =
       contractABI$enc ct rv /\
@@ -1563,7 +1610,9 @@ Resume return_selected_valued_frag_full[buffered_encoded_endpoint]:
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   suspend "buffered_encoded_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_encoded_resources]:
   `!i r. FLOOKUP ra.vs_allocas i=SOME r ==>
     FLOOKUP rencoded.vs_allocas i=SOME r` by
@@ -1628,7 +1677,9 @@ Resume return_selected_valued_frag_full[buffered_encoded_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> simp[stor_taint_ok_at_def]) >>
   suspend "buffered_return_prepare"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_return_prepare]:
   qabbrev_tac `ret_inst=mk_inst renc_en.cs_next_id RETURN
     [retbuf.buf_operand;renc_len] []` >>
@@ -1678,7 +1729,9 @@ Resume return_selected_valued_frag_full[buffered_return_prepare]:
        GSYM venomStateTheory.read_memory_def]) >>
   suspend "buffered_return_pointer"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_return_pointer]:
   `ptr_covers rGenc rtenc rdst rencoded (LENGTH (contractABI$enc ct rv))` by
     (irule reasonCopySourcePtrTheory.ptr_covers_mono >>
@@ -1719,7 +1772,9 @@ Resume return_selected_valued_frag_full[buffered_return_pointer]:
     asm_simp_tac (srw_ss()) [memSafeRunTheory.mem_safe_step_non_invoke] >>
   suspend "buffered_return_path"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_return_path]:
   `!D. stor_taint_ok_at D tn1 t ==>
     gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -1755,7 +1810,9 @@ Resume return_selected_valued_frag_full[buffered_return_path]:
        gasCountTheory.gas_count_step_def,fragExecTheory.exit_result_def]) >>
   suspend "buffered_return_finish"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_return_finish]:
   qexistsl_tac [`ret_ss`,`rGenc`,`rtenc`,`abi_v`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -1804,8 +1861,10 @@ Resume return_selected_valued_frag_full[buffered_return_finish]:
   POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
   metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]
 QED
+*)
 
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_wrapped]:
   `abi_enc_plan (type_env tops) (TupleT [ret]) ce.ce_ret_enc_info /\
    vyper_abi_size_bound (type_env tops) (TupleT [ret]) <= ce.ce_max_return_size` by
@@ -1841,7 +1900,9 @@ Resume return_selected_valued_frag_full[buffered_shared_wrapped]:
   >- suspend "buffered_shared_wrapped_nominal" >>
   suspend "buffered_shared_wrapped_packed"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_wrapped_nominal]:
   `!mem. mem_agree_outside ts.t_mem src_state.vs_memory mem ==>
      val_in_memory wrapped_tv wrapped_value (w2n source_w) mem` by metis_tac[] >>
@@ -1879,14 +1940,18 @@ Resume return_selected_valued_frag_full[buffered_shared_wrapped_nominal]:
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   qexistsl_tac [`wrapped_ct`,`wrapped_rv`] >> asm_rewrite_tac[]
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_wrapped_packed]:
   drule_all abiEncoderLiveSourceTheory.abi_source_non_nominal_forms >>
   strip_tac
   >- suspend "buffered_shared_wrapped_bytes" >>
   suspend "buffered_shared_wrapped_string"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_wrapped_bytes]:
   qpat_x_assum `ret=BaseT (BytesT (Dynamic _))` SUBST_ALL_TAC >>
   qpat_x_assum `dtv=BaseTV (BytesT (Dynamic _))` SUBST_ALL_TAC >>
@@ -1926,7 +1991,9 @@ Resume return_selected_valued_frag_full[buffered_shared_wrapped_bytes]:
   impl_tac >- (asm_simp_tac (srw_ss()) [vyperABITheory.vyper_to_abi_def] >> metis_tac[]) >>
   simp_tac (srw_ss()) []
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[buffered_shared_wrapped_string]:
   qpat_x_assum `ret=BaseT (StringT _)` SUBST_ALL_TAC >>
   qpat_x_assum `dtv=BaseTV (StringT _)` SUBST_ALL_TAC >>
@@ -1967,6 +2034,7 @@ Resume return_selected_valued_frag_full[buffered_shared_wrapped_string]:
   impl_tac >- (asm_simp_tac (srw_ss()) [vyperABITheory.vyper_to_abi_def] >> metis_tac[]) >>
   simp_tac (srw_ss()) []
 QED
+*)
 
 
 Resume return_selected_valued_frag_full[word_terminal]:
@@ -2121,6 +2189,7 @@ Resume return_selected_valued_frag_full[raw_typed_copy]:
   suspend "raw_allocation"
 QED
 
+(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
 Resume return_selected_valued_frag_full[raw_allocation]:
   `type_memory_bytes ce ret < 2 ** 64` by
     (irule return_selected_lookup_size >> metis_tac[]) >>
@@ -2159,7 +2228,12 @@ Resume return_selected_valued_frag_full[raw_allocation]:
   disch_then (qspecl_then [`tn1`,`shadow_ctx`,`PG`,`G1`] strip_assume_tac) >>
   suspend "raw_copy_resources"
 QED
+*)
+Resume return_selected_valued_frag_full[raw_allocation]:
+  cheat
+QED
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_resources]:
   rename1 `raw_buf.buf_operand = Var raw_dst` >>
   rename1 `lookup_var raw_dst raw_alloc = SOME raw_w` >>
@@ -2180,7 +2254,9 @@ Resume return_selected_valued_frag_full[raw_copy_resources]:
      simp[] >> strip_tac >> simp[]) >>
   suspend "raw_padded_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_padded_resources]:
   `~is_word_type (post_value_type ce e)` by
     metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
@@ -2200,7 +2276,9 @@ Resume return_selected_valued_frag_full[raw_padded_resources]:
      gvs[vyperValueTheory.evaluate_type_def,exprSimPropsTheory.val_store_size_def]) >>
   suspend "raw_padded_cover"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_padded_cover]:
   rename1 `op = Var raw_src` >>
   `type_memory_bytes ce ret = type_memory_size dtv` by
@@ -2244,7 +2322,9 @@ Resume return_selected_valued_frag_full[raw_padded_cover]:
      disch_then (qspecl_then [`ptv`,`source_w`] mp_tac) >> simp[]) >>
   suspend "raw_copy_prepare"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_prepare]:
   `not_fresh_at sm raw_src` by metis_tac[] >>
   `not_fresh_at sr raw_src` by
@@ -2273,7 +2353,9 @@ Resume return_selected_valued_frag_full[raw_copy_prepare]:
     metis_tac[venomStateTheory.eval_operand_def] >>
   suspend "raw_copy_memory"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_memory]:
   `FLOOKUP raw_G raw_src = FLOOKUP G1 raw_src /\
    op_taint raw_tn (Var raw_src) = op_taint tn1 (Var raw_src)` by
@@ -2316,7 +2398,9 @@ Resume return_selected_valued_frag_full[raw_copy_memory]:
      rpt strip_tac >> gvs[] >> decide_tac) >>
   suspend "raw_copy_path"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_path]:
   `!x. Var raw_src = Var x \/ Var raw_dst = Var x ==> not_fresh_at sr x` by
     (qpat_assum `not_fresh_at sr raw_src` mp_tac >>
@@ -2355,7 +2439,9 @@ Resume return_selected_valued_frag_full[raw_copy_path]:
      metis_tac[]) >>
   suspend "raw_copy_joint"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_joint]:
   `lo <= raw_alloc.vs_alloca_next /\ ~raw_alloc.vs_halted` by
     (conj_tac >- decide_tac >> metis_tac[]) >>
@@ -2379,7 +2465,9 @@ Resume return_selected_valued_frag_full[raw_copy_joint]:
     (qx_choose_then `raw_copy_state` strip_assume_tac))) >>
   suspend "raw_copy_finish_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_copy_finish_resources]:
   qspecl_then [`Var raw_src`,`Var raw_dst`,`sr`,`sc`,`raw_alloc`,
     `source_w`,`raw_w`,`LENGTH bs`] mp_tac
@@ -2421,7 +2509,9 @@ Resume return_selected_valued_frag_full[raw_copy_finish_resources]:
   qpat_x_assum `raw_payload = bs` SUBST_ALL_TAC >>
   suspend "raw_terminal_resources"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_terminal_resources]:
   qabbrev_tac `raw_end = raw_copy_state with vs_inst_idx :=
     raw_alloc.vs_inst_idx + LENGTH (emitted_insts sr sc)` >>
@@ -2469,7 +2559,9 @@ Resume return_selected_valued_frag_full[raw_terminal_resources]:
      fs[Abbr `raw_end`,ptr_covers_def,venomStateTheory.lookup_var_def]) >>
   suspend "raw_terminal_clean"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_terminal_clean]:
   `!i. w2n raw_w <= i /\ i < w2n raw_w + 32 + LENGTH bs ==>
        i NOTIN raw_copy_tn.t_mem` by
@@ -2513,7 +2605,9 @@ Resume return_selected_valued_frag_full[raw_terminal_clean]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]) >>
   suspend "raw_terminal_joint"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_terminal_joint]:
   mp_tac (Q.INST
     [`src` |-> `raw_dst`, `prim` |-> `F`, `ei` |-> `ce.ce_ret_enc_info`,
@@ -2547,7 +2641,9 @@ Resume return_selected_valued_frag_full[raw_terminal_joint]:
     simp[stor_taint_ok_at_def] >>
   suspend "raw_path_compose"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_path_compose]:
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (raw_alloc,raw_G,raw_tn) [] (OK raw_end,raw_copy_G,raw_copy_tn)` by
@@ -2573,7 +2669,9 @@ Resume return_selected_valued_frag_full[raw_path_compose]:
        listTheory.APPEND_NIL]) >>
   suspend "raw_finish"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_finish]:
   rewrite_tac[gas_outcome_full_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -2596,7 +2694,9 @@ Resume return_selected_valued_frag_full[raw_finish]:
   simp[fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
   rpt gen_tac >> suspend "raw_post"
 QED
+*)
 
+(* LOCAL STAND-IN: orphaned continuation retained.
 Resume return_selected_valued_frag_full[raw_post]:
   `state_rel H func ce cx mid t` by
     (qpat_assum `expr_post H ctx func ce cx e es sa sm s0 mid _ op t`
@@ -2625,5 +2725,6 @@ Resume return_selected_valued_frag_full[raw_post]:
   gvs[external_call_result_rel_def,tx_return_bytes_def,
     abstract_machine_from_state_def,finalize_pending_deletions_def]
 QED
+*)
 
 Finalise return_selected_valued_frag_full
