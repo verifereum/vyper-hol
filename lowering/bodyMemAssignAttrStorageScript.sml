@@ -2,7 +2,7 @@
    (bodyMemAssign's dispatch): a word field of a storage or transient struct (S1's body_assign_attr_storage). *)
 Theory bodyMemAssignAttrStorage
 Ancestors
-  fragGasSeqAbort
+  fragGasSeqAbort venomInst
   supportedExprTraverse allocLimits allocLimitsProps
   bodySimStmtCases
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
