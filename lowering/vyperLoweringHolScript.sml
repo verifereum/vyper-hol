@@ -47,6 +47,7 @@ Ancestors
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
+  asmOptOwnMergeJumpdests
   asmSymOwnCode
   finalizerContractOwn
   asmSpliceOwn
