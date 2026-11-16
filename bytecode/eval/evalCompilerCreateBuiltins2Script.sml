@@ -53,3 +53,67 @@ Theorem cb03_blueprint_rawargs_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation cb03_blueprint_rawargs))) >> EVAL_TAC
 QED
+
+val cb08_blueprint_runtime_offset = memoryStoreWitnessLib.evaluate fixture_root "cb08_blueprint_runtime_offset"
+Theorem cb08_blueprint_runtime_offset_matches_python_oracle:
+  ^(#term cb08_blueprint_runtime_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb08_blueprint_runtime_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb08_blueprint_runtime_offset))) >> EVAL_TAC
+QED
+
+val cb09_blueprint_folded_offset = memoryStoreWitnessLib.evaluate fixture_root "cb09_blueprint_folded_offset"
+Theorem cb09_blueprint_folded_offset_matches_python_oracle:
+  ^(#term cb09_blueprint_folded_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb09_blueprint_folded_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb09_blueprint_folded_offset))) >> EVAL_TAC
+QED
+
+val cb10_blueprint_flag_offset = memoryStoreWitnessLib.evaluate fixture_root "cb10_blueprint_flag_offset"
+Theorem cb10_blueprint_flag_offset_matches_python_oracle:
+  ^(#term cb10_blueprint_flag_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb10_blueprint_flag_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb10_blueprint_flag_offset))) >> EVAL_TAC
+QED
+
+val cb11_blueprint_folded_wei_offset = memoryStoreWitnessLib.evaluate fixture_root "cb11_blueprint_folded_wei_offset"
+Theorem cb11_blueprint_folded_wei_offset_matches_python_oracle:
+  ^(#term cb11_blueprint_folded_wei_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb11_blueprint_folded_wei_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb11_blueprint_folded_wei_offset))) >> EVAL_TAC
+QED
+
+val cb12_blueprint_unsafe_offset = memoryStoreWitnessLib.evaluate fixture_root "cb12_blueprint_unsafe_offset"
+Theorem cb12_blueprint_unsafe_offset_matches_python_oracle:
+  ^(#term cb12_blueprint_unsafe_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb12_blueprint_unsafe_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb12_blueprint_unsafe_offset))) >> EVAL_TAC
+QED
+
+val cb13_blueprint_mixed_bytes_offset = memoryStoreWitnessLib.evaluate fixture_root "cb13_blueprint_mixed_bytes_offset"
+Theorem cb13_blueprint_mixed_bytes_offset_matches_python_oracle:
+  ^(#term cb13_blueprint_mixed_bytes_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb13_blueprint_mixed_bytes_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb13_blueprint_mixed_bytes_offset))) >> EVAL_TAC
+QED
+
+val cb14_blueprint_mixed_high_offset = memoryStoreWitnessLib.evaluate fixture_root "cb14_blueprint_mixed_high_offset"
+Theorem cb14_blueprint_mixed_high_offset_matches_python_oracle:
+  ^(#term cb14_blueprint_mixed_high_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb14_blueprint_mixed_high_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb14_blueprint_mixed_high_offset))) >> EVAL_TAC
+QED
+
+val cb15_blueprint_membership_flag = memoryStoreWitnessLib.evaluate fixture_root "cb15_blueprint_membership_flag"
+Theorem cb15_blueprint_membership_flag_matches_python_oracle:
+  ^(#term cb15_blueprint_membership_flag) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb15_blueprint_membership_flag")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb15_blueprint_membership_flag))) >> EVAL_TAC
+QED

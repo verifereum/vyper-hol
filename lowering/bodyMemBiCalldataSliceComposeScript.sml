@@ -314,6 +314,11 @@ Resume compile_calldata_slice_vv_sim_mem[success]:
     (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
   disch_then (qx_choosel_then [`res'`, `fin`, `out`]
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  `res' <> INR HaltException` by
+    (qpat_assum `gas_marked_exec _ _ (\st. _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[builtin_result_def] >> CASE_TAC >> rpt strip_tac >> gvs[]) >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
   qexistsl_tac [`res'`, `fin`, `out`] >>
@@ -326,7 +331,7 @@ Resume compile_calldata_slice_vv_sim_mem[success]:
       qpat_x_assum `!H. valid_horizon _ _ H (fin with gas_obs := []).storage_trace ==> _`
         mp_tac >>
       simp[]) >>
-  disj2_tac >> simp[] >>
+  disj2_tac >> simp[halt_exit_def] >>
   qpat_x_assum `!H. valid_horizon _ _ H (fin with gas_obs := []).storage_trace ==> _`
     mp_tac >>
   simp[]
@@ -343,9 +348,9 @@ Resume compile_calldata_slice_vv_sim_mem[exception]:
   conj_tac
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[] >> Cases_on `rr` >> Cases_on `y` >> gvs[expr_exit_def] >>
+  simp[] >> Cases_on `rr` >> Cases_on `y` >> gvs[expr_exit_def, halt_exit_def] >>
   rename1 `expr_exit (INR (Error err)) _` >>
-  Cases_on `err` >> gvs[expr_exit_def]
+  Cases_on `err` >> gvs[expr_exit_def, halt_exit_def]
 QED
 
 Resume compile_calldata_slice_vv_sim_mem[exempt]:

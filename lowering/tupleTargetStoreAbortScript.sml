@@ -54,9 +54,11 @@ Theorem tuple_source_list_outcome:
     (!i. i < LENGTH gs ==>
       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) ==>
-    ?res es'. !tail.
+    ?res es'. (!tail.
       assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
-        (res,es' with gas_obs := tail)
+        (res,es' with gas_obs := tail)) /\
+      (res = INL () \/
+       res = INR (Error (RuntimeError "write in static context")))
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
@@ -108,7 +110,7 @@ Theorem tuple_target_static_head_exit:
       !H. stmt_exit (RetQ H) ee (INR (Error (RuntimeError "write in static context"))) r
 Proof
   rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
-  >- (drule_all compile_get_target_ptr_toplevel >>
+  >- (drule_all stmtSimAssignStorageFactsTheory.compile_get_target_ptr_toplevel >>
       disch_then (qspec_then `st` assume_tac) >> gvs[] >>
       drule_all tuple_store_word_step >> strip_tac >>
       qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
@@ -222,8 +224,10 @@ Resume tuple_store_targets_abort_path[abort]:
   `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
     (qpat_x_assum `!i. i < LENGTH (_::gs) ==> ?w. _`
       (qspec_then `0` mp_tac) >> simp[]) >>
-  drule_all tuple_target_static_head_exit >>
-  disch_then (qspecl_then [`ctx`, `RetQ`, `head_es`] strip_assume_tac) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es`, `s`,
+    `BaseTarget bt`, `ty`, `tv`, `v`, `op`, `st`, `sm`, `RetQ`, `head_es`]
+    tuple_target_static_head_exit) >>
+  impl_tac >- simp[] >> strip_tac >>
   `assign_tuple_targets cx (BaseTarget bt) v es =
     (INR (Error (RuntimeError "write in static context")),
      head_es with gas_obs := es.gas_obs)` by
@@ -380,7 +384,8 @@ Proof
    s.vs_call_ctx.cc_static = cx.txn.is_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   drule_all tuple_source_list_outcome >>
-  disch_then (qx_choosel_then [`res`, `ee`] assume_tac) >>
+  disch_then (qx_choosel_then [`res`, `ee`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `assign_tuple_target_list cx gs vs es =
     (res,ee with gas_obs := es.gas_obs)` by
     (qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = _`
@@ -392,7 +397,7 @@ Proof
       drule_all tuple_store_targets_path >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
       qexistsl [`INL ()`, `ee with gas_obs := es.gas_obs`, `OK t`] >>
-      gvs[]) >>
+      gvs[] >> disj1_tac >> first_assum ACCEPT_TAC) >>
   drule_all tuple_store_targets_abort_path >>
   disch_then (qspecl_then [`ctx`, `RetQ`] strip_assume_tac) >>
   qexistsl [`INR y`, `ee with gas_obs := es.gas_obs`, `r`] >>

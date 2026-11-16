@@ -6,13 +6,14 @@ Ancestors
   exprSimHyps exprLoweringProps exprSimMemorySource exprSimHypsDefs
   exprSimSource compileEnv exprSafeOperand exprSimMemDefs fragExec exprSimOperands
   stmtSimDeclCompose gasOutcome gasStorage vyperStorageTrace vyperStorageFootprint
+  loweringPosts
 
 (* Applies a thm-tactic to an assumption or one of its conjuncts, trying
    each until one closes the goal. *)
 fun conj_assum_thm_tac ttac (g as (asl, w)) =
   let fun conjs th =
         if boolSyntax.is_conj (Thm.concl th)
-        then conjs (Drule.CONJUNCT1 th) @ conjs (Drule.CONJUNCT2 th)
+        then conjs (CONJUNCT1 th) @ conjs (CONJUNCT2 th)
         else [th]
   in Tactical.FIRST_ASSUM
        (fn th => Tactical.FIRST (map ttac (conjs th))) g end;
@@ -26,8 +27,9 @@ Theorem ec_mem_outcome_then:
   gas_outcome T tops (ctx,func) cx st0
     (m : evaluation_state -> value evaluation_result) (es,s0)
     (\H res ee t. ?v. res = INL v /\ P H v ee t)
-    (\H res ee r. expr_exit res r) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!marks v ee t.
@@ -41,7 +43,7 @@ Proof
   strip_tac >>
   match_mp_tac
     (Q.SPECL [`\H res ee t. ?v. res = INL v /\ P H v ee t`,
-              `\H res ee r. expr_exit res r`]
+              `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`]
        (Q.GENL [`Qa`, `Ra`] gas_outcome_bind_value)) >>
   BETA_TAC >> rpt conj_tac
   >- first_assum ACCEPT_TAC
@@ -53,7 +55,7 @@ Proof
           `!H. valid_horizon cx st0 H mid.storage_trace ==>
                P H v (mid with gas_obs := []) t` by
             (qx_gen_tac `H` >> strip_tac >>
-             qpat_assum `!H'. valid_horizon cx st0 H' mid.storage_trace ==>
+             qpat_x_assum `!H'. valid_horizon cx st0 H' mid.storage_trace ==>
                               ?v. _`
                (qspec_then `H` mp_tac) >>
              (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
@@ -92,7 +94,8 @@ Theorem ec_mem_operands_then:
      storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==>
      R H (INR exc) ee r) /\
   (!v1 v2. storage_trace_frame (k v1 v2)) /\
   (!es1 es2 v1 v2 t u.
@@ -173,6 +176,14 @@ QED
 
 Resume ec_mem_operands_then[first_success]:
   qx_genl_tac [`m1`, `v1`, `es1`, `t`] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es1.storage_trace)
+     es1.storage_trace` by fs[storage_trace_domain_def] >>
+  `t.vs_current_bb = s1.cs_current_bb /\
+   t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t` by
+    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                      expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon es1.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `?gs1. bind (eval_expr cx a) (read_result cx) (es with gas_obs := gs1) =
@@ -213,13 +224,12 @@ Resume ec_mem_operands_then[first_success]:
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es1 t /\
        storage_well_formed_on cx es1 (FST H)` by
-    (qx_gen_tac `H` >> strip_tac >> res_tac >>
-     conj_tac >>
-     first_assum (fn th =>
-       let val r = REWRITE_RULE [expr_post_def] th in
-         ACCEPT_TAC (CONJUNCT1 r) ORELSE
-         ACCEPT_TAC (CONJUNCT1 (CONJUNCT2 r))
-       end)) >>
+    (qx_gen_tac `H` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                        expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     simp[expr_post_def]) >>
   match_mp_tac
     (Q.SPEC `\H v2 ee u. expr_post H ctx func cenv cx b es1 s1 sm t ee v2 q u /\
        expr_store_bound cx (expr_type b) v2 q u /\
@@ -231,7 +241,8 @@ Resume ec_mem_operands_then[first_success]:
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ b _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
       disch_then irule >> simp[] >>
-      metis_tac[expr_body_pre_gas_admissible])
+      irule expr_body_pre_gas_admissible >>
+      qexistsl_tac [`cenv`, `env`] >> first_assum ACCEPT_TAC)
   >- first_assum ACCEPT_TAC
   >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC)
   >- suspend "second_success"
@@ -277,18 +288,31 @@ Resume ec_mem_operands_then[second_success]:
     (qx_gen_tac `H` >> strip_tac >>
      `valid_horizon cx st0 H es1.storage_trace` by
        first_assum (drule_then ACCEPT_TAC) >>
-     res_tac >>
-     conj_tac >- conj_assum_tac >>
-     conj_tac >- conj_assum_tac >>
-     first_assum (fn th =>
-       ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_post_def] th)))) >>
+     qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                      expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es2.storage_trace ==>
+                      expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [expr_post_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?H0. valid_horizon cx st0 H0 es2.storage_trace` by
     (qexists_tac `storage_trace_horizon es2.storage_trace` >>
      first_assum (fn th =>
        ACCEPT_TAC (REWRITE_RULE [storage_trace_domain_def] th))) >>
   `valid_horizon cx st0 H0 es1.storage_trace` by
     first_assum (drule_then ACCEPT_TAC) >>
-  res_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                   expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==>
+                   expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\ _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qspecl_then [`H0`, `func`, `cenv`, `cx`, `a`, `b`, `es`, `es1`, `es2`, `sa`,
                `s1`, `sm`, `s0`, `t`, `u`, `v1`, `v2`, `p`, `q`, `ctx`] mp_tac
     (Q.GEN `H` exprSimOperandsTheory.expr_post_operand_word) >>
