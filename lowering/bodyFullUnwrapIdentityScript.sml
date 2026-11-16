@@ -37,7 +37,7 @@ Theorem unwrap_stack_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -77,6 +77,11 @@ Theorem unwrap_stack_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -129,6 +134,15 @@ Proof
       simp[vv_post_def, vv_at_def, mk_ptr_def, expr_val_at_def] >>
       strip_tac >> rpt strip_tac >> gvs[] >>
       simp[local_place_at_def] >> metis_tac[])
+  >- (strip_tac >> disj1_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+      qpat_x_assum `vv_at _ _ _ sa sm _ _ _ _` mp_tac >>
+      simp[vv_at_def, mk_ptr_def, expr_val_at_def] >>
+      strip_tac >> rpt strip_tac >> gvs[] >>
+      simp[local_place_at_def] >> metis_tac[])
   >> qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def] >> rpt strip_tac >>
   metis_tac[]
@@ -144,7 +158,7 @@ Theorem unwrap_memory_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -184,6 +198,11 @@ Theorem unwrap_memory_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -239,6 +258,13 @@ Proof
         (drule_then mp_tac) >>
       simp[vv_post_def] >> strip_tac >>
       qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_at_def, mk_ptr_def])
+  >- (disj1_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+      qpat_x_assum `vv_at _ _ _ sa sm _ _ _ _` mp_tac >>
       simp[vv_at_def, mk_ptr_def])
   >> qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def] >> rpt strip_tac >>

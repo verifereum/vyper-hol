@@ -163,7 +163,8 @@ Proof
        vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+  rpt strip_tac >>
+  gvs[CaseEq "bool", CaseEq "option", CaseEq "prod", CaseEq "sum", CaseEq "list"]
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
