@@ -264,7 +264,7 @@ Resume compile_bop_typed_sim[right_normal]:
      qpat_x_assum `_ = (bop_result _ _ _ _ _ _ _, _)`
        (fn th => qpat_x_assum `_ = (out, _)` (mp_tac o TRANS (SYM th))) >>
      rpt (pop_assum kall_tac) >>
-     simp[bop_result_def, AllCaseEqs()]) >>
+     simp[bop_result_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
   qexistsl_tac [`out`, `end_es`, `end_r`] >>
   fs[halt_exit_def] >> metis_tac[]
 QED
