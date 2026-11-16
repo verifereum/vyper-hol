@@ -5230,6 +5230,297 @@ Proof
     mp_tac >> simp[NoAsms]
 QED
 
+(* A historical cut ending before the replaced segment stays a root prefix. *)
+Theorem dft_packet_cut_prefix_frame[local]:
+  !cut pre mid post mid' r.
+    pre ++ mid ++ post = cut ++ r /\ LENGTH cut <= LENGTH pre ==>
+    ?r'. pre ++ mid' ++ post = cut ++ r'
+Proof
+  rpt strip_tac >>
+  `TAKE (LENGTH cut) (pre ++ mid' ++ post) = cut` by
+    (qsuff_tac `TAKE (LENGTH cut) (pre ++ mid' ++ post) =
+                 TAKE (LENGTH cut) (pre ++ mid ++ post)`
+     >- (qpat_x_assum `pre ++ mid ++ post = _` SUBST1_TAC >>
+         simp[TAKE_APPEND]) >>
+     simp[GSYM APPEND_ASSOC,TAKE_APPEND1]) >>
+  qexists_tac `DROP (LENGTH cut) (pre ++ mid' ++ post)` >>
+  metis_tac[TAKE_DROP]
+QED
+
+Theorem dft_packet_cut_flat_frame[local]:
+  !cuts tab tab'.
+    (!ai ds ei qi zi. MEM (ai,ds,ei,qi,zi) cuts ==>
+      (!f. MEM f ds ==> FLOOKUP tab' (ai,f) = FLOOKUP tab (ai,f)) /\
+      TAKE qi (THE (FLOOKUP tab' (ai,ei))) =
+        TAKE qi (THE (FLOOKUP tab (ai,ei)))) ==>
+    FLAT (MAP (\(ai,ds,ei,qi,zi).
+      FLAT (MAP (\f. FLAT (THE (FLOOKUP tab' (ai,f)))) ds) ++
+      FLAT (TAKE qi (THE (FLOOKUP tab' (ai,ei))))) cuts) =
+    FLAT (MAP (\(ai,ds,ei,qi,zi).
+      FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (ai,f)))) ds) ++
+      FLAT (TAKE qi (THE (FLOOKUP tab (ai,ei))))) cuts)
+Proof
+  rpt strip_tac >> AP_TERM_TAC >> irule MAP_CONG >> simp[] >>
+  gen_tac >> PairCases_on `x` >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  AP_TERM_TAC >> irule MAP_CONG >> simp[]
+QED
+
+(* Conditional transport only: concrete splices must establish every frame law.
+   The semantic certificate still refers to the old cursor p,d,st,inst. *)
+Theorem dft_packet_historical_cut_transport:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  a <> b /\
+  Mroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
+  Eroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP es_tab ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
+  Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
+  Mroot' = FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab' ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts' [])))))))) /\
+  Eroot' = FLAT (MAP (\e. FLAT (THE (FLOOKUP es_tab' ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts' [])))))))) /\
+  Kroot' = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab' ([],e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts' [])))))))) /\
+  (?hm vm wm vm'. Mroot = hm ++ vm ++ wm /\ Mroot' = hm ++ vm' ++ wm /\
+    LENGTH Mcut <= LENGTH hm) /\
+  (?he ve we ve'. Eroot = he ++ ve ++ we /\ Eroot' = he ++ ve' ++ we /\
+    LENGTH Ecut <= LENGTH he) /\
+  (?hk vk wk vk'. Kroot = hk ++ vk ++ wk /\ Kroot' = hk ++ vk' ++ wk /\
+    LENGTH Kcut <= LENGTH hk) /\
+  (!ai ds ei qi zi. MEM (ai,ds,ei,qi,zi) cuts ==>
+    FLOOKUP acts' ai = FLOOKUP acts ai /\
+    FLOOKUP blocks' (ai,ei) = FLOOKUP blocks (ai,ei) /\
+    (!cid. FLOOKUP calls' (ai,ei,cid) = FLOOKUP calls (ai,ei,cid)) /\
+    (!f. MEM f ds ==>
+      FST (THE (FLOOKUP blocks' (ai,f))) = FST (THE (FLOOKUP blocks (ai,f))) /\
+      FLOOKUP ms_tab' (ai,f) = FLOOKUP ms_tab (ai,f) /\
+      FLOOKUP es_tab' (ai,f) = FLOOKUP es_tab (ai,f) /\
+      FLOOKUP ks_tab' (ai,f) = FLOOKUP ks_tab (ai,f)) /\
+    TAKE qi (THE (FLOOKUP ms_tab' (ai,ei))) = TAKE qi (THE (FLOOKUP ms_tab (ai,ei))) /\
+    TAKE qi (THE (FLOOKUP es_tab' (ai,ei))) = TAKE qi (THE (FLOOKUP es_tab (ai,ei))) /\
+    TAKE qi (THE (FLOOKUP ks_tab' (ai,ei))) = TAKE qi (THE (FLOOKUP ks_tab (ai,ei)))) /\
+  MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+    REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+  LENGTH cuts = LENGTH levels /\
+  (!i ai ds ei qi zi.
+    i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+    ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+      ini hi bei counti fronti closedi resti later.
+      FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+      FLOOKUP blocks (ai,ei) =
+        SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+      orderi = ds ++ ei::later /\
+      (if SUC i = LENGTH cuts then
+        ai = a /\ ei = e /\ qi = q /\ zi = z
+       else
+        ?cid h b0 done_at_call child_entry ret.
+          EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+          FLOOKUP calls (ai,ei,cid) = SOME (qi,h,b0,done_at_call,child_entry,ret) /\
+          qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+          zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+          EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+          (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==> MEM r done_at_call)) /\
+      EL i levels =
+        (sfi, MAP (\f. (FST (THE (FLOOKUP blocks (ai,f))),f,
+          DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+            (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+          [(bbi,ei,zi)], if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+  Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+  Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP es_tab (ai,ei))))) cuts) /\
+  Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
+  Mroot = Mcut ++ mr /\ Eroot = Ecut ++ er /\ Kroot = Kcut ++ kr /\
+  LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
+  (!F gs tail.
+    N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
+    levels_ok F C7 levels
+      (MAP (\(ai,ds,ei,qi,zi). ai) cuts)
+      (MAP (\(ai,ds,ei,qi,zi).
+        FST (SND (SND (THE (FLOOKUP acts ai)))) ) cuts)
+      root_sf (root_entry with vs_gas_readings := gs ++ tail) [] 0 /\
+    (?extra. Ecut = FST (rooted_eval F C7 levels
+      (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
+    (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+      OK u =>
+        FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
+        u.vs_gas_readings = tail /\
+        (?before after.
+          dftGasFromListTraceDefs$trace_blocks [] 0 F C7 root_sf
+            (root_entry with vs_gas_readings := gs ++ tail) =
+            before ++ [((a,e,(EL (LENGTH z)
+              (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)).inst_id),sf,
+              EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions),u)] ++ after /\
+          dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
+        (!tail'. rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail') =
+          (Ecut,OK (u with vs_gas_readings := tail'))) /\
+        (body_entry = NONE ==> u with vs_gas_readings := st.vs_gas_readings = st) /\
+        (a = p /\ e = d /\ IS_SOME body_entry /\
+          inv_memory_observation inst.inst_opcode /\ EL q xs = inst ==>
+          (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op st) /\
+          u.vs_initial_fmp = st.vs_initial_fmp)
+    | stopped =>
+        run_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
+        gas_events_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
+          FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)))) ==>
+  ?mr' er' kr'.
+    MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+      REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+    LENGTH cuts = LENGTH levels /\
+    (!i ai ds ei qi zi.
+      i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+      ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+        ini hi bei counti fronti closedi resti later.
+        FLOOKUP acts' ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+        FLOOKUP blocks' (ai,ei) =
+          SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+        orderi = ds ++ ei::later /\
+        (if SUC i = LENGTH cuts then
+          ai = a /\ ei = e /\ qi = q /\ zi = z
+         else
+          ?cid h b0 done_at_call child_entry ret.
+            EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+            FLOOKUP calls' (ai,ei,cid) = SOME (qi,h,b0,done_at_call,child_entry,ret) /\
+            qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+            zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+            EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+            (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==> MEM r done_at_call)) /\
+        EL i levels =
+          (sfi, MAP (\f. (FST (THE (FLOOKUP blocks' (ai,f))),f,
+            DROP (phi_prefix_length (FST (THE (FLOOKUP blocks' (ai,f)))).bb_instructions)
+              (FST (THE (FLOOKUP blocks' (ai,f)))).bb_instructions)) ds ++
+            [(bbi,ei,zi)], if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+    Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+      FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab' (ai,f)))) ds) ++
+      FLAT (TAKE qi (THE (FLOOKUP ms_tab' (ai,ei))))) cuts) /\
+    Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+      FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab' (ai,f)))) ds) ++
+      FLAT (TAKE qi (THE (FLOOKUP es_tab' (ai,ei))))) cuts) /\
+    Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+      FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab' (ai,f)))) ds) ++
+      FLAT (TAKE qi (THE (FLOOKUP ks_tab' (ai,ei))))) cuts) /\
+    Mroot' = Mcut ++ mr' /\ Eroot' = Ecut ++ er' /\ Kroot' = Kcut ++ kr' /\
+    LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
+    (!F gs tail.
+      N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
+      levels_ok F C7 levels
+        (MAP (\(ai,ds,ei,qi,zi). ai) cuts)
+        (MAP (\(ai,ds,ei,qi,zi).
+          FST (SND (SND (THE (FLOOKUP acts' ai)))) ) cuts)
+        root_sf (root_entry with vs_gas_readings := gs ++ tail) [] 0 /\
+      (?extra. Ecut = FST (rooted_eval F C7 levels
+        (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
+      (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+        OK u =>
+          FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
+          u.vs_gas_readings = tail /\
+          (?before after.
+            dftGasFromListTraceDefs$trace_blocks [] 0 F C7 root_sf
+              (root_entry with vs_gas_readings := gs ++ tail) =
+              before ++ [((a,e,(EL (LENGTH z)
+                (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)).inst_id),sf,
+                EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions),u)] ++ after /\
+            dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
+          (!tail'. rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail') =
+            (Ecut,OK (u with vs_gas_readings := tail'))) /\
+          (body_entry = NONE ==> u with vs_gas_readings := st.vs_gas_readings = st) /\
+          (a = p /\ e = d /\ IS_SOME body_entry /\
+            inv_memory_observation inst.inst_opcode /\ EL q xs = inst ==>
+            (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op st) /\
+            u.vs_initial_fmp = st.vs_initial_fmp)
+      | stopped =>
+          run_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
+          gas_events_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
+            FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail))))
+Proof
+  strip_tac >>
+  `?mr'. Mroot' = Mcut ++ mr'` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`Mroot = _ ++ _ ++ _`,`Mroot' = _ ++ _ ++ _`,
+       `Mroot = Mcut ++ mr`,`LENGTH Mcut <= LENGTH hm`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[dft_packet_cut_prefix_frame]) >>
+  `?er'. Eroot' = Ecut ++ er'` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`Eroot = _ ++ _ ++ _`,`Eroot' = _ ++ _ ++ _`,
+       `Eroot = Ecut ++ er`,`LENGTH Ecut <= LENGTH he`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[dft_packet_cut_prefix_frame]) >>
+  `?kr'. Kroot' = Kcut ++ kr'` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`Kroot = _ ++ _ ++ _`,`Kroot' = _ ++ _ ++ _`,
+       `Kroot = Kcut ++ kr`,`LENGTH Kcut <= LENGTH hk`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[dft_packet_cut_prefix_frame]) >>
+  qexistsl_tac [`mr'`,`er'`,`kr'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "description" >>
+  conj_tac >- suspend "masks" >>
+  conj_tac >- suspend "sites" >>
+  conj_tac >- suspend "keys" >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  suspend "semantics"
+QED
+
+Resume dft_packet_historical_cut_transport[description]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`!ai ds ei qi zi. MEM _ cuts ==> _`,`!i ai ds ei qi zi. _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  `MEM (ai,ds,ei,qi,zi) cuts` by metis_tac[MEM_EL] >>
+  qpat_x_assum `!ai ds ei qi zi. MEM _ cuts ==> _` drule >> strip_tac >>
+  `MAP (\f. (FST (THE (FLOOKUP blocks' (ai,f))),f,
+     DROP (phi_prefix_length (FST (THE (FLOOKUP blocks' (ai,f)))).bb_instructions)
+       (FST (THE (FLOOKUP blocks' (ai,f)))).bb_instructions)) ds =
+   MAP (\f. (FST (THE (FLOOKUP blocks (ai,f))),f,
+     DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+       (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds` by
+    (irule MAP_CONG >> simp[]) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `!i ai ds ei qi zi. _` drule_all >> simp[]
+QED
+Resume dft_packet_historical_cut_transport[masks]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`!ai ds ei qi zi. MEM _ cuts ==> _`,`Mcut = FLAT _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `Mcut = _` SUBST1_TAC >> sym_tac >>
+  irule dft_packet_cut_flat_frame >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+Resume dft_packet_historical_cut_transport[sites]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`!ai ds ei qi zi. MEM _ cuts ==> _`,`Ecut = FLAT _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `Ecut = _` SUBST1_TAC >> sym_tac >>
+  irule dft_packet_cut_flat_frame >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+Resume dft_packet_historical_cut_transport[keys]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`!ai ds ei qi zi. MEM _ cuts ==> _`,`Kcut = FLAT _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `Kcut = _` SUBST1_TAC >> sym_tac >>
+  irule dft_packet_cut_flat_frame >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+Resume dft_packet_historical_cut_transport[semantics]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`!ai ds ei qi zi. MEM _ cuts ==> _`,
+     `!F gs tail. N <= F /\ LIST_REL _ Mcut gs ==> _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  `MAP (\(ai,ds,ei,qi,zi). FST (SND (SND (THE (FLOOKUP acts' ai))))) cuts =
+   MAP (\(ai,ds,ei,qi,zi). FST (SND (SND (THE (FLOOKUP acts ai))))) cuts` by
+    (irule MAP_CONG >> simp[] >> gen_tac >> PairCases_on `x` >> simp[] >>
+     strip_tac >> first_x_assum drule >> simp[]) >>
+  asm_rewrite_tac[]
+QED
+Finalise dft_packet_historical_cut_transport
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
