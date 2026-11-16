@@ -678,7 +678,8 @@ Theorem raw_call_typed_args_suffix[local]:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!vs. storage_trace_frame (k vs)) /\
-  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r /\
+     halt_exit H cx ee (INR exc : value list + exception) r ==> R H (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\
      ee.gas_obs = [] /\ (?H. valid_horizon cx st0 H ee.storage_trace) /\
@@ -700,7 +701,7 @@ Proof
   qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   conj_tac >- (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def] >>
-               metis_tac[wb_args_exit_def]) >>
+               metis_tac[wb_args_exit_def, halt_exit_def]) >>
   reverse conj_tac >- (simp[] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >> fs[] >> metis_tac[]
 QED
@@ -717,7 +718,8 @@ Theorem raw_call_operand_suffix[local]:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!v. storage_trace_frame (k v)) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
      ee.gas_obs = [] /\ (?H. valid_horizon cx st0 H ee.storage_trace) /\
@@ -739,7 +741,7 @@ Proof
   qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   conj_tac >- (rpt gen_tac >> Cases_on `rr` >>
-               simp[expr_exit_def] >> metis_tac[expr_exit_def]) >>
+               simp[expr_exit_def] >> metis_tac[expr_exit_def, halt_exit_def]) >>
   reverse conj_tac >- (simp[] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >> fs[] >> metis_tac[]
 QED
@@ -1574,7 +1576,8 @@ Theorem raw_call_addr_data_sim[local]:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!av dv. storage_trace_frame (k av dv)) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!gsA av esA tA gsD bs esD tD.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
     esA.gas_obs = [] /\
@@ -2211,7 +2214,8 @@ Theorem raw_call_prefix_sim[local]:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!av dv kvs. storage_trace_frame (k av dv kvs)) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!gsA av esA tA gsD bs esD tD gsK kvs esK tm tk t xs b gw.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) =
       (INL av,esA) /\ esA.gas_obs = [] /\
@@ -2393,7 +2397,9 @@ Resume raw_call_prefix_sim[keyword_setup]:
   qpat_assum `typed_args_ready _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `lower_word_args _ _ _ _ = _` (irule_at Any) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> fs[wb_args_exit_def] >> metis_tac[]) >>
+  >- (rpt strip_tac >> fs[wb_args_exit_def] >>
+      qpat_x_assum `!H exc ee r. expr_exit _ _ /\ halt_exit _ _ _ _ _ ==> R _ _ _ _`
+        irule >> simp[] >> fs[halt_exit_def]) >>
   rpt strip_tac >> suspend "keyword_endpoint"
 QED
 
@@ -4634,7 +4640,7 @@ Theorem raw_call_tail_outcome[local]:
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u)
         H res ee u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   rename1 `valid_horizon cx st0 H0 esK.storage_trace` >>
@@ -4717,7 +4723,7 @@ Resume raw_call_tail_outcome[static_value_abort]:
     lift_option_type_def, return_def, dest_BytesV_def] >>
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  rpt strip_tac >> gvs[expr_exit_def]
+  rpt strip_tac >> gvs[expr_exit_def, halt_exit_def]
 QED
 
 Resume raw_call_tail_outcome[ready]:
@@ -4842,7 +4848,7 @@ Resume raw_call_tail_outcome[lift]:
   `es2 with gas_obs := [] = es2` by
     (Cases_on `es2` >> gvs[evaluation_state_fn_updates]) >>
   BETA_TAC >>
-  conj_tac >- (rpt strip_tac >> gvs[expr_exit_def]) >>
+  conj_tac >- (rpt strip_tac >> gvs[expr_exit_def, halt_exit_def]) >>
   conj_tac >- simp[] >>
   rpt strip_tac >>
   rename1 `valid_horizon cx st0 HE es2.storage_trace` >>
@@ -4977,8 +4983,8 @@ Resume compile_raw_call_case[placement]:
   first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
   simp[raw_call_action_frame] >> conj_tac >-
     (rpt gen_tac >> Cases_on `r` >> Cases_on `exc` >>
-     simp[expr_exit_def] >> rename1 `Error err` >>
-     Cases_on `err` >> simp[expr_exit_def]) >>
+     simp[expr_exit_def, halt_exit_def] >> rename1 `Error err` >>
+     Cases_on `err` >> simp[expr_exit_def, halt_exit_def]) >>
   rpt strip_tac >>
   qpat_x_assum `ext_call_kwarg EKValue _ xs = _`
     (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
