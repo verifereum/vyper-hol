@@ -57,7 +57,15 @@ Ancestors
   readonlyInvokeCopyFwdProofs
   (* SSA insertion for variables absent from liveness *)
   o1LabelFlowPhiPruning
+  o1LabelFlowOwnPreWalk
+  o1LabelFlowOwnFirstSsa
+  o1LabelFlowOwnLowerDload
+  o1LabelFlowOwnConcretize
+  o1LabelFlowOwnFmp
+  o1LabelFlowOwnWalk
+  o1LabelFlowOwnCompose
   (* symbolic layout and label flow through the O1 pipeline *)
   o1CodeEndOffset o1LabelFlowCompose o1SymStaticPipeline o1SymStaticData
+  o1LabelFlowOwnLate
   (* symbolic assembly finalizers and their codegen correctness bridge *)
   asmOptNonemptyFinalizer codegenAsmOpt
