@@ -6947,6 +6947,192 @@ Resume native_whole_block_packet[transport]:
 QED
 Finalise native_whole_block_packet
 
+Theorem native_whole_block_packet_ok[local]:
+  !K S U. ^native_block_packetq p d bb bb' x K S U /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+    (MAP (ALOOKUP (^native_block_gasq p d b C' fn' bb' x)) K) g /\
+  run_block n C bb (x with vs_gas_readings := g ++ tail) = OK v ==>
+  ?u. run_block b C' bb' x = OK u /\
+      v = u with vs_gas_readings := tail /\
+      ^native_block_gasq p d n C fn bb (x with vs_gas_readings := g ++ tail) = ZIP (K,g) /\
+      ^native_block_sitesq n C fn bb (x with vs_gas_readings := g ++ tail) = S
+Proof
+  map_every qx_gen_tac [`keys`, `sites`, `unused`] >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  `LENGTH g = LENGTH keys` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`g`, `tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `terminates (run_block n C bb (x with vs_gas_readings := g ++ tail))` by
+    simp[passSimulationDefsTheory.terminates_def] >>
+  `terminates (run_block b C bb (x with vs_gas_readings := g ++ tail))` by metis_tac[] >>
+  `run_block (MAX b n) C bb (x with vs_gas_readings := g ++ tail) = OK v` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >> simp[] >> qexists_tac `n` >> simp[]) >>
+  `run_block (MAX b n) C bb (x with vs_gas_readings := g ++ tail) =
+     run_block b C bb (x with vs_gas_readings := g ++ tail)` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >>
+     conj_tac >- (Cases_on `run_block b C bb (x with vs_gas_readings := g ++ tail)` >>
+                  fs[passSimulationDefsTheory.terminates_def]) >>
+     qexists_tac `b` >> simp[]) >>
+  `run_block b C bb (x with vs_gas_readings := g ++ tail) = OK v` by metis_tac[] >>
+  `?u. run_block b C' bb' x = OK u /\
+       v with vs_gas_readings := [] = u with vs_gas_readings := []` by
+    (Cases_on `run_block b C' bb' x` >>
+     fs[dft_res_rel_def, restore_result_def] >> metis_tac[]) >>
+  `v.vs_gas_readings = tail` by metis_tac[] >>
+  qexists_tac `u` >> simp[] >>
+  conj_tac >- (qpat_x_assum `v with vs_gas_readings := [] = _` mp_tac >>
+                simp[venom_state_component_equality]) >>
+  qpat_x_assum `!n'. ?k. _` (qspec_then `n` strip_assume_tac) >>
+  `?sp. eval_phis (x with vs_gas_readings := g ++ tail) bb.bb_instructions = OK sp /\
+    exec_block n C bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` by
+    (mp_tac (Q.SPECL [`x with vs_gas_readings := g ++ tail`, `bb.bb_instructions`]
+      eval_phis_ok_or_error_defs) >> strip_tac >> fs[run_block_def] >> metis_tac[]) >>
+  `sp.vs_gas_readings = g ++ tail` by (drule gas_count_phis_ok >> simp[]) >>
+  `gas_count_block n C bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = k` by
+    (mp_tac (cj 2 trace_gas_lengths) >>
+     disch_then (qspecl_then [`p`, `d`, `n`, `C`, `fn`, `bb`,
+       `sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`] mp_tac) >>
+     fs[LENGTH_ZIP, LENGTH_TAKE]) >>
+  `DROP k (g ++ tail) = tail` by
+    (mp_tac (cj 2 gas_count_suffix) >>
+     disch_then (qspecl_then [`n`, `C`, `bb`,
+       `sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`] mp_tac) >>
+     fs[gas_count_suffix_def]) >>
+  `k = LENGTH keys` by
+    (qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : bytes32 list -> num``) >>
+     fs[LENGTH_DROP] >> decide_tac) >>
+  fs[] >>
+  `TAKE (LENGTH sites) g = g` by
+    (irule TAKE_LENGTH_ID_rwt >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem native_blocks_projections[local]:
+  lookup_block x.vs_current_bb fn.fn_blocks = SOME bb ==>
+  trace_gas (dftGasFromListTraceDefs$trace_blocks p d (SUC n) C fn x) =
+    ^native_block_gasq p (SUC d) n C fn bb x ++
+    (case run_block n C bb x of
+       OK v => if v.vs_halted then [] else
+         trace_gas (dftGasFromListTraceDefs$trace_blocks p (SUC d) n C fn v)
+     | _ => []) /\
+  gas_events_blocks (SUC n) C fn x =
+    ^native_block_sitesq n C fn bb x ++
+    (case run_block n C bb x of
+       OK v => if v.vs_halted then [] else gas_events_blocks n C fn v
+     | _ => [])
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`x`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >>
+  simp[Once dftGasFromListTraceDefsTheory.trace_defs, Once gas_events_blocks_def,
+       run_block_def, trace_gas_def, MAP_APPEND, FLAT_APPEND] >>
+  Cases_on `exec_block n C bb (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem native_stopped_block_packet[local]:
+  !keys sites unused.
+  ^native_block_packetq p (SUC d) bb bb' x keys sites unused /\
+  lookup_block x.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block x.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  (!u. run_block b C' bb' x = OK u ==> u.vs_halted) ==>
+  (\b. ^native_inventory_Dq p d fn fn' x x keys sites unused) (SUC b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!g tail n v.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+      (MAP (ALOOKUP (^native_block_gasq p (SUC d) b C' fn' bb' x)) keys) g /\
+    run_block n C bb (x with vs_gas_readings := g ++ tail) = OK v ==>
+    v.vs_halted` by
+    (rpt strip_tac >> drule_all native_whole_block_packet_ok >>
+     strip_tac >> fs[]) >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  `trace_gas (dftGasFromListTraceDefs$trace_blocks p d (SUC b) C' fn' x) =
+    ^native_block_gasq p (SUC d) b C' fn' bb' x` by
+    (drule native_blocks_projections >> simp[] >> strip_tac >>
+     Cases_on `run_block b C' bb' x` >> fs[]) >>
+  `run_blocks (SUC b) C' fn' x =
+    (case run_block b C' bb' x of OK u => Halt u | z => z)` by
+    (simp[Once run_blocks_unfold] >> Cases_on `run_block b C' bb' x` >> fs[]) >>
+  fs[] >>
+  conj_tac >- (fs[EVERY_MEM] >> metis_tac[block_region_later]) >>
+  conj_tac >- (Cases_on `run_block b C' bb' x` >> fs[]) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`g`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+  `!n. trace_gas (dftGasFromListTraceDefs$trace_blocks p d (SUC n) C fn
+       (x with vs_gas_readings := g ++ tail)) =
+       ^native_block_gasq p (SUC d) n C fn bb (x with vs_gas_readings := g ++ tail) /\
+     gas_events_blocks (SUC n) C fn (x with vs_gas_readings := g ++ tail) =
+       ^native_block_sitesq n C fn bb (x with vs_gas_readings := g ++ tail)` by
+    (gen_tac >>
+     mp_tac (Q.SPEC `x with vs_gas_readings := g ++ tail`
+       (Q.GEN `x` native_blocks_projections)) >>
+     simp[] >> strip_tac >>
+     Cases_on `run_block n C bb (x with vs_gas_readings := g ++ tail)` >>
+     fs[] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases
+      >- (qexists_tac `0` >> simp[trace_gas_def, Once gas_events_blocks_def]) >>
+      fs[] >> metis_tac[]) >>
+  `!n. run_blocks (SUC n) C fn (x with vs_gas_readings := g ++ tail) =
+     (case run_block n C bb (x with vs_gas_readings := g ++ tail) of
+        OK u => Halt u | z => z)` by
+    (gen_tac >> simp[Once run_blocks_unfold] >>
+     Cases_on `run_block n C bb (x with vs_gas_readings := g ++ tail)` >>
+     fs[] >> metis_tac[]) >>
+  strip_tac >>
+  `?n. terminates (run_block n C bb (x with vs_gas_readings := g ++ tail))` by
+    (Cases_on `n`
+     >- fs[Once run_blocks_def, passSimulationDefsTheory.terminates_def] >>
+     qexists_tac `n'` >>
+     qpat_x_assum `!n. run_blocks _ _ _ _ = _` (qspec_then `n'` assume_tac) >>
+     Cases_on `run_block n' C bb (x with vs_gas_readings := g ++ tail)` >>
+     fs[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `(?n. terminates (run_block _ _ _ _)) ==> _` mp_tac >>
+  simp[] >> strip_tac >> fs[] >>
+  Cases_on `run_block b C bb (x with vs_gas_readings := g ++ tail)` >>
+  Cases_on `run_block b C' bb' x` >>
+  fs[passSimulationDefsTheory.terminates_def, dft_res_rel_def, restore_result_def,
+     residual_result_def] >> metis_tac[]
+QED
+
+Theorem uniform_native_prefix_packet:
+  !b C C'. ^native_inventory_IHq
+Proof
+  Induct
+  >- simp[Once run_blocks_def, passSimulationDefsTheory.terminates_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!C C' f f' x q r. _`
+    (qspecl_then [`C`, `C'`] assume_tac) >>
+  `?bb'. lookup_block x.vs_current_bb f'.fn_blocks = SOME bb'` by
+    (Cases_on `lookup_block x.vs_current_bb f'.fn_blocks` >>
+     fs[Once run_blocks_unfold, passSimulationDefsTheory.terminates_def]) >>
+  `?bb. lookup_block x.vs_current_bb f.fn_blocks = SOME bb` by
+    (Cases_on `lookup_block x.vs_current_bb f.fn_blocks` >>
+     metis_tac[dftCorrectnessTheory.dft_fn_lookup_block_none, optionTheory.NOT_NONE_SOME]) >>
+  `terminates (run_block b C' bb' x)` by
+    (Cases_on `run_block b C' bb' x` >>
+     fs[Once run_blocks_unfold, passSimulationDefsTheory.terminates_def]) >>
+  `(case eval_phis x bb'.bb_instructions of
+      OK z => gas_count_block b C' bb'
+        (z with vs_inst_idx := phi_prefix_length bb'.bb_instructions) | _ => 0)
+    <= LENGTH x.vs_gas_readings` by
+    (qpat_x_assum `gas_count_blocks (SUC b) _ _ _ <= _` mp_tac >>
+     simp[Once gas_count_blocks_def] >>
+     Cases_on `eval_phis x bb'.bb_instructions` >> simp[] >>
+     rpt strip_tac >> decide_tac) >>
+  drule_all native_whole_block_packet >>
+  disch_then (qspecl_then [`q`, `SUC r`] mp_tac) >>
+  strip_tac >>
+  Cases_on `?u. run_block b C' bb' x = OK u /\ ~u.vs_halted`
+  >- suspend "continuing block" >>
+  qexistsl_tac [`K'`, `S'`, `U`] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  irule (BETA_RULE native_stopped_block_packet) >> simp[] >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
