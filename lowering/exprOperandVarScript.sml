@@ -2143,9 +2143,11 @@ Proof
       >- (rpt strip_tac >> irule compiler_create_salt_reserved_cong >> simp[]) >>
       rpt gen_tac >> strip_tac >>
       irule compiler_reserved_bind_cong >> simp[] >>
-      conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+      conj_tac
+      >- (rpt CASE_TAC >> simp[ci_mono_comp_return, ci_mono_lower_value_cfn]) >>
       qexists `ce` >> simp[] >> reverse conj_tac
-      >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+      >- (rpt strip_tac >> rpt CASE_TAC >> simp[] >>
+          irule compiler_lower_value_reserved_cong >> simp[]) >>
       rpt gen_tac >> strip_tac >>
       irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_blueprint_check] >>
       qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>

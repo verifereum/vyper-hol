@@ -171,7 +171,7 @@ Theorem expr_sim_mem_room:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
@@ -261,8 +261,9 @@ Proof
          gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
          Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
-      simp[GSYM expr_exit_exception_transport] >>
-      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+      simp[GSYM expr_exit_exception_transport, halt_exit_def] >> conj_tac
+      >- (irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+      disj2_tac >> fs[halt_exit_def]) >>
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[force_exempt_cert]
 QED

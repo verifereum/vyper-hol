@@ -13,6 +13,9 @@ Ancestors forPtrRangeLiteral forPtrRangeDynamic bodyPtrPreds
   fragExec bodyPtrDefs gasContext vyperABI
 Libs monadsyntax intLib
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 val _ = Parse.hide "body";
 
 Theorem body_for_range_lit_ptr:
@@ -273,7 +276,7 @@ Resume body_for_range_ptr[pre]:
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
             is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule stmt_expr_body_pre_alloc >>
+    (irule_body_pre stmt_expr_body_pre_alloc >>
      qpat_assum `supported_expr tops e1`
        (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
@@ -282,7 +285,7 @@ Resume body_for_range_ptr[pre]:
          allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
      qpat_assum `supported_expr tops e2`
        (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,

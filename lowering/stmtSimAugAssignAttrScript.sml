@@ -641,7 +641,7 @@ Theorem augassign_load_rhs_counted:
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-        expr_exit res r) \/
+        expr_exit res r /\ halt_exit H cx ee res r) \/
     ?err ee leaf finish.
       gas_exempt_cert F (cx_tops cx) (ctx,func)
         (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -669,7 +669,11 @@ Proof
       rewrite_tac[gas_summary_at_def] >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
       drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> strip_tac
-      >~ [`exit_result r`] >- (conj_tac >- first_assum ACCEPT_TAC >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      >~ [`exit_result r`] >-
+        (conj_tac >- first_assum ACCEPT_TAC >> disj2_tac >>
+         rpt strip_tac >>
+         qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _` drule >>
+         simp[halt_exit_def, halt_rel_def, accounts_rel_def]) >>
       fs[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
@@ -1165,7 +1169,8 @@ Theorem augassign_attr_normal_summary[local]:
     (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_post H ctx func cx lctx cenv cenv sa sb es s0 res ee t)
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `bind (eval_expr cx e) (read_result cx)
@@ -1312,7 +1317,7 @@ Resume augassign_attr_normal_summary[operator_error]:
       >- (gen_tac >> simp[GSYM bind_assoc, bind_def, lift_sum_def, raise_def]) >>
       metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]) >>
   disj2_tac >> rpt strip_tac >> simp[stmt_exit_def] >>
-  Cases_on `y` >> Cases_on `r` >> gvs[expr_exit_def]
+  Cases_on `y` >> Cases_on `r` >> gvs[expr_exit_def, halt_exit_def]
 QED
 Finalise augassign_attr_normal_summary
 
@@ -1463,7 +1468,7 @@ QED
 
 Resume compile_augassign_attr_local_case[rhs_error]:
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H1` mp_tac) >> simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
   simp[gas_summary_at_def] >>
@@ -1472,7 +1477,8 @@ Resume compile_augassign_attr_local_case[rhs_error]:
       rewrite_tac[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> irule augassign_attr_rhs_exception >>
       simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  disj2_tac >> rpt strip_tac >> fs[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
+  fs[halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

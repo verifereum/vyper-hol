@@ -49,6 +49,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* ===== Declared names ===== *)
 
 (* The typing declares only a name it does not know, which the compile env
@@ -149,7 +152,7 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
@@ -1009,13 +1012,13 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule stmt_expr_body_pre_alloc >>
+    (irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>

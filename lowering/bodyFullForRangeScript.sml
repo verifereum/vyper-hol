@@ -17,10 +17,11 @@ Ancestors
   bodyFullForRounds stmtSimForParts stmtSimForRange gasOutcomeFullCompose
   gasStorage exprSimSource vyperTypeInvariants vyperValue vyperStorageTrace
   stmtLoweringMono bodyFullAllocaFresh bodyPtrDefs forPtrCheckedScalar
-  forPtrCheckedEntryGhost
+  forPtrCheckedEntryGhost bodyInvNoDalloca
   ghostPcTransportPtr bodyFullForRangeSlot bodyFullForRangeScalar
   gasShadowStmtEnv bodyFullForRangeInit bodyFullForRangeEmpty
   bodyFullForRangeStart bodyFullForRangeBody bodyFullForRangeSuffix
+  bodyFullForArrayImmBody contextRawReachable unitMemInv
     gasOutcomeFullGuarded bodyExprPreFacts supportedStmtTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness supportedExprTraverse exprSimHyps allocLimitsProps
   gasShadowCompileStmtHelpers gasShadowCompileStmtOps gasExemptCert vyperTypeValues
@@ -1259,6 +1260,7 @@ Proof
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
     fs[ghost_inv_at_def] >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
     strip_assume_tac) >>
@@ -1289,7 +1291,7 @@ QED
 
 (* The entry prefixes are intentionally absent here.  The concrete slot,
    condition, body and backedge layout determine the common continuation. *)
-Theorem for_range_continue_full:
+Theorem for_range_continue_rich_full[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (For id typ it n stmts) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -1388,7 +1390,10 @@ Theorem for_range_continue_full:
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x)))
     (\H res ee gt rr. ?ex. res = INR ex /\
-      !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr)
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr) /\
+      halt_exit H cx ee (INR ex : unit + exception) rr /\
+      (ctx_has_dalloca ctx ==> !s.
+        (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   qabbrev_tac `Inv = \H rs ee G tn s.
@@ -1497,7 +1502,10 @@ Proof
                          handle_loop_exception) pop_scope od)
         (ee,s,G,tn) (RoundPost rs)
         (\H res ee gt rr. ?ex. res = INR ex /\
-          !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr)` >>
+          (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr) /\
+      halt_exit H cx ee (INR ex : unit + exception) rr /\
+      (ctx_has_dalloca ctx ==> !s.
+        (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s))` >>
   qabbrev_tac `EmptyObligation =
     !ee s G tn.
       ~s.vs_halted /\ storage_trace_domain cx st0 ee.storage_trace /\
@@ -1774,7 +1782,7 @@ Proof
        `\H res mid G tn t. mid.gas_obs = [] /\
           BodyPost (sstart:venom_state) (Gstart:string |-> num # num)
             (tnstart:taint) H res mid G tn t`]
-       for_handled_round_ptr_full) >>
+       for_imm_handled_round_full) >>
      conj_tac >-
        (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ BodyStart _ _ _ _ _ _ /\ _`
           (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
@@ -1817,7 +1825,7 @@ Proof
      `!H. dead_lo_ok H (DF H) lo bc cx` by
        (drule bodyPtrDefsTheory.same_frame_is_ctor >>
         fs[bodyPtrDefsTheory.dead_lo_ok_def]) >>
-     irule for_full_body_fragment_normalized >>
+     irule for_imm_body_fragment_normalized_full >>
      asm_simp_tac bool_ss [] >>
      conj_tac >-
        (`bc.ce_return_buf = cenv.ce_return_buf` by
@@ -1883,12 +1891,18 @@ Proof
   qexistsl_tac
     [`\H res ee G tn t. res = INL () /\ Done H ee G tn t`,
      `\H res ee gt rr. ?ex. res = INR ex /\
-       !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr`] >>
+       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr) /\
+      halt_exit H cx ee (INR ex : unit + exception) rr /\
+      (ctx_has_dalloca ctx ==> !s.
+        (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s)`] >>
   conj_tac >- simp_tac bool_ss [Abbr `Done`] >>
   conj_tac >- simp_tac bool_ss [] >>
   irule (GEN_ALL (BETA_RULE (Q.INST
-    [`R` |-> `\H ex ee gt rr. !tail.
-      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr`]
+    [`R` |-> `\H ex ee gt rr.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr) /\
+      halt_exit H cx ee (INR ex : unit + exception) rr /\
+      (ctx_has_dalloca ctx ==> !s.
+        (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s)`]
     (SPEC_ALL eval_for_rounds_full)))) >>
   conj_tac >-
     (qpat_assum `InitObligation` mp_tac >>
@@ -1960,13 +1974,16 @@ Resume body_for_range_lit_full[continuation]:
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x))`,
      `\H res ee gt rr. ?ex. res = INR ex /\
-       !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr`] >>
+       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr) /\
+      halt_exit H cx ee (INR ex : unit + exception) rr /\
+      (ctx_has_dalloca ctx ==> !s.
+        (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s)`] >>
   conj_tac >- (rpt gen_tac >> simp_tac bool_ss [] >> strip_tac >> qexists_tac `cenv` >> asm_rewrite_tac []) >>
   conj_tac >- (simp_tac bool_ss [] >> rpt strip_tac >> asm_rewrite_tac []) >>
   mp_tac (Q.INST [`it` |-> `Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`,
     `n` |-> `Num (n2-n1)`,
     `j1` |-> `sa.cs_next_id + 5`, `j2` |-> `sa.cs_next_id + 6`,
-    `jstore` |-> `sa.cs_next_id + 7`] (SPEC_ALL for_range_continue_full)) >>
+    `jstore` |-> `sa.cs_next_id + 7`] (SPEC_ALL for_range_continue_rich_full)) >>
   (impl_tac >-
     (asm_rewrite_tac [] >>
      conj_tac >-
@@ -2473,9 +2490,13 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `firstR`] >> rpt strip_tac >>
   Cases_on `res` >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def]) >>
-  simp[stmt_exit_ptr_def] >> gen_tac >> disj1_tac >>
-  qpat_x_assum `expr_exit (INR _) _` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  simp[stmt_exit_ptr_def] >>
+  conj_tac >-
+    (qpat_x_assum `expr_exit (INR _) _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  conj_tac >- fs[exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >> gvs[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume body_for_range_checked_full[selected_first]:
@@ -2540,6 +2561,13 @@ Resume body_for_range_checked_full[selected_first]:
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def]) >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     drule body_inv_no_dalloca >>
+     simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >> strip_tac >>
+     `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
+     simp[unitMemInvTheory.dalloca_no_wrap_def]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e2 mid`
     (fn th => drule_all (REWRITE_RULE [expr_sim_full_def] th)) >>
   disch_tac >>
@@ -2568,9 +2596,13 @@ Resume body_for_range_checked_full[selected_first]:
   conj_tac >- simp[] >>
   simp[Abbr `secondR`] >> rpt strip_tac >>
   Cases_on `res` >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def]) >>
-  simp[stmt_exit_ptr_def] >> gen_tac >> disj1_tac >>
-  qpat_x_assum `expr_exit (INR _) _` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  simp[stmt_exit_ptr_def] >>
+  conj_tac >-
+    (qpat_x_assum `expr_exit (INR _) _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  conj_tac >- fs[exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >> gvs[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume body_for_range_checked_full[selected_second]:
@@ -2612,11 +2644,17 @@ Resume body_for_range_checked_full[selected_second]:
   `?n1. v = IntV n1 /\ value_has_type tyv (IntV n1)` by
     (qspecl_then [`get_tenv cx`, `expr_type e1`, `tyv`, `v`]
        mp_tac exprSimBinopFragTheory.int_type_value >>
-     (impl_tac >- simp[]) >> strip_tac >> gvs[]) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     qpat_x_assum `value_has_type tyv v` mp_tac >>
+     qpat_x_assum `v = IntV _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `?n2. v' = IntV n2 /\ value_has_type tyv (IntV n2)` by
     (qspecl_then [`get_tenv cx`, `expr_type e1`, `tyv`, `v'`]
        mp_tac exprSimBinopFragTheory.int_type_value >>
-     (impl_tac >- simp[]) >> strip_tac >> gvs[]) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     qpat_x_assum `value_has_type tyv v'` mp_tac >>
+     qpat_x_assum `v' = IntV _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
   qpat_x_assum `v' = IntV _` SUBST_ALL_TAC >>
   `for_range_checked_code cenv lctx ret_ty id (expr_type e1) n stmts op1 op2 s2 = ((),r)` by
@@ -2663,6 +2701,7 @@ Resume body_for_range_checked_full[selected_second]:
           mk_inst (s2.cs_next_id + 1) JMP [Label entry_lbl] []]|>` >>
      simp[]) >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn2`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G2`]
     strip_assume_tac) >>
@@ -2888,19 +2927,27 @@ Resume body_for_range_checked_full[selected_second]:
          else INR (Error (RuntimeError "For too long"))`,`tc`] >>
       simp[fragExecTheory.exit_result_def] >>
       (conj_tac >-
-        (qunabbrev_tac `bad1` >> qunabbrev_tac `bad2` >>
-         Cases_on `n2 < n1` >>
-         fs[GSYM integerTheory.INT_NOT_LE,get_range_limits_def,
-            lift_sum_def,bind_def,ignore_bind_def,return_def,raise_def,
-            check_def,assert_def,compatible_bound_def] >>
-         `~(Num (n2 - n1) <= n)` by
-           (qpat_assum `w2n _ > _` mp_tac >>
-            qpat_assum `w2n _ = Num (n2 - n1)` (fn th => rewrite_tac[th]) >>
-            `n MOD dimword (:256) = n` by simp[arithmeticTheory.LESS_MOD] >>
-            simp[] >> decide_tac) >> simp[])) >>
+        (map_every (fn pat => qpat_assum pat mp_tac)
+           [`bad1 \/ bad2`, `Abbrev (bad1 = _)`, `Abbrev (bad2 = _)`,
+            `n1 <= n2 ==> _`, `n < dimword (:256)`] >>
+         POP_ASSUM_LIST (K ALL_TAC) >> ntac 5 disch_tac >>
+         qunabbrev_tac `bad1` >> qunabbrev_tac `bad2` >>
+         Cases_on `n2 < n1`
+         >- fs[GSYM integerTheory.INT_NOT_LE,get_range_limits_def,
+                 lift_sum_def,bind_def,ignore_bind_def,return_def,raise_def,
+                 check_def,assert_def,compatible_bound_def] >>
+         `n1 <= n2` by intLib.COOPER_TAC >>
+         `w2n (i2w n2 - i2w n1 : bytes32) = Num (n2 - n1)` by
+           metis_tac[] >>
+         `n MOD dimword (:256) = n` by simp[arithmeticTheory.LESS_MOD] >>
+         `~(Num (n2 - n1) <= n)` by gvs[] >>
+         simp[get_range_limits_def,lift_sum_def,bind_def,ignore_bind_def,
+              return_def,raise_def,check_def,assert_def,compatible_bound_def])) >>
       gen_tac >> disch_tac >>
       (reverse conj_tac >-
-        (Cases_on `bad1` >> simp[stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def])) >>
+        (Cases_on `bad1` >>
+         simp[stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,
+              exprSimDefsTheory.halt_exit_def])) >>
       irule gas_origin_ptr_path_trans >>
       qexistsl_tac [`G'`,`e0`,`tn'`] >>
       (reverse conj_tac >- metis_tac[]) >>
@@ -2939,7 +2986,17 @@ Resume body_for_range_checked_full[selected_second]:
      simp[Abbr `cmp`,Abbr `bad1`,Abbr `bad2`,
           Abbr `u1`,Abbr `u2`,Abbr `u3`,Abbr `u4`,
           Abbr `u5`,Abbr `u6`,Abbr `u7`] >>
-     Cases_on `is_signed_type (expr_type e1)` >> fs[] >>
+     (conj_tac >-
+       (qpat_assum `(if is_signed_type _ then _ else _) <=> _` mp_tac >>
+        qpat_assum `~bad2` mp_tac >>
+        qpat_assum `Abbrev (bad2 = _)` mp_tac >>
+        qpat_assum `n < dimword (:256)` mp_tac >>
+        qpat_assum `n1 <= n2` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[markerTheory.Abbrev_def] >> rpt strip_tac >>
+        Cases_on `is_signed_type (expr_type e1)` >> fs[] >>
+        intLib.COOPER_TAC)) >>
+     (conj_tac >- (Cases_on `is_signed_type (expr_type e1)` >> simp[])) >>
      qexistsl_tac [`cx`,`ee`,`st0`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `!D lo'. _ ==> inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -3161,7 +3218,7 @@ Resume body_for_range_checked_full[selected_second]:
     `ev` |-> `STRING #"%" (toString (s2.cs_next_var + 7))`,
     `nv` |-> `STRING #"%" (toString pj.cs_next_var)`,
     `j1` |-> `s2.cs_next_id + 12`, `j2` |-> `s2.cs_next_id + 13`,
-    `jstore` |-> `s2.cs_next_id + 14`] (SPEC_ALL for_range_continue_full)) >>
+    `jstore` |-> `s2.cs_next_id + 14`] (SPEC_ALL for_range_continue_rich_full)) >>
   (impl_tac >-
     (asm_rewrite_tac [] >>
      (conj_tac >- metis_tac[]) >>
@@ -3305,4 +3362,114 @@ Proof
     it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
   >- (irule body_for_range_lit_full >> metis_tac[]) >>
   irule body_for_range_checked_full >> metis_tac[]
+QED
+
+(* Preserve the original pointer-only interface as a weakening of the same
+   selected rich execution. *)
+Theorem for_range_continue_full:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (For id typ it n stmts) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (For id typ it n stmts) ==> occurs_abi_decode_target target tops) /\
+  ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (For id typ it n stmts) = SOME env' /\
+  stmt_exprs_ok cenv (For id typ it n stmts) /\
+  call_evaluation_safe cx (int_calls_stmt (For id typ it n stmts)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx RetQ cenv ret_ty /\
+  (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1)) <> [] ==>
+    body_stmts_full_ok cx stmts) /\
+  id NOTIN FDOM env.var_types /\ is_int_type typ /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
+  n1 <= n2 /\ Num (n2-n1) < dimword (:256) /\
+  type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
+  type_memory_bytes cenv typ = 32 /\ cenv.ce_alloca_locals /\
+  FLOOKUP cenv.ce_vars id = NONE /\
+  local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  fn_inst_ids_distinct func /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\
+  q = STRING #"%" (toString sa.cs_next_var) /\
+  not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\
+  (!x. not_fresh_at sa x ==> x <> cv /\ x <> dv) /\
+  q <> cv /\ cv <> ev /\ q <> dv /\ cv <> dv /\ ev <> dv /\
+  declare_local cenv id typ sa = (bc,sa with cs_next_var := sa.cs_next_var + 1) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) (fn_insts func) /\
+  lookup_block cond_lbl func.fn_blocks = SOME
+    <|bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var cv; Var ev] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []]|> /\
+  lookup_block body_lbl func.fn_blocks = SOME bbb /\
+  get_instruction bbb 0 = SOME (mk_inst jstore MSTORE [Var q; Var cv] []) /\
+  sb0.cs_current_bb = body_lbl /\
+  sb0.cs_current_insts = [mk_inst jstore MSTORE [Var q; Var cv] []] /\
+  sa.cs_next_var < sb0.cs_next_var /\ cs_extends sa sb0 /\
+  compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty stmts sb0 = ((),sb1) /\
+  stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty stmts sb0 = (bc_out,sb1) /\
+  cs_extends sb0 sb1 /\ fn_has_code sb0 sb1 func /\
+  stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt stmts)
+    shadow_body_in = (bc_out,shadow_body_out) /\
+  gas_shadow_state sb0 shadow_body_in /\ gas_shadow_state sb1 shadow_body_out /\
+  fn_has_code shadow_body_in shadow_body_out shadow_func /\
+  (~block_is_terminated sb1 ==>
+    sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+    sj.cs_current_insts = sb1.cs_current_insts ++
+      [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
+  sj.cs_next_var = sb1.cs_next_var /\ nv = STRING #"%" (toString sj.cs_next_var) /\
+  lookup_block incr_lbl func.fn_blocks = SOME
+    <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst sj.cs_next_id ADD [Var cv; Lit 1w] [nv];
+       mk_inst (sj.cs_next_id + 1) ASSIGN [Var nv] [cv];
+       mk_inst (sj.cs_next_id + 2) JMP [Label cond_lbl] []]|> /\
+  r.cs_current_bb = exit_lbl /\ r.cs_current_insts = [] /\
+  sa.cs_next_var <= r.cs_next_var /\ ~block_is_terminated r /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  gas_admissible (eval_for cx tyv id stmts
+    (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1)))) (stmt_res_ok lctx) es /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es ec /\
+    storage_well_formed_on cx es (FST H) /\
+    return_buf_frame d cenv sa ec /\ alloca_history func ec /\
+    s0.vs_alloca_next <= ec.vs_alloca_next /\ allocas_from lo ec /\
+    ghost_inv_at (DF H) lo d cenv cx es Gentry tnentry ec /\
+    ~ec.vs_halted /\ ec.vs_current_bb = cond_lbl /\ ec.vs_inst_idx = 0 /\
+    lookup_var q ec = SOME w /\ ptr_covers Gentry tnentry q ec 32 /\
+    FLOOKUP ec.vs_allocas sa.cs_next_id = SOME (w2n w,32) /\
+    w2n w + 32 < dimword (:256) /\ w2n w + 32 <= ec.vs_alloca_next /\
+    (!name b len. local_region cenv es.scopes ec name b len ==>
+      regions_disjoint (w2n w) 32 b len) /\
+    FLOOKUP Gentry cv = NONE /\ FLOOKUP Gentry ev = NONE /\
+    op_taint tnentry (Var cv) = {} /\ op_taint tnentry (Var ev) = {} /\
+    lookup_var ev ec = SOME (i2w n2) /\ lookup_var cv ec = SOME (i2w n1) /\
+    (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x ec = SOME v) /\
+    (!aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ==> FLOOKUP ec.vs_allocas aid = SOME bl) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gentry x = FLOOKUP G0 x /\
+      op_taint tnentry (Var x) = op_taint tn0 (Var x))) ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1))))
+    (es,ec,Gentry,tnentry)
+    (\H res ee G tn s. res = INL () /\
+      stmt_lands lctx r (INL ()) s /\ ~s.vs_halted /\
+      ~block_is_terminated r /\ cenv_top_ext cenv cenv ee.scopes /\
+      stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv r s /\ alloca_history func s /\
+      s0.vs_alloca_next <= s.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+      (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x s = SOME v) /\
+      (!aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ==> FLOOKUP s.vs_allocas aid = SOME bl) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
+        op_taint tn (Var x) = op_taint tn0 (Var x)))
+    (\H res ee gt rr. ?ex. res = INR ex /\
+      !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt rr)
+Proof
+  disch_tac >> mp_tac (SPEC_ALL for_range_continue_rich_full) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  pop_assum kall_tac >> disch_tac >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED

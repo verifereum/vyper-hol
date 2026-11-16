@@ -5,7 +5,7 @@ Ancestors
   stmtSimDefs loweringPosts exprLoweringProps loweringHalt
   abiTupleProps rich_list fragGasMode exprLowering compileEnv
   externalEntryShape venomState fragExec placeMemoryCopyEffect exprSimProps
-  stmtSimReturn targetPlaceSimCasesBase
+  stmtSimReturn targetPlaceSimCasesBase vyperStorageFootprint
 
 Theorem assign_place_staged_copy_endpoint:
   compile_alloc_buffer (type_memory_bytes cenv sty) sa = (buf,sm) /\
@@ -25,7 +25,10 @@ Theorem assign_place_staged_copy_endpoint:
   eval_operand dst s = SOME dw /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx ee s /\ expr_sim_inv cenv cx env ee /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s) /\
+  expr_sim_inv cenv cx env ee /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -36,7 +39,8 @@ Theorem assign_place_staged_copy_endpoint:
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -45,6 +49,9 @@ Theorem assign_place_staged_copy_endpoint:
     alloca_frame cenv ee sa s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by metis_tac[] >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
   `cs_extends sm sn` by
     (drule_all compile_copy_memory_extends >> strip_tac >>
@@ -85,7 +92,7 @@ Proof
      irule assign_place_bytes_copy_effect >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t /\
+  `stmt_state_rel H0 ctx func cenv cx ff t /\
    alloca_frame cenv ee sn u cenv ff t` by
     (irule assign_place_copy_effect_state_frame >> simp[] >> metis_tac[]) >>
   `alloca_frame cenv ee sa s cenv ff t` by
@@ -98,8 +105,12 @@ Proof
      qpat_assum `typed_copy_effect _ _ _ _ _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_effect_def] >>
      metis_tac[gas_marked_path_then, arithmeticTheory.ADD]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ff t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee u` by metis_tac[] >>
+     irule (cj 1 assign_place_copy_effect_state_frame) >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
   qexists_tac `t` >> fs[typed_copy_effect_def] >> simp[not_fresh_at_def])
 QED
-
-
-

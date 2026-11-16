@@ -172,9 +172,10 @@ Proof
   disch_then (qspec_then `BaseTV (StringT n)` mp_tac) >>
   strip_tac >>
   `wb_frame cenv es es' sa s0 t` by
-    (irule wb_frame_trans >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`es'`, `sm`, `s`] >> simp[]) >>
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
+       `es'`, `es'`, `sm`, `s`, `t`, `ctx`]
+       (Q.INST [`H` |-> `H`] wb_frame_trans)) >>
+     impl_tac >- simp[] >> simp[]) >>
   mp_tac (Q.INST [`X` |-> `X`, `n` |-> `n`] uint2str_result_memory_bounds) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `LENGTH (num_to_dec_string X) <= n` by
