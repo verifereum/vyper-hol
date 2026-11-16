@@ -8,6 +8,9 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
+  bodyFullAnnAssignWordEntry bodyFullAnnAssignReserve bodyFullAnnAssignCompose
+  bodyFullPathHistory bodyInvNoDalloca annAssignPtrFacts bodyExprPreFacts
+  stmtSimDeclSource exprSimSource exprLoweringProps supportedStmtTraverse loweringPosts
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
