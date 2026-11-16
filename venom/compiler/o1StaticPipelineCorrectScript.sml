@@ -2,6 +2,7 @@
 Theory o1StaticPipelineCorrect
 Ancestors
   o1StaticPipelineCompose o1PipelineCorrect o1LabelStages o1PipelineCompose
+  o1LabelFlowStaticContracts
   o1DretDesugarContract o1ScheduleDecomp o1FnScheduleDecompHelpers
   o1ComposeSupport o1ContractSimplifyCfg o1PassContract o1RequestContract
   ctxLookupAgree ctxLookupAgreeHelpers venomPipelineDriver venomPipelineRunner
