@@ -10,7 +10,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasFromListLocator dftGasFromListContextReach
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
-  dftGasInvResidualTrace venomInstProps venomInstProofs stateEquivProofs
+  dftGasInvResidualTrace dftGasInvExtraction venomInstProps venomInstProofs stateEquivProofs
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
   dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
@@ -2582,6 +2582,29 @@ Proof
   rpt strip_tac >> (simp[sortingTheory.PERM_FUN_APPEND_CONS])
 QED
 
+Theorem native_bubbles_inversion[local]:
+  !src dst. dft_head_bubbles R src dst ==>
+    ALL_DISTINCT src ==>
+    !x z. id_before src x z /\ id_before dst z x ==> R x z
+Proof
+  ho_match_mp_tac dft_head_bubbles_strongind >> conj_tac
+  >- simp[id_before_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `dft_head_bubbles R (pre ++ post) rest` >>
+  `PERM (pre ++ post) rest` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (pre ++ post) /\ ~MEM y pre /\ ~MEM y post` by
+    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  Cases_on `z = y`
+  >- (gvs[dftSsaPreserveTheory.id_before_append, id_before_cons,
+          EVERY_MEM] >> metis_tac[id_before_mem]) >>
+  `~MEM y rest` by metis_tac[PERM_MEM_EQ, MEM_APPEND] >>
+  `x <> y` by
+    (gvs[id_before_cons] >> metis_tac[id_before_mem]) >>
+  first_x_assum irule >> simp[] >>
+  gvs[dftSsaPreserveTheory.id_before_append, id_before_cons] >>
+  metis_tac[]
+QED
+
 Theorem native_bubbles_filter[local]:
   (!x y. A x y ==> ~(P x /\ P y)) ==>
   !src dst. dft_head_bubbles A src dst ==> FILTER P src = FILTER P dst
@@ -3489,6 +3512,41 @@ Resume native_frontier_mask_inventory[actual_call]:
   simp_tac pure_ss [MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 Finalise native_frontier_mask_inventory
+
+Theorem native_residual_completion_sort:
+  ALL_DISTINCT (A ++ i::srcpost) /\
+  dft_head_bubbles R (A ++ i::srcpost) (consumed ++ i::later) /\
+  (!x y. R x y ==> dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) /\
+  inv_ev_ftrace orc p d ctx
+    (consumed ++ FILTER (\x. ~MEM x consumed) A) s t ==>
+  inv_ev_ftrace orc p d ctx
+    (A ++ FILTER (\x. MEM x consumed) srcpost) s t
+Proof
+  strip_tac >>
+  `PERM (A ++ i::srcpost) (consumed ++ i::later)` by
+    metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (consumed ++ i::later)` by metis_tac[ALL_DISTINCT_PERM] >>
+  `EVERY (\x. MEM x (A ++ srcpost)) consumed` by
+    (gvs[ALL_DISTINCT_APPEND, EVERY_MEM] >> rpt strip_tac >>
+     drule PERM_MEM_EQ >> disch_then (qspec_then `x` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `ALL_DISTINCT (A ++ srcpost)` by gvs[ALL_DISTINCT_APPEND] >>
+  `PERM (consumed ++ FILTER (\x. ~MEM x consumed) A)
+        (A ++ FILTER (\x. MEM x consumed) srcpost)` by
+    (irule dftGasInvExtractionTheory.inv_completed_prefix_perm >>
+     gvs[ALL_DISTINCT_APPEND]) >>
+  irule dftGasInvExtractionTheory.inv_ftrace_source_sort >> conj_tac
+  >- (gvs[ALL_DISTINCT_APPEND] >>
+      simp[ALL_DISTINCT_APPEND, FILTER_ALL_DISTINCT, MEM_FILTER] >> metis_tac[]) >>
+  qexists_tac `consumed ++ FILTER (\x. ~MEM x consumed) A` >>
+  simp[] >> ntac 2 gen_tac >> strip_tac >>
+  `id_before (A ++ i::srcpost) x z` by
+    metis_tac[dftGasInvExtractionTheory.inv_completed_order_source] >>
+  `id_before (consumed ++ i::later) z x` by
+    metis_tac[dftGasInvExtractionTheory.inv_completion_inversion, PERM_SYM] >>
+  `R x z` by metis_tac[native_bubbles_inversion] >>
+  metis_tac[]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
