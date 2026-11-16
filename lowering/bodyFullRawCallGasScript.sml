@@ -8,7 +8,7 @@ Ancestors
   exprLowering compileEnv emitHelper msgGasSim
   venomInst venomState venomExecSemantics memSafeRun
   vyperStorageTrace finite_map pred_set list codegenRel decoderGhostFramePtr
-  vyperTypeSystem
+  vyperTypeSystem unitTransformDefs contextCodegenRel
 
 Theorem raw_call_optional_gas_joint:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
@@ -150,7 +150,17 @@ Resume raw_call_optional_gas_joint[gas_path]:
 QED
 
 Resume raw_call_optional_gas_joint[state_frame]:
-  cheat
+  `not_local_ptr cenv es.scopes (FST (fresh_var sa))` by
+    (simp[fresh_var_def] >> irule local_ptrs_reserved_fresh >>
+     qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es
+     (update_var (FST (fresh_var sa)) w s)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (update_var _ _ _)`
+    (mp_then Any mp_tac msg_gas_state_frame) >>
+  disch_then (qspecl_then [`DROP 1 s.vs_gas_readings`,
+    `SUC (LENGTH sa.cs_current_insts)`, `es.gas_obs`] mp_tac) >>
+  simp[update_var_def]
 QED
 
 Finalise raw_call_optional_gas_joint
