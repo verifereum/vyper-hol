@@ -3776,7 +3776,7 @@ Proof
   simp[pairTheory.UNCURRY, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_extcall_store_values[local]:
+Theorem ci_mono_compile_extcall_store_values:
   ∀cenv vals buf_op offset sa.
     ci_mono sa
       (SND (compile_extcall_store_values cenv vals buf_op offset sa))
