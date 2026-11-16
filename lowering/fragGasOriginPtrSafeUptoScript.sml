@@ -685,7 +685,8 @@ Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
       simp[inst_mem_ok_in_fn_def] >> metis_tac[]) >>
-  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def]
+  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def] >>
+  metis_tac[inst_mem_below_frontier_frontiers]
 QED
 
 Theorem invoke_mem_facts[local]:
@@ -696,7 +697,7 @@ Proof
   `inst = inst with inst_opcode := INVOKE` by
     simp[instruction_component_equality] >>
   pop_assum (fn th => once_rewrite_tac [th]) >>
-  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontier_def]
+  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontiers_def]
 QED
 
 Theorem focus_at_ok[local]:
