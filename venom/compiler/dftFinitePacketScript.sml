@@ -4449,10 +4449,47 @@ Proof
          match_mp_tac (PURE_REWRITE_RULE [LENGTH_APPEND] dft_packet_keymap_cut_piece) >>
          conj_tac >- simp[Abbr `work`] >>
          rpt strip_tac >>
+         `MEM f orderi` by gvs[] >>
          drule_all dft_packet_activation_rows >>
-         disch_then irule >> gvs[]) >>
+         disch_then ACCEPT_TAC) >>
      gvs[Abbr `newcut`,Abbr `work`]) >>
-  FAIL_TAC "cut map2 proved"
+  `newAM [] = if inst.inst_opcode = GAS then
+      MAP2 (\slot key. if key = (p,d,inst.inst_id) then
+        SOME (HD s.vs_gas_readings) else slot) (AM []) (AK []) else AM []` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`,
+       `Abbrev (work = _)`,`Abbrev (newAM = _)`,`AM = _`,`AK = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     Cases_on `inst.inst_opcode = GAS`
+     >- (simp[] >> (metis_tac[dft_packet_keymap_root])) >>
+     simp[Abbr `work`,Abbr `newAM`]) >>
+  `LENGTH newcut = LENGTH Mcut /\ newcut = TAKE (LENGTH Mcut) (newAM [])` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`newcut = if _ then _ else _`,`newAM [] = if _ then _ else _`,
+       `AM [] = Mcut ++ mr`,`AK [] = Kcut ++ kr`,`LENGTH Mcut = LENGTH Kcut`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     Cases_on `inst.inst_opcode = GAS` >>
+     gvs[MAP2_APPEND,dft_packet_aligned_map2_take,TAKE_APPEND] >>
+     metis_tac[TAKE_LENGTH_ID]) >>
+  conj_tac >- simp[NoAsms,Abbr `newcut`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (map_every (fn pat => qpat_assum pat mp_tac)
+        [`LENGTH newcut = LENGTH Mcut`,`newcut = TAKE (LENGTH Mcut) (newAM [])`] >>
+      POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+      metis_tac[TAKE_DROP]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (map_every (fn pat => qpat_assum pat mp_tac)
+        [`LENGTH newcut = LENGTH Mcut`,`LENGTH Mcut = LENGTH Ecut`] >>
+      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  conj_tac
+  >- (map_every (fn pat => qpat_assum pat mp_tac)
+        [`LENGTH newcut = LENGTH Mcut`,`LENGTH Mcut = LENGTH Kcut`] >>
+      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  FAIL_TAC "cut lengths proved"
 QED
 
 Theorem dft_focus_packet_step:
