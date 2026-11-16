@@ -1,0 +1,61 @@
+NONLOGICAL CONTEXT INDEX -- C1.5.5.1.a
+
+Consumer theory: bodyFullForArrayLocalConsumer
+Declaration under diagnosis: body_for_local_array_full_from_contracts
+Resume under fixed-path observation: fixed_init
+Source: lowering/bodyFullForArrayLocalConsumerScript.sml
+Base commit: 7fa477c887c95a0650b8fc18888caf726dfadf0f
+Base blob: 5a295bb9c0d27cebf180e7355caefe7dd3edac34
+The complete base-plus-patch archive in this directory is authoritative for
+all abbreviations, quotes, source prefixes and retained unfinished proofs.
+It is not a theorem import and must not be overlaid on production blindly.
+
+Exact Ancestors stanza in archived Consumer:
+Ancestors ptrCoverage[qualified,ignore_grammar] immutableMemoryFrame[qualified,ignore_grammar] typedMemoryCopy[qualified,ignore_grammar] abiDecodeStaticProps[qualified,ignore_grammar] lowerDloadRelocationBoundary[qualified,ignore_grammar] abiEncoderSourceInvoke[qualified,ignore_grammar] o1ContractLowerDloadTaint[qualified,ignore_grammar] pred_set[qualified,ignore_grammar]
+  bodyFullForArrayLocalContracts bodyFullForArrayLocalControl
+  bodyFullForArrayLocalRecovery bodyFullForRounds bodyFullPreds bodySimFull
+  bodyFullGhostFrame bodyInvNoDalloca stmtSimForArrayLoop stmtSimForParts
+  stmtLowering stmtLoweringMono compileEnv codegenRel contextCodegenRel
+  fragExec fragGasOriginPtrLoop ptrDiscipline venomInst venomState
+  vyperInterpreter vyperTypeSystem vyperState vyperTyping vyperValue
+  supportedStmts supportedStmtTraverse valueEncoding exprSimAggregateLayout
+  exprSimHypsDefs loweringPosts bodyPtrDefs finite_map list words
+  gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
+  stmtSimForArray stmtSimForArrayFrag
+  vyperStorageTrace exprSimProps vyperTypeValues vyperTypeInvariants
+  vyperAST vyperArray vyperTypeEnv arithmetic vyperValueOperation
+  exprSimHyps allocLimits gasShadow whitelistForIterDynFrag
+  bodyFullForArrayDynamicScalar
+  gasShadowStmtEnv gasShadowCompileStmtOps gasShadowState
+
+Imported local interface file identities (Git blobs from m1052_t003):
+bodyFullForArrayDynamicScalarScript.sml 3e68a8add80fc0e069e143ebca7b4f73ff2f1a4b
+bodyFullForArrayLocalContractsScript.sml f363d2c91cc5a2dd39819e6b0359b0224bc4a986
+bodyFullForArrayLocalControlScript.sml d6343401b4629c80033611cd79683f5f4f1a562e
+bodyFullForArrayLocalRecoveryScript.sml ef5407bab7ae723f36950646f1330d56d2cc5030
+All paths are under lowering/. The imports are provenance, not certification
+that any universally closed antecedent has been supplied as a theorem.
+
+Seven-cut preservation:
+The Consumer's initial comment explicitly says all seven cuts are universally
+closed antecedents, not proof dependencies on eventual suppliers. Its
+fixed_entry_contract and remaining quotation texts are retained in the base.
+The entire archived diff changes only diagnostic printing, the dynamic_static
+suspension, the reduced fixed premise solver, and a post-QED marker. It does
+not change any quotation or public theorem header. No LocalContracts file
+edit is made in this publication. The existing approval is preserved rather
+than re-audited or extended.
+
+Proof-context access and replay:
+Other capture owners can reconstruct the source losslessly from the public
+base and complete patch without reading this lane's private worktree. The
+raw-goals.txt fixed sequent has no free abbreviation requiring expansion;
+the wider runtime source's abbreviations (including Head and packet setup)
+remain in the full reconstructed source. Captures for other points must
+retain their actual necessary assumptions and abbreviation expansions;
+this fixed-only record cannot substitute for their sequents.
+
+The observed fixed path uses a selected runtime endpoint/ghost tuple before
+all horizons. No arbitrary shadow code_ready witness or ordinary/shadow state
+identification is supplied here. Dynamic static, common-round, shadow packet,
+suffix and dynamic entry obligations are not claimed solved by fixed_init.

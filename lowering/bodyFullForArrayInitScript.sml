@@ -21,7 +21,7 @@ Theorem for_array_dynamic_entry_path_full:
        mk_inst e2 GT [Var lv; Lit (n2w c)] [g];
        mk_inst e3 ISZERO [Var g] [vld];
        mk_inst e4 ASSERT [Var vld] [];
-       mk_inst e5 JMP [Label cond] []]|> /\
+       mk_inst e5 JMP [Label cond_lbl] []]|> /\
   s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
   (?H. valid_horizon cx st0 H es.storage_trace) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -51,10 +51,10 @@ Theorem for_array_dynamic_entry_path_full:
   ?dst cc s1.
     exec_alloca ainst (update_var lv (n2w (LENGTH vs)) s0)
       (n2w sz : bytes32) = OK s1 /\ s1 = sA /\
-    cc = jump_to cond (update_var vld 1w (update_var g 0w
+    cc = jump_to cond_lbl (update_var vld 1w (update_var g 0w
       (update_var idx 0w (jump_to entry s1)))) /\
     array_loop_inv ctx func cenv cx st0 P vs id idx saved_base array_base p dst sz
-      ainst cond st 0 es cc /\
+      ainst cond_lbl st 0 es cc /\
     lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
     array_caller_frame st s0 cc /\
     gas_marked_path F ctx func s0 0 (OK cc) /\
@@ -113,7 +113,7 @@ Proof
           bool_to_word_def,inst_mem_below_frontier_def,
           source_memory_read_ranges_def,source_memory_write_ranges_def,
           Abbr `u`]) >>
-  qpat_x_assum `cc = jump_to cond u` SUBST_ALL_TAC >> simp[] >>
+  qpat_x_assum `cc = jump_to cond_lbl u` SUBST_ALL_TAC >> simp[] >>
   conj_tac >- gvs[Abbr `u`,ALL_DISTINCT,lookup_var_update_var] >> qx_gen_tac `hh` >>
   qpat_assum `!h. inst_seq_ptr _ _ _ _ _ G tn _ s0 _ _`
     (qspec_then `hh` assume_tac) >>
@@ -142,7 +142,7 @@ Proof
      disch_then irule >> gvs[jump_to_def,mk_inst_def]) >>
   `gas_origin_ptr_path (DF hh,lo,explicit,ctx,func,PG)
      (u with vs_inst_idx := 4,G2,tn2) []
-     (OK (jump_to cond (u with vs_inst_idx := 4)),G2,tn2)` by
+     (OK (jump_to cond_lbl (u with vs_inst_idx := 4)),G2,tn2)` by
     (irule jmp_origin_ptr_path >>
      simp[Abbr `u`,Abbr `en`,jump_to_def,update_var_def,
           allocas_from_def,get_instruction_def] >>
