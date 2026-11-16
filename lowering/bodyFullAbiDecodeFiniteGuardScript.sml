@@ -1,6 +1,7 @@
 Theory bodyFullAbiDecodeFiniteGuard
 Ancestors
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeClamp bodyFullAbiDecodePath
+  bodyFullAbiDecodeClampMemory
   abiDecodePtrScalarAbort bodyPtrBopScalarOutcome
   bodyPtrBopScalarSeq instSeqPtrLo fragGasOriginPtrDead fragGasOriginPtrLoop
   abiDecodePtrPrims exprLoweringProps freshWrites list rich_list finite_map
@@ -79,7 +80,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bop_scalar_seq_mem_ok] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
   drule_all emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -133,7 +134,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bop_scalar_seq_mem_ok] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
   drule_all abi_decode_emitted_abort_origin_ptr_path >>
   disch_then (qspec_then `explicit` strip_assume_tac) >>
   qexistsl_tac [`j`, `G'`, `tn'`] >> gen_tac >>
