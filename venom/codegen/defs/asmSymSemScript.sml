@@ -20,9 +20,9 @@
  *     (AsmLabel l) and go to that label; JUMPI's condition is concrete,
  *     and when it is zero the target is ignored, as in asm_jumpi;
  *   - ADD of Lab l d and a concrete w, in either order, gives
- *     Lab l (d + w2n w) when l is a data header (AsmDataHeader l); deltas
- *     stay below 2^255, so the concrete address never wraps;
- *   - CODECOPY from Lab l d, for a data header l, copies from the bytes
+ *     Lab l (d + w2n w) when l is a data header (AsmDataHeader l);
+ *   - CODECOPY from Lab l d, for a data header l, requires d < 2^255
+ *     and copies from the bytes
  *     the data environment gives for l; the environment is a parameter,
  *     shared by the program and its finalized version;
  *   - MSTORE writes one to memory, which records it byte by byte in a side
