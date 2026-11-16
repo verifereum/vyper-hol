@@ -16,35 +16,6 @@ Ancestors
 Libs
   pairLib
 
-Theorem target_storage_result_ready_mem[local]:
-  valid_horizon cx st0 H ee.storage_trace /\
-  storage_well_formed_on cx ee (FST H) /\
-  eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),ee) ==>
-  slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
-  storage_read_live H tr (get_storage cx ee tr) slot tv
-Proof
-  strip_tac >>
-  drule_all eval_base_place_storage_ready >> strip_tac >> simp[] >>
-  Cases_on `type_slot_size tv = 0`
-  >- metis_tac[zero_slot_size_slots_in_range] >>
-  drule eval_base_place_observed_region >> strip_tac >>
-  `MEM (tr,n2w offset,tv') (FST H) /\
-   offset + type_slot_size tv' <= dimword(:256)` by
-    (fs[valid_horizon_def, storage_observations_ok_def, storage_roots_fit_def, EVERY_MEM] >>
-     conj_tac
-     >- (first_x_assum irule >>
-         simp[storage_trace_regions_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-         first_assum (irule_at Any) >> simp[]) >>
-     first_x_assum drule >> simp[]) >>
-  drule storage_subregion_bounds >> strip_tac >>
-  `offset < dimword(:256) /\ offset + delta < dimword(:256)` by decide_tac >>
-  `w2n slot = offset + delta` by simp[wordsTheory.word_add_n2w] >>
-  `slots_in_range (get_storage cx ee tr) offset tv'` by
-    (fs[storage_well_formed_on_def] >> first_x_assum drule >> simp[]) >>
-  metis_tac[storage_subregion_slots_in_range]
-
-QED
-
 Theorem target_storage_index_open_mem[local]:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env e es /\
