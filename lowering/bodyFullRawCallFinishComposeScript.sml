@@ -61,6 +61,103 @@ Theorem raw_call_finish_from_result_bridges:
       halt_exit H cx ee (INR (Error (RevertData s.vs_returndata)))
         (Abort Revert_abort u) /\
       (ctx_has_dalloca ctx ==> !t. Abort Revert_abort u = Halt t ==> allocas_below_fmp t))) ==>
+ (!n ov ok sa result sb cenv e cx H0 ctx func es s es0 sf s0 alloc q w tn G
+   success lo G0 tn0 t explicit PG dep ovx.
+  (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sa = (result,sb) /\
+  0 < n /\
+  post_value_type cenv e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) =
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <=
+    64 + ((n + 31) DIV 32) * 32 /\
+  stmt_state_rel (H0 : (bool # 256 word # type_value) list # num list)
+    ctx func cenv cx es s /\
+  wb_frame cenv es0 es sf s0 s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+  alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+  FLOOKUP s.vs_allocas alloc.inst_id =
+    SOME (w2n w,32 + ((n + 31) DIV 32) * 32) /\
+  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= alloc.inst_id /\
+  alloc.inst_id < sa.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sf x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sf x) /\
+  safe_operand sa ov /\ safe_operand sa ok /\
+  ov = Var ovx /\
+  FLOOKUP G ovx = SOME (w2n w,32 + ((n + 31) DIV 32) * 32) /\
+  op_taint tn ov = {} /\ op_taint tn ok = {} /\
+  eval_operand ov s = SOME w /\
+  eval_operand ok s = SOME (if success then 1w else 0w) /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
+    TAKE n s.vs_returndata /\
+  (!i. w2n w + 32 <= i /\
+       i < w2n w + 32 + LENGTH (TAKE n s.vs_returndata) ==>
+       i NOTIN tn.t_mem) /\
+  64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\
+  n < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ghost_kept_at lo cenv es0 sf G0 tn0 s0 G tn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next ==>
+  ?Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)) /\
+    !H D. stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at D lo dep cenv cx es G tn s ==>
+      vv_post H ctx func cenv cx e es0 sf sb s0 es
+        (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+        (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) es
+        (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+        (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      s0.vs_alloca_next <= (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_alloca_next /\
+      ghost_inv_at D lo dep cenv cx es Gf tnf (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      ptr_vv_ok cx (post_value_type cenv e)
+        (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+        (LocatedValue (expr_type e) (mk_ptr result LocMemory)) es Gf tnf
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      (cenv.ce_is_ctor /\ vv_location (LocatedValue (expr_type e) (mk_ptr result LocMemory)) = SOME LocCode ==>
+        ?val. read_result cx (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))) es = (INL val,es) /\
+          !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+            eval_operand (vv_operand (LocatedValue (expr_type e) (mk_ptr result LocMemory)))
+              (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w ==>
+            w2n w + type_memory_size rt <= lo /\
+            (!mem. mem_agree_outside tnf.t_mem (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory mem ==>
+              val_in_memory rt val (w2n w) mem)) /\
+      (!t' op. LocatedValue (expr_type e) (mk_ptr result LocMemory) = StackValue t' op /\
+        ~is_word_type (post_value_type cenv e) ==>
+        ptr_buf_ok cenv e op Gf (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      (!t' p. LocatedValue (expr_type e) (mk_ptr result LocMemory) = LocatedValue t' p /\
+        p.ptr_location = LocMemory ==>
+        ptr_buf_ok cenv e p.ptr_operand Gf (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      ghost_kept_at lo cenv es0 sf G0 tn0 s0 Gf tnf) ==>
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0.
@@ -206,9 +303,10 @@ Theorem raw_call_finish_from_result_bridges:
 Proof
   disch_then (mk_asm "static_bridge") >>
   disch_then (mk_asm "revert_bridge") >>
+  disch_then (mk_asm "tuple_bridge") >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   rename1 `emit_op ADD [data;Lit 32w] s3 = (dp,s4)` >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon esK.storage_trace)
      esK.storage_trace` by fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _`
@@ -232,6 +330,7 @@ Proof
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
    ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7` by
     (asm_x "static_bridge" kall_tac >> asm_x "revert_bridge" kall_tac >>
+     asm_x "tuple_bridge" kall_tac >>
      rpt conj_tac
      >- metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
                   exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND]
@@ -576,7 +675,8 @@ Proof
      drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`)
        vyperFiniteStoragePreservationTheory.eval_raw_call_preserves_storage_well_formed_on >>
      disch_then irule >> fs[valid_horizon_def]) >>
-  `(!aid lb sz. aid < sa.cs_next_id /\ FLOOKUP t7.vs_allocas aid=SOME(lb,sz) ==>
+  `flags.rcf_max_outsize <> 0 ==>
+   (!aid lb sz. aid < sa.cs_next_id /\ FLOOKUP t7.vs_allocas aid=SOME(lb,sz) ==>
      regions_disjoint (if flags.rcf_max_outsize=0 then ob else ob+32)
        (LENGTH (TAKE flags.rcf_max_outsize outcome.co_returnData)) lb sz) /\
    (!name lb sz. local_region cenv es.scopes s0 name lb sz ==>
@@ -591,8 +691,7 @@ Proof
         `local_ptrs_reserved cenv sa`,
         `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==> lb+sz <= _ \/ _ <= lb`] >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac
-     >- (Cases_on `flags.rcf_max_outsize=0` >>
-         fs[loweringStateRelDefsTheory.regions_disjoint_def,
+     >- (fs[loweringStateRelDefsTheory.regions_disjoint_def,
             exprLoweringPropsTheory.ci_mono_def] >>
          `aid <> s6.cs_next_id` by decide_tac >>
          `ob + (((flags.rcf_max_outsize+31) DIV 32)*32+32) <= lb \/ lb+sz <= ob` by
@@ -608,10 +707,58 @@ Proof
      first_x_assum drule >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
      decide_tac) >>
+  `wb_frame cenv es esK sa s0 u` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`u=update_var _ _ t`, `t=t7 with <| vs_outcomes := _; vs_requests := _;
+          vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+          vs_returndata := _; vs_memory := _ |>`,
+        `t.vs_memory = _`, `wb_frame cenv es esK sa s0 t7`, `ci_mono sa s7`,
+        `flags.rcf_max_outsize <> 0 ==> _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `~not_fresh_at sa (STRING #"%" (toString s7.cs_next_var))` by
+       fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def,
+          ASCIInumbersTheory.toString_inj] >>
+     `t.vs_vars=t7.vs_vars /\ t.vs_allocas=t7.vs_allocas` by
+       (qpat_assum `t=t7 with <| vs_outcomes := _; vs_requests := _;
+          vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+          vs_returndata := _; vs_memory := _ |>`
+          (mp_tac o Q.AP_TERM `\z. (z.vs_vars,z.vs_allocas)`) >> simp[]) >>
+     qpat_x_assum `t=t7 with <| vs_outcomes := _; vs_requests := _;
+          vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+          vs_returndata := _; vs_memory := _ |>` kall_tac >>
+     Cases_on `flags.rcf_max_outsize=0`
+     >- (`!off len. mem_bytes_at off len t.vs_memory = mem_bytes_at off len t7.vs_memory` by
+           (simp[venomStateTheory.write_memory_with_expansion_def, LET_THM,
+                 listTheory.TAKE_DROP] >> rpt gen_tac >> IF_CASES_TAC >>
+            simp[valueEncodingProofsTheory.mem_bytes_at_append_zero]) >>
+         `locals_kept cenv es esK s0 u` by
+           (irule exprSimPropsTheory.locals_kept_regions_tail >>
+            qexists_tac `t7` >>
+            gvs[loweringPostsTheory.wb_frame_def, venomStateTheory.update_var_def]) >>
+         gvs[loweringPostsTheory.wb_frame_def, venomStateTheory.update_var_def,
+             venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+         metis_tac[]) >>
+     qpat_assum `u=update_var _ _ t` (fn th => once_rewrite_tac[th]) >>
+     irule raw_call_oracle_frame >>
+     simp[] >>
+     qexistsl_tac [`ob+32`, `TAKE flags.rcf_max_outsize outcome.co_returnData`, `t7`] >>
+     gvs[] >> metis_tac[]) >>
+  `es2.scopes = esK.scopes /\ es2.immutables = esK.immutables` by
+    (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >>
+     qpat_assum `adopt_call_outcome rq outcome es1 = _` (fn th => simp[th])) >>
+  `wb_frame cenv es es2 sa s0 u` by
+    (qpat_assum `wb_frame cenv es esK sa s0 u` mp_tac >>
+     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+          loweringPostsTheory.popped_kept_def]) >>
+  Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success`
+  >- suspend "revert_result" >>
+  Cases_on `flags.rcf_max_outsize=0`
+  >- suspend "zero_result" >>
+  Cases_on `flags.rcf_revert_on_failure`
+  >- suspend "bytes_result" >>
   qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _` mp_tac >>
-  qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-  FAIL_TAC "frame and branch assembly"
+  FAIL_TAC "tuple branch assembly"
 QED
 
 Resume raw_call_finish_from_result_bridges[static_value_abort]:
