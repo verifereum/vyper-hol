@@ -45,6 +45,7 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasFocusStep
+  dftNativePlanPrefix
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
