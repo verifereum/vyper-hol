@@ -1,6 +1,7 @@
 (* Backward ASSIGN comparisons through FMP lowering prefixes. *)
 Theory fmpStageCoverForwardPrefix
 Ancestors
+  fmpStageControlWalk
   fmpStageRel fmpStepBridge fmpStepLayout fmpStepRewrite
   fmpLowerDefs fmpLowerProps fmpLowerSequenceExec lowerDloadPtrForward contextCodegenRel
   simplifyCfgFrameRf fmpStageControlLayout fmpStepOpaque callLayoutDefs
@@ -91,18 +92,6 @@ Proof
   gvs[same_after_assigns_def, step_back_assign_def, mk_inst_def]
 QED
 
-Theorem fmp_prefix_inst_vars_mono[local]:
-  fmp_lower_inst infos ctx runner s inst = SOME (out,s') ==>
-  !v. MEM v s.irs_used_vars ==> MEM v s'.irs_used_vars
-Proof
-  Cases_on `inst.inst_opcode = DALLOCA`
-  >- (rpt strip_tac >>
-      gvs[fmp_lower_inst_def, fmp_lower_inst_shape_def, AllCaseEqs()] >>
-      rpt (dxrule (cj 2 fresh_ir_var_contract) >> strip_tac) >>
-      gvs[fresh_inst_id_def]) >>
-  rpt strip_tac >> gvs[fmp_lower_inst_def, AllCaseEqs()]
-QED
-
 Theorem fmp_prefix_restores_vars[local]:
   fmp_emit_restores runner s bases = (out,s') ==>
   s'.irs_used_vars = s.irs_used_vars
@@ -121,7 +110,7 @@ Proof
   simp[fmpLowerIndexedPropsTheory.fmp_lower_indexed_cons] >>
   rpt strip_tac >> gvs[] >>
   drule fmp_prefix_restores_vars >> strip_tac >>
-  drule fmp_prefix_inst_vars_mono >> strip_tac >>
+  drule fmp_control_inst_vars_mono >> strip_tac >>
   first_x_assum drule >> metis_tac[]
 QED
 

@@ -5,7 +5,6 @@
  *
  * TOP-LEVEL:
  *   fmp_stage_sim_halt - STOP, RETURN, REVERT, SINK, SELFDESTRUCT, INVALID
- *   fmp_stage_sim_jump - JMP, JNZ, DJMP jump to the same label
  *)
 Theory fmpStageTermSim
 Ancestors
@@ -42,20 +41,4 @@ Proof
   Cases_on `inst.inst_opcode = SELFDESTRUCT`
   >- (irule fmp_stage_selfdestruct_result >> metis_tac[]) >>
   irule fmp_stage_basic_result >> fs[listTheory.MEM] >> metis_tac[]
-QED
-
-(* Why: a jump's condition and table index are untainted scalars with no
-   provenance (taint_ok, fn_static_ptr_ok), so they agree; the labels are
-   literal; and the frames agree on the current block. *)
-Theorem fmp_stage_sim_jump:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  ~s.vs_halted /\ MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom T stk PG G tn fn s lo t ts /\
-  step_inst k C inst s = r /\ terminates r ==>
-  ?lbl. r = OK (jump_to lbl s) /\
-        !k'. step_inst k' C' inst t = OK (jump_to lbl t)
-Proof
-  MATCH_ACCEPT_TAC fmp_stage_jump_result
 QED
