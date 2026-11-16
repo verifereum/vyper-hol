@@ -108,9 +108,6 @@ Resume body_full_memory_same_type_store_path[code]:
   simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]
 QED
 Resume body_full_memory_same_type_store_path[finish]:
-  `eval_operand (Var xs) s = SOME sw /\ eval_operand (Var xd) s = SOME dw /\
-   (!x. Var xs = Var x \/ Var xd = Var x ==> not_fresh_at sa x)` by
-    (simp[eval_operand_def] >> metis_tac[]) >>
   `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
   drule_all buffer_store_bytestring_run >> strip_tac >>
   gvs[] >> rename1 `run_inst_seq (emitted_insts sa sb) s = OK sf` >>
