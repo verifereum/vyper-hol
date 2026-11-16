@@ -3064,6 +3064,34 @@ Proof
   impl_tac >- simp[] >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
+Theorem dft_packet_closed_activation_return:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FLOOKUP acts a = SOME (sf,tf,inc,entry,order,SOME result,SOME rest) ==>
+  a <> [] /\ ?ir child_out. result = IntRet ir child_out
+Proof
+  strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` mp_tac >>
+  qpat_x_assum `!a e cid q h b0 done_at_call child_entry ret.
+    FLOOKUP calls (a,e,cid) = _ ==> _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts [] = _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts a = SOME (sf,tf,inc,entry,order,SOME result,SOME rest)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt (disch_then strip_assume_tac) >>
+  Cases_on `a` >- gvs[] >> simp[] >>
+  qpat_x_assum `FLOOKUP acts [] = _` kall_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest. _`
+    (drule_then strip_assume_tac) >>
+  rename1 `FLOOKUP acts (pair::parent) = _` >> PairCases_on `pair` >>
+  qpat_x_assum `!e cid parent. _`
+    (qspecl_then [`pair0`,`pair1`,`parent`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!a e cid q h b0 done_at_call child_entry ret. _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >> Cases_on `ret` >> gvs[] >> PairCases_on `x` >> gvs[]
+QED
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
