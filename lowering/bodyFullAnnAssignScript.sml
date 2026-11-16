@@ -11,6 +11,14 @@ Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  bodySimDeclCases bodyFullAnnAssignMemoryPost bodyFullMemoryValue
+  bodyFullAnnAssignReserve bodyFullPathHistory bodyFullPathFrontier
+  bodyFullAnnAssignCompose gasOutcomeFullStmts annassignRelayoutFrag
+  annassignRelayoutSource annassignRelayoutPost bodyExprPreFacts
+  supportedStmtTraverse supportedExprs supportedExprTraverse vyperTypeEnv
+  vyperTypeInvariants vyperTypeContractStaticMaps supportedDecls compileVyper
+  gasContext exprSimSource exprSimHyps assignRelayoutCaller allocLimits
+  vyperTypeCallGraph bodyInvNoDalloca
 
 val _ = Parse.hide "body";
 
