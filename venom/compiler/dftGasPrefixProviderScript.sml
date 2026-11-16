@@ -4521,7 +4521,44 @@ Resume native_successful_cut_inventory[append_rows]:
   cheat
 QED
 Resume native_successful_cut_inventory[plain_step]:
-  cheat
+  qpat_x_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [LET_THM] >> simp[] >> strip_tac >>
+  Cases_on `i.inst_opcode = GAS`
+  >- suspend "gas_step" >>
+  gvs[] >>
+  drule_all dftBlockSimTheory.step_inst_ok_non_gas_oracle >> strip_tac >>
+  conj_tac
+  >- (simp[Once ev_step_def] >> metis_tac[step_inst_non_invoke]) >>
+  simp[visit_gas_def, trace_step_noninvoke, gas_events_step_def] >>
+  qpat_x_assum `u.vs_gas_readings = _` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >> simp[]
+QED
+Resume native_successful_cut_inventory[gas_step]:
+  `?w. gc = [w]` by (Cases_on `gc` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  gvs[] >>
+  `u.vs_gas_readings = w::(gpost ++ tail)` by
+    (qpat_x_assum `u.vs_gas_readings = _` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `ev_step orc` >>
+  `orc (p,d,i.inst_id) = w` by suspend "gas_lookup" >>
+  qpat_x_assum `step_inst n C i u = OK r` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_gas_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  simp[Once ev_step_def, visit_gas_def, trace_step_noninvoke,
+       gas_events_step_def, update_var_def, ev_gas_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp_tac bool_ss [APPEND, list_case_def]
+QED
+Resume native_successful_cut_inventory[gas_lookup]:
+  qmatch_asmsub_abbrev_tac `ALOOKUP obs (p,d,i.inst_id)` >>
+  `ALOOKUP obs (p,d,i.inst_id) = NONE \/ ALOOKUP obs (p,d,i.inst_id) = SOME w` by
+    (qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+     simp[LIST_REL_APPEND_EQ, LENGTH_MAP]) >>
+  `ALOOKUP (ZIP (Kpre ++ [(p,d,i.inst_id)] ++ Kpost,gpre ++ [w] ++ gpost))
+      (p,d,i.inst_id) = SOME w` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     simp[MAP_ZIP, GSYM rich_listTheory.ZIP_APPEND, MEM_APPEND]) >>
+  simp[Abbr `orc`, alistTheory.ALOOKUP_APPEND]
 QED
 Finalise native_successful_cut_inventory
 
