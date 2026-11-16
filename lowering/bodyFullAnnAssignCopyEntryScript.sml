@@ -2,7 +2,7 @@
 Theory bodyFullAnnAssignCopyEntry
 Ancestors
   annAssignPtrMemoryLayout annAssignPtrFacts bodyFullPreds bodySimFull
-  exprSimDeclEnv bodySim exprSimHypsDefs supportedStmts supportedStmtTraverse
+  bodySim exprSimHypsDefs supportedStmts supportedStmtTraverse
   supportedExprTraverse bodyExprPreFacts memoryLocalRhsProps vyperTypeCallGraph
   gasShadowCompileStmtHelpers gasShadowCompileStmtBase gasShadowCompile
   stmtSimDecl stmtSimProps exprLoweringProps emitHelperProps loweringSlice
