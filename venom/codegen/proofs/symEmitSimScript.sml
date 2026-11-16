@@ -50,6 +50,22 @@ Proof
   simp[sym_step_op_def]
 QED
 
+Theorem sym_step_add_data_left_mode:
+  !allow_own own.
+  ss.sym_stack = Lab l d :: Val w :: tail /\
+  sym_data_label p env l ==>
+  (if allow_own then sym_step_own p env own (AsmOp "ADD") ss
+   else sym_step p env (AsmOp "ADD") ss) = SymOK
+    (ss with <| sym_base := asm_next ss.sym_base;
+                sym_stack := Lab l (d + w2n w) :: tail |>)
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_own_def,
+       asmSymOwnCodeTheory.sym_step_op_own_def,
+       sym_step_def, sym_step_op_def, sym_add_def,
+       sym_push_lab_def, sym_set_stack_def]
+QED
+
 Theorem sym_step_add_data_left:
   ss.sym_stack = Lab l d :: Val w :: tail /\
   sym_data_label p env l ==>
@@ -57,7 +73,22 @@ Theorem sym_step_add_data_left:
     (ss with <| sym_base := asm_next ss.sym_base;
                 sym_stack := Lab l (d + w2n w) :: tail |>)
 Proof
-  simp[sym_step_def, sym_step_op_def, sym_add_def,
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_add_data_left_mode) >> simp[]
+QED
+
+Theorem sym_step_add_data_right_mode:
+  !allow_own own.
+  ss.sym_stack = Val w :: Lab l d :: tail /\
+  sym_data_label p env l ==>
+  (if allow_own then sym_step_own p env own (AsmOp "ADD") ss
+   else sym_step p env (AsmOp "ADD") ss) = SymOK
+    (ss with <| sym_base := asm_next ss.sym_base;
+                sym_stack := Lab l (d + w2n w) :: tail |>)
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_own_def,
+       asmSymOwnCodeTheory.sym_step_op_own_def,
+       sym_step_def, sym_step_op_def, sym_add_def,
        sym_push_lab_def, sym_set_stack_def]
 QED
 
@@ -68,10 +99,8 @@ Theorem sym_step_add_data_right:
     (ss with <| sym_base := asm_next ss.sym_base;
                 sym_stack := Lab l (d + w2n w) :: tail |>)
 Proof
-  simp[sym_step_def, sym_step_op_def, sym_add_def,
-       sym_push_lab_def, sym_set_stack_def]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_add_data_right_mode) >> simp[]
 QED
-
 Theorem sym_step_add_words:
   ss.sym_stack = Val a :: Val b :: tail ==>
   sym_step_op p env "ADD" ss = sym_step_concrete "ADD" ss
