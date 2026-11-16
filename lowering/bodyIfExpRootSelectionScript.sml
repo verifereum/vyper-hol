@@ -9,9 +9,11 @@ Ancestors
 Theorem ifexp_condition_exit_mem:
   gas_marked_exec T (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
-    (es,s0) marks res mid r /\ expr_exit res r ==>
+    (es,s0) marks res mid r /\ expr_exit res r /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     halt_exit H cx (mid with gas_obs := []) res r) ==>
   gas_outcome T tops (ctx,func) cx st0 (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_def, gas_summary_at_def] >>
@@ -21,8 +23,8 @@ Proof
   >- (rewrite_tac[ifexp_root_eval_forced] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
   disj2_tac >> simp[] >>
-  Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
-  Cases_on `y` >> fs[expr_exit_def] >>
+  Cases_on `r` >> fs[expr_exit_def, exit_result_def, halt_exit_def] >>
+  Cases_on `y` >> fs[expr_exit_def, halt_exit_def] >>
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
 
@@ -30,7 +32,7 @@ Theorem ifexp_root_condition_dispatch_mem:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   gas_outcome T tops (ctx,func) cx st0
     (bind (eval_expr cx c) (read_result cx)) (es,s0) P
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee u. P H res ee u ==> ?v. res = INL v) /\
   (!marks sel mid u.
     gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
@@ -39,9 +41,9 @@ Theorem ifexp_root_condition_dispatch_mem:
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
          P H (INL (BoolV sel)) (mid with gas_obs := []) u) ==>
     gas_outcome T tops (ctx,func) cx st0 (eval_expr cx (IfExp t c a b)) (es,s0) Q
-      (\H res ee r. expr_exit res r)) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   gas_outcome T tops (ctx,func) cx st0 (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
