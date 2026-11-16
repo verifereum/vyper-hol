@@ -13,7 +13,7 @@ Ancestors
   ctorDeployLoweringEntryPrefix
   compileEnv
   ctorDeployMemoryRunPtrDefs ctorDeployLoweringDefs gasSummary ptrSafeRun
-  stmtSimDefs venomInst
+  stmtSimDefs venomInst loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixInit ctorDeployMemoryRunPtrPrefixPrepare
   ctorDeployMemoryRunPtrPrefixRegisterList
   ctorDeployMemoryRunPtrPrefixCompleteCoherent
@@ -48,6 +48,7 @@ val _ = Parse.hide "body";
 Theorem deploy_ptr_entry_normalized:
   deploy_phases policy tops (deploy_bc,runtime_bc)
     (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   deploy_ctor_code tops rp runtime_bc unit
@@ -267,7 +268,8 @@ Proof
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
-    `deploy_dead HS0 tops runtime_bc am tx`] strip_assume_tac) >>
+    `deploy_dead (HS0:(bool # bytes32 # type_value) list # num list)
+      tops runtime_bc am tx`] strip_assume_tac) >>
   qpat_x_assum `is_payable \/ tx.value = 0` kall_tac >>
   qpat_x_assum `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` kall_tac >>
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
@@ -312,15 +314,14 @@ Proof
      simp[Abbr `initial`, initial_compile_state_def]) >>
   `alloca_history fn t` by metis_tac[] >>
   drule (deploy_ptr_entry_register_prepared_origins_coverage_mode |> Q.SPEC `T` |>
-    SIMP_RULE bool_ss [] |> INST_TYPE [``:'a`` |-> ``:word8``] |> SPEC_ALL |>
+    SIMP_RULE bool_ss [] |> SPEC_ALL |>
     Q.INST [`ce0` |-> `cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`] |>
+    Q.GENL [`runtime_bc`, `am`, `HS`] |>
+    Q.ISPECL [`runtime_bc:word8 list`, `am:abstract_machine`,
+      `HS0:(bool # bytes32 # type_value) list # num list`] |>
     GEN_ALL |> SRULE []) >>
   disch_then drule_all >>
-  disch_then (qspec_then `tx` mp_tac) >>
-  disch_then (qspec_then `qt` mp_tac) >>
-  disch_then (qspec_then `runtime_bc` mp_tac) >>
-  disch_then (qspec_then `am` mp_tac) >>
-  disch_then (qspec_then `H`
+  disch_then (qspecl_then [`tx`, `qt`, `runtime_bc`, `am`, `HS0`, `H`]
     (qx_choose_then `end_state` (qx_choose_then `end_G`
       (qx_choose_then `end_taint` strip_assume_tac)))) >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
@@ -462,10 +463,10 @@ Proof
           fuel unit.cu_context func [] FEMPTY entry_taint
           (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
     (qx_gen_tac `HS` >> strip_tac >>
-     mp_tac (Q.SPECL [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
+     qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
        `unit.cu_context`, `func`, `[]`, `FEMPTY`, `entry_taint`,
        `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
-       `0`, `H`, `qt`, `actual`] gas_path_ptr_safe_run) >>
+       `0`, `H`, `qt`, `actual`] mp_tac gas_path_ptr_safe_run >>
      impl_tac
      >- (rpt conj_tac
          >- (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
@@ -616,7 +617,8 @@ Theorem deploy_ctor_entry_run_ptr:
                             vs_inst_idx := 0 |>))
 Proof
   rpt strip_tac >>
-  drule_all deploy_ptr_entry_prefix_related >> strip_tac >>
+  drule_all deploy_ptr_entry_prefix_related >>
+  disch_then (Q.ISPEC_THEN `HS` strip_assume_tac) >>
   drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >> gvs[] >>
   qexistsl [`actual`,`H`,`qt`] >> simp[] >> strip_tac >>
   qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
