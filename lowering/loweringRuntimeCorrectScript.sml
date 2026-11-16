@@ -107,6 +107,11 @@ Theorem selected_call_trace_body[local]:
          am' = finalize_pending_deletions
                  (abstract_machine_from_state am.sources am.exports
                     am.layouts ee)) /\
+      (res = INR HaltException ==>
+         r = INR HaltException /\ rqs = ee.requests /\
+         am' = finalize_pending_deletions
+                 (abstract_machine_from_state am.sources am.exports
+                    am.layouts ee)) /\
       (!v. res = INR (ReturnException v) ==>
          rqs = ee.requests /\
          (r, am') =
@@ -134,15 +139,30 @@ Proof
   `es0.scopes = [env]` by
     (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
   `(es0 with gas_obs := gx).scopes = [env]` by simp[] >>
+  `res = INR HaltException ==>
+     call_external_body am
+       (initial_evaluation_context am.sources am.layouts tx NONE)
+       F mut (type_env tops) (es0 with gas_obs := gx) env fbody ret =
+       (INR HaltException,
+        abstract_machine_from_state am.sources am.exports am.layouts ee,
+        ee.requests)` by
+    (strip_tac >>
+     `(es0 with gas_obs := gx) with scopes := [env] =
+      es0 with gas_obs := gx` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     simp[call_external_body_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+          vyperStateTheory.set_scopes_def]) >>
   drule_all call_external_body_run >>
   disch_then (qspecl_then [`am`, `mut`, `type_env tops`, `ret`]
                 strip_assume_tac) >>
   rpt conj_tac
   >- (strip_tac >> gvs[])
+  >- (strip_tac >> gvs[])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `!v. res = INR (ReturnException v) ==> _`
         (qspec_then `v` mp_tac) >>
-      gvs[] >> strip_tac >> gvs[] >> every_case_tac >> gvs[]) >>
+      gvs[] >> strip_tac >> gvs[] >> BasicProvers.every_case_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!e. res = INR e /\ _ ==> _` (qspec_then `e` mp_tac) >>
   simp[] >> strip_tac >> Cases_on `e` >> gvs[]
@@ -178,7 +198,7 @@ Proof
   simp[] >> rpt strip_tac >> simp[] >>
   qpat_x_assum `stmt_res_ok _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_res_ok_def]) >>
-  gvs[abstract_machine_from_state_def] >> every_case_tac >> gvs[]
+  gvs[abstract_machine_from_state_def] >> BasicProvers.every_case_tac >> gvs[]
 QED
 
 (* The call's fourth component is its storage observations. *)
