@@ -13,6 +13,9 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullBuiltinEnv bodyFullMakeArray bodyFullBuiltinConcat bodyFullBuiltinSlice
+  bodyFullBuiltinCalldataSlice bodyFullBuiltinUint2Str
+  bodyFullBuiltinECRecover bodyFullBuiltinECArith
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -227,7 +230,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
+(* Joint Env-family suppliers, excluding Env MsgGas. *)
 Theorem env_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
@@ -242,7 +245,11 @@ Theorem env_builtin_expr_full_ok:
        body_expr_full_ok cx (HD es)) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule env_builtin_sim_full >>
+      gvs[type_check_def, assert_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
@@ -265,14 +272,18 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
+(* MakeArray's joint supplier and the literal-child clause. *)
 Theorem make_array_expr_full_ok:
   !cx ty bt es.
     (?t n. bt = MakeArray t n) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule make_array_builtin_sim_full >>
+      metis_tac[]) >>
+  simp[]
 QED
 
 (* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
@@ -301,7 +312,7 @@ Proof
   ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
+(* Joint bytestring suppliers; Slice retains its code-source child order. *)
 Theorem bytestring_builtin_expr_full_ok:
   !cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
@@ -315,17 +326,32 @@ Theorem bytestring_builtin_expr_full_ok:
             body_exprs_full_ok cx [addr])) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `(?n. bt = CalldataSlice n) \/ _` mp_tac >> strip_tac
+      >- (gvs[code_slice_source_def] >>
+          metis_tac[calldata_slice_expr_sim_full, calldata_slice_vv_sim_full])
+      >- (gvs[code_slice_source_def] >> irule concat_sim_full >> metis_tac[])
+      >- (gvs[] >> irule slice_builtin_sim_full >> metis_tac[]) >>
+      gvs[code_slice_source_def] >> irule uint2str_builtin_sim_full >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
-(* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
+(* Joint recovery and elliptic-curve arithmetic suppliers. *)
 Theorem precompile_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `bt = ECRecover`
+      >- (gvs[] >> irule ecrecover_builtin_sim_full >> metis_tac[]) >>
+      irule ec_arith_builtin_sim_full >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* msg.gas, by msgGasFull's joint fragment: typing fixes the
@@ -684,6 +710,8 @@ Theorem body_return_case_full:
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_const_name_free >> simp[]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
