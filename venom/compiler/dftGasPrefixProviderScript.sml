@@ -2365,6 +2365,83 @@ Proof
   drule trace_step_block_disjoint >> metis_tac[]
 QED
 
+Theorem native_lookup_fill_subtrace_agreement:
+  !obs keys vals target source.
+    ALL_DISTINCT (MAP FST obs) ==>
+    (EVERY (\kw. MEM kw obs) (trace_gas target) ==>
+      trace_agrees
+        (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+          NONE => 0w | SOME w => w) target) /\
+    (ALL_DISTINCT keys /\ LENGTH keys = LENGTH vals /\
+     LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+       (MAP (ALOOKUP obs) keys) vals /\
+     EVERY (\kw. MEM kw (ZIP (keys,vals))) (trace_gas source) ==>
+      trace_agrees
+        (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+          NONE => 0w | SOME w => w) source)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (simp[trace_agrees_def, EVERY_MEM] >> strip_tac >>
+      qx_gen_tac `kw` >> Cases_on `kw` >> simp[] >> strip_tac >>
+      rename1 `MEM (key,w) (trace_gas target)` >>
+      `MEM (key,w) obs` by metis_tac[] >>
+      `ALOOKUP obs key = SOME w` by
+        metis_tac[alistTheory.ALOOKUP_ALL_DISTINCT_MEM] >>
+      simp[alistTheory.ALOOKUP_APPEND]) >>
+  strip_tac >>
+  `EVERY (\(key,w). ALOOKUP obs key = NONE \/ ALOOKUP obs key = SOME w)
+     (ZIP (keys,vals))` by
+    (gvs[LIST_REL_MAP1, LIST_REL_EVERY_ZIP, combinTheory.o_DEF]) >>
+  `ALL_DISTINCT (MAP FST (ZIP (keys,vals)))` by simp[MAP_ZIP] >>
+  fs[EVERY_MEM] >> simp[trace_agrees_def, EVERY_MEM] >>
+  qx_gen_tac `kw` >> Cases_on `kw` >> simp[] >> strip_tac >>
+  rename1 `MEM (key,w) (trace_gas source)` >>
+  `MEM (key,w) (ZIP (keys,vals))` by metis_tac[] >>
+  `ALOOKUP (ZIP (keys,vals)) key = SOME w` by
+    metis_tac[alistTheory.ALOOKUP_ALL_DISTINCT_MEM] >>
+  qpat_x_assum `!kw. MEM kw (ZIP _) ==> _`
+    (qspec_then `(key,w)` mp_tac) >> simp[] >> strip_tac >>
+  simp[alistTheory.ALOOKUP_APPEND]
+QED
+
+Theorem native_inventory_child_agreement:
+  ctx_inst_ids_distinct C' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) /\
+  MEM ((p,d,i.inst_id),fn',i,a)
+    (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) /\
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME cf' /\
+  eval_operands ops a = SOME args /\ setup_callee cf' args a = SOME ct ==>
+  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
+      child = dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d b C' cf' ct
+  in ALL_DISTINCT (MAP FST obs) /\
+     EVERY (\kw. MEM kw obs) (trace_gas child) /\
+     trace_agrees
+       (\key. case ALOOKUP (obs ++ ZIP (keys,vals)) key of
+         NONE => 0w | SOME w => w) child
+Proof
+  strip_tac >> simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `ALL_DISTINCT (MAP FST obs)` >>
+  qmatch_goalsub_abbrev_tac `trace_gas child` >>
+  conj_asm1_tac
+  >- (simp_tac pure_ss [Abbr `obs`] >> irule trace_gas_names_distinct >>
+      irule native_inventory_suffix_distinct >> simp[] >>
+      qpat_x_assum `ctx_inst_ids_distinct C'` mp_tac >>
+      simp_tac bool_ss [ctx_inst_ids_distinct_def] >> strip_tac >>
+      simp[EVERY_MEM] >> rpt strip_tac >>
+      drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
+      BETA_TAC >> strip_tac >>
+      drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  conj_asm1_tac
+  >- (`FILTER (\kw. frame_below ((d,i.inst_id)::p) (FST (FST kw))) obs =
+       trace_gas child` by
+        (simp_tac pure_ss [Abbr `obs`, Abbr `child`] >>
+         drule_all native_inventory_root_subtree >>
+         drule_all dftGasFromListTraceDefsTheory.trace_step_invoke >> simp[]) >>
+      pop_assum (SUBST1_TAC o SYM) >> simp[EVERY_MEM, MEM_FILTER]) >>
+  irule (cj 1 native_lookup_fill_subtrace_agreement) >> simp[]
+QED
+
 Theorem native_inventory_lookup_rows[local]:
   !keys obs. ALL_DISTINCT keys /\ ALL_DISTINCT (MAP FST obs) ==>
   PERM
