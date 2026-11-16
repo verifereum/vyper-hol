@@ -6,7 +6,7 @@ Ancestors
   bodyPtrIfExpAllocOrdered bodyPtrIfExpAllocSource bodyPtrIfExpAllocCompiler
   bodyPtrIfExpAllocGhost bodyPtrIfExpAllocKept
   bodyPtrIfExpBytesPost bodyPtrIfExpBytesSemantic bodyPtrIfExpBytesCounted
-  bodyPtrIfExpAllocLocals allocationPtr
+  bodyPtrIfExpAllocLocals allocationPtr fragGasSeqPtrContext bytesCopyCode
   bodyCopyMemory bodyPtrDefs bodyPtrPrecompileBuiltinsAllocationFrame
   fragGasSeqPtr fragGasOriginPtr fragExecPtr ptrSafetyTransport
   instMemFrontier unitTransformDefs memSafeRun ptrSafeRun ptrDiscipline
@@ -16,7 +16,7 @@ Ancestors
 
 Theorem ifexp_alloca_origin_ptr_edge:
   !s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     lo <= s.vs_alloca_next /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
@@ -218,7 +218,7 @@ Theorem compile_store_bytestring_origin_ptr_path:
       (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
       allocas_from lo s /\ lo <= s.vs_alloca_next /\
       run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-      ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
       ?Gf tnf sf.
@@ -236,23 +236,32 @@ Theorem compile_store_bytestring_origin_ptr_path:
           op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all compile_store_bytestring_seq_ptr >>
-  disch_then (qspecl_then [`ARB`, `fn`, `PG`] strip_assume_tac) >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by
+    simp[ctx_has_dalloca_def] >>
+  drule bytesCopyCodeTheory.compile_store_bytestring_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+      i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    simp[bytes_copy_insts_def, mk_inst_def, is_alloca_op_def, is_terminator_def] >>
+  drule_all (Q.SPECL [`ARB`, `ctx with ctx_functions := []`, `fn`, `PG`]
+    compile_store_bytestring_seq_ptr) >>
+  disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >> gen_tac >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf` by
-    (drule_all compile_store_bytestring_seq_ptr >>
-     disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+    (irule inst_seq_ptr_restore_ctx >> simp[] >>
+     drule_all (Q.SPECL [`D`, `ctx with ctx_functions := []`, `fn`, `PG`]
+       compile_store_bytestring_seq_ptr) >>
+     disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
      metis_tac[inst_seq_ptr_ghost_unique]) >>
-  drule compile_store_bytestring_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by
     gvs[listTheory.EVERY_MEM] >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tnf` by
     (irule inst_seq_ptr_lower_bound_transport >>
-     simp[] >> qexists_tac `0` >> simp[]) >>
+     simp[] >> qexists_tac `0` >>
+     gvs[bytes_copy_insts_def, mk_inst_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sb)` by gvs[listTheory.EVERY_MEM] >>
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
-    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
-     gvs[listTheory.EVERY_MEM]) >>
+    simp[bytes_copy_insts_def, mk_inst_def] >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED

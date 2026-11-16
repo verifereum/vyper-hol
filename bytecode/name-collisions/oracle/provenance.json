@@ -40,11 +40,11 @@
     "nm_local_return_buf.hex": "9492e2ab36f74dad658759ba63220a86780996a074485dfb68c547b62d5dd886",
     "nm_local_return_buf.json": "1fffd8237c82000a7ab8d8cb6c1da5c717beb801441522792089224d9513ef62",
     "nm_local_storage_types.hex": "20311e345410dd004af9f16350b9081f89f2a6a1fdcb88f5bb5f611fe19b32ac",
-    "nm_local_storage_types.json": "827cda6a56b132c7cd8ec8cbfff386ab4ab15846b341be9fd9c2567bb7850f0c",
+    "nm_local_storage_types.json": "d18ed3d92d060a461d3d796de6dad0a8edee64b9fcb613d1b6d15ed7b50338e1",
     "nm_redeclared_local.hex": "ed8a6d9a923fe03a393e7d9f5ee78967b0525b71c276863b172bf67543530bd4",
-    "nm_redeclared_local.json": "b67e222905f62b1f5eddb601d97cc3749369ced776e43e6eab71bec9b3177035",
+    "nm_redeclared_local.json": "2a3bf6650142dad86bd7d9896dacfcefbfc5ac095ab73e195cd963357edad416",
     "nm_redeclared_loop_var.hex": "b913b094ccbb56d245db02bbbf4417933cd99ecb971493fe9a1c8dbb9255379e",
-    "nm_redeclared_loop_var.json": "9b88d22ef676e9a34dbccc3e1c001de12a007b2e20aa2afaf014c3cddde0a1c7",
+    "nm_redeclared_loop_var.json": "8124cc777cfce276d9f141c362a107f9ea1b42eafd9c2721f0f716da7f64157c",
     "nm_transient_local.hex": "a4af978d4a5453df58195a7e4e1360e1ceeb442ae7d72bc35cd6f107db5f2f6b",
     "nm_transient_local.json": "340fe1ab06861cb5f020cb93075501d34222e9ea153d8b339cca517ef6153d35"
   }

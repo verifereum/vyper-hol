@@ -10,6 +10,9 @@ Ancestors assignBasePtrWordFragment assignTuplePtrBodyReady bodyPtrPreds bodyPtr
   compileEnv valueEncodingProps finite_map list gasContext
 Libs monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem body_assign_local_word_ptr:
   !cx id e ty d ctx PG func tops bindings cenv env env' ret_ty lctx RetQ es.
     body_expr_ptr_ok cx e /\
@@ -40,7 +43,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

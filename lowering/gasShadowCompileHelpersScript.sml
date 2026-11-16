@@ -3,7 +3,7 @@ Ancestors
   gasShadowCompileOps gasShadowCompileConvert gasShadowCompileContext
   gasShadowCompileAbi gasShadowCompileCallSupport gasShadowCompileBuiltinCreate
   gasShadowCompileMembership gasShadowCompilePure
-  exprLowering gasShadow gasShadowState compileEnv list
+  exprLowering gasShadow gasShadowState compileEnv list vyperOriginFold vyperPinFold
 
 Theorem gas_shadow_compiles_lower_value:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
@@ -494,6 +494,139 @@ Proof
   Cases_on `sh` >> simp[NoAsms, compile_create_call_def]
 QED
 
+Theorem gas_shadow_pin_literal_values[local]:
+  !es. pin_literal_values (MAP gas_shadow_expr es) = pin_literal_values es
+Proof
+  Induct >> simp[pin_literal_values_def] >>
+  Cases_on `h` >> simp[gas_shadow_expr_def, pin_literal_values_def]
+QED
+
+Theorem gas_shadow_pin_fold_result[local]:
+  gas_shadow_expr (pin_fold_result ty e result) =
+    pin_fold_result ty (gas_shadow_expr e) result
+Proof
+  Cases_on `result` >> simp[pin_fold_result_def] >>
+  CASE_TAC >> simp[gas_shadow_expr_def]
+QED
+
+Theorem gas_shadow_pin_fold_builtin[local]:
+  gas_shadow_expr (pin_fold_builtin ty bi es) =
+    pin_fold_builtin ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es)
+Proof
+  Cases_on `ty` >> Cases_on `bi` >>
+  simp[pin_fold_builtin_def, gas_shadow_builtin_def,
+       pin_foldable_builtin_def, gas_shadow_expr_def,
+       gas_shadow_pin_literal_values, MAP_MAP_o, EVERY_MAP, EXISTS_MAP,
+       combinTheory.o_DEF, ETA_THM,
+       gas_shadow_expr_type, gas_shadow_pin_fold_result] >>
+  BasicProvers.every_case_tac >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, pin_foldable_builtin_def,
+      gas_shadow_pin_literal_values, gas_shadow_pin_fold_result,
+      EVERY_MAP, EXISTS_MAP, MAP_MAP_o, combinTheory.o_DEF, ETA_THM] >>
+  fs[GSYM EVERY_NOT_EXISTS, combinTheory.o_DEF]
+QED
+
+Theorem gas_shadow_origin_fold_not[local]:
+  gas_shadow_expr (origin_fold_builtin ty Not es) =
+    origin_fold_builtin ty Not (MAP gas_shadow_expr es)
+Proof
+  namedCases_on `es` ["", "first_arg rest_args"]
+  >- simp[origin_fold_builtin_def, gas_shadow_expr_def, gas_shadow_builtin_def] >>
+  Cases_on `first_arg` >> Cases_on `rest_args` >>
+  simp[origin_fold_builtin_def, gas_shadow_expr_def, gas_shadow_builtin_def,
+       gas_shadow_pin_fold_builtin] >>
+  BasicProvers.every_case_tac >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin]
+QED
+
+Theorem gas_shadow_origin_fold_bop[local]:
+  gas_shadow_expr (origin_fold_builtin ty (Bop bop) es) =
+    origin_fold_builtin ty (Bop bop) (MAP gas_shadow_expr es)
+Proof
+  Cases_on `bop` >>
+  simp[origin_fold_builtin_def, gas_shadow_expr_def, gas_shadow_builtin_def,
+       gas_shadow_pin_fold_builtin] >>
+  namedCases_on `es` ["", "first_arg rest_args"] >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  Cases_on `first_arg` >> Cases_on `rest_args` >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin]
+QED
+
+Theorem gas_shadow_origin_fold_builtin[local]:
+  gas_shadow_expr (origin_fold_builtin ty bi es) =
+    origin_fold_builtin ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es)
+Proof
+  Cases_on `bi = Not`
+  >- gvs[gas_shadow_origin_fold_not, gas_shadow_builtin_def] >>
+  Cases_on `?bop. bi = Bop bop`
+  >- gvs[gas_shadow_origin_fold_bop, gas_shadow_builtin_def] >>
+  Cases_on `?item. bi = Env item`
+  >- (gvs[origin_fold_builtin_def, gas_shadow_builtin_def] >>
+      IF_CASES_TAC >>
+      gvs[origin_fold_builtin_def, gas_shadow_pin_fold_builtin,
+          gas_shadow_builtin_def]) >>
+  Cases_on `bi` >>
+  gvs[origin_fold_builtin_def, gas_shadow_builtin_def, gas_shadow_pin_fold_builtin]
+QED
+
+Theorem gas_shadow_origin_fold_value:
+  (!e. origin_fold_value (gas_shadow_expr e) =
+       gas_shadow_expr (origin_fold_value e)) /\
+  (!es. origin_fold_values (MAP gas_shadow_expr es) =
+        MAP gas_shadow_expr (origin_fold_values es))
+Proof
+  ho_match_mp_tac origin_fold_value_ind >>
+  rw[origin_fold_value_def, gas_shadow_expr_def,
+     GSYM gas_shadow_origin_fold_builtin] >>
+  simp[vyperPinFoldTheory.pin_fold_expr_def, gas_shadow_expr_def,
+       gas_shadow_pin_fold_result]
+QED
+
+Theorem gas_shadow_origin_int_literal[local]:
+  is_int_literal (origin_fold_value (gas_shadow_expr e)) =
+    is_int_literal (origin_fold_value e)
+Proof
+  simp[gas_shadow_origin_fold_value] >>
+  Cases_on `origin_fold_value e` >>
+  simp[gas_shadow_expr_def, is_int_literal_def]
+QED
+
+Theorem gas_shadow_compiles_blueprint_offset[local]:
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+  gas_shadow_compiles
+    (case origin_fold_value e of
+       Literal _ (IntL i) => comp_return (Lit (i2w i))
+     | _ => lower_value f cenv (expr_type e) e)
+    (case origin_fold_value (if sh then gas_shadow_expr e else e) of
+       Literal _ (IntL i) => comp_return (Lit (i2w i))
+     | _ => lower_value g cenv
+              (expr_type (if sh then gas_shadow_expr e else e))
+              (if sh then gas_shadow_expr e else e))
+Proof
+  strip_tac >>
+  `gas_shadow_compiles (lower_value f cenv (expr_type e) e)
+     (lower_value g cenv (expr_type e)
+       (if sh then gas_shadow_expr e else e))`
+    by (irule gas_shadow_compiles_lower_value >> simp[]) >>
+  Cases_on `sh` >>
+  simp[gas_shadow_origin_fold_value] >>
+  Cases_on `origin_fold_value e` >>
+  simp[gas_shadow_expr_def, gas_shadow_compiles_return,
+       gas_shadow_compiles_lower_value] >>
+  BasicProvers.every_case_tac >>
+  gvs[gas_shadow_expr_def, gas_shadow_compiles_return,
+      gas_shadow_compiles_lower_value]
+QED
+
 Theorem gas_shadow_compiles_blueprint_call[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -535,9 +668,13 @@ Proof
   Cases_on `sh` >> Cases_on `has_salt` >>
   gvs[compile_create_call_def, comp_ignore_bind_def,
       gas_shadow_compiles_bind, gas_shadow_compiles_emit_inst,
-      gas_shadow_compiles_return] >>
+      gas_shadow_compiles_return, gas_shadow_origin_int_literal] >>
   (ntac 5 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-        >- simp[gas_shadow_compiles_create_blueprint_check] >>
+        >- simp[gas_shadow_compiles_create_blueprint_check,
+                SIMP_RULE (srw_ss()) []
+                  (Q.INST [`sh` |-> `T`] gas_shadow_compiles_blueprint_offset),
+                SIMP_RULE (srw_ss()) []
+                  (Q.INST [`sh` |-> `F`] gas_shadow_compiles_blueprint_offset)] >>
         gen_tac >> BETA_TAC) >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- (qpat_x_assum `!es. gas_shadow_compiles (compile_create_blueprint_args f cenv raw_args es) _`

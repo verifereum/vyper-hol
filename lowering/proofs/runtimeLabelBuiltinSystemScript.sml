@@ -411,9 +411,10 @@ QED
 
 Theorem rb_compile_create_blueprint_check:
   rb_operand_ok target /\ rb_operand_ok offset ==>
-  rb_step rb_operand_ok (compile_create_blueprint_check target offset)
+  rb_step rb_operand_ok (compile_create_blueprint_check is_lit target offset)
 Proof
-  strip_tac >> pure_rewrite_tac[compile_create_blueprint_check_def] >>
+  Cases_on `is_lit` >> strip_tac >>
+  pure_rewrite_tac[compile_create_blueprint_check_def, COND_CLAUSES] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -449,7 +450,7 @@ Theorem rb_compile_create_blueprint:
   rb_operand_ok offset /\
   (case args_info of NONE => T | SOME (p,n) => rb_operand_ok p /\ rb_operand_ok n) ==>
   rb_step rb_operand_ok
-    (compile_create_blueprint target value_op salt_opt offset args_info revert_on_failure)
+    (compile_create_blueprint is_lit target value_op salt_opt offset args_info revert_on_failure)
 Proof
   strip_tac >> pure_rewrite_tac[compile_create_blueprint_def] >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>

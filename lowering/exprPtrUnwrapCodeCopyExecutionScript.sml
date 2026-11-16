@@ -13,7 +13,7 @@ Theorem unwrap_runtime_code_execution:
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\ 32*n <= nb /\
   sm.cs_next_var <= mid.cs_next_var /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} ==>
@@ -54,8 +54,10 @@ Proof
   `lookup_var root a = SOME d` by
     (qpat_x_assum `eval_operand buf.buf_operand a = _` mp_tac >>
      simp[eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[unwrap_alloc_below_fmp] >>
   `allocas_from 0 a /\ (ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
-    simp[allocas_from_def] >>
+    (gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_assum `buf.buf_operand = Var root` (fn th =>
     qpat_x_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _`
       (assume_tac o REWRITE_RULE [th])) >>

@@ -6,14 +6,17 @@ Ancestors
   exprReasonOperand exprSimHypsDefs exprSimHyps targetPlaceLive
   targetPlaceSimCasesBase stmtLoweringMono targetPlaceSim targetPlaceSimDefs
   targetSubscriptMemory
-  loweringPosts gasOutcome gasSummary gasContext fragGasMode fragExec
+  loweringPosts gasOutcome gasSummary gasContext gasStorage stmtSimProps
+  vyperStorageTrace vyperStorageFootprint fragGasMode fragExec
   exprSimDefs exprLowering exprLoweringProps compileEnv vyperInterpreter vyperState
   loweringStateRelDefs venomState list finite_map vyperTypeSystem vyperValue
 
 Theorem target_local_array_summary_mem[local]:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path))
-    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s) /\
+  valid_horizon cx st0 H0 es.storage_trace /\
   expr_sim_inv cenv cx env es /\
   lookup_scopes id es.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
@@ -32,32 +35,53 @@ Theorem target_local_array_summary_mem[local]:
   s0.vs_alloca_next <= s.vs_alloca_next ==>
   gas_summary_at T (ctx,func) []
     (extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i))) (es,s)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es0 sa sb s0 ee pv' (Type ety) op u /\
+    (\res ee u. !H. valid_horizon cx st0 H ee.storage_trace ==> ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es0 sa sb s0 ee pv' (Type ety) op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit res r /\ halt_exit H cx ee res r)
 Proof
-  strip_tac >> drule_all target_subscript_memory_compile >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es
+    (PlaceR (MemoryPlace id path))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
+  drule_all target_subscript_memory_compile >> strip_tac >> gvs[] >>
   Cases_on `extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es` >>
   rename1 `extend_place _ _ _ _ = (result,es')` >> Cases_on `result`
-  >- (drule_all target_memory_array_suffix_mem >> strip_tac >>
-      irule target_subscript_extend_summary_normal >>
-      goal_assum (drule_at Any) >> simp[] >>
-      fs[target_post_def, locals_kept_def, popped_kept_def] >>
+  >- (drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+      drule_all target_memory_array_suffix_mem >> strip_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl [`INL (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)])))`,
+        `es`, `OK u`] >>
+      simp[gas_marked_exec_def, target_subscript_extend_gas_obs, exit_result_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ sb _ _ _ _ _ _`
+        (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule storage_well_formed_on_backends >> simp[]) >>
+      fs[target_post_def, stmt_state_rel_start_gas_obs, locals_kept_def, popped_kept_def] >>
       metis_tac[]) >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es
+    (PlaceR (MemoryPlace id path))
+    (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
   drule_all target_memory_array_error_suffix_mem >> strip_tac >> gvs[] >>
-  irule target_subscript_extend_summary_error >>
-  qexistsl [`Error (RuntimeError "evaluate_subscripts array_index")`, `es`,
-    `Abort Revert_abort u`] >> simp[expr_exit_def, exit_result_def]
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `es`,
+    `Abort Revert_abort u`] >>
+  simp[gas_marked_exec_def, target_subscript_extend_gas_obs,
+    expr_exit_def, exit_result_def, halt_exit_def]
 QED
 
 Theorem target_local_typed_summary_mem[local]:
   subscript_vtype bvt (expr_type e) = SOME vt /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
-  target_post ctx func cenv cx es0 sa sn s0 es (PlaceR (MemoryPlace id path)) bvt rb s /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    target_post H ctx func cenv cx es0 sa sn s0 es (PlaceR (MemoryPlace id path)) bvt rb s /\
+    expr_post H ctx func cenv cx e ee sm sn t es key ix s) /\
+  valid_horizon cx st0 H0 es.storage_trace /\
   expr_sim_inv cenv cx env es /\
   lookup_scopes id es.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
@@ -72,14 +96,17 @@ Theorem target_local_typed_summary_mem[local]:
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next ==>
   gas_summary_at T (ctx,func) []
     (extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript key)) (es,s)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es0 sa sb s0 ee pv' vt op u /\
+    (\res ee u. !H. valid_horizon cx st0 H ee.storage_trace ==> ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es0 sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es (PlaceR (MemoryPlace id path)) bvt rb s /\
+   expr_post H0 ctx func cenv cx e ee sm sn t es key ix s` by simp[] >>
   `?w. place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w (FST (SND rb)) bvt` by
     (fs[target_post_def] >> metis_tac[]) >>
   gvs[place_ptr_rel_def] >>
@@ -87,11 +114,12 @@ Proof
   gvs[subscript_vtype_def, AllCaseEqs()] >>
   rename1 `evaluate_type _ (ArrayT ety bd) = _` >> Cases_on `bd` >>
   gvs[evaluate_type_def, AllCaseEqs()] >>
+  `expr_post H0 ctx func cenv cx e ee sm sn t es key ix s` by simp[] >>
   drule_all target_subscript_int_index_view >> strip_tac >> gvs[]
-  >- (drule (SRULE [] (Q.INST [`dyn` |-> `F`] target_local_array_summary_mem)) >>
-      simp[evaluate_type_def] >> disch_then drule_all >> simp[]) >>
-  drule (SRULE [] (Q.INST [`dyn` |-> `T`] target_local_array_summary_mem)) >>
-  simp[evaluate_type_def] >> disch_then drule_all >> simp[]
+  >- (irule (SRULE [] (Q.INST [`dyn` |-> `F`] target_local_array_summary_mem)) >>
+      simp[evaluate_type_def] >> metis_tac[]) >>
+  irule (SRULE [] (Q.INST [`dyn` |-> `T`] target_local_array_summary_mem)) >>
+  simp[evaluate_type_def] >> metis_tac[]
 QED
 
 Theorem target_local_index_summary_mem[local]:
@@ -102,10 +130,12 @@ Theorem target_local_index_summary_mem[local]:
       evaluate_subscripts entry.type entry.value path = INL v) /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (mid with gas_obs := [],t) right (INL key) ee (OK u) /\
-  target_post ctx func cenv cx es sa sn s0 (ee with gas_obs := [])
-    (PlaceR (MemoryPlace id path)) bvt rb u /\
-  expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t
-    (ee with gas_obs := []) key ix u /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    target_post H ctx func cenv cx es sa sn s0 (ee with gas_obs := [])
+      (PlaceR (MemoryPlace id path)) bvt rb u /\
+    expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t
+      (ee with gas_obs := []) key ix u) /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   subscript_vtype bvt (expr_type e) = SOME vt /\
   target_subscript_suffix cenv e rb ix sn = (op,sb) /\
   lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
@@ -119,14 +149,19 @@ Theorem target_local_index_summary_mem[local]:
   gas_summary_at T (ctx,func) []
     (extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript key))
     (ee with gas_obs := [],u)
-    (\res fin v. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 fin pv' vt op v /\
+    (\res fin v. !H. valid_horizon cx st0 H fin.storage_trace ==> ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 fin pv' vt op v /\
       v.vs_current_bb = sb.cs_current_bb /\
       v.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res r /\ halt_exit H cx fin res r)
 Proof
   strip_tac >>
+  `target_post H0 ctx func cenv cx es sa sn s0 (ee with gas_obs := [])
+    (PlaceR (MemoryPlace id path)) bvt rb u /\
+   expr_post H0 ctx func cenv cx e (mid with gas_obs := []) sm sn t
+    (ee with gas_obs := []) key ix u` by simp[] >>
   `bind (eval_expr cx e) (read_result cx)
     (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
     (INL key,ee with gas_obs := [])` by
@@ -162,11 +197,13 @@ Theorem target_subscript_local_live_continuation_mem:
   ci_mono sa sm /\ ci_mono sm sn /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
   gas_marked_exec T (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL (PlaceR (MemoryPlace id path))) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := [])
-    (PlaceR (MemoryPlace id path)) bvt rb t /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := [])
+      (PlaceR (MemoryPlace id path)) bvt rb t) /\
   t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
@@ -174,16 +211,16 @@ Theorem target_subscript_local_live_continuation_mem:
     (mid with gas_obs := gs) = (INL key,ee) ==>
     ?entry v. lookup_scopes id ee.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
@@ -207,26 +244,45 @@ Proof
   `~t.vs_halted` by metis_tac[target_subscript_marked_base_nonhalted] >>
   `sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
    sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+    target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := [])
+      (PlaceR (MemoryPlace id path)) bvt rb t /\
+    stmt_state_rel H ctx func cenv cx es s0` by
+    (rpt strip_tac >>
+     `storage_trace_frame (eval_base_place cx bt)` by simp[evaluate_storage_trace_frame] >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       (fs[] >> drule_all gas_marked_exec_valid_prefix >> simp[]) >> fs[] >> metis_tac[]) >>
   drule target_index_outcome_mem >>
   disch_then (qspecl_then [`sn`, `ix`, `e`] mp_tac) >> simp[] >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  irule target_subscript_index_bind_outcome >>
-  qexists `\key ee u.
-    target_post ctx func cenv cx es sa sn s0 ee (PlaceR (MemoryPlace id path)) bvt rb u /\
-    expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+  irule (SRULE [] (Q.INST [`keep_halt` |-> `T`] target_subscript_index_bind_outcome_halt)) >>
+  qexists `\H key ee u.
+    target_post H ctx func cenv cx es sa sn s0 ee (PlaceR (MemoryPlace id path)) bvt rb u /\
+    expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
     expr_store_bound cx (expr_type e) key ix u /\
     u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
     alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next` >>
   pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `(\key ee u. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> (\H key ee u. _) _ _ _ _`
+    (assume_tac o BETA_RULE) >>
+  reverse (Cases_on `storage_trace_domain cx st0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[storage_trace_frame_extend_place]) >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by
+    fs[storage_trace_domain_def, Abbr `H0`] >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+    (qspec_then `H0` mp_tac) >> simp[] >> strip_tac >>
   `sa.cs_next_var <= sn.cs_next_var /\ s0.vs_alloca_next <= u.vs_alloca_next` by
     decide_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
   irule target_local_index_summary_mem >> simp[] >>
-  goal_assum (drule_at (Pat `gas_marked_exec`)) >> simp[] >>
-  qexistsl [`bvt`, `env`] >>
-  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
+  conj_tac >- (qexists `H0` >> simp[]) >>
+  qexistsl [`bvt`, `e`, `env`, `ix`, `mid`, `rb`, `right`, `sm`, `sn`, `t`] >>
+  fs[exprSimSourceTheory.expr_body_pre_gas_obs] >> metis_tac[]
 QED
 
 Theorem target_subscript_local_nopop_continuation_mem:
@@ -241,24 +297,26 @@ Theorem target_subscript_local_nopop_continuation_mem:
   ci_mono sa sm /\ ci_mono sm sn /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
   gas_marked_exec T (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL (PlaceR (MemoryPlace id path))) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := [])
-    (PlaceR (MemoryPlace id path)) bvt rb t /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := [])
+      (PlaceR (MemoryPlace id path)) bvt rb t) /\
   t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := []) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!gs key ee. bind (eval_expr cx e) (read_result cx)
