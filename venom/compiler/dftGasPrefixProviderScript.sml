@@ -3140,6 +3140,70 @@ val native_inventory_Rq = ``\obs i Kc Sc cert.
        Kc = [(p,d,i.inst_id)] /\ Sc = [(fn.fn_name,i.inst_id)]
      else Kc = [] /\ Sc = [])``;
 
+Theorem native_selected_child_return_replay:
+  !K.
+  ^native_inventory_Rq
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+    i Kc Sc (SOME (a,nm,ops,args,cf,cf',cs,ct,Uc)) /\
+  i.inst_opcode = INVOKE /\ ctx_inst_ids_distinct C' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) /\
+  K = Kpre ++ Kc ++ Kpost /\ g = gpre ++ gc ++ gpost /\
+  LENGTH Kpre = LENGTH gpre /\ LENGTH Kc = LENGTH gc /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+    (MAP (ALOOKUP (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) K) g /\
+  run_blocks n C cf (cs with vs_gas_readings := gc ++ tailc) = IntRet ret u ==>
+  ?v.
+    run_blocks b C' cf' ct = IntRet ret v /\
+    run_blocks b C cf (cs with vs_gas_readings := gc ++ tailc) = IntRet ret u /\
+    trace_gas (dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d n C cf
+      (cs with vs_gas_readings := gc ++ tailc)) = ZIP (Kc,gc) /\
+    gas_events_blocks n C cf (cs with vs_gas_readings := gc ++ tailc) = Sc /\
+    u.vs_gas_readings = tailc /\
+    (u with vs_gas_readings := []) = (v with vs_gas_readings := []) /\
+    ev_blocks
+      (\key. case ALOOKUP
+        (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ++
+          ZIP (K,g)) key of NONE => 0w | SOME w => w)
+      ((d,i.inst_id)::p) d b C' cf' (ct with vs_gas_readings := []) =
+      IntRet ret (u with vs_gas_readings := [])
+Proof
+  gen_tac >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `(if _ then _ else _)` mp_tac >>
+  asm_simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  gvs[MAP_APPEND, LIST_REL_APPEND_EQ] >>
+  qpat_x_assum `!g' tail. LIST_REL _ _ g' ==> _`
+    (qspecl_then [`gc`, `tailc`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `?n. terminates (run_blocks n C cf (cs with vs_gas_readings := gc ++ tailc))` by
+    (qexists_tac `n` >> simp[passSimulationDefsTheory.terminates_def]) >>
+  `(?v. run_blocks b C' (dft_fn cf) cs = IntRet ret v) /\
+   run_blocks b C cf (cs with vs_gas_readings := gc ++ tailc) = IntRet ret u /\
+   trace_gas (dftGasFromListTraceDefs$trace_blocks ((d,i.inst_id)::p) d n C cf
+     (cs with vs_gas_readings := gc ++ tailc)) = ZIP (Kc,gc) /\
+   gas_events_blocks n C cf (cs with vs_gas_readings := gc ++ tailc) = Sc /\
+   u.vs_gas_readings = tailc` by
+    (irule returning_child_packet_exhaustion >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     reverse conj_tac >- metis_tac[] >>
+     gen_tac >> qpat_x_assum `!n'. ?k. _ /\ _ /\ _`
+       (qspec_then `f` strip_assume_tac) >>
+     qexists_tac `DROP k Sc` >> simp[]) >>
+  `u with vs_gas_readings := [] = v with vs_gas_readings := []` by
+    (qpat_x_assum `(?n. terminates _) ==> _` mp_tac >>
+     simp[restore_result_def, dft_res_rel_def] >> metis_tac[]) >>
+  qexists_tac `v` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `ev_blocks orc` >>
+  `trace_agrees orc (dftGasFromListTraceDefs$trace_blocks
+     ((d,i.inst_id)::p) d b C' (dft_fn cf) cs)` by
+    (simp_tac pure_ss [Abbr `orc`] >>
+     drule_all native_inventory_child_agreement >>
+     simp_tac pure_ss [LET_THM] >> metis_tac[]) >>
+  drule (cj 3 dftGasFromListReplayTheory.trace_replay) >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[restore_rel_cases]
+QED
+
 Theorem native_frontier_mask_inventory:
   !body.
   LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
