@@ -16,7 +16,7 @@ Theorem compile_store_bytestring_inst_seq_ptr[local]:
   mload (w2n a) s = n2w len /\
   ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr
       (<|d_stor := K (K {}); d_trans := K (K {});
@@ -94,7 +94,7 @@ Resume compile_store_bytestring_inst_seq_ptr[rounding_not]:
           venomExecSemanticsTheory.step_inst_base_opcode_eqs,
           venomExecSemanticsTheory.exec_pure1_def,
           venomStateTheory.eval_operand_def, venomStateTheory.update_var_def] >>
-     rpt strip_tac >> gvs[allocas_from_def, Abbr `fuel`] >>
+     rpt strip_tac >> gvs[allocas_from_def, allocas_below_fmp_def, Abbr `fuel`] >>
      metis_tac[]) >>
   simp[] >>
   `!tmp w. new_site_bytes s1 (update_var tmp w s1) = {}` by
@@ -128,7 +128,7 @@ Resume compile_store_bytestring_inst_seq_ptr[rounding_add_length]:
           venomExecSemanticsTheory.exec_pure2_def,
           venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
           venomStateTheory.update_var_def] >>
-     rpt strip_tac >> gvs[allocas_from_def, Abbr `fuel`]
+     rpt strip_tac >> gvs[allocas_from_def, allocas_below_fmp_def, Abbr `fuel`]
      >~ [`op <> Var _`] >- (Cases_on `op` >> simp[SF DISJ_ss]) >>
      metis_tac[]) >>
   simp[] >>
@@ -165,7 +165,7 @@ Resume compile_store_bytestring_inst_seq_ptr[rounding_mask]:
           venomExecSemanticsTheory.exec_pure2_def,
           venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
           venomStateTheory.update_var_def] >>
-     rpt strip_tac >> gvs[allocas_from_def, Abbr `fuel`]
+     rpt strip_tac >> gvs[allocas_from_def, allocas_below_fmp_def, Abbr `fuel`]
      >~ [`op <> Var _`] >-
        (Cases_on `op` >> simp[] >> rpt IF_CASES_TAC >> gvs[]) >>
      metis_tac[]) >>
@@ -203,7 +203,7 @@ Resume compile_store_bytestring_inst_seq_ptr[rounding_add_header]:
           venomExecSemanticsTheory.exec_pure2_def,
           venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
           venomStateTheory.update_var_def] >>
-     rpt strip_tac >> gvs[allocas_from_def, Abbr `fuel`]
+     rpt strip_tac >> gvs[allocas_from_def, allocas_below_fmp_def, Abbr `fuel`]
      >~ [`op <> Var _`] >-
        (Cases_on `op` >> simp[] >> rpt IF_CASES_TAC >> gvs[]) >>
      metis_tac[]) >>
@@ -258,7 +258,7 @@ Resume compile_store_bytestring_inst_seq_ptr[copy_check]:
        (conj_tac >-
           (gen_tac >> Cases_on `op` >> simp[] >>
            rpt IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
-        gvs[allocas_from_def]) >>
+        gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
      simp[]) >>
   suspend "final_ghosts"
 QED
