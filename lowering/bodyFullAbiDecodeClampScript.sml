@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeClamp
 Ancestors
+  bodyFullAbiDecodeClampMemory
   abiDecodeClampShape abiDecodePtrScalarAbort bodyPtrBopScalarOutcome
   abiEncoder bodyPtrBopScalarDynamic bodyPtrBopScalarCompile bodyPtrBopScalarSeq
   bodyFullAbiDecodePath instSeqPtrLo abiDecoderReentry emitHelperProps
@@ -87,7 +88,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bop_scalar_seq_mem_ok] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[abi_decode_scalar_seq_mem_ok] >>
   drule_all abi_decode_clamp_runtime >> strip_tac
   >- (drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
       disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
