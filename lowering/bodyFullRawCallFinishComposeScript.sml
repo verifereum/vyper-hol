@@ -353,7 +353,12 @@ Proof
                    exprLoweringPropsTheory.ci_mono_refl, pairTheory.SND]) >>
      metis_tac[exprLoweringPropsTheory.ci_mono_compile_raw_call_outbuf, pairTheory.SND]) >>
   `ci_mono sa s7` by
-    metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ci_mono sa s1`, `ci_mono s1 s2`, `ci_mono s2 s3`,
+        `ci_mono s3 s4`, `ci_mono s4 s5`, `ci_mono s5 s6`,
+        `ci_mono s6 s7`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_trans]) >>
   `local_ptrs_reserved cenv s7` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
@@ -747,7 +752,41 @@ Proof
     (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >>
      qpat_assum `adopt_call_outcome rq outcome es1 = _` (fn th => simp[th])) >>
   `wb_frame cenv es es2 sa s0 u` by
-    (qpat_assum `wb_frame cenv es esK sa s0 u` mp_tac >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`wb_frame cenv es esK sa s0 u`, `es2.scopes = esK.scopes`,
+        `es2.immutables = esK.immutables`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+         loweringPostsTheory.popped_kept_def] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK uc,HG,un)` >>
+  `~uc.vs_halted /\ uc.vs_current_bb=sc.cs_current_bb /\
+   uc.vs_inst_idx=LENGTH sc.cs_current_insts /\
+   uc.vs_allocas=t7.vs_allocas /\ uc.vs_alloca_next=t7.vs_alloca_next /\
+   uc.vs_returndata=outcome.co_returnData` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`Abbrev(uc=_)`, `u=update_var _ _ t`,
+        `t=t7 with <| vs_outcomes := _; vs_requests := _;
+          vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+          vs_returndata := _; vs_memory := _ |>`, `t.vs_returndata = _`,
+        `~t7.vs_halted`, `t7.vs_current_bb=s7.cs_current_bb`,
+        `emit_op _ _ s7 = (ok,sc)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[Abbr `uc`, venomStateTheory.update_var_def] >>
+     metis_tac[emitHelperPropsTheory.emit_op_state]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es2 uc /\
+    ghost_inv_at (DF H) lo dframe cenv cx es2 HG un uc` by
+    (qx_gen_tac `H` >> strip_tac >>
+     `valid_horizon cx st0 H esK.storage_trace` by
+       (qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _` drule >> simp[]) >>
+     qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       drule >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> stmt_state_rel _ _ _ _ _ es2 u /\ _`
+       drule >> strip_tac >>
+     fs[Abbr `uc`]) >>
+  `wb_frame cenv es es2 sa s0 uc` by
+    (qpat_assum `wb_frame cenv es es2 sa s0 u` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
      simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
           loweringPostsTheory.popped_kept_def]) >>
   Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success`
