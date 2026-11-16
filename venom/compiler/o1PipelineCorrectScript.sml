@@ -166,15 +166,18 @@ QED
 (* S4 with the dead bytes chosen after the run: one input state serves
  * every well-formed D (dead_wf). *)
 Theorem run_venom_pipeline_correct_all_dead:
-  !lo rpolicy unit out vs_out.
+  !lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context
+    fixed_region_reserved lo unit.cu_context /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp
     ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. raw_variant fmp vs_in vs_out /\
       !D. dead_wf D ==> (raw_unit_memory_ok unit.cu_context vs_in /\
        ptr_discipline lo unit.cu_context vs_in /\
        taint_within D unit.cu_context vs_in /\
@@ -185,19 +188,42 @@ Theorem run_venom_pipeline_correct_all_dead:
 Proof
   rpt strip_tac >>
   `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `!D vi. raw_unit_memory_ok unit.cu_context vi /\
+  `EVERY pre_fmp_ops unit.cu_context.ctx_functions /\
+   ~ctx_has_dalloca unit.cu_context` by
+    (simp[EVERY_MEM] >>
+     metis_tac[source_pre_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
+  (* At an input state whose free-memory pointer is its initial one, no
+     reachable state moves it: the raw phase's FMP facts hold. *)
+  `!D vi. vi.vs_fmp = vi.vs_initial_fmp /\
+        raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline lo unit.cu_context vi /\
         taint_within D unit.cu_context vi /\
         mem_inv dload_offset_ok unit.cu_context vi /\
         mem_inv dload_headroom_ok unit.cu_context vi ==>
         o1_pre_walk_inv D unit.cu_context vi` by
     (rpt strip_tac >>
+     `mem_inv raw_mem_ok unit.cu_context vi` by
+       (simp[raw_unit_memory_ok_mem_inv] >> rpt gen_tac >> strip_tac >>
+        drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
+        drule raw_reachable_initial_fmp >> strip_tac >>
+        `inst.inst_opcode <> DALLOCA` by
+          (`EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
+             (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+              metis_tac[]) >>
+           imp_res_tac EVERY_active_inst >> gvs[]) >>
+        simp[dalloca_no_wrap_def]) >>
      `o1_src_inv D unit.cu_context vi` by
-       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
-           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+       (fs[o1_src_inv_def] >> metis_tac[]) >>
      irule o1_source_pre_walk_inv >> simp[]) >>
   fs[o1_pipeline_def] >>
-  drule_all o1_pipeline_stage_facts_all_dead >> strip_tac >> metis_tac[]
+  drule_all o1_pipeline_stage_facts_all_dead >> strip_tac >>
+  first_x_assum (qspecl_then [`fmp`, `vs_out`] mp_tac) >>
+  simp[fmp_variant_room_def] >> strip_tac >>
+  qexists_tac `vs_in` >> simp[] >> rpt strip_tac >>
+  `vs_in.vs_fmp = vs_in.vs_initial_fmp` by
+    gvs[raw_variant_def, gas_variant_def,
+        venomStateTheory.venom_state_component_equality] >>
+  metis_tac[]
 QED
 
 Theorem o1_lowered_inv_fixed_pointer[local]:
