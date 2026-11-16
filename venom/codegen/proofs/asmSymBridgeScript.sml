@@ -1191,23 +1191,34 @@ Proof
   simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
+Theorem sym_step_plain_control_sim_core:
+  !lo code_ok.
+  bridge_core lo code_ok cs ss /\ MEM name ["POP"; "JUMPDEST"; "STOP"; "INVALID"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >> irule sym_step_concrete_good_core >>
+  simp[concrete_underflow] >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  gvs[MEM] >> simp[remaining_plain_arities] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
+  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
+  Cases_on `cs.as_stack` >>
+  gvs[remaining_plain_arities, asm_pop_def, sym_lift_def, asm_next_def,
+      asm_op_mem_writes_def, mem_labels_clear_def,
+      GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
+      sym_obs_def, sym_init_def] >>
+  conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
+QED
+
 Theorem sym_step_plain_control_sim[local]:
   asm_sym_rel p env cs ss /\ MEM name ["POP"; "JUMPDEST"; "STOP"; "INVALID"] ==>
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >> irule sym_step_concrete_good >>
-  simp[concrete_underflow] >> rpt strip_tac >>
-  gvs[MEM] >> simp[remaining_plain_arities] >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
-  simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
-  gvs[asm_sym_rel_def] >>
-  Cases_on `cs.as_stack` >>
-  gvs[remaining_plain_arities, asm_pop_def, sym_lift_def, asm_next_def,
-      asm_op_mem_writes_def, mem_labels_clear_def,
-      GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
-      asm_sym_step_rel_def, asm_sym_rel_def, sym_obs_def, sym_init_def] >>
-  conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_plain_control_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem sym_step_selfdestruct_sim_core:
