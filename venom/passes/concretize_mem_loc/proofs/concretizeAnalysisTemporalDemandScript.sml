@@ -329,17 +329,6 @@ Proof
   drule_all concretize_protected_cached_byte_no_kill_static >> simp[]
 QED
 
-Theorem trace_config_at:
-  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es ==>
-  joint_config_reachable vs0 C (EL k (q0::qs))
-Proof
-  strip_tac >>
-  `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
-  drule joint_trace_prefix_reachable >> strip_tac >>
-  Cases_on `k` >> gvs[EVERY_EL] >>
-  rename1 `SUC i <= LENGTH qs` >> `i < LENGTH qs` by decide_tac >> metis_tac[]
-QED
-
 Definition activation_nonrevert_def:
   activation_nonrevert (JointConfig stk PG G tn fn inst s oms om hs h) d <=>
     (d = LENGTH stk ==> ~in_revert_forward fn s)
@@ -372,7 +361,7 @@ Proof
   `activation_cache (EL k (q0::qs)) d fn aid (b,sz)` by
     (irule joint_activation_cache_interval >> metis_tac[LESS_EQ_TRANS]) >>
   `joint_config_reachable vs0 C (EL k (q0::qs))` by
-    metis_tac[trace_config_at, LESS_EQ_TRANS] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at, LESS_EQ_TRANS] >>
   `joint_transition C (EL k (q0::qs)) (EL k es) (EL (SUC k) (q0::qs))` by
     metis_tac[joint_trace_edge_at] >>
   `activation_nonrevert (EL k (q0::qs)) d /\
@@ -542,7 +531,7 @@ Theorem concretize_cached_read_liveat_headroom_static:
 Proof
   strip_tac >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
-    metis_tac[trace_config_at] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at] >>
   `joint_origin_history vs0 C stk PG G tn fn inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
@@ -631,7 +620,7 @@ Theorem concretize_untainted_local_read_liveat_at_location_headroom_static:
 Proof
   strip_tac >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
-    metis_tac[trace_config_at] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at] >>
   `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
     (gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
@@ -729,7 +718,7 @@ Proof
   `active_inst fn inst0 s0` by
     (irule reachable_active >>
      `joint_config_reachable vs0 C (EL n (q0::qs))` by
-       (irule trace_config_at >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
+       (irule frameJointTraceTheory.joint_trace_reachable_at >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
   irule concretize_untainted_local_read_liveat_at_location >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>

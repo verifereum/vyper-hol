@@ -244,7 +244,7 @@ Proof
      drule_all (Q.INST [`M` |-> `raw_mem_ok`] frame_reachable_mem_inv) >> simp[]) >>
   `a.po_state.vs_initial_fmp = vs.vs_initial_fmp` by
     (fs[ptr_observation_reachable_def] >>
-     drule frame_reachable_initial_fmp >> simp[]) >>
+     drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >> simp[]) >>
   drule ptr_history_content_control >>
   simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def] >>
   strip_tac >> gvs[raw_mem_ok_def]

@@ -604,7 +604,7 @@ Proof
        a.po_fn a.po_inst a.po_state` by
        (drule ptr_gap_ownership_history >> strip_tac >>
         drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-     drule frameAllocationOwnershipTheory.frame_reachable_initial_fmp >>
+     drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
      simp[dyn_floor_def]) >>
   `k <= w2n n` by simp[] >>
   `?rho. (!j. j < k ==> rho (w2n x + j) = w2n y + j) /\

@@ -45,7 +45,7 @@ Proof
     (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `allocas_below_fmp s` by metis_tac[] >>
   `s.vs_initial_fmp = vs0.vs_initial_fmp` by
-    metis_tac[frame_reachable_initial_fmp] >>
+    metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke] >> pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[] >> simp[AllCaseEqs()] >> strip_tac >>
@@ -229,7 +229,7 @@ Proof
   disch_then drule >> strip_tac >>
   qexists_tac `G` >>
   `s.vs_initial_fmp = vs0.vs_initial_fmp` by
-    metis_tac[frame_reachable_initial_fmp] >>
+    metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
   `dyn_floor ctx s = dyn_floor ctx vs0` by simp[dyn_floor_def] >>
   pop_assum SUBST1_TAC >>
   conj_tac >- (fs[ptr_discipline_def] >> metis_tac[]) >>

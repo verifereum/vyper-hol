@@ -36,27 +36,6 @@ Proof
   metis_tac[]
 QED
 
-(* A clean write at or above the dynamic floor, at the same address on
-   both sides. *)
-Theorem ld_memory_agree_write_dyn_clean[local]:
-  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
-  ld_dyn_floor_ok fl lo sites X /\ fl <= p ==>
-  ld_memory_agree sites lo (mask DIFF {i | p<=i /\ i<p+LENGTH xs})
-    (write_memory_with_expansion p xs s).vs_memory
-    (write_memory_with_expansion p xs t).vs_memory
-Proof
-  strip_tac >>
-  `ld_memory_agree sites lo
-     ((mask DIFF {i | p<=i /\ i<p+LENGTH xs}) UNION
-       {p+k | k<LENGTH xs /\ k IN {}})
-     (write_memory_with_expansion p xs s).vs_memory
-     (write_memory_with_expansion p xs t).vs_memory` by
-    (irule ld_memory_agree_write_dyn >> simp[] >> metis_tac[]) >>
-  `{p+k | k<LENGTH xs /\ k IN {}} = {}` by simp[EXTENSION] >>
-  pop_assum (fn eq => qpat_x_assum `ld_memory_agree _ _ (_ UNION _) _ _`
-    (ACCEPT_TAC o REWRITE_RULE [eq, UNION_EMPTY]))
-QED
-
 Theorem ld_joint_supply_dloadbytes_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
@@ -151,7 +130,7 @@ Proof
       irule ld_dyn_agree_clean_write_same >> metis_tac[])
   >- (qpat_x_assum `w2n p = w2n q` (fn th => rewrite_tac[GSYM th]) >>
       conj_tac
-      >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_write_dyn_clean >>
+      >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) o1LowerDloadRangeTransportTheory.ld_memory_agree_clean_write_dyn >>
           disch_then irule >> rpt conj_tac >>
           FIRST [first_assum ACCEPT_TAC,
                  qpat_x_assum `tmp.vs_memory = _` (fn th => rewrite_tac[th]) >>

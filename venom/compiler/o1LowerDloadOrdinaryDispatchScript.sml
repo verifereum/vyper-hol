@@ -100,7 +100,7 @@ Proof
        metis_tac[occ_frame_reachable_projection] >>
      `allocas_below_fmp s` by metis_tac[ptr_discipline_upto_def] >>
      `s.vs_initial_fmp = vs.vs_initial_fmp` by
-       metis_tac[frame_reachable_initial_fmp] >>
+       metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
      drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`, `inst`, `SUC s.vs_inst_idx`, `fuel`, `C`] mp_tac) >>
      simp[occurrence_sites_step_def, dyn_floor_def] >>

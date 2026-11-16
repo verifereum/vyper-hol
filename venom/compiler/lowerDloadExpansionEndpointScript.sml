@@ -1,6 +1,7 @@
 (* Location-independent endpoints of actual generated expansions. *)
 Theory lowerDloadExpansionEndpoint
 Ancestors
+  ptrDisciplineEmptyTaint
   lowerDloadScratchTransport lowerDloadPublicEffect lowerDloadSafetyAdvance
   lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises lowerDloadAllocationOrigins
   lowerDloadFrontier lowerDloadSafetyBoundary lowerDloadSafetyValues lowerDloadSafetyUpdates
@@ -320,7 +321,7 @@ Resume ld_dload_endpoint_static[assemble]:
      strip_tac >>
      `s.vs_initial_fmp = vs0.vs_initial_fmp` by
        (drule ld_sync_source >> strip_tac >>
-        drule o1LowerDloadOccurrenceTheory.frame_reachable_initial_fmp >>
+        drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
         simp[]) >>
      pop_assum (fn th => rewrite_tac[GSYM th]) >>
      qpat_assum `dload_headroom_ok _ _ _ _` mp_tac >>

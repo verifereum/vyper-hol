@@ -54,7 +54,7 @@ Theorem ptr_reachable_owner_below_initial_fmp:
 Proof
   strip_tac >> drule_all ptr_reachable_owner_frame >> strip_tac >>
   `(ptr_owner_view d obs).cf_state.vs_initial_fmp = vs.vs_initial_fmp` by
-    metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp] >>
+    metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
   drule frameAllocationOwnershipTheory.frame_reachable_caches_below >> rpt (disch_then drule) >>
   disch_then (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]
 QED
@@ -70,7 +70,7 @@ Theorem ptr_reachable_alloca_below_dyn_floor:
 Proof
   strip_tac >> simp[dyn_floor_def] >> IF_CASES_TAC
   >- (`s.vs_initial_fmp = vs.vs_initial_fmp` by
-        metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp] >>
+        metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
       drule frameAllocationOwnershipTheory.frame_reachable_caches_below >> rpt (disch_then drule) >>
       disch_then (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
   `ptr_alloc_table_ok s` by

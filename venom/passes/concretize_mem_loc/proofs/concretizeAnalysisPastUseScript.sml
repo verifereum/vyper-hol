@@ -29,7 +29,7 @@ Proof
   strip_tac >>
   `joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h)` by
-    (drule trace_config_at >> disch_then (qspec_then `m` mp_tac) >> simp[]) >>
+    (drule frameJointTraceTheory.joint_trace_reachable_at >> disch_then (qspec_then `m` mp_tac) >> simp[]) >>
   `joint_origin_history vs0 C stk PG G tn fn inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
   `origin_frame_reachable vs0 C stk PG G tn fn inst s oms om` by
