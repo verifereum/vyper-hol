@@ -3,8 +3,8 @@ Theory bodyFullBuiltinConcatAdd
 Ancestors
   bodyFullBuiltinBytestringBuffer
   bodyFullAllocaFresh bodyFullGhostFrame bodyFullUnwrapRun
-  bodyPtrBytestringBuiltinsConcatChecks bodyPtrBytestringBuiltinsWindowGhost
-  wordArgsPtr fragGasSeqPtr fragExec fragGasCopyLoop
+  concatArmSeqPtr bodyPtrBytestringBuiltinsWindowGhost ptrSafetyTransport
+  wordArgsPtr fragGasSeqPtr fragExec
   loweringHalt emitHelperProps exprLoweringProps venomMemProps finite_map pred_set
 
 Theorem concat_data_add_full:
@@ -53,8 +53,9 @@ Proof
        `sc.cs_next_id`, `func`, `PG`, `D`] strip_assume_tac) >>
      gvs[Abbr `code`, inst_seq_ptr_def]) >>
   `!D. inst_seq_ptr D lo ctx func PG G tn code s G1 tn1` by
-    (gen_tac >> irule inst_seq_ptr_lower_bound_transport >>
-     simp[Abbr `code`] >> qexists `0` >> gvs[]) >>
+    (gen_tac >> gvs[Abbr `code`, inst_seq_ptr_def] >>
+     irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+     qexists `0` >> simp[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (raw with vs_inst_idx := LENGTH sc'.cs_current_insts),G1,tn1)` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
@@ -107,7 +108,8 @@ Proof
   qpat_assum `raw = update_var _ _ s` SUBST1_TAC >>
   simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
        ptrDisciplineTheory.allocas_from_def, finite_mapTheory.FLOOKUP_UPDATE,
-       GSYM wordsTheory.word_add_n2w]
+       GSYM wordsTheory.word_add_n2w] >>
+  fs[ptrDisciplineTheory.allocas_from_def]
 QED
 
 Theorem concat_data_add_fresh_full:
@@ -184,5 +186,6 @@ Proof
        loweringStateRelDefsTheory.not_fresh_at_def] >>
   gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_ignore_bind_def,
       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
-      compileEnvTheory.fresh_id_def, compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def]
+      compileEnvTheory.fresh_id_def, compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def] >>
+  fs[ptrDisciplineTheory.allocas_from_def]
 QED
