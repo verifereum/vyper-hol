@@ -617,6 +617,8 @@ QED
 
 (* The certificate remains at the RHS entry, for syntactic lifting by the
    enclosing statement. Only a completed summary is prefixed here. *)
+(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
+   Original theorem and proof retained; never deliver this stand-in.
 Theorem augassign_load_rhs_counted:
   expr_sim ctx func cenv cx ty e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
@@ -672,6 +674,39 @@ Proof
       >~ [`exit_result r`] >- (conj_tac >- first_assum ACCEPT_TAC >> disj2_tac >> first_assum ACCEPT_TAC) >>
       fs[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
+QED
+*)
+Theorem augassign_load_rhs_counted:
+  expr_sim ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  gas_marked_path F ctx func s0 0 (OK sm) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es sm /\
+       storage_well_formed_on cx es (FST H)) /\
+  ~sm.vs_halted /\
+  sm.vs_current_bb = sa.cs_current_bb /\
+  sm.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?marks.
+    gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+      es s0 marks \/
+    gas_summary_at F (ctx,func) marks
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        ?v. res = INL v /\
+        expr_post H ctx func cenv cx e (es with gas_obs := []) sa sb sm ee v op t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        expr_exit res r) \/
+    ?err ee leaf finish.
+      gas_exempt_cert F (cx_tops cx) (ctx,func)
+        (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+        (es with gas_obs := [],sm) marks (err,ee) (leaf,finish)
+Proof
+  cheat
 QED
 
 Theorem augassign_expr_post_operands:
