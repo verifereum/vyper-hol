@@ -8,7 +8,7 @@ Ancestors
 
 Theorem literal_chunk_pair_ptr:
   lookup_var src s = SOME (n2w b) /\ FLOOKUP G src = SOME (base_addr,n) /\
-  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var src) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   base_addr <= b /\ b + off + 32 <= base_addr + n /\
   b + off + 32 < dimword (:256) ==>
   inst_seq_ptr D 0 ctx fn PG G tn
@@ -36,6 +36,8 @@ Proof
    OK (mstore (w2n (n2w (b+off):bytes32)) w u)` by
     (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def]) >>
   drule literal_mstore_ghost >> disch_then assume_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (gvs[Abbr `u`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   gvs[w2n_n2w] >>
   simp[inst_seq_ptr_def, literal_mstore_ptr_inst_ok]
 QED
@@ -119,7 +121,7 @@ Theorem literal_chunks_ptr:
   compile_store_byte_chunks ptr bs off sa = ((),sb) /\ ptr = Var p /\
   not_fresh_at sa p /\ lookup_var p s = SOME (n2w b) /\
   FLOOKUP G p = SOME (base_addr,n) /\ op_taint tn (Var p) = {} /\
-  ~ctx_has_dalloca ctx /\ base_addr <= b /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ base_addr <= b /\
   b + off + 32 * word_size (LENGTH bs) <= base_addr + n /\
   b + off + 32 * word_size (LENGTH bs) < dimword (:256) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -203,6 +205,9 @@ Resume literal_chunks_ptr[head]:
   `b + (offset + (32 * word_size (SUC (LENGTH tl) - 32) + 32)) <= base_addr+n /\
    b + (offset + (32 * word_size (SUC (LENGTH tl) - 32) + 32)) < dimword (:256)` by
     decide_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp v)` by
+    (gvs[Abbr `v`, Abbr `u`, mstore_def, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   first_x_assum drule_all >> strip_tac >>
   suspend "compose"
 QED
