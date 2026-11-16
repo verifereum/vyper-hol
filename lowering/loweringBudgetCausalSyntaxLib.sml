@@ -94,6 +94,10 @@ val base_eqs = strip_conj (concl bodyFullPredsTheory.body_base_target_full_ok_de
 val expr_base_body = list_mk_conj (map (close_except [cx,ep,bp] o
   replace_consts recursive_subst o causal o snd o strip_forall) (expr_eq::base_eqs));
 val expr_base_pred = list_mk_abs([cx,ep,bp],expr_base_body);
+val (expr_var,expr_equation) = dest_forall (hd (strip_conj expr_base_body));
+val expr_conjuncts = strip_conj (rhs expr_equation);
+val expr_nonrecursive = list_mk_abs([cx,expr_var],
+  mk_conj(hd expr_conjuncts,List.nth(expr_conjuncts,2)));
 val p = ``p : (expr -> bool) # (base_assignment_target -> bool)``;
 val expr_base_exists_tm = ``!cx. ?p. ^expr_base_pred cx (FST p) (SND p)`` |> beta;
 val selected_pair = ``\cx. @p. ^expr_base_pred cx (FST p) (SND p)`` |> beta;
