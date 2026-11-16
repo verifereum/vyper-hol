@@ -5,7 +5,7 @@ Ancestors
   oracleCallStepPtr bodyPtrDefs ptrDiscipline pred_set
 
 Theorem raw_call_exec_stor_taint_at:
-  ((inst.inst_opcode = CALL /\ ~stat) \/
+  (inst.inst_opcode = CALL \/
    (inst.inst_opcode = STATICCALL /\ stat)) /\
   exec_ext_call inst s gas addr value ao az ro rz stat = OK u /\
   u.vs_immutables = s.vs_immutables /\
