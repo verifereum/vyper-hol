@@ -10,6 +10,7 @@
  *)
 Theory symFrameInvoke
 Ancestors
+  symInvokeEntryFacts
   symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
@@ -17,14 +18,14 @@ Ancestors
   dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim gasFrameSim
   fnFrameStepsRevertForward
 
-(* INVOKE cannot consume the opaque code-end pointer. *)
+(* Canonical entry APIs are corollaries of the shared entry facts. *)
 Theorem sym_invoke_argument_not_code_end:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
 Proof
-  rw[label_flow_ok_def] >>
-  first_x_assum drule_all >> simp[] >> metis_tac[]
+  metis_tac[sym_invoke_argument_not_code_end_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_argument_shape:
@@ -32,10 +33,7 @@ Theorem sym_invoke_argument_shape:
   inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args ==>
   opaque_use_ok fn /\ EVERY (\op. ~is_label_operand op) args
 Proof
-  strip_tac >>
-  `opaque_use_ok fn /\ label_positions_ok inst` by
-    (gvs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
-  gvs[label_positions_ok_def]
+  ACCEPT_TAC sym_invoke_argument_shape_core
 QED
 
 Theorem sym_invoke_argument_word_kind:
@@ -45,12 +43,8 @@ Theorem sym_invoke_argument_word_kind:
   op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
   ?w. sv = Val w
 Proof
-  strip_tac >>
-  drule_all sym_invoke_argument_shape >> strip_tac >>
-  `~is_label_operand op` by gvs[EVERY_MEM] >>
-  Cases_on `op` >> gvs[is_label_operand_def, op_kind_ok_def] >>
-  metis_tac[fnFrameBoundaryInvokeTheory.invoke_arguments_not_retpc,
-            sym_invoke_argument_not_code_end, MEM]
+  metis_tac[sym_invoke_argument_word_kind_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_output_not_code_end:
@@ -130,11 +124,7 @@ Theorem sym_invoke_selected_prefix_sim_marked:
         (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  `emit_input_plan ADD operands nl ps = (iops,prepared)` by
-    metis_tac[fnFrameBoundaryInvokeTheory.invoke_label_free_input] >>
-  `ADD <> INVOKE /\ PERM operands operands` by simp[] >>
-  drule_all sym_selected_prefix_sim_marked >> simp[]
+  ACCEPT_TAC sym_invoke_selected_prefix_sim_marked_core
 QED
 
 Theorem sym_invoke_call_packet:
@@ -146,10 +136,7 @@ Theorem sym_invoke_call_packet:
     SymOK (ss with <| sym_base := ss.sym_base with as_pc := pc;
                      sym_stack := Lab ret_lbl 0 :: ss.sym_stack |> )
 Proof
-  rpt strip_tac >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[asmSpliceTheory.sym_steps_compute, sym_step_def, sym_set_stack_def,
-       sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
+  ACCEPT_TAC sym_invoke_call_packet_core
 QED
 
 Theorem sym_invoke_prefix_pair:
@@ -222,8 +209,7 @@ Theorem sval_conc_words:
   LIST_REL (\sv w. sval_conc lo sv = SOME w) svs ws ==>
   svs = MAP Val ws
 Proof
-  Induct >> Cases_on `ws` >> simp[] >>
-  rpt strip_tac >> gvs[sval_conc_def] >> metis_tac[]
+  ACCEPT_TAC sval_conc_words_core
 QED
 
 Theorem sym_invoke_argument_list_words:
@@ -234,11 +220,8 @@ Theorem sym_invoke_argument_list_words:
   LIST_REL (op_kind_ok fn ret) (REVERSE args) svs ==>
   EVERY (\sv. ?w. sv = Val w) svs
 Proof
-  rw[EVERY_MEM] >>
-  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
-  gvs[MEM_REVERSE] >>
-  `x <> dead_stack_marker` by metis_tac[] >>
-  drule_all sym_invoke_argument_word_kind >> simp[]
+  metis_tac[sym_invoke_argument_list_words_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_arranged_stack:
@@ -254,17 +237,9 @@ Theorem sym_invoke_arranged_stack:
     ss.sym_stack = MAP Val values ++ saved_sym ++ srest /\
     LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym
 Proof
-  rpt strip_tac >>
-  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1] >>
-  rename1 `LIST_REL (op_kind_ok fn ret) (REVERSE args) arg_syms` >>
-  `EVERY (\sv. ?w. sv = Val w) arg_syms` by
-    (drule_all sym_invoke_argument_list_words >> simp[]) >>
-  `LENGTH arg_syms = LENGTH values` by
-    metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
-  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     arg_syms values` by
-    metis_tac[asm_sym_rel_def, GSYM APPEND_ASSOC, LIST_REL_APPEND_EQ] >>
-  drule_all sval_conc_words >> strip_tac >> gvs[]
+  rpt strip_tac >> irule sym_invoke_arranged_stack_core >>
+  gvs[asm_sym_rel_def] >>
+  metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_callee_code_label:
@@ -313,8 +288,7 @@ Theorem sym_invoke_return_code_label:
     ([SOPushLabel ret; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret] ++ post)) ==>
   MEM (AsmLabel ret) p
 Proof
-  rpt strip_tac >> irule spillWordBoundsTheory.asm_block_at_member >>
-  goal_assum (drule_at Any) >> simp[execute_plan_def, exec_stack_op_def]
+  ACCEPT_TAC sym_invoke_return_code_label_core
 QED
 
 Theorem sym_invoke_entry_symbolic_boundary:
