@@ -311,7 +311,9 @@ Proof
   pure_rewrite_tac[eval_assign_tuple_action] >>
   irule forced_then_outcome >>
   conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> simp[stmt_exit_def] >>
+      conj_tac >- metis_tac[expr_exit_INR_type] >>
+      fs[halt_exit_def]) >>
   conj_tac
   >- (gen_tac >> simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   qexists_tac `\H v ee t.
@@ -431,19 +433,21 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[post]:
   disj1_tac >> qexists_tac `t'` >> conj_tac >- REFL_TAC >>
   qx_gen_tac `H` >> strip_tac >>
   `valid_horizon cx st0 H ee.storage_trace` by
-    (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+               vyperStorageFootprintTheory.valid_horizon_frame) >>
      qexistsl [`assign_tuple_targets cx
                   (TupleTarget (MAP (BaseTarget o NameTarget) ids))
                   (ArrayV (TupleV vs))`, `INL ()`, `ee'`] >>
-     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     fs[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?u. stmt_state_rel H ctx func cenv cx ee' u /\
        u.vs_accounts = t.vs_accounts /\ u.vs_transient = t.vs_transient /\
        u.vs_requests = t.vs_requests /\ u.vs_call_ctx = t.vs_call_ctx` by
     metis_tac[] >>
   `stmt_state_rel H ctx func cenv cx ee' t'` by
     (mp_tac (Q.INST [`H0` |-> `H1`, `u` |-> `t'`, `s` |-> `u`, `es` |-> `ee'`]
-               exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
-     impl_tac >- (rpt conj_tac >> simp[]) >> simp[]) >>
+               (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+                  exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     impl_tac >- (rpt conj_tac >> fs[]) >> simp[]) >>
   `storage_well_formed_on cx (ee' with gas_obs := []) (FST H)` by
     (`storage_well_formed_on cx ee (FST H)` by metis_tac[] >>
      `(ee' with gas_obs := []).accounts = ee.accounts /\
@@ -452,17 +456,15 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[post]:
   `sa.cs_next_var <= sb.cs_next_var` by decide_tac >>
   `return_buf_frame d cenv sb t'` by
     (irule return_buf_frame_frame >> qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
-     conj_tac
-     >- (rpt strip_tac >>
-         `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
-     >> decide_tac) >>
+     rpt strip_tac >>
+     `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >> metis_tac[]) >>
   BETA_TAC >> qexists_tac `cenv` >> rpt conj_tac
   >- simp[stmt_lands_def]
   >- simp[]
   >- simp[]
   >- simp[cenv_top_ext_refl]
   >- simp[]
-  >- first_assum ACCEPT_TAC
+  >- fs[]
   >- (rpt strip_tac >>
       `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
   >- metis_tac[]
