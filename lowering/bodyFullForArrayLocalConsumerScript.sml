@@ -773,7 +773,24 @@ Resume body_for_local_array_full_from_contracts[fixed_runtime]:
     (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
      simp[supported_stmt_def,supported_iterator_def,AllCaseEqs()]) >>
   qpat_x_assum `n' = n` SUBST_ALL_TAC >>
-  drule_all compile_for_array_code_ready_framed >> strip_tac >>
+  drule_all stmtSimForArrayPartsTheory.compile_for_array_stages >> strip_tac >>
+  drule_all stmtSimForArrayPartsTheory.compile_for_array_prefix >> strip_tac >>
+  drule stmtSimForArrayPartsTheory.compile_for_array_suffix >> strip_tac >>
+  `cs_extends start sa` by
+    (irule stmtSimForArrayPartsTheory.array_prefix_extends >>
+     simp_tac (srw_ss()) [] >> goal_assum (drule_at Any) >> simp[]) >>
+  `~block_is_terminated sa` by
+    simp[block_is_terminated_def,mk_inst_def,is_terminator_def] >>
+  qpat_x_assum `_ sa = ((),sb0)` mp_tac >> simp[] >> strip_tac >>
+  drule_all stmtSimForArrayPartsTheory.array_iter_copy_static >> strip_tac >>
+  drule stmtSimForArrayPartsTheory.array_body_backedge >> strip_tac >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  drule_all stmtSimForArrayPartsTheory.array_stages_code >> strip_tac >>
+  suspend "fixed_staged_static"
+QED
+
+Resume body_for_local_array_full_from_contracts[fixed_staged_static]:
+  FAIL_TAC "fixed-staged-static" >>
   qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`ov`,`ep`,`nv`,`Lit (n2w n)`,
     `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
     `start.cs_next_id + 4`,`start.cs_next_id + 5`,
@@ -1444,7 +1461,15 @@ Resume body_for_local_array_full_from_contracts[common_round_body]:
      qexistsl_tac [`bindings`,`cenv`,`env`,`env`,`id`,
        `Array (Name (ArrayT typ bd) name)`,`n`,`sdecl`,`sdecl'`,`tops`,`typ`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  FAIL_TAC "body-fragment-ready"
+  Cases_on `stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty stmts sb0` >>
+  rename1 `stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty stmts sb0 = (bc_out,sb_body)` >>
+  `sb_body = sb1` by
+    (qpat_x_assum `stmts_env bc _ _ stmts sb0 = _` mp_tac >>
+     qpat_x_assum `compile_stmts bc _ _ stmts sb0 = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[stmtSimPropsTheory.compile_stmts_env,pairTheory.SND]) >>
+  qpat_x_assum `sb_body = sb1` SUBST_ALL_TAC >>
+  FAIL_TAC "body-shadow-packet"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
