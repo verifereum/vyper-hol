@@ -2319,6 +2319,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[LENGTH_MAP,LENGTH_REVERSE,LENGTH_GENLIST]) >>
   `cuts <> []` by (Cases_on `cuts` >> gvs[]) >>
+  `0 < LENGTH cuts` by simp[] >>
   `HD (MAP (\(ai,ds,ei,qi,zi). ai) cuts) = []` by
     (simp[HD_REVERSE,GENLIST_LAST,GENLIST_EQ_NIL]) >>
   `!i ai ds ei qi zi. i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
@@ -2362,7 +2363,60 @@ Proof
      qpat_assum `!i ai ds ei qi zi. _ ==> ?tf inc res nrest. _`
        (drule_all_then strip_assume_tac) >>
      simp[EL_MAP] >> metis_tac[]) >>
-  FAIL_TAC "root and child"
+  `bbs (LENGTH cuts - 1) = bb /\ xss (LENGTH cuts - 1) = xs /\
+   bes (LENGTH cuts - 1) = be /\ LAST (entries (LENGTH cuts - 1)) = hin /\
+   depths (LENGTH cuts - 1) = e /\ qs (LENGTH cuts - 1) = q /\
+   zs (LENGTH cuts - 1) = z /\ mss (LENGTH cuts - 1) = THE (FLOOKUP work (a,e))` by
+    (`LENGTH cuts - 1 < LENGTH cuts /\ SUC (LENGTH cuts - 1) = LENGTH cuts` by simp[] >>
+     qabbrev_tac `ci = EL (LENGTH cuts - 1) cuts` >> PairCases_on `ci` >>
+     `EL (LENGTH cuts - 1) cuts = (ci0,ci1,ci2,ci3,ci4)` by metis_tac[Abbr `ci`] >>
+     qpat_assum `!i ai ds ei qi zi. _ ==> ?sfi tfi inci enti orderi resi nresti
+       bbi bti psi xsi ysi rhoi ini hi bei counti fronti closedi resti later.
+       FLOOKUP acts ai = _ /\ FLOOKUP blocks (ai,ei) = _ /\ orderi = ds ++ ei::later /\ _`
+       (drule_all_then strip_assume_tac) >>
+     qpat_x_assum `if SUC (LENGTH cuts - 1) = LENGTH cuts then _ else _` mp_tac >>
+     qpat_x_assum `SUC (LENGTH cuts - 1) = LENGTH cuts` (fn th => rewrite_tac[th]) >>
+     disch_then strip_assume_tac >>
+     qpat_assum `!i ai ds ei qi zi. _ ==> ?tf inc res nrest. _`
+       (drule_all_then strip_assume_tac) >>
+     qpat_x_assum `FLOOKUP blocks (ci0,ci2) = SOME (bbs _,_)` mp_tac >>
+     qpat_x_assum `FLOOKUP blocks (a,e) = _` mp_tac >>
+     qpat_x_assum `ci0 = a` mp_tac >> qpat_x_assum `ci2 = e` mp_tac >>
+     qpat_x_assum `ci3 = q` mp_tac >> qpat_x_assum `ci4 = z` mp_tac >>
+     qpat_x_assum `depths (LENGTH cuts - 1) = _` mp_tac >>
+     qpat_x_assum `qs (LENGTH cuts - 1) = _` mp_tac >>
+     qpat_x_assum `zs (LENGTH cuts - 1) = _` mp_tac >>
+     qpat_x_assum `mss (LENGTH cuts - 1) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[]) >>
+  qabbrev_tac `segments = (\i. FLAT (slotss i) ++ FLAT (TAKE (qs i) (mss i)))` >>
+  `Mcut = FLAT (MAP segments (COUNT_LIST (LENGTH cuts)))` by
+    (qpat_x_assum `Mcut = FLAT (MAP _ cuts)` SUBST1_TAC >>
+     AP_TERM_TAC >> irule LIST_EQ >> simp[MAP_COUNT_LIST,LENGTH_COUNT_LIST] >>
+     qx_gen_tac `i` >> strip_tac >>
+     `i < LENGTH cuts` by simp[] >>
+     qabbrev_tac `ci = EL i cuts` >> PairCases_on `ci` >>
+     `EL i cuts = (ci0,ci1,ci2,ci3,ci4)` by metis_tac[Abbr `ci`] >>
+     qpat_assum `!i ai ds ei qi zi. _ ==> ?tf inc res nrest. _`
+       (drule_all_then strip_assume_tac) >>
+     simp[EL_MAP,EL_GENLIST,Abbr `segments`]) >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  `?Mbefore gpre kgss v.
+    Mbefore = FLAT (MAP segments (COUNT_LIST (LENGTH cuts - 1))) ++ FLAT (slotss (LENGTH cuts - 1)) /\
+    Mcut = Mbefore ++ FLAT (TAKE (qs (LENGTH cuts - 1)) (mss (LENGTH cuts - 1))) /\
+    gs = gpre ++ FLAT kgss /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mbefore gpre /\
+    LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+      (TAKE (qs (LENGTH cuts - 1)) (mss (LENGTH cuts - 1))) kgss /\
+    v = (LAST (entries (LENGTH cuts - 1)) with vs_gas_readings := FLAT kgss ++ tail) /\
+    SND (row_eval fuel C7 (sfs (LENGTH cuts - 1)).fn_name
+      (bbs (LENGTH cuts - 1),depths (LENGTH cuts - 1),zs (LENGTH cuts - 1)) v) = OK u /\
+    FOLDR (dft_exec_cons (fuel-depths (LENGTH cuts - 1)) C7) OK
+      (TAKE (qs (LENGTH cuts - 1)) (xss (LENGTH cuts - 1)))
+      (bes (LENGTH cuts - 1) with vs_gas_readings := FLAT kgss ++ tail) = OK u` by
+    (irule dft_packet_rooted_row_alignment >>
+     FAIL_TAC "rooted application") >>
+  FAIL_TAC "rooted result"
 QED
 
 Theorem dft_focus_packet_step:
