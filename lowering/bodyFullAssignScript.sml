@@ -19,13 +19,14 @@ Ancestors
   bodyFullAssignLocalSetup bodyFullAssignLocalSource bodyFullAssignLocalTail
   bodyFullMemoryFrames bodyFullMemoryCopy bodyFullMemoryStore
   bodyFullLocalCopy bodyFullMemoryStage bodyFullAssignMemoryCompose
+  bodyFullAssignMemoryExitCompose
   bodyFullAssignMemoryValue assignRelayoutCaller assignRelayoutFrag
   assignBasePtrLocalBodyFacts stmtSimAssign stmtSimAssignStore
   gasShadowCompileStmtHelpers gasShadowState stmtSimAssignSource loweringPosts
   stmtSimAssignAttr exprSimFieldLayout exprSimHyps exprSimSource
   supportedExprForms supportedExprs supportedExprTraverse supportedStmtTraverse
   vyperTypeEnv vyperTypeInvariants vyperTypeContractStaticMaps
-  compileVyper supportedDecls gasContext vyperTypeCallGraph
+  compileVyper supportedDecls gasContext vyperTypeCallGraph targetPlaceSim
 
 val _ = Parse.hide "body";
 
@@ -57,7 +58,7 @@ Proof
   `lookup_scopes id mid.scopes = SOME entry` by
     metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME entry.type` by
-    (drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> simp[] >> metis_tac[]) >>
+    (drule_all targetPlaceSimTheory.expr_sim_inv_local >> simp[] >> metis_tac[]) >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
   `value_has_type entry.type v` by
@@ -86,7 +87,7 @@ Theorem body_assign_local_word_full_continue[local]:
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   FLOOKUP env.var_types id = SOME (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   expr_body_pre cenv cx env e es /\ local_ptrs_reserved cenv sa /\
   return_buf_frame d cenv sa s0 /\
@@ -116,7 +117,8 @@ Theorem body_assign_local_word_full_continue[local]:
       (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
       cenv_top_ext cenv ce ee.scopes /\ stmt_state_rel H ctx func ce cx ee t /\
       storage_well_formed_on cx ee (FST H) /\ return_buf_frame d ce sb t /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d ce cx ee G tn t /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -150,7 +152,8 @@ Proof
   `find_containing_scope id (mid with gas_obs := []).scopes = SOME (pre,sc,entry,rest)` by simp[] >>
   drule_all body_assign_local_word_full_tail >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
-  strip_tac >> gvs[vyperStateTheory.evaluation_state_fupdcanon]
+  strip_tac >> gvs[vyperStateTheory.evaluation_state_fupdcanon] >>
+  drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 (* A word local. *)
@@ -200,16 +203,19 @@ Proof
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
     `op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> disch_then drule >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
   irule body_assign_local_word_full_source >>
   conj_tac >- metis_tac[] >> qexists_tac `Q1` >>
   reverse conj_tac >- (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-    goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >>
+    goal_assum (drule_at Any) >> simp[] >>
+    POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
     Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def] >>
     Cases_on `y` >> Cases_on `r` >>
-    simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def] >>
-    Cases_on `e'` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+    simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,
+      exprSimDefsTheory.halt_exit_def] >>
+    rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >>
+    simp[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   irule body_assign_local_word_full_continue >>
   goal_assum (drule_at Any) >> simp[Abbr `Q1`] >> metis_tac[]
@@ -299,6 +305,8 @@ Proof
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> fs[body_inv_def]) >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    metis_tac[body_inv_const_name_free] >>
   `expr_body_pre cenv cx env e es` by
     (irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
      fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -307,7 +315,7 @@ Proof
      drule supported_expr_body_calls >> strip_tac >>
      fs[body_inv_def] >> metis_tac[]) >>
   drule_all assign_relayout_source_classify >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
@@ -351,15 +359,16 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sB`,`shadow_sa`,`shadow_sB`,`op`,
     `s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  simp[] >> disch_then drule >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  qpat_x_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
-  irule assign_local_memory_full_outcome >>
+  qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
+  irule assign_local_memory_full_outcome_exit >>
   conj_tac >- (qexists_tac `lctx` >> first_assum ACCEPT_TAC) >>
   qexists_tac `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
   conj_tac >- suspend "memory_continue" >>
   conj_tac >- (simp[Abbr `childQ`] >> metis_tac[]) >>
   qunabbrev_tac `childR` >>
+  qpat_assum `cx_tops cx = tops` SUBST1_TAC >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[]
@@ -376,7 +385,7 @@ Resume body_assign_local_widened_full[memory_continue]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >>
   qpat_x_assum `INL v = INL _` (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
-  rename1 `expr_store_bound cx (post_value_type cenv e) v op u` >>
+  rename1 `expr_store_bound cx (lowered_value_type cenv e) v op u` >>
   drule_all stmtSimAssignSourceTheory.assign_local_continuation_all_tails >>
   disch_then (qx_choosel_then [`pre`,`sc`,`ent`,`rest`] strip_assume_tac) >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid u` by
@@ -562,6 +571,10 @@ Resume body_assign_local_widened_full[memory_continue]:
     fs[loweringPostsTheory.expr_post_def] >>
   first_x_assum (qspecl_then [`H`,`DF H`,`d`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H ctx _ _ _ _ t` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]) >>
   simp[loweringPostsTheory.stmt_lands_def,
        stmtSimPropsTheory.cenv_top_ext_refl] >>
   conj_tac
@@ -830,7 +843,7 @@ Proof
   (impl_tac >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
     qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[])) >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def,expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
+    (bossLib.gvs [exprSimHypsDefsTheory.expr_body_pre_def , exprSimHypsDefsTheory.expr_sim_inv_def , vyperTypeInvariantsTheory.env_consistent_def , vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   `value_has_type tvt v` by
     (fs[vyperTypeExprResultTheory.expr_result_typed_def,
        vyperTypeExprSoundnessTheory.expr_runtime_typed_def,

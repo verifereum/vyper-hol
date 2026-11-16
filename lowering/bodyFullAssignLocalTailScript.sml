@@ -9,14 +9,14 @@ Ancestors
   vyperLookup loweringStateRelDefs stmtSimDeclStore ptrDiscipline
   venomExecProofs venomState venomInst bodyFullUnwrapRun bodyMemoryDefs
   stmtSimDefs vyperStorageFootprint vyperStorageBackend emitHelper list rich_list
-  loweringPosts stmtSimProps
+  loweringPosts stmtSimProps bodyFullHashKeccakFixed
 
 Theorem body_assign_local_word_full_edge:
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ptr_covers G tn p s 32 /\ allocas_from lo s /\
@@ -59,7 +59,7 @@ Theorem body_assign_local_word_full_store:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es0 /\
@@ -82,6 +82,8 @@ Theorem body_assign_local_word_full_store:
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G tf t
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
   `local_ptrs_rel func cenv es.scopes s` by fs[stmt_state_rel_def,state_rel_def] >>
@@ -225,7 +227,7 @@ Theorem body_assign_local_word_full_tail:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es /\

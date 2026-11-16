@@ -12,7 +12,7 @@ Theorem straight_fresh_scalar_origin_ptr_success:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   scalar_code A (emitted_insts sa sb) /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK t0 /\
   scalar_available
     (A UNION BIGUNION (set (MAP (\i. set i.inst_outputs)
