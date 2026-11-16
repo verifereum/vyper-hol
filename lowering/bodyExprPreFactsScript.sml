@@ -649,10 +649,7 @@ Proof
     (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
      simp[extend_local_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
-  conj_tac >- fs[extend_local_def] >>
-  PURE_ONCE_REWRITE_TAC [CONJ_ASSOC] >>
-  conj_tac >- (irule storage_conjs_scopes >> simp[]) >>
-  FIRST [first_assum ACCEPT_TAC, rpt strip_tac >> res_tac >> simp[]]
+  gvs[extend_local_def] >> first_assum ACCEPT_TAC
 QED
 
 (* After an iteration that goes on (a normal end or a continue), with the
@@ -721,27 +718,9 @@ Proof
        simp[for_pushed_popped_keys] >>
      drule_all (cj 2 eval_stmts_popped_keys_indexed) >> simp[]) >>
   `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
-  `contract_storage_well_formed cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   oracle_storage_ok cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    (irule storage_conjs_scopes >> simp[]) >>
-  `runtime_storage_consistent (extend_local env id fty F) cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   IS_SOME (es with scopes updated_by
-              CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                     popped := []|>))).outcomes` by
-    simp[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 2 eval_stmts_storage_conjs) >> strip_tac >>
-  `contract_storage_well_formed cx (es2 with scopes := rest) /\
-   oracle_storage_ok cx (es2 with scopes := rest)` by
-    (irule storage_conjs_scopes >> simp[]) >>
+  `IS_SOME es2.outcomes` by
+    (drule (cj 2 eval_outcome_suffix_mutual) >>
+     rw[outcome_suffix_def] >> gvs[]) >>
   qpat_x_assum `es2.scopes = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   RULE_ASSUM_TAC (REWRITE_RULE [TL]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
