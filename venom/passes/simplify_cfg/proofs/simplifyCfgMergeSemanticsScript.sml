@@ -223,10 +223,13 @@ Proof
   simp[LENGTH_DROP, EL_DROP]
 QED
 
-Theorem scfg_chain_frame_sim:
-  scfg_chain_hyp fn a b ==> frame_sim L C C fn (scfg_chain fn a b)
+Theorem scfg_merge_frame_observation:
+  scfg_chain_hyp fn a b /\ fn_entry_state fn s0 /\
+  frame_reach C (scfg_chain fn a b) s0 i t /\ i.inst_opcode <> PHI ==>
+  ?s. frame_reach C fn s0 i s /\ scfg_payload s t /\
+      mem_corr i s i t /\ call_corr i s i t
 Proof
-  strip_tac >> simp[frame_sim_def] >> qx_genl_tac [`s0`, `j`, `w`] >> strip_tac >>
+  strip_tac >>
   `wf_function (scfg_chain fn a b)` by metis_tac[scfg_chain_wf] >>
   drule_all scfg_frame_reach_decompose >>
   disch_then (qx_choosel_then [`s`, `bb`, `v`, `e`] strip_assume_tac) >>
@@ -237,11 +240,22 @@ Proof
      goal_assum (drule_at Any) >> simp[scfg_bprefix_rules] >>
      conj_tac >- (qexists_tac `s0` >> simp[scfg_bprefix_rules]) >>
      qexists_tac `s0` >> simp[]) >>
-  `j.inst_opcode <> PHI` by
-    (irule scfg_wf_prefix_instruction_nonphi >> goal_assum (drule_at Any) >>
-     metis_tac[]) >>
   qpat_x_assum `e = _` SUBST_ALL_TAC >>
-  drule_all scfg_chain_rooted_observation >>
-  disch_then (qx_choose_then `u1` strip_assume_tac) >>
-  qexistsl_tac [`j`, `u1`] >> simp[]
+  drule_all scfg_chain_rooted_observation >> simp[]
+QED
+
+Theorem scfg_chain_frame_sim:
+  scfg_chain_hyp fn a b ==> frame_sim L C C fn (scfg_chain fn a b)
+Proof
+  strip_tac >> simp[frame_sim_def] >> qx_genl_tac [`s0`,`j`,`w`] >> strip_tac >>
+  `wf_function (scfg_chain fn a b)` by metis_tac[scfg_chain_wf] >>
+  `j.inst_opcode <> PHI` by
+    (drule_all scfg_frame_reach_decompose >>
+     disch_then (qx_choosel_then [`entry_state`,`target_block`,`phi_state`,`body_state`]
+       strip_assume_tac) >>
+     irule scfg_wf_prefix_instruction_nonphi >> goal_assum (drule_at Any) >>
+     metis_tac[]) >>
+  drule_all scfg_merge_frame_observation >>
+  disch_then (qx_choose_then `source_state` strip_assume_tac) >>
+  qexistsl_tac [`j`,`source_state`] >> simp[]
 QED

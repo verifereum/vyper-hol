@@ -29,7 +29,7 @@ Theorem snapshot_physical_unwrap_path:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   read_result cx tv ee = (INL v,ee) /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?stv u. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
@@ -40,7 +40,7 @@ Theorem snapshot_physical_unwrap_path:
       type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
       type_memory_size tvt < 2 ** 64) /\
     gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
     (is_word_type (lowered_value_type ce e) ==>
       eval_operand op u = SOME (typed_val_to_w256 stv v)) /\
     (~is_word_type (lowered_value_type ce e) ==>

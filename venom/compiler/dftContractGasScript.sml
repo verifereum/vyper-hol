@@ -224,14 +224,19 @@ QED
    so the context's run never ends in IntRet.  static_mem_ok reads
    operands and memory ranges, not vs_gas_readings, and
    dft_fn keeps fn_eom, so max_live_eom C' = max_live_eom C. *)
-Theorem dft_ctx_sim_gas:
+Theorem dft_ctx_sim_gas_oracle:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
   o1_ctx_shape C /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
-       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
+  ?vs orc. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
+       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs') /\
+       (!fn inst t. raw_reachable vs' C' fn inst t ==>
+         ?p d. ev_reachable orc vs' C' p d fn inst
+           (t with vs_gas_readings := vs'.vs_gas_readings)) /\
+       (!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
+         ?ws. raw_reachable vs C fn inst (t with vs_gas_readings := ws))
 Proof
   strip_tac >>
   `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
@@ -246,7 +251,7 @@ Proof
             gas_oracle_to_list) >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
-  qexists_tac `vs' with vs_gas_readings := rds` >>
+  qexistsl_tac [`vs' with vs_gas_readings := rds`,`orc`] >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac
   >- (rw[ctx_sim_fuel_def] >>
@@ -255,6 +260,7 @@ Proof
       qexistsl [`ev_context orc fuel C vs'`, `ev_context orc fuel C' vs'`] >>
       simp[] >> irule dft_ev_context_sim >> simp[] >>
       metis_tac[gas_res_rel_terminates]) >>
+  reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
   rw[o1_lowered_inv_def] >> qexists_tac `eom` >>
   conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
   gvs[mem_inv_raw_reachable] >>
@@ -270,6 +276,21 @@ Proof
   >- (simp[lookup_function_map, dft_fn_entry_label] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   first_x_assum drule >> simp[]
+QED
+
+Theorem dft_ctx_sim_gas:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
+       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
+Proof
+  strip_tac >> drule_all dft_ctx_sim_gas_oracle >>
+  disch_then (qspec_then `D`
+    (qx_choosel_then [`source_state`,`oracle`] strip_assume_tac)) >>
+  qexists_tac `source_state` >> simp[]
 QED
 
 Theorem dft_out_wf_ssa:

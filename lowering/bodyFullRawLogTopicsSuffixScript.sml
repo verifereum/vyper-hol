@@ -128,7 +128,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
       ghost_kept_at lo cenv es sa G0 tn0 s G tn /\
       (!op x. MEM op ops /\ op = Var x ==> not_fresh_at sb x) /\
       (!op l. MEM op ops ==> op <> Label l))
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_tac >> Induct_on `rest`
   >- (rpt gen_tac >> strip_tac >>
@@ -239,7 +239,7 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `headR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
+  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -318,7 +318,7 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
       ghost_kept_at lo cenv mid sm G1 tn1 u G tn /\
       (!op x. MEM op tailops /\ op = Var x ==> not_fresh_at last x) /\
       (!op l. MEM op tailops ==> op <> Label l))
-    (\H res ee gt r. expr_exit res r)` by
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `!pre topics DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ann n data dflt st0 sa sb shadow_sa shadow_sb ops es s G0 tn0. _` irule >>
      simp[] >>
      conj_tac
@@ -347,7 +347,7 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
   qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `tailR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
+  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

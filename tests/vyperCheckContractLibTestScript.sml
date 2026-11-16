@@ -2119,8 +2119,8 @@ val () = List.app (fn wrap =>
   [in_if, in_loop]
 val () = check_rejects loop_call_layouts
   (loop_call_modules popping_default_foo ``[^(loop_calling dyn3 "d" "foo")]``)
-val () = check_accepts "loop calling a default that pops another array" false
-  loop_call_layouts
+(* Effectful defaults are rejected even when they pop a different array. *)
+val () = check_rejects loop_call_layouts
   (loop_call_modules popping_default_foo ``[^(loop_calling arr3 "a" "foo")]``)
 val () = check_accepts "loop over a local calling a local write" false
   loop_call_layouts

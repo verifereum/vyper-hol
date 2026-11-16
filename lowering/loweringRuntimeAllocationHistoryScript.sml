@@ -2,6 +2,14 @@
 Theory loweringRuntimeAllocationHistory
 Ancestors
   loweringCallBudgetHistory loweringJointPrefixHistory vyperLoweringCorrect
+  loweringBudgetActualShadow loweringBudgetCompilerCuts
+  loweringBudgetMarkedResidual loweringBudgetOracleConsumption
+  loweringBudgetOraclePrefix loweringBudgetPathDeterminism
+  loweringBudgetPrecompilePrefix loweringBudgetResidualArithmetic
+  loweringBudgetReturnStorePrefix loweringBudgetSourceResidual
+  loweringBudgetTerminalFrontier loweringRuntimeBudgetAssembly
+  loweringBudgetExitCoverage
+  loweringRuntimeBudgetSourceEntry
   ptrDiscipline contextRawReachable sourceCallCount compileVyper
   vyperCompiler e2eDefs lowerDloadDefs o1PassContract
   list arithmetic
