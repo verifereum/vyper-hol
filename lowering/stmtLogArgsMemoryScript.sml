@@ -108,7 +108,7 @@ Theorem compile_log_eval_all_gas_mem:
          LIST_REL (\p v. expr_store_bound cx (SND p) v (FST p) t) xs vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
@@ -283,7 +283,11 @@ Resume compile_log_eval_all_gas_mem[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> rpt (pop_assum kall_tac) >>
+  simp[halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_log_eval_all_gas_mem[head_exempt]:
