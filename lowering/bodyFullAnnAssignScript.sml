@@ -19,7 +19,7 @@ Ancestors
   supportedStmtTraverse supportedExprs supportedExprTraverse vyperTypeEnv
   vyperTypeInvariants vyperTypeContractStaticMaps supportedDecls compileVyper
   gasContext exprSimSource exprSimHyps assignRelayoutCaller allocLimits
-  vyperTypeCallGraph bodyInvNoDalloca bodyFullAnnAssignOrdinary
+  vyperTypeCallGraph bodyInvNoDalloca bodyFullAnnAssignOrdinary bodyFullAnnAssignOther annAssignPtrFacts stmtSimDeclMem bodyDeclCopyMemory immutableDeployAssignRanges gasShadowCompileStmtBase gasShadowState
 
 val _ = Parse.hide "body";
 
@@ -625,6 +625,7 @@ QED
 Finalise body_annassign_widened_full
 
 (* Any other declared type. *)
+
 Theorem body_annassign_other_full:
   !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
@@ -654,5 +655,66 @@ Theorem body_annassign_other_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_full_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (fs[ce_locals_declared_def] >> Cases_on `FLOOKUP cenv.ce_vars id` >>
+     gvs[] >> metis_tac[FLOOKUP_DEF]) >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
+  rewrite_tac[stmt_frag_full_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule stmt_env_annassign >> strip_tac >>
+  rename1 `declare_local cenv id typ sa = (ce,r)` >>
+  drule_all annassign_declared_rhs_pre_ptr >> strip_tac >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx (expr_type e) e es` by
+    (qpat_x_assum `body_expr_full_ok cx e`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     disch_then drule_all >> simp[]) >>
+  `~is_bytestring_type typ /\ expr_type e <> typ /\
+   ~(has_length_word typ /\ is_empty_value_expr e)` by metis_tac[] >>
+  qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+    (mp_tac o REWRITE_RULE [gas_shadow_stmt_def]) >>
+  strip_tac >> drule_then strip_assume_tac stmt_env_annassign >>
+  drule_all declare_local_memory_types_mem >> strip_tac >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  drule_all immutable_assign_copy_metadata >> strip_tac >>
+  drule_all annassign_other_full_layout >> strip_tac >>
+  `!H. dead_lo_ok H (DF H) lo ce cx` by
+    (`same_frame cenv ce` by
+       (drule_then irule declare_local_same_frame >> simp[]) >>
+     `ce.ce_is_ctor = cenv.ce_is_ctor` by
+       metis_tac[bodyPtrDefsTheory.same_frame_is_ctor] >>
+     fs[bodyPtrDefsTheory.dead_lo_ok_def]) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    fs[loweringPostsTheory.ret_pc_ok_def] >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+  irule_at Any annassign_other_full_execution >>
+  qexistsl_tac [`tyv`, `tops`, `stv`, `shadow_sb`, `shadow_sa`, `st`,
+    `shadow_func`, `sb`, `sa`, `ret_ty`, `r`, `cenv`, `lctx`, `env'`,
+    `env`, `d`, `ce`, `RetQ`] >> simp[] >> gvs[] >>
+  gvs[]
 QED
