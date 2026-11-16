@@ -52,6 +52,15 @@ Definition asm_data_env_ok_def:
               env ' l = DROP off code
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition asm_data_env_lo_ok_def:
+  asm_data_env_lo_ok lo p (env : string |-> byte list) code ⇔
+    ∀l. MEM (AsmDataHeader l) p ⇒
+        ∃off. FLOOKUP lo l = SOME off ∧
+              off < dimword (:256) DIV 2 ∧
+              (l ∈ FDOM env ⇒ env ' l = DROP off code)
+End
+
 (* The concrete word of a symbolic value under the label offsets lo. *)
 Definition sval_conc_def:
   sval_conc lo (Val w) = SOME w ∧
@@ -77,6 +86,23 @@ Definition asm_sym_rel_def:
          ∃w. sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ∧
              EL i cs.as_memory = EL j (word_to_bytes w T)) ∧
     asm_data_env_ok p env cs.as_code
+End
+
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition asm_sym_rel_own_def:
+  asm_sym_rel_own lo p env own cs ss ⇔
+    LIST_REL (λsv w. sval_conc lo sv = SOME w)
+      ss.sym_stack cs.as_stack ∧
+    (∃m. ss.sym_base = cs with <| as_stack := []; as_code := [];
+                                  as_memory := m |> ∧
+         LENGTH m = LENGTH cs.as_memory ∧
+         ∀i. i < LENGTH cs.as_memory ∧ i ∉ FDOM ss.sym_mem_labels ⇒
+             EL i m = EL i cs.as_memory) ∧
+    (∀i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l, d, j) ⇒
+         i < LENGTH cs.as_memory ∧ j < 32 ∧
+         ∃w. sval_conc lo (Lab l d) = SOME w ∧
+             EL i cs.as_memory = EL j (word_to_bytes w T)) ∧
+    asm_data_env_lo_ok lo p env own ∧ cs.as_code = own
 End
 
 (* One symbolic step's result against the concrete step's. A label misuse
