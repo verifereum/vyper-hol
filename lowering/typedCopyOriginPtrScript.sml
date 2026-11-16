@@ -14,7 +14,22 @@ Ancestors
   placeTypedCopyRecursivePath fragGasOriginPtr fragGasOriginPtrDead bodyPtrDefs ptrDiscipline
   typedMemoryCopy compileEnv context typedCopyDomain vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping valueEncoding valueEncodingDefs
 
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Theorem typed_copy_origin_ptr_rank_entry:
+  !n cenv tenv ctx dty sty dtv stv v.
+    type_rank cenv.ce_struct_fields dty = n /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields.
+       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname, fty, sz). !tv.
+         evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v ==>
+    typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v
 Proof
   completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
   Cases_on `is_word_type dty`
@@ -73,45 +88,6 @@ Proof
        gas_origin_ptr_path_rules]
 QED
 
-
-*)
-Theorem typed_copy_origin_ptr_rank_entry:
-  !n cenv tenv ctx dty sty dtv stv v.
-    type_rank cenv.ce_struct_fields dty = n /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
-    (!name fields.
-       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-       ALL_DISTINCT (MAP FST fields) /\
-       EVERY (\(fname, fty, sz). !tv.
-         evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    type_widens_to tenv sty dty /\
-    evaluate_type tenv sty = SOME stv /\
-    evaluate_type tenv dty = SOME dtv /\
-    value_has_type stv v /\ value_has_type dtv v /\
-    val_wf stv v /\ val_wf dtv v ==>
-    typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
-Proof
-  strip_tac >>
-  `typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v` by
-    (irule typed_copy_origin_ptr_rank_entry >> simp[] >>
-     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `typed_copy_origin_ptr_entry _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [typed_copy_origin_ptr_entry_def]) >>
-  disch_then (qspecl_then [`lo`,`explicit`,`func`,`PG`,`xd`,`xs`,
-    `sa`,`sb`,`s`,`G`,`tn`,`dw`,`sw`] mp_tac) >>
-  asm_rewrite_tac[] >> strip_tac >>
-  qexistsl_tac [`t`,`Gf`,`tnf`] >> asm_rewrite_tac[] >>
-  gen_tac >> irule gas_origin_ptr_path_from_no_dead >>
-  first_assum ACCEPT_TAC
-QED
-
-*)
 Theorem compile_store_memory_typed_origin_ptr_path:
   compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -153,5 +129,16 @@ Theorem compile_store_memory_typed_origin_ptr_path:
     (!p. not_fresh_at sa p ==>
        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  cheat
+  strip_tac >>
+  `typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v` by
+    (irule typed_copy_origin_ptr_rank_entry >> simp[] >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `typed_copy_origin_ptr_entry _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [typed_copy_origin_ptr_entry_def]) >>
+  disch_then (qspecl_then [`lo`,`explicit`,`func`,`PG`,`xd`,`xs`,
+    `sa`,`sb`,`s`,`G`,`tn`,`dw`,`sw`] mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> asm_rewrite_tac[] >>
+  gen_tac >> irule gas_origin_ptr_path_from_no_dead >>
+  first_assum ACCEPT_TAC
 QED

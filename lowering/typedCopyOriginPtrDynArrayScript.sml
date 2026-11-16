@@ -7,7 +7,19 @@ Ancestors
   ghostPcTransportPtr instIdxIndep
 
 (* A single checked emitted instruction, with its concrete ghosts. *)
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Theorem typed_copy_emit_inst_origin_ptr_path:
+  emit_inst opc args outs sa = ((),sb) /\ fn_has_code sa sb func /\
+  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  inst_mem_below_frontier (mk_inst sa.cs_next_id opc args outs) s /\
+  inst_dload_in_section (mk_inst sa.cs_next_id opc args outs) s /\
+  ptr_inst_ok D lo 0 ctx func G tn (mk_inst sa.cs_next_id opc args outs) s /\
+  step_inst_base (mk_inst sa.cs_next_id opc args outs) s = OK u ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G (mk_inst sa.cs_next_id opc args outs) u,
+     step_taint (mk_inst sa.cs_next_id opc args outs) s u tn)
 Proof
   strip_tac >> drule emitHelperPropsTheory.emit_inst_extends >> strip_tac >>
   drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
@@ -33,46 +45,6 @@ QED
 
 (* Package the emitted dynamic-array payload loop; the shared loop theorem
    owns the recursive execution and ghost invariant. *)
-
-*)
-Theorem typed_copy_emit_inst_origin_ptr_path:
-  emit_inst opc args outs sa = ((),sb) /\ fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  inst_mem_below_frontier (mk_inst sa.cs_next_id opc args outs) s /\
-  inst_dload_in_section (mk_inst sa.cs_next_id opc args outs) s /\
-  ptr_inst_ok D lo 0 ctx func G tn (mk_inst sa.cs_next_id opc args outs) s /\
-  step_inst_base (mk_inst sa.cs_next_id opc args outs) s = OK u ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G (mk_inst sa.cs_next_id opc args outs) u,
-     step_taint (mk_inst sa.cs_next_id opc args outs) s u tn)
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  drule_all typed_copy_dynarray_slow_layout >> strip_tac >>
-  irule typed_copy_origin_ptr_index_loop >> simp[] >>
-  qpat_assum `emit_inst ASSIGN [Lit 0w] _ _ = _`
-    (irule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
-  qpat_assum `emit_op LT _ _ = _` (irule_at (Pat `emit_op LT _ _ = _`)) >>
-  qpat_assum `emit_op ISZERO _ _ = _` (irule_at (Pat `emit_op ISZERO _ _ = _`)) >>
-  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
-  qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
-    (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  qpat_assum `emit_op ADD [Var xs;so] b2 = (sp,b3)`
-    (irule_at (Pat `emit_op ADD [Var _;_] _ = _`)) >>
-  qpat_assum `emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1)`
-    (irule_at (Pat `emit_op MUL _ stb = _`)) >>
-  rpt (goal_assum (drule_at Any)) >> gvs[]
-QED
-
-
-*)
 Theorem typed_copy_origin_ptr_dynarray_slow_data_path:
   fresh_label "typed_dyn_cond" sa = (hdr,l1) /\
   fresh_label "typed_dyn_body" l1 = (blabel,l2) /\
@@ -135,10 +107,52 @@ Theorem typed_copy_origin_ptr_dynarray_slow_data_path:
     (!p. not_fresh_at sa p ==>
        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all typed_copy_dynarray_slow_layout >> strip_tac >>
+  irule typed_copy_origin_ptr_index_loop >> simp[] >>
+  qpat_assum `emit_inst ASSIGN [Lit 0w] _ _ = _`
+    (irule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
+  qpat_assum `emit_op LT _ _ = _` (irule_at (Pat `emit_op LT _ _ = _`)) >>
+  qpat_assum `emit_op ISZERO _ _ = _` (irule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
+    (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  qpat_assum `emit_op ADD [Var xs;so] b2 = (sp,b3)`
+    (irule_at (Pat `emit_op ADD [Var _;_] _ = _`)) >>
+  qpat_assum `emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1)`
+    (irule_at (Pat `emit_op MUL _ stb = _`)) >>
+  rpt (goal_assum (drule_at Any)) >> gvs[]
 QED
 
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Theorem typed_copy_origin_ptr_dyn_check_path:
+  emit_op GT [Var lv; Lit (n2w C)] a = (too_long,b) /\
+  emit_op ISZERO [too_long] b = (ok,c) /\
+  emit_void ASSERT [ok] c = ((),d) /\
+  not_fresh_at a lv /\ eval_operand (Var lv) s = SOME (n2w N) /\
+  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  N <= C /\ C < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code a d func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    typed_copy_state_frame a off len s t /\
+    t.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
+    t.vs_inst_idx = LENGTH d.cs_current_insts /\
+    (!p. not_fresh_at a p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!p sz. not_fresh_at a p /\ ptr_covers G tn p s sz ==>
+      ptr_covers Gf tnf p t sz) /\
+    eval_operand (Var lv) t = SOME (n2w N) /\
+    FLOOKUP Gf lv = NONE /\ op_taint tnf (Var lv) = {}
 Proof
   strip_tac >>
   qpat_assum `emit_op GT _ _ = _`
@@ -253,42 +267,26 @@ Proof
 
 QED
 
-
-*)
-Theorem typed_copy_origin_ptr_dyn_check_path:
-  emit_op GT [Var lv; Lit (n2w C)] a = (too_long,b) /\
-  emit_op ISZERO [too_long] b = (ok,c) /\
-  emit_void ASSERT [ok] c = ((),d) /\
-  not_fresh_at a lv /\ eval_operand (Var lv) s = SOME (n2w N) /\
-  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
-  N <= C /\ C < dimword (:256) /\
+Theorem typed_copy_origin_ptr_offset_path:
+  !k N.
+  emit_op ADD [Var x; Lit (n2w k)] a = (Var r,b) /\
+  not_fresh_at a x /\ lookup_var x s = SOME w /\ ptr_covers G tn x s N /\
+  k <= N /\ w2n w + N < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a d func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?t Gf tnf.
     gas_origin_ptr_path
-      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
-          d_ret := K {} |>,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,Gf,tnf) /\
-    typed_copy_state_frame a off len s t /\
-    t.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
-    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    t.vs_alloca_next = s.vs_alloca_next /\
-    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
-    t.vs_inst_idx = LENGTH d.cs_current_insts /\
-    (!p. not_fresh_at a p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!p sz. not_fresh_at a p /\ ptr_covers G tn p s sz ==>
-      ptr_covers Gf tnf p t sz) /\
-    eval_operand (Var lv) t = SOME (n2w N) /\
-    FLOOKUP Gf lv = NONE /\ op_taint tnf (Var lv) = {}
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
+       lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = ((update_var r (w+n2w k) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    ptr_covers Gf tnf r t (N-k) /\ eval_operand (Var r) t = SOME (w+n2w k) /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. p <> r ==> FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qabbrev_tac `u = update_var r (w+n2w k) s` >>
@@ -364,33 +362,47 @@ QED
 
 Finalise typed_copy_origin_ptr_offset_path
 
-
-*)
-Theorem typed_copy_origin_ptr_offset_path:
-  !k N.
-  emit_op ADD [Var x; Lit (n2w k)] a = (Var r,b) /\
-  not_fresh_at a x /\ lookup_var x s = SOME w /\ ptr_covers G tn x s N /\
-  k <= N /\ w2n w + N < dimword (:256) /\
+Theorem typed_copy_origin_ptr_dyn_data_path:
+  !S T.
+  emit_void MSTORE [Var xd; Var lv] a = ((),b) /\
+  emit_op ADD [Var xs; Lit 32w] b = (Var sdv,c) /\
+  emit_op ADD [Var xd; Lit 32w] c = (Var ddv,d) /\
+  not_fresh_at a xs /\ not_fresh_at a xd /\ not_fresh_at a lv /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  eval_operand (Var lv) s = SOME w /\
+  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  ptr_covers G tn xs s S /\ ptr_covers G tn xd s T /\
+  32 <= S /\ 32 <= T /\
+  w2n sw + S < dimword (:256) /\ w2n dw + T < dimword (:256) /\
+  w2n sw + S <= s.vs_alloca_next /\ w2n dw + T <= s.vs_alloca_next /\
+  (w2n sw + S <= w2n dw \/ w2n dw + T <= w2n sw) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  fn_has_code a d func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?t Gf tnf.
     gas_origin_ptr_path
-      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
-       lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    t = ((update_var r (w+n2w k) s) with vs_inst_idx := SUC s.vs_inst_idx) /\
-    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
-    t.vs_inst_idx = LENGTH b.cs_current_insts /\
-    ptr_covers Gf tnf r t (N-k) /\ eval_operand (Var r) t = SOME (w+n2w k) /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    (!p. p <> r ==> FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    typed_copy_state_frame a (w2n dw) 32 s t /\
+    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
+    t.vs_inst_idx = LENGTH d.cs_current_insts /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at a p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    ptr_covers Gf tnf xs t S /\ ptr_covers Gf tnf xd t T /\
+    eval_operand (Var lv) t = SOME w /\
+    FLOOKUP Gf lv = NONE /\ op_taint tnf (Var lv) = {} /\
+    eval_operand (Var sdv) t = SOME (sw+32w) /\
+    eval_operand (Var ddv) t = SOME (dw+32w) /\
+    ptr_covers Gf tnf sdv t (S-32) /\ ptr_covers Gf tnf ddv t (T-32) /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw+32) ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      mem_word_at (w2n dw) mem = w)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!p. not_fresh_at a p ==> p <> sdv /\ p <> ddv` by
@@ -592,54 +604,34 @@ QED
 
 Finalise typed_copy_origin_ptr_dyn_data_path
 
-
-*)
-Theorem typed_copy_origin_ptr_dyn_data_path:
-  !S T.
-  emit_void MSTORE [Var xd; Var lv] a = ((),b) /\
-  emit_op ADD [Var xs; Lit 32w] b = (Var sdv,c) /\
-  emit_op ADD [Var xd; Lit 32w] c = (Var ddv,d) /\
-  not_fresh_at a xs /\ not_fresh_at a xd /\ not_fresh_at a lv /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  eval_operand (Var lv) s = SOME w /\
-  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
-  ptr_covers G tn xs s S /\ ptr_covers G tn xd s T /\
-  32 <= S /\ 32 <= T /\
-  w2n sw + S < dimword (:256) /\ w2n dw + T < dimword (:256) /\
-  w2n sw + S <= s.vs_alloca_next /\ w2n dw + T <= s.vs_alloca_next /\
-  (w2n sw + S <= w2n dw \/ w2n dw + T <= w2n sw) /\
+Theorem typed_copy_origin_ptr_dyn_read_path:
+  emit_op MLOAD [Var xs] a = (Var lv,b) /\
+  not_fresh_at a xs /\ lookup_var xs s = SOME sw /\
+  ptr_covers G tn xs s 32 /\
+  w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     mem_word_at (w2n sw) mem = n2w N) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a d func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?t Gf tnf.
     gas_origin_ptr_path
-      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
-          d_ret := K {} |>,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,Gf,tnf) /\
-    typed_copy_state_frame a (w2n dw) 32 s t /\
-    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
-    t.vs_inst_idx = LENGTH d.cs_current_insts /\
+      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+       lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
     t.vs_alloca_next = s.vs_alloca_next /\
-    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    eval_operand (Var lv) t = SOME (n2w N) /\ FLOOKUP Gf lv = NONE /\
+    op_taint tnf (Var lv) = {} /\ t.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    typed_copy_state_frame a off len s t /\
     (!p. not_fresh_at a p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    ptr_covers Gf tnf xs t S /\ ptr_covers Gf tnf xd t T /\
-    eval_operand (Var lv) t = SOME w /\
-    FLOOKUP Gf lv = NONE /\ op_taint tnf (Var lv) = {} /\
-    eval_operand (Var sdv) t = SOME (sw+32w) /\
-    eval_operand (Var ddv) t = SOME (dw+32w) /\
-    ptr_covers Gf tnf sdv t (S-32) /\ ptr_covers Gf tnf ddv t (T-32) /\
-    (!i. ~(w2n dw <= i /\ i < w2n dw+32) ==>
-      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
-    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
-      mem_word_at (w2n dw) mem = w)
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+       op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!p n. not_fresh_at a p /\ ptr_covers G tn p s n ==>
+       ptr_covers Gf tnf p t n)
 Proof
   strip_tac >>
   `!i. w2n sw <= i /\ i < w2n sw + 32 ==> i NOTIN tn.t_mem` by
@@ -736,41 +728,46 @@ Proof
 QED
 
 (* The bulk suffix copies just the live payload, including its taint. *)
-
-*)
-Theorem typed_copy_origin_ptr_dyn_read_path:
-  emit_op MLOAD [Var xs] a = (Var lv,b) /\
-  not_fresh_at a xs /\ lookup_var xs s = SOME sw /\
-  ptr_covers G tn xs s 32 /\
-  w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-     mem_word_at (w2n sw) mem = n2w N) /\
+Theorem typed_copy_origin_ptr_dynarray_fast_data_path:
+  emit_op MUL [Var lv; Lit (n2w (type_memory_size tv))] a = (bytes,b) /\
+  compile_copy_memory_dynamic (Var xd) (Var xs) bytes b = ((),c) /\
+  not_fresh_at a lv /\ FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  eval_operand (Var lv) s = SOME (n2w N) /\ N < dimword (:256) /\
+  (!i. i < N ==> val_wf tv (f i)) /\
+  not_fresh_at a xs /\ not_fresh_at a xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!i mem. i < N /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv (f i) (w2n sw + i * type_memory_size tv) mem) /\
+  w2n sw + N * type_memory_size tv < dimword (:256) /\
+  w2n dw + N * type_memory_size tv < dimword (:256) /\
+  (N * type_memory_size tv = 0 \/
+    w2n sw + N * type_memory_size tv <= s.vs_alloca_next) /\
+  (N * type_memory_size tv = 0 \/
+    w2n dw + N * type_memory_size tv <= s.vs_alloca_next) /\
+  (w2n sw + N * type_memory_size tv <= w2n dw \/
+    w2n dw + N * type_memory_size tv <= w2n sw) /\
+  ptr_covers G tn xs s (N * type_memory_size tv) /\
+  ptr_covers G tn xd s (N * type_memory_size tv) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?t Gf tnf.
     gas_origin_ptr_path
       (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
        lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
-    t.vs_inst_idx = LENGTH b.cs_current_insts /\
-    t.vs_alloca_next = s.vs_alloca_next /\
-    eval_operand (Var lv) t = SOME (n2w N) /\ FLOOKUP Gf lv = NONE /\
-    op_taint tnf (Var lv) = {} /\ t.vs_memory = s.vs_memory /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
-    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    typed_copy_state_frame a off len s t /\
+    (!i. i < N ==> val_in_memory tv (f i)
+      (w2n dw + i * type_memory_size tv) t.vs_memory) /\
+    typed_copy_state_frame a (w2n dw) (N * type_memory_size tv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+    t.vs_inst_idx = LENGTH c.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size tv) ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      val_in_memory tv (f i) (w2n dw + i * type_memory_size tv) mem) /\
     (!p. not_fresh_at a p ==>
-       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!p n. not_fresh_at a p /\ ptr_covers G tn p s n ==>
-       ptr_covers Gf tnf p t n)
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qpat_assum `emit_op MUL _ _ = _`
@@ -1006,53 +1003,27 @@ Resume typed_copy_origin_ptr_dynarray_fast_data_path[post_frame]:
 QED
 Finalise typed_copy_origin_ptr_dynarray_fast_data_path
 
-
-*)
-Theorem typed_copy_origin_ptr_dynarray_fast_data_path:
-  emit_op MUL [Var lv; Lit (n2w (type_memory_size tv))] a = (bytes,b) /\
-  compile_copy_memory_dynamic (Var xd) (Var xs) bytes b = ((),c) /\
-  not_fresh_at a lv /\ FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
-  eval_operand (Var lv) s = SOME (n2w N) /\ N < dimword (:256) /\
-  (!i. i < N ==> val_wf tv (f i)) /\
-  not_fresh_at a xs /\ not_fresh_at a xd /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  (!i mem. i < N /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    val_in_memory tv (f i) (w2n sw + i * type_memory_size tv) mem) /\
-  w2n sw + N * type_memory_size tv < dimword (:256) /\
-  w2n dw + N * type_memory_size tv < dimword (:256) /\
-  (N * type_memory_size tv = 0 \/
-    w2n sw + N * type_memory_size tv <= s.vs_alloca_next) /\
-  (N * type_memory_size tv = 0 \/
-    w2n dw + N * type_memory_size tv <= s.vs_alloca_next) /\
-  (w2n sw + N * type_memory_size tv <= w2n dw \/
-    w2n dw + N * type_memory_size tv <= w2n sw) /\
-  ptr_covers G tn xs s (N * type_memory_size tv) /\
-  ptr_covers G tn xd s (N * type_memory_size tv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code a c func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\
-  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
-  ?t Gf tnf.
-    gas_origin_ptr_path
-      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
-       lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-    (!i. i < N ==> val_in_memory tv (f i)
-      (w2n dw + i * type_memory_size tv) t.vs_memory) /\
-    typed_copy_state_frame a (w2n dw) (N * type_memory_size tv) s t /\
-    ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
-    t.vs_inst_idx = LENGTH c.cs_current_insts /\
-    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size tv) ==>
-      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
-    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
-      val_in_memory tv (f i) (w2n dw + i * type_memory_size tv) mem) /\
-    (!p. not_fresh_at a p ==>
-      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
-Proof
-  cheat
-QED
-
-(* LOCAL STUB: fixed canonical copy contract; original proof retained.
+Theorem typed_copy_origin_ptr_dynarray_entry:
+  !cenv tenv ctx de cap sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname, fty, sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (ArrayT de (Dynamic cap)) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (ArrayT de (Dynamic cap)) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (ArrayT de (Dynamic cap)) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
+    typed_copy_origin_ptr_entry cenv ctx (ArrayT de (Dynamic cap)) sty dtv stv v
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all typed_copy_array_source >> strip_tac >> gvs[] >>
@@ -1398,29 +1369,3 @@ Resume typed_copy_origin_ptr_dynarray_entry[reconstruction]:
 QED
 
 Finalise typed_copy_origin_ptr_dynarray_entry
-
-*)
-Theorem typed_copy_origin_ptr_dynarray_entry:
-  !cenv tenv ctx de cap sty dtv stv v.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      ALL_DISTINCT (MAP FST fields) /\
-      EVERY (\(fname, fty, sz). !tv.
-        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
-    type_widens_to tenv sty (ArrayT de (Dynamic cap)) /\
-    evaluate_type tenv sty = SOME stv /\
-    evaluate_type tenv (ArrayT de (Dynamic cap)) = SOME dtv /\
-    value_has_type stv v /\ value_has_type dtv v /\
-    val_wf stv v /\ val_wf dtv v /\
-    (!cd cs cdt cst cv.
-      type_rank cenv.ce_struct_fields cd <
-        type_rank cenv.ce_struct_fields (ArrayT de (Dynamic cap)) ==>
-      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
-      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
-      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
-      typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
-    typed_copy_origin_ptr_entry cenv ctx (ArrayT de (Dynamic cap)) sty dtv stv v
-Proof
-  cheat
-QED
