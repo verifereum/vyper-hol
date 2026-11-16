@@ -66,8 +66,7 @@ Proof
   drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
   `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
-    (qpat_x_assum `?q. run_inst_seq _ _ = OK q /\ _` strip_assume_tac >>
-     drule_all exprSimUnwrapTheory.alloc_buffer_fields >> gvs[]) >>
+    (drule_all exprSimUnwrapTheory.alloc_buffer_fields >> gvs[]) >>
   `vv_post H ctx func ce cx e es origin sm s0 ee raw vv u` by
     (irule ifexp_allocated_post >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
