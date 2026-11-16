@@ -27,11 +27,12 @@ Theorem filter_unused_refines_own_under:
       (pfx ++ FILTER ($~ o asm_unused_label used) sfx)
 Proof
   strip_tac >> Induct >- simp[asm_refines_own_refl] >>
-  rpt strip_tac >> reverse (Cases_on `asm_unused_label used h`) >> simp[]
-  >- (first_x_assum (qspec_then `pfx ++ [h]` mp_tac) >>
+  rpt strip_tac >> rename1 `pfx ++ x :: sfx` >>
+  reverse (Cases_on `asm_unused_label used x`) >> simp[]
+  >- (first_x_assum (qspec_then `pfx ++ [x]` mp_tac) >>
       REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
       disch_then irule >> simp[]) >>
-  Cases_on `h` >> gvs[asm_unused_label_def] >>
+  Cases_on `x` >> gvs[asm_unused_label_def] >>
   rename1 `AsmLabel l0` >>
   irule asm_refines_own_trans >>
   qexists_tac `pfx ++ sfx` >>
