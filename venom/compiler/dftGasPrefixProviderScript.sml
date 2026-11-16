@@ -243,27 +243,6 @@ QED
 
 Finalise native_trace_oracle_agreement
 
-Theorem native_context_oracle_agreement:
-  (!n. trace_agrees orc
-    (dftGasFromListTraceDefs$trace_context n ctx s)) ==>
-  !n. agrees orc s.vs_gas_readings
-    (trace_events (dftGasToListTrace$trace_context orc n ctx s))
-Proof
-  strip_tac >> gen_tac >>
-  first_x_assum (qspec_then `n` mp_tac) >>
-  Cases_on `ctx.ctx_entry` >>
-  simp[dftGasFromListTraceDefsTheory.trace_context_def,
-       dftGasToListTraceTheory.trace_context_def, trace_events_def] >>
-  rename1 `ctx.ctx_entry = SOME nm` >>
-  Cases_on `lookup_function nm ctx.ctx_functions` >> simp[trace_events_def] >>
-  rename1 `lookup_function _ _ = SOME fn` >>
-  Cases_on `fn_entry_label fn` >>
-  simp[dftGasFromListTraceDefsTheory.trace_function_def,
-       dftGasToListTraceTheory.trace_function_def, trace_events_def] >>
-  strip_tac >> drule (cj 3 native_trace_oracle_agreement) >>
-  disch_then (qspec_then `s.vs_gas_readings` mp_tac) >> simp[]
-QED
-
 Theorem fixed_shared_oracle_replay:
   !C C' orc readings s.
   EVERY wf_function C.ctx_functions /\ EVERY wf_function C'.ctx_functions /\
