@@ -742,7 +742,17 @@ Resume augassign_toplevel_continue_full[success]:
          qexistsl_tac [`n2w slot`, `Lit (n2w slot)`, `s3`, `sb`, `tr`,
            `res_op`, `val_to_w256 result`] >> gvs[eval_operand_def, op_taint_def]) >>
       conj_tac
-      >- metis_tac[gas_origin_ptr_path_append, APPEND] >>
+      >- (`oprun with vs_inst_idx := LENGTH s2.cs_current_insts +
+              LENGTH (emitted_insts s2 s3) = operated` by simp[LENGTH_APPEND] >>
+          qpat_assum `oprun with vs_inst_idx := _ = operated`
+            (fn th => pure_rewrite_tac[th]) >>
+          qpat_assum `gas_origin_ptr_path _ (u,Gr,tnr) [] (OK operated,Gop,tnop)`
+            (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+          disch_then (qspecl_then [`operated`, `Gop`, `tnop`, `[]`,
+            `Abort ExHalt_abort (halt_state (set_returndata [] operated))`,
+            `Gop`, `tnop`] mp_tac) >>
+          pure_rewrite_tac[APPEND] >> disch_then irule >>
+          conj_tac >- REFL_TAC >> first_assum ACCEPT_TAC) >>
       simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
         halt_state_def, set_returndata_def]) >>
   `~operated.vs_call_ctx.cc_static /\
