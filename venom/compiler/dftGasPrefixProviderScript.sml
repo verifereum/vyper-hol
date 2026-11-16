@@ -3548,6 +3548,152 @@ Proof
   metis_tac[]
 QED
 
+(* Coinitial success: first construct a forward extension, then exchange it. *)
+Theorem native_coenabled_gas[local]:
+  dft_gas_swap_pair g i /\ g.inst_opcode = GAS /\
+  inst_wf g /\ inst_wf i /\
+  ev_step orc p d b C g s = OK sg /\
+  ev_step orc p d b C i s = OK si ==>
+  ?u. ev_step orc p d b C i sg = OK u
+Proof
+  strip_tac >>
+  `?out. g.inst_outputs = [out]` by metis_tac[ev_step_gas_shape] >>
+  `sg = update_var out (orc (p,d,g.inst_id)) s` by
+    (gvs[ev_step_def, ev_gas_def]) >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  drule_all dftGasSimSwapSuccessTheory.ev_step_independent_update_ok_iff >> metis_tac[]
+QED
+
+Theorem native_coenabled_invoke[local]:
+  dft_gas_swap_pair c i /\ c.inst_opcode = INVOKE /\
+  i.inst_opcode <> GAS /\ inst_wf c /\ inst_wf i /\
+  ev_step orc p d b C c s = OK sc /\
+  ev_step orc p d b C i s = OK si ==>
+  ?u. ev_step orc p d b C i sc = OK u
+Proof
+  strip_tac >>
+  drule dftGasSimInvokePartnerTheory.ev_invoke_partner_updates >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem native_coenabled_ordinary[local]:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  a.inst_opcode <> GAS /\ a.inst_opcode <> INVOKE /\
+  b.inst_opcode <> GAS /\ b.inst_opcode <> INVOKE /\
+  ~is_ext_call_op a.inst_opcode /\ ~is_ext_call_op b.inst_opcode /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u
+Proof
+  strip_tac >> gvs[ev_step_ordinary] >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode /\
+   ~is_alloca_op a.inst_opcode /\ ~is_alloca_op b.inst_opcode /\
+   effects_independent a.inst_opcode b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+  simp[step_inst_non_invoke] >>
+  irule passSharedTransferTheory.step_inst_base_ok_transfer >> simp[] >>
+  qexistsl_tac [`s`, `sb`] >> simp[] >>
+  `sa.vs_call_ctx = s.vs_call_ctx /\ sa.vs_prev_bb = s.vs_prev_bb /\
+   sa.vs_params = s.vs_params /\
+   (Eff_RETURNDATA NOTIN write_effects a.inst_opcode ==>
+      sa.vs_returndata = s.vs_returndata)` by
+    metis_tac[step_inst_preserves_eligible_fields] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> sym_tac >> irule eval_operand_step_pres >>
+      qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
+      metis_tac[dft_swap_output_frame]) >>
+  strip_tac >>
+  `Eff_RETURNDATA IN read_effects RETURNDATACOPY` by EVAL_TAC >>
+  gvs[effects_independent_def] >> metis_tac[pred_setTheory.IN_DISJOINT]
+QED
+
+Theorem native_coenabled_external[local]:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  a.inst_opcode <> GAS /\ a.inst_opcode <> INVOKE /\
+  b.inst_opcode <> GAS /\ b.inst_opcode <> INVOKE /\
+  is_ext_call_op a.inst_opcode /\ ~is_ext_call_op b.inst_opcode /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u
+Proof
+  strip_tac >> gvs[ev_step_ordinary] >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode /\
+   ~is_alloca_op b.inst_opcode /\
+   effects_independent a.inst_opcode b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  `b.inst_opcode <> RETURNDATACOPY` by
+    (strip_tac >> gvs[] >> Cases_on `a.inst_opcode` >>
+     gvs[is_ext_call_op_def, effects_independent_def,
+         read_effects_def, write_effects_def, all_effects_def,
+         empty_effects_def, pred_setTheory.DISJOINT_DEF,
+         pred_setTheory.EXTENSION]) >>
+  `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+  drule_all venomInstProofsTheory.step_ext_call_preserves >> strip_tac >>
+  simp[step_inst_non_invoke] >>
+  irule passSharedTransferTheory.step_inst_base_ok_transfer >> simp[] >>
+  qexistsl_tac [`s`, `sb`] >> simp[] >>
+  rpt strip_tac >> sym_tac >> irule eval_operand_step_pres >>
+  qexistsl_tac [`C`, `fuel`, `a`] >> simp[] >>
+  metis_tac[dft_swap_output_frame]
+QED
+
+Theorem native_coenabled_step_square:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u. ev_step orc p d fuel C b sa = OK u /\
+      ev_step orc p d fuel C a sb = OK u
+Proof
+  strip_tac >>
+  `dft_gas_swap_pair b a` by metis_tac[dft_gas_swap_pair_sym] >>
+  `(?u. ev_step orc p d fuel C b sa = OK u) \/
+   (?u. ev_step orc p d fuel C a sb = OK u)` by
+    (Cases_on `a.inst_opcode = GAS`
+     >- (disj1_tac >> irule native_coenabled_gas >> metis_tac[]) >>
+     Cases_on `b.inst_opcode = GAS`
+     >- (disj2_tac >> irule native_coenabled_gas >> metis_tac[]) >>
+     Cases_on `a.inst_opcode = INVOKE`
+     >- (disj1_tac >> irule native_coenabled_invoke >> metis_tac[]) >>
+     Cases_on `b.inst_opcode = INVOKE`
+     >- (disj2_tac >> irule native_coenabled_invoke >> metis_tac[]) >>
+     `~(is_ext_call_op a.inst_opcode /\ is_ext_call_op b.inst_opcode)` by
+       (strip_tac >>
+        `effects_independent a.inst_opcode b.inst_opcode` by
+          gvs[dft_gas_swap_pair_def] >>
+        qpat_x_assum `effects_independent _ _` mp_tac >>
+        qpat_x_assum `is_ext_call_op a.inst_opcode` mp_tac >>
+        qpat_x_assum `is_ext_call_op b.inst_opcode` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        Cases_on `a.inst_opcode` >> simp[is_ext_call_op_def] >>
+        Cases_on `b.inst_opcode` >> simp[is_ext_call_op_def] >>
+        EVAL_TAC) >>
+     Cases_on `is_ext_call_op a.inst_opcode`
+     >- (disj1_tac >> irule native_coenabled_external >> metis_tac[]) >>
+     Cases_on `is_ext_call_op b.inst_opcode`
+     >- (disj2_tac >> irule native_coenabled_external >> metis_tac[]) >>
+     disj1_tac >> irule native_coenabled_ordinary >> metis_tac[]) >>
+  first_x_assum strip_assume_tac >>
+  drule_all dftGasSimSwapSuccessTheory.ev_pair_success >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem native_coenabled_indexed_square:
+  dft_gas_swap_pair a b /\ inst_wf a /\ inst_wf b /\
+  ev_step orc p d fuel C a s = OK sa /\
+  ev_step orc p d fuel C b s = OK sb ==>
+  ?u v.
+    ev_step orc p d fuel C b (sa with vs_inst_idx := SUC s.vs_inst_idx) = OK u /\
+    ev_step orc p d fuel C a (sb with vs_inst_idx := SUC s.vs_inst_idx) = OK v /\
+    (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    (v with vs_inst_idx := SUC (SUC s.vs_inst_idx))
+Proof
+  strip_tac >> drule_all native_coenabled_step_square >> strip_tac >>
+  `~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  metis_tac[dftGasSimLocalBoundaryTheory.ev_step_nonterminator_ok_idx]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
