@@ -2,9 +2,11 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  (* LOCAL STUB: provider-only CI imports withheld during conditional launch.
   bodyFullBuiltinCalldataSlice bodyFullBuiltinPrecompileRecoveryArgs
   bodyFullBuiltinPrecompileRecoveryBuffers bodyFullBuiltinECRecover
   bodyFullBuiltinUint2Str
+  *)
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
