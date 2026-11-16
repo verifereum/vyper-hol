@@ -4328,13 +4328,6 @@ Proof
   simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
 
-Theorem calldata_gas_explicit_false[local]:
-  !n gs. gas_explicit (REPLICATE n F) gs = []
-Proof
-  Induct >> gen_tac >> Cases_on `gs` >>
-  simp[rich_listTheory.REPLICATE, gas_explicit_cons]
-QED
-
 (* In oracle mode raw_call reads no gas observation. *)
 Theorem calldata_take_call_outcome_gas_obs[local]:
   !target cd vo st g.
@@ -4413,7 +4406,7 @@ Proof
   `fin with gas_obs := [] = fin` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
-       calldata_gas_explicit_false] >>
+       gas_explicit_replicate_false] >>
   qexistsl_tac [`res`, `fin`, `r`] >> simp[]
 QED
 
