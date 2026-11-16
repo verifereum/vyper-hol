@@ -5,7 +5,7 @@
    touches no memory. *)
 Theory bodyMemAssignTopWord
 Ancestors
-  fragGasSeqAbort
+  fragGasSeqAbort fragExec
   gasStorage vyperStorageTrace vyperStorageFootprint
   supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
@@ -145,7 +145,8 @@ Proof
       simp[vyperStorageTraceTheory.storage_trace_frame_event,
            vyperStorageTraceTheory.storage_trace_frame_write_storage_slot])
   >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -216,7 +217,8 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
         simp[ignore_bind_def,bind_def,record_storage_event_def,return_def,
              write_place_def,write_storage_slot_eq] >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+      disj2_tac >>
+      simp[exit_result_def,stmt_exit_def,expr_exit_def,halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `alloca_inv t` by
