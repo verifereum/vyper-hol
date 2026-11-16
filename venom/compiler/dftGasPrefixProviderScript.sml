@@ -5613,6 +5613,170 @@ Proof
   pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac []
 QED
 
+Theorem native_successful_suffix_cut[local]:
+  !pre n C x rest.
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  ((?u. dft_exec_suffix n C (pre ++ rest) x = OK u) \/
+   (?v u. dft_exec_suffix n C (pre ++ rest) x = IntRet v u)) ==>
+  ?q. FOLDR (dft_exec_cons n C) OK pre x = OK q /\
+      dft_exec_suffix n C (pre ++ rest) x = dft_exec_suffix n C rest q
+Proof
+  Induct >- simp[] >> rpt gen_tac >> simp_tac bool_ss [EVERY_DEF, APPEND] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?u. step_inst n C h x = OK u` by
+    (qpat_x_assum `(?u. dft_exec_suffix _ _ _ _ = OK u) \/ _` mp_tac >>
+     simp[dftIndexedExecTheory.dft_exec_suffix_def] >>
+     Cases_on `step_inst n C h x` >> simp[] >>
+     metis_tac[dft_swap_nonterminator_no_intret]) >>
+  qpat_x_assum `(?u. dft_exec_suffix _ _ _ _ = OK u) \/ _` mp_tac >>
+  simp[dftIndexedExecTheory.dft_exec_suffix_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`n`, `C`, `u with vs_inst_idx := SUC x.vs_inst_idx`, `rest`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `q` >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def]
+QED
+
+Theorem native_inventory_success_residual:
+  !frontier_body key_rows site_rows certs.
+  ^native_inventory_frontierq ==>
+  let x = s with vs_gas_readings := g ++ tail;
+      source_residual = bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
+  dft_res_rel (restore_result [] (exec_block b C source_residual x))
+              (restore_result [] (exec_block b C' bt t)) ==>
+  ((?u. exec_block b C' bt t = OK u) \/
+   (?v u. exec_block b C' bt t = IntRet v u)) ==>
+  gas_events_block b C fn.fn_name source_residual x = FLAT site_rows /\
+  (!u. exec_block b C source_residual x = OK u ==> u.vs_gas_readings = tail) /\
+  (!v u. exec_block b C source_residual x = IntRet v u ==> u.vs_gas_readings = tail) /\
+  residual_result tail (exec_block b C' bt t) (exec_block b C source_residual x)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp_tac pure_ss [LET_THM] >> rpt disch_tac >>
+  `after = []` by metis_tac[] >>
+  `is_terminator z.inst_opcode` by
+    (qpat_x_assum `(?u. exec_block b C' bt t = OK u) \/ _` mp_tac >>
+     qpat_x_assum `exec_block b C' bt t = _` (fn th => rewrite_tac[th]) >>
+     Cases_on `is_terminator z.inst_opcode` >> simp[] >>
+     simp[dftIndexedExecTheory.dft_exec_suffix_def] >>
+     Cases_on `step_inst b C' z tz` >> simp[] >>
+     metis_tac[dft_swap_nonterminator_no_intret]) >>
+  `(?u. exec_block b C
+    (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+    (s with vs_gas_readings := g ++ tail) = OK u) \/
+   (?v u. exec_block b C
+    (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+    (s with vs_gas_readings := g ++ tail) = IntRet v u)` by
+    (qpat_x_assum `dft_res_rel _ _` mp_tac >>
+     qpat_x_assum `(?u. exec_block b C' bt t = OK u) \/ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `exec_block b C' bt t` >>
+     Cases_on `exec_block b C
+       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+       (s with vs_gas_readings := g ++ tail)` >>
+     simp[restore_result_def, dft_res_rel_def]) >>
+  suspend "saturation"
+QED
+Resume native_inventory_success_residual[saturation]:
+  markerLib.RESUME_TAC >>
+  `exec_block b C
+    (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+    (s with vs_gas_readings := g ++ tail) =
+   dft_exec_suffix b C todo (s with vs_gas_readings := g ++ tail)` by
+    (irule dftIndexedExecTheory.dft_exec_suffix_boundary >> simp[NoAsms, DROP_APPEND]) >>
+  `?q. FOLDR (dft_exec_cons b C) OK before
+          (s with vs_gas_readings := g ++ tail) = OK q` by
+    (mp_tac (Q.SPEC `before` native_successful_suffix_cut) >>
+     disch_then (qspecl_then [`b`, `C`, `s with vs_gas_readings := g ++ tail`, `[z]`] mp_tac) >>
+     simp[] >> metis_tac[APPEND_NIL, APPEND]) >>
+  qspecl_then [`frontier_body`, `key_rows`, `site_rows`, `certs`] mp_tac
+    (Q.INST [`P` |-> `before ++ [z]`] native_successful_cut_inventory) >>
+  (impl_tac >- (asm_rewrite_tac[] >> qexists_tac `after` >> simp[])) >>
+  disch_then (qspecl_then [`before`, `b`, `z::after`, `[z]`, `q`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> simp_tac pure_ss [LET_THM] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `z.inst_opcode <> INVOKE /\ z.inst_opcode <> GAS` by
+    (qpat_x_assum `is_terminator z.inst_opcode` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `z.inst_opcode` >> simp[is_terminator_def]) >>
+  `EL (LENGTH before) key_rows = [] /\ EL (LENGTH before) site_rows = []` by
+    (qpat_x_assum `!h. h < _ ==> _` (qspec_then `LENGTH before` mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  `FLAT (TAKE (LENGTH before) key_rows) = FLAT key_rows /\
+   FLAT (TAKE (LENGTH before) site_rows) = FLAT site_rows` by
+    (qpat_x_assum `!h. h < _ ==> _` kall_tac >>
+     `LENGTH key_rows = SUC (LENGTH before) /\
+      LENGTH site_rows = SUC (LENGTH before)` by simp[] >>
+     qpat_assum `LENGTH key_rows = SUC _`
+       (mp_then Any assume_tac vyperMiscTheory.TAKE_SNOC_EL) >>
+     qpat_assum `LENGTH site_rows = SUC _`
+       (mp_then Any assume_tac vyperMiscTheory.TAKE_SNOC_EL) >>
+     metis_tac[FLAT_APPEND, FLAT, APPEND_NIL]) >>
+  suspend "terminal"
+QED
+Resume native_inventory_success_residual[terminal]:
+  markerLib.RESUME_TAC >>
+  `LENGTH (FLAT key_rows) = LENGTH g` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  `q.vs_gas_readings = tail` by
+    (qpat_x_assum `q.vs_gas_readings = _` mp_tac >>
+     asm_simp_tac (srw_ss()) [DROP_APPEND]) >>
+  qspecl_then [`before`, `s with vs_gas_readings := g ++ tail`, `s.vs_inst_idx`]
+    mp_tac native_prefix_cut >>
+  (impl_tac >- asm_simp_tac bool_ss [venom_state_accfupds, venom_state_fupdfupds]) >>
+  disch_then (qspecl_then [`b`, `C`, `fn`, `p`, `d`, `[z]`, `bb`, `pad`] mp_tac) >>
+  simp_tac pure_ss [LET_THM] >>
+  asm_simp_tac (srw_ss()) [] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "silent_terminal"
+QED
+Resume native_inventory_success_residual[silent_terminal]:
+  markerLib.RESUME_TAC >>
+  qmatch_goalsub_abbrev_tac `gas_events_block b C fn.fn_name br q` >>
+  `get_instruction br q.vs_inst_idx = SOME z` by
+    simp[Abbr `br`, get_instruction_def, EL_APPEND_EQN] >>
+  `gas_events_block b C fn.fn_name br q = []` by
+    (qpat_x_assum `get_instruction br _ = _` mp_tac >>
+     qpat_x_assum `is_terminator z.inst_opcode` mp_tac >>
+     qpat_x_assum `z.inst_opcode <> GAS` mp_tac >>
+     qpat_x_assum `z.inst_opcode <> INVOKE` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt disch_tac >>
+     simp[Once gas_events_block_def, Once gas_events_step_def] >>
+     Cases_on `step_inst b C z q` >> simp[]) >>
+  `gas_count_suffix 0 q (exec_block b C br q)` by
+    metis_tac[cj 2 gas_count_suffix, cj 2 gas_events_length, LENGTH] >>
+  `dft_exec_suffix b C (before ++ [z]) (s with vs_gas_readings := g ++ tail) =
+   exec_block b C br q` by
+    (simp_tac pure_ss [Abbr `br`] >> metis_tac[APPEND_NIL, APPEND, APPEND_ASSOC]) >>
+  `(!u. dft_exec_suffix b C (before ++ [z]) (s with vs_gas_readings := g ++ tail) = OK u ==>
+      u.vs_gas_readings = tail) /\
+   (!v u. dft_exec_suffix b C (before ++ [z]) (s with vs_gas_readings := g ++ tail) = IntRet v u ==>
+      u.vs_gas_readings = tail)` by
+    (qpat_x_assum `gas_count_suffix _ _ _` mp_tac >>
+     qpat_x_assum `dft_exec_suffix _ _ _ _ = exec_block _ _ _ _` mp_tac >>
+     qpat_x_assum `q.vs_gas_readings = tail` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `exec_block b C br q` >> simp[gas_count_suffix_def] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [] >> suspend "residual"
+QED
+Resume native_inventory_success_residual[residual]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `dft_res_rel _ _` mp_tac >>
+  qpat_x_assum `(?u. exec_block b C' bt t = OK u) \/ _` mp_tac >>
+  asm_simp_tac (srw_ss()) [] >>
+  qpat_x_assum `gas_count_suffix _ _ _` mp_tac >>
+  qpat_x_assum `q.vs_gas_readings = tail` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  Cases_on `exec_block b C br q` >>
+  Cases_on `dft_exec_suffix b C' [z] tz` >>
+  simp[gas_count_suffix_def, restore_result_def, dft_res_rel_def,
+       residual_result_def, stateEquivTheory.lift_result_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `src = dst with vs_gas_readings := _` >>
+  qpat_x_assum `_ with vs_gas_readings := [] = _`
+    (mp_tac o Q.AP_TERM `\a. a with vs_gas_readings := src.vs_gas_readings`) >>
+  simp_tac (srw_ss()) [] >> metis_tac[]
+QED
+Finalise native_inventory_success_residual
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
