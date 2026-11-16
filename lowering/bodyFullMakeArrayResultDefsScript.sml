@@ -105,3 +105,41 @@ Theorem make_array_completed_endpoint:
 Proof
   simp[make_array_completed_def]
 QED
+
+(* Interface probes: the same endpoint packet covers both zero-offset layouts
+   and the dynamic-array length word followed by its 32-byte-offset payload. *)
+Theorem make_array_completed_tuple_probe[local]:
+  make_array_completed H D lo d ctx func ce cx env
+    (Builtin ann (MakeArray NONE bnd) args) es sa sm sb s0 si
+    G0 tn0 ee (ArrayV (TupleV vs)) (TupleTV tvs) base cap q G tn t gs ==>
+  (!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
+       tuple_in_memory vs tvs (base + 0) m) /\
+  ptr_covers G tn q t cap
+Proof
+  simp[make_array_completed_def,valueEncodingDefsTheory.val_in_memory_def]
+QED
+
+Theorem make_array_completed_static_probe[local]:
+  make_array_completed H D lo d ctx func ce cx env
+    (Builtin ann (MakeArray (SOME et) (Fixed n)) args) es sa sm sb s0 si
+    G0 tn0 ee (ArrayV (SArrayV kvs)) (ArrayTV tv (Fixed n))
+    base cap q G tn t gs ==>
+  (!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
+       kvs_in_memory kvs (base + 0) tv m) /\
+  ptr_covers G tn q t cap
+Proof
+  simp[make_array_completed_def,valueEncodingDefsTheory.val_in_memory_def]
+QED
+
+Theorem make_array_completed_dynamic_probe[local]:
+  make_array_completed H D lo d ctx func ce cx env
+    (Builtin ann (MakeArray (SOME et) (Dynamic n)) args) es sa sm sb s0 si
+    G0 tn0 ee (ArrayV (DynArrayV vs)) (ArrayTV tv (Dynamic n))
+    base cap q G tn t gs ==>
+  (!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
+       mem_word_at base m = n2w (LENGTH vs) /\
+       elems_in_memory vs (base + 32) tv m) /\
+  ptr_covers G tn q t cap
+Proof
+  simp[make_array_completed_def,valueEncodingDefsTheory.val_in_memory_def]
+QED
