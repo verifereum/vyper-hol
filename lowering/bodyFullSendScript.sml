@@ -499,7 +499,10 @@ Resume send_expr_sim_full[gas_child]:
   qpat_assum `gas_outcome_full _ _ _ _ _ _ gasQ gasR` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `gasR`,Abbr `amountR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]
+  Cases_on `res`
+  >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
+      simp[exprSimDefsTheory.expr_exit_def]) >>
+  simp[]
 QED
 
 Resume send_expr_sim_full[call_tail]:
@@ -721,8 +724,10 @@ Resume send_expr_sim_full[gas_call_tail]:
     metis_tac[uint256_typed_dest] >>
   `outcomes_accounts_typed gas_end.outcomes /\
    accounts_runtime_well_typed gas_end.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+    (qpat_assum `expr_sim_inv cenv cx env gas_end` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
   `s0.vs_alloca_next <= gas_s.vs_alloca_next` by
     metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   `MAP finite_map$FDOM es.scopes = MAP finite_map$FDOM gas_end.scopes` by
