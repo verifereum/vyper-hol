@@ -1,75 +1,12 @@
 Theory o1SymStaticPipeline
 Ancestors
   o1LabelFlowStaticContracts
-  o1SymStaticSimple o1SymStaticMakeSSA o1SymStaticSimplifyCFG
-  o1SymStaticCFGNormalization o1SymStaticFMP o1SymStaticSchedule
+  o1LabelReadiness o1LabelStages o1SymStaticSchedule
   o1PipelineCorrect o1PipelineCompose o1ComposeSupport
   venomPassDispatcher venomFnScheduleRunner fmpStepBridge
   o1PassContract venomFnScheduleRunnerProps o1DretDesugarContract
   o1ContractSimplifyCfg o1FnScheduleDecompHelpers fcgPruning
   venomPipelineRunner venomInst list rich_list
-
-Theorem configured_runtime_reflect:
-  fn_pass_step rp pass observed s fn out /\
-  o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s ==>
-  ((?i. MEM i (fn_insts out.fpo_function) /\
-        MEM (Label "runtime_begin") i.inst_operands) ==>
-   (?i. MEM i (fn_insts fn) /\ MEM (Label "runtime_begin") i.inst_operands))
-Proof
-  strip_tac >>
-  `MEM fn observed.cu_context.ctx_functions` by
-    metis_tac[fn_pass_step_def, lookup_unique_function_member] >>
-  `o1_fn_shape observed.cu_context fn` by
-    gvs[o1_ctx_shape_def, EVERY_MEM] >>
-  `ir_supply_covers_fn s fn` by
-    metis_tac[fn_pass_step_def, ir_supply_covers_unit_member] >>
-  fs[fn_pass_step_def] >> Cases_on `pass` >> Cases_on `v` >>
-  gvs[execute_configured_fn_pass_def, AllCaseEqs()]
-  >- metis_tac[concretize_context_runtime_reflect]
-  >- metis_tac[cfg_norm_function_supply_runtime_reflect]
-  >- metis_tac[dft_runtime_reflect]
-  >- (gvs[o1_fn_shape_def] >> metis_tac[dret_runtime_reflect])
-  >- metis_tac[fmp_lower_function_label_origin]
-  >- metis_tac[lower_dload_runtime_reflect]
-  >- metis_tac[make_ssa_current_fn_runtime_reflect]
-  >- (drule simplify_cfg_runtime_reflect >> gvs[])
-  >- metis_tac[sue_runtime_reflect]
-QED
-
-Theorem pre_walk_runtime_reflect:
-  run_pipeline_stages rp o1_pipeline_spec.ps_pre_walk_stages unit s =
-    SOME (unit',s') /\ o1_ctx_shape unit.cu_context /\
-  ALL_DISTINCT (unit_label_namespace unit) /\ ir_supply_inst_ok s ==>
-  ((?fn i. MEM fn unit'.cu_context.ctx_functions /\ MEM i (fn_insts fn) /\
-           MEM (Label "runtime_begin") i.inst_operands) ==>
-   (?fn i. MEM fn unit.cu_context.ctx_functions /\ MEM i (fn_insts fn) /\
-           MEM (Label "runtime_begin") i.inst_operands))
-Proof
-  strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
-  `o1_ctx_shape mid.cu_context /\ unit_labels_wf mid /\ ir_supply_inst_ok t` by
-    (mp_tac (Q.INST [`rp` |-> `rp`, `pass` |-> `CFP_Simple VP_SimplifyCFG`,
-       `u` |-> `unit`, `u'` |-> `mid`, `s'` |-> `t`] mapped_pass_stage) >>
-     simp[o1_contract_simplify_cfg_pre_walk] >> metis_tac[]) >>
-  `ALL_DISTINCT (unit_label_namespace mid)` by
-    metis_tac[unit_labels_wf_namespace] >>
-  `!pass a b sa sb.
-     o1_step_contract rp pass /\
-     run_mapped_functions rp pass a sa = SOME (b,sb) /\
-     o1_ctx_shape a.cu_context /\ ALL_DISTINCT (unit_label_namespace a) /\
-     ir_supply_inst_ok sa ==>
-     ((?fn. MEM fn b.cu_context.ctx_functions /\
-       ?i. MEM i (fn_insts fn) /\ MEM (Label "runtime_begin") i.inst_operands) ==>
-      (?fn. MEM fn a.cu_context.ctx_functions /\
-       ?i. MEM i (fn_insts fn) /\ MEM (Label "runtime_begin") i.inst_operands))` by
-    (rpt gen_tac >> strip_tac >>
-     match_mp_tac (BETA_RULE (Q.INST [`s` |-> `sa`, `s'` |-> `sb`, `P` |-> `\fn. ?i. MEM i (fn_insts fn) /\
-       MEM (Label "runtime_begin") i.inst_operands`] run_mapped_functions_reflect)) >>
-     metis_tac[configured_runtime_reflect]) >>
-  first_assum (qspecl_then [`CFP_Simple VP_SimplifyCFG`, `unit`, `mid`, `s`, `t`] mp_tac) >>
-  simp[o1_contract_simplify_cfg_pre_walk] >> strip_tac >>
-  first_x_assum (qspecl_then [`CFP_Simple VP_DretDesugar`, `mid`, `unit'`, `t`, `s'`] mp_tac) >>
-  simp[o1_contract_dret_desugar_pre_walk] >> metis_tac[]
-QED
 
 Theorem walk_runtime_reflect:
   fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
@@ -96,7 +33,13 @@ Proof
                       MEM (Label "runtime_begin") i.inst_operands`]
     run_named_fn_schedules_reflect) >>
   simp[o1_fn_passes_steps, o1_step_contracts_from_rows] >>
-  impl_tac >- metis_tac[configured_runtime_reflect] >>
+  impl_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `MEM fn observed.cu_context.ctx_functions` by
+        metis_tac[fn_pass_step_def, lookup_unique_function_member] >>
+      `o1_fn_shape observed.cu_context fn` by
+        gvs[o1_ctx_shape_def, EVERY_MEM] >>
+      metis_tac[fn_pass_step_no_runtime_begin]) >>
   simp[MEM_prune_unit_fcg_unreachable_functions] >> metis_tac[]
 QED
 
@@ -129,7 +72,5 @@ Proof
        `fcg` |-> `fcg_analyze pre.cu_context`, `unit'` |-> `out.po_unit`,
        `s` |-> `t`, `s'` |-> `t'`] walk_runtime_reflect) >>
      simp[] >> metis_tac[]) >>
-  mp_tac (Q.INST [`rp` |-> `rpolicy`, `unit'` |-> `pre`,
-     `s` |-> `init_ir_supply unit`, `s'` |-> `t`] pre_walk_runtime_reflect) >>
-  simp[] >> metis_tac[]
+  metis_tac[o1_pre_walk_no_runtime_begin]
 QED
