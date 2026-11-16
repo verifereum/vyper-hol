@@ -7098,6 +7098,41 @@ Proof
      residual_result_def] >> metis_tac[]
 QED
 
+Theorem native_block_gas_not_later[local]:
+  EVERY (\kw. ~later_region p d (FST kw))
+    (^native_block_gasq p d n C fn bb x)
+Proof
+  simp_tac (srw_ss()) [] >> Cases_on `eval_phis x bb.bb_instructions` >> simp[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM (FST kw) (MAP FST (dftGasFromListTraceDefs$trace_block p d n C fn bb
+    (v with vs_inst_idx := phi_prefix_length bb.bb_instructions)))` by
+    (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+  fs[MEM_MAP] >> drule trace_block_region >>
+  metis_tac[block_later_disjoint]
+QED
+
+Theorem native_region_append_mask[local]:
+  !R O1 O2 K1 K2.
+  EVERY (\kw. ~R (FST kw)) O1 /\ EVERY (\kw. R (FST kw)) O2 /\
+  EVERY (\k. ~R k) K1 /\ EVERY R K2 ==>
+  MAP (ALOOKUP (O1 ++ O2)) (K1 ++ K2) =
+    MAP (ALOOKUP O1) K1 ++ MAP (ALOOKUP O2) K2
+Proof
+  rpt strip_tac >>
+  `FILTER (\kw. ~R (FST kw)) O1 = O1 /\
+   FILTER (\kw. ~R (FST kw)) O2 = [] /\
+   FILTER (\kw. R (FST kw)) O1 = [] /\
+   FILTER (\kw. R (FST kw)) O2 = O2` by
+    (fs[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM]) >>
+  simp[MAP_APPEND] >> BINOP_TAC
+  >- (mp_tac (Q.SPECL [`\k. ~R k`, `K1`, `O1 ++ O2`]
+        (Q.GENL [`R`, `keys`, `obs`] ambient_region_mask)) >>
+      simp[FILTER_APPEND_DISTRIB]) >>
+  mp_tac (Q.SPECL [`R`, `K2'`, `O1 ++ O2`]
+    (Q.GENL [`R`, `keys`, `obs`] ambient_region_mask)) >>
+  simp[FILTER_APPEND_DISTRIB]
+QED
+
 Theorem uniform_native_prefix_packet:
   !b C C'. ^native_inventory_IHq
 Proof
@@ -7127,11 +7162,160 @@ Proof
   disch_then (qspecl_then [`q`, `SUC r`] mp_tac) >>
   strip_tac >>
   Cases_on `?u. run_block b C' bb' x = OK u /\ ~u.vs_halted`
-  >- suspend "continuing block" >>
+  >- suspend "continuing_block" >>
   qexistsl_tac [`K'`, `S'`, `U`] >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   irule (BETA_RULE native_stopped_block_packet) >> simp[] >> metis_tac[]
 QED
+
+Resume uniform_native_prefix_packet[continuing_block]:
+  qpat_x_assum `?u. _ /\ ~u.vs_halted` strip_assume_tac >>
+  drule_all native_blocks_successor_admissible >> strip_tac >>
+  qpat_x_assum `!f f' x q r. _`
+    (qspecl_then [`f`, `f'`, `u`, `q`, `SUC r`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `!g tail n v.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+      (MAP (ALOOKUP (^native_block_gasq q (SUC r) b C' f' bb' x)) K') g /\
+    run_block n C bb (x with vs_gas_readings := g ++ tail) = OK v ==>
+    v = u with vs_gas_readings := tail /\
+    ^native_block_gasq q (SUC r) n C f bb (x with vs_gas_readings := g ++ tail) = ZIP (K',g) /\
+    ^native_block_sitesq n C f bb (x with vs_gas_readings := g ++ tail) = S'` by
+    (rpt strip_tac >> drule_all native_whole_block_packet_ok >> simp[]) >>
+  qexistsl_tac [`K' ++ K''`, `S' ++ S''`, `U'`] >>
+  fs[LET_THM] >>
+  `EVERY (\k. ~later_region q (SUC r) k) K'` by
+    (fs[EVERY_MEM] >> metis_tac[block_later_disjoint]) >>
+  `MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks q r (SUC b) C' f' x)))
+     (K' ++ K'') =
+   MAP (ALOOKUP (^native_block_gasq q (SUC r) b C' f' bb' x)) K' ++
+   MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_blocks q (SUC r) b C' f' u))) K''` by
+    (qpat_assum `lookup_block _ f'.fn_blocks = SOME bb'`
+       (mp_then Any mp_tac native_blocks_projections) >>
+     disch_then (qspecl_then [`q`, `b`, `r`, `C'`] mp_tac) >>
+     simp[] >> strip_tac >> simp[] >>
+     irule (REWRITE_RULE [MAP_APPEND] native_region_append_mask) >>
+     qexists_tac `later_region q (SUC r)` >>
+     simp[BETA_RULE native_block_gas_not_later, native_blocks_gas_region]) >>
+  qpat_x_assum `MAP _ (K' ++ K'') = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [MAP_APPEND, APPEND_11_LENGTH] o BETA_RULE) >>
+  qpat_assum `f' = dft_fn f` (fn th => pure_rewrite_tac [GSYM th]) >>
+  qpat_assum `MAP _ K' = _` (fn th => pure_rewrite_tac [th]) >>
+  qpat_assum `MAP _ K'' = _` (fn th => pure_rewrite_tac [th]) >>
+  conj_tac >- (fs[ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >- (fs[EVERY_MEM] >> metis_tac[block_region_later, later_region_mono, DECIDE ``r <= SUC r``]) >>
+  conj_tac
+  >- (pure_rewrite_tac[FILTER_APPEND_DISTRIB, MAP_APPEND, GSYM APPEND_ASSOC] >>
+      qpat_x_assum `PERM _ x.vs_gas_readings` mp_tac >>
+      qpat_x_assum `PERM _ u.vs_gas_readings` mp_tac >>
+      qpat_x_assum `U = u.vs_gas_readings` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[] >>
+      qmatch_asmsub_abbrev_tac `PERM (a ++ u.vs_gas_readings) x.vs_gas_readings` >>
+      irule sortingTheory.PERM_TRANS >>
+      qexists_tac `a ++ u.vs_gas_readings` >>
+      conj_tac
+      >- (pure_rewrite_tac[GSYM APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+          first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
+  `run_blocks (SUC b) C' f' x = run_blocks b C' f' u` by
+    simp[Once run_blocks_unfold] >>
+  conj_tac >- (pure_rewrite_tac[EVERY_APPEND] >> metis_tac[]) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `LIST_REL _ (_ ++ _) g`
+    (strip_assume_tac o REWRITE_RULE [LIST_REL_SPLIT1]) >>
+  rename1 `g = gb ++ gn` >>
+  `LENGTH gb = LENGTH K' /\ LENGTH gn = LENGTH K''` by
+    metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  qpat_x_assum `g = gb ++ gn` SUBST_ALL_TAC >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`gn`, `tail`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`gb`, `gn ++ tail`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qpat_x_assum `!g tail n v. _`
+    (qspecl_then [`gb`, `gn ++ tail`] mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  conj_tac
+  >- (Cases
+      >- (qexists_tac `0` >> simp[trace_gas_def, Once gas_events_blocks_def]) >>
+      rename1 `trace_gas (_ q r (SUC n) C f _)` >>
+      mp_tac (Q.SPECL [`q`, `r`, `f`]
+        (Q.GENL [`p`, `d`, `fn`]
+          (Q.SPEC `x with vs_gas_readings := gb ++ (gn ++ tail)`
+            (Q.GEN `x` native_blocks_projections)))) >>
+      impl_tac >- simp[] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      disch_then (strip_assume_tac o BETA_RULE) >>
+      Cases_on `run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail))`
+      >- suspend "continue_source_OK" >>
+      qpat_x_assum `!n. ?k. _ /\ (case _ of _ => _ | _ => _ | _ => _ | _ => _ | _ => _) = _ /\ _`
+        (qspec_then `n` strip_assume_tac) >>
+      qexists_tac `k` >>
+      asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+      simp[TAKE_APPEND1] >> decide_tac) >>
+  suspend "guarded_join"
+QED
+
+Resume uniform_native_prefix_packet[continue_source_OK]:
+  qpat_x_assum `!n v. _` drule >> strip_tac >>
+  qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  qpat_x_assum `!n. ?k. _ /\ (case _ of _ => _ | _ => _ | _ => _ | _ => _ | _ => _) = _ /\ _` kall_tac >>
+  qpat_x_assum `!n. ?k. _` (qspec_then `n` strip_assume_tac) >>
+  qexists_tac `LENGTH K' + k` >>
+  asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[rich_listTheory.TAKE_APPEND2, GSYM rich_listTheory.ZIP_APPEND, LENGTH_TAKE] >>
+  decide_tac
+QED
+
+Resume uniform_native_prefix_packet[guarded_join]:
+  strip_tac >>
+  Cases_on `n`
+  >- fs[Once run_blocks_def, passSimulationDefsTheory.terminates_def] >>
+  rename1 `terminates (run_blocks (SUC n) C f _)` >>
+  `terminates (run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail)))` by
+    (qpat_x_assum `terminates (run_blocks (SUC n) C f _)` mp_tac >>
+     simp[Once run_blocks_unfold] >>
+     Cases_on `run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail))` >>
+     asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `(?n. terminates (run_block _ _ _ _)) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  `run_block (MAX b n) C bb (x with vs_gas_readings := gb ++ (gn ++ tail)) =
+     OK (u with vs_gas_readings := gn ++ tail)` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >> simp[] >>
+     qexists_tac `b` >> asm_rewrite_tac[GSYM APPEND_ASSOC] >> simp[]) >>
+  `run_block (MAX b n) C bb (x with vs_gas_readings := gb ++ (gn ++ tail)) =
+     run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail))` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >>
+     conj_tac
+     >- (Cases_on `run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail))` >>
+         fs[passSimulationDefsTheory.terminates_def]) >>
+     qexists_tac `n` >> simp[]) >>
+  `run_block n C bb (x with vs_gas_readings := gb ++ (gn ++ tail)) =
+     OK (u with vs_gas_readings := gn ++ tail)` by metis_tac[] >>
+  `terminates (run_blocks n C f (u with vs_gas_readings := gn ++ tail))` by
+    (qpat_x_assum `terminates (run_blocks (SUC n) C f _)` mp_tac >>
+     simp[Once run_blocks_unfold] >>
+     asm_rewrite_tac[GSYM APPEND_ASSOC] >> simp[]) >>
+  qpat_x_assum `(?n. terminates (run_blocks _ _ _ _)) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  `run_blocks (SUC b) C f (x with vs_gas_readings := gb ++ (gn ++ tail)) =
+     run_blocks b C f (u with vs_gas_readings := gn ++ tail)` by
+    (simp[Once run_blocks_unfold] >>
+     asm_rewrite_tac[GSYM APPEND_ASSOC] >> simp[]) >>
+  qpat_assum `f' = dft_fn f` (fn th => pure_rewrite_tac [GSYM th]) >>
+  asm_rewrite_tac[] >> conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_tac >>
+  mp_tac (Q.SPECL [`f`, `x with vs_gas_readings := gb ++ (gn ++ tail)`]
+    (Q.GENL [`fn`, `x`] (Q.INST [`n` |-> `b`] (cj 2 native_blocks_projections)))) >>
+  impl_tac >- simp[] >>
+  disch_then (assume_tac o BETA_RULE) >>
+  asm_rewrite_tac[GSYM APPEND_ASSOC] >> simp[] >> metis_tac[]
+QED
+
+Finalise uniform_native_prefix_packet
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
