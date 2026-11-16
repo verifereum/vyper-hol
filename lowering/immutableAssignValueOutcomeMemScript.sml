@@ -24,7 +24,7 @@ Theorem immutable_assign_value_mem_stmt_post:
   type_widens_to env.type_defs (expr_type e) ity /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
   expr_sim_inv ce cx env ee /\
-  expr_post ctx func ce cx e ers si su s0 ee v op s /\
+  expr_post H ctx func ce cx e ers si su s0 ee v op s /\
   expr_store_bound cx (expr_type e) v op s /\
   (~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
     !w tv. eval_operand op s = SOME w /\
@@ -43,8 +43,12 @@ Theorem immutable_assign_value_mem_stmt_post:
   off + type_memory_size itv < dimword (:256) /\
   write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) ==>
   ?q. gas_marked_path T ctx func s 0 (OK q) /\
-    stmt_post ctx func cx lctx ce ce su sb ee s (INL ()) fin q /\
-    s.vs_alloca_next <= q.vs_alloca_next
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q /\
+    s.vs_alloca_next <= q.vs_alloca_next /\
+    q.vs_accounts = s.vs_accounts /\
+   q.vs_transient = s.vs_transient /\
+   q.vs_requests = s.vs_requests /\
+   q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
@@ -54,9 +58,10 @@ Proof
   drule_all type_widens_to_value_has_type >> strip_tac >>
   `tu = itv` by metis_tac[optionTheory.SOME_11] >>
   `value_has_type itv v` by metis_tac[] >>
-  `stmt_state_rel ctx func ce cx ee s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  `stmt_state_rel H ctx func ce cx ee s` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (ACCEPT_TAC o cj 1 o PURE_REWRITE_RULE [expr_post_def])) >>
+  `storage_well_formed_on cx ee (FST H)` by fs[expr_post_def] >>
   Cases_on `is_word_type ity`
   >- suspend "word" >>
   suspend "aggregate"
@@ -99,8 +104,8 @@ Resume immutable_assign_value_mem_stmt_post[direct]:
   `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
     metis_tac[return_source_word_widens_eq, type_widens_from_bytestring] >>
   `expr_val_at ce cx (post_value_type ce e) si su ee v op s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-      (ACCEPT_TAC o cj 3 o PURE_REWRITE_RULE [expr_post_def])) >>
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (ACCEPT_TAC o cj 4 o PURE_REWRITE_RULE [expr_post_def])) >>
   drule_all immutable_assign_source_range >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `stv = itv` by metis_tac[optionTheory.SOME_11] >>
@@ -152,8 +157,7 @@ Resume immutable_assign_value_mem_stmt_post[direct_store]:
     (SPEC_ALL immutable_assign_direct_stmt_post_mem)) >>
   impl_tac >- (rpt conj_tac >> metis_tac[LESS_EQ_REFL]) >>
   strip_tac >> qexists_tac `q` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  asm_simp_tac bool_ss [] >>
   drule gas_marked_path_exec >> strip_tac >>
   drule rest_word_path_frontier >>
   disch_then (qspec_then `q` mp_tac) >> simp_tac bool_ss [])
@@ -166,8 +170,8 @@ Resume immutable_assign_value_mem_stmt_post[bytes]:
   `~is_word_type (post_value_type ce e)` by
     metis_tac[immutable_rhs_post_physical_classify, is_bytestring_word_type] >>
   `expr_val_at ce cx (post_value_type ce e) si su ee v op s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-      (ACCEPT_TAC o cj 3 o PURE_REWRITE_RULE [expr_post_def])) >>
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (ACCEPT_TAC o cj 4 o PURE_REWRITE_RULE [expr_post_def])) >>
   drule_all immutable_assign_source_range >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e)` by
@@ -250,9 +254,9 @@ Resume immutable_assign_value_mem_stmt_post[normalized]:
     metis_tac[immutable_rhs_post_physical_classify] >>
   `expr_val_at ce cx (lowered_value_type ce e) si su ee v op s /\
    expr_val_rel cx (lowered_value_type ce e) v op s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (fn th =>
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (fn th =>
        let val pr = PURE_REWRITE_RULE [expr_post_def] th in
-         mp_tac (cj 2 pr) >> mp_tac (cj 3 pr)
+         mp_tac (cj 4 pr) >> mp_tac (cj 3 pr)
        end) >> asm_simp_tac bool_ss []) >>
   `type_memory_size stv = 0 <=> type_memory_size itv = 0` by
     metis_tac[type_widens_to_zero_memory_size] >>

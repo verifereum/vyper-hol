@@ -60,7 +60,7 @@ Proof
   irule body_annassign_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_append_case_ptr_at (bodyPtrLogCases). *)
+(* Admitted: the joint Append case. *)
 Theorem body_append_case_full:
   !cx t e.
     (!s'' p t'.
@@ -584,7 +584,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
+(* Admitted: the joint Log case. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof

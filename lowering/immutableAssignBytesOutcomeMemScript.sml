@@ -10,7 +10,8 @@ Theorem immutable_assign_bytes_mem_stmt_post:
     (type_memory_bytes ce ity) su = ((),sb) /\
   is_bytestring_type ity /\ is_bytestring_type sty /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
-  stmt_state_rel ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  stmt_state_rel H ctx func ce cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\ expr_sim_inv ce cx env ee /\
   local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -34,8 +35,12 @@ Theorem immutable_assign_bytes_mem_stmt_post:
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_post ctx func cx lctx ce ce su sb ee s (INL ()) fin t /\
-    s.vs_alloca_next <= t.vs_alloca_next
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\
+   t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `off < dimword (:256)` by decide_tac >>
@@ -52,7 +57,14 @@ QED
 
 Resume immutable_assign_bytes_mem_stmt_post[post]:
   `w2n (n2w off : bytes32) = off` by simp[w2n_n2w] >>
-  `stmt_post ctx func cx lctx ce ce su sb ee s (INL ()) fin
+  `t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\
+   t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `t with <|vs_vars := _; vs_memory := _; vs_immutables := _;
+      vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
+  `stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule immutable_assign_suffix_stmt_post >> simp[] >>
      qexistsl_tac [`env`, `id`, `itv`, `ity`, `off`, `v`] >> simp[] >>
