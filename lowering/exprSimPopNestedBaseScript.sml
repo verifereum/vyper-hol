@@ -20,7 +20,7 @@ Ancestors
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps
   gasOutcome gasExemptCert gasSummaryCompose fragGasMode fragGasPath
   exprOracleStoragePreservation bodyStoragePreservation vyperTypeStoragePreservation
-  vyperTypeExprSoundness supportedExprTraverse supportedProgram
+  vyperTypeExprSoundness supportedExprTraverse supportedProgram evalNoHalt
   vyperStorageLayoutSafety vyperPlaceStoragePreservation accountsRelProps vyperStorage
 
 
@@ -1317,7 +1317,10 @@ Resume pop_nested_storage_sim[summary]:
   rename1 `expr_exit (INR exc) tr0` >>
   qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> first_assum ACCEPT_TAC
+  disj2_tac >> qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> fs[halt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Resume pop_nested_storage_sim[normal]:
@@ -1371,7 +1374,15 @@ Resume pop_nested_storage_sim[normal]:
       qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
         (irule_at Any) >>
       asm_rewrite_tac[]) >>
-  gvs[]
+  gvs[] >> disj2_tac >>
+  `pres' <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `gas_marked_exec _ _ (pop_place _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >>
+     asm_simp_tac bool_ss [gas_explicit_nil, APPEND_NIL] >>
+     disch_then (ACCEPT_TAC o MATCH_MP evalNoHaltTheory.pop_place_nh)) >>
+  simp[halt_exit_def]
 QED
 
 Finalise pop_nested_storage_sim
