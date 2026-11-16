@@ -2,7 +2,7 @@
    the RHS/operator/write outcome. Storage observations may be appended. *)
 Theory augAssignFullSourcePrefix
 Ancestors
-  gasOutcomeFullSourcePrefix gasOutcomeFull gasExemptPurePrefix
+  gasOutcomeFull gasExemptPurePrefix gasSummaryCompose
   fragGasOriginPtr fragGasOrigin fragGasMode fragGasPathMem fragExec
   gasExemptCert gasSummary gasStorage
   vyperStorageFootprint vyperStorageTrace vyperInterpreter vyperState
@@ -49,18 +49,28 @@ Proof
     (gen_tac >> simp[Once evaluate_def, bind_def, ignore_bind_def, Abbr `m`] >>
      Cases_on `eval_expr cx e (mid with gas_obs := gs)` >>
      rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[bind_def]) >>
-  irule gas_outcome_full_source_prefix >>
-  qpat_assum `gas_outcome_full _ _ _ _ m _ _ _` (irule_at Any) >>
-  qpat_assum `mid.storage_trace = _` (irule_at Any) >> rpt conj_tac
-  >~ [`storage_trace_frame m`]
-  >- (qunabbrev_tac `m` >> irule storage_trace_frame_bind_all >>
-      conj_tac
-      >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-          simp[storage_trace_frame_lifts, storage_trace_frame_write_place]) >>
-      irule storage_trace_frame_bind_all >>
-      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt gen_tac >> strip_tac >>
+  `storage_trace_frame m` by
+    (qunabbrev_tac `m` >> irule storage_trace_frame_bind_all >>
+     conj_tac
+     >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+         simp[storage_trace_frame_lifts, storage_trace_frame_write_place]) >>
+     irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `gas_path ctx func s0 (LENGTH []) (OK s1)` by
+    (bossLib.simp [fragGasPathMemTheory.gas_path_mem_exec]) >>
+  `!marks. gas_explicit marks s0.vs_gas_readings =
+           gas_explicit marks s1.vs_gas_readings` by
+    (gen_tac >>
+     mp_tac (Q.INST [`left` |-> `[]`, `s` |-> `s0`, `t` |-> `s1`,
+                     `right` |-> `marks`] gas_explicit_append_path) >>
+     gvs[gas_explicit_def]) >>
+  `!marks err ee leaf fin.
+     gas_exempt_cert T tops (ctx,func) (ignore_bind m (return ()))
+       (mid,s1) marks (err,ee) (leaf,fin) ==>
+     gas_exempt_cert T tops (ctx,func)
+       (ignore_bind (eval_stmt cx (AugAssign ty tgt bop e)) (return ()))
+       (es,s0) marks (err,ee) (leaf,fin)` by
+    (rpt gen_tac >> strip_tac >>
       `gas_exempt_cert T tops (ctx,func) (ignore_bind m (return ()))
         (mid with gas_obs := [],s1) marks (err,ee) (leaf,fin)` by
         (drule gas_exempt_cert_start_gas_obs >>
@@ -85,5 +95,49 @@ Proof
       BETA_TAC >>
       irule (Q.INST [`v` |-> `ptv`] gas_exempt_cert_pure_prefix) >>
       fs[Abbr `m`, ignore_bind_def, bind_assoc]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ m _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
+  >~ [`gas_bad_storage_at _ _ m _ _ _`]
+  >- (rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >>
+      disj1_tac >> conj_tac
+      >- gvs[gas_bad_storage_at_def] >>
+      qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+      conj_tac >- metis_tac[valid_horizon_append] >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
+        (qspec_then `H` mp_tac) >>
+      impl_tac >- gvs[] >> strip_tac >>
+      drule_all (cj 2 gas_origin_ptr_focus_rules) >> simp[])
+  >~ [`gas_origin_ptr_focus _ _ _ _`]
+  >- (rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >>
+      disj2_tac >> disj2_tac >>
+      qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+      conj_tac >- metis_tac[] >>
+      qexists_tac `H` >> conj_tac >- metis_tac[valid_horizon_append] >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
+        (qspec_then `H` mp_tac) >>
+      impl_tac >- gvs[] >> strip_tac >>
+      drule_all (cj 2 gas_origin_ptr_focus_rules) >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H mid.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `!tail. m _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all storage_trace_frame_prefix >> simp[] >>
+     strip_tac >> gvs[] >> metis_tac[valid_horizon_append]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
+  conj_tac >- gvs[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `H` >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  conj_tac >- (
+    qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
+      (qspec_then `H` mp_tac) >>
+    impl_tac >- metis_tac[] >> strip_tac >>
+    qpat_assum `gas_origin_ptr_path _ _ [] _`
+      (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+    simp[] >> disch_then drule >> simp[]) >>
   first_assum ACCEPT_TAC
 QED
