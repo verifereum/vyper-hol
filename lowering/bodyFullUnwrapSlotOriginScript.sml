@@ -18,7 +18,7 @@ Theorem unwrap_ensure_slot_origin_loop:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -49,6 +49,13 @@ Proof
   qpat_x_assum `out = root` SUBST_ALL_TAC >>
   `u1 = u` by fs[] >>
   qpat_x_assum `u1 = u` SUBST_ALL_TAC >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (strip_tac >> drule_all unwrap_alloc_below_fmp >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     qpat_x_assum `a = u with vs_inst_idx := _`
+       (fn th => REWRITE_TAC [th]) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `not_fresh_at sm root /\ (!x. src = Var x ==> not_fresh_at sm x)` by
     (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
      qpat_x_assum `!x. src = Var x ==> _` mp_tac >>
@@ -98,7 +105,7 @@ Theorem unwrap_single_slot_origin_execution:
     [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] /\
   eval_operand src s = SOME key /\ op_taint tn src = {} /\ root <> out /\
   ptr_covers G tn root s 32 /\ lookup_var root s = SOME addr /\
-  allocas_from lo s /\ w2n addr + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ w2n addr + 32 <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?Gf tnf t.
@@ -151,7 +158,7 @@ Theorem unwrap_ensure_slot_origin_single:
   compile_ensure_in_memory src loc nb 1 ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32 <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -240,7 +247,7 @@ Theorem unwrap_ensure_slot_origin_execution:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   alloca_history func s /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

@@ -10,7 +10,8 @@ Ancestors
 
 Theorem storage_word_store_origin_ptr:
   emit_void (if tr then TSTORE else SSTORE) [addr;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_call_ctx.cc_static /\
@@ -44,15 +45,21 @@ Proof
   `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
    u.vs_requests = s.vs_requests` by
     (Cases_on `tr` >> simp[Abbr `u`, sstore_def, tstore_def]) >>
-  drule_all emit_storage_store_ptr >>
-  disch_then (qspecl_then [`func`, `PG`, `G`, `D`] assume_tac) >>
-  qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
-  `inst_seq_ptr D lo ctx func PG G tn [inst] s G un` by
-    (irule inst_seq_ptr_zero_to_lo >> simp[Abbr `un`] >>
-     qexists_tac `D` >> fs[]) >>
-  `ptr_inst_ok D lo 0 ctx func G tn inst s /\
-   step_prov PG G inst u = G /\ step_taint inst s u tn = un` by
-    gvs[inst_seq_ptr_def] >>
+  `ptr_inst_ok D lo 0 ctx func G tn inst s` by
+    (Cases_on `tr` >>
+     simp[Abbr `inst`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, fixed_source_write_range_def] >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
+       instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `step_prov PG G inst u = G` by
+    simp[Abbr `inst`, scalar_void_prov] >>
+  `step_taint inst s u tn = un` by
+    (simp[Abbr `inst`, Abbr `un`] >>
+     irule scalar_storage_store_taint >> simp[]) >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
    ~is_terminator inst.inst_opcode /\ inst_mem_below_frontier inst s /\
    inst_dload_in_section inst s` by

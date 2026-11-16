@@ -59,6 +59,7 @@ Proof
   drule_all ensure_slot_memory_loop_code >> strip_tac >>
   drule_all unwrap_alloc_site_bound >> strip_tac >>
   `buffer_allocation_base s sa.cs_next_id < dimword (:256)` by decide_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all unwrap_alloc_loop_entry >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `compile_slot_to_memory src (Var root) n loc sm = (lab,sb)` by metis_tac[] >>

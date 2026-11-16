@@ -110,7 +110,9 @@ Resume concat_result_vv_sim_mem[prefix]:
   `fn_has_code s4 s5 func /\ fn_has_code s5 sb func` by
     (irule fn_has_code_split >> simp[]) >>
   qpat_assum `buf.buf_operand = _`
-    (fn th => mp_tac (REWRITE_RULE [th] concat_prefix_path_mem)) >>
+    (fn th => mp_tac (REWRITE_RULE [th]
+      (Q.INST [`H` |-> `storage_trace_horizon es.storage_trace`]
+        (INST_TYPE [alpha |-> ``:256``] concat_prefix_path_mem)))) >>
   qpat_assum `ob.buf_operand = _`
     (fn th => PURE_REWRITE_TAC [th]) >>
   disch_then drule_all >>
@@ -155,13 +157,15 @@ Resume concat_result_vv_sim_mem[bind]:
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> simp[storage_trace_frame_def])
   >~ [`wb_args_exit (INR _) _`]
-  >- (simp[wb_args_exit_def] >> rpt gen_tac >>
+  >- (simp[wb_args_exit_def, halt_exit_def] >> rpt gen_tac >>
       Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
-  `!(rr : value list + exception) ee r.
-     (?exc. rr = INR exc /\ expr_exit (INR exc : eval_result + exception) r) =
-     wb_args_exit rr r` by
-    (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def] >>
+  `!(H : (bool # bytes32 # type_value) list # num list)
+     (rr : value list + exception) ee r.
+     (?exc. rr = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit H cx ee (INR exc : eval_result + exception) r) =
+     (wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
+    (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def, halt_exit_def] >>
      rename1 `INR exc` >> Cases_on `exc` >> Cases_on `r` >>
      simp[expr_exit_def] >> rename1 `Error err` >> Cases_on `err` >>
      simp[expr_exit_def]) >>
@@ -169,12 +173,12 @@ Resume concat_result_vv_sim_mem[bind]:
     `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ Post _` >>
   qexists_tac `\H vs ee tt. Post H (INL vs) ee tt` >> reverse conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` mp_tac >>
-      simp[Abbr `Post`]) >>
+      qpat_assum `!H rr ee r. _ = (wb_args_exit rr r /\ _)`
+        (fn th => simp[Abbr `Post`, th])) >>
   simp[Abbr `Post`] >> rpt gen_tac >> strip_tac >> suspend "normal"
 QED
 Resume concat_result_vv_sim_mem[normal]:
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
-    (qx_choose_then `H1` assume_tac) >>
+  rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (drule_then strip_assume_tac) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
@@ -262,11 +266,12 @@ QED
 
 Resume concat_result_vv_sim_mem[frame]:
   `wb_frame cenv es ee sa s0 t'` by
-    (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_list_frame) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac
-     >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
-                       `func`] >> first_assum ACCEPT_TAC) >>
+    (irule (Q.INST [`H` |-> `storage_trace_horizon es.storage_trace`]
+       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         concat_prefix_list_frame)) >>
+     asm_rewrite_tac[] >>
+     reverse conj_tac
+     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`B`, `bsz`, `es`, `ow`, `s4`, `t`] >>
      asm_rewrite_tac[] >> simp[] >> first_assum ACCEPT_TAC) >>
   `~expr_has_effect (Builtin ann (Concat n) args) ==>
@@ -436,7 +441,7 @@ Resume concat_result_vv_sim_mem[bytes_size]:
   simp[loweringPostsTheory.val_footprint_def] >> strip_tac >>
   `word_size (LENGTH (FLAT bss)) <=
      word_size (SUM (MAP concat_payload_capacity (MAP expr_type args)))` by
-    (irule exprSimHypsTheory.word_size_monotone >> decide_tac) >>
+    (irule exprSimPropsTheory.word_size_monotone >> decide_tac) >>
   qpat_x_assum `word_size _ <= word_size _` mp_tac >>
   simp[exprSimPropsTheory.val_store_size_def, Abbr `bsz`, concat_alloc_size_def,
        vfmConstantsTheory.word_size_def]
@@ -451,7 +456,7 @@ Resume concat_result_vv_sim_mem[string_size]:
   simp[loweringPostsTheory.val_footprint_def] >> strip_tac >>
   `word_size (LENGTH (FLAT ss)) <=
      word_size (SUM (MAP concat_payload_capacity (MAP expr_type args)))` by
-    (irule exprSimHypsTheory.word_size_monotone >> decide_tac) >>
+    (irule exprSimPropsTheory.word_size_monotone >> decide_tac) >>
   qpat_x_assum `word_size _ <= word_size _` mp_tac >>
   simp[exprSimPropsTheory.val_store_size_def, Abbr `bsz`, concat_alloc_size_def,
        vfmConstantsTheory.word_size_def]
