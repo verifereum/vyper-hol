@@ -33,6 +33,11 @@ Theorem compose_concretize_own:
   (3 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)
 Proof
   rpt gen_tac >> simp[] >> strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     simp[venomPassScheduleTheory.fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    metis_tac[concretizeStageShapeTheory.concretize_step_no_raw_fmp] >>
   `o1_fn_shape observed.cu_context out.fpo_function /\
    o1_fn_row 3 out.fpo_function` by
     (mp_tac (Q.SPEC `rp` (GEN_ALL concretize_step_contract_at)) >>

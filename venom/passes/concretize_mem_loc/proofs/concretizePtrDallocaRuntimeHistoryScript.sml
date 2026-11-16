@@ -70,8 +70,8 @@ Proof
   Cases_on `(EL n0 h).po_inst.inst_opcode = ALLOCA`
   >- (qpat_x_assum `(EL q ht).po_inst = concretize_inst_with_positions _ _` mp_tac >>
       simp[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
-      rpt strip_tac >> gvs[mk_assign_inst_def, mk_nop_inst_def,
-                           out_taint_def, op_taint_def, eval_operand_def] >>
+      rpt strip_tac >> gvs[mk_assign_inst_def, mk_nop_inst_def] >>
+      simp[out_taint_def, op_taint_def, eval_operand_def] >>
       rpt CASE_TAC >> simp[]) >>
   `(EL q ht).po_inst = (EL n0 h).po_inst` by
     gvs[concretize_inst_with_positions_def] >>
