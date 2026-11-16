@@ -84,6 +84,8 @@ Proof
   `supported_pure_expr tops e /\ supported_expr tops e /\ int_calls_expr e = []` by
     (gvs[supported_stmt_def, supported_assert_reason_def] >>
      metis_tac[supported_pure_int_calls, supportedExprsTheory.supported_expr_def]) >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    metis_tac[bodySimTheory.body_inv_const_name_free] >>
   simp[expr_sim_pre_body] >> irule stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assert_exists_def, type_stmt_def, int_calls_stmt_def,
