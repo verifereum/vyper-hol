@@ -397,11 +397,26 @@ Proof
   `!mem. mem_agree_outside tnout.t_mem output_state.vs_memory mem ==>
      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n bw) mem` by
     suspend "source_alloc" >>
-  FAIL_TAC "source after allocation"
+  suspend "continuation"
 QED
 Resume abi_encode_staged_tuple_full_tail[source_shape]:
-  gvs[] >>
-  FAIL_TAC "source shape"
+  qpat_x_assum `tvs = ts` mp_tac >>
+  qpat_x_assum `LENGTH ts = _` mp_tac >>
+  qpat_x_assum `LENGTH vs = _` mp_tac >>
+  qpat_x_assum `!i. _ ==> evaluate_type _ _ = SOME (EL i ts) /\ _` mp_tac >>
+  qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac bool_ss [abi_args_post_def] >> rpt strip_tac
+  >- (simp[vyperTypingTheory.value_has_type_def,
+        abiTupleValueEncodingTheory.abi_values_have_types,listTheory.LIST_REL_EL_EQN] >>
+      metis_tac[]) >>
+  `LENGTH ops = LENGTH args` by
+    (drule listTheory.LIST_REL_LENGTH >> simp[LENGTH_ZIP]) >>
+  simp[abiTuplePropsTheory.abi_tuple_bytes_def,valueEncodingTheory.type_memory_size_def] >>
+  simp[listTheory.MAP_ZIP,listTheory.MAP_MAP_o,
+    typeLayoutPropsTheory.type_memory_size_list_sum] >>
+  AP_TERM_TAC >> irule listTheory.LIST_EQ >> simp[listTheory.EL_MAP] >>
+  metis_tac[]
 QED
 Resume abi_encode_staged_tuple_full_tail[source_address]:
   FAIL_TAC "source address"
@@ -409,3 +424,7 @@ QED
 Resume abi_encode_staged_tuple_full_tail[source_alloc]:
   FAIL_TAC "source alloc"
 QED
+Resume abi_encode_staged_tuple_full_tail[continuation]:
+  FAIL_TAC "continuation"
+QED
+Finalise abi_encode_staged_tuple_full_tail
