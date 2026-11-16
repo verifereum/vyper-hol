@@ -240,7 +240,7 @@ Proof
    resolved_config_ok g.lop_config g.lop_ids g.lop_anns` by
     fs[layout_ordinary_trace_def] >>
   `joint_config_reachable vs0 C (EL g.lop_cursor (q0::qs))` by
-    (irule frameRelocationBindingTheory.joint_trace_reachable_at >> simp[] >>
+    (irule frameJointTraceTheory.joint_trace_reachable_at >> simp[] >>
      qexistsl_tac [`es`, `q`] >> simp[]) >>
   `ctx_has_dalloca C` by
     (qpat_x_assum `joint_config_reachable _ _ _` mp_tac >> simp[] >>

@@ -215,16 +215,6 @@ Proof
   goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >> simp[]
 QED
 
-Theorem joint_trace_reachable_at:
-  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es ==>
-  joint_config_reachable vs0 C (EL k (q0::qs))
-Proof
-  strip_tac >>
-  `LENGTH es = LENGTH qs` by metis_tac[joint_chain_length, joint_trace_def] >>
-  drule joint_trace_prefix_reachable >> simp[EVERY_EL] >> strip_tac >>
-  Cases_on `k` >> simp[] >> first_x_assum irule >> decide_tac
-QED
-
 (* Observed bytes below the dynamic region lie in a live cache. *)
 Theorem joint_observed_read_cached_upto:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
@@ -261,7 +251,7 @@ Theorem joint_initial_fmp_trace:
   k <= LENGTH es ==>
   joint_initial_fmp (EL k (q0::qs)) = w2n vs0.vs_initial_fmp
 Proof
-  strip_tac >> drule_all joint_trace_reachable_at >> strip_tac >>
+  strip_tac >> drule_all frameJointTraceTheory.joint_trace_reachable_at >> strip_tac >>
   `?stk PG G tn fn inst s oms om hs h.
      EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h` by
     (Cases_on `EL k (q0::qs)` >> simp[]) >>
@@ -277,7 +267,7 @@ Theorem joint_cache_below_initial_fmp_upto:
   activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
   b + sz <= w2n vs0.vs_initial_fmp
 Proof
-  strip_tac >> drule_all joint_trace_reachable_at >> strip_tac >>
+  strip_tac >> drule_all frameJointTraceTheory.joint_trace_reachable_at >> strip_tac >>
   `gas_cut ncut vs0 (joint_state (EL k (q0::qs)))` by
     metis_tac[trace_config_gas_cut] >>
   Cases_on `EL k (q0::qs)` >> gvs[joint_state_def] >> metis_tac[frameDemandOwnershipTheory.joint_config_cache_below_upto]

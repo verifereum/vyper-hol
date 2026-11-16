@@ -440,7 +440,7 @@ Proof
      simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
   `sz <> 0w` by (strip_tac >> gvs[]) >>
   `dyn_floor C a.po_state = dyn_floor C vs` by
-    (drule frameAllocationOwnershipTheory.frame_reachable_initial_fmp >>
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
      simp[dyn_floor_def]) >>
   qabbrev_tac `ops = <|iao_ofst := dop; iao_size := SOME nop; iao_max_size := SOME nop|>` >>
   Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\

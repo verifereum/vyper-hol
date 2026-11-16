@@ -193,18 +193,6 @@ Proof
   ho_match_mp_tac frame_reachable_strongind >> rw[] >> metis_tac[]
 QED
 
-Theorem frame_reachable_initial_fmp:
-  !vs0 ctx stk PG G tn fn inst s.
-    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-    s.vs_initial_fmp = vs0.vs_initial_fmp /\
-    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rw[] >>
-  imp_res_tac ctxLookupAgreeHelpersTheory.enters_block_initial_fmp >> imp_res_tac ctxLookupAgreeHelpersTheory.step_inst_initial_fmp >>
-  imp_res_tac ctxLookupAgreeHelpersTheory.setup_callee_initial_fmp >> imp_res_tac ctxLookupAgreeHelpersTheory.bind_outputs_initial_fmp >>
-  gvs[]
-QED
-
 (* With DALLOCA, every cache of a reachable frame and its callers lies below
    the dynamic region. *)
 Theorem frame_reachable_saved_below_fmp_upto:
@@ -250,7 +238,7 @@ Proof
   strip_tac >>
   `allocas_below_fmp s` by metis_tac[ptr_discipline_upto_at] >>
   drule_all frame_reachable_saved_below_fmp_upto >> strip_tac >>
-  drule frame_reachable_initial_fmp >> strip_tac >>
+  drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >> strip_tac >>
   rpt gen_tac >> Cases_on `k` >> simp[]
   >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
   strip_tac >>
@@ -314,7 +302,7 @@ Proof
   strip_tac >>
   `b = s.vs_fmp` by metis_tac[resolved_dalloca_output] >>
   `allocas_below_fmp s` by metis_tac[ptr_discipline_upto_at] >>
-  `s.vs_initial_fmp = vs0.vs_initial_fmp` by metis_tac[frame_reachable_initial_fmp] >>
+  `s.vs_initial_fmp = vs0.vs_initial_fmp` by metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
   gvs[allocas_below_fmp_def]
 QED
 

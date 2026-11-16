@@ -74,7 +74,7 @@ Proof
   strip_tac >>
   `wf_function fn /\ all_reachable fn` by
     (`MEM fn C.ctx_functions` by
-       (drule trace_config_at >> disch_then (qspec_then `m` mp_tac) >>
+       (drule frameJointTraceTheory.joint_trace_reachable_at >> disch_then (qspec_then `m` mp_tac) >>
         impl_tac >- decide_tac >> simp[] >>
         strip_tac >> gvs[joint_config_reachable_def] >>
         drule joint_origin_history_erasure >> strip_tac >>
@@ -157,7 +157,7 @@ Proof
   qpat_x_assum `bp = _` SUBST_ALL_TAC >>
   qpat_x_assum `owner = _` kall_tac >> qpat_x_assum `d = _` kall_tac >>
   `MEM owner C.ctx_functions` by
-    (drule trace_config_at >> disch_then (qspec_then `m` mp_tac) >>
+    (drule frameJointTraceTheory.joint_trace_reachable_at >> disch_then (qspec_then `m` mp_tac) >>
      impl_tac >- decide_tac >> simp[] >>
      strip_tac >> gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
@@ -250,7 +250,7 @@ Proof
   strip_tac >>
   `joint_config_reachable vs0 C
     (JointConfig stkm PGm Gm tnm fn instm sm omsm omm hsm hm)` by
-    metis_tac[trace_config_at, arithmeticTheory.LESS_EQ_TRANS] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at, arithmeticTheory.LESS_EQ_TRANS] >>
   `ml_used_gen (Allocation aid) bp
     (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) instm` by
     (gvs[] >> irule joint_local_write_used_generator >>
