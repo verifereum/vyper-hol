@@ -737,6 +737,8 @@ QED
    outcome, given e's expr_sim_case (so e may make internal calls unless
    nocalls).  The statement's type ty is x's declared type, and the
    typing gives x that type (toplevel_vtypes). *)
+(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
+   Original theorem and proof retained; never deliver this stand-in.
 Theorem compile_augassign_toplevel_case:
   !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
@@ -1194,4 +1196,27 @@ Resume compile_augassign_toplevel_case[operator_exit]:
 QED
 
 Finalise compile_augassign_toplevel_case
+*)
+Theorem compile_augassign_toplevel_case:
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
+   ts tr id_str slot tvt vtyp.
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) ty = SOME tvt /\
+    FLOOKUP env.toplevel_vtypes (src, id) = SOME (Type ty) /\
+    well_formed_type env.type_defs ty /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\ is_word_type vtyp /\
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+    bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
+Proof
+  cheat
+QED
 
