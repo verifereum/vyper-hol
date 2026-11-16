@@ -4,6 +4,9 @@
    Decoder/expression simulation supplies the initialization fragment. *)
 Theory externalEntryProps
 Ancestors
+  entryExternalPackageCoherence entryParameterAdmissibility
+  entryReachBodyInitialResources entryRegistrationCursorHistory
+  entryValidatedResources
   fragExec moduleLowering emitHelperProps exprLoweringProps
   venomExecSemantics venomExecProofs venomState venomInst
   compileEnv emitHelper list rich_list
