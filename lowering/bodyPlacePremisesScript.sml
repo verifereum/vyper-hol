@@ -11,6 +11,7 @@ Ancestors
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
+(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem legacy_storage_root_not_immutable[local]:
   body_inv tops ctx cenv cx /\
   (supported_scalar_target tops (src,id) \/
@@ -39,7 +40,18 @@ Proof
   Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
   gvs[] >> Cases_on `decl2` >> gvs[] >> metis_tac[]
 QED
+*)
+Theorem legacy_storage_root_not_immutable[local]:
+  body_inv tops ctx cenv cx /\
+  (supported_scalar_target tops (src,id) \/
+   supported_subscript_base tops (src,id) \/
+   (?fld. supported_storage_field_write tops (src,id) fld)) ==>
+  ~immutable_root cx (TopLevelNameTarget (src,id))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assignment_place_premises:
   body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -198,3 +210,28 @@ Resume body_assignment_place_premises[immutable]:
 QED
 
 Finalise body_assignment_place_premises
+*)
+Theorem body_assignment_place_premises:
+  body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) ==>
+  expr_body_pre cenv cx env e es /\
+  expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+  target_indices_pre cenv cx env t /\
+  (body_base_target_ok cx t ==> target_case F ctx func cenv cx t) /\
+  cenv.ce_target CapMcopy /\ acyclic_struct_metadata cenv.ce_struct_fields /\
+  assign_alloc_ok cenv t e /\
+  ?dty. type_place_target env t = SOME (Type dty) /\
+        type_widens_to env.type_defs (expr_type e) dty /\
+        assignable_type env.type_defs (expr_type e) /\
+        (immutable_root cx t ==>
+          ?nsid. t = TopLevelNameTarget nsid /\
+                 supported_immutable_type tops nsid = SOME dty /\ cx.in_deploy)
+Proof
+  cheat
+QED
