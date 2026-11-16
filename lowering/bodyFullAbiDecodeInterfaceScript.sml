@@ -340,7 +340,7 @@ QED
    constructed, NOT extra hypotheses for the frozen expression theorem.
    In particular no bound on the actual length, nor setup success, is
    assumed by caller_setup_pre. *)
-val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var.
+val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
   fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
@@ -365,9 +365,14 @@ val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b dat
   b+32+LENGTH input_bytes <= s.vs_alloca_next /\
   b+32+LENGTH input_bytes < dimword (:256) /\
   min_size <= max_size /\ max_size < dimword (:256) /\
-  s.vs_alloca_next+outsz < dimword (:256)``;
+  outsz < dimword (:256) /\ d+outsz < dimword (:256) /\
+  (b+32+LENGTH input_bytes <= d \/ d+outsz <= b+32) /\
+  ((FLOOKUP s.vs_allocas (abi_builtin_decode_output_site st min_size max_size) = NONE /\
+      d = s.vs_alloca_next) \/
+   FLOOKUP s.vs_allocas (abi_builtin_decode_output_site st min_size max_size) =
+     SOME (d,outsz))``;
 
-val caller_setup_success = ``\st ready ops s G tn b min_size max_size outsz t G' tn'.
+val caller_setup_success = ``\st ready ops s G tn b min_size max_size outsz t G' tn' d.
   ?output input.
     ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
     t.vs_inst_idx = LENGTH ready.cs_current_insts /\
@@ -376,8 +381,14 @@ val caller_setup_success = ``\st ready ops s G tn b min_size max_size outsz t G'
     min_size <= LENGTH input_bytes /\ LENGTH input_bytes <= max_size /\
     (\live protected input_word output_base output_cap output_id.
        (^owned_decoder_state) ready t G' tn')
-      [] [] (n2w (b+32)) s.vs_alloca_next outsz
+      [] [] (n2w (b+32)) d outsz
       (abi_builtin_decode_output_site st min_size max_size) /\
+    FLOOKUP G' output = SOME (d,outsz) /\
+    (b+32+LENGTH input_bytes <= d \/ d+outsz <= b+32) /\
+    ((FLOOKUP s.vs_allocas (abi_builtin_decode_output_site st min_size max_size) = NONE /\
+        d = s.vs_alloca_next) \/
+     FLOOKUP s.vs_allocas (abi_builtin_decode_output_site st min_size max_size) =
+       SOME (d,outsz)) /\
     op_prov G' (SND (SND ops)) = NONE /\
     op_taint tn' (FST ops) = {} /\ op_taint tn' (FST (SND ops)) = {} /\
     op_taint tn' (SND (SND ops)) = {} /\
@@ -388,20 +399,20 @@ val caller_setup_success = ``\st ready ops s G tn b min_size max_size outsz t G'
       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))``;
 
-val caller_setup_post = ``\st ready ops s G tn b min_size max_size outsz.
+val caller_setup_post = ``\st ready ops s G tn b min_size max_size outsz d.
   ?r G' tn'.
     (!H. V H ==> gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (r,G',tn')) /\
     ((?u. r = Abort Revert_abort u) \/
      (?t. r = OK t /\ (^caller_setup_success)
-       st ready ops s G tn b min_size max_size outsz t G' tn'))``;
+       st ready ops s G tn b min_size max_size outsz t G' tn' d))``;
 
-val caller_guarded_root_entry = ``\ready finish ops t G' tn' env sf ty tv outsz b st min_size max_size s.
+val caller_guarded_root_entry = ``\ready finish ops t G' tn' env sf ty tv outsz b st min_size max_size s d.
   (\live protected input output input_word output_base output_cap output_id.
     (^guarded_to_buf_entry) (FST ops) (Lit 0w) MLOAD (FST (SND ops))
       (SND (SND ops)) (type_to_abi_dec_info sf ce ty) env sf ty tv
       live protected ready finish t G' tn' output_base)
     [] [] (THE (case FST (SND ops) of Var x => SOME x | _ => NONE))
     (THE (case FST ops of Var x => SOME x | _ => NONE))
-    (n2w (b+32)) s.vs_alloca_next outsz
+    (n2w (b+32)) d outsz
     (abi_builtin_decode_output_site st min_size max_size)``;
