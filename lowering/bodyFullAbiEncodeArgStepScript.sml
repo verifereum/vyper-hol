@@ -8,7 +8,7 @@ Ancestors
   exprLowering compileEnv bodySimFull gasOutcomeFullCompose gasOutcomeFull
   abiEncodeArgsCase exprOperandVar abiBuiltinEncodeWord
   exprSimAbiEncodeArgsMaterializePath fragExec exprSimMemorySource
-  bodyMemBopRestWordPath
+  bodyMemBopRestWordPath contextRawReachable unitMemInv
 
 Theorem abi_encode_arg_step_full:
   body_expr_full_ok cx e /\ body_inv tops ctx ce cx /\
@@ -75,9 +75,16 @@ Theorem abi_encode_arg_step_full:
           w2n w + type_memory_size tv <= t.vs_alloca_next /\
           (!name b sz. local_region ce es.scopes s0 name b sz ==>
             b+sz <= w2n w \/ w2n w+type_memory_size tv <= b)))
-    (\H rr ee gt r. expr_exit rr r)
+    (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+    dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
+     disch_then drule >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+       unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
   Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce rest`
   >- suspend "capture" >>
   `unwrap_value ce vv mid = (op,sb) /\
@@ -116,11 +123,12 @@ Proof
   qexists `\H res ee G tn t. childQ H res ee G tn t /\ ee.gas_obs = [] /\ ~t.vs_halted` >>
   reverse conj_tac
   >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
-      simp[Abbr `childR`] >> rpt strip_tac >>
+      simp[Abbr `childR`, exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
       qpat_x_assum `expr_exit res r` mp_tac >>
       Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def] >>
       Cases_on `r` >> Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+      gvs[] >> rename1 `Error err` >> Cases_on `err` >>
+      simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   suspend "uncaptured_read"
 QED
 
@@ -159,11 +167,12 @@ Resume abi_encode_arg_step_full[capture]:
   qexists `\H res ee G tn t. childQ H res ee G tn t /\ ee.gas_obs = [] /\ ~t.vs_halted` >>
   reverse conj_tac
   >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
-      simp[Abbr `childR`] >> rpt strip_tac >>
+      simp[Abbr `childR`, exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
       qpat_x_assum `expr_exit res r` mp_tac >>
       Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def] >>
       Cases_on `r` >> Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+      gvs[] >> rename1 `Error err` >> Cases_on `err` >>
+      simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   suspend "capture_read"
 QED
 
@@ -275,7 +284,7 @@ Resume abi_encode_arg_step_full[uncaptured_unwrap]:
   `~z.vs_halted` by
     (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
      simp[fragExecTheory.exit_result_def]) >>
-  gvs[SF SFY_ss] >> metis_tac[read_result_gas_obs]
+  gvs[SF SFY_ss] >- simp[read_result_gas_obs] >> metis_tac[read_result_gas_obs]
 QED
 Resume abi_encode_arg_step_full[capture_read]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> BETA_TAC >> strip_tac >>
