@@ -618,7 +618,8 @@ Resume compile_assign_attr_storage_mem[store]:
         simp[ignore_bind_def,bind_def,record_storage_event_def,return_def,
              write_place_def,write_storage_slot_eq] >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+      disj2_tac >>
+      simp[exit_result_def,stmt_exit_def,expr_exit_def,halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `alloca_inv t` by
