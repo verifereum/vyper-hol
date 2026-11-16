@@ -144,17 +144,41 @@ Resume focus_initial_singleton_cut[execution]:
      simp[restore_rel_def]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\
      i.inst_opcode <> INVOKE /\ ~is_pseudo i.inst_opcode) z` by
-    (gvs[Abbr `z`, EVERY_MEM, MEM_TAKE] >> metis_tac[]) >>
+    (`EVERY (\i. ~is_pseudo i.inst_opcode) z` by
+       (simp[Abbr `z`] >> irule EVERY_TAKE >> simp[]) >>
+     qpat_x_assum `EVERY (\i. ~is_terminator i.inst_opcode /\ _) z` mp_tac >>
+     qpat_x_assum `EVERY (\i. ~is_pseudo i.inst_opcode) z` mp_tac >>
+     simp[NoAsms, EVERY_MEM] >> metis_tac[]) >>
   qabbrev_tac `be = sp with vs_inst_idx := LENGTH ps` >>
   qabbrev_tac `cut = bb with bb_instructions := ps ++ z` >>
   `!rs. rooted_eval fuel C levels (entry with vs_gas_readings := rs) =
     (gas_events_block (fuel-1) C sf.fn_name cut (be with vs_gas_readings := rs),
      FOLDR (dft_exec_cons (fuel-1) C) OK z (be with vs_gas_readings := rs))` by
-    (gen_tac >> simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`,
+    (gen_tac >> map_every (fn v => qpat_x_assum v kall_tac)
+       [`Abbrev (levels_ok = _)`, `Abbrev (plan_ok = _)`, `Abbrev (call_setup = _)`] >>
+     simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`,
        Abbr `levels`, Abbr `cut`, Abbr `be`, TAKE_APPEND] >>
      Cases_on `FOLDR (dft_exec_cons (fuel-1) C) OK z
-       (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := rs|>)` >> simp[]) >>
-  FAIL_TAC "execution boundary"
+       (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := rs|>)` >> gvs[]) >>
+  map_every (fn v => qpat_x_assum v kall_tac)
+    [`Abbrev (levels_ok = _)`, `Abbrev (plan_ok = _)`,
+     `Abbrev (rooted_eval = _)`, `Abbrev (plan_eval = _)`,
+     `Abbrev (row_eval = _)`, `Abbrev (call_setup = _)`, `Abbrev (levels = _)`] >>
+  simp[Abbr `R`] >>
+  `!rs. gas_events_block (fuel-1) C sf.fn_name cut (be with vs_gas_readings := rs) =
+    gas_events_block (fuel-1) C sf.fn_name
+      <|bb_label := be.vs_current_bb;
+        bb_instructions := REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ z|>
+      (be with vs_gas_readings := rs)` by
+    (gen_tac >> irule gas_events_block_suffix_cong >> qexists_tac `z` >>
+     simp[Abbr `be`, Abbr `cut`, DROP_APPEND]) >>
+  qspecl_then [`fuel-1`,`C`,`sf.fn_name`,`be`] mp_tac
+    focus_initial_unvisited_row_replay >>
+  disch_then (qspecl_then [`z`,`gs`] mp_tac) >>
+  simp[GSYM EVERY_CONJ, Abbr `E`] >> disch_tac >>
+  first_assum (qspec_then `tail` strip_assume_tac) >>
+  simp[] >> conj_tac >- suspend "successful" >>
+  suspend "stopped"
 QED
 
 Finalise focus_initial_singleton_cut
