@@ -58,7 +58,9 @@ Theorem aug_place_loaded_memory_suffix:
     (\H res ff v. res = INL () /\
       stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aug_place_memory_reads_replay >> strip_tac >>
