@@ -133,18 +133,24 @@ Proof
   rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by simp[] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H0` strip_assume_tac) >>
+    (qspec_then `H0` (drule_then assume_tac)) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
-    (qspec_then `H0` strip_assume_tac) >>
+    (qspec_then `H0` (drule_then assume_tac)) >>
   drule_all convert_bytestring_counted_cont_mem >> strip_tac
   >- (simp[gas_summary_at_def] >>
       qexistsl_tac [`INL v'`, `ee`, `OK tt`] >>
       simp[gas_marked_exec_def] >>
+      disj1_tac >>
       rpt strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
         (drule_then strip_assume_tac) >>
-      irule exprSimUnwrapTheory.expr_post_fields_transport >>
-      qexistsl_tac [`H0`, `s`] >> gvs[expr_post_def]) >>
+      qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+      irule (INST_TYPE [alpha |-> ``:256``]
+        exprSimUnwrapTheory.expr_post_fields_transport) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (qexists_tac `s` >> simp[]) >>
+      qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) (expr_type e) v`,
                `ee`, `Abort Revert_abort tt`] >>
