@@ -4793,6 +4793,46 @@ Resume extcall_request_full[request_main]:
   strip_tac >>
   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
   qexists `vs` >> conj_tac >- REFL_TAC >>
+  qpat_x_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) [PULL_EXISTS] o BETA_RULE) >>
+  `body_exprs_full_ok cx (DROP (LENGTH arg_types) t)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`!tail. eval_exprs cx [h] _ = _`,
+        `!tail. eval_exprs cx (TAKE (LENGTH arg_types) t) _ = _`,
+        `!s target u s' results u'. _ ==> body_exprs_full_ok cx _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     first_x_assum (qspecl_then
+       [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+        `[v]`,`mid with gas_obs := []`,
+        `mid with gas_obs := gas_explicit marks' t'.vs_gas_readings`,
+        `vs`,`mid' with gas_obs := []`] mp_tac) >>
+     simp[] >> metis_tac[APPEND_NIL]) >>
+  `expr_sim_inv cenv cx env mid'` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`expr_sim_inv cenv cx env mid`,
+        `!e st. (_ \/ MEM e t) /\ _ ==> expr_body_pre cenv cx env e st`,
+        `!tail. eval_exprs cx (TAKE (LENGTH arg_types) t) _ = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     `expr_sim_inv cenv cx env (mid' with gas_obs := [])` suffices_by simp[] >>
+     irule (cj 1 abiEncodeArgsTypingTheory.abi_encode_args_success_typed) >>
+     qexistsl_tac [`TAKE (LENGTH arg_types) t`,
+       `mid with gas_obs := gas_explicit marks' t'.vs_gas_readings`,`vs`] >>
+     simp[] >> conj_tac
+     >- (qpat_assum `!tail. eval_exprs cx (TAKE (LENGTH arg_types) t) _ = _`
+           (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND_NIL]))) >>
+     simp[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  `gas_shadow_compiles
+    (compile_ext_call_kwargs compile_expr cenv ann opts (DROP (LENGTH arg_types) t))
+    (compile_ext_call_kwargs compile_expr cenv ann opts
+      (MAP gas_shadow_expr (DROP (LENGTH arg_types) t)))` by
+    (irule (SIMP_RULE bool_ss []
+       (Q.INST [`sh` |-> `T`] gasShadowCompileHelpersTheory.gas_shadow_compiles_ext_call_kwargs)) >>
+     simp[gasShadowCompileTheory.gas_shadow_compile_expr]) >>
+  `vo' = vo /\ go' = go /\ def' = def /\ gas_shadow_state s3 s3'` by
+    (qpat_x_assum `gas_shadow_compiles (compile_ext_call_kwargs _ _ _ _ _) _` mp_tac >>
+     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`s2`,`shadow_s2`] mp_tac) >>
+     fs[GSYM listTheory.MAP_DROP]) >>
   FAIL_TAC "keyword-outcome"
 QED
 
