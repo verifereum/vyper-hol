@@ -2,7 +2,7 @@
 Theory bodyFullAssignAttrStorage
 Ancestors
   bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore augAssignFullStore
-  bodyFullUnwrapWord bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  bodyFullUnwrapWord bodyFullHashKeccakFixed bodySimFull gasOutcomeFullCompose gasOutcomeFull
   stmtSimAssignAttrStorage stmtSimAssignStorage stmtSimForced assignTuplePtrStorage
   stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   gasShadowCompileStmtHelpers gasShadowState gasShadow gasExemptCert
@@ -18,7 +18,6 @@ Ancestors
   venomState venomInst ptrDiscipline context list finite_map pred_set
 Libs monadsyntax
 
-(* LOCAL STUB - owned obligation; Alan must restore the proof.
 Theorem compile_assign_attr_storage_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty env
    src id fld sid fty fsz e es ts tr id_str slot.
@@ -122,36 +121,14 @@ Proof
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
   simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type]
+  conj_tac
+  >- (qpat_assum `expr_exit (INR _) _` mp_tac >>
+      rpt (pop_assum kall_tac) >> metis_tac[expr_exit_INR_type]) >>
+  conj_tac >- gvs[halt_exit_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `expr_exit (INR _) _` mp_tac >>
+  Cases_on `y` >> simp[expr_exit_def]
 QED
-*)
-Theorem compile_assign_attr_storage_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty env
-   src id fld sid fty fsz e es ts tr id_str slot.
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid),id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    cenv.ce_hashmap_info (src,id) = NONE /\
-    cenv.ce_module_var_type (src,id) = SOME (StructT sid) /\
-    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld =
-      SOME (fty,fsz) /\ is_word_type fty /\ expr_type e = fty /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es ==>
-    stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-        (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
-      (stmt_env cenv lctx ty
-        (gas_shadow_stmt
-          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e)))
-      (eval_stmt cx
-        (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e)) es
-Proof
-  cheat
-QED
-
-(* LOCAL STUB - preserved suspension.
 Resume compile_assign_attr_storage_full[continue]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >>
@@ -239,6 +216,8 @@ Resume compile_assign_attr_storage_full[continue]:
     metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase,
               gas_marked_path_exec, gas_path_normal] >>
   `alloca_inv z` by fs[stmt_state_rel_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `eval_operand op z = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `eval_operand dst z = SOME (n2w slot + n2w off) /\
@@ -284,7 +263,7 @@ Resume compile_assign_attr_storage_full[continue]:
           qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
           rpt (pop_assum kall_tac) >> rpt strip_tac >>
           metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
-      simp[stmt_exit_ptr_def, expr_exit_def]) >>
+      simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
   `~z.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `result = INL ()` by
@@ -392,12 +371,11 @@ Resume compile_assign_attr_storage_full[continue]:
      tstore_def, sstore_def, lookup_var_def] >>
   map_every (fn pat => qpat_assum pat mp_tac)
     [`!x. not_fresh_at sa x ==> FLOOKUP Gu x = FLOOKUP G0 x /\ _`,
+     `ctx_has_dalloca ctx ==> allocas_below_fmp z`,
      `(step_taint _ _ _ _).t_var = tu.t_var`, `dst = Var out`,
      `ftv = rty`, `off = struct_field_offset_slots _ fld`] >>
-  rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]
+  rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[allocas_below_fmp_def] >>
+  first_assum ACCEPT_TAC
 QED
-*)
 
-(* LOCAL STUB - preserved suspension.
 Finalise compile_assign_attr_storage_full
-*)
