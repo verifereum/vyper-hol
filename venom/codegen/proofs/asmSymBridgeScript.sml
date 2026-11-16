@@ -964,6 +964,13 @@ Proof
        asm_sym_rel_core_canonical]
 QED
 
+(* Normalize the result without simplifying it under the input invariant. *)
+fun stack_next_normalize th =
+  CONV_RULE (STRIP_QUANT_CONV
+    (RAND_CONV (SIMP_CONV (boss_ss())
+      [sym_lift_def, asm_next_def, cj 1 sval_conc_def] THENC
+      SIMP_CONV (boss_ss()) [asm_state_component_equality]))) th;
+
 Theorem pure_binary_arities[local]:
   EVERY (\name. asm_op_arity name = 2)
     ["ADD"; "MUL"; "SUB"; "DIV"; "SDIV"; "MOD"; "SMOD"; "EXP";
@@ -971,6 +978,38 @@ Theorem pure_binary_arities[local]:
      "SHL"; "SHR"; "SAR"; "SIGNEXTEND"; "BYTE"]
 Proof
   EVAL_TAC
+QED
+
+Theorem sym_step_pure_binary_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  MEM name ["ADD"; "MUL"; "SUB"; "DIV"; "SDIV"; "MOD"; "SMOD"; "EXP";
+     "LT"; "GT"; "SLT"; "SGT"; "EQ"; "AND"; "OR"; "XOR";
+     "SHL"; "SHR"; "SAR"; "SIGNEXTEND"; "BYTE"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_op_arity name = 2` by
+    (mp_tac pure_binary_arities >> rewrite_tac[EVERY_MEM] >>
+     disch_then drule >> simp[]) >>
+  qpat_x_assum `ss.sym_base = _` (mk_asm "base") >> simp[] >>
+  irule (SRULE [] sym_step_concrete_good_core) >> simp[concrete_underflow] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `m` >> simp[markerLib.L "base"]) >>
+  rpt strip_tac >>
+  Cases_on `cs.as_stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  gvs[MEM] >>
+  simp[asm_step_op_def, asm_step_arith_def] >>
+  simp[asm_step_compare_def] >> simp[asm_step_bitwise_def] >>
+  simp[asm_binop_def] >> simp[asm_op_mem_writes_def] >>
+  simp[mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
+       finite_mapTheory.DRESTRICT_UNIV] >>
+  simp[NoAsms, sym_lift_def, asm_next_def, cj 1 sval_conc_def,
+       asm_state_component_equality] >>
+  irule (stack_next_normalize
+    (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
+      related_stack_next_core)) >>
+  simp[markerLib.L "base"] >> metis_tac[]
 QED
 
 Theorem sym_step_pure_binary_sim[local]:
@@ -981,21 +1020,9 @@ Theorem sym_step_pure_binary_sim[local]:
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >>
-  `asm_op_arity name = 2` by
-    (mp_tac pure_binary_arities >> rewrite_tac[EVERY_MEM] >>
-     disch_then drule >> simp[]) >>
-  irule sym_step_concrete_good >> simp[concrete_underflow] >>
-  rpt strip_tac >>
-  Cases_on `cs.as_stack` >> gvs[] >> Cases_on `t` >> gvs[] >>
-  gvs[MEM] >>
-  simp[asm_step_op_def, asm_step_arith_def] >>
-  simp[asm_step_compare_def] >> simp[asm_step_bitwise_def] >>
-  simp[asm_binop_def] >> simp[asm_op_mem_writes_def] >>
-  simp[mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
-       finite_mapTheory.DRESTRICT_UNIV] >>
-  irule (SRULE [] (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
-    related_stack_next)) >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_pure_binary_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem pure_small_arities[local]:
@@ -1005,21 +1032,62 @@ Proof
   EVAL_TAC
 QED
 
-Theorem sym_step_pure_unary_sim[local]:
-  asm_sym_rel p env cs ss /\ MEM name ["ISZERO"; "NOT"] ==>
-  asm_sym_step_rel p env (sym_step_concrete name ss)
+Theorem sym_step_pure_unary_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ MEM name ["ISZERO"; "NOT"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `asm_op_arity name = 1` by gvs[MEM, pure_small_arities] >>
-  irule sym_step_concrete_good >> simp[concrete_underflow] >>
+  qpat_x_assum `ss.sym_base = _` (mk_asm "base") >> simp[] >>
+  irule (SRULE [] sym_step_concrete_good_core) >> simp[concrete_underflow] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `m` >> simp[markerLib.L "base"]) >>
   rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
   gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
   simp[asm_step_compare_def, asm_step_bitwise_def, asm_unop_def,
        asm_op_mem_writes_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
-  irule (SRULE [] (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
-    related_stack_next)) >> simp[]
+  simp[NoAsms, sym_lift_def, asm_next_def, cj 1 sval_conc_def,
+       asm_state_component_equality] >>
+  irule (stack_next_normalize
+    (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
+      related_stack_next_core)) >>
+  simp[markerLib.L "base"] >> metis_tac[]
+QED
+
+Theorem sym_step_pure_unary_sim[local]:
+  asm_sym_rel p env cs ss /\ MEM name ["ISZERO"; "NOT"] ==>
+  asm_sym_step_rel p env (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_pure_unary_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
+QED
+
+Theorem sym_step_pure_ternary_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ MEM name ["ADDMOD"; "MULMOD"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_op_arity name = 3` by gvs[MEM, pure_small_arities] >>
+  qpat_x_assum `ss.sym_base = _` (mk_asm "base") >> simp[] >>
+  irule (SRULE [] sym_step_concrete_good_core) >> simp[concrete_underflow] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `m` >> simp[markerLib.L "base"]) >>
+  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def, asm_ternop_def,
+       asm_op_mem_writes_def, mem_labels_clear_def,
+       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
+  simp[NoAsms, sym_lift_def, asm_next_def, cj 1 sval_conc_def,
+       asm_state_component_equality] >>
+  irule (stack_next_normalize
+    (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
+      related_stack_next_core)) >>
+  simp[markerLib.L "base"] >> metis_tac[]
 QED
 
 Theorem sym_step_pure_ternary_sim[local]:
@@ -1027,16 +1095,9 @@ Theorem sym_step_pure_ternary_sim[local]:
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >>
-  `asm_op_arity name = 3` by gvs[MEM, pure_small_arities] >>
-  irule sym_step_concrete_good >> simp[concrete_underflow] >>
-  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
-  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def, asm_ternop_def,
-       asm_op_mem_writes_def, mem_labels_clear_def,
-       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
-  irule (SRULE [] (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
-    related_stack_next)) >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_pure_ternary_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem context_push_arities[local]:
