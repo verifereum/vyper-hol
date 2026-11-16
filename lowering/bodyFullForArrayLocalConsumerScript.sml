@@ -625,7 +625,7 @@ Resume body_for_local_array_full_from_contracts[runtime]:
   `type_memory_bytes cenv typ < 2 ** 64` by
     fs[bodySimTheory.stmt_exprs_ok_def,alloc_limits_stmt_def] >>
   `type_memory_bytes cenv typ = type_memory_size tv` by
-    (irule expr_sim_inv_memory_size >> goal_assum (drule_at Any) >> simp[]) >>
+    (drule_all expr_sim_inv_memory_size >> simp[]) >>
   `type_memory_bytes cenv typ + 64 < dimword (:256)` by
     (fs[wordsTheory.dimword_def] >> decide_tac) >>
   `!c lc a b. compile_stmts c lc ret_ty stmts a = ((),b) ==>
@@ -637,7 +637,8 @@ Resume body_for_local_array_full_from_contracts[runtime]:
    compile_stmt cenv lctx ret_ty
      (For id typ (Array (Name (ArrayT typ bd) name)) n stmts) sa = ((),sb)` by
     (qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
-     simp[stmt_env_def,declare_stmt_local_def,comp_bind_def,comp_return_def] >>
+     simp[stmt_env_def,declare_stmt_local_def,comp_ignore_bind_def,
+          comp_bind_def,comp_return_def] >>
      pairarg_tac >> simp[]) >>
   Cases_on `bd`
   >- suspend "fixed_runtime" >>
@@ -645,7 +646,13 @@ Resume body_for_local_array_full_from_contracts[runtime]:
 QED
 
 Resume body_for_local_array_full_from_contracts[fixed_runtime]:
-  FAIL_TAC "fixed-runtime"
+  `!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by simp[] >>
+  `n' = n` by
+    (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
+     simp[supported_stmt_def,supported_iterator_def,AllCaseEqs()]) >>
+  qpat_x_assum `n' = n` SUBST_ALL_TAC >>
+  drule_all compile_for_array_code_ready_framed >> strip_tac >>
+  FAIL_TAC "fixed-code-ready"
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_runtime]:
