@@ -127,7 +127,7 @@ Theorem raw_log_dynamic_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -201,7 +201,7 @@ Proof
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
   reverse (rpt conj_tac)
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def, halt_exit_def])
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
@@ -425,9 +425,7 @@ Proof
     `len_op` |-> `len_op`, `sl` |-> `sl`, `data_op` |-> `ptr_op`,
     `sm` |-> `sp`, `ops` |-> `ops`, `vs` |-> `vs`, `u` |-> `()`]
     (SPEC_ALL raw_log_dynamic_tail_summary)) >>
-  (impl_tac >- simp[Abbr `call`]) >> strip_tac >> fs[Abbr `call`] >>
-  pop_assum mp_tac >> simp[] >> rpt (pop_assum kall_tac) >>
-  simp[gas_summary_at_def] >> metis_tac[]
+  (impl_tac >- simp[Abbr `call`]) >> strip_tac >> fs[Abbr `call`]
 QED
 
 Resume raw_log_dynamic_frag[static]:
@@ -489,7 +487,7 @@ Theorem raw_log_fixed32_body_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -569,7 +567,7 @@ Proof
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
   reverse (rpt conj_tac)
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def, halt_exit_def])
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
@@ -878,9 +876,7 @@ Proof
         [STRING #"%" (toString sm.cs_next_var)]`]
     raw_log_fixed_tail_summary) >>
   (impl_tac >- (Cases_on `u` >> fs[Abbr `call`] >> first_assum ACCEPT_TAC)) >>
-  strip_tac >> fs[Abbr `call`] >>
-  pop_assum mp_tac >> simp[] >> rpt (pop_assum kall_tac) >>
-  simp[gas_summary_at_def] >> metis_tac[]
+  strip_tac >> fs[Abbr `call`]
 QED
 
 Resume raw_log_fixed32_body_frag[static]:

@@ -23,7 +23,7 @@ Theorem raw_log_body_topics_sim:
        typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `typed_args_ready ctx func cenv cx expr_type
@@ -32,17 +32,9 @@ Proof
   `wb_args_shape cenv expr_type topics` by
     (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
      simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx topics) (es,s0)
-    (\H rr ee t. ?vs. rr = INL vs /\
-       typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
-       t.vs_current_bb = sb.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
-    (irule lower_typed_args_sim >> simp[] >>
-     qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
-     qexists_tac `expr_type` >> simp[]) >>
-  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
-  simp[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
+  irule lower_typed_args_sim >> simp[] >>
+  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
+  qexists_tac `expr_type` >> simp[]
 QED
 
 Theorem raw_log_topics_marked_post:
