@@ -14,7 +14,7 @@
 
 Theory symFnSimSpec
 Ancestors
-  codegenSymOwnRel fnPlanPlaceRevertPostamble
+  asmSymOwnStep codegenSymOwnRel fnPlanPlaceRevertPostamble
   fnSimSpec codegenSymRel asmSymBridge asmSymSem frameRel codegenRel
   contextCodegenRelProps fnPlanLineage codegen venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
@@ -319,3 +319,37 @@ Definition sym_fn_frame_sim_at_own_def:
                       FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
                  (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b))
 End
+
+(* Canonical execution is the false-mode instance of the relocated interface. *)
+Theorem sym_fn_sim_at_own_canonical:
+  !fuel. sym_fn_sim_at_own F fuel ==> sym_fn_sim_at fuel
+Proof
+  gen_tac >> strip_tac >> rewrite_tac[sym_fn_sim_at_def] >>
+  rpt gen_tac >> strip_tac >>
+  `asm_sym_rel_own lo prog env as.as_code as ss` by
+    simp[asm_sym_rel_own_canonical] >>
+  `code_labels_agree prog lo` by simp[code_labels_agree_refl] >>
+  qpat_x_assum `sym_fn_sim_at_own F fuel` mp_tac >>
+  rewrite_tac[sym_fn_sim_at_own_def] >>
+  disch_then drule_all >>
+  simp[sym_steps_mode_def, asm_sym_rel_own_canonical] >>
+  (metis_tac[])
+QED
+
+Theorem sym_fn_frame_sim_at_own_canonical:
+  !fuel. sym_fn_frame_sim_at_own F fuel ==> sym_fn_frame_sim_at fuel
+Proof
+  gen_tac >> strip_tac >> rewrite_tac[sym_fn_frame_sim_at_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss` >>
+  `sym_frame_inv_own lo prog env as.as_code
+     ctx cpl fn ret srest labs0 ps as ss` by
+    gvs[sym_frame_inv_own_def, sym_frame_inv_def,
+        asm_sym_rel_own_canonical] >>
+  `code_labels_agree prog lo` by simp[code_labels_agree_refl] >>
+  qpat_x_assum `sym_fn_frame_sim_at_own F fuel` mp_tac >>
+  rewrite_tac[sym_fn_frame_sim_at_own_def] >>
+  disch_then drule_all >>
+  simp[sym_steps_mode_def, asm_sym_rel_own_canonical] >>
+  metis_tac[]
+QED
