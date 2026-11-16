@@ -3879,6 +3879,73 @@ Proof
   metis_tac[dftGasSimLocalBoundaryTheory.ev_step_nonterminator_ok_idx]
 QED
 
+Theorem native_successful_cut_call_inputs:
+  ALL_DISTINCT (A ++ i::srcpost) /\
+  dft_head_bubbles R (A ++ i::srcpost) (consumed ++ i::later) /\
+  (!x y. R x y ==> dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) /\
+  i.inst_opcode = INVOKE /\
+  inv_ev_trace orc p d b C' A s0 u /\
+  inv_ev_trace orc p d b C' consumed s0 v
+  ==>
+  (!op. MEM op i.inst_operands ==> eval_operand op u = eval_operand op v) /\
+  (!callee args. setup_callee callee args u = setup_callee callee args v)
+Proof
+  strip_tac >>
+  `PERM (A ++ i::srcpost) (consumed ++ i::later)` by
+    metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (consumed ++ i::later)` by metis_tac[ALL_DISTINCT_PERM] >>
+  `?w.
+    inv_ev_trace orc p d b C' (A ++ FILTER (\x. ~MEM x A) consumed) s0 w /\
+    inv_ev_trace orc p d b C' (consumed ++ FILTER (\x. ~MEM x consumed) A) s0 w /\
+    inv_ev_trace orc p d b C' (FILTER (\x. ~MEM x A) consumed) u w /\
+    inv_ev_trace orc p d b C' (FILTER (\x. ~MEM x consumed) A) v w` by
+    (irule native_successful_prefix_union >> reverse conj_tac >- simp[] >>
+     qexistsl_tac [`A ++ i::srcpost`, `consumed ++ i::later`,
+       `i::srcpost`, `i::later`,
+       `\x y. dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y`] >>
+     simp[] >> suspend "union") >>
+  `EVERY (\x. dft_gas_swap_pair i x /\ inst_wf x)
+     (FILTER (\x. ~MEM x A) consumed) /\
+   EVERY (\x. dft_gas_swap_pair i x /\ inst_wf x)
+     (FILTER (\x. ~MEM x consumed) A)` by suspend "partners" >>
+  `inv_ev_ftrace orc p d C' (FILTER (\x. ~MEM x A) consumed) u w /\
+   inv_ev_ftrace orc p d C' (FILTER (\x. ~MEM x consumed) A) v w` by
+    metis_tac[dftGasInvFlexibleTraceTheory.inv_ev_trace_ftrace] >>
+  metis_tac[dftGasInvInversionTheory.inv_ev_trailing_trace_frame,
+    dftGasInvCallerInputTheory.inv_ev_invoke_trace_setup]
+QED
+Resume native_successful_cut_call_inputs[union]:
+  conj_tac
+  >- (rpt strip_tac >> irule native_coenabled_indexed_square >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- metis_tac[dft_gas_swap_pair_sym] >>
+  conj_tac >- metis_tac[native_bubbles_inversion] >>
+  rpt strip_tac >> gvs[]
+QED
+Resume native_successful_cut_call_inputs[partners]:
+  simp[EVERY_MEM, MEM_FILTER] >> conj_tac
+  >- (rpt strip_tac >>
+      `~MEM x (i::later)` by gvs[ALL_DISTINCT_APPEND] >>
+      `MEM x srcpost` by
+        (drule PERM_MEM_EQ >> disch_then (qspec_then `x` mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+      `id_before (A ++ i::srcpost) i x /\
+       id_before (consumed ++ i::later) x i` by
+        (simp[dftSsaPreserveTheory.id_before_append, id_before_cons]) >>
+      `R i x` by metis_tac[native_bubbles_inversion] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `~MEM x (i::srcpost)` by gvs[ALL_DISTINCT_APPEND] >>
+  `MEM x later` by
+    (drule PERM_MEM_EQ >> disch_then (qspec_then `x` mp_tac) >>
+     simp[] >> metis_tac[MEM]) >>
+  `id_before (A ++ i::srcpost) x i /\
+   id_before (consumed ++ i::later) i x` by
+    (simp[dftSsaPreserveTheory.id_before_append, id_before_cons]) >>
+  `R x i` by metis_tac[native_bubbles_inversion] >>
+  metis_tac[dft_gas_swap_pair_sym]
+QED
+Finalise native_successful_cut_call_inputs
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
