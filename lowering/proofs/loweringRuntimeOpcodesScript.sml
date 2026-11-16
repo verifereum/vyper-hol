@@ -5,9 +5,33 @@ Ancestors
   venomInst list pair supportedStmtTraverse
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeStmtReturns loweringFunctionOpcodes
 
+Theorem every_state_insts_defaults_bind[local]:
+  (!st. EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (FST (m st)).ce_func_defaults) /\
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (m st)))) /\
+  (!ce st. EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (comp_bind m f st)))
+Proof
+  rpt strip_tac >> simp[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  metis_tac[FST, SND]
+QED
+
+Theorem opcode_comp_bind_return[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
 local
   fun preserve ths = rpt (FIRST [
+    CHANGED_TAC (simp[opcode_comp_bind_return]),
     IF_CASES_TAC >> gvs[] >> qid_spec_tac `st`,
+    ho_match_mp_tac every_state_insts_defaults_bind >>
+      (conj_tac >- (simp ths >> NO_TAC)) >> conj_tac,
     ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp (ths @ [opcode_every_emit_op,
@@ -54,16 +78,45 @@ Proof
   simp[materialize_internal_params_def] >> preserve []
 QED
 
+Theorem register_positional_args_defaults[local]:
+  !args ce off st.
+    (FST (compile_register_positional_args ce args off st)).ce_func_defaults =
+      ce.ce_func_defaults
+Proof
+  Induct >> simp[compile_register_positional_args_def, comp_return_def] >>
+  qx_gen_tac `arg` >> PairCases_on `arg` >> rpt gen_tac >>
+  simp[compile_register_positional_args_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem materialize_internal_params_defaults[local]:
+  !params ce st.
+    (FST (materialize_internal_params ce params st)).ce_func_defaults =
+      ce.ce_func_defaults
+Proof
+  Induct >> simp[materialize_internal_params_def, comp_return_def] >>
+  qx_gen_tac `param` >> PairCases_on `param` >> rpt gen_tac >>
+  simp[materialize_internal_params_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
 Theorem opcode_every_guarded_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce ty st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
+  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_guarded_body ce nr key trans view fbody ret st)))
 Proof
   strip_tac >>
-  strip_tac >> simp[compile_guarded_body_def] >>
+  strip_tac >> strip_tac >> simp[compile_guarded_body_def] >>
   preserve [UNDISCH opcode_every_nonreentrant_lock,
     UNDISCH opcode_every_nonreentrant_unlock]
 QED
@@ -71,44 +124,59 @@ QED
 Theorem opcode_every_external_function_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce ty st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
+  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_external_function_body ce args nr key trans view fbody ret st)))
 Proof
   strip_tac >>
-  strip_tac >> simp[compile_external_function_body_def] >>
-  preserve [UNDISCH opcode_every_register_positional_args,
+  strip_tac >> strip_tac >> simp[compile_external_function_body_def] >>
+  preserve [register_positional_args_defaults,
+    UNDISCH opcode_every_register_positional_args,
     UNDISCH opcode_every_guarded_body]
 QED
 
 Theorem opcode_every_fallback_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce ty st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
+  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_fallback_body ce pay nr key trans view fbody ret st)))
 Proof
   strip_tac >>
-  strip_tac >> simp[compile_fallback_body_def] >>
+  strip_tac >> strip_tac >> simp[compile_fallback_body_def] >>
   preserve [UNDISCH opcode_every_guarded_body]
 QED
 
 Theorem opcode_every_internal_function:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce ty st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
+  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_internal_function ce params rb nr key trans view ctor imm fbody ret st)))
 Proof
-  strip_tac >>
-  strip_tac >> simp[compile_internal_function_def] >>
-  preserve [UNDISCH opcode_every_internal_param_decls,
-    UNDISCH opcode_every_materialize_internal_params,
-    UNDISCH opcode_every_alloc_buffer, UNDISCH opcode_every_fixed_region,
-    UNDISCH opcode_every_nonreentrant_lock, UNDISCH opcode_every_nonreentrant_unlock]
+  strip_tac >> strip_tac >> strip_tac >>
+  simp[compile_internal_function_def] >>
+  let val ths = [materialize_internal_params_defaults,
+        UNDISCH opcode_every_internal_param_decls,
+        UNDISCH opcode_every_materialize_internal_params,
+        UNDISCH opcode_every_alloc_buffer, UNDISCH opcode_every_fixed_region,
+        UNDISCH opcode_every_nonreentrant_lock,
+        UNDISCH opcode_every_nonreentrant_unlock]
+  in
+    preserve ths >> disch_tac >> qid_spec_tac `st` >> preserve ths
+  end
 QED
 
 Theorem opcode_every_entry_checks:
@@ -124,7 +192,9 @@ QED
 Theorem opcode_every_external_fn_bodies:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty ss st. ~supported_stmts_expr_exists expr_shape_root ss ==>
+  (!ce ty ss st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) ==>
   !fns. EVERY external_fn_shape_ok fns ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -133,7 +203,7 @@ Proof
   strip_tac >>
   strip_tac >> Induct >> simp[compile_external_fn_bodies_def, every_state_insts_return] >>
   qx_gen_tac `fn` >> PairCases_on `fn` >>
-  simp[external_fn_shape_ok_def] >> strip_tac >>
+  simp[external_fn_shape_ok_def, cenv_static_ok_def] >> strip_tac >>
   simp[compile_external_fn_bodies_def] >>
   preserve [UNDISCH opcode_every_entry_checks,
     UNDISCH opcode_every_external_function_body]
@@ -142,7 +212,9 @@ QED
 Theorem opcode_every_internal_fn_bodies:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty ss st. ~supported_stmts_expr_exists expr_shape_root ss ==>
+  (!ce ty ss st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) ==>
   !fns. EVERY internal_fn_shape_ok fns ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -151,7 +223,7 @@ Proof
   strip_tac >>
   strip_tac >> Induct >> simp[compile_internal_fn_bodies_def, every_state_insts_return] >>
   qx_gen_tac `fn` >> PairCases_on `fn` >>
-  simp[internal_fn_shape_ok_def] >> strip_tac >>
+  simp[internal_fn_shape_ok_def, cenv_static_ok_def] >> strip_tac >>
   simp[compile_internal_fn_bodies_def] >>
   preserve [UNDISCH opcode_every_internal_function]
 QED
@@ -182,7 +254,9 @@ QED
 Theorem opcode_every_generate_runtime_linear:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (!ce ty ss st. ~supported_stmts_expr_exists expr_shape_root ss ==>
+  (!ce ty ss st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) /\
   EVERY external_fn_shape_ok exts /\ EVERY internal_fn_shape_ok ints /\
   fallback_shape_ok fb ==>
@@ -194,8 +268,8 @@ Proof
   preserve [UNDISCH opcode_every_selector_dispatch_linear,
     UNDISCH opcode_every_external_fn_bodies,
     UNDISCH opcode_every_internal_fn_bodies,
-    UNDISCH opcode_every_fallback_body, fallback_shape_ok_def] >>
-  gvs[fallback_shape_ok_def] >> qid_spec_tac `st` >>
+    UNDISCH opcode_every_fallback_body, fallback_shape_ok_def, cenv_static_ok_def] >>
+  gvs[fallback_shape_ok_def, cenv_static_ok_def] >> qid_spec_tac `st` >>
   simp[UNDISCH opcode_every_fallback_body]
 QED
 
