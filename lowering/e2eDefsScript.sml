@@ -1,13 +1,13 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_storage_ok, tx_block_fields_rel,
+ * call_storage_ok, tx_block_fields_rel,
  * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
- * call_success_rel, exception_outcome_rel, call_result_rel, logs_correspond.
+ * effects_agree, exception_outcome_rel, call_result_rel, logs_correspond.
  * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -17,7 +17,7 @@
 Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState vfmRunCall
-  vfmTotalBalance vfmReturndataBound vfmWfState
+  vfmTotalBalance vfmReturndataBound vfmCalldataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
@@ -99,22 +99,15 @@ Definition source_typing_ok_def:
           machine_well_typed am /\ call_tx_well_typed tx
 End
 
-Definition source_storage_ok_def:
-  source_storage_ok am tx os gs <=>
+Definition call_storage_ok_def:
+  call_storage_ok am tx os gobs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-    let obs = source_storage_trace am tx os gs in
+    let obs = source_storage_trace am tx os gobs in
     let (regions, locks) = storage_trace_horizon obs in
       storage_roots_fit obs ∧ regions_consistent regions ∧
       storage_locks_separated regions locks ∧
-      storage_well_formed_on cx (initial_state am []) regions
-End
-
-Definition call_outcomes_storage_ok_def:
-  call_outcomes_storage_ok am tx os gs <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-    let obs = source_storage_trace am tx os gs in
-      storage_trace_backends_well_formed cx
-        (FST (storage_trace_horizon obs)) obs
+      storage_well_formed_on cx (initial_state am []) regions ∧
+      storage_trace_backends_well_formed cx regions obs
 End
 
 (* The global storage-and-bounds predicate remains available independently.
@@ -174,22 +167,25 @@ Definition account_immutables_def:
     | SOME imms => imms
 End
 
+Definition evm_state_ok_def:
+  evm_state_ok s <=>
+    wf_state s /\ balance_bounded (2 ** 256 - 1) s /\
+    returndata_bounded s /\ calldata_bounded s
+End
+
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
-      wf_state es /\ (?d. es.msdomain = Collect d) /\
+      evm_state_ok es /\ (?d. es.msdomain = Collect d) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
       (lookup_account tx.target es.rollback.accounts).code =
         ctxt.msgParams.code /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
-      LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
-      balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
@@ -204,6 +200,29 @@ Definition call_state_rel_def:
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
+
+Theorem call_state_rel_parsed:
+  call_state_rel tops runtime_bc am tx es ==>
+  (FST (HD es.contexts)).msgParams.parsed =
+    parse_code 0 FEMPTY (FST (HD es.contexts)).msgParams.code
+Proof
+  rw[call_state_rel_def, evm_state_ok_def] >>
+  gvs[wf_state_def, wf_context_def]
+QED
+
+Theorem call_state_rel_code_length:
+  call_state_rel tops runtime_bc am tx es ==>
+  LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
+Proof
+  strip_tac >>
+  `wf_state es /\
+   (lookup_account tx.target es.rollback.accounts).code =
+     (FST (HD es.contexts)).msgParams.code` by
+    gvs[call_state_rel_def, evm_state_ok_def] >>
+  `wf_accounts es.rollback.accounts` by fs[wf_state_def, all_accounts_def] >>
+  fs[wf_accounts_def, wf_account_state_def, lookup_account_def] >>
+  first_x_assum (qspec_then `tx.target` mp_tac) >> simp[]
+QED
 
 (* ===== Outcome bounds of the real run ===== *)
 
@@ -295,7 +314,7 @@ Theorem call_state_rel_call_outcomes_ok:
 Proof
   strip_tac >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    fs[call_state_rel_def] >>
+    fs[call_state_rel_def, evm_state_ok_def] >>
   drule_all call_trace_outcomes_bounded >>
   qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
   simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
@@ -589,24 +608,23 @@ End
 (* Primitive source/Venom result boundary at one observed storage horizon. *)
 Definition external_call_result_rel_def:
   external_call_result_rel H tops ret tx (res, am', rqs) vres <=>
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     case (res, vres) of
       (INL v, Halt ss) =>
         tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree H cx am'.accounts
+        accounts_agree H tx.target am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree H cx am'.tStorage ss.vs_transient /\
+        transient_agree H tx.target am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree H cx) rqs ss.vs_requests
+        LIST_REL (request_agree H tx.target) rqs ss.vs_requests
     | (INR HaltException, Halt ss) =>
         ss.vs_returndata = [] /\
-        accounts_agree H cx am'.accounts
+        accounts_agree H tx.target am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree H cx am'.tStorage ss.vs_transient /\
+        transient_agree H tx.target am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree H cx) rqs ss.vs_requests
+        LIST_REL (request_agree H tx.target) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
@@ -616,26 +634,22 @@ Definition external_call_result_rel_def:
 End
 
 (* Fixed slots use distinct observations; absent slots must be irrelevant
-   to the observation selected by run. *)
+   to the predicate selected by the caller. *)
 Definition gas_readings_rel_def:
-  gas_readings_rel readings run out <=>
+  gas_readings_rel readings P <=>
     ?slots unused.
       PERM (MAP THE (FILTER IS_SOME slots) ++ unused) readings /\
       !gobs tail.
         LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gobs ==>
-        run (gobs ++ tail) = out
+        P (gobs ++ tail)
 End
 
-Definition call_success_rel_def:
-  call_success_rel H tops ret tx (v, am', rqs) es r es' <=>
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-    ?out.
-      frame_outcome es r es' NONE out am'.logs /\
-      tx_return_bytes tops ret tx v out /\
-      accounts_agree H cx am'.accounts
-        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es)
+Definition effects_agree_def:
+  effects_agree H tx (am', rqs) es es' <=>
+    accounts_agree H tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+    transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
+    LIST_REL (request_agree H tx.target) rqs (call_requests es)
 End
 
 Definition exception_outcome_rel_def:
@@ -667,27 +681,22 @@ QED
 (* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops ret am tx es r es' <=>
-    let H = storage_trace_horizon
-      (source_storage_trace am tx (MAP SND (call_trace es)) gobs) in
-    let (res, am', rqs) =
-      call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+    let os = MAP SND (call_trace es) in
+    let H = storage_trace_horizon (source_storage_trace am tx os gobs) in
+    let (res, am', rqs) = call_external (SOME os) gobs am tx in
     case res of
-      INL v => call_success_rel H tops ret tx (v, am', rqs) es r es'
-    | INR HaltException =>
-        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-          frame_outcome es r es' NONE [] am'.logs /\
-          accounts_agree H cx am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H cx) rqs (call_requests es)
+      INL v => ?out. tx_return_bytes tops ret tx v out /\
+                     frame_outcome es r es' NONE out am'.logs /\
+                     effects_agree H tx (am', rqs) es es'
+    | INR HaltException => frame_outcome es r es' NONE [] am'.logs /\
+                           effects_agree H tx (am', rqs) es es'
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
+    let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
-      (\gobs.
-        source_storage_ok am tx (MAP SND (call_trace es)) gobs ∧
-        call_outcomes_storage_ok am tx (MAP SND (call_trace es)) gobs ==>
-        call_result_rel_at gobs tops ret am tx es r es') T
+      (\gobs. call_storage_ok am tx os gobs ==>
+              call_result_rel_at gobs tops ret am tx es r es')
 End

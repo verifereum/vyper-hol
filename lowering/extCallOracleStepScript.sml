@@ -56,7 +56,7 @@ Theorem venom_call_request_source:
     accounts_rel H cx es s /\ w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
     (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt ==>
-    request_agree H cx
+    request_agree H cx.txn.target
       (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
          value_opt es)
       (venom_call_request s aw vw ao az stat)
@@ -100,7 +100,7 @@ QED
    record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
   !func cenv cx es s rq rq' outcome rest ro rz tr.
-    state_rel H func cenv cx es s /\ request_agree H cx rq rq' /\
+    state_rel H func cenv cx es s /\ request_agree H cx.txn.target rq rq' /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
       (SND (consume_call_outcome rq' ro rz s)) /\
@@ -201,7 +201,7 @@ Proof
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
      simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
-  `request_agree H cx rq (venom_call_request s aw vw ao az stat)` by
+  `request_agree H cx.txn.target rq (venom_call_request s aw vw ao az stat)` by
     (qpat_x_assum `rq = _` SUBST1_TAC >>
      irule venom_call_request_source >> simp[]) >>
   qabbrev_tac `rq' = venom_call_request s aw vw ao az stat` >>

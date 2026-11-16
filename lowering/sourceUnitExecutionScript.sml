@@ -23,12 +23,12 @@ End
 (* Storage guards that hold of the source call's observations put them in
    their own horizon's domain. *)
 Theorem source_storage_guards_domain:
-  source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs ==>
+  call_storage_ok am tx os gs ==>
   storage_trace_domain
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am []) (source_storage_trace am tx os gs)
 Proof
-  simp[source_storage_ok_def, call_outcomes_storage_ok_def,
+  simp[call_storage_ok_def,
        storage_trace_domain_def, valid_horizon_def,
        storage_observations_ok_def, storage_trace_horizon_def,
        listTheory.EVERY_MEM]
@@ -46,9 +46,7 @@ Definition source_unit_execution_correct_at_def:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       (((!tail.
-           ~(source_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-             call_outcomes_storage_ok am tx vs.vs_outcomes
+           ~(call_storage_ok am tx vs.vs_outcomes
                (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
         ?(H : (bool # bytes32 # type_value) list # num list)
            leaf leaf_pg leaf_g leaf_tn finish.

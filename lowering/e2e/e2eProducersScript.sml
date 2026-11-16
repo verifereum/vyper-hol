@@ -177,6 +177,7 @@ Theorem entry_venom_state_initial_ctx_rel:
   initial_ctx_rel cp prog u.cu_context (entry_venom_state prog cp es) es
 Proof
   rpt strip_tac >> rename1 `entry_venom_state prog cplan es` >>
+  drule call_state_rel_parsed >> strip_tac >>
   `((FST (HD es.contexts)).msgParams.code <> [] ==>
     account_already_created
       (lookup_account (FST (HD es.contexts)).msgParams.callee
@@ -190,7 +191,7 @@ Proof
      gvs[unit_shape_ok_def]) >>
   `(entry_venom_state prog cplan es).vs_params = []` by
     simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
-  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
+  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def, evm_state_ok_def,
       initial_ctx_rel_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]
 QED

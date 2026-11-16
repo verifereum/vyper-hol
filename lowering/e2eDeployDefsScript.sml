@@ -146,7 +146,7 @@ Definition deploy_state_rel_def:
   deploy_state_rel tops deploy_bc am tx es <=>
     ?ctxt rb args_bytes.
       es.contexts = [(ctxt, rb)] /\
-      wf_state es /\ (?d. es.msdomain = Collect d) /\
+      evm_state_ok es /\ (?d. es.msdomain = Collect d) /\
       account_empty (lookup_account tx.target es.originalAccounts) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
@@ -167,7 +167,6 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
       tx.function_name = "__init__" /\ ~tx.is_static /\
-      balance_bounded (2 ** 256 - 1) es /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
@@ -186,7 +185,8 @@ Theorem deploy_state_rel_call_outcomes_ok:
 Proof
   strip_tac >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    gvs[deploy_state_rel_def, vfmReturndataBoundTheory.returndata_bounded_def] >>
+    gvs[deploy_state_rel_def, evm_state_ok_def,
+        vfmReturndataBoundTheory.returndata_bounded_def] >>
   drule_all call_trace_outcomes_bounded >>
   qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
   simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
@@ -207,16 +207,15 @@ Definition deploy_result_rel_def:
   deploy_result_rel H tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
-        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         if ALOOKUP am'.sources tx.target = NONE then
           (* the constructor self-destructed: no source installed, no code
              deposited *)
           frame_outcome es r es' NONE [] am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = [] /\
-          accounts_agree H cx am'.accounts
+          accounts_agree H tx.target am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H cx) rqs (call_requests es)
+          transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
+          LIST_REL (request_agree H tx.target) rqs (call_requests es)
         else
           ?section.
             immutables_section_rel tops (account_immutables am' tx.target)
@@ -224,14 +223,14 @@ Definition deploy_result_rel_def:
             frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
             (lookup_account tx.target es'.rollback.accounts).code =
               runtime_bc ++ section /\
-            accounts_agree H cx am'.accounts
+            accounts_agree H tx.target am'.accounts
               (process_deletions es'.rollback.toDelete
                  (update_account tx.target
                     (lookup_account tx.target es'.rollback.accounts with
                        code := (lookup_account tx.target am'.accounts).code)
                     es'.rollback.accounts)) /\
-            transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-            LIST_REL (request_agree H cx) rqs (call_requests es)
+            transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
+            LIST_REL (request_agree H tx.target) rqs (call_requests es)
     | INR (AssertException s) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
@@ -254,6 +253,6 @@ Definition deploy_call_result_rel_def:
             deploy_result_rel
               (storage_trace_horizon (deploy_storage_trace (SOME os) gs am tx tops))
               tops runtime_bc tx es r es'
-              (load_contract (SOME os) gs am tx [(NONE, tops)] [])) T
+              (load_contract (SOME os) gs am tx [(NONE, tops)] []))
 End
 

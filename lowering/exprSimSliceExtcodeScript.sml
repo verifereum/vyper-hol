@@ -8,7 +8,7 @@ Ancestors
   vfmState vyperValue valueEncoding words arithmetic list rich_list
 
 Theorem slice_extcode_account:
-  accounts_agree H cx acc s.vs_accounts /\ accounts_well_typed acc /\
+  accounts_agree H cx.txn.target acc s.vs_accounts /\ accounts_well_typed acc /\
   LENGTH bs = 20 ==>
   (lookup_account
     (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) s.vs_accounts).code =

@@ -185,26 +185,26 @@ Definition deploy_venom_result_rel_def:
            * deletion on both sides. *)
           ss.vs_returndata = [] /\
           MEM tx.target ss.vs_pending_deletions /\
-          accounts_agree H cx am'.accounts
+          accounts_agree H cx.txn.target am'.accounts
             (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-          transient_agree H cx am'.tStorage ss.vs_transient /\
+          transient_agree H cx.txn.target am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs ss.vs_logs /\
-          LIST_REL (request_agree H cx) rqs ss.vs_requests
+          LIST_REL (request_agree H cx.txn.target) rqs ss.vs_requests
         else
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          accounts_agree H cx am'.accounts
+          accounts_agree H cx.txn.target am'.accounts
             (process_deletions ss.vs_pending_deletions
                (update_account tx.target
                   (lookup_account tx.target ss.vs_accounts with
                      code := (lookup_account tx.target am'.accounts).code)
                   ss.vs_accounts)) /\
-          transient_agree H cx am'.tStorage ss.vs_transient /\
+          transient_agree H cx.txn.target am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs ss.vs_logs /\
-          LIST_REL (request_agree H cx) rqs ss.vs_requests
+          LIST_REL (request_agree H cx.txn.target) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error e), Abort _ _) => T
