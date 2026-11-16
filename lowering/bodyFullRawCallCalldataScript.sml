@@ -8,7 +8,7 @@
  *)
 Theory bodyFullRawCallCalldata
 Ancestors
-  bodyFullPreds bodySimFull rawCallCalldataDalloca exprSimHypsDefs fragExec
+  bodyFullPreds bodySimFull bodyInvNoDalloca rawCallCalldataDalloca exprSimHypsDefs fragExec
   ptrDiscipline exprLowering vyperTypeSystem vyperAST list
 
 val _ = Parse.hide "body";
@@ -19,6 +19,7 @@ Theorem raw_call_calldata_expr_full_ok:
     body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
   rw[body_expr_full_ok_def] >>
+  drule body_inv_no_dalloca >> strip_tac >>
   `es <> []` by (strip_tac >> gvs[expr_body_pre_def, well_typed_expr_def]) >>
   rw[expr_sim_full_def, expr_vv_sim_full_def] >>
   `EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)`

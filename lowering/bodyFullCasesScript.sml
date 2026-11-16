@@ -12,6 +12,7 @@ Ancestors
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullRawCall bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -628,22 +629,22 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
+(* The calldata leaf supplies the joint case. *)
 Theorem body_raw_call_calldata_case_full:
   !cx ty flags es v19.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  ACCEPT_TAC raw_call_calldata_expr_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
+(* The bytes-payload leaf supplies the joint case. *)
 Theorem body_raw_call_case_full:
   !cx ty flags es v18.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  cheat
+  ACCEPT_TAC raw_call_expr_full_ok
 QED
 
 (* RawLog composes its topic and data children at one joint midpoint. *)
