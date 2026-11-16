@@ -73,7 +73,9 @@ Theorem snapshot_store_result_room_mem:
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = sb.cs_current_bb /\
-    z.vs_inst_idx = LENGTH sb.cs_current_insts
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+    z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `type_memory_size ltv = 0`

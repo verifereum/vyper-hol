@@ -14,12 +14,12 @@ Theorem place_store_empty_memory_run_mem:
   has_length_word dty /\ evaluate_type (get_tenv cx) dty = SOME dtv /\
   expr_sim_inv cenv cx env ee /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv sa /\
   (!id path entry t0.
     p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
     cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (default_value dtv) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -27,16 +27,18 @@ Theorem place_store_empty_memory_run_mem:
   alloca_history func s /\ alloca_inv s /\
   w2n w + 32 <= s.vs_alloca_next ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
       FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s.vs_alloca_next = t.vs_alloca_next
+    alloca_history func t /\ s.vs_alloca_next = t.vs_alloca_next /\
+    (!J. stmt_state_rel J ctx func cenv cx ee s ==>
+      stmt_state_rel J ctx func cenv cx ff t)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ff (mstore (w2n w) 0w s)` by
+  `stmt_state_rel H ctx func cenv cx ff (mstore (w2n w) 0w s)` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
      >- (irule place_store_empty_memory_state >>
@@ -59,14 +61,21 @@ Proof
      qexistsl_tac [`dst_op`, `LocMemory`, `Lit 0w`, `sa`] >>
      simp[eval_operand_def]) >>
   qexists_tac `(mstore (w2n w) 0w s) with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def]
+  fs[stmt_state_rel_inst_idx, lookup_var_def] >>
+  rpt strip_tac >> Cases_on `p`
+  >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
+  >- (irule place_store_empty_memory_state >>
+      goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `evaluate_type _ dty = _`)) >> simp[]) >>
+  gvs[place_ptr_rel_def]
 QED
 
 (* Restore at the execution endpoint, using the global outside-destination frame.
    r is s for a direct store, or the post-allocation state for a staged store. *)
 Theorem place_store_endpoint_stmt_state[local]:
-  stmt_state_rel ctx func cenv cx ee s /\
-  stmt_state_rel ctx func cenv cx ee r /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee r /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
@@ -75,6 +84,7 @@ Theorem place_store_endpoint_stmt_state[local]:
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
   val_in_memory dtv v (w2n w) t.vs_memory /\
+  LENGTH r.vs_memory <= LENGTH t.vs_memory /\
   (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
     vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
     vs_inst_idx := r.vs_inst_idx|>) = r /\
@@ -83,7 +93,7 @@ Theorem place_store_endpoint_stmt_state[local]:
     local_region cenv ee.scopes r name b len) /\
   (!a n. a+n <= w2n w \/ w2n w+type_memory_size dtv <= a ==>
     mem_bytes_at a n t.vs_memory = mem_bytes_at a n r.vs_memory) ==>
-  stmt_state_rel ctx func cenv cx ff t
+  stmt_state_rel H ctx func cenv cx ff t
 Proof
   strip_tac >>
   drule_all memory_place_live_region >> strip_tac >>
@@ -92,7 +102,7 @@ Proof
     metis_tac[stmt_state_rel_def] >>
   irule memory_place_write_stmt_state >>
   goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ r`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ r`)) >>
   goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
   qexistsl_tac [`env`, `sa`, `v`] >> simp[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >> rpt strip_tac >>
@@ -134,14 +144,14 @@ Theorem place_store_direct_memory_cont:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
-  alloca_history func s /\ stmt_state_rel ctx func cenv cx ee s /\
+  alloca_history func s /\ stmt_state_rel H ctx func cenv cx ee s /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) ==>
-  ?t. mem_cont_sim ctx func s t /\ stmt_state_rel ctx func cenv cx ff t /\
+  ?t. mem_cont_sim ctx func s t /\ stmt_state_rel H ctx func cenv cx ff t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -152,7 +162,7 @@ Proof
   `alloca_inv s /\ alloca_room ctx func s` by fs[stmt_state_rel_def] >>
   drule_all place_direct_store_cont >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (irule place_store_endpoint_stmt_state >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `evaluate_type _ _ = SOME dtv`)) >>
@@ -197,14 +207,14 @@ Theorem place_store_staged_memory_cont:
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
-  alloca_history func s /\ stmt_state_rel ctx func cenv cx ee s /\
+  alloca_history func s /\ stmt_state_rel H ctx func cenv cx ee s /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) ==>
-  ?t. mem_cont_sim ctx func s t /\ stmt_state_rel ctx func cenv cx ff t /\
+  ?t. mem_cont_sim ctx func s t /\ stmt_state_rel H ctx func cenv cx ff t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -216,7 +226,7 @@ Proof
   drule_all memory_place_live_region >> strip_tac >>
   drule (SIMP_RULE bool_ss [LET_THM] place_staged_store_cont) >>
   disch_then drule >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
   disch_then (fn th => qpat_assum `eval_operand dst s = SOME dw`
@@ -236,7 +246,7 @@ Proof
     qexists_tac `t` >> simp[] >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `u` (qx_choose_then `tw`
     (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)))) >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (irule place_store_endpoint_stmt_state >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `evaluate_type _ _ = SOME dtv`)) >>

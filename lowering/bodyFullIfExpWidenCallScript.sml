@@ -436,14 +436,13 @@ Theorem ifexp_widened_call_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
-    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
       ~is_word_type (post_value_type cenv e) ==>
@@ -484,6 +483,11 @@ Theorem ifexp_widened_call_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+      (~is_word_type (post_value_type cenv e) ==>
+       vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+       vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
       expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
@@ -503,7 +507,7 @@ Theorem ifexp_widened_call_arm_step_full:
       ghost_kept_at lo cenv ee sb G tn s G' tn') /\
   (* ifexp_alloca_origin_ptr_edge *)
   (!s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     lo <= s.vs_alloca_next /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
@@ -564,7 +568,8 @@ Theorem ifexp_widened_call_arm_step_full:
      w2n dw + type_memory_size dtv <= w2n sw) /\
     ptr_covers G tn xs s (type_memory_size stv) /\
     ptr_covers G tn xd s (type_memory_size dtv) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -585,7 +590,8 @@ Theorem ifexp_widened_call_arm_step_full:
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -737,7 +743,8 @@ Proof
      asm "alloc_inv" mp_tac >> simp[Abbr `ai`] >>
      disch_then drule_all >> simp[]) >>
   `allocas_from lo z /\ lo <= z.vs_alloca_next` by
-    gvs[ghost_inv_at_def] >>
+    (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ z` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ghost_inv_at_def]) >>
   `ghost_kept_at lo cenv es1 sa G1 tn1 u
       (step_prov PG G ai za) (step_taint ai z za tn)` by
     (asm "alloc_kept" mp_tac >> simp[Abbr `ai`] >>
@@ -1166,6 +1173,17 @@ Proof
      qpat_x_assum `w2n sw + type_memory_size ptv <= z'.vs_alloca_next` mp_tac >>
      qpat_x_assum `0 < type_memory_size ptv` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[alloca_room_def] >> decide_tac) >>
+  `alloca_inv z' /\ fmp_room ctx func z'` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ z'` mp_tac >>
+     pure_rewrite_tac[expr_post_def, stmt_state_rel_def] >>
+     strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp z')` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv z'` mp_tac >>
+     qpat_x_assum `fmp_room ctx func z'` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   asm "copy" (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ xs _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ p _ _`)) >>
@@ -1178,7 +1196,7 @@ Proof
   disch_then (drule_at (Pat `value_has_type rty _`)) >>
   disch_then (drule_at (Pat `type_widens_to _ _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca _ ==> allocas_below_fmp z'`)) >>
   disch_then (qspecl_then [`lo`, `explicit`, `PG`] mp_tac) >>
   (impl_tac >- (simp[eval_operand_def] >> conj_tac >- asm_rewrite_tac[] >>
     qpat_x_assum `compile_alloc_buffer _ sm = (buf,sk)` mp_tac >>

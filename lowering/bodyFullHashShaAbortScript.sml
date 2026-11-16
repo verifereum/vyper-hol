@@ -1,7 +1,8 @@
 Theory bodyFullHashShaAbort
 Ancestors
+  bodyFullHashShaFixed bodyFullHashKeccakFixed context
   bodyFullHashShaInput bodyPtrHashBuiltinsShaAlloc instSeqPtrLo
-  bodyPtrDefs loweringHalt exprLoweringProps compileEnv venomState
+  bodyPtrDefs loweringHalt exprLoweringProps compileEnv venomState venomInst exprSimHash
   ptrDiscipline words
 
 Theorem sha_alloc_abort_ptr_at:
@@ -27,7 +28,7 @@ Theorem sha_alloc_abort_ptr_at:
       aid < sa.cs_next_id /\ b <= w2n w /\ w2n w+w2n n <= b+k) \/
    (?name b k. local_region cenv es.scopes s name b k /\
       b <= w2n w /\ w2n w+w2n n <= b+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -41,8 +42,25 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   `!x. x=p \/ len=Var x \/ x=q ==> not_fresh_at sn x` by metis_tac[] >>
   `eval_operand (Var q) t = SOME v` by metis_tac[] >>
-  drule_all hash_alloc_sha256_abort_from_input >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    hash_alloc_sha256_abort_from_input) >>
   disch_then (qspec_then `D` strip_assume_tac) >>
+  drule_all hash_alloc_sha256_code_split >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sn sb)` by
+    (drule_all emitted_insts_sha256_tail >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
+    (irule sha_allocated_sequence_restore_ctx >>
+     conj_tac >- first_assum ACCEPT_TAC >> conj_tac
+     >- (qexistsl_tac [`buf`, `emitted_insts sn sb`, `sn`, `t`] >> simp[]) >>
+     simp[]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
     (irule (Q.SPECL [`emitted_insts sa sb`, `D`, `D`, `lo`,
        `ctx`, `fn`, `PG`, `G`, `tn`, `s`, `Gf`, `tf`] inst_seq_ptr_zero_to_lo) >>
