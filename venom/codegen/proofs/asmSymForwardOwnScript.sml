@@ -27,8 +27,7 @@ Theorem asm_sym_rel_own_pc:
   asm_sym_rel_own lo p env own cs ss ==>
   ss.sym_base.as_pc = cs.as_pc
 Proof
-  rewrite_tac[GSYM asm_sym_rel_core_own] >>
-  metis_tac[asm_sym_rel_core_pc]
+  rw[asm_sym_rel_own_def] >> gvs[]
 QED
 
 Theorem asm_sym_inst_step_own_conditional:
@@ -60,7 +59,8 @@ Proof
      (asm_step lo (build_offset_to_pc p) inst cs)` by
     (qspecl_then [`lo`, `\code. asm_data_env_lo_ok lo p env own /\ code = own`]
        mp_tac asm_sym_inst_step_core >>
-     simp[asm_sym_rel_core_own] >> disch_then irule >> simp[]) >>
+     simp[asm_sym_rel_core_own] >> disch_then irule >> simp[] >>
+     metis_tac[]) >>
   Cases_on `inst` >> fs[sym_step_own_def] >>
   rename1 `MEM (AsmOp name) p` >>
   Cases_on `name = "CODESIZE" \/ name = "CODECOPY"`
@@ -94,7 +94,7 @@ Proof
   >- (conj_tac >- metis_tac[asm_sym_rel_own_pc] >>
       conj_tac >- simp[Once sym_run_own_def] >>
       rpt strip_tac >> irule asm_sym_inst_step_own_conditional >>
-      simp[EL_MEM]) >>
+      simp[EL_MEM] >> metis_tac[]) >>
   disch_then irule >> simp[asm_sym_rel_own_init] >>
   fs[label_disciplined_own_def]
 QED
