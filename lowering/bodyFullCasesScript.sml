@@ -13,6 +13,7 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -675,13 +676,13 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
+(* The joint raw_call-with-calldata case. *)
 Theorem body_raw_call_calldata_case_full:
   !cx ty flags es v19.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
