@@ -2643,6 +2643,27 @@ Proof
     `u with vs_inst_idx := SUC s.vs_inst_idx`, `t`] mp_tac) >> simp[]
 QED
 
+Theorem native_selected_maximal_cut:
+  !P n C s. ?A rest q.
+    P = A ++ rest /\
+    EVERY (\i. ~is_terminator i.inst_opcode) A /\
+    FOLDR (dft_exec_cons n C) OK A s = OK q /\
+    (rest = [] \/ ?i more. rest = i::more /\
+       (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)))
+Proof
+  Induct >> rpt gen_tac
+  >- (qexistsl_tac [`[]`, `[]`, `s`] >> simp[]) >>
+  Cases_on `is_terminator h.inst_opcode \/ ~(?u. step_inst n C h s = OK u)`
+  >- (qexistsl_tac [`[]`, `h::P`, `s`] >> gvs[]) >>
+  gvs[] >>
+  rename1 `step_inst n C h s = OK u` >>
+  qpat_x_assum `!n C s. _` (qspecl_then
+    [`n`, `C`, `u with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  strip_tac >>
+  qexistsl_tac [`h::A`, `rest`, `q`] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def]
+QED
+
 Theorem native_suffix_stopping_decomposition:
   !xs b C t. terminates (dft_exec_suffix b C xs t) ==>
   ?done z later tz.
@@ -4793,6 +4814,266 @@ Resume native_selected_child_stopped_transport[result]:
       restore_result_def, dft_res_rel_def, AllCaseEqs()]
 QED
 Finalise native_selected_child_stopped_transport
+
+Theorem native_inventory_stopped_cut_prefix:
+  !body key_rows site_rows certs.
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\
+  (s with vs_gas_readings := []) = (t with vs_gas_readings := []) /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h x. h.inst_id = x.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static /\ terminates (exec_block b C' bt t) /\
+  gas_count_block b C' bt t <= LENGTH t.vs_gas_readings /\
+  (?post. todo = P ++ post) /\
+  LENGTH key_rows = LENGTH P /\ LENGTH site_rows = LENGTH P /\ LENGTH certs = LENGTH P /\
+  (!h. h < LENGTH P ==>
+    ^native_inventory_Rq
+      (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+      (EL h P) (EL h key_rows) (EL h site_rows) (EL h certs)) /\
+  ALL_DISTINCT (FLAT key_rows) /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+    (MAP (ALOOKUP (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))
+      (FLAT key_rows)) g ==>
+  !A i n rest frontpost q.
+    todo = A ++ i::rest /\ P = A ++ i::frontpost /\
+    EVERY (\x. ~is_terminator x.inst_opcode) A /\
+    FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail) = OK q /\
+    (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)) ==>
+    ?k. k <= LENGTH (FLAT key_rows) /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+        (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+        (s with vs_gas_readings := g ++ tail)) =
+        ZIP (TAKE k (FLAT key_rows), TAKE k g) /\
+      gas_events_block n C fn.fn_name
+        (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+        (s with vs_gas_readings := g ++ tail) = TAKE k (FLAT site_rows)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
+  mp_tac (Q.SPECL [`actual_body`, `key_rows`, `site_rows`, `certs`]
+    native_successful_cut_inventory) >>
+  (impl_tac >- (simp[] >> gvs[])) >>
+  disch_then (qspecl_then [`A`, `n`, `i::rest`, `i::frontpost`, `q`] mp_tac) >>
+  qpat_x_assum `todo = A ++ i::rest /\ _` strip_assume_tac >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  `LENGTH A < LENGTH P` by simp[] >>
+  `LENGTH A < LENGTH key_rows /\ LENGTH A < LENGTH site_rows` by metis_tac[] >>
+  qabbrev_tac `Kpre = FLAT (TAKE (LENGTH A) key_rows)` >>
+  qabbrev_tac `Kc = EL (LENGTH A) key_rows` >>
+  qabbrev_tac `Kpost = FLAT (DROP (SUC (LENGTH A)) key_rows)` >>
+  qabbrev_tac `Spre = FLAT (TAKE (LENGTH A) site_rows)` >>
+  qabbrev_tac `Sc = EL (LENGTH A) site_rows` >>
+  qabbrev_tac `Spost = FLAT (DROP (SUC (LENGTH A)) site_rows)` >>
+  `FLAT key_rows = Kpre ++ Kc ++ Kpost /\
+   FLAT site_rows = Spre ++ Sc ++ Spost` by
+    (conj_tac
+     >- (simp_tac pure_ss [Abbr `Kpre`, Abbr `Kc`, Abbr `Kpost`] >>
+         qspecl_then [`LENGTH A`, `key_rows`] mp_tac rich_listTheory.TAKE_DROP_SUC >>
+         simp[] >> disch_then (mp_tac o Q.AP_TERM `FLAT`) >> simp[]) >>
+     simp_tac pure_ss [Abbr `Spre`, Abbr `Sc`, Abbr `Spost`] >>
+     qspecl_then [`LENGTH A`, `site_rows`] mp_tac rich_listTheory.TAKE_DROP_SUC >>
+     simp[] >> disch_then (mp_tac o Q.AP_TERM `FLAT`) >> simp[]) >>
+  `LENGTH (FLAT key_rows) = LENGTH g` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  `?gpre gc gpost. g = gpre ++ gc ++ gpost /\
+    LENGTH Kpre = LENGTH gpre /\ LENGTH Kc = LENGTH gc /\ LENGTH Kpost = LENGTH gpost` by
+    (qexistsl_tac [`TAKE (LENGTH Kpre) g`,
+       `TAKE (LENGTH Kc) (DROP (LENGTH Kpre) g)`,
+       `DROP (LENGTH Kc) (DROP (LENGTH Kpre) g)`] >>
+     conj_tac >- metis_tac[TAKE_DROP, APPEND_ASSOC] >> simp[] >> gvs[] >> simp[]) >>
+  `^native_inventory_Rq
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+    i Kc Sc (EL (LENGTH A) certs)` by
+    (qpat_x_assum `!h. h < LENGTH P ==> _` (qspec_then `LENGTH A` mp_tac) >>
+     simp[EL_APPEND_EQN, Abbr `Kc`, Abbr `Sc`]) >>
+  `q.vs_gas_readings = gc ++ gpost ++ tail` by
+    (qpat_x_assum `q.vs_gas_readings = _` mp_tac >>
+     simp_tac pure_ss [GSYM APPEND_ASSOC, Abbr `Kpre`] >>
+     asm_rewrite_tac[] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp_tac bool_ss []) >>
+  `?kc. kc <= LENGTH Kc /\
+    trace_gas (((p,d,i.inst_id),fn,i,q)::
+      dftGasFromListTraceDefs$trace_step p d n C fn i q) = ZIP (TAKE kc Kc,TAKE kc gc) /\
+    gas_events_step n C fn.fn_name i q = TAKE kc Sc` by suspend "row" >>
+  suspend "compose"
+QED
+Resume native_inventory_stopped_cut_prefix[row]:
+  markerLib.RESUME_TAC >> (
+  Cases_on `i.inst_opcode = INVOKE` >- suspend "invoke" >>
+  qpat_x_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [LET_THM] >> simp[] >> strip_tac >>
+  Cases_on `i.inst_opcode = GAS` >- suspend "gas" >>
+  qexists_tac `0` >> gvs[] >>
+  simp[trace_gas_cons, visit_gas_def, trace_step_noninvoke, gas_events_step_def])
+QED
+Resume native_inventory_stopped_cut_prefix[gas]:
+  markerLib.RESUME_TAC >> (
+  `?w. gc = [w]` by (Cases_on `gc` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  qexists_tac `1` >> gvs[] >>
+  simp[trace_gas_cons, visit_gas_def, trace_step_noninvoke, gas_events_step_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp_tac (srw_ss()) [])
+QED
+Resume native_inventory_stopped_cut_prefix[invoke]:
+  markerLib.RESUME_TAC >> (
+  `~is_terminator i.inst_opcode` by
+    (qpat_assum `i.inst_opcode = INVOKE` (fn th => rewrite_tac[th, is_terminator_def])) >>
+  `~(?u. step_inst n C i q = OK u)` by metis_tac[] >>
+  qpat_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [LET_THM] >> asm_rewrite_tac[] >> strip_tac >>
+  `ALL_DISTINCT (MAP (\x. x.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `ALL_DISTINCT todo /\ EVERY (\x. MEM x bb.bb_instructions) todo` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     simp_tac bool_ss [dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\x. x.inst_id) todo)` by
+    (irule ALL_DISTINCT_MAP_INJ >> asm_rewrite_tac[] >> rpt strip_tac >>
+     irule (Q.ISPEC `\x:instruction. x.inst_id` dftCorrectnessTheory.all_distinct_map_mem_inj) >>
+     conj_tac >- asm_rewrite_tac[] >>
+     qexists_tac `bb.bb_instructions` >> asm_rewrite_tac[] >>
+     qpat_x_assum `EVERY (\x. MEM x bb.bb_instructions) todo` mp_tac >>
+     simp_tac bool_ss [EVERY_MEM] >> metis_tac[]) >>
+  `PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (MAP (\x. x.inst_id) scheduled) /\
+   EVERY (\x. MEM x bb.bb_instructions) scheduled` by
+    metis_tac[PERM_MAP, ALL_DISTINCT_PERM, PERM_EVERY] >>
+  `?consumed later. scheduled = consumed ++ i::later` by
+    metis_tac[MEM_SPLIT, PERM_MEM_EQ, MEM_APPEND, MEM] >>
+  qpat_x_assum `scheduled = _` SUBST_ALL_TAC >>
+  qmatch_asmsub_abbrev_tac `inv_ev_trace orc p d b C' A` >>
+  `inv_ev_trace orc p d b C' consumed (t with vs_gas_readings := [])
+    (a with vs_gas_readings := [])` by
+    (simp_tac pure_ss [Abbr `orc`] >> irule native_selected_target_event_cut >> simp[] >>
+     conj_tac >- fs[o1_ctx_shape_def] >>
+     qexistsl_tac [`bb.bb_instructions`, `i`, `later`] >> simp[DROP_APPEND] >>
+     qpat_x_assum `ALL_DISTINCT (MAP _ (consumed ++ i::later))` mp_tac >>
+     qpat_x_assum `EVERY _ (consumed ++ i::later)` mp_tac >>
+     simp_tac (srw_ss()) [MAP_APPEND, EVERY_APPEND]) >>
+  suspend "transport")
+QED
+Resume native_inventory_stopped_cut_prefix[transport]:
+  markerLib.RESUME_TAC >> (
+  `?kc. kc <= LENGTH Kc /\
+    trace_gas (dftGasFromListTraceDefs$trace_step p d n C fn i q) =
+      ZIP (TAKE kc Kc, TAKE kc gc) /\
+    gas_events_step n C fn.fn_name i q = TAKE kc Sc` by
+    (qpat_assum `inv_ev_trace orc p d b C' A _ _`
+       (mp_then (Pat `inv_ev_trace _ _ _ _ _ A _ _`) mp_tac
+         (cj 1 native_selected_child_stopped_transport)) >>
+     disch_then irule >> suspend "transport_premises") >>
+  qexists_tac `kc` >> simp[trace_gas_cons, visit_gas_def])
+QED
+Resume native_inventory_stopped_cut_prefix[transport_premises]:
+  markerLib.RESUME_TAC >> (
+  simp_tac bool_ss [] >>
+  conj_tac >- gvs[] >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- asm_rewrite_tac[] >>
+  qpat_assum `inv_ev_trace orc p d b C' consumed _ _`
+    (irule_at (Pat `inv_ev_trace _ _ _ _ _ _ _ _`)) >>
+  qpat_x_assum `todo = A ++ i::rest` SUBST_ALL_TAC >>
+  qpat_assum `dft_head_bubbles _ (A ++ i::rest) _`
+    (irule_at (Pat `dft_head_bubbles _ _ _`)) >>
+  qpat_x_assum `EL (LENGTH A) certs = _` SUBST_ALL_TAC >>
+  qpat_assum `(\obs i Kc Sc cert. _) _ _ _ _ _`
+    (irule_at (Pat `if _ then _ else _`) o SIMP_RULE bool_ss []) >>
+  qpat_assum `q.vs_gas_readings = gc ++ gpost ++ tail`
+    (irule_at (Pat `q.vs_gas_readings = _`)) >>
+  qpat_assum `LENGTH Kpre = LENGTH gpre`
+    (irule_at (Pat `LENGTH _ = LENGTH _`)) >>
+  qexists_tac `Kpost` >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- asm_rewrite_tac[] >>
+  rpt strip_tac >> metis_tac[dft_crossing_swap_pair])
+QED
+Resume native_inventory_stopped_cut_prefix[compose]:
+  markerLib.RESUME_TAC >> (
+  qpat_x_assum `!h. h < LENGTH P ==> _` kall_tac >>
+  qpat_x_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` kall_tac >>
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+     (bb with bb_instructions := REPLICATE q.vs_inst_idx pad ++ i::rest) q) =
+     ZIP (TAKE kc Kc,TAKE kc gc) /\
+   gas_events_block n C fn.fn_name
+     (bb with bb_instructions := REPLICATE q.vs_inst_idx pad ++ i::rest) q = TAKE kc Sc` by
+    suspend "stop_eq" >>
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn
+     (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+     (s with vs_gas_readings := g ++ tail)) =
+     ZIP (Kpre,TAKE (LENGTH Kpre) g) ++ ZIP (TAKE kc Kc,TAKE kc gc) /\
+   gas_events_block n C fn.fn_name
+     (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+     (s with vs_gas_readings := g ++ tail) = Spre ++ TAKE kc Sc` by
+    suspend "prefix_eq" >>
+  suspend "lists")
+QED
+Resume native_inventory_stopped_cut_prefix[stop_eq]:
+  markerLib.RESUME_TAC >> (
+  conj_tac
+  >- (once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+      simp[get_instruction_def, EL_APPEND_EQN] >>
+      Cases_on `step_inst n C i q` >> gvs[trace_gas_append]) >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[get_instruction_def, EL_APPEND_EQN] >>
+  Cases_on `step_inst n C i q` >> gvs[])
+QED
+Resume native_inventory_stopped_cut_prefix[prefix_eq]:
+  markerLib.RESUME_TAC >> (
+  mp_tac (Q.SPEC `A` native_prefix_cut) >>
+  disch_then (qspec_then `s with vs_gas_readings := g ++ tail` mp_tac) >>
+  disch_then (qspec_then `s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`n`, `C`, `fn`, `p`, `d`] mp_tac) >>
+  disch_then (qspecl_then [`i::rest`, `bb`, `pad`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  qpat_assum `FOLDR _ _ A _ = OK q` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  asm_simp_tac bool_ss [])
+  >> (gvs[])
+QED
+Resume native_inventory_stopped_cut_prefix[lists]:
+  markerLib.RESUME_TAC >> (
+  `LENGTH Spre = LENGTH Kpre` by
+    (qpat_assum `trace_gas (dftGasFromListTraceDefs$trace_block _ _ _ _ _
+       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ A) _) = _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >>
+     qpat_assum `gas_events_block _ _ _
+       (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ A) _ = _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[dftGasFromListReadingsTheory.trace_gas_lengths, gas_events_length] >>
+     gvs[]) >>
+  `kc <= LENGTH Sc` by
+    (qpat_assum `trace_gas (dftGasFromListTraceDefs$trace_block _ _ _ _ _
+       (bb with bb_instructions := REPLICATE q.vs_inst_idx pad ++ i::rest) _) = _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >>
+     qpat_assum `gas_events_block _ _ _
+       (bb with bb_instructions := REPLICATE q.vs_inst_idx pad ++ i::rest) _ = _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[dftGasFromListReadingsTheory.trace_gas_lengths, gas_events_length] >>
+     rpt strip_tac >> metis_tac[rich_listTheory.LENGTH_TAKE_LE]) >>
+  `LENGTH gpre - (LENGTH gc + LENGTH gpre) = 0 /\
+   kc - LENGTH gc = 0 /\ kc - LENGTH Sc = 0` by decide_tac >>
+  qexists_tac `LENGTH Kpre + kc` >>
+  conj_tac >- (asm_rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
+  simp[rich_listTheory.TAKE_APPEND, TAKE_LENGTH_TOO_LONG,
+       rich_listTheory.ZIP_APPEND])
+QED
+Finalise native_inventory_stopped_cut_prefix
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
