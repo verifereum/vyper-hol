@@ -6645,10 +6645,70 @@ Resume native_block_entry_residual_boundary[partition]:
   simp[FILTER_APPEND_DISTRIB]
 QED
 Resume native_block_entry_residual_boundary[phase]:
-  cheat
+  `run_block b C' bb' s =
+    case eval_phis s pre of
+      OK u => FOLDR (dft_exec_cons b C') (dft_exec_suffix b C' out_body)
+        (DROP (phi_prefix_length pre) pre)
+        (u with vs_inst_idx := phi_prefix_length pre)
+    | Error e => Error e` by
+    (irule dftIndexedExecTheory.dft_run_block_prefix >> simp[]) >>
+  qspecl_then [`s`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs
+  >- (qexists_tac `s'` >> simp[] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode)
+         (DROP (phi_prefix_length pre) pre)` by
+        (irule rich_listTheory.EVERY_DROP >> simp[EVERY_MEM] >>
+         qx_gen_tac `i` >> strip_tac >>
+         `is_pseudo i.inst_opcode` by fs[EVERY_MEM] >>
+         pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+         Cases_on `i.inst_opcode` >> simp[is_pseudo_def, is_terminator_def]) >>
+      `(?t. FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length pre) pre)
+         (s' with vs_inst_idx := phi_prefix_length pre) = OK t) \/
+       (?e. FOLDR (dft_exec_cons b C') OK (DROP (phi_prefix_length pre) pre)
+         (s' with vs_inst_idx := phi_prefix_length pre) = Error e)` by
+        (irule native_pseudo_fold_cases >> simp[rich_listTheory.EVERY_DROP]) >>
+      pop_assum strip_assume_tac
+      >- metis_tac[] >>
+      qpat_x_assum `terminates _` mp_tac >>
+      asm_rewrite_tac[] >>
+      simp[Once dftRunRelTheory.dft_exec_prefix_continue] >>
+      simp[passSimulationDefsTheory.terminates_def]) >>
+  fs[passSimulationDefsTheory.terminates_def]
 QED
 Resume native_block_entry_residual_boundary[initialize]:
-  cheat
+  `EVERY (\i. inst_wf i /\ ~is_terminator i.inst_opcode) pre` by
+    (simp[EVERY_MEM] >> qx_gen_tac `i` >> strip_tac >> conj_tac
+     >- fs[EVERY_MEM] >>
+     `is_pseudo i.inst_opcode` by fs[EVERY_MEM] >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     Cases_on `i.inst_opcode` >> simp[is_pseudo_def, is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (DROP (phi_prefix_length pre) pre)` by
+    (irule rich_listTheory.EVERY_DROP >> fs[EVERY_MEM]) >>
+  `t.vs_inst_idx = phi_prefix_length pre + LENGTH (DROP (phi_prefix_length pre) pre)` by
+    (qspecl_then [`DROP (phi_prefix_length pre) pre`,
+       `sp with vs_inst_idx := phi_prefix_length pre`, `phi_prefix_length pre`]
+       mp_tac native_prefix_cut >>
+     (impl_tac >- simp[]) >>
+     disch_then (mp_tac o cj 4 o SRULE [LET_THM]) >>
+     disch_then (qspecl_then [`b`, `C'`] mp_tac) >> simp[]) >>
+  `phi_prefix_length pre <= LENGTH pre` by
+    simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  `t.vs_inst_idx = LENGTH pre` by fs[] >>
+  `t.vs_gas_readings = s.vs_gas_readings` by
+    metis_tac[native_pseudo_phase_readings] >>
+  drule_all dftAvailabilityTheory.dft_pseudo_initialization >> strip_tac >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    (drule_all dftRunRelTheory.dft_prefix_call_ctx >>
+     drule dftRunRelTheory.dft_eval_phis_call_ctx >> simp[]) >>
+  simp[] >>
+  simp[Abbr `todo`] >> irule dftRunRelTheory.dft_remaining_inv_initialized >>
+  simp[] >> qexistsl_tac [`C'`, `b`, `s`, `sp`] >>
+  gvs[Abbr `pre`] >>
+  rpt strip_tac >>
+  qpat_x_assum `ctx_labels_bound C s.vs_labels` mp_tac >>
+  simp[dftRunRelTheory.ctx_labels_bound_def] >>
+  disch_then irule >> qexistsl_tac [`fn`, `i`] >> simp[] >>
+  simp[fn_insts_def] >> irule venomInstTheory.fmp_fn_insts_blocks_intro >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 Resume native_block_entry_residual_boundary[bridge]:
   rpt gen_tac >> strip_tac >>
