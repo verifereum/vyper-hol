@@ -1,12 +1,12 @@
 (*
- * gen_inst_halt_frame_sim_deep: fnFrameTerminal's gen_inst_halt_frame_sim for an instruction whose step Halts, with
+ * gen_inst_halt_frame_sim_deep_reloc: fnFrameTerminal's gen_inst_halt_frame_sim for an instruction whose step Halts, with
  * operands at any stack depth, repeated dead_stack_marker slots
  * (generated_plan_state_wf_marked) and only an address bound on the
  * plan's spill and restore offsets.  fnFrameDeep collects it with the
  * other instruction frame lemmas the block induction composes.
  *
  * TOP-LEVEL:
- *   gen_inst_halt_frame_sim_deep
+ *   gen_inst_halt_frame_sim_deep_reloc
  *)
 
 Theory fnFrameDeepHalt
@@ -202,10 +202,9 @@ Finalise frame_terminal_prefix_setup_marked
 
 (* gen_inst_halt_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
    address bound on spill and restore offsets. *)
-Theorem gen_inst_halt_frame_sim_deep:
+Theorem gen_inst_halt_frame_sim_deep_reloc:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
     source_memory_reads_disjoint cp inst vs /\
@@ -275,7 +274,7 @@ Proof
   >> suspend "selfdestruct"
 QED
 
-Resume gen_inst_halt_frame_sim_deep[stop]:
+Resume gen_inst_halt_frame_sim_deep_reloc[stop]:
   `vs' = halt_state (vs with vs_returndata := [])` by
     (qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
      simp[Once step_inst_def, step_inst_base_def]) >>
@@ -294,7 +293,7 @@ Resume gen_inst_halt_frame_sim_deep[stop]:
   gvs[]
 QED
 
-Resume gen_inst_halt_frame_sim_deep[return]:
+Resume gen_inst_halt_frame_sim_deep_reloc[return]:
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
   simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
   strip_tac >>
@@ -321,7 +320,7 @@ Resume gen_inst_halt_frame_sim_deep[return]:
   gvs[]
 QED
 
-Resume gen_inst_halt_frame_sim_deep[selfdestruct]:
+Resume gen_inst_halt_frame_sim_deep_reloc[selfdestruct]:
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
   simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
   strip_tac
@@ -347,4 +346,67 @@ Resume gen_inst_halt_frame_sim_deep[selfdestruct]:
   gvs[COND_RATOR]
 QED
 
-Finalise gen_inst_halt_frame_sim_deep
+Finalise gen_inst_halt_frame_sim_deep_reloc
+
+
+Theorem gen_inst_halt_frame_sim_deep:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode <> INVOKE /\
+    source_memory_reads_disjoint cp inst vs /\
+    opaque_use_ok fn /\
+    ~is_param_opcode inst.inst_opcode /\
+    (* The invariant's region clause for the output planner state, as in
+       gen_inst_frame_sim: the prefix's transient spills lie below
+       ps'.ps_alloc.sa_next_offset, so this keeps them inside the region
+       whose bytes source_memory_reads_disjoint keeps the payload out of.
+       fn_frame_inv bounds only ps at entry, which isn't enough
+       (fnFrameTerminalPrep$terminal_escape_halt_counterexample). *)
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf_marked base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    inst_wf inst /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = Halt vs' ==>
+      ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+        asm_steps lo o2pc prog n as = AsmHalt as' /\
+        venom_asm_terminal_rel vs' as' /\
+        create_safe_prefix lo o2pc prog n as
+Proof
+  rpt strip_tac >>
+  drule_all gen_inst_halt_frame_sim_deep_reloc >> simp[]
+QED
