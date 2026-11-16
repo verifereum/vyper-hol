@@ -70,5 +70,33 @@ Proof
   `elbl = "__entry"` by
     (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
      simp[fresh_label_def, initial_compile_state_def] >> strip_tac >> gvs[]) >>
-  FAIL_TAC "installed"
+  drule_all entry_runtime_no_dalloca >> strip_tac >>
+  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
+    vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `fresh_vars_wrt label_st ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
+   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (drule_all initial_entry_dispatch_scalars >>
+     disch_then (qspecl_then [`0`, `"__entry"`, `label_st`] mp_tac) >>
+     simp[Abbr `ss`]) >>
+  `EVERY (\(sel,lbl). sel < 2 ** 32)
+    (MAP (\(sel,lbl,z). (sel,lbl)) sels)` by
+    (qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
+       mp_tac linear_selectors_lt >> simp[]) >>
+  `linear_dispatch_target ss.vs_call_ctx.cc_calldata
+     (MAP (\(sel,lbl,z). (sel,lbl)) sels) fallback = fallback` by
+    (simp[Abbr `ss`] >> irule default_raw_fallback_target >> simp[]) >>
+  drule linear_dispatch_fallback_revert_joint >>
+  disch_then (qspecl_then [`entry_taint`, `ss`, `entry_end`, `checks`] mp_tac) >>
+  disch_then (qspecl_then [`0`, `func`, `unit.cu_context`] mp_tac) >>
+  disch_then (qspecl_then [`[]`, `FEMPTY`] mp_tac) >>
+  (impl_tac >- simp[Abbr `ss`]) >> strip_tac >>
+  drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  `phi_prefix_length b0.bb_instructions = 0 /\
+   entry_prov func ss FEMPTY = FEMPTY /\
+   entry_taint_vars func ss entry_taint = entry_taint` by
+    (Cases_on `b0.bb_instructions` >>
+     gvs[get_instruction_def, mk_inst_def, phi_prefix_length_def,
+       entry_prov_def, entry_taint_vars_def, phis_prov_def, phis_taint_def,
+       Abbr `ss`]) >>
+  qexistsl_tac [`func`, `s`, `G'`, `tn'`] >> simp[] >> metis_tac[]
 QED
