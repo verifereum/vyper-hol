@@ -5253,6 +5253,93 @@ Resume native_inventory_frontier_no_pass[contradiction]:
 QED
 Finalise native_inventory_frontier_no_pass
 
+Theorem native_stopped_suffix_budget_lift[local]:
+  !A n b C x q i rest frontpost.
+  EVERY (\j. ~is_terminator j.inst_opcode) A /\
+  FOLDR (dft_exec_cons n C) OK A x = OK q /\
+  (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)) /\
+  terminates (dft_exec_suffix n C (A ++ i::rest) x) /\
+  (!H h r fp u.
+    A ++ i::rest = H ++ h::r /\ A ++ i::frontpost = H ++ h::fp /\
+    EVERY (\j. ~is_terminator j.inst_opcode) H /\
+    FOLDR (dft_exec_cons n C) OK H x = OK u /\
+    h.inst_opcode = INVOKE /\ terminates (step_inst n C h u) ==>
+    step_inst b C h u = step_inst n C h u) ==>
+  dft_exec_suffix b C (A ++ i::rest) x =
+    dft_exec_suffix n C (A ++ i::rest) x
+Proof
+  Induct >- (
+    rpt gen_tac >> simp[] >> strip_tac >>
+    `terminates (step_inst n C i x)` by
+      (Cases_on `step_inst n C i x` >>
+       gvs[dftIndexedExecTheory.dft_exec_suffix_def,
+           passSimulationDefsTheory.terminates_def]) >>
+    `step_inst b C i x = step_inst n C i x` by
+      (Cases_on `i.inst_opcode = INVOKE`
+       >- (first_x_assum irule >> simp[] >>
+           qexistsl_tac [`[]`, `frontpost`, `rest`] >> simp[]) >>
+       simp[step_inst_non_invoke]) >>
+    once_rewrite_tac[dftIndexedExecTheory.dft_exec_suffix_def] >>
+    simp[] >> Cases_on `step_inst n C i x` >> gvs[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >> (
+  rename1 `step_inst n C h x = OK v` >>
+  `step_inst b C h x = OK v` by
+    (Cases_on `h.inst_opcode = INVOKE`
+     >- (`step_inst b C h x = step_inst n C h x` suffices_by simp[] >>
+         first_x_assum irule >>
+         simp[passSimulationDefsTheory.terminates_def] >>
+         qexistsl_tac [`[]`, `A ++ i::frontpost`, `A ++ i::rest`] >> simp[]) >>
+     metis_tac[step_inst_non_invoke]) >>
+  once_rewrite_tac[dftIndexedExecTheory.dft_exec_suffix_def] >> simp[] >>
+  first_x_assum irule >>
+  conj_tac
+  >- (qexists_tac `frontpost` >> rpt strip_tac >>
+      first_x_assum irule >> simp[] >>
+      qexistsl_tac [`h::H`, `fp`, `r`] >>
+      simp[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  conj_tac
+  >- (qpat_x_assum `terminates _` mp_tac >>
+      simp[dftIndexedExecTheory.dft_exec_suffix_def]) >>
+  qexists_tac `q` >> simp[])
+QED
+
+Theorem native_stopped_cut_budget_lift:
+  let x = s with vs_gas_readings := g ++ tail;
+      source_residual = bb with
+        bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo in
+  todo = A ++ i::rest /\ P = A ++ i::frontpost /\
+  EVERY (\j. ~is_terminator j.inst_opcode) A /\
+  FOLDR (dft_exec_cons n C) OK A x = OK q /\
+  (is_terminator i.inst_opcode \/ ~(?u. step_inst n C i q = OK u)) /\
+  terminates (exec_block n C source_residual x) /\
+  (!H h r fp u.
+    todo = H ++ h::r /\ P = H ++ h::fp /\
+    EVERY (\j. ~is_terminator j.inst_opcode) H /\
+    FOLDR (dft_exec_cons n C) OK H x = OK u /\
+    h.inst_opcode = INVOKE /\ terminates (step_inst n C h u) ==>
+    step_inst b C h u = step_inst n C h u) ==>
+  exec_block b C source_residual x = exec_block n C source_residual x /\
+  terminates (exec_block b C source_residual x)
+Proof
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  `!f. exec_block f C
+     (bb with bb_instructions := REPLICATE s.vs_inst_idx pad ++ todo)
+     (s with vs_gas_readings := g ++ tail) =
+   dft_exec_suffix f C todo (s with vs_gas_readings := g ++ tail)` by
+    (gen_tac >> irule dftIndexedExecTheory.dft_exec_suffix_boundary >>
+     simp[NoAsms, DROP_APPEND]) >>
+  gvs[] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  `dft_exec_suffix b C (A ++ i::rest) (s with vs_gas_readings := g ++ tail) =
+   dft_exec_suffix n C (A ++ i::rest) (s with vs_gas_readings := g ++ tail)` by
+    (irule native_stopped_suffix_budget_lift >>
+     asm_simp_tac bool_ss [] >>
+     conj_tac >- (qexists_tac `frontpost` >> first_assum ACCEPT_TAC) >>
+     qexists_tac `q` >> asm_simp_tac bool_ss []) >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac []
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
