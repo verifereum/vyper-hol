@@ -1,7 +1,8 @@
 (* Local closure interfaces for pointwise structural restrictions. *)
 Theory fmpStepRestrictionClosure
 Ancestors
-  fmpStepPredicateTransport fmpStepLayout fmpStepRewrite fmpLowerDefs fmpLowerProps
+  fmpStepPredicateTransport fmpStepLayout fmpStepRewrite
+  fmpStepRewriteSupply fmpStepRewriteOrigin fmpLowerDefs fmpLowerProps
   o1PassContract venomInst list rich_list
 
 Theorem fmp_lower_inst_invoke_head:

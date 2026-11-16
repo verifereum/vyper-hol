@@ -21,7 +21,7 @@ Ancestors
   asmFrameRun asmFrameRel codegenEntrySim codegenEntryRel codegenAsmProgOk
   asmToBytecodeProps asmToBytecodeProofs codegenAsmStaticWf asmSymSem
   asmOptimizer asmWf asmSem venomExecSemantics vfmDecreasesGas symbolResolve
-  contextCodegenRel codegenRel
+  contextCodegenRel codegenRel venomRetProps
 
 (* ===== Static facts ===== *)
 
@@ -187,7 +187,7 @@ Proof
                   (build_offset_to_pc prog') prog' n' s'))` by
     (rpt strip_tac >> gvs[Abbr`s'`] >> irule asm_opt_transfer >> simp[]) >>
   Cases_on `run_context fuel unit.cu_context vs` >>
-  gvs[venom_frame_rel_def, run_context_never_ok]
+  gvs[venom_frame_rel_def, run_context_not_ok]
   >- ((* Halt *)
       rename1 `asm_steps _ _ prog n s = AsmHalt a1` >>
       qpat_x_assum `!n. sym_terminal _ ==> _` (qspec_then `n` mp_tac) >>
