@@ -328,18 +328,17 @@ Theorem append_storage_copy_suffix_path:
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  if w2n (if tr then tload slot s else sload slot s) < cap then
+  let len = if tr then tload slot s else sload slot s in
+  if w2n len < cap then
     ?t ks. gas_marked_path F ctx func s 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
       store_copy_normalize s t =
-        (if tr then tstore else sstore) slot
-          ((if tr then tload slot s else sload slot s)+1w)
+        (if tr then tstore else sstore) slot (len+1w)
           (FOLDL (\q j. (if tr then tstore else sstore)
-            (slot+1w+(if tr then tload slot s else sload slot s)*n2w stride+n2w j)
-            (mload (w2n b+32*j) s) q) s ks)
+            (slot+1w+len*n2w stride+n2w j) (mload (w2n b+32*j) s) q) s ks)
   else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
