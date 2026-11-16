@@ -32,7 +32,7 @@ QED
 Theorem unwrap_alloc_loop_entry:
   compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\

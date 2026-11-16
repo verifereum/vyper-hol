@@ -10,7 +10,7 @@ Ancestors
   fragGasSeq gasCount gasSummary gasExemptCert gasContext gasOutcome
   gasSummaryCompose stmtSimForRounds vyperInterpreter vyperState
   words arithmetic rich_list emitHelperProps exprSimBopRestWordLoads
-  exprSimBopRestWordLayout exprSimProps
+  exprSimBopRestWordLayout exprSimProps exprSimSliceCompose
 Libs
   monadsyntax
 
@@ -729,7 +729,7 @@ Proof
   (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then irule >> simp[] >>
+  disch_then (fn th => irule slice_gas_outcome_conseq >> irule_at Any th) >> simp[] >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func bc cx
        (es with <|scopes := (FEMPTY |+ (id,
