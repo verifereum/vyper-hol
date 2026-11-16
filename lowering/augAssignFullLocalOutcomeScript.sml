@@ -7,7 +7,7 @@ Ancestors
   augAssignFullLocalNumeric augAssignFullLocalSuccessSource
   augAssignFullLocalSuccessFrame augAssignFullLocalWriteOutcome
   augAssignFullStateFrame augAssignFullHistory gasOutcomeFullCompose
-  gasOutcomeFullRunning bodyFullMemoryFrames bodySimFull stmtSimAugAssign
+  gasOutcomeFullGuarded bodyFullMemoryFrames bodySimFull stmtSimAugAssign targetPlaceSim
   exprSimSource exprSimHypsDefs exprSimProps exprLoweringProps exprBopSimProps
   stmtSimAugAssignAttr exprSimExtract32Post loweringSlice vyperState
   fragExec exprSimDefs bodyFullGhostFrame loweringStateRelDefs stmtSimDeclStore stmtSimDefs
@@ -60,7 +60,23 @@ Proof
   `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx e
     es se sb s (mid with gas_obs := []) v rhs t` by
     simp[extract32_expr_post_end_gas_obs] >>
-  drule_all augassign_attr_rhs_word_operand >> disch_tac >>
+  `eval_operand rhs t = SOME (val_to_w256 v)` by
+    (`expr_body_pre cenv cx env e
+        (es with gas_obs := gas_explicit marks s.vs_gas_readings)` by simp[] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
+     drule expr_body_pre_word_result >>
+     disch_then (qspecl_then [`INL v`, `mid with gas_obs := []`] mp_tac) >>
+     (impl_tac >- (simp[bind_def] >>
+       qpat_x_assum `bind _ _ _ = _` mp_tac >>
+       simp[bind_def, AllCaseEqs()] >> metis_tac[])) >>
+     strip_tac >>
+     qpat_x_assum `!tv. INL v = INL tv ==> _` (qspec_then `v` mp_tac) >>
+     simp[] >> strip_tac >>
+     `post_value_type cenv e = expr_type e` by
+       (irule post_value_type_word >> simp[]) >>
+     irule expr_val_rel_word >> simp[] >>
+     qexistsl [`cx`, `expr_type e`] >>
+     fs[expr_post_def]) >>
   simp[] >> metis_tac[not_fresh_at_mono]
 QED
 

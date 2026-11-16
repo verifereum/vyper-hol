@@ -3,7 +3,7 @@ Theory augAssignFullLocalPrefix
 Ancestors
   augAssignFullSourcePrefix augAssignFullStateFrame augAssignFullHistory
   typedCopyOriginPtrBase exprPtrCtorImmStore decoderSetupStepPtr
-  wordLoadStorePtr stmtSimAugAssign bodyFullPreds bodyMemoryDefs bodyPtrDefs
+  wordLoadStorePtr stmtSimAugAssign targetPlaceSim bodyFullPreds bodyMemoryDefs bodyPtrDefs
   vyperTyping vyperTypeSystem exprSimHypsDefs exprSimProps
   emitHelperProps exprLoweringProps ptrSafetyTransport
   codegenRel contextCodegenRel unitTransformDefs instMemFrontier memSafeRun venomExecSemantics venomInst venomState
@@ -51,7 +51,7 @@ Theorem augassign_local_prefix_full:
   lookup_scopes name es.scopes = SOME entry /\
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME aw /\
