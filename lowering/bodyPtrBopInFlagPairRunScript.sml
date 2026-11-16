@@ -1,17 +1,9 @@
 Theory bodyPtrBopInFlagPairRun
-Ancestors bodyPtrBopInFlagRobust bodyPtrBopContinuation bodyPtrBopEntry
+Ancestors
+  bodyPtrBopTypedSource bodyPtrBopInFlagInterface bodyPtrBopInFlagRobust
+  bodyPtrBopContinuation bodyPtrBopEntry
   bodyPtrBopOperandContract bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   vyperTypeSystem vyperValue vyperTyping loweringSlice exprBopSimProps valueEncoding compileEnv
-
-Theorem membership_flag_typed_inputs:
-  (bop = In \/ bop = NotIn) /\ well_typed_binop ann bop ty (FlagT fid) /\
-  evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
-  evaluate_type tenv (FlagT fid) = SOME tv2 /\ value_has_type tv2 v2 ==>
-  ?m. value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\ m <= 256
-Proof
-  strip_tac >> gvs[well_typed_binop_def] >>
-  gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[]
-QED
 
 Theorem membership_flag_pair_run:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
