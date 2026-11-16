@@ -726,6 +726,7 @@ Resume compile_assign_attr_storage_mem[store]:
     (qpat_x_assum `u = _` SUBST1_TAC >>
      REWRITE_TAC [stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
+  conj_tac >- fs[] >>
   irule return_buf_frame_frame >>
   qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
 QED
