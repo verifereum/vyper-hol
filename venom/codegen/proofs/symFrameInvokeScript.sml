@@ -1647,6 +1647,68 @@ Proof
 QED
 
 (* The function contract specialized to a callee installed by INVOKE. *)
+Theorem sym_invoke_callee_sim_own:
+  !allow_own fuel ctx unit lo o2pc prog cp rpolicy j callee rj vs Inv cvs args cas cra
+   crest cpc env own scas ret_lbl srest.
+  sym_fn_sim_at_own allow_own fuel /\
+  ctx = unit.cu_context /\
+  code_labels_agree prog lo /\ o2pc = build_offset_to_pc prog /\
+  generate_context_plan ctx = SOME cp /\ codegen_assembly rpolicy unit = SOME prog /\
+  unit_shape_ok unit /\
+  j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+  EL j cp.cp_regions = rj /\
+  MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+  (!f inst callee_name args callee.
+     MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+     MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE /\
+     inst.inst_operands = Label callee_name :: args /\
+     lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+     fn_has_retpc callee) /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+  fn_entry_inv Inv ctx callee cvs /\
+  setup_callee callee args vs = SOME cvs /\ fn_has_retpc callee /\
+  asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
+  LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+  fn_entry_state_rel cp callee cvs cas cra crest /\
+  FLOOKUP o2pc (w2n cra) = SOME cpc /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env own /\ vs.vs_code = own /\
+  asm_sym_rel_own lo prog env own cas scas /\
+  scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ srest /\
+  MEM (AsmLabel ret_lbl) prog /\
+  (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cp b) ==>
+  (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+     ?n as'. asm_steps lo o2pc prog n cas = AsmHalt as' /\
+       venom_asm_terminal_rel vs' as' /\
+       sym_terminal (sym_steps_mode allow_own prog env own n scas)) /\
+  (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+     ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n cas = AsmRevert as') \/
+              (a = ExHalt_abort /\ asm_steps lo o2pc prog n cas = AsmFault as')) /\
+       venom_asm_terminal_rel vs' as' /\
+       sym_terminal (sym_steps_mode allow_own prog env own n scas)) /\
+  (!rv vs'. run_blocks fuel ctx callee cvs = IntRet rv vs' ==>
+     ?n as' ss'. asm_steps lo o2pc prog n cas = AsmOK as' /\
+       as'.as_pc = cpc /\ as'.as_stack = REVERSE rv.iret_values ++ crest /\
+       fn_return_state_rel ctx cp callee vs' cas as' /\
+       sym_steps_mode allow_own prog env own n scas = SymOK ss' /\
+       asm_sym_rel_own lo prog env own as' ss' /\
+       ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+       (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee.fn_name b ==>
+          FLOOKUP ss'.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b) /\
+       (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cvs.vs_params = args /\ cvs.vs_labels = vs.vs_labels /\
+   cvs.vs_call_ctx = vs.vs_call_ctx` by
+    (gvs[setup_callee_def, AllCaseEqs()] >> simp[]) >>
+  drule (iffLR sym_fn_sim_at_own_def) >> disch_then irule >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem sym_invoke_callee_sim:
   !fuel ctx unit lo o2pc prog cp rpolicy j callee rj vs Inv cvs args cas cra
    crest cpc env scas ret_lbl srest.
@@ -1705,6 +1767,63 @@ Proof
 QED
 
 (* Paired call-prefix composition keeps the witness chosen by the callee. *)
+Theorem sym_invoke_halt_compose_mode:
+  asm_steps lo o2pc prog k cs = AsmOK cas /\
+  sym_steps_mode allow_own prog env own k ss = SymOK scas /\
+  asm_steps lo o2pc prog n cas = AsmHalt fin /\
+  venom_asm_terminal_rel vs' fin /\
+  sym_terminal (sym_steps_mode allow_own prog env own n scas) ==>
+  ?m as'. asm_steps lo o2pc prog m cs = AsmHalt as' /\
+    venom_asm_terminal_rel vs' as' /\
+    sym_terminal (sym_steps_mode allow_own prog env own m ss)
+Proof
+  strip_tac >> qexistsl [`k + n`, `fin`] >>
+  simp[sym_steps_mode_add] >>
+  metis_tac[blockSimHelpersTheory.asm_steps_compose_halt]
+QED
+
+Theorem sym_invoke_abort_compose_mode:
+  asm_steps lo o2pc prog k cs = AsmOK cas /\
+  sym_steps_mode allow_own prog env own k ss = SymOK scas /\
+  ((a = Revert_abort /\ asm_steps lo o2pc prog n cas = AsmRevert fin) \/
+   (a = ExHalt_abort /\ asm_steps lo o2pc prog n cas = AsmFault fin)) /\
+  venom_asm_terminal_rel vs' fin /\
+  sym_terminal (sym_steps_mode allow_own prog env own n scas) ==>
+  ?m as'. ((a = Revert_abort /\ asm_steps lo o2pc prog m cs = AsmRevert as') \/
+           (a = ExHalt_abort /\ asm_steps lo o2pc prog m cs = AsmFault as')) /\
+    venom_asm_terminal_rel vs' as' /\
+    sym_terminal (sym_steps_mode allow_own prog env own m ss)
+Proof
+  strip_tac >> qexistsl [`k + n`, `fin`] >>
+  simp[sym_steps_mode_add] >>
+  metis_tac[blockSimHelpersTheory.asm_steps_compose_revert,
+    blockSimHelpersTheory.asm_steps_compose_fault]
+QED
+
+Theorem sym_invoke_ok_compose_own:
+  asm_steps lo o2pc prog k cs = AsmOK cas /\
+  sym_steps_mode allow_own prog env own k ss = SymOK scas /\
+  asm_steps lo o2pc prog n cas = AsmOK asr /\
+  sym_steps_mode allow_own prog env own n scas = SymOK ssr /\
+  asm_steps lo o2pc prog m asr = AsmOK fin /\
+  sym_steps_mode allow_own prog env own m ssr = SymOK sfin /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
+  sym_frame_inv_own lo prog env own ctx cplan fn ret srest labs0 final fin sfin /\
+  fin.as_pc = cs.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp ops) ==>
+  ?j as' ss'. asm_steps lo o2pc prog j cs = AsmOK as' /\
+    fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' as' /\
+    as'.as_pc = cs.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp ops) /\
+    sym_steps_mode allow_own prog env own j ss = SymOK ss' /\
+    sym_frame_inv_own lo prog env own ctx cplan fn ret srest labs0 final as' ss'
+Proof
+  strip_tac >>
+  `asm_steps lo o2pc prog (n + m) cas = AsmOK fin` by
+    metis_tac[blockSimHelpersTheory.asm_steps_compose_ok] >>
+  qexistsl [`k + (n + m)`, `fin`, `sfin`] >>
+  asm_simp_tac (srw_ss()) [sym_steps_mode_add] >>
+  metis_tac[blockSimHelpersTheory.asm_steps_compose_ok]
+QED
+
 Theorem sym_invoke_halt_compose:
   asm_steps lo o2pc prog k cs = AsmOK cas /\
   sym_steps prog env k ss = SymOK scas /\
@@ -1713,8 +1832,9 @@ Theorem sym_invoke_halt_compose:
   ?m as'. asm_steps lo o2pc prog m cs = AsmHalt as' /\
     venom_asm_terminal_rel vs' as' /\ sym_terminal (sym_steps prog env m ss)
 Proof
-  strip_tac >> qexistsl [`k + n`, `fin`] >>
-  simp[sym_steps_add] >> metis_tac[blockSimHelpersTheory.asm_steps_compose_halt]
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`]
+    sym_invoke_halt_compose_mode) >>
+  simp[sym_steps_mode_def]
 QED
 
 Theorem sym_invoke_abort_compose:
@@ -1727,9 +1847,9 @@ Theorem sym_invoke_abort_compose:
            (a = ExHalt_abort /\ asm_steps lo o2pc prog m cs = AsmFault as')) /\
     venom_asm_terminal_rel vs' as' /\ sym_terminal (sym_steps prog env m ss)
 Proof
-  strip_tac >> qexistsl [`k + n`, `fin`] >>
-  simp[sym_steps_add] >> metis_tac[blockSimHelpersTheory.asm_steps_compose_revert,
-    blockSimHelpersTheory.asm_steps_compose_fault]
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`]
+    sym_invoke_abort_compose_mode) >>
+  simp[sym_steps_mode_def]
 QED
 
 Theorem sym_invoke_ok_compose:
