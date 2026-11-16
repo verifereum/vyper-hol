@@ -7,7 +7,7 @@ Ancestors
   fragGasSeqPtr fragExecPtr wordLoadStorePtr storageCopyBodyPtr
   stmtReasonMemory exprSimPtrTopLevelImmutableCopy
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
-  valueEncodingProps valueEncodingProofs loweringPosts
+  valueEncodingProps valueEncodingProofs loweringPosts ssaOperandFrame
   finite_map words list pred_set
 
 Theorem raw_call_tuple_copy_checked:
@@ -84,7 +84,7 @@ Proof
      simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `u`, Abbr `v`, Abbr `w`,
        step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, mstore_def,
-       FLOOKUP_UPDATE, GSYM word_add_n2w]) >>
+       FLOOKUP_UPDATE, word_add_n2w]) >>
   `t = w` by
     (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
      simp[run_inst_seq_def]) >>
@@ -94,6 +94,33 @@ Proof
   qabbrev_tac `tn2 = step_taint i2 u v tn1` >>
   qabbrev_tac `G3 = step_prov PG G2 i3 w` >>
   qabbrev_tac `tn3 = step_taint i3 v w tn2` >>
+  `G1 = G /\ tn1 = tn with t_mem := tn.t_mem DIFF {i | b <= i /\ i < b+32}` by
+    (qpat_assum `eval_operand (Var p) s = _`
+       (mp_then Any mp_tac storage_copy_store_ghost) >>
+     disch_then (fn th => qpat_assum `eval_operand ok s = _`
+       (mp_then Any mp_tac th)) >>
+     disch_then (qspecl_then [`tn`,`sa.cs_next_id`,`PG`,`G`] mp_tac) >>
+     simp[Abbr `G1`, Abbr `tn1`, Abbr `i1`, Abbr `u`]) >>
+  `?site. FLOOKUP G p = SOME site` by metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
+  `G2 = G |+ (q,site) /\ tn2 = tn1 with t_var := tn1.t_var |+ (q,{})` by
+    (drule literal_add_ghost >> disch_then strip_assume_tac >>
+     simp[Abbr `G2`, Abbr `tn2`, Abbr `i2`, Abbr `v`]) >>
+  `G3 = G2 /\ tn3.t_var = tn2.t_var /\ tn3.t_stor = tn2.t_stor /\
+   tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+   tn3.t_mem = (tn2.t_mem DIFF {i | b+32 <= i /\ i < b+32+cnt}) UNION
+      {b+32+i | i < cnt /\ a+i IN tn2.t_mem}` by
+    ((`eval_operand (Lit (n2w cnt)) v = SOME (n2w cnt)` by simp[eval_operand_def] >>
+     qpat_assum `eval_operand (Var q) v = _`
+       (mp_then Any mp_tac mcopy_operand_ghost_frame) >>
+     disch_then (fn th => qpat_assum `eval_operand (Var x) v = _`
+       (mp_then Any mp_tac th)) >>
+     disch_then (fn th => qpat_assum `eval_operand (Lit _) v = _`
+       (mp_then Any mp_tac th)) >>
+     disch_then strip_assume_tac >>
+     `tn3.t_imm = tn2.t_imm` by
+       simp[Abbr `tn3`, Abbr `i3`, step_taint_nonmemory_frame, mk_inst_def] >>
+     fs[arithmeticTheory.LESS_MOD] >>
+     simp[Abbr `G3`, Abbr `tn3`, Abbr `i3`, Abbr `w`] >> (gvs[]))) >>
   qexistsl [`G3`,`tn3`] >>
   conj_tac >- suspend "checked" >>
   conj_tac >- suspend "cover" >>
@@ -110,27 +137,39 @@ Resume raw_call_tuple_copy_checked[checked]:
   cheat
 QED
 Resume raw_call_tuple_copy_checked[cover]:
-  cheat
+  `FLOOKUP s.vs_vars p = SOME (n2w b)` by fs[lookup_var_def] >>
+  qpat_x_assum `ptr_covers G tn p s _` mp_tac >>
+  simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, Abbr `w`, Abbr `v`,
+       Abbr `u`, lookup_var_def, update_var_def, mcopy_vars, mstore_vars,
+       FLOOKUP_UPDATE]
 QED
 Resume raw_call_tuple_copy_checked[robust]:
-  cheat
+  simp[Abbr `w`, Abbr `v`, mcopy_update_var, update_var_def] >>
+  irule bool_pair_mstore_mcopy_robust >>
+  simp[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
+       valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def, Abbr `u`, Abbr `cnt`] >>
+  decide_tac
 QED
 Resume raw_call_tuple_copy_checked[mask]:
-  cheat
+  simp[]
 QED
 Resume raw_call_tuple_copy_checked[stor]:
-  cheat
+  simp[]
 QED
 Resume raw_call_tuple_copy_checked[trans]:
-  cheat
+  simp[]
 QED
 Resume raw_call_tuple_copy_checked[imm]:
-  cheat
+  simp[]
 QED
 Resume raw_call_tuple_copy_checked[old]:
-  cheat
+  qx_gen_tac `name` >> strip_tac >>
+  `name <> q` by metis_tac[] >>
+  simp[Abbr `w`, Abbr `v`, Abbr `u`, lookup_var_def, update_var_def,
+       mcopy_vars, mstore_vars, FLOOKUP_UPDATE, op_taint_def]
 QED
 Resume raw_call_tuple_copy_checked[state]:
-  cheat
+  simp[Abbr `w`, Abbr `v`, mcopy_update_var, update_var_reset_vars,
+       GSYM mcopy_reset_vars, Abbr `u`, GSYM mstore_reset_vars]
 QED
 Finalise raw_call_tuple_copy_checked
