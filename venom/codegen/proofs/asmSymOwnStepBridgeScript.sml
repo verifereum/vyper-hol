@@ -3,7 +3,7 @@
 Theory asmSymOwnStepBridge
 Ancestors
   asmSymBridge asmSymOwnCode asmSymSem asmSem asmWf symbolResolve
-  vfmTypes
+  vfmTypes asmSymOwnStep
 
 Theorem asm_sym_step_own_from_copy:
   (!c t bytes.
@@ -27,15 +27,14 @@ Proof
   >- (gvs[sym_step_op_own_def, asm_step_def] >>
       first_x_assum irule >> simp[]) >>
   Cases_on `name = "CODESIZE"`
-  >- (gvs[sym_step_op_own_def, asm_step_def] >>
-      simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-           asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
-           asm_step_extcall_def, asm_step_copy_def, asm_step_context_def,
-           asm_push_val_def, sym_set_stack_def, asm_sym_step_rel_def] >>
-      gvs[asm_sym_rel_def, asm_next_def, sval_conc_def] >>
-      conj_tac
-      >- (rename1 `LENGTH memory = LENGTH cs.as_memory` >>
-          qexists `memory` >> simp[]) >>
-      metis_tac[]) >>
+  >- (gvs[] >>
+      `asm_sym_rel_own (SND (compute_label_offsets p)) p env cs.as_code cs ss`
+        by simp[asm_sym_rel_own_canonical] >>
+      mp_tac (Q.INST [`lo` |-> `SND (compute_label_offsets p)`,
+        `own` |-> `cs.as_code`, `otp` |-> `build_offset_to_pc p`]
+        sym_codesize_own_sim) >>
+      simp[] >> strip_tac >>
+      gvs[sym_step_own_def, sym_step_op_own_def, asm_step_def,
+          asm_sym_step_rel_def, asm_sym_rel_own_canonical]) >>
   gvs[sym_step_op_own_def, sym_step_def]
 QED
