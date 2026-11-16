@@ -1,5 +1,6 @@
 Theory fmpStageFmpStepsRetpcFrame
 Ancestors
+  lowerDloadSafetyRetpcEffects
   fmpStageFmpStepsLive fmpStageFmpStepsRetpcFrameCore fmpStageFmpStepsRetpcAnalysis
   fmpStageFmpStepsRetpcState fmpStageReclaimSound
   fnBlockPlanStaticOffsetLive cfgWf venomWfProps venomExecProofs
@@ -119,7 +120,7 @@ Theorem fmp_retpc_stage_write[local]:
 Proof
   rpt strip_tac >>
   gvs[] >>
-  gvs[fmp_retpc_taint] >>
+  gvs[lowerDloadSafetyRetpcEffectsTheory.ld_retpc_taint] >>
   gvs[fmp_stage_rel_def, update_var_def,
       fmp_retpc_shared_write] >> metis_tac[]
 QED

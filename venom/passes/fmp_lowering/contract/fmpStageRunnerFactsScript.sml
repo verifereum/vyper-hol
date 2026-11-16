@@ -5,7 +5,6 @@
  * root instructions the context entry runs first are straight-line.
  *
  * TOP-LEVEL:
- *   fmp_frame_reachable_not_halted - frame_reachable states are not halted
  *   fmp_frame_reachable_entry_last - the bottom frame is the context entry
  *   fmp_invoke_not_entry           - no INVOKE calls the context entry
  *   fmp_stage_rel_lowered          - the relation's target function is
@@ -24,32 +23,6 @@ Ancestors
   analysisSimDefs venomInstProofs venomInstProofs1 venomExecProofs
   venomExecSemantics
   contextCodegenRel venomWf venomState venomInst list
-
-(* Why: invoke_return and the block steps assume a live source state;
-   only a halt ends a frame, and merge_callee_state keeps the caller's
-   flag. *)
-Theorem fmp_frame_reachable_not_halted:
-  !vs C stk PG G tn fn inst s.
-    frame_reachable vs C stk PG G tn fn inst s ==>
-    ~vs.vs_halted ==>
-    ~s.vs_halted /\ EVERY (\f. ~f.cf_state.vs_halted) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[enters_block_def]
-  >- (drule eval_phis_only_updates_vs_vars >>
-      disch_then (fn th => once_rewrite_tac[th]) >> simp[])
-  >- (`inst.inst_opcode <> INVOKE` by simp[] >>
-      gvs[step_inst_non_invoke] >>
-      drule step_inst_base_OK_preserves_halted >> simp[])
-  >- (drule eval_phis_only_updates_vs_vars >>
-      disch_then (fn th => once_rewrite_tac[th]) >> simp[])
-  >- (drule eval_phis_only_updates_vs_vars >>
-      disch_then (fn th => once_rewrite_tac[th]) >> gvs[setup_callee_def])
-  >> qspec_then `\u. u.vs_halted` mp_tac bind_outputs_preserves >>
-  simp[update_var_def] >> disch_then drule >>
-  simp[adopt_return_fmp_def, merge_callee_state_def] >>
-  CASE_TAC >> simp[]
-QED
 
 (* Why: the bottom frame runs the context entry, so the callee order
    (callee_first) puts every active function at or before it. *)

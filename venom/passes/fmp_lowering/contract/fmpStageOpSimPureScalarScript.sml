@@ -339,6 +339,8 @@ Proof
     (drule_all fmp_scalar_prov >> simp[]) >>
   qexistsl [`k`,`OK (update_var out y t)`] >> simp_tac (srw_ss()) [] >>
   conj_tac >- simp[] >>
-  irule fmp_scalar_update_post >> simp[PULL_EXISTS] >> qexists `m` >>
+  irule (REWRITE_RULE [ctxLookupAgreeHelpersTheory.update_var_initial_fmp]
+    fmp_scalar_update_post) >>
+  simp[PULL_EXISTS] >> qexists `m` >>
   fs[fmp_stage_rel_def] >> gvs[]
 QED

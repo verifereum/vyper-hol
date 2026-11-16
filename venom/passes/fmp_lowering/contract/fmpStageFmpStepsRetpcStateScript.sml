@@ -1,5 +1,6 @@
 Theory fmpStageFmpStepsRetpcState
 Ancestors
+  lowerDloadSafetyRetpcEffects
   fmpStageFmpStepsRetpcPreservation livenessProofs cfgWf venomWfProps
   venomExecProofs o1LowerDloadShared o1LowerDloadRelocationKernel
   fmpStageRel ptrDiscipline venomState venomInst codegenRel
@@ -81,7 +82,7 @@ Theorem fmp_retpc_env_step:
     ((update_var pc y t) with vs_inst_idx := ti)
 Proof
   strip_tac >> drule_all fmp_retpc_prov >> disch_then (qspec_then `update_var pc x s` assume_tac) >>
-  simp[fmp_retpc_taint] >>
+  simp[lowerDloadSafetyRetpcEffectsTheory.ld_retpc_taint] >>
   irule fmp_retpc_env_next >> simp[] >>
   metis_tac[fmp_retpc_live_next]
 QED
@@ -103,7 +104,7 @@ Theorem fmp_retpc_env_runner_step:
     ((update_var pc y (update_var runner z t)) with vs_inst_idx := ti)
 Proof
   strip_tac >> drule_all fmp_retpc_prov >> disch_then (qspec_then `update_var pc x s` assume_tac) >>
-  simp[fmp_retpc_taint] >>
+  simp[lowerDloadSafetyRetpcEffectsTheory.ld_retpc_taint] >>
   irule fmp_retpc_env_runner_next >> simp[] >>
   metis_tac[fmp_retpc_live_next]
 QED

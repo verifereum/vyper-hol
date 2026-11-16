@@ -24,16 +24,3 @@ Proof
   Cases_on `outs` >> simp[] >>
   simp[Once step_inst_base_def]
 QED
-
-Theorem fmp_retpc_taint:
-  inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] ==>
-  step_taint inst s (update_var v x s) tn =
-    tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}
-Proof
-  strip_tac >>
-  simp[step_taint_def, out_taint_def, written_taint_def, mem_taint_def,
-       update_var_def, new_site_bytes_def, step_writes_def, range_bytes_def,
-       source_memory_write_ranges_def, store_taint_def, adopt_reset_def,
-       imm_taint_def, eval_operand_def, FLOOKUP_DEF, taint_component_equality] >>
-  SET_TAC[]
-QED
