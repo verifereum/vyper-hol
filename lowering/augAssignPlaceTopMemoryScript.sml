@@ -30,13 +30,19 @@ Proof
   drule_all augassign_rhs_pre >> strip_tac >>
   drule_all augassign_toplevel_success >> strip_tac >>
   `body_expr_mem_ok cx e` by metis_tac[] >>
-  drule_all augassign_toplevel_metadata >> strip_tac >>
+  drule_all augassign_toplevel_metadata >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `tr` (qx_choose_then `id_str`
+      (qx_choose_then `slot` (qx_choose_then `tvt` strip_assume_tac))))) >>
   irule compile_augassign_toplevel_mem >> simp[] >> conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
         (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
-        `es with gas_obs := gs`] mp_tac) >>
-      simp[expr_body_pre_gas_obs]) >>
+        `(es with storage_trace :=
+           es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := gs`]
+        mp_tac) >>
+      simp[expr_body_pre_gas_obs,
+           exprSimHypsDefsTheory.expr_body_pre_storage_trace]) >>
   metis_tac[]
 QED

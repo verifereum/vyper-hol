@@ -1225,10 +1225,9 @@ Proof
   fs[gas_admissible_def] >> metis_tac[]
 QED
 
-(* The operator and the store at a storage place.  The relation excludes
-   a static call, so the write succeeds, and the store keeps the
-   relation at every horizon valid after it: such a horizon observes the
-   place, whose root the trace holds. *)
+(* The operator and the store at a storage place.  A static write aborts;
+   a successful store keeps the relation at every horizon valid after it,
+   since such a horizon observes the place whose root the trace holds. *)
 Theorem aug_place_storage_binop_store_outcome[local]:
   bop <> In /\ bop <> NotIn /\ word_value cur /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
@@ -1318,20 +1317,40 @@ Resume aug_place_storage_binop_store_outcome[normal]:
    stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
      ee t` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    (qpat_x_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ ee t`
-       mp_tac >>
-     rewrite_tac[stmt_state_rel_def, state_rel_def] >> strip_tac >> simp[]) >>
-  `value_has_type tv v` by metis_tac[] >>
-  `res = INL ()` by
-    (drule_all aug_place_storage_write_outcome >> metis_tac[]) >>
-  qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
   `eval_operand dst t = SOME slot` by
     (irule aug_place_saved_operand >>
      goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
      qexists_tac `s2` >> simp[]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
     simp[typed_val_to_w256_word_value] >>
+  `value_has_type tv v` by metis_tac[] >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `res = INR (Error (RuntimeError "write in static context")) /\ ff = ee` by
+        metis_tac[aug_place_storage_write_static, pairTheory.PAIR_EQ] >>
+      gvs[] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      `gas_marked_path F ctx func s 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+        metis_tac[fragGasModeTheory.gas_marked_path_then,
+                  arithmeticTheory.ADD_CLAUSES] >>
+      `!tail. k (ee with gas_obs := tail) =
+        (INR (Error (RuntimeError "write in static context")),
+         ee with gas_obs := tail)` by
+        (unabbrev_all_tac >> drule aug_place_storage_suffix_gas_obs >> simp[]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+      disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+                   `ee`, `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+      simp[stmt_exit_def, expr_exit_def, exit_result_def]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `res = INL ()` by
+    (drule_all aug_place_storage_write_outcome >> metis_tac[]) >>
+  qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`sa` |-> `s3`, `sb` |-> `sf`, `s` |-> `t`]
             aug_place_storage_store_run) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
