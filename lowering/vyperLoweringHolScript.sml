@@ -56,4 +56,5 @@ Ancestors
   asmSpliceOwn
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
+  asmOptFinalizerOwn
   asmOptOwnPruneJumps
