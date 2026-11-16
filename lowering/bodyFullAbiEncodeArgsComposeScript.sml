@@ -481,12 +481,13 @@ Resume abi_encode_args_full_from_step[positive_owned]:
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
   disch_then (qspecl_then [`w`, `v`, `tv`, `type_memory_size tv`,
     `w2n w`, `func`, `d`, `cx`, `mid.cs_next_id`, `DF H`] mp_tac) >>
-  (impl_tac >- (simp[] >> gvs[])) >>
+  (impl_tac >- (simp[] >> gvs[] >> rpt strip_tac >>
+    qpat_x_assum `!n b k. local_region ce mid'.scopes t n b k ==> _` drule >> decide_tac)) >>
   strip_tac >>
   `abi_tuple_input ce (lowered_value_type ce h) tv v (Var x) t'` by
     (simp[abiTuplePropsTheory.abi_tuple_input_def, eval_operand_def] >>
      metis_tac[mem_agree_outside_def]) >>
-  simp[] >> qexists `w` >> simp[] >> decide_tac
+  gvs[] >> qexists `w` >> simp[] >> decide_tac
 QED
 
 Resume abi_encode_args_full_from_step[cons_post]:
@@ -494,23 +495,29 @@ Resume abi_encode_args_full_from_step[cons_post]:
   >- (fs[] >>
       `~is_word_type (lowered_value_type ce h)` by
         metis_tac[expr_body_pre_lowered_fits, exprSimLayoutTransportTheory.compatible_word_type] >>
-      irule abi_args_post_cons_captured >>
-      qexistsl_tac [`storage_trace_horizon es.storage_trace`,
-        `storage_trace_horizon mid'.storage_trace`, `mid.cs_next_id`,
-        `w2n w`, `type_memory_size tv`, `t`, `tv`, `w`] >>
-      simp[eval_operand_def] >> metis_tac[]) >>
+      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_args_post_cons_captured >>
+      disch_then (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `FLOOKUP t.vs_allocas _ = _`)) >>
+      disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+      simp[eval_operand_def] >> gvs[] >> metis_tac[ADD_SYM]) >>
   `~is_word_type (lowered_value_type ce h) ==> ee.scopes = mid'.scopes` by
     (metis_tac[expr_body_pre_lowered_fits, exprSimLayoutTransportTheory.compatible_word_type]) >>
   `?w. eval_operand op t = SOME w` by
     (qpat_x_assum `expr_val_rel _ _ _ _ t` mp_tac >>
      simp[expr_val_rel_def] >> metis_tac[]) >>
   `eval_operand op t = eval_operand op t'` by
-    (Cases_on `op` >> simp[eval_operand_def] >>
-     metis_tac[abi_args_operand_kept, eval_operand_def]) >>
-  irule abi_encode_args_post_cons_uncaptured_eq >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`storage_trace_horizon es.storage_trace`,
-    `storage_trace_horizon mid'.storage_trace`, `env`, `t`] >> simp[]
+    (Cases_on `op`
+     >- simp_tac (srw_ss()) [eval_operand_def]
+     >- (rename1 `Var x` >>
+         `eval_operand (Var x) t' = SOME w` by
+           (irule abi_args_operand_kept >> simp[] >>
+            goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >> simp[]) >> metis_tac[]) >>
+     simp_tac (srw_ss()) [eval_operand_def] >> simp[]) >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_encode_args_post_cons_uncaptured_eq >>
+  disch_then (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume abi_encode_args_full_from_step[cons_ghost]:
