@@ -137,15 +137,28 @@ Theorem ld_nonallocating_endpoint:
   ts.vs_alloca_next = t.vs_alloca_next /\
   ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
   ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb ==>
-  let g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+  ld_vars P A (f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
     lf_tgt := ts with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|> in
-  ld_vars P A g /\ ld_maps A g /\
-  ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\ ld_maps A (f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
+  ld_global lo A ((f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>)::fs) /\ FDOM A = ld_slots A ((f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>)::fs) /\
   EVERY (ld_maps A) fs /\
-  (!next. active_inst fn next g.lf_src ==>
+  (!next. active_inst fn next (f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>).lf_src ==>
     ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-      (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
+      (step_taint inst s ss tn) fn next (f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>).lf_src (f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>).lf_tgt A ((f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>)::fs) N)
 Proof
   strip_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >>
   qmatch_goalsub_abbrev_tac `ld_vars P A g` >>

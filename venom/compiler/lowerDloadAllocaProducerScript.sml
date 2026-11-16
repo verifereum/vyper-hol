@@ -40,10 +40,8 @@ Theorem ld_alloca_pair_memory:
     c+n <= t.vs_alloca_next) /\
   ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) ==>
-  let E' = if FLOOKUP L i.inst_id = NONE
-           then E |+ ((0,k),(bs,bt,sz)) else E in
-  let live' = if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live in
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E' live' a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes (if FLOOKUP L i.inst_id = NONE
+           then E |+ ((0,k),(bs,bt,sz)) else E) (if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live) a b)
     (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
     (\a. read_memory a 1 s') (\b. read_memory b 1 t')
 Proof

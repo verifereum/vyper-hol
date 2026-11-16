@@ -83,64 +83,87 @@ Theorem dload_normal_invoke_call:
       {id | ?i. MEM i (fn_insts (EL k (caller::MAP (\c. c.cf_fn) cs))) /\
                 i.inst_id = id}) /\
   (!k. k < LENGTH cs ==>
-    let c = EL k cs; d = EL k ds in
-    dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+    dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
       (DROP (SUC k) fs) /\
-    dload_equal_environment c.cf_state d.cf_state /\
-    c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
-    c.cf_inst = d.cf_inst /\
-    (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-      (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-    (?q. ir_supply_covers_fn q c.cf_fn /\
-      (?q'. lower_dload_function_supply q c.cf_fn = (d.cf_fn,q')) /\
-      dload_control_match q c.cf_fn d.cf_fn c.cf_state d.cf_state
-        c.cf_inst [c.cf_inst] 0)) /\
+    dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+    (EL k cs).cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+    (EL k cs).cf_inst = (EL k ds).cf_inst /\
+    (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+      (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+    (?q. ir_supply_covers_fn q (EL k cs).cf_fn /\
+      (?q'. lower_dload_function_supply q (EL k cs).cf_fn = ((EL k ds).cf_fn,q')) /\
+      dload_control_match q (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+        (EL k cs).cf_inst [(EL k cs).cf_inst] 0)) /\
   (!f. MEM f C.ctx_functions ==> fn_ptr_ok P f) ==>
   ?xs u i emitted.
-    let c = <|cf_fn := caller; cf_inst := callinst; cf_state := s;
-              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>;
-        d = <|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
-              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>;
-        fr = <|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>
-    in
     eval_operands ops s = SOME xs /\ setup_callee callee xs s = SOME u /\
     enters_block callee u u /\
-    frame_reachable vs0 C (c::cs) (MAP (op_prov G) ops) FEMPTY
+    frame_reachable vs0 C ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) (MAP (op_prov G) ops) FEMPTY
       (tn with t_var := FEMPTY) callee i u /\
     (!a. a IN set (fn_ir_vars callee) ==>
       (lookup_var a u = NONE <=> lookup_var a t1 = NONE)) /\
-    dload_boundary_core fl lo (fr::fs)
+    dload_boundary_core fl lo ((<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::fs)
       (set (fn_ir_vars callee) DIFF {a | retpc_var callee a})
-      (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {a | retpc_var c.cf_fn a}) (c::cs))
+      (MAP (\saved. set (fn_ir_vars saved.cf_fn) DIFF {a | retpc_var saved.cf_fn a}) ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs))
       (MAP (op_prov G) ops) (MAP (op_prov H) ops) FEMPTY FEMPTY
-      (tn with t_var := FEMPTY) (un with t_var := FEMPTY) u t1 (c::cs) (d::ds) /\
+      (tn with t_var := FEMPTY) (un with t_var := FEMPTY) u t1 ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds) /\
     dload_control_match q callee gcallee u t1 i emitted 0 /\ j = HD emitted /\
     ir_supply_covers_fn q callee /\
     lower_dload_function_supply q callee = (gcallee,q') /\
-    LENGTH (fr::fs) = SUC (LENGTH (c::cs)) /\ LENGTH (c::cs) = LENGTH (d::ds) /\
-    (!k. k < LENGTH (fr::fs) ==>
-      (EL k (fr::fs)).dr_scratch =
-        FDOM (EL k (t1::MAP (\d. d.cf_state) (d::ds))).vs_allocas DIFF
-        {id | ?i. MEM i (fn_insts (EL k (callee::MAP (\c. c.cf_fn) (c::cs)))) /\
+    LENGTH ((<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::fs) = SUC (LENGTH ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)) /\ LENGTH ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) = LENGTH ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds) /\
+    (!k. k < LENGTH ((<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::fs) ==>
+      (EL k ((<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::fs)).dr_scratch =
+        FDOM (EL k (t1::MAP (\saved. saved.cf_state) ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds))).vs_allocas DIFF
+        {id | ?i. MEM i (fn_insts (EL k (callee::MAP (\saved. saved.cf_fn) ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)))) /\
                   i.inst_id = id}) /\
-    (!k. k < LENGTH (c::cs) ==>
-      let c = EL k (c::cs); d = EL k (d::ds) in
-      dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
-        (DROP (SUC k) (fr::fs)) /\
-      dload_equal_environment c.cf_state d.cf_state /\
-      c.cf_state.vs_call_ctx.cc_address = u.vs_call_ctx.cc_address /\
-      c.cf_inst = d.cf_inst /\
-      (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-        (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-      (?q. ir_supply_covers_fn q c.cf_fn /\
-        (?q'. lower_dload_function_supply q c.cf_fn = (d.cf_fn,q')) /\
-        dload_control_match q c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0)) /\
+    (!k. k < LENGTH ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) ==>
+      dload_live_layout lo (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_state.vs_alloca_next (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_state.vs_alloca_next
+        (DROP (SUC k) ((<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::fs)) /\
+      dload_equal_environment (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_state (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_state /\
+      (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_state.vs_call_ctx.cc_address = u.vs_call_ctx.cc_address /\
+      (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_inst = (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_inst /\
+      (!a. a IN set (fn_ir_vars (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_fn) ==>
+        (lookup_var a (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_state = NONE <=> lookup_var a (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_state = NONE)) /\
+      (?q. ir_supply_covers_fn q (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_fn /\
+        (?q'. lower_dload_function_supply q (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_fn = ((EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_fn,q')) /\
+        dload_control_match q (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_fn (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_fn (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_state (EL k ((<|cf_fn := gcaller; cf_inst := callinst; cf_state := t;
+              cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>)::ds)).cf_state
+          (EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_inst [(EL k ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs)).cf_inst] 0)) /\
     FDOM (FEMPTY:string |-> num # num) SUBSET fn_pv P callee /\
     (!k b sz. k < LENGTH (MAP (op_prov G) ops) /\
       EL k (MAP (op_prov G) ops) = SOME (b,sz) ==> k IN P callee.fn_name) /\
-    (!cc. MEM cc (c::cs) ==> FDOM cc.cf_prov SUBSET fn_pv P cc.cf_fn) /\
-    (!cc k b sz. MEM cc (c::cs) /\ k < LENGTH cc.cf_params /\
+    (!cc. MEM cc ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) ==> FDOM cc.cf_prov SUBSET fn_pv P cc.cf_fn) /\
+    (!cc k b sz. MEM cc ((<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+              cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>)::cs) /\ k < LENGTH cc.cf_params /\
       EL k cc.cf_params = SOME (b,sz) ==> k IN P cc.cf_fn.fn_name)
 Proof
   rpt strip_tac >>
