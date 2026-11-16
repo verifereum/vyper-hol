@@ -91,7 +91,7 @@ Theorem assign_place_capture_mem:
   compile_expr ce (expr_type e) e sa = (vv0,sr) /\
   compile_snapshot_vv ce T (vv_with_type (lowered_value_type ce e) vv0) sr =
     (saved,ss) /\
-  vv_post ctx func ce cx e es sa sr s0 ee raw vv0 s /\
+  vv_post H ctx func ce cx e es sa sr s0 ee raw vv0 s /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv0 s /\
   read_result cx raw ee = (INL v,ee) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\ value_has_type etv v /\
@@ -103,8 +103,8 @@ Theorem assign_place_capture_mem:
   ~s.vs_halted /\ s.vs_current_bb = sr.cs_current_bb /\
   s.vs_inst_idx = LENGTH sr.cs_current_insts ==>
   ?z. gas_marked_path T ctx func s 0 (OK z) /\
-    vv_post ctx func ce cx e es sa ss s0 ee raw saved z /\
-    stmt_state_rel ctx func ce cx ee z /\
+    vv_post H ctx func ce cx e es sa ss s0 ee raw saved z /\
+    stmt_state_rel H ctx func ce cx ee z /\
     type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e) /\
     vv_type saved = lowered_value_type ce e /\
     (!x. vv_operand saved = Var x ==> not_fresh_at ss x) /\
@@ -121,7 +121,9 @@ Theorem assign_place_capture_mem:
        ?w. eval_operand (vv_operand saved) z = SOME w /\ val_wf ltv v /\
          val_in_memory ltv v (w2n w) z.vs_memory /\
          (type_memory_size ltv = 0 \/
-          w2n w + type_memory_size ltv <= z.vs_alloca_next))
+          w2n w + type_memory_size ltv <= z.vs_alloca_next)) /\
+    (!J. vv_post J ctx func ce cx e es sa sr s0 ee raw vv0 s ==>
+      vv_post J ctx func ce cx e es sa ss s0 ee raw saved z)
 Proof
   strip_tac >>
   `expr_sim_inv ce cx env es /\ well_typed_expr env e` by
@@ -136,13 +138,15 @@ Proof
   `!x. vv_operand vv0 = Var x ==> not_fresh_at sr x` by
     metis_tac[cj 1 compiler_compile_var] >>
   `?z. gas_marked_path T ctx func s 0 (OK z) /\
-    vv_post ctx func ce cx e es sa ss s0 ee raw saved z /\
+    vv_post H ctx func ce cx e es sa ss s0 ee raw saved z /\
     vv_own ce cx (post_value_type ce e) sr ss ee raw saved z /\
     vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e)
       ee raw saved z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = ss.cs_current_bb /\
-    z.vs_inst_idx = LENGTH ss.cs_current_insts` by
+    z.vs_inst_idx = LENGTH ss.cs_current_insts /\
+    (!J. vv_post J ctx func ce cx e es sa sr s0 ee raw vv0 s ==>
+      vv_post J ctx func ce cx e es sa ss s0 ee raw saved z)` by
     (Cases_on `lowered_value_type ce e = expr_type e \/
        is_bytestring_type (expr_type e) /\
        is_bytestring_type (lowered_value_type ce e) /\
@@ -227,7 +231,8 @@ Resume assign_place_capture_mem[result]:
   `type_memory_size ltv = 0 \/ w2n w + type_memory_size ltv <= z.vs_alloca_next` by
     (fs[vv_store_bound_def, mk_ptr_def, vv_operand_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
-  qexists_tac `z` >> gvs[vv_operand_def, mk_ptr_def, vv_post_def] >>
+  qexists_tac `z` >> simp[] >>
+  gvs[vv_operand_def, mk_ptr_def, vv_post_def] >>
   first_assum ACCEPT_TAC
 QED
 
