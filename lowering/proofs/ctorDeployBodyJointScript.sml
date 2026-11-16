@@ -857,7 +857,7 @@ Proof
          rpt (pop_assum kall_tac) >>
          Cases_on `r` >> Cases_on `e` >>
          simp[expr_exit_def, deploy_ctor_finish_def, deploy_venom_result_rel_def] >>
-         every_case_tac >> simp[]) >>
+         rename1 `abort = Revert_abort` >> Cases_on `abort` >> simp[]) >>
      `v = NoneV /\ ?final. r = Halt final` by fs[constructor_return_q_def] >>
      gvs[] >>
      `final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels` by
@@ -867,7 +867,13 @@ Proof
         (LENGTH runtime_bc) (imm_len tops) F nkey NoneV
         ((ee with gas_obs := []) with scopes := []) (Halt final)` by
        metis_tac[constructor_return_q_gas_obs] >>
-     drule_all deploy_ctor_return >> simp[deploy_ctor_finish_gas_obs]) >>
+     once_rewrite_tac[GSYM (Q.INST [`g` |-> `[]`] deploy_ctor_finish_gas_obs)] >>
+     irule deploy_ctor_return >>
+     qpat_assum `deploy_phases _ _ _ _` (irule_at Any) >>
+     qpat_assum `deploy_ctor_code _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `deploy_ctor_start _ _ _ _` (irule_at Any) >>
+     qexistsl_tac [`vs`, `gas_explicit marks vs.vs_gas_readings`, `es`] >>
+     simp[vyperStateTheory.evaluation_state_fupdcanon]) >>
   qexists_tac `marks` >> irule deploy_joint_terminal_with >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   rpt strip_tac >> res_tac >> simp[] >> metis_tac[]
