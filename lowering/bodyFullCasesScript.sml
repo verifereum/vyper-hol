@@ -23,14 +23,16 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* Admitted: the joint twin of body_expr_ptr_ok_at_leaf (bodySimPtrMain). *)
+(* Join the four joint expression leaves. *)
 Theorem body_expr_full_ok_leaf:
   !cx e.
     (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
     (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
     body_expr_full_ok cx e
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  simp[name_expr_full_ok, toplevel_name_expr_full_ok,
+       flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
 (* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
