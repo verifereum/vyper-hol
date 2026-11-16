@@ -14,10 +14,12 @@ Ancestors
   stmtSimForArray stmtSimForArrayFrag
   vyperStorageTrace exprSimProps vyperTypeValues vyperTypeInvariants
   vyperAST vyperArray vyperTypeEnv arithmetic vyperValueOperation
-  exprSimHyps allocLimits gasShadow
+  exprSimHyps allocLimits gasShadow whitelistForIterDynFrag
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "cond";
+val _ = Parse.hide "start";
+val _ = Parse.hide "finish";
 
 val fixed_entry_contract = ``
   compile_alloc_buffer sz sa = (buf,sb) /\ buf.buf_operand = Var p /\
@@ -640,6 +642,71 @@ Resume body_for_local_array_full_from_contracts[runtime]:
      simp[stmt_env_def,declare_stmt_local_def,comp_ignore_bind_def,
           comp_bind_def,comp_return_def] >>
      pairarg_tac >> simp[]) >>
+  rename1 `compile_stmt _ _ _ _ start = ((),finish)` >>
+  (* Normalize the two compiler branches before any loop reasoning.  All
+     bounds, labels and registers in this packet are independent of H. *)
+  `?bc p idx dv ov tov ep nv bound_op cond_lbl body_lbl incr_lbl exit_lbl
+      scopy sb0 sb1 sj ainst j1 j2 j3 joff j4 i1 i2 i3 sdecl sdecl'.
+    lookup_block cond_lbl func.fn_blocks = SOME
+      <|bb_label := cond_lbl; bb_instructions :=
+        [mk_inst j1 EQ [Var idx;bound_op] [dv];
+         mk_inst j2 JNZ [Var dv;Label exit_lbl;Label body_lbl] []]|> /\
+    lookup_block incr_lbl func.fn_blocks = SOME
+      <|bb_label := incr_lbl; bb_instructions :=
+        [mk_inst i1 ADD [Var idx;Lit 1w] [nv];
+         mk_inst i2 ASSIGN [Var nv] [idx];
+         mk_inst i3 JMP [Label cond_lbl] []]|> /\
+    scopy.cs_current_bb = body_lbl /\
+    scopy.cs_current_insts =
+      [mk_inst j3 MUL [Var idx;Lit (n2w (type_memory_bytes cenv typ))] [ov]] ++
+      (case bd of Fixed m => []
+       | Dynamic c => [mk_inst joff ADD [Lit 32w;Var ov] [tov]]) ++
+      [mk_inst j4 ADD [Var ap;
+        (case bd of Fixed m => Var ov | Dynamic c => Var tov)] [ep]] /\
+    compile_iter_elem_copy cenv (Var ep) (Var p) (type_memory_bytes cenv typ)
+      LocMemory F typ typ scopy = ((),sb0) /\
+    sb0.cs_current_bb = body_lbl /\
+    sb0.cs_current_insts = scopy.cs_current_insts ++ emitted_insts scopy sb0 /\
+    same_blocks scopy sb0 /\ fn_has_code scopy sb0 func /\
+    compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty stmts sb0 = ((),sb1) /\
+    fn_has_code sb0 sb1 func /\
+    local_ptrs_reserved bc scopy /\ local_ptrs_reserved bc sb0 /\
+    ~block_is_terminated sb0 /\
+    (~block_is_terminated sb1 ==>
+      sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+      sj.cs_current_insts = sb1.cs_current_insts ++
+        [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\
+      fn_has_code sb1 sj func) /\
+    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+    ainst.inst_outputs = [p] /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes cenv typ)) /\
+    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+    bc with <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
+      ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv /\
+    (!scs. not_local_ptr cenv scs idx /\ not_local_ptr cenv scs dv /\
+      not_local_ptr cenv scs ov /\ not_local_ptr cenv scs ep /\
+      not_local_ptr cenv scs nv) /\
+    ALL_DISTINCT [idx;dv;ov;ep;nv;p] /\
+    (bd = Dynamic (bound_length bd) ==>
+      ALL_DISTINCT [idx;dv;ov;tov;ep;nv;p] /\
+      (!scs. not_local_ptr cenv scs tov)) /\
+    (~MEM ap [idx;dv;ov;ep;nv]) /\
+    (bd = Dynamic (bound_length bd) ==> ap <> tov) /\
+    not_fresh_at scopy idx /\ not_fresh_at scopy p /\ not_fresh_at scopy ep /\
+    not_fresh_at scopy ap /\
+    finish.cs_current_bb = exit_lbl /\ finish.cs_current_insts = [] /\
+    declare_local cenv id typ sdecl = (bc,sdecl') /\
+    (!x. not_fresh_at start x ==>
+      not_fresh_at scopy x /\ x <> dv /\ x <> ov /\ x <> ep /\
+      (bd = Dynamic (bound_length bd) ==> x <> tov)) /\
+    (!x. not_fresh_at start x ==>
+      not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\ not_fresh_at sb0 ap`
+    by suspend "code_packet" >>
+  suspend "initialized_packet"
+QED
+
+Resume body_for_local_array_full_from_contracts[code_packet]:
   Cases_on `bd`
   >- suspend "fixed_runtime" >>
   suspend "dynamic_runtime"
@@ -657,6 +724,10 @@ QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_runtime]:
   FAIL_TAC "dynamic-runtime"
+QED
+
+Resume body_for_local_array_full_from_contracts[initialized_packet]:
+  FAIL_TAC "initialized-packet"
 QED
 
 Finalise body_for_local_array_full_from_contracts
