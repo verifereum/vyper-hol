@@ -17,7 +17,7 @@ Ancestors
   bodyFullForRounds stmtSimForParts stmtSimForRange gasOutcomeFullCompose
   gasStorage exprSimSource vyperTypeInvariants vyperValue vyperStorageTrace
   stmtLoweringMono bodyFullAllocaFresh bodyPtrDefs forPtrCheckedScalar
-  forPtrCheckedEntryGhost
+  forPtrCheckedEntryGhost bodyInvNoDalloca
   ghostPcTransportPtr bodyFullForRangeSlot bodyFullForRangeScalar
   gasShadowStmtEnv bodyFullForRangeInit bodyFullForRangeEmpty
   bodyFullForRangeStart bodyFullForRangeBody bodyFullForRangeSuffix
@@ -1259,6 +1259,7 @@ Proof
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
     fs[ghost_inv_at_def] >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
     strip_assume_tac) >>
@@ -2663,6 +2664,7 @@ Resume body_for_range_checked_full[selected_second]:
           mk_inst (s2.cs_next_id + 1) JMP [Label entry_lbl] []]|>` >>
      simp[]) >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn2`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G2`]
     strip_assume_tac) >>
