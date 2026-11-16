@@ -40,6 +40,76 @@ Ancestors
    RET's plan never shrinks below its operand count (no outputs, so no
    pops), contradicting ps'.ps_stack = [] with at most 16 operands.
    So no memory is written, and a restore only reads. *)
+Theorem gen_ret_frame_sim_reloc:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = RET /\
+    MEM inst (fn_insts (reachable_fn fn)) /\
+    codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+    inst_wf inst /\
+    generated_plan_state_wf base ps /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+    (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    ps'.ps_stack = [] /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    !ret vs'. step_inst fuel ctx inst vs = IntRet ret vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        as'.as_pc = pc_ret /\
+        as'.as_stack = REVERSE ret.iret_values ++ rest /\
+        context_memory_rel cp vs'.vs_memory as'.as_memory /\
+        (!b. context_spill_byte cp b /\
+             ~closure_spill_byte ctx cp fn.fn_name b ==>
+             read_byte b as'.as_memory = read_byte b mem0) /\
+        shared_state_rel vs' as'
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_tac >>
+  drule_all ret_source_frame_boundary >>
+  disch_then (qspec_then `ra` strip_assume_tac) >>
+  drule_all ret_frame_prefix >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog n as = AsmOK mid` >>
+  `FLOOKUP o2pc (w2n ra) = SOME pc_ret` by metis_tac[] >>
+  `asm_steps lo o2pc prog (SUC 0) mid =
+    AsmOK (mid with <| as_pc := pc_ret;
+      as_stack := REVERSE ret.iret_values ++ rest |>)` by
+    (pure_rewrite_tac[asm_steps_def] >>
+     qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
+     simp[asm_block_at_def] >> strip_tac >>
+     `mid.as_pc < LENGTH prog` by decide_tac >>
+     gvs[asm_step_jump, asm_jump_def]) >>
+  qexistsl_tac [`n + SUC 0`,
+    `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>`] >>
+  conj_tac >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  gvs[shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
+
 Theorem gen_ret_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
@@ -89,26 +159,7 @@ Theorem gen_ret_frame_sim:
              read_byte b as'.as_memory = read_byte b mem0) /\
         shared_state_rel vs' as'
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt gen_tac >> disch_tac >>
-  drule_all ret_source_frame_boundary >>
-  disch_then (qspec_then `ra` strip_assume_tac) >>
-  drule_all ret_frame_prefix >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  rename1 `asm_steps lo o2pc prog n as = AsmOK mid` >>
-  `FLOOKUP o2pc (w2n ra) = SOME pc_ret` by metis_tac[] >>
-  `asm_steps lo o2pc prog (SUC 0) mid =
-    AsmOK (mid with <| as_pc := pc_ret;
-      as_stack := REVERSE ret.iret_values ++ rest |>)` by
-    (pure_rewrite_tac[asm_steps_def] >>
-     qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
-     simp[asm_block_at_def] >> strip_tac >>
-     `mid.as_pc < LENGTH prog` by decide_tac >>
-     gvs[asm_step_jump, asm_jump_def]) >>
-  qexistsl_tac [`n + SUC 0`,
-    `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>`] >>
-  conj_tac >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
-  gvs[shared_state_rel_def, venom_asm_terminal_rel_def]
+  rpt strip_tac >> drule_all gen_ret_frame_sim_reloc >> metis_tac[]
 QED
 
 (* ===== INVOKE ===== *)
@@ -160,12 +211,11 @@ val invoke_enter_tac =
     (irule asm_steps_compose_ok >> qexists `mid` >>
      conj_tac >> first_assum ACCEPT_TAC);
 
-Theorem gen_invoke_frame_sim:
+Theorem gen_invoke_frame_sim_reloc:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
    rest mem0 nm arg_ops.
     ctx = unit.cu_context /\
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
@@ -289,12 +339,12 @@ Proof
   metis_tac[asm_steps_compose_revert, asm_steps_compose_fault]
 QED
 
-Resume gen_invoke_frame_sim[ok]:
+Resume gen_invoke_frame_sim_reloc[ok]:
   drule_all invoke_source_ok >> strip_tac >> invoke_enter_tac >>
   first_x_assum drule >> strip_tac >>
   rename1 `asm_steps lo o2pc prog n cas = AsmOK asr` >>
   drule_all invoke_plan_decompose >> strip_tac >>
-  map_every (fn q => qpat_x_assum q kall_tac) [`ctx = _`, `lo = _`, `o2pc = _`] >>
+  map_every (fn q => qpat_x_assum q kall_tac) [`ctx = _`, `o2pc = _`] >>
   gvs[] >>
   rename1 `emit_input_plan INVOKE _ _ ps = (iops, prepared)` >>
   rename1 `reorder_plan _ _ prepared = (rops, arranged)` >>
@@ -302,7 +352,7 @@ Resume gen_invoke_frame_sim[ok]:
   suspend "frame"
 QED
 
-Resume gen_invoke_frame_sim[frame]:
+Resume gen_invoke_frame_sim_reloc[frame]:
   `ordered_spill_regions cplan.cp_regions /\ ctx_wf ctx` by
     fs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
   `fn_directly_calls ctx fn.fn_name (EL j ctx.ctx_functions).fn_name` by
@@ -351,7 +401,7 @@ Resume gen_invoke_frame_sim[frame]:
   fs[execute_plan_def, exec_stack_op_def]
 QED
 
-Finalise gen_invoke_frame_sim
+Finalise gen_invoke_frame_sim_reloc
 
 (* ===== Entry parameters ===== *)
 
@@ -381,10 +431,9 @@ Finalise gen_invoke_frame_sim
    optimistic_swap_plan only drop dead outputs and swap; the spill map is
    empty; shared_state_rel and context_memory_rel give the rest of
    context_venom_asm_rel. *)
-Theorem entry_params_frame_sim:
+Theorem entry_params_frame_sim_reloc:
   !fuel ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs as ra rest.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     liveness = liveness_analyze fn /\
     codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
@@ -462,4 +511,150 @@ Proof
   simp[] >> conj_tac
   >- gvs[Abbr `start`, Abbr `local`, execute_plan_def, exec_stack_op_def] >>
   simp[Abbr `vp`]
+QED
+
+Theorem entry_params_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs as ra rest.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs as ra rest /\
+    asm_block_at prog as.as_pc
+      (execute_plan cp.cp_initial_fmp
+         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))
+    ==>
+    ?n as' vs_p.
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc +
+        LENGTH (execute_plan cp.cp_initial_fmp
+                  (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+        exec_block fuel ctx (HD fn.fn_blocks) vs_p /\
+      vs_p.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+      fn_frame_inv ctx cp lo fn ra rest as.as_memory ps1 vs_p as'
+Proof
+  rpt strip_tac >> drule_all entry_params_frame_sim_reloc >> metis_tac[]
+QED
+
+Theorem gen_invoke_frame_sim:
+  !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
+   next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
+   rest mem0 nm arg_ops.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\
+    MEM fn ctx.ctx_functions /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    Inv ctx fn inst vs /\ active_inst fn inst vs /\
+    inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label nm :: arg_ops /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+       ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
+                FLOOKUP o2pc off = SOME pc /\
+                asm_block_at prog pc
+                  (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)) /\
+    (* The callee's function-level simulation at this fuel. *)
+    (!j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cp.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+       fn_entry_state_rel cp callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cp callee vs' cas as')) /\
+    opaque_use_ok fn /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    inst_wf inst /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!lbl i. i < LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+             EL i (execute_plan cp.cp_initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+    (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    (!vs'. step_inst fuel ctx inst vs = OK vs' ==>
+       ?n as'.
+         asm_steps lo o2pc prog n as = AsmOK as' /\
+         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
+         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)) /\
+    (!vs'. step_inst fuel ctx inst vs = Halt vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
+       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as')
+Proof
+  rpt gen_tac >> strip_tac >> drule_all gen_invoke_frame_sim_reloc >> simp[]
 QED
