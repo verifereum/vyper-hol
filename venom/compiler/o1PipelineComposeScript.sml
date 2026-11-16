@@ -322,7 +322,9 @@ Theorem o1_pre_walk_rows:
   ALL_DISTINCT (unit_label_namespace unit) /\ ir_supply_inst_ok s /\
   o1_source_unit_ok unit /\ unit_defs_reach_uses unit /\
   unit_fmp_unsealed unit ==>
-  EVERY (o1_fn_row 0) unit'.cu_context.ctx_functions
+  EVERY (o1_fn_row 0) unit'.cu_context.ctx_functions /\
+  EVERY no_raw_fmp_ops unit'.cu_context.ctx_functions /\
+  EVERY fmp_sig_no_param unit'.cu_context.ctx_functions
 Proof
   strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
   mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_SimplifyCFG`,
