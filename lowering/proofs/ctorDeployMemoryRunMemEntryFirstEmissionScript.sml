@@ -3,6 +3,7 @@ Ancestors
   compilerFirstEmission stmtLowering exprLowering compileEnv fragExec rich_list context
   builtinSimple builtinMath builtinMisc builtinHashing builtinBytes
   exprLoweringProps exprSimUnwrap builtinAbi builtinCreate
+  entryReachBodyFirstEmissionExprSupport
 Libs
   monadsyntax
 
@@ -4612,60 +4613,6 @@ Proof
   irule ctor_ci_mono_appends >> simp[ci_mono_store_multi_results]
 QED
 
-Theorem ctor_int_call_first_emission:
-  (!env e ety a x b. cfn env ety e a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !rt ty func_id def a x b. compile_call cfn env rt ty (IntCall func_id) args def a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  strip_tac >> ntac 4 gen_tac >>
-  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (Cases_on `returns_count > 0` >> simp[]
-      >- (ho_match_mp_tac first_emission_bind >> conj_tac
-          >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_alloc_buffer_first_emission]) >>
-          simp[cs_extends_refl]) >>
-      Cases_on `return_buf_size > 0` >> simp[cs_extends_refl] >>
-      ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_alloc_buffer_first_emission]) >>
-      simp[cs_extends_refl]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_stage_intcall_args_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_stage_intcall_args_first_emission >> metis_tac[]) >>
-  gen_tac >> Cases_on `returns_count > 0` >> simp[]
-  >- (Cases_on `return_buf` >> simp[]
-      >- (ho_match_mp_tac first_emission_bind >> conj_tac
-          >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-              irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-          simp[cs_extends_refl]) >>
-      ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (rpt gen_tac >> strip_tac >>
-          drule_at (Pos last) ctor_emit_multi_op_first_emission >> simp[]) >>
-      gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_store_multi_results_first_emission] >>
-      simp[cs_extends_refl]) >>
-  Cases_on `return_buf` >> simp[] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      irule (cj 2 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[cs_extends_refl] >> rpt gen_tac >> strip_tac >>
-  qspec_then `INVOKE` mp_tac (cj 2 first_emission_emit_helpers) >>
-  simp[] >> disch_then drule >> metis_tac[]
-QED
-
 Theorem ctor_guarded_int_call_expr_first_emission:
   (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
@@ -4688,7 +4635,7 @@ Proof
   strip_tac >> dxrule ctor_expr_callback_first_emission >> disch_tac >>
   simp_tac (srw_ss()) [Once compile_expr_body_def, LET_THM] >>
   rpt gen_tac >> disch_tac >>
-  drule_at (Pos last) ctor_int_call_first_emission >>
+  drule_at (Pos last) first_emission_intcall >>
   disch_then irule >> metis_tac[]
 QED
 
