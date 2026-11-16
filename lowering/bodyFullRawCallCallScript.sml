@@ -24,7 +24,7 @@ Theorem raw_call_actual_call_full:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   u = update_var (STRING #"%" (toString sa.cs_next_var))

@@ -981,8 +981,260 @@ Proof
      Cases_on `flags.rcf_max_outsize = 0` >> fs[]
      >- (drule_all raw_call_outbuf_zero_run >> metis_tac[]) >>
      `0 < flags.rcf_max_outsize` by decide_tac >>
-     drule_at (Pat `compile_raw_call_outbuf _ _ = _`) raw_call_outbuf_positive_run >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-     simp[] >> metis_tac[]) >>
-  FAIL_TAC "outbuf frames"
+     metis_tac[raw_call_outbuf_positive_run,arithmeticTheory.MULT_COMM]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s5 x` by
+    (qpat_assum `sa.cs_next_var <= s5.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `wb_frame cenv es esK sa s0 t6` by
+    (irule wb_frame_readonly_tail >> qexistsl_tac [`s5`, `tk`] >>
+     simp[] >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at s5 x ==> _ /\ _` drule >> simp[]) >>
+  `return_buf_frame dframe cenv sa t6` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qexistsl_tac [`cenv`, `tk`, `sa`] >> simp[] >>
+     rpt strip_tac >>
+     `not_fresh_at s5 x` by metis_tac[] >>
+     qpat_assum `!x. not_fresh_at s5 x ==> _ /\ _` drule >> simp[]) >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 G6 tn6` by
+    (irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
+     qexistsl_tac [`GK`, `tnK`] >> simp[] >> rpt strip_tac >>
+     `not_fresh_at s5 x` by metis_tac[] >>
+     qpat_assum `!x. not_fresh_at s5 x ==> _ /\ _` drule >> simp[]) >>
+  `allocas_from lo t6 /\ lo <= t6.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ lo dframe cenv cx esK G6 tn6 t6`
+       (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >> simp[]) >>
+  `s0.vs_alloca_next <= t6.vs_alloca_next` by
+    (qpat_assum `s0.vs_alloca_next <= tA.vs_alloca_next` mp_tac >>
+     qpat_assum `tA.vs_alloca_next <= tD.vs_alloca_next` mp_tac >>
+     qpat_assum `t4.vs_alloca_next = tD.vs_alloca_next` mp_tac >>
+     qpat_assum `t4.vs_alloca_next <= tk.vs_alloca_next` mp_tac >>
+     qpat_assum `t6.vs_alloca_next = tk.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME(off,sz) /\
+     aid < sa.cs_next_id ==> off+sz <= t6.vs_alloca_next` by
+    (qpat_assum `wb_frame cenv es esK sa s0 t6`
+       (mp_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ esK t6`
+       (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def]) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
+  `!name lb sz. local_region cenv es.scopes s0 name lb sz ==>
+     lb+sz <= t6.vs_alloca_next` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s0` mp_tac >>
+     qpat_assum `s0.vs_alloca_next <= t6.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[bodyMemoryDefsTheory.body_local_region_frontier,arithmeticTheory.LESS_EQ_TRANS]) >>
+  qabbrev_tac `t7 = u with vs_inst_idx := LENGTH s7.cs_current_insts` >>
+  mp_tac (Q.INST [`sa` |-> `s6`, `sb` |-> `s7`, `sk` |-> `sa`,
+    `es0` |-> `es`, `es` |-> `esK`, `s` |-> `t6`, `d` |-> `dframe`,
+    `G` |-> `G6`, `tn` |-> `tn6`, `M` |-> `flags.rcf_max_outsize`,
+    `n` |-> `if flags.rcf_max_outsize = 0 then 0 else
+       ((flags.rcf_max_outsize+31) DIV 32)*32+32`] raw_call_outbuf_joint) >>
+  (impl_tac >- (simp[Abbr `t7`] >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _` mp_tac >>
+    qpat_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _` mp_tac >>
+    qpat_assum `!name lb sz. local_region cenv es.scopes s0 name lb sz ==> _` mp_tac >>
+    qpat_assum `t6.vs_alloca_next = tk.vs_alloca_next` mp_tac >>
+    POP_ASSUM_LIST (K all_tac) >> metis_tac[])) >>
+  strip_tac >>
+  `s5.cs_next_var <= s6.cs_next_var` by
+    (qpat_assum `ci_mono s5 s6` (mp_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
+  `!x. not_fresh_at s5 x ==>
+     lookup_var x t7 = lookup_var x tk /\ FLOOKUP G7 x = FLOOKUP GK x /\
+     op_taint tn7 (Var x) = op_taint tnK (Var x)` by
+    (qpat_assum `!x. not_fresh_at s5 x ==> _ /\ _` mp_tac >>
+     qpat_assum `!x. not_fresh_at s6 x ==> _ /\ _` mp_tac >>
+     qpat_assum `s5.cs_next_var <= s6.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `!x. safe_operand s5 x ==> eval_operand x t7 = eval_operand x tk /\
+      op_prov G7 x = op_prov GK x /\ op_taint tn7 x = op_taint tnK x` by
+    (qpat_assum `!x. not_fresh_at s5 x ==> _ /\ _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> Cases >>
+     simp[exprSafeOperandTheory.safe_operand_def,venomStateTheory.eval_operand_def,
+          ptrDisciplineTheory.op_prov_def,ptrDisciplineTheory.op_taint_def]) >>
+  `safe_operand s5 addr /\ safe_operand s5 len /\ safe_operand s5 dp` by
+    (qpat_assum `!z. addr = Var z ==> not_fresh_at s1 z` mp_tac >>
+     qpat_assum `!l. addr <> Label l` mp_tac >>
+     qpat_assum `!z. len = Var z \/ dp = Var z ==> not_fresh_at s4 z` mp_tac >>
+     qpat_assum `len = Var l` mp_tac >> qpat_assum `dp = Var p` mp_tac >>
+     qpat_assum `s1.cs_next_var <= s4.cs_next_var` mp_tac >>
+     qpat_assum `s4.cs_next_var <= s5.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exprSafeOperandTheory.safe_operand_def] >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `EVERY (safe_operand s5) xs` by
+    (`wb_args_shape cenv (K (BaseT (UintT 256))) kws` by
+      (qpat_assum `!e ee. MEM e kws /\ _ ==> _` mp_tac >>
+       qpat_assum `expr_sim_inv cenv cx env esK` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[wb_args_shape_def] >> rpt strip_tac >>
+       drule expr_body_pre_lower_value_word_shape >> metis_tac[]) >>
+     qpat_assum `wb_args_shape cenv _ kws` mp_tac >>
+     qpat_assum `lower_word_args cenv _ kws s4 = (xs,s5)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_all lower_word_args_shape_ready >>
+     simp[EVERY_MEM,exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+  `!kw x. ext_call_kwarg kw flags.rcf_kws xs = SOME x ==> safe_operand s5 x` by
+    (qpat_assum `EVERY (safe_operand s5) xs` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> qid_spec_tac `xs` >>
+     qspec_tac (`flags.rcf_kws`,`ks`) >> Induct_on `ks` >> Cases_on `xs` >>
+     simp[vyperInterpreterTheory.ext_call_kwarg_def] >> rpt strip_tac >>
+     gvs[AllCaseEqs()] >> metis_tac[]) >>
+  `safe_operand s5 (case vo of NONE => Lit 0w | SOME v => v)` by
+    (Cases_on `vo` >> simp[] >> metis_tac[]) >>
+  `expr_val_rel cx (BaseT AddressT) av addr t7 /\
+   eval_operand len t7 = SOME(n2w(LENGTH bs)) /\
+   eval_operand dp t7 = SOME(n2w(b+32)) /\
+   op_taint tn7 addr = {} /\ op_taint tn7 len = {} /\ op_taint tn7 dp = {} /\
+   op_prov G7 addr = NONE /\ op_prov G7 len = NONE /\
+   op_prov G7 dp = SOME(base',cap')` by
+    (qpat_assum `!x. safe_operand s5 x ==> _ /\ _ /\ _` mp_tac >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`safe_operand s5 addr`, `safe_operand s5 len`, `safe_operand s5 dp`,
+        `expr_val_rel cx (BaseT AddressT) av addr tk`,
+        `eval_operand len tk = _`, `eval_operand dp tk = _`,
+        `op_taint tnK addr = {}`, `op_taint tnK len = {}`, `op_taint tnK dp = {}`,
+        `op_prov GK addr = NONE`, `op_prov GK len = NONE`, `op_prov GK dp = _`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[loweringPostsTheory.expr_val_rel_def,compileEnvTheory.is_word_type_def]) >>
+  `safe_operand s6 gas` by
+    (qpat_assum `(case go of NONE => _ | SOME _ => _) = (gas,s6)` mp_tac >>
+     qpat_assum `go = ext_call_kwarg _ _ _` mp_tac >>
+     qpat_assum `!kw x. ext_call_kwarg _ _ _ = _ ==> safe_operand s5 x` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >>
+     metis_tac[exprSafeOperandTheory.emit_op_safe_operand]) >>
+  `eval_operand gas t7 = SOME gw /\ op_taint tn7 gas = {}` by
+    (qpat_assum `!x. not_fresh_at s6 x ==> _ /\ _` mp_tac >>
+     qpat_assum `safe_operand s6 gas` mp_tac >>
+     qpat_assum `eval_operand gas t6 = SOME gw` mp_tac >>
+     qpat_assum `op_taint tn6 gas = {}` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `gas` >>
+     simp[exprSafeOperandTheory.safe_operand_def,venomStateTheory.eval_operand_def,
+          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `op_taint tn7 (case vo of NONE => Lit 0w | SOME v => v) = {}` by
+    (qpat_assum `!x. safe_operand s5 x ==> _ /\ _ /\ _` mp_tac >>
+     qpat_assum `safe_operand s5 (case vo of NONE => _ | SOME _ => _)` mp_tac >>
+     qpat_assum `!v. vo = SOME v ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `vo` >>
+     simp[ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `b+32+LENGTH bs <= tD.vs_alloca_next` by
+    (qpat_assum `expr_store_bound cx _ (BytesV bs) data tD`
+       (mp_tac o REWRITE_RULE [exprSimMemDefsTheory.expr_store_bound_def]) >>
+     qpat_assum `evaluate_type _ _ = SOME (BaseTV (BytesT (Dynamic cap)))` mp_tac >>
+     qpat_assum `eval_operand data tD = SOME(n2w b)` mp_tac >>
+     qpat_assum `b < dimword (:256)` mp_tac >>
+     qpat_assum `post_value_type cenv d = _` mp_tac >>
+     qpat_assum `expr_type d = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compileEnvTheory.is_word_type_def,exprSimPropsTheory.val_store_size_def] >>
+     qspec_then `LENGTH bs` mp_tac exprSimPropsTheory.le_word_size_mul >> rpt strip_tac >> decide_tac) >>
+  `b+32+LENGTH bs <= t6.vs_alloca_next` by
+    (qpat_assum `b+32+LENGTH bs <= tD.vs_alloca_next` mp_tac >>
+     qpat_assum `t4.vs_alloca_next = tD.vs_alloca_next` mp_tac >>
+     qpat_assum `t4.vs_alloca_next <= tk.vs_alloca_next` mp_tac >>
+     qpat_assum `t6.vs_alloca_next = tk.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `mem_bytes_at (b+32) (LENGTH bs) t7.vs_memory = bs /\
+   (!mem. mem_agree_outside tn7.t_mem t7.vs_memory mem ==>
+       mem_bytes_at (b+32) (LENGTH bs) mem = bs)` by
+    (qpat_assum `!mem. mem_agree_outside tnK.t_mem _ _ ==> _` mp_tac >>
+     qpat_assum `t7.vs_memory = t6.vs_memory` mp_tac >>
+     qpat_assum `t6.vs_memory = tk.vs_memory` mp_tac >>
+     qpat_assum `tn6.t_mem = tnK.t_mem` mp_tac >>
+     qpat_assum `!i. i IN tn7.t_mem <=> _` mp_tac >>
+     qpat_assum `b+32+LENGTH bs <= t6.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `mem_bytes_at (b+32) (LENGTH bs) t7.vs_memory = bs` by
+       metis_tac[bodyPtrDefsTheory.mem_agree_outside_def] >>
+     simp[] >>
+     `!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tnK.t_mem` by
+       (drule representationCleanPtrTheory.robust_mem_bytes_at_clean >> simp[]) >>
+     `mem_bytes_at (b+32) (LENGTH bs) t7.vs_memory =
+      mem_bytes_at (b+32) (LENGTH bs) mem` by
+       (irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >>
+        fs[bodyPtrDefsTheory.mem_agree_outside_def] >> rpt strip_tac >>
+        first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  `?ai q. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\
+     ai.inst_outputs = [q] /\ ai.inst_id = s6.cs_next_id /\
+     not_local_ptr cenv esK.scopes q` by
+    (qpat_assum `compile_raw_call_outbuf flags.rcf_max_outsize s6 = _` mp_tac >>
+     qpat_assum `fn_has_code s6 s7 func` mp_tac >>
+     qpat_assum `local_ptrs_reserved cenv s6` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     Cases_on `flags.rcf_max_outsize = 0`
+     >- (fs[builtinSystemTheory.compile_raw_call_outbuf_def,
+           compileEnvTheory.comp_bind_def,compileEnvTheory.comp_return_def] >>
+         pairarg_tac >> gvs[compileEnvTheory.comp_bind_def,compileEnvTheory.comp_return_def] >>
+         drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+         goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def] >>
+         irule exprSimOperandsTheory.fresh_not_local_ptr >>
+         qexists_tac `s6` >> simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+     `0 < flags.rcf_max_outsize` by decide_tac >>
+     drule_all raw_call_outbuf_allocation_site >> metis_tac[]) >>
+  `stmt_state_rel (storage_trace_horizon esK.storage_trace) ctx func cenv cx esK t7` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ t7 /\ _`
+       (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >> simp[]) >>
+  `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
+     regions_disjoint b' (if flags.rcf_max_outsize = 0 then 0 else
+       ((flags.rcf_max_outsize+31) DIV 32)*32+32) lb sz` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
+       (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def,
+         loweringStateRelDefsTheory.state_rel_def]) >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`MEM ai (fn_insts func)`, `ai.inst_outputs = [q]`,
+        `not_local_ptr cenv esK.scopes q`, `ai.inst_id = s6.cs_next_id`,
+        `FLOOKUP t7.vs_allocas s6.cs_next_id = _`, `fn_inst_ids_distinct func`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
+  `(cenv.ce_is_ctor ==> !name tv v off.
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME(ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME(tv,v) ==>
+     regions_disjoint off (type_memory_size tv) b'
+       (if flags.rcf_max_outsize = 0 then 0 else ((flags.rcf_max_outsize+31) DIV 32)*32+32))` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
+       (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def,
+         exprLoweringPropsTheory.immutable_alloca_sep_def]) >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`MEM ai (fn_insts func)`, `ai.inst_opcode = ALLOCA`,
+        `ai.inst_id = s6.cs_next_id`, `FLOOKUP t7.vs_allocas s6.cs_next_id = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `s6.cs_next_var <= s7.cs_next_var /\ s5.cs_next_var <= s7.cs_next_var` by
+    (qpat_assum `ci_mono s6 s7` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
+     qpat_assum `s5.cs_next_var <= s6.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `safe_operand s7 ov /\ safe_operand s7 op` by
+    (qpat_assum `!x. ov = Var x \/ op = Var x ==> not_fresh_at s7 x` mp_tac >>
+     qpat_assum `op_prov G7 ov = SOME _` mp_tac >>
+     qpat_assum `op_prov G7 op = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `ov` >> Cases_on `op` >>
+     simp[exprSafeOperandTheory.safe_operand_def,ptrDisciplineTheory.op_prov_def]) >>
+  `EVERY (safe_operand s7)
+     [addr;len;dp;gas;(case vo of NONE => Lit 0w | SOME v => v);ov;op]` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`safe_operand s5 addr`, `safe_operand s5 len`, `safe_operand s5 dp`,
+        `safe_operand s5 (case vo of NONE => _ | SOME _ => _)`,
+        `safe_operand s6 gas`, `safe_operand s7 ov`, `safe_operand s7 op`,
+        `s6.cs_next_var <= s7.cs_next_var`, `s5.cs_next_var <= s7.cs_next_var`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[] >>
+     metis_tac[exprSafeOperandTheory.safe_operand_mono]) >>
+  `!x. MEM (Var x) [addr;len;dp;gas;(case vo of NONE => Lit 0w | SOME v => v);ov;op] ==>
+      not_fresh_at s7 x` by
+    (qpat_assum `EVERY (safe_operand s7) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM,exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+  `(flags.rcf_max_outsize = 0 ==> ov = op)` by
+    (qpat_assum `compile_raw_call_outbuf flags.rcf_max_outsize s6 = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> strip_tac >>
+     gvs[builtinSystemTheory.compile_raw_call_outbuf_def,compileEnvTheory.comp_bind_def,
+         compileEnvTheory.comp_return_def] >> pairarg_tac >> gvs[]) >>
+  irule (Q.INST [`s1` |-> `t7`, `G1` |-> `G7`, `tn1` |-> `tn7`, `n` |-> `0`]
+    raw_call_generated_prefix_full) >> simp[] >>
+  qexistsl_tac [`G7`,`0`,`t7`,`tn7`] >>
+  (conj_tac >- simp[]) >>
+  qpat_assum `!gsA av esA gsD bs esD gsK kvs esK b ob gw tA tD t4 tk t7 G7 tn7. _` irule >>
+  FAIL_TAC "callback inputs"
 QED

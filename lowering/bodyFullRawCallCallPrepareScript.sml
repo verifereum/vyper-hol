@@ -69,7 +69,7 @@ Theorem raw_call_actual_call_from_interfaces:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   u = update_var (STRING #"%" (toString sa.cs_next_var))
@@ -148,21 +148,21 @@ Proof
     (simp[inst_mem_below_frontier_def] >>
      qpat_x_assum `w2n az = 0 \/ _` mp_tac >> simp[]) >>
   `exec_ext_call inst s gas aw (if stat then 0w else val_word)
-      ao az ro (n2w cap : 256 word) stat = OK u` by
+      ao az ro (n2w cap : 256 word) (stat \/ s.vs_call_ctx.cc_static) = OK u` by
     (asm_x "origin" kall_tac >> asm_x "frame" kall_tac >>
      qpat_x_assum `t = _` kall_tac >>
-     qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
      Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >>
+     Cases_on `value_opt` >> gns[] >>
+     qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
      Cases_on `val_word = 0w` >>
-     simp[step_inst_base_opcode_eqs, eval_operand_def, w2n_eq_0] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, w2n_eq_0] >>
      simp[exec_ext_call_def, venom_call_request_def]) >>
   `stor_taint_ok_at D (step_taint inst s u tn) u` by
     (drule_at (Pat `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`)
        raw_call_exec_stor_taint_at >>
      disch_then (qspecl_then [`tn`,`D`] mp_tac) >>
-     impl_tac >- (Cases_on `stat` >> simp[] >>
-       qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-       simp[ghost_inv_at_def]) >> simp[]) >>
+     impl_tac >- (Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >>
+       gns[ghost_inv_at_def]) >> simp[]) >>
   `!x. not_fresh_at sa x ==>
     FLOOKUP (step_prov PG G inst u) x = FLOOKUP G x /\
     op_taint (step_taint inst s u tn) (Var x) = op_taint tn (Var x) /\
