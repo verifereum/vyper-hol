@@ -601,7 +601,18 @@ Theorem extcall_saved_nonmemory_unwrap_origin_ptr:
     wb_frame cenv ee ee su t z /\
     ghost_kept_at lo cenv ee su G tn t G' tn'
 Proof
-  cheat
+  strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e ee si sm t ee (Value v) saved t` by
+    metis_tac[extcall_saved_nonmemory_uniform_post] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e ee si sm t ee (Value v) saved t /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn t` by metis_tac[] >>
+  `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
+     ee (Value v) saved t` by metis_tac[] >>
+  drule_all unwrap_value_origin_ptr >>
+  simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  metis_tac[]
 QED
 
 (* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
