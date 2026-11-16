@@ -58,6 +58,7 @@ Ancestors
   asmSymOwnCode
   asmOptOwnMergeIszero
   finalizerContractOwn
+  asmOptOwnPruneUnreachable
   asmSpliceOwn
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
