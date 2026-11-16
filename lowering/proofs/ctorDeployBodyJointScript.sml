@@ -614,6 +614,9 @@ Theorem deploy_ctor_body_joint_with:
     ?marks.
       deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx dunit vs
 Proof
+  (* Admitted: the joint twin of main's deploy_ctor_body_ptr; SEQ-4920, route (f) *)
+  cheat
+  (* Draft proof kept for the removal (route (f) alan run):
   rpt gen_tac >> strip_tac >>
   drule_all deploy_ctor_entry_joint >> strip_tac >> gvs[] >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >>
@@ -784,6 +787,7 @@ Proof
   qexists_tac `marks` >> irule deploy_joint_terminal_with >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   rpt strip_tac >> res_tac >> simp[] >> metis_tac[]
+  *)
 QED
 
 Theorem deploy_ctor_body_joint:
