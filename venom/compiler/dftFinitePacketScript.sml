@@ -853,6 +853,17 @@ Proof
        pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
+Theorem dft_packet_invoke_memory_order[local]:
+  !x y. x.inst_opcode = INVOKE /\ inv_memory_observation y.inst_opcode ==>
+    dft_must_order x y
+Proof
+  rpt gen_tac >> Cases_on `y.inst_opcode` >>
+  simp[inv_memory_observation_def, dftScheduleOrderTheory.dft_must_order_def,
+       venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+       venomEffectsTheory.all_effects_def, venomInstTheory.is_terminator_def,
+       pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
 Theorem dft_packet_id_before_take[local]:
   !l k a. ALL_DISTINCT l /\ k < LENGTH l /\
     id_before l a (EL k l) ==> MEM a (TAKE k l)
@@ -863,7 +874,8 @@ Proof
   gvs[] >> simp[MEM_EL] >> qexists_tac `i` >> simp[EL_TAKE]
 QED
 
-Theorem dft_packet_schedule_predecessors:
+(* Both guarded cursor interfaces use the same schedule argument. *)
+Theorem dft_packet_ordered_schedule_predecessors[local]:
   !sf tf bb bt ps xs ys rho count q.
   dft_fn_rel sf tf /\
   lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
@@ -876,7 +888,9 @@ Theorem dft_packet_schedule_predecessors:
   LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
     from_block [EL q xs] y) rho ys /\
   count < LENGTH ys /\ q = EL count rho /\ EL q xs = EL count ys /\
-  (is_fallible (EL q xs) \/ (EL q xs).inst_opcode = INVOKE) ==>
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+    ~dft_abort_compatible (EL r xs).inst_opcode (EL q xs).inst_opcode \/
+    dft_must_order (EL r xs) (EL q xs)) ==>
   EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
   (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
     MEM r (TAKE count rho))
@@ -917,7 +931,7 @@ Proof
   suspend "calls"
 QED
 
-Resume dft_packet_schedule_predecessors[calls]:
+Resume dft_packet_ordered_schedule_predecessors[calls]:
   rpt strip_tac >>
   `r < LENGTH xs` by decide_tac >>
   `MEM (EL r xs) bb.bb_instructions /\ MEM (EL q xs) bb.bb_instructions` by
@@ -933,7 +947,7 @@ Resume dft_packet_schedule_predecessors[calls]:
      (EL r xs).inst_id (EL q xs).inst_id` by
     (Cases_on `dft_abort_compatible (EL r xs).inst_opcode (EL q xs).inst_opcode`
      >- (`dft_must_order (EL r xs) (EL q xs)` by
-           metis_tac[dft_packet_invoke_fallible_order] >>
+           metis_tac[] >>
          qpat_x_assum `dft_block_rel bb bt`
            (strip_assume_tac o REWRITE_RULE [dftScheduleOrderTheory.dft_block_rel_def]) >>
          fs[] >> irule id_before_append_right >> metis_tac[]) >>
@@ -962,7 +976,96 @@ Resume dft_packet_schedule_predecessors[calls]:
   simp[MEM_EL] >> qexists_tac `k` >> simp[EL_TAKE]
 QED
 
-Finalise dft_packet_schedule_predecessors
+Finalise dft_packet_ordered_schedule_predecessors
+
+Theorem dft_packet_schedule_predecessors:
+  !sf tf bb bt ps xs ys rho count q.
+  dft_fn_rel sf tf /\
+  lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+  lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+  bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+  EVERY (\x. is_pseudo x.inst_opcode) ps /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) xs /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) ys /\
+  LENGTH xs = LENGTH ys /\ PERM rho (COUNT_LIST (LENGTH xs)) /\
+  LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+    from_block [EL q xs] y) rho ys /\
+  count < LENGTH ys /\ q = EL count rho /\ EL q xs = EL count ys /\
+  (is_fallible (EL q xs) \/ (EL q xs).inst_opcode = INVOKE) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+    MEM r (TAKE count rho))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule dft_packet_ordered_schedule_predecessors >>
+  rpt (first_assum (irule_at Any)) >>
+  metis_tac[dft_packet_invoke_fallible_order]
+QED
+
+Theorem dft_packet_memory_schedule_predecessors:
+  !sf tf bb bt ps xs ys rho pos q.
+  dft_fn_rel sf tf /\
+  lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+  lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+  bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+  EVERY (\x. is_pseudo x.inst_opcode) ps /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) xs /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) ys /\
+  LENGTH xs = LENGTH ys /\ PERM rho (COUNT_LIST (LENGTH xs)) /\
+  LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+    from_block [EL q xs] y) rho ys /\
+  pos < LENGTH ys /\ q = EL pos rho /\ EL q xs = EL pos ys /\
+  inv_memory_observation (EL q xs).inst_opcode ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+    MEM r (TAKE pos rho))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule dft_packet_ordered_schedule_predecessors >>
+  rpt (first_assum (irule_at Any)) >>
+  metis_tac[dft_packet_invoke_memory_order]
+QED
+
+Theorem dft_packet_next_memory_eligible:
+  !sf tf bb bt ps xs ys rho count q.
+  dft_fn_rel sf tf /\
+  lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+  lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+  bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+  EVERY (\x. is_pseudo x.inst_opcode) ps /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) xs /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) ys /\
+  LENGTH xs = LENGTH ys /\ PERM rho (COUNT_LIST (LENGTH xs)) /\
+  LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+    from_block [EL q xs] y) rho ys /\
+  SUC count < LENGTH ys /\ q = EL (SUC count) rho /\
+  EL q xs = EL (SUC count) ys /\
+  inv_memory_observation (EL q xs).inst_opcode /\
+  (EL count ys).inst_opcode <> INVOKE ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+    MEM r (TAKE count rho))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `PERM sched (COUNT_LIST (LENGTH xs))` >>
+  rename1 `SUC pos < LENGTH ys` >>
+  drule_all dft_packet_memory_schedule_predecessors >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `pos < LENGTH sched /\ pos < LENGTH ys` by
+    (fs[LIST_REL_EL_EQN] >> decide_tac) >>
+  `from_block [EL (EL pos sched) xs] (EL pos ys)` by
+    (fs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `(EL (EL pos sched) xs).inst_opcode <> INVOKE` by
+    (strip_tac >>
+     qpat_x_assum `from_block _ _` mp_tac >>
+     simp[dftStructuralTheory.from_block_def, dftDefsTheory.is_flippable_def,
+          venomEffectsTheory.is_commutative_def, passSharedDefsTheory.is_comparator_def,
+          venomInstTheory.is_pseudo_def] >>
+     metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM r (TAKE (SUC pos) sched)` by metis_tac[] >>
+  gvs[TAKE_SUC_BY_TAKE, MEM_SNOC] >> metis_tac[]
+QED
 
 Theorem dft_packet_guarded_cursor_structure:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
@@ -1979,11 +2082,13 @@ Proof
       (THE (FLOOKUP ms_tab key)) (THE (FLOOKUP work key))` by
     (qhdtm_x_assum `dft_focus_packet_rel`
        (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
-     rpt strip_tac >>
-     `?old. FLOOKUP ms_tab key = SOME old` by
-       metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
-     `?new. FLOOKUP work key = SOME new` by
-       metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+     qpat_x_assum `FDOM work = FDOM ms_tab` mp_tac >>
+     qpat_x_assum `!key old new. _ ==> LIST_REL _ old new` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `?old. FLOOKUP ms_tab key = SOME old` by gvs[FLOOKUP_DEF] >>
+     `?new. FLOOKUP work key = SOME new` by gvs[FLOOKUP_DEF] >>
+     simp[] >> metis_tac[]) >>
   `!f. MEM f (ds ++ [e]) ==> (a,f) IN FDOM blocks` by
     (qhdtm_x_assum `dft_focus_packet_rel`
        (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
