@@ -371,7 +371,7 @@ Proof
        (irule local_region_frame_fwd >>
         qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[] >> metis_tac[vv_post_def]) >>
      metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  Cases_on `type_memory_size tv = 0`
+  (Cases_on `type_memory_size tv = 0`
   >- (`~is_bytestring_type (lowered_value_type ce e)` by
         (strip_tac >>
          drule_all assignTuplePtrLocalCompatTheory.bytestring_evaluated_shape_ptr >>
@@ -575,7 +575,7 @@ Proof
   rpt strip_tac >>
   `not_fresh_at mid x /\ not_fresh_at su x` by
     metis_tac[not_fresh_at_mono] >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 Theorem abi_encode_capture_origin:
