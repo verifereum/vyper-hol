@@ -203,50 +203,6 @@ Definition extcall_returned_def:
       default_opt t
 End
 
-(* LOCAL STUB - original proof retained; foreign owner is repairing this header.
-Proof
-  strip_tac >>
-  `!H. valid_horizon cx st0 H
-      (SND (adopt_call_outcome rq oc consumed)).storage_trace ==>
-      valid_horizon cx st0 H ee.storage_trace` by
-    (rpt strip_tac >>
-     `adopt_call_outcome rq oc consumed =
-        (INL (), SND (adopt_call_outcome rq oc consumed))` by
-       simp[adopt_call_outcome_equation] >>
-     metis_tac[valid_horizon_frame, storage_trace_frame_adopt,
-               storage_trace_frame_take_call]) >>
-  fs[extcall_request_ready_def] >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
-    ee.storage_trace` by fs[storage_trace_domain_def] >>
-  `state_rel (storage_trace_horizon ee.storage_trace)
-    func cenv cx ee t` by metis_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  Cases_on `eval_operand gas_op t` >> gvs[] >> rename1 `_ = SOME gas` >>
-  `cap < dimword (:256)` by decide_tac >>
-  `w2n ((n2w cap):bytes32) = cap` by simp[] >>
-  `IS_NONE value_opt = (value_opt = NONE)` by (Cases_on `value_opt` >> simp[]) >>
-  VALID (drule_then mp_tac (INST_TYPE [Type.beta |-> ``:bytes32``, Type.gamma |-> ``:256``, Type.delta |-> ``:256``] exec_ext_call_oracle_step) >>
-    disch_then (qspec_then `inst` mp_tac) >> simp[] >>
-    disch_then drule_all >>
-    disch_then (strip_assume_tac o Q.ISPECL
-      [`gas:bytes32`, `ro:bytes32`, `(n2w cap):bytes32`])) >>
-  qexists_tac `s'` >> simp[] >> rpt strip_tac >>
-  `state_rel H func cenv cx ee t` by metis_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  VALID (drule_then mp_tac (INST_TYPE [Type.beta |-> ``:bytes32``, Type.gamma |-> ``:256``, Type.delta |-> ``:256``] exec_ext_call_oracle_step) >>
-    disch_then (qspec_then `inst` mp_tac) >> simp[] >>
-    disch_then drule_all >>
-    disch_then (strip_assume_tac o Q.ISPECL
-      [`gas:bytes32`, `ro:bytes32`, `(n2w cap):bytes32`])) >>
-  `s'' = s'` by
-    (qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `s'' = _` mp_tac >>
-     qpat_x_assum `s' = _` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[venomStateTheory.update_var_def,
-          venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
-  gvs[]
-QED
-*)
 Theorem extcall_request_oracle_core_initial_domain:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
@@ -278,7 +234,69 @@ Theorem extcall_request_oracle_core_initial_domain:
        immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee u ==>
        state_rel H func cenv cx (SND (adopt_call_outcome rq oc consumed)) u))
 Proof
-  cheat
+  strip_tac >>
+  `!H. valid_horizon cx st0 H
+      (SND (adopt_call_outcome rq oc consumed)).storage_trace ==>
+      valid_horizon cx st0 H ee.storage_trace` by
+    (rpt strip_tac >>
+     `adopt_call_outcome rq oc consumed =
+        (INL (), SND (adopt_call_outcome rq oc consumed))` by
+       simp[adopt_call_outcome_equation] >>
+     metis_tac[valid_horizon_frame, storage_trace_frame_adopt,
+               storage_trace_frame_take_call]) >>
+  fs[extcall_request_ready_def] >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+    ee.storage_trace` by fs[storage_trace_domain_def] >>
+  `state_rel (storage_trace_horizon ee.storage_trace)
+    func cenv cx ee t` by metis_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  drule frame_call_value_success >> strip_tac >>
+  `t.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  `w2n vw = (case framed_value of NONE => 0 | SOME n => n)` by
+    (Cases_on `cx.txn.is_static` >> gvs[] >>
+     Cases_on `value_opt` >> gvs[]) >>
+  `(stat \/ t.vs_call_ctx.cc_static) = IS_NONE framed_value` by
+    (Cases_on `cx.txn.is_static` >> gvs[]) >>
+  Cases_on `eval_operand gas_op t` >> gvs[] >> rename1 `_ = SOME gas` >>
+  `cap < dimword (:256)` by decide_tac >>
+  `cap MOD dimword (:256) = cap` by
+    (irule arithmeticTheory.LESS_MOD >> first_assum ACCEPT_TAC) >>
+  `w2n ((n2w cap):bytes32) = cap` by simp[] >>
+  `IS_NONE value_opt = (value_opt = NONE)` by (Cases_on `value_opt` >> simp[]) >>
+  qspecl_then
+    [`storage_trace_horizon ee.storage_trace`, `func`, `cenv`, `cx`, `ee`, `t`,
+     `inst`, `gas:bytes32`, `aw:bytes32`, `vw:bytes32`, `ao:bytes32`, `az:bytes32`,
+     `ro:bytes32`, `(n2w cap):bytes32`, `value_opt = NONE`, `out`, `w2w aw`,
+     `if cx.txn.is_static then NONE else value_opt`, `rq`, `oc`, `consumed`] mp_tac
+    (INST_TYPE [Type.beta |-> ``:bytes32``, Type.gamma |-> ``:256``,
+                Type.delta |-> ``:256``] exec_ext_call_oracle_step) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  qexists_tac `s'` >>
+  qpat_x_assum `cap MOD dimword (:256) = cap` (fn th => fs[th]) >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+  `state_rel H func cenv cx ee t` by
+    (qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  qspecl_then
+    [`H`, `func`, `cenv`, `cx`, `ee`, `t`,
+     `inst`, `gas:bytes32`, `aw:bytes32`, `vw:bytes32`, `ao:bytes32`, `az:bytes32`,
+     `ro:bytes32`, `(n2w cap):bytes32`, `value_opt = NONE`, `out`, `w2w aw`,
+     `if cx.txn.is_static then NONE else value_opt`, `rq`, `oc`, `consumed`] mp_tac
+    (INST_TYPE [Type.beta |-> ``:bytes32``, Type.gamma |-> ``:256``,
+                Type.delta |-> ``:256``] exec_ext_call_oracle_step) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  `s'' = s'` by
+    (qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `s'' = _` mp_tac >>
+     qpat_x_assum `s' = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[venomStateTheory.update_var_def,
+          venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
+  gvs[]
 QED
 
 Theorem extcall_request_memory_rel:
