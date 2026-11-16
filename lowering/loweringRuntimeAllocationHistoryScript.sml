@@ -8,6 +8,7 @@ Ancestors
   loweringBudgetPrecompilePrefix loweringBudgetResidualArithmetic
   loweringBudgetReturnStorePrefix loweringBudgetSourceResidual
   loweringBudgetTerminalFrontier loweringRuntimeBudgetAssembly
+  loweringBudgetExitCoverage
   loweringRuntimeBudgetSourceEntry
   ptrDiscipline contextRawReachable sourceCallCount compileVyper
   vyperCompiler e2eDefs lowerDloadDefs o1PassContract
