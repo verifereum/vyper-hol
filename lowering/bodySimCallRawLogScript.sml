@@ -104,7 +104,30 @@ Proof
   strip_tac >> drule expr_body_pre_builtin_arg >> disch_then irule >> simp[]
 QED
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem raw_log_dynamic_frag:
+  body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
+  expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
+  (?a elem bd topics data cap.
+    args = [Builtin a (MakeArray elem bd) topics; data] /\
+    expr_type data = BaseT (BytesT (Dynamic cap))) /\
+  compile_expr cenv ty (Call ann RawLog args dflt) sa = (StackValue ann (Lit 0w),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
+    expr_res_ok es /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0)
+    (\H rr ee t. ?v. rr = INL v /\
+      expr_post H ctx func cenv cx (Call ann RawLog args dflt)
+        es sa sb s0 ee v (Lit 0w) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\H rr ee r. expr_exit rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -401,36 +424,7 @@ Proof
     `sm` |-> `sp`, `ops` |-> `ops`, `vs` |-> `vs`, `u` |-> `()`]
     (SPEC_ALL raw_log_dynamic_tail_summary)) >> simp[]
 QED
-*)
-Theorem raw_log_dynamic_frag:
-  body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
-  expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
-  (?a elem bd topics data cap.
-    args = [Builtin a (MakeArray elem bd) topics; data] /\
-    expr_type data = BaseT (BytesT (Dynamic cap))) /\
-  compile_expr cenv ty (Call ann RawLog args dflt) sa = (StackValue ann (Lit 0w),sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
-    expr_res_ok es /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es s0 /\
-     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-  s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0)
-    (\H rr ee t. ?v. rr = INL v /\
-      expr_post H ctx func cenv cx (Call ann RawLog args dflt)
-        es sa sb s0 ee v (Lit 0w) t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
-Proof
-  cheat
-QED
 
-(* LOCAL STAND-IN: orphaned continuation retained.
 Resume raw_log_dynamic_frag[static]:
   `?u. run_inst_seq (emitted_insts sn sb) t' = Abort ExHalt_abort u` by
     (drule_all raw_log_dynamic_static_run >> simp[]) >>
@@ -448,8 +442,7 @@ Resume raw_log_dynamic_frag[static]:
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_static_suffix_summary) >> simp[dest_BytesV_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
-*)
-(* LOCAL STAND-IN: held root. Finalise raw_log_dynamic_frag *)
+Finalise raw_log_dynamic_frag
 
 Theorem raw_log_alloc_args_post:
   wb_args_post H ctx func cenv cx es0 sa s0 es ops vals t /\
@@ -468,7 +461,30 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem raw_log_fixed32_body_frag:
+  body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
+  expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
+  (?a elem bd topics data.
+    args = [Builtin a (MakeArray elem bd) topics; data] /\
+    expr_type data = BaseT (BytesT (Fixed 32))) /\
+  compile_expr cenv ty (Call ann RawLog args dflt) sa = (StackValue ann (Lit 0w),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
+    expr_res_ok es /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0)
+    (\H rr ee t. ?v. rr = INL v /\
+      expr_post H ctx func cenv cx (Call ann RawLog args dflt)
+        es sa sb s0 ee v (Lit 0w) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\H rr ee r. expr_exit rr r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -856,36 +872,7 @@ Proof
     raw_log_fixed_tail_summary) >> Cases_on `u` >> fs[] >>
   first_assum ACCEPT_TAC
 QED
-*)
-Theorem raw_log_fixed32_body_frag:
-  body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
-  expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
-  (?a elem bd topics data.
-    args = [Builtin a (MakeArray elem bd) topics; data] /\
-    expr_type data = BaseT (BytesT (Fixed 32))) /\
-  compile_expr cenv ty (Call ann RawLog args dflt) sa = (StackValue ann (Lit 0w),sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
-    expr_res_ok es /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es s0 /\
-     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-  s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0)
-    (\H rr ee t. ?v. rr = INL v /\
-      expr_post H ctx func cenv cx (Call ann RawLog args dflt)
-        es sa sb s0 ee v (Lit 0w) t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
-Proof
-  cheat
-QED
 
-(* LOCAL STAND-IN: orphaned continuation retained.
 Resume raw_log_fixed32_body_frag[static]:
   `t''.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -905,10 +892,11 @@ Resume raw_log_fixed32_body_frag[static]:
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_static_suffix_summary) >> simp[dest_BytesV_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
-*)
-(* LOCAL STAND-IN: held root. Finalise raw_log_fixed32_body_frag *)
+Finalise raw_log_fixed32_body_frag
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem raw_log_body_expr_ok:
+  !cx v20 es v21.
+    body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
   rpt gen_tac >> strip_tac >>
   `!tops ctx func cenv env ty es'.
@@ -939,11 +927,4 @@ Proof
         mp_tac body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
   metis_tac[]
-QED
-*)
-Theorem raw_log_body_expr_ok:
-  !cx v20 es v21.
-    body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
-Proof
-  cheat
 QED

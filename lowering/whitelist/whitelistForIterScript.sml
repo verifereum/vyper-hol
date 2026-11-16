@@ -126,7 +126,47 @@ QED
    pointer, asserts it is at most the capacity c, and reads element k at
    base + 32 + k * size.  The source iterates the snapshot's elements; the
    body cannot write the array (iterator_unmodified). *)
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem body_for_dynarray_name:
+  !cx id typ c name n stmts tops bindings ctx func cenv env env' ret_ty lctx
+   RetQ es.
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\
+       eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name)) s'3' =
+       (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id stmts vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx (Array (Name (ArrayT typ (Dynamic c)) name))) /\
+    body_inv tops ctx cenv cx /\
+    supported_type_namespace typ /\ supported_stmts tops bindings stmts /\
+    ~supported_stmts_expr_exists expr_internal_call_root stmts /\ c <= n /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target)
+       (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty
+      (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) =
+      SOME env' /\
+    body_stmt_safe tops (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
+    stmt_exprs_ok cenv
+      (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts))
+      (eval_stmt cx
+         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts)) es
 Proof
   rpt gen_tac >> strip_tac >>
   imp_res_tac body_stmt_safe_for_body >>
@@ -176,53 +216,17 @@ Proof
   drule_at (Pat `eval_stmts`) array_body_scope_callback >>
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
-*)
-Theorem body_for_dynarray_name:
-  !cx id typ c name n stmts tops bindings ctx func cenv env env' ret_ty lctx
-   RetQ es.
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\
-       eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name)) s'3' =
-       (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id stmts vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx (Array (Name (ArrayT typ (Dynamic c)) name))) /\
-    body_inv tops ctx cenv cx /\
-    supported_type_namespace typ /\ supported_stmts tops bindings stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\ c <= n /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target)
-       (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty
-      (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) =
-      SOME env' /\
-    body_stmt_safe tops (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
-    stmt_exprs_ok cenv
-      (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
-    call_evaluation_safe cx
-      (int_calls_stmt
-         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty
-         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts))
-      (eval_stmt cx
-         (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts)) es
-Proof
-  cheat
-QED
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem memory_iterator_source_classify[local]:
+  !e cx es rv ee.
+    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+    expr_writes_ok (\_. F) e /\
+    (!tgt nid. loop_iterator_place e = SOME tgt ==>
+       target_root tgt <> TopLevelNameTarget nid) /\
+    eval_expr cx e es = (INL rv,ee) ==>
+    (?v. rv = Value v) \/
+    (?id path tgt. rv = PlaceR (MemoryPlace id path) /\
+       loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget id)
 Proof
   ho_match_mp_tac
     (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
@@ -309,20 +313,6 @@ Proof
       get_accounts_def, assert_def, AllCaseEqs()] >>
   Cases_on `evaluate_abi_decode_return (get_tenv ca) p2 returnData` >>
   gvs[bind_apply, return_def, raise_def]
-QED
-*)
-Theorem memory_iterator_source_classify[local]:
-  !e cx es rv ee.
-    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
-    expr_writes_ok (\_. F) e /\
-    (!tgt nid. loop_iterator_place e = SOME tgt ==>
-       target_root tgt <> TopLevelNameTarget nid) /\
-    eval_expr cx e es = (INL rv,ee) ==>
-    (?v. rv = Value v) \/
-    (?id path tgt. rv = PlaceR (MemoryPlace id path) /\
-       loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget id)
-Proof
-  cheat
 QED
 
 (* ADMITTED (out-of-packet key, allowed by the plan session): a For over a

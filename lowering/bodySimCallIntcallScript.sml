@@ -103,7 +103,13 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
+Theorem expr_sim_of_vv_sim_stack_memory[local]:
+  !ctx func cenv cx ty e es.
+    expr_vv_sim ctx func cenv cx ty e es /\
+    (!sa vv sm. compile_expr cenv ty e sa = (vv,sm) ==>
+      ((?t op. vv = StackValue t op) \/
+       (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))) ==>
+    expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
@@ -180,17 +186,6 @@ Proof
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[force_exempt_cert]
 QED
-*)
-Theorem expr_sim_of_vv_sim_stack_memory[local]:
-  !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es /\
-    (!sa vv sm. compile_expr cenv ty e sa = (vv,sm) ==>
-      ((?t op. vv = StackValue t op) \/
-       (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))) ==>
-    expr_sim ctx func cenv cx ty e es
-Proof
-  cheat
-QED
 
 (* A widened internal call is laid out at the callee's return type.
    Its stack/memory result needs no post-value/annotation equality to force. *)
@@ -240,60 +235,6 @@ QED
    ce_locals_declared_params, for an env that has the parameters; the
    body's locals_alloc_ok and stmt_exprs_ok's alloc_limits_stmt come from
    fn_allocs_ok_body. *)
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
-Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >>
-  conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func cenv cx (Call v16 (IntCall (src_id_opt,fn)) es v17)`
-    suffices_by
-      (strip_tac >> conj_tac >- (
-         Cases_on `post_value_type cenv (Call v16 (IntCall (src_id_opt,fn)) es v17) =
-                   expr_type (Call v16 (IntCall (src_id_opt,fn)) es v17)`
-         >- (irule expr_sim_case_of_vv >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-         irule intcall_sim_case_widened >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-       first_assum ACCEPT_TAC) >>
-  simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `expr_body_pre cenv cx tenv _ es0` >>
-  drule_all body_intcall_source_selection >> strip_tac >>
-  `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_ok cx es` by
-    (strip_tac >> drule intcall_results_ih >> disch_then drule_all >> simp[]) >>
-  `!s1 vs t1 s3 u t3 penv rtv.
-     ~MEM (src_id_opt,fn) cx.stk /\
-     eval_exprs cx es s1 = (INL vs,t1) /\
-     bind_arguments (get_tenv cx) args vs = SOME penv /\
-     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
-     evaluate_type (get_tenv cx) ret = SOME rtv ==>
-     body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
-    (rpt strip_tac >> drule intcall_body_ih >> disch_then drule_all >>
-     simp[]) >>
-  gvs[] >>
-  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  `?nrc nrbs npvs.
-     cenv.ce_func_info (nsid_to_string (NONE,fn)) = (nrc,nrbs,npvs)`
-    by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  irule intcall_args_frame_setup >> simp[] >>
-  qexistsl_tac [`args`,`cenv`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
-                `ty`,`vv`] >>
-  simp[] >> rpt strip_tac >>
-  qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
-               `v17`,`es0`,`st0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
-               `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
-    mp_tac intcall_return_restore >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (drule_then assume_tac) >>
-      drule intcall_entry_source >> strip_tac >>
-      `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
-        (Cases_on `u` >>
-         qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
-         simp[lock_if_nr_def] >> strip_tac >>
-         qpat_x_assum `!s1 vs t1. _` drule_all >>
-         simp[]) >>
-      drule_all intcall_callee_body_sim >> simp[]) >>
-  simp[]
-QED
-*)
 Theorem intcall_body_expr_ok:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
@@ -362,5 +303,54 @@ Theorem intcall_body_expr_ok:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  cheat
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >>
+  conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Call v16 (IntCall (src_id_opt,fn)) es v17)`
+    suffices_by
+      (strip_tac >> conj_tac >- (
+         Cases_on `post_value_type cenv (Call v16 (IntCall (src_id_opt,fn)) es v17) =
+                   expr_type (Call v16 (IntCall (src_id_opt,fn)) es v17)`
+         >- (irule expr_sim_case_of_vv >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         irule intcall_sim_case_widened >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       first_assum ACCEPT_TAC) >>
+  simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `expr_body_pre cenv cx tenv _ es0` >>
+  drule_all body_intcall_source_selection >> strip_tac >>
+  `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_ok cx es` by
+    (strip_tac >> drule intcall_results_ih >> disch_then drule_all >> simp[]) >>
+  `!s1 vs t1 s3 u t3 penv rtv.
+     ~MEM (src_id_opt,fn) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) /\
+     bind_arguments (get_tenv cx) args vs = SOME penv /\
+     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+     evaluate_type (get_tenv cx) ret = SOME rtv ==>
+     body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
+    (rpt strip_tac >> drule intcall_body_ih >> disch_then drule_all >>
+     simp[]) >>
+  gvs[] >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  `?nrc nrbs npvs.
+     cenv.ce_func_info (nsid_to_string (NONE,fn)) = (nrc,nrbs,npvs)`
+    by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  irule intcall_args_frame_setup >> simp[] >>
+  qexistsl_tac [`args`,`cenv`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
+                `ty`,`vv`] >>
+  simp[] >> rpt strip_tac >>
+  qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
+               `v17`,`es0`,`st0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
+               `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
+    mp_tac intcall_return_restore >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (drule_then assume_tac) >>
+      drule intcall_entry_source >> strip_tac >>
+      `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
+        (Cases_on `u` >>
+         qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
+         simp[lock_if_nr_def] >> strip_tac >>
+         qpat_x_assum `!s1 vs t1. _` drule_all >>
+         simp[]) >>
+      drule_all intcall_callee_body_sim >> simp[]) >>
+  simp[]
 QED

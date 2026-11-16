@@ -6,20 +6,6 @@ Ancestors
   exprLoweringProps vyperAST vyperValue compileEnv list
   gasSummary exprSimRawLog vyperState
 
-(* LOCAL STAND-IN: inherited receiving-cone failure; never deliver.
-Proof
-  strip_tac >>
-  `typed_args_ready ctx func cenv cx expr_type
-     (\s. expr_sim_inv cenv cx env s) topics` by
-    metis_tac[raw_log_body_topics_ready] >>
-  `wb_args_shape cenv expr_type topics` by
-    (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
-     simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
-  irule lower_typed_args_sim >> simp[] >>
-  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
-  qexists_tac `expr_type` >> simp[]
-QED
-*)
 Theorem raw_log_body_topics_sim:
   body_inv tops ctx cenv cx /\ body_exprs_ok cx topics /\
   (!e s. MEM e topics /\ expr_sim_inv cenv cx env s ==>
@@ -39,7 +25,16 @@ Theorem raw_log_body_topics_sim:
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\H rr ee r. wb_args_exit rr r)
 Proof
-  cheat
+  strip_tac >>
+  `typed_args_ready ctx func cenv cx expr_type
+     (\s. expr_sim_inv cenv cx env s) topics` by
+    metis_tac[raw_log_body_topics_ready] >>
+  `wb_args_shape cenv expr_type topics` by
+    (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
+     simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
+  irule lower_typed_args_sim >> simp[] >>
+  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
+  qexists_tac `expr_type` >> simp[]
 QED
 
 Theorem raw_log_topics_marked_post:
