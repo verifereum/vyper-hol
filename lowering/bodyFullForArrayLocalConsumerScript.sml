@@ -15,7 +15,7 @@ Ancestors
   vyperStorageTrace exprSimProps vyperTypeValues vyperTypeInvariants
   vyperAST vyperArray vyperTypeEnv arithmetic vyperValueOperation
   exprSimHyps allocLimits gasShadow whitelistForIterDynFrag
-  bodyFullForArrayDynamicStart
+  bodyFullForArrayDynamicScalar
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "cond";
@@ -742,7 +742,21 @@ Resume body_for_local_array_full_from_contracts[runtime]:
         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
           (s0,G0,tn0) [] (OK cc,Gentry,tnentry) /\
         Head idx p bound_op cond_lbl ainst arr_base dst H (MAP Value vs)
-          (es with gas_obs := []) Gentry tnentry cc))`
+          (es with gas_obs := []) Gentry tnentry cc)) /\
+    (cs_extends start scopy /\ cs_extends scopy sb0 /\
+     start.cs_next_var <= scopy.cs_next_var /\
+     scopy.cs_next_var <= sb0.cs_next_var /\
+     start.cs_next_var <= sb0.cs_next_var /\
+     copy_old_operand start (Var ap) /\ copy_old_operand scopy bound_op /\
+     (!x. bound_op = Var x ==> x <> dv /\ x <> ov /\
+       (bd = Dynamic (bound_length bd) ==> x <> tov) /\
+       x <> ep /\ x <> idx /\ x <> nv) /\
+     (bd = Dynamic (bound_length bd) ==>
+       not_fresh_at scopy tov /\ tov <> p /\ tov <> idx /\
+       joff <> j3 /\ joff <> j4) /\
+     (?tail_code. lookup_block body_lbl func.fn_blocks = SOME
+       <|bb_label := body_lbl;
+         bb_instructions := sb0.cs_current_insts ++ tail_code|>))`
     by suspend "code_packet" >>
   suspend "initialized_packet"
 QED
@@ -765,19 +779,122 @@ Resume body_for_local_array_full_from_contracts[fixed_runtime]:
     `start.cs_next_id + 4`,`start.cs_next_id + 5`,
     `start.cs_next_id + 6`,`0`,`start.cs_next_id + 7`,
     `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,`start`,`sd`] >>
-  fs[array_for_code_def] >> gvs[mk_inst_def] >> suspend "fixed_init"
+  fs[array_for_code_def] >> gvs[mk_inst_def] >>
+  conj_tac >- suspend "fixed_init" >> suspend "fixed_static"
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_runtime]:
   `!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by simp[] >>
-  drule_all compile_for_dynarray_code_ready >> strip_tac >>
+  `!c lc a b. compile_stmts c lc ret_ty stmts a = ((),b) ==>
+     cs_extends a b` by
+    (rpt strip_tac >> qpat_x_assum `!c lc a b. _ ==> _ /\ _` drule >> simp[]) >>
+  drule_all compile_for_dynarray_parts >> strip_tac >>
+  drule_all stmtSimPropsTheory.declare_local_ptr >> strip_tac >>
+  `start.cs_next_var + 9 <= sj.cs_next_var` by
+    (qpat_x_assum `!c lc a b. _ ==> _ /\ _` drule >> simp[]) >>
+  `(!scs. not_local_ptr cenv scs idx /\ not_local_ptr cenv scs dv /\
+      not_local_ptr cenv scs ov /\ not_local_ptr cenv scs tot /\
+      not_local_ptr cenv scs ep /\ not_local_ptr cenv scs nv /\
+      not_local_ptr cenv scs lv /\ not_local_ptr cenv scs g /\
+      not_local_ptr cenv scs vld)` by
+    (gen_tac >> rpt conj_tac >> simp[] >>
+     irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
+     qexists_tac `start` >> simp[]) >>
+  `not_fresh_at start ap` by
+    (qpat_assum `local_ptrs_reserved cenv start` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+     strip_tac >> first_x_assum drule >> strip_tac >> simp[]) >>
+  `ALL_DISTINCT [idx;dv;ov;tot;ep;nv;p;lv;g;vld] /\
+   (!x. not_fresh_at start x ==>
+      ~MEM x [idx;dv;ov;tot;ep;nv;p;lv;g;vld])` by
+    (map_every (fn label => asm_x label kall_tac)
+       ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+        "body_outcome","handler","entry"] >>
+     simp[] >> simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `local_ptrs_reserved cenv st1` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `start` >> simp[]) >>
+  `st1.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
+  drule_all stmtSimForArrayFragTheory.array_declared_reserved >> strip_tac >>
+  `MEM (mk_inst (start.cs_next_id + 1) ALLOCA
+      [Lit (n2w (type_memory_bytes cenv typ))] [p]) (fn_insts func)` by
+    (irule lookup_block_fn_insts >>
+     qpat_assum `lookup_block start.cs_current_bb _ = _` (irule_at (Pos hd)) >>
+     simp[]) >>
+  qabbrev_tac `ainst = mk_inst (start.cs_next_id + 1) ALLOCA
+      [Lit (n2w (type_memory_bytes cenv typ))] [p]` >>
+  `(!x. not_fresh_at start x ==> not_fresh_at st1 x) /\
+   (!x. not_fresh_at st1 x ==>
+      not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep) /\
+   (!x. not_fresh_at st1 x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+   not_fresh_at st1 lv /\ not_fresh_at sa lv /\ not_fresh_at sa tot /\
+   not_fresh_at sa idx /\ not_fresh_at sa p /\
+   not_fresh_at sa ep /\ not_fresh_at sa ap /\
+   not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\ not_fresh_at sb0 ap` by
+    (map_every (fn label => asm_x label kall_tac)
+       ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+        "body_outcome","handler","entry"] >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `not_fresh_at start _` mp_tac >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`tot`,`ep`,`nv`,`Var lv`,
     `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
     `start.cs_next_id + 8`,`start.cs_next_id + 9`,
     `start.cs_next_id + 10`,`start.cs_next_id + 11`,`start.cs_next_id + 12`,
-    `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,`st1`,`sd`] >>
-  fs[whitelistForIterDynLoopTheory.dynarray_for_code_def] >>
-  gvs[mk_inst_def] >> suspend "dynamic_init"
+    `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,
+    `st1`,`st1 with cs_next_var := st1.cs_next_var + 1`] >>
+  fs[elem_size_in_location_def,is_slot_addressed_def,Abbr `ainst`,mk_inst_def,
+     ALL_DISTINCT] >>
+  conj_tac >-
+    (qpat_x_assum `MEM _ (fn_insts func)` mp_tac >> simp[]) >>
+  conj_tac >- suspend "dynamic_init" >> suspend "dynamic_static"
+QED
+
+Resume body_for_local_array_full_from_contracts[fixed_static]:
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+     "body_outcome","handler","entry"] >>
+  `~block_is_terminated sa` by
+    simp[block_is_terminated_def,mk_inst_def,is_terminator_def] >>
+  drule_all stmtSimForArrayPartsTheory.array_iter_copy_static >> strip_tac >>
+  `not_fresh_at start ap` by
+    (qpat_x_assum `local_ptrs_reserved cenv start` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+     strip_tac >> first_x_assum drule >> strip_tac >> simp[]) >>
+  simp[exprSimCopyTheory.copy_old_operand_def] >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  qspecl_then [`sb0`,`sb1`,`func`] mp_tac fn_has_code_start >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  pure_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  `bb.bb_label = sb0.cs_current_bb` by
+    (qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
+     pure_rewrite_tac[lookup_block_def] >>
+     strip_tac >> drule FIND_P >> simp[]) >>
+  qexists_tac `l` >>
+  qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
+  simp[basic_block_component_equality]
+QED
+
+Resume body_for_local_array_full_from_contracts[dynamic_static]:
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+     "body_outcome","handler","entry"] >>
+  simp[exprSimCopyTheory.copy_old_operand_def] >>
+  conj_tac >-
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+  qspecl_then [`sb0`,`sb1`,`func`] mp_tac fn_has_code_start >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  pure_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  `bb.bb_label = sb0.cs_current_bb` by
+    (qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
+     pure_rewrite_tac[lookup_block_def] >>
+     strip_tac >> drule FIND_P >> simp[]) >>
+  qexists_tac `l` >>
+  qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
+  simp[basic_block_component_equality]
 QED
 
 Resume body_for_local_array_full_from_contracts[fixed_init]:
@@ -863,19 +980,7 @@ QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_init]:
   `lv = STRING #"%" (toString start.cs_next_var) /\
-   p = STRING #"%" (toString (start.cs_next_var + 1))` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
-        "body_outcome","handler","entry"] >>
-     `!c lc a b. compile_stmts c lc ret_ty stmts a = ((),b) ==>
-       cs_extends a b` by
-       (rpt strip_tac >> qpat_x_assum `!c lc a b. _ ==> _ /\ _` drule >> simp[]) >>
-     drule_all compile_for_dynarray_parts >> strip_tac >>
-     qpat_x_assum `_ = STRING #"%" (toString start.cs_next_var)` mp_tac >>
-     qpat_x_assum `_ = STRING #"%" (toString (start.cs_next_var + 1))` mp_tac >>
-     qpat_x_assum `lookup_block start.cs_current_bb _ = _` mp_tac >>
-     qpat_x_assum `lookup_block start.cs_current_bb _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[mk_inst_def]) >>
+   p = STRING #"%" (toString (start.cs_next_var + 1))` by simp[] >>
   Cases_on `emit_op MLOAD [Var ap] start` >>
   rename1 `emit_op MLOAD [Var ap] start = (load_result,load_cs)` >>
   `load_result = Var lv /\
@@ -947,21 +1052,259 @@ Resume body_for_local_array_full_from_contracts[dynamic_init]:
        update_var_def,AllCaseEqs(),Abbr `sA`,Abbr `vs`] >>
      gvs[venom_state_component_equality]) >>
   `lookup_var lv (jump_to entry' sA) = SOME (n2w (LENGTH vs))` by
-    simp[Abbr `sA`,Abbr `vs`,jump_to_def,lookup_var_def] >>
+    (qpat_x_assum `lookup_var _ t = SOME (n2w (LENGTH _))` mp_tac >>
+     simp[Abbr `sA`,Abbr `vs`,jump_to_def,lookup_var_def]) >>
   `allocas_from lo (jump_to entry' sA) /\
    lo <= (jump_to entry' sA).vs_alloca_next` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ t /\ _`
        drule >> strip_tac >>
      qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ t` mp_tac >>
-     simp[ghost_inv_at_def,Abbr `sA`,jump_to_def,allocas_from_def]) >>
-  drule_at (Pat `lookup_var _ (jump_to _ _) = _`)
-    for_array_dynamic_scalar_sequence_full >>
-  disch_then (qspecl_then [`idx`,`g`,`vld`] mp_tac) >>
-  FAIL_TAC "dynamic-scalar-apply"
+     rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+     qpat_x_assum `allocas_from lo t` mp_tac >>
+     simp[allocas_from_def,Abbr `sA`,jump_to_def]) >>
+  `?Gf tf. (!D. inst_seq_ptr D lo ctx func PG Gp tp
+     [mk_inst (start.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+      mk_inst (start.cs_next_id + 4) GT [Var lv;Lit (n2w n')] [g];
+      mk_inst (start.cs_next_id + 5) ISZERO [Var g] [vld];
+      mk_inst (start.cs_next_id + 6) ASSERT [Var vld] []]
+     (jump_to entry' sA) Gf tf) /\
+     FLOOKUP Gf idx = NONE /\ FLOOKUP Gf lv = NONE /\
+     op_taint tf (Var idx) = {} /\ op_taint tf (Var lv) = {} /\
+     tf.t_mem = tp.t_mem /\ tf.t_stor = tp.t_stor /\
+     tf.t_trans = tp.t_trans /\ tf.t_imm = tp.t_imm /\
+     (!x. ~MEM x [idx;g;vld] ==> FLOOKUP Gf x = FLOOKUP Gp x /\
+       op_taint tf (Var x) = op_taint tp (Var x))` by
+    (irule bodyFullForArrayDynamicScalarTheory.for_array_dynamic_scalar_sequence_full >>
+     simp[] >> qexists_tac `LENGTH vs` >> simp[ALL_DISTINCT]) >>
+  `!H. inst_seq_ptr (DF H) lo ctx func PG Gp tp
+     [mk_inst (start.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+      mk_inst (start.cs_next_id + 4) GT [Var lv;Lit (n2w n')] [g];
+      mk_inst (start.cs_next_id + 5) ISZERO [Var g] [vld];
+      mk_inst (start.cs_next_id + 6) ASSERT [Var vld] []]
+     (jump_to entry' sA) Gf tf` by simp[] >>
+  `!H. inst_seq_ptr (DF H) lo ctx func PG G0 tn0
+     [mk_inst start.cs_next_id MLOAD [Var ap] [lv];
+      mk_inst (start.cs_next_id + 1) ALLOCA [Lit (n2w (type_memory_size tv))] [p]]
+     s0 Gp tp` by simp[mk_inst_def] >>
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","body_fragment","body_outcome","handler","entry"] >>
+  `?dst cc s1.
+    exec_alloca (mk_inst (start.cs_next_id + 1) ALLOCA
+      [Lit (n2w (type_memory_size tv))] [p])
+      (update_var lv (n2w (LENGTH vs)) s0)
+      (n2w (type_memory_size tv) : bytes32) = OK s1 /\ s1 = sA /\
+    cc = jump_to cond (update_var vld 1w (update_var g 0w
+      (update_var idx 0w (jump_to entry' s1)))) /\
+    array_loop_inv ctx func cenv cx st0 (expr_sim_inv cenv cx env)
+      vs id idx (Var ap) base' p dst (type_memory_size tv)
+      (mk_inst (start.cs_next_id + 1) ALLOCA
+        [Lit (n2w (type_memory_size tv))] [p]) cond start 0 es cc /\
+    lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
+    array_caller_frame start s0 cc /\
+    gas_marked_path F ctx func s0 0 (OK cc) /\
+    gas_path_mem ctx func s0 0 (OK cc) /\
+    alloca_history func cc /\ cc.vs_memory = s0.vs_memory /\
+    s0.vs_alloca_next <= cc.vs_alloca_next /\
+    (!H. gas_origin_ptr_path
+      (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) [] (OK cc,Gf,tf))` by
+    suspend "dynamic_entry_pending" >>
+  suspend "dynamic_init_after_entry"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_packet]:
-  FAIL_TAC "initialized-packet"
+  qabbrev_tac `Inv = Head idx p bound_op cond_lbl ainst arr_base dst` >>
+  qabbrev_tac `Done = \H ee G tn s.
+    stmt_lands lctx finish (INL ()) s /\ ~s.vs_halted /\
+    ~block_is_terminated finish /\ cenv_top_ext cenv cenv ee.scopes /\
+    stmt_state_rel H ctx func cenv cx ee s /\
+    storage_well_formed_on cx ee (FST H) /\
+    return_buf_frame d cenv finish s /\ alloca_history func s /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+    (!x w. not_fresh_at start x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x s = SOME w) /\
+    (!aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ==>
+      FLOOKUP s.vs_allocas aid = SOME bl) /\
+    (!x. not_fresh_at start x ==> FLOOKUP G x = FLOOKUP G0 x /\
+      op_taint tn (Var x) = op_taint tn0 (Var x))` >>
+  qabbrev_tac `Exit = \H ex ee gt r.
+    (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail)
+      (INR ex : unit + exception) gt r) /\
+    halt_exit H cx ee (INR ex : unit + exception) r /\
+    (ctx_has_dalloca ctx ==> !s.
+      (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s)` >>
+  `!rs ee s G tn.
+    ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> Inv H rs ee G tn s) /\
+    gas_admissible (eval_for cx tv id stmts rs) (stmt_res_ok lctx) ee ==>
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_for cx tv id stmts rs) (ee,s,G,tn)
+      (\H res ee G tn t. res = INL () /\ Done H ee G tn t)
+      (\H res ee gt r. ?ex. res = INR ex /\ Exit H ex ee gt r)`
+    by suspend "common_loop" >>
+  suspend "initialized_loop_suffix"
+QED
+
+Resume body_for_local_array_full_from_contracts[common_loop]:
+  ho_match_mp_tac (Q.INST
+    [`round` |-> `\a. do v <- read_result cx a;
+       push_scope_with_var id tv v;
+       finally (try (do eval_stmts cx stmts; return F od)
+                    handle_loop_exception) pop_scope od`,
+     `next` |-> `\rs b. if b then return () else eval_for cx tv id stmts rs`]
+    eval_for_rounds_full) >>
+  simp_tac bool_ss [] >>
+  conj_tac >- suspend "common_round" >>
+  conj_tac >- suspend "common_nil" >>
+  conj_tac >- suspend "common_cert_head" >>
+  suspend "common_cert_tail"
+QED
+
+Resume body_for_local_array_full_from_contracts[common_nil]:
+  VALID (rpt gen_tac >> strip_tac >>
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+     "body_outcome","handler","entry"] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> Inv _ [] _ _ _ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  simp_tac (srw_ss()) [Abbr `Inv`,Abbr `Head`] >> strip_tac >>
+  `lo <= s.vs_alloca_next` by fs[ghost_inv_at_def]) >>
+  `!H. gas_origin_ptr_path
+      (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s,G,tn) []
+      (OK (jump_to exit_lbl (update_var dv 1w s)),
+       DRESTRICT G (COMPL {dv}),tn with t_var := tn.t_var |+ (dv,{}))` by
+    (irule (SRULE [venomExecSemanticsTheory.bool_to_word_def]
+      (Q.INST [`a` |-> `n2w (LENGTH (vs : value list)) : 256 word`,
+               `b` |-> `n2w (LENGTH (vs : value list)) : 256 word`]
+        (cj 1 (SRULE [] for_array_local_condition_full)))) >>
+     asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`body_lbl`,`bound_op`,`idx`,`j1`,`j2`,`vs`] >>
+     simp_tac bool_ss [APPEND] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`jump_to exit_lbl (update_var dv 1w s)`,
+    `DRESTRICT G (COMPL {dv})`,`tn with t_var := tn.t_var |+ (dv,{})`] >>
+  VALID (rpt gen_tac >> disch_tac) >> conj_tac >- simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    drule >> simp_tac (srw_ss()) [] >> strip_tac >>
+  `(jump_to exit_lbl (update_var dv 1w s)).vs_current_bb = exit_lbl /\
+   (jump_to exit_lbl (update_var dv 1w s)).vs_inst_idx = 0` by
+    simp[jump_to_def,update_var_def] >>
+  simp[Abbr `Done`,stmt_lands_def,block_is_terminated_def,
+    stmtSimPropsTheory.cenv_top_ext_refl] >>
+  conj_tac >- (rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_jump_to] >>
+    irule exprLoweringPropsTheory.stmt_state_rel_update_var >> simp[]) >>
+  conj_tac >-
+    (qpat_x_assum `storage_well_formed_on cx ee (FST H)` mp_tac >>
+     simp[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_def,boolTheory.FORALL_BOOL]) >>
+  conj_tac >-
+    (`start.cs_next_var <= finish.cs_next_var` by
+       (qspecl_then [`cenv`,`lctx`,`ret_ty`,
+          `For id typ (Array (Name (ArrayT typ bd) name)) n stmts`,`start`]
+          mp_tac (cj 1 compile_stmt_ci_mono) >>
+        simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qexistsl_tac [`cenv`,`s`,`start`] >>
+     simp[jump_to_def,update_var_def,lookup_var_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _`
+       drule >> simp[FLOOKUP_UPDATE]) >>
+  conj_tac >-
+    (irule allocaHistoryTheory.alloca_history_jump >>
+     simp[jump_to_def,update_var_def] >> qexists_tac `s` >> simp[]) >>
+  conj_tac >- simp[jump_to_def,update_var_def] >>
+  conj_tac >-
+    (irule bodyFullGhostFrameTheory.ghost_inv_at_exterior_frame >>
+     qexistsl_tac [`G`,`ee`,`s`,`start`,`tn`] >>
+     simp[jump_to_def,update_var_def] >>
+     conj_tac >-
+       (qpat_x_assum `ret_pc_ok cenv start s0` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        pure_rewrite_tac[ret_pc_ok_def] >>
+        rpt strip_tac >> first_x_assum drule >>
+        disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _`
+       drule >> simp[lookup_var_def,FLOOKUP_UPDATE,FLOOKUP_DRESTRICT,
+         ptrDisciplineTheory.op_taint_def] >> strip_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> FLOOKUP G x = _ /\ _`
+       drule >> simp[ptrDisciplineTheory.op_taint_def]) >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _`
+       drule >> simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
+     strip_tac >>
+     qpat_x_assum `!x w. not_fresh_at start x /\ lookup_var x s0 = SOME w ==> _`
+       drule_all >> simp[lookup_var_def]) >>
+  conj_tac >- simp[jump_to_def,update_var_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _`
+    drule >> simp[FLOOKUP_DRESTRICT,ptrDisciplineTheory.op_taint_def,
+      FLOOKUP_UPDATE] >> strip_tac >>
+  qpat_x_assum `!x. not_fresh_at start x ==> FLOOKUP G x = _ /\ _`
+    drule >> simp[ptrDisciplineTheory.op_taint_def]
+QED
+
+Resume body_for_local_array_full_from_contracts[common_cert_head]:
+  rpt gen_tac >> strip_tac >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_bool >>
+  asm_rewrite_tac []
+QED
+
+Resume body_for_local_array_full_from_contracts[common_cert_tail]:
+  rpt gen_tac >> strip_tac >>
+  irule gasExemptCertTheory.gas_exempt_cert_bind_bool >>
+  qexistsl_tac [`mid`,`t`,`b`] >> asm_simp_tac bool_ss []
+QED
+
+Resume body_for_local_array_full_from_contracts[common_round]:
+  rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >-
+    (once_rewrite_tac[ignore_bind_def] >>
+     irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_read_result] >> gen_tac >>
+     once_rewrite_tac[ignore_bind_def] >>
+     irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_state_updates] >>
+     irule storage_trace_frame_finally >>
+     simp[storage_trace_frame_pop_scope] >>
+     irule storage_trace_frame_try >>
+     simp[storage_trace_frame_loop_handler] >>
+     once_rewrite_tac[ignore_bind_def] >>
+     irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame,storage_trace_frame_return]) >>
+  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> Inv _ (a::rs) _ _ _ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  simp_tac (srw_ss()) [Abbr `Inv`,Abbr `Head`] >> strip_tac >>
+  qabbrev_tac `k = LENGTH vs - SUC (LENGTH rs)` >>
+  `k < LENGTH vs` by
+    (qpat_x_assum `Abbrev (k = _)` mp_tac >>
+     qpat_x_assum `SUC (LENGTH rs) <= LENGTH vs` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[markerTheory.Abbrev_def] >> decide_tac) >>
+  qpat_x_assum `a::rs = MAP Value _` (mp_tac o GSYM) >>
+  rewrite_tac[MAP_EQ_CONS] >> strip_tac >>
+  qpat_x_assum `a = Value _` SUBST_ALL_TAC >>
+  pure_rewrite_tac[read_result_def,bind_return] >>
+  FAIL_TAC "common-round-entry"
+QED
+
+Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
+  FAIL_TAC "initialized-loop-suffix"
+QED
+
+(* The original typed-entry diagnostic is retained behind the external
+   interface-approval gate; common-loop work does not use a changed cut. *)
+Resume body_for_local_array_full_from_contracts[dynamic_entry_pending]:
+  asm "dynamic_entry" match_mp_tac >> simp[mk_inst_def] >>
+  FAIL_TAC "dynamic-entry-premises"
+QED
+
+Resume body_for_local_array_full_from_contracts[dynamic_init_after_entry]:
+  FAIL_TAC "dynamic-entry-apply"
 QED
 
 Finalise body_for_local_array_full_from_contracts
