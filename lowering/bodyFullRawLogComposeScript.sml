@@ -216,17 +216,21 @@ Resume raw_log_expr_sim_full[fixed_data]:
   disch_then (fn th => qpat_assum `expr_type data = _` (fn eq =>
     qpat_assum `lower_value _ _ _ data sd = _`
       (mp_then (Pat `lower_value _ _ _ data _ = _`) mp_tac (REWRITE_RULE [eq] th)))) >>
-  disch_then (drule_at (Pat `lower_value _ _ _ (gas_shadow_expr data) _ = _`)) >>
+  disch_then (fn th => qpat_assum `lower_value _ _ _ (gas_shadow_expr data) _ = _`
+    (mp_then (Pat `lower_value _ _ _ (gas_shadow_expr data) _ = _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `emit_inst MSTORE _ _ sn = _`
     (mp_then (Pat `emit_inst MSTORE _ _ _ = _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `emit_inst LOG _ _ s1 = _`
     (mp_then (Pat `emit_inst LOG _ _ _ = _`) mp_tac (REWRITE_RULE [APPEND] th))) >>
-  disch_then (drule_at (Pat `expr_body_pre _ _ _ (Call _ RawLog _ _) _`)) >>
-  disch_then (drule_at (Pat `gas_shadow_function _ _`)) >>
+  disch_then (fn th => qpat_assum `expr_body_pre _ _ _ (Call _ RawLog _ _) _`
+    (mp_then (Pat `expr_body_pre _ _ _ (Call _ RawLog _ _) _`) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `gas_shadow_function _ _`
+    (mp_then (Pat `gas_shadow_function _ _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `expr_type data = _` (fn eq =>
     qpat_assum `expr_sim_full _ _ _ _ data mid`
       (mp_then (Pat `expr_sim_full _ _ _ _ _ _`) mp_tac th o REWRITE_RULE [eq]))) >>
-  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  disch_then (fn th => qpat_assum `expr_sim_inv _ _ _ _`
+    (mp_then (Pat `expr_sim_inv _ _ _ _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `gas_shadow_state sm shadow_sm`
     (mp_then (Pat `gas_shadow_state _ _`) mp_tac th)) >>
   disch_then (qspecl_then [`t`, `G1`, `tn1`, `st0`, `vs`] mp_tac) >>
