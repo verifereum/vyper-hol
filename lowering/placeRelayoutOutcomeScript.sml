@@ -88,10 +88,13 @@ Proof
          >- gvs[vyperPlaceFramesTheory.write_storage_place_eq] >>
          fs[loweringPostsTheory.target_post_def, loweringPostsTheory.place_ptr_rel_def] >>
          gvs[]) >>
+      `regions_consistent (FST H)` by
+        fs[vyperStorageFootprintTheory.valid_horizon_def] >>
       drule_all placeRelayoutStaticExitTheory.owned_target_relayout_store_static_exit >>
       disch_then (qspec_then `RetQ H` strip_assume_tac) >>
       qexists_tac `r` >> simp[] >>
-      metis_tac[stmt_exit_def]) >>
+      qpat_x_assum `stmt_exit _ _ (INR (Error _)) r` mp_tac >>
+      simp[stmtSimDefsTheory.stmt_exit_def]) >>
   `res = INL ()` by
     (Cases_on `p`
      >- (rename1 `write_place cx (StoragePlace tr sl tv) v ee = (res,ff)` >>
