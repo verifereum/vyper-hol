@@ -2074,7 +2074,7 @@ Resume pop_full_storage_static_path[exit]:
   fs[GSYM mk_inst_def,step_inst_non_invoke]
 QED
 
-Finalise pop_full_storage_static_path
+Finalise pop_full_storage_static_path[local]
 
 Resume pop_vv_full_of_target[storage_suffix]:
   rename1 `StoragePlace tr slot tv` >>
