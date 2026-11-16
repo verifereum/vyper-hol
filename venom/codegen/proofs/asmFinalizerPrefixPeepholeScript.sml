@@ -49,7 +49,7 @@ Proof
   >~ [`stack_peephole_opts (AsmOp "SWAP1" :: AsmOp "DUP2" :: _)`]
   >- (first_x_assum (qspecl_then
         [`AsmOp "SWAP1" :: AsmOp "DUP2" :: rest`] mp_tac) >>
-      simp[] >> metis_tac[]) 
+      simp[] >> metis_tac[])
   >~ [`stack_peephole_opts rest = SOME _`]
   >- (first_x_assum (qspecl_then [`rest`] mp_tac) >>
       simp[] >> metis_tac[])
