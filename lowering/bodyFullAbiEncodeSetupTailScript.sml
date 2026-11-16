@@ -45,31 +45,42 @@ QED
 
 Resume setup_literal_store_origin[path]:
   gen_tac >>
+  `get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst a.cs_next_id MSTORE [Var dst;Lit w] [])` by simp[] >>
   drule_at (Pat `get_instruction _ _ = _`) abi_encode_mstore_origin_path >>
   simp[eval_operand_def, op_taint_def, w2n_n2w,
     SRULE [eval_operand_def, op_taint_def] toplevel_immutable_mstore_ghost_frame] >>
   disch_then irule >> simp[] >>
   simp[inst_mem_below_frontier_def, inst_dload_in_section_def, mk_inst_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def,
-    sized_source_write_range_def, eval_operand_def] >> metis_tac[]
+    sized_source_write_range_def, fixed_source_write_range_def,
+    eval_operand_def, w2n_n2w, ADD_COMM]
 QED
 
 Resume setup_literal_store_origin[robust]:
   rpt strip_tac >>
   `step_taint (mk_inst a.cs_next_id MSTORE [Var dst;Lit w] []) s (mstore p w s) tn =
     (tn with t_mem := tn.t_mem DIFF {i | p <= i /\ i < p+32})` by
-    metis_tac[SRULE [eval_operand_def, op_taint_def] toplevel_immutable_mstore_ghost_frame,
-      w2n_n2w, LESS_MOD] >>
+    (drule (Q.INST [`value` |-> `Lit w`] toplevel_immutable_mstore_ghost_frame) >>
+     simp[eval_operand_def, op_taint_def, w2n_n2w] >> metis_tac[]) >>
   drule_at (Pat `lookup_var _ _ = _`) mstore_raw_robust_word >>
-  disch_then irule >> simp[eval_operand_def, op_taint_def] >> metis_tac[w2n_n2w, LESS_MOD]
+  simp[w2n_n2w] >> disch_then irule >>
+  qexistsl_tac [`a.cs_next_id`, `tn`, `Lit w`] >>
+  simp[eval_operand_def, op_taint_def]
 QED
 
 Resume setup_literal_store_origin[inv]:
   rpt strip_tac >>
   `ghost_kept_at lo ce es a G tn s G tn` by simp[ghost_kept_at_refl] >>
-  drule_all abi_encode_mstore_frame_at >>
-  disch_then (qspecl_then [`a.cs_next_id`, `a`, `G`, `tn`, `s`] mp_tac) >>
-  FAIL_TAC "store invariant"
+  drule_at (Pat `lookup_var _ _ = _`) (cj 1 abi_encode_mstore_frame_at) >>
+  simp[eval_operand_def, op_taint_def, w2n_n2w,
+    SRULE [eval_operand_def, op_taint_def] toplevel_immutable_mstore_ghost_frame] >>
+  disch_then irule >>
+  simp[] >> conj_tac
+  >- gvs[] >>
+  simp[] >> conj_tac
+  >- (qexists_tac `Lit w` >> simp[eval_operand_def]) >>
+  metis_tac[]
 QED
 
 Finalise setup_literal_store_origin
