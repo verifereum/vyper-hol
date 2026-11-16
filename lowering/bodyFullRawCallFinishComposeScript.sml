@@ -204,6 +204,8 @@ Theorem raw_call_finish_from_result_bridges:
    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
      (ctx_has_dalloca ctx ==> !s. r=Halt s ==> allocas_below_fmp s))
 Proof
+  disch_then (mk_asm "static_bridge") >>
+  disch_then (mk_asm "revert_bridge") >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   rename1 `emit_op ADD [data;Lit 32w] s3 = (dp,s4)` >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
@@ -229,7 +231,8 @@ Proof
     strip_assume_tac) >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
    ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7` by
-    (rpt conj_tac
+    (asm_x "static_bridge" kall_tac >> asm_x "revert_bridge" kall_tac >>
+     rpt conj_tac
      >- metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
                   exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND]
      >- metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
@@ -507,7 +510,55 @@ Proof
          loweringStateRelDefsTheory.regions_disjoint_def,
          wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
      metis_tac[wordsTheory.n2w_11, arithmeticTheory.LESS_EQ_TRANS]) >>
-  POP_ASSUM_LIST (K all_tac) >> FAIL_TAC "actual ghost continuation"
+  `!H. valid_horizon cx st0 H esK.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es2 u /\
+    mem_bytes_at (if flags.rcf_max_outsize=0 then ob else ob+32)
+      (LENGTH (TAKE flags.rcf_max_outsize outcome.co_returnData)) u.vs_memory =
+      TAKE flags.rcf_max_outsize outcome.co_returnData` by
+    (qx_gen_tac `H` >> strip_tac >>
+     qpat_assum `!H. _ ==> expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     map_every (fn q => qpat_assum q mp_tac)
+      [`emit_op _ _ s7 = (ok,sc)`, `run_inst_seq _ t7 = OK u`,
+       `stmt_state_rel H ctx func cenv cx esK t7`,
+       `local_ptrs_reserved cenv s7`,
+       `eval_operand gas t7 = SOME gw`,
+       `eval_operand addr t7 = SOME (w2w target)`,
+       `eval_operand dp t7 = SOME _`, `eval_operand len t7 = SOME _`,
+       `eval_operand op t7 = SOME _`,
+       `eval_operand (case ext_call_kwarg EKValue _ _ of NONE => Lit 0w | SOME x => x) t7 = SOME _`,
+       `vo = ext_call_kwarg EKValue _ _`,
+       `amount < dimword (:256)`, `flags.rcf_is_static ==> amount = 0`,
+       `cx.txn.is_static ==> amount = 0`,
+       `take_call_outcome _ _ _ esK = _`, `adopt_call_outcome rq outcome es1 = _`,
+       `read_memory _ _ t7 = bs`,
+       `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==> lb+sz <= _ \/ _ <= lb`,
+       `cenv.ce_is_ctor ==> !name tv v off. _ ==> off+type_memory_size tv <= _ \/ _ <= off`,
+       `ob + (if _ then _ else _) < dimword (:256)`,
+       `flags.rcf_max_outsize < dimword (:256)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     qpat_assum `read_memory _ _ t7 = bs` (fn th =>
+       qpat_x_assum `take_call_outcome _ _ _ esK = _`
+         (assume_tac o ONCE_REWRITE_RULE [GSYM th])) >>
+     drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
+     disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     disch_then (qspecl_then
+       [`n2w amount`,`n2w (if flags.rcf_max_outsize=0 then ob else ob+32)`,
+        `gw`,`w2w target`] mp_tac) >>
+     (impl_tac >-
+       (`(if flags.rcf_max_outsize=0 then ob else ob+32) < dimword (:256)` by
+          (Cases_on `flags.rcf_max_outsize=0` >> fs[]) >>
+        `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
+        Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >>
+        fs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[])) >>
+     strip_tac >>
+     gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+         venomStateTheory.update_var_def]) >>
+  qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  FAIL_TAC "source outcome packaging"
 QED
 
 Resume raw_call_finish_from_result_bridges[static_value_abort]:
