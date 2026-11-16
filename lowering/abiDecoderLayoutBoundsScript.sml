@@ -90,11 +90,3 @@ Proof
   simp[Once abi_static_size_def, GSYM abi_embedded_static_size_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
-
-(* Empty arrays do not impose a size bound on their unvisited element. *)
-Theorem abi_decoder_zero_capacity_probe:
-  abi_size_bound sf (ArrayT (BaseT (BytesT (Dynamic n))) (Dynamic 0)) = 32 /\
-  abi_size_bound sf (ArrayT (BaseT (BytesT (Dynamic n))) (Fixed 0)) = 0
-Proof
-  conj_tac >> simp[Once abi_size_bound_def]
-QED

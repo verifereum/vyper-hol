@@ -7,6 +7,7 @@ Ancestors
   loweringPosts supportedStmtTraverse vyperCallOutcomeStorage vyperTypeExprSoundness
   vyperTypeSystem vyperTypeEnvPreservation vyperTypeContractStaticMaps
   vyperTypeEvalSoundness vyperTypeInvariants vyperTypeAssignContext
+  vyperTypeValues vyperTypeScopePop vyperTypeEnvExtension
   vyperTypeStoragePreservation vyperStorageLayoutSafety vyperStorageBackend
   vyperEvalOutcomeSuffix bodyStoragePreservation stmtPoppedKeys placeTypingProps
   finite_map list exprLoweringProps compileVyper
@@ -564,6 +565,165 @@ Proof
       simp[] >> drule_then irule (cj 2 eval_outcome_suffix_mutual)) >>
   drule (cj 2 eval_outcome_suffix_mutual) >>
   rw[outcome_suffix_def] >> gvs[]
+QED
+
+(* The scope of a loop's iteration: the loop variable, declared in the
+   compile env and added to the type environment. *)
+Theorem for_pushed_state_well_typed:
+  !st tyv v id.
+    state_well_typed st /\ value_has_type tyv v /\
+    well_formed_type_value tyv ==>
+    state_well_typed
+      (st with scopes updated_by
+         CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                popped := []|>)))
+Proof
+  rw[state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]
+QED
+
+Theorem for_pushed_popped_keys[local]:
+  !scs id tyv v.
+    popped_keys_indexed scs ==>
+    popped_keys_indexed
+      (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                        popped := []|>) :: scs)
+Proof
+  rw[popped_keys_indexed_def, FLOOKUP_UPDATE] >> gvs[]
+QED
+
+Theorem scopes_CONS_updated:
+  !es x. es with scopes := x :: es.scopes = es with scopes updated_by CONS x
+Proof
+  simp[evaluation_state_component_equality]
+QED
+
+Theorem expr_sim_inv_for_scope:
+  !cenv cx env es id fty tyv v st c st1.
+    expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
+    declare_local cenv id fty st = (c, st1) /\ cenv.ce_alloca_locals ==>
+    expr_sim_inv c cx (extend_local env id fty F)
+      (es with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                           popped := []|>)) :: es.scopes)
+Proof
+  rpt strip_tac >> REWRITE_TAC [scopes_CONS_updated] >>
+  `env_consistent (extend_local env id fty F) cx
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>)))` by
+    (irule push_scope_with_var_env_consistent >> fs[expr_sim_inv_def]) >>
+  `well_formed_type_value tyv` by
+    metis_tac[evaluate_type_well_formed_type_value] >>
+  qpat_x_assum `expr_sim_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+  drule_all for_pushed_state_well_typed >>
+  disch_then (qspec_then `id` assume_tac) >>
+  `popped_keys_indexed
+     (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                       popped := []|>) :: es.scopes)` by
+    simp[for_pushed_popped_keys] >>
+  drule_all declare_local_ptr >> strip_tac >>
+  `c.ce_var_type = (id =+ SOME fty) cenv.ce_var_type` by
+    (qpat_x_assum `declare_local _ _ _ _ = _` mp_tac >>
+     simp[declare_local_def, fresh_var_def, comp_bind_def, comp_return_def,
+          LET_THM] >> strip_tac >> gvs[]) >>
+  `!n ty. FLOOKUP (extend_local env id fty F).var_types n = SOME ty ==>
+          ?p sz. FLOOKUP c.ce_vars n = SOME (PtrVar (Var p) sz)` by
+    (rpt gen_tac >> Cases_on `n = id` >>
+     simp[extend_local_def, FLOOKUP_UPDATE, combinTheory.C_THM] >>
+     metis_tac[]) >>
+  `!n ty. FLOOKUP (extend_local env id fty F).var_types n = SOME ty ==>
+          c.ce_var_type n = SOME ty` by
+    (rpt gen_tac >> Cases_on `n = id` >>
+     simp[extend_local_def, FLOOKUP_UPDATE, combinTheory.C_THM,
+          combinTheory.APPLY_UPDATE_THM]) >>
+  qpat_x_assum
+    `_ with <| ce_vars := _; ce_var_type := _;
+               ce_dynarray_capacity := _ |> = cenv`
+    (strip_assume_tac o
+     SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
+  `(place_map_tables_agree_on_defined c (extend_local env id fty F) <=>
+    place_map_tables_agree_on_defined cenv env) /\
+   (extend_local env id fty F).bare_globals = env.bare_globals` by
+    (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
+     simp[extend_local_def]) >>
+  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
+  gvs[extend_local_def] >> first_assum ACCEPT_TAC
+QED
+
+(* After an iteration that goes on (a normal end or a continue), with the
+   loop variable's scope popped, expr_sim_inv holds again at the loop's
+   compile and type environments: the type soundness of the body, and
+   vyperTypeEvalSoundness's for_body_env_consistent_after_pop. *)
+Theorem expr_sim_inv_for_pop:
+  !cenv cx env es id fty tyv v ret_ty body env_b r2 es2 sc rest tops
+   bindings.
+    expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
+    type_stmts (extend_local env id fty F) ret_ty body = SOME env_b /\
+    call_evaluation_safe cx (int_calls_stmts body) /\
+    eval_stmts cx body
+      (es with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                           popped := []|>)) :: es.scopes) = (r2, es2) /\
+    (r2 = INL () \/ r2 = INR ContinueException) /\
+    es2.scopes = sc :: rest /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    supported_stmts tops bindings body ==>
+    expr_sim_inv cenv cx env (es2 with scopes := rest)
+Proof
+  rpt gen_tac >> disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [scopes_CONS_updated]) >>
+  `env_consistent (extend_local env id fty F) cx
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>)))` by
+    (irule push_scope_with_var_env_consistent >> fs[expr_sim_inv_def]) >>
+  `well_formed_type_value tyv` by
+    metis_tac[evaluate_type_well_formed_type_value] >>
+  qpat_x_assum `expr_sim_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+  drule_all for_pushed_state_well_typed >>
+  disch_then (qspec_then `id` assume_tac) >>
+  `accounts_well_typed
+     (es with scopes updated_by
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                               popped := []|>))).accounts` by simp[] >>
+  drule_all (cj 2 eval_scc_type_sound_mutual) >> strip_tac >>
+  `env_maps_wf env` by metis_tac[env_consistent_env_maps_wf] >>
+  `env_consistent env cx (es2 with scopes := TL es2.scopes)` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     qpat_x_assum `sum_CASE _ _ _` mp_tac >> simp_tac (srw_ss()) [] >>
+     strip_tac
+     >- (irule for_body_env_consistent_after_pop >> metis_tac[]) >>
+     irule for_body_env_extends_consistent_after_pop >> metis_tac[]) >>
+  `state_well_typed (es2 with scopes := TL es2.scopes)` by
+    (irule scope_bracket_preserves_swt >> metis_tac[]) >>
+  `outcomes_accounts_typed es2.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule (cj 2 eval_outcome_suffix_mutual) >> strip_tac >>
+     drule_then irule outcome_suffix_EVERY >>
+     gvs[outcomes_accounts_typed_def]) >>
+  `popped_keys_indexed es2.scopes` by
+    (`runtime_consistent (extend_local env id fty F) cx
+        (es with scopes updated_by
+          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                 popped := []|>)))` by
+       simp[runtime_consistent_def] >>
+     `popped_keys_indexed
+        (es with scopes updated_by
+          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
+                                 popped := []|>))).scopes` by
+       simp[for_pushed_popped_keys] >>
+     drule_all (cj 2 eval_stmts_popped_keys_indexed) >> simp[]) >>
+  `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
+  `IS_SOME es2.outcomes` by
+    (drule (cj 2 eval_outcome_suffix_mutual) >>
+     rw[outcome_suffix_def] >> gvs[]) >>
+  qpat_x_assum `es2.scopes = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [TL]) >>
+  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
 QED
 
 Theorem expr_sim_inv_push_scope:

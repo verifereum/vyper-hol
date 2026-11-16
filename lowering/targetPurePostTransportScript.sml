@@ -63,6 +63,34 @@ Proof
        vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
   metis_tac[]
 QED
+Theorem saved_value_region_bytes:
+  vv_at ce cx ty origin endpoint es raw (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx raw es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  wb_frame ce es es' cut s u /\ es'.scopes = es.scopes /\
+  endpoint.cs_next_id <= cut.cs_next_id ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_at_def] >> strip_tac >> gvs[]
+  >- (gvs[wb_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (first_x_assum irule >> simp[] >>
+         conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+         qexists `aid` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (gvs[wb_frame_def, locals_kept_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` irule >>
+         qexists `n` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem target_saved_value_region_bytes:
   vv_at cenv cx ty sa sm es r (LocatedValue carried_ty p) s /\
   p.ptr_location = LocMemory /\
@@ -74,17 +102,11 @@ Theorem target_saved_value_region_bytes:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   strip_tac >>
-  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_at_def] >> strip_tac >> gvs[]
-  >- (gvs[wb_frame_def] >>
-      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[])
-  >- (gvs[wb_frame_def, locals_kept_def] >>
-      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[]) >>
-  simp[mem_bytes_at_def]
+  mp_tac (Q.INST [`ce` |-> `cenv`, `origin` |-> `sa`,
+    `endpoint` |-> `sm`, `cut` |-> `sm`, `es'` |-> `es`,
+    `raw` |-> `r`, `ann` |-> `carried_ty`, `p` |-> `p`,
+    `cx` |-> `cx`, `ty` |-> `ty`, `es` |-> `es`]
+    saved_value_region_bytes) >> simp[]
 QED
 
 Theorem target_saved_regions_oracles:
@@ -114,29 +136,44 @@ Proof
        SRULE [] target_saved_storage_oracles]
 QED
 
+Theorem saved_stack_value_frame:
+  expr_val_rel cx ty v op s /\ expr_val_at ce cx ty origin endpoint es v op s /\
+  wb_frame ce es es' cut s u /\ es'.scopes = es.scopes /\
+  endpoint.cs_next_id <= cut.cs_next_id /\
+  (!w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) ==>
+  expr_val_rel cx ty v op u
+Proof
+  strip_tac >> gvs[expr_val_rel_def] >> rpt strip_tac >>
+  Cases_on `is_word_type ty` >- gvs[] >> simp[] >>
+  `val_in_memory tv v (w2n w) s.vs_memory` by metis_tac[] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  irule exprSimPropsTheory.val_in_memory_footprint_agree >> simp[] >>
+  qexists `s.vs_memory` >> simp[]
+  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def] >> first_x_assum irule >> simp[] >>
+         conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+         qexists `aid` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def, locals_kept_def] >>
+         qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` irule >>
+         qexists `n` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem target_saved_stack_value_frame:
   expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sm es v op s /\
   wb_frame cenv es es sm s u /\
   (!w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) ==>
   expr_val_rel cx ty v op u
 Proof
-  strip_tac >> gvs[expr_val_rel_def] >>
-  rpt strip_tac >>
-  Cases_on `is_word_type ty` >- gvs[] >> simp[] >>
-  `val_in_memory tv v (w2n w) s.vs_memory` by metis_tac[] >>
-  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_val_at_def] >> strip_tac >>
-  irule exprSimPropsTheory.val_in_memory_footprint_agree >>
-  simp[] >> qexists_tac `s.vs_memory` >> simp[] >>
-  gvs[wb_frame_def, locals_kept_def]
-  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (qpat_x_assum `!aid off sz. FLOOKUP _ aid = SOME (off,sz) /\ _ ==> _` irule >>
-         metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[])
-  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[]) >>
-  simp[mem_bytes_at_def]
+  strip_tac >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `origin` |-> `sa`,
+    `endpoint` |-> `sm`, `cut` |-> `sm`, `es'` |-> `es`,
+    `cx` |-> `cx`, `ty` |-> `ty`, `es` |-> `es`, `op` |-> `op`]
+    saved_stack_value_frame) >> simp[]
 QED
 
 

@@ -554,7 +554,11 @@ Proof
   conj_tac >- (metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL]) >>
   simp[] >> rpt strip_tac >>
   `not_fresh_at s1 p'' /\ not_fresh_at s2 p''` by
-    (gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+    (qpat_x_assum `not_fresh_at sa p''` mp_tac >>
+     qpat_x_assum `ci_mono sa s1` mp_tac >>
+     qpat_x_assum `ci_mono sa s2` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   metis_tac[]
 QED
 

@@ -759,26 +759,8 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes:
-  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
 
-Theorem gas_variant_call_ctx:
-  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
 
-Theorem gas_variant_initial_venom_state_rel:
-  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
-  initial_venom_state_rel tops am tx si
-Proof
-  rw[gas_variant_def] >>
-  qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  gvs[initial_venom_state_rel_def, venom_env_rel_def]
-QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* The call theorem at one fixed gas marking, then at every guarded filling of

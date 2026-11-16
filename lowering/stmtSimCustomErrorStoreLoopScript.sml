@@ -224,7 +224,9 @@ Resume custom_error_store_args_sim_using_head[step]:
            vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
-    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    (qexists_tac `storage_trace_horizon mid.storage_trace` >>
+     qpat_x_assum `storage_trace_domain cx st0 mid.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==>
     _ /\ t.vs_current_bb = sm.cs_current_bb /\ _`
     (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
@@ -236,7 +238,9 @@ Resume custom_error_store_args_sim_using_head[step]:
         simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
         disch_then (qspecl_then [`cx`, `st0`, `H`] mp_tac) >>
         asm_rewrite_tac[]) >>
-     metis_tac[]) >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\ _`
+       (qspec_then `H` (ACCEPT_TAC o CONJUNCT1 o UNDISCH))) >>
   `?ht tt. evaluate_type (get_tenv cx) (expr_type h) = SOME ht /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tt /\
     tvs = ht::tt` by fs[] >> gvs[] >>
@@ -265,7 +269,12 @@ Resume custom_error_store_args_sim_using_head[step]:
   `b+asz < dimword (:256)` by decide_tac >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
-    metis_tac[vv_post_def] >>
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       vv_post H ctx func ce cx h es sa sm s0 _ tv vv t`
+       (qspec_then `H`
+         (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+          PURE_REWRITE_RULE [vv_post_def] o UNDISCH))) >>
   asm_x "head" (qspecl_then
     [`ce`, `h`, `sa`, `vv`, `sm`, `off`, `x`, `dst`, `sn`, `op`, `su`, `st`,
      `cx`, `env`, `es`, `s0`, `ctx`, `func`, `marks`, `tv`, `mid`, `t`,

@@ -10,29 +10,71 @@
  *     builtins that lower to a literal buffer (method_id)
  *)
 Theory bodyFullLiteralBuffer
-Ancestors
+Ancestors ptrSafeRun[qualified,ignore_grammar]
   exprSimPtrLiteralPayload exprLoweringProps list
   exprSimPtrLiteralBuffer fragGasSeqPtr instSeqPtrLo bodyPtrDefs vyperStorageFootprint
   exprLowering compileEnv loweringStateRelDefs venomState finite_map words
   exprSimLiteralBuffer ptrSafetyTransport venomExecSemantics venomInst ptrDiscipline
-  context emitHelper exprLoweringProps
+  context emitHelper exprLoweringProps bodyFullHashKeccakFixed
 
 Theorem literal_full_ptr_transport[local]:
-  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  inst_seq_ptr D0 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' ==>
-  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'
+  !ptr bs off sa sb D ctx0 ctx fn PG G tn s G' tn'.
+  compile_store_byte_chunks ptr bs off sa = ((),sb) /\
+  inst_seq_ptr D 0 ctx0 fn PG G tn (emitted_insts sa sb) s G' tn' /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'
 Proof
-  strip_tac >>
-  drule_all literal_bytelike_ptr_run >>
-  disch_then (qspecl_then [`tn`, `func`, `PG`, `G`, `D`] strip_assume_tac) >>
-  `G' = G'' /\ tn' = tn''` by
-    (irule inst_seq_ptr_ghost_unique >> metis_tac[]) >>
-  gvs[] >> irule inst_seq_ptr_zero_to_lo >> simp[] >>
-  qexists_tac `D` >> simp[]
+  recInduct compile_store_byte_chunks_ind >> rpt gen_tac >> strip_tac
+  >- gvs[compile_store_byte_chunks_def, comp_return_def,
+         emitted_insts_def, inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `compile_store_byte_chunks data_ptr (hd::tl) offset sa = ((),sb)` >>
+  qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [Once compile_store_byte_chunks_def, LET_THM,
+                   comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+  rename1 `emit_void MSTORE _ mid = (u,post)` >> Cases_on `u` >>
+  drule_all exprSimPtrLiteralChunksTheory.literal_chunk_head_shape >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`TAKE 32 (hd::tl ++ REPLICATE 31 0w)`,
+     `word_of_bytes T 0w (TAKE 32 (hd::tl ++ REPLICATE 31 0w))`] mp_tac) >>
+  simp_tac bool_ss [] >> disch_tac >>
+  drule literal_payload_chunks_shape >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa post ++ emitted_insts post sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ (i1::i2::rest)` >>
+  `!G tn s. ptr_inst_ok D 0 0 ctx0 fn G tn i1 s /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+     ptr_inst_ok D 0 0 ctx fn G tn i1 s` by
+    simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i1`, mk_inst_def,
+         step_inst_non_invoke] >>
+  `!G tn s. ptr_inst_ok D 0 0 ctx0 fn G tn i2 s /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+     ptr_inst_ok D 0 0 ctx fn G tn i2 s` by
+    simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i2`, mk_inst_def,
+         step_inst_non_invoke] >>
+  gvs[Once inst_seq_ptr_def] >>
+  simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac >- metis_tac[] >>
+  Cases_on `step_inst_base i1 s` >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `step_inst_base i1 s = OK v` mp_tac >>
+     simp[Abbr `i1`, step_inst_base_def, mk_inst_def, exec_pure2_def,
+          eval_operand_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
+  gvs[Once inst_seq_ptr_def] >>
+  simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac >- metis_tac[] >>
+  Cases_on `step_inst_base i2 (v with vs_inst_idx := SUC s.vs_inst_idx)` >> gvs[] >>
+  rename1 `step_inst_base i2 _ = OK z` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (z with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
+    (qpat_x_assum `step_inst_base i2 _ = OK z` mp_tac >>
+     simp[Abbr `i2`, step_inst_base_def, mk_inst_def, exec_write2_def,
+          eval_operand_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
+  fs[Abbr `rest`] >> first_x_assum irule >> metis_tac[]
 QED
 
 (* The pointer twin is exprSimPtrLiteralBuffer's literal_bytelike_ptr_run at
@@ -136,11 +178,16 @@ Proof
   metis_tac[]
 QED
 
+(* Static allocation and the literal stores preserve the conditional FMP
+   bound. The domain horizon supplies the entry resource through
+   stmt_state_rel; allocation room supplies the post-ALLOCA resource.
+   An empty-function context can be used for lower pointer runs only:
+   stmt_state_rel itself needs the actual function lookup. *)
 Theorem literal_bytelike_full_run:
   !bs sa buf sb DF lo d PG ctx func cenv cx st0 es s G tn.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     storage_trace_domain cx st0 es.storage_trace /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -179,6 +226,7 @@ Theorem literal_bytelike_full_run:
       tn'.t_imm = tn.t_imm /\
       (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
          FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       !H. valid_horizon cx st0 H es.storage_trace ==>
         inst_seq_ptr (DF H) lo ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
         stmt_state_rel H ctx func cenv cx es u
@@ -190,35 +238,156 @@ Proof
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by
     gvs[ghost_inv_at_def] >>
   drule literal_ptr_bytelike_shape >> strip_tac >>
-  drule_all literal_bytelike_ptr_run >>
-  disch_then (qspecl_then [`tn`, `func`, `PG`, `G`, `DF (storage_trace_horizon es.storage_trace)`]
-    strip_assume_tac) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ u` kall_tac >>
-  `p' = p` by metis_tac[operand_11] >>
-  qpat_x_assum `p' = p` SUBST_ALL_TAC >>
-  drule_all literal_full_prefix_exists >> strip_tac >>
+  drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  drule_all literal_bytelike_run >> strip_tac >>
+  `?u. run_inst_seq (emitted_insts sa sm) s = OK u` by
+    (irule (INST_TYPE [alpha |-> ``:256``] literal_full_prefix_exists) >>
+     asm_simp_tac (bool_ss ++ SFY_ss) []) >>
+  pop_assum strip_assume_tac >>
   drule_all literal_full_prefix_frame >> strip_tac >>
   drule_all literal_full_payload_frame >> strip_tac >>
-  `b < dimword (:256) /\ b' < dimword (:256)` by decide_tac >>
-  `b' = b` by metis_tac[n2w_11, arithmeticTheory.LESS_MOD, optionTheory.SOME_11] >>
-  qpat_x_assum `b' = b` SUBST_ALL_TAC >>
-  qpat_x_assum `p = STRING _ _` kall_tac >>
-  qexistsl_tac [`u'`, `t`, `b`, `p`, `sh`, `G'`, `tn'`] >>
-  asm_simp_tac bool_ss [] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  gen_tac >> strip_tac >>
-  qpat_assum `emitted_insts sa sb = _`
-    (fn th => once_rewrite_tac[GSYM th]) >>
-  conj_tac
-  >- (irule (INST_TYPE [alpha |-> ``:256``] literal_full_ptr_transport) >>
-      asm_simp_tac (bool_ss ++ SFY_ss) [] >>
-      qexists_tac `DF (storage_trace_horizon es.storage_trace)` >>
-      qpat_x_assum `inst_seq_ptr _ 0 _ _ _ _ _ _ _ _ _` mp_tac >>
-      asm_simp_tac bool_ss []) >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-    (drule_then strip_assume_tac) >>
-  irule (cj 1 literal_full_prefix_frame) >>
-  asm_simp_tac (bool_ss ++ SFY_ss) []
+  `MEM (mk_inst sa.cs_next_id ALLOCA
+     [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) (fn_insts func)` by metis_tac[] >>
+  drule_all literal_ptr_alloca_ghost >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  suspend "payload"
 QED
+
+Resume literal_bytelike_full_run[payload]:
+  `b' = b` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  qpat_x_assum `p = STRING _ _` kall_tac >>
+  gvs[] >>
+  qabbrev_tac `Ga = G |+ (p,(b,32+32*word_size (LENGTH bs)))` >>
+  qabbrev_tac `ta = tn with <|t_var := tn.t_var |+ (p,{}); t_mem := tn.t_mem UNION dirty|>` >>
+  qabbrev_tac `uh = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `ctx0 = ctx with ctx_functions := []` >>
+  `lookup_var p uh = SOME (n2w b) /\
+   FLOOKUP Ga p = SOME (b,32+32*word_size (LENGTH bs)) /\
+   op_taint ta (Var p) = {}` by
+    (simp[Abbr `uh`, Abbr `Ga`, Abbr `ta`, lookup_var_def, op_taint_def, FLOOKUP_UPDATE] >>
+     metis_tac[lookup_var_def]) >>
+  `~ctx_has_dalloca ctx0` by simp[Abbr `ctx0`, ctx_has_dalloca_def] >>
+  `?t G' tn'.
+    run_inst_seq (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) uh = OK t /\
+    inst_seq_ptr (DF (storage_trace_horizon es.storage_trace)) 0 ctx0 func PG Ga ta
+      (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+       emitted_insts sh sb) uh G' tn' /\
+    tn'.t_mem = ta.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    tn'.t_stor = ta.t_stor /\ tn'.t_trans = ta.t_trans /\ tn'.t_imm = ta.t_imm /\
+    (!v. not_fresh_at sh v ==> FLOOKUP G' v = FLOOKUP Ga v /\
+      FLOOKUP tn'.t_var v = FLOOKUP ta.t_var v)` by
+    (irule literal_header_chunks_ptr >> simp[] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  suspend "assemble"
+QED
+
+Resume literal_bytelike_full_run[assemble]:
+  `FLOOKUP G' p = SOME (b,32+32*word_size (LENGTH bs)) /\
+   op_taint tn' (Var p) = {}` by
+    (qpat_x_assum `!v. not_fresh_at sh v ==> _` (qspec_then `p` mp_tac) >>
+     simp[Abbr `Ga`, Abbr `ta`, FLOOKUP_UPDATE, op_taint_def]) >>
+  `tn'.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)}` by
+    (simp[Abbr `ta`] >> qpat_x_assum `dirty SUBSET _` mp_tac >> SET_TAC[]) >>
+  `!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+    FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x` by
+    (rpt strip_tac >> `x <> p` by metis_tac[] >>
+     `not_fresh_at sh x` by metis_tac[] >>
+     qpat_x_assum `!v. not_fresh_at sh v ==> _` drule >>
+     simp[Abbr `Ga`, Abbr `ta`, FLOOKUP_UPDATE]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t` (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+  qexistsl_tac [`u`, `b`, `sh`, `G'`, `tn'`] >>
+  simp[Abbr `ta`] >>
+  ntac 3 (conj_tac >- (first_assum ACCEPT_TAC)) >>
+  suspend "horizon"
+QED
+
+Resume literal_bytelike_full_run[horizon]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  `32 + 32 * word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
+  reverse conj_tac
+  >- (irule (cj 1 literal_full_prefix_frame) >> simp[] >>
+      goal_assum (drule_at (Pat `compile_bytelike_literal _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `allocas_from _ _`)) >>
+      simp[SF SFY_ss]) >>
+  qabbrev_tac `ta = tn with <|t_var := tn.t_var |+ (p,{}); t_mem := tn.t_mem UNION dirty|>` >>
+  `?z g tt. run_inst_seq
+    (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] :: emitted_insts sh sb) uh = OK z /\
+    inst_seq_ptr (DF H) 0 ctx0 func PG Ga ta
+    (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] :: emitted_insts sh sb) uh g tt /\
+    tt.t_mem = ta.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
+    tt.t_stor = ta.t_stor /\ tt.t_trans = ta.t_trans /\ tt.t_imm = ta.t_imm /\
+    (!v. not_fresh_at sh v ==> FLOOKUP g v = FLOOKUP Ga v /\
+      FLOOKUP tt.t_var v = FLOOKUP ta.t_var v)` by
+    (irule literal_header_chunks_ptr >> simp[] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `g = G' /\ tt = tn'` by
+    (irule inst_seq_ptr_ghost_unique >> metis_tac[]) >>
+  qpat_x_assum `g = G'` SUBST_ALL_TAC >>
+  qpat_x_assum `tt = tn'` SUBST_ALL_TAC >>
+  suspend "restore"
+QED
+
+Resume literal_bytelike_full_run[restore]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (simp[Abbr `uh`, allocas_below_fmp_def] >>
+     metis_tac[stmt_state_rel_allocas_below_fmp, allocas_below_fmp_def]) >>
+  `inst_seq_ptr (DF H) 0 ctx func PG Ga ta
+    (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) uh G' tn'` by
+    suspend "restore_payload" >>
+  suspend "prepend"
+QED
+
+Resume literal_bytelike_full_run[restore_payload]:
+  qpat_x_assum `inst_seq_ptr (DF H) _ ctx0 _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [Once inst_seq_ptr_def] >> strip_tac >>
+  simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac
+  >- (simp[ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def, step_inst_non_invoke] >>
+      (bossLib.gvs [ptrSafeRunTheory.ptr_inst_ok_def , venomInstTheory.mk_inst_def , venomExecSemanticsTheory.step_inst_non_invoke])) >>
+  qpat_x_assum `case step_inst_base _ _ of OK _ => _ | _ => _` mp_tac >>
+  Cases_on `step_inst_base (mk_inst sm.cs_next_id MSTORE
+    [Var p; Lit (n2w (LENGTH bs))] []) uh` >> simp[] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+    (v with vs_inst_idx := SUC uh.vs_inst_idx)` by
+    (qpat_x_assum `step_inst_base _ uh = OK v` mp_tac >>
+     simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+          eval_operand_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
+  irule literal_full_ptr_transport >> metis_tac[]
+QED
+
+Resume literal_bytelike_full_run[prepend]:
+  qmatch_goalsub_abbrev_tac `ia::rest` >>
+  `ptr_inst_ok (DF H) 0 0 ctx func G tn ia s` by
+    suspend "alloca" >>
+  `inst_seq_ptr (DF H) 0 ctx func PG G tn (ia::rest) s G' tn'` by
+    (simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac >- simp[] >>
+     simp[Abbr `ia`] >>
+     gvs[Abbr `rest`, Abbr `Ga`, Abbr `ta`, Abbr `uh`]) >>
+  irule inst_seq_ptr_zero_to_lo >>
+  simp[] >> qexists_tac `DF H` >> simp[]
+QED
+
+Resume literal_bytelike_full_run[alloca]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  qpat_x_assum `step_inst_base ia s = OK u` mp_tac >>
+  qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+  simp[Abbr `ia`] >> POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+  simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    allocas_from_def, op_taint_def, step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ s = OK u` mp_tac >>
+  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()] >>
+  strip_tac >> gvs[update_var_def]
+QED
+
+Finalise literal_bytelike_full_run

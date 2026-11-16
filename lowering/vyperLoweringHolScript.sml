@@ -6,6 +6,8 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   bodyMemStorageCopyStage
+  createCtorTupleExecution dallocaBlueprintArgs
+  dallocaCreateCopy dallocaCreateGeometry
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
@@ -19,7 +21,7 @@ Ancestors
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain bodySimMain bodySimFullMain externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimMain bodySimMain bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -52,4 +54,20 @@ Ancestors
   loweringCalldataCorrect
   asmSymBridge
   asmDataEnv
+  asmOptOwnPeephole
   asmOptFinalizerCorrect
+  asmSymOwnCode
+  asmOptOwnMergeIszero
+  finalizerContractOwn
+  asmOptOwnPruneUnreachable
+  asmSpliceOwn
+  asmOptOwnInefficientJumps
+  asmOptOwnPruneUnused
+  asmOptOwnPruneJumps
+  (* reached here instead of as holproject.toml roots *)
+  targetPtrFacts bodyFullTarget
+  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
+  extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
+  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* providers awaiting their consumers *)
+  sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite

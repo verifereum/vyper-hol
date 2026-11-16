@@ -11,7 +11,7 @@ Ancestors
   stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
   venomState targetRootAttributeMemory targetAttributeMemory
-  targetSubscriptCompositionMemory targetPlaceSimCasesBase
+  targetSubscriptCompositionMemory targetPlaceSimCasesBase gasSummaryCompose
 Libs
   pairLib
 
@@ -112,7 +112,7 @@ Proof
       disch_then (DISJ_CASES_THEN strip_assume_tac)
       >- (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
             (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-          impl_tac >- first_assum ACCEPT_TAC >>
+          impl_tac >- simp[] >>
           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
           qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
             (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
@@ -121,10 +121,11 @@ Proof
               (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
             disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings`
                           mp_tac) >>
-            qpat_assum `!tail. source _ = _` (qspec_then `[]` mp_tac) >>
-            simp[bind_def] >> strip_tac >>
+            qpat_assum `!tail. source _ = _`
+              (qspec_then `[]` (fn th =>
+                simp[bind_def, SIMP_RULE (srw_ss()) [] th])) >> strip_tac >>
             Cases_on `pv` >>
-            simp[get_place_def, raise_def, target_place_res_ok_def]) >>
+            fs[get_place_def, raise_def, target_place_res_ok_def]) >>
           rpt BasicProvers.VAR_EQ_TAC >>
           rewrite_tac[gas_outcome_def] >>
           qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -143,7 +144,7 @@ Proof
           simp[]) >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >>
+      impl_tac >- simp[] >>
       strip_tac >>
       `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >>
       rpt BasicProvers.VAR_EQ_TAC >>
@@ -156,7 +157,9 @@ Proof
       qx_gen_tac `H1` >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `H1` mp_tac) >>
-      simp[expr_exit_INR_type, halt_exit_def]) >>
+      impl_tac >- simp[] >> strip_tac >> conj_tac
+      >- metis_tac[expr_exit_INR_type] >>
+      fs[halt_exit_def]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
   rewrite_tac[gas_outcome_def] >>
@@ -200,7 +203,9 @@ Proof
     (mp_tac o REWRITE_RULE [target_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  mp_tac (BETA_RULE (Q.INST [`P` |->
+  mp_tac (BETA_RULE (Q.INST
+    [`source` |-> `eval_base_place cx bt`, `memory` |-> `T`,
+     `tops` |-> `cx_tops cx`, `P` |->
     `\H pv ee t. target_post H ctx func cenv cx es sa sb s0 ee pv (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\

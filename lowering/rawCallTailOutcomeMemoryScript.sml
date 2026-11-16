@@ -215,13 +215,16 @@ Resume raw_call_tail_outcome_mem[outcome]:
   qexists_tac `es2` >> qexists_tac `r` >>
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
   qpat_x_assum `gas_path_mem _ _ _ _ _ /\ _` strip_assume_tac >>
-  gvs[expr_exit_def, halt_exit_def, fragExecTheory.exit_result_def] >>
+  simp[expr_exit_def, halt_exit_def, fragExecTheory.exit_result_def] >>
+  `es2.gas_obs = []` by asm_rewrite_tac[] >>
   `es2 with gas_obs := [] = es2` by
     (qpat_x_assum `es2.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   `t.vs_alloca_next <= u.vs_alloca_next` by
     (drule fragGasPathMemTheory.gas_path_mem_exec >>
      disch_then (mp_tac o CONJUNCT1) >>
      disch_then (mp_then Any mp_tac rest_word_path_frontier) >> simp[]) >>
+  qpat_assum `adopt_call_outcome rq outcome es1 = _`
+    (fn th => rule_assum_tac (PURE_REWRITE_RULE [th, pairTheory.SND])) >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
 

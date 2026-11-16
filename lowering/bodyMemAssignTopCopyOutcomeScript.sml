@@ -76,12 +76,6 @@ Proof
        metis_tac[cj 1 ci_mono_stmt_helpers, pairTheory.SND] >>
      fs[ci_mono_def] >> decide_tac) >>
   irule forced_then_outcome >>
-  qexists_tac `\H v ee t.
-    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
-    expr_store_bound cx (expr_type e) v op t /\
-    t.vs_current_bb = sB.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sB.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   rpt conj_tac
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> BETA_TAC >>
@@ -89,7 +83,15 @@ Proof
       simp[vyperStorageTraceTheory.storage_trace_frame_event,
            vyperStorageTraceTheory.storage_trace_frame_write_storage_slot])
   >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
+  qexists_tac `\H v ee t.
+    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_store_bound cx (expr_type e) v op t /\
+    t.vs_current_bb = sB.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sB.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+  rpt conj_tac
   >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr _ _) _) _ _ _`]
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
@@ -119,7 +121,8 @@ Resume compile_assign_storage_copy_stmt_frag_mem[success]:
   `value_has_type tvt v` by
     (qpat_x_assum `!gs v es1. _ ==> value_has_type _ _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
-  `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
   drule typed_storage_copy_write >>
   disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
@@ -179,6 +182,121 @@ Resume compile_assign_storage_copy_stmt_frag_mem[success]:
     (irule return_buf_frame_frame >>
      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[static]:
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  `?w. eval_operand op t = SOME w` by
+    (fs[expr_post_def, loweringPostsTheory.expr_val_rel_def] >> metis_tac[]) >>
+  `0 < type_memory_size tvt` by
+    simp[valueEncodingPropsTheory.type_memory_size_slots] >>
+  `w2n w + type_memory_size tvt <= t.vs_alloca_next` by
+    (drule_all topcopy_source_bound >> simp[]) >>
+  `w2n w + type_memory_size tvt < dimword (:256)` by
+    (drule_all exprSimHashBoundaryTheory.hash_post_footprint_bound >>
+     drule_all topcopy_val_footprint >> simp[]) >>
+  `type_slot_size tvt < dimword (:256)` by
+    (fs[valueEncodingPropsTheory.type_memory_size_slots] >> decide_tac) >>
+  `t.vs_call_ctx.cc_static` by
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  `!x. op = Var x ==> not_fresh_at sB x` by
+    (mp_tac (Q.INST [`ce` |-> `cenv`, `ty` |-> `expr_type e`,
+       `e` |-> `e`, `sa` |-> `sa`, `op` |-> `op`, `sb` |-> `sB`]
+       exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
+  `?r. gas_marked_path T ctx func t 0 r /\ exit_result r /\
+       stmt_exit (RetQ H1) ee
+         (INR (Error (RuntimeError "write in static context"))) r`
+    by suspend "static_path" >>
+  qabbrev_tac `ef = ee with storage_trace :=
+    ee.storage_trace ++ [StorageRoot tr slot tvt]` >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `ef`, `r`] >>
+  simp[Abbr `ef`, ignore_bind_def, bind_def, record_storage_event_def,
+       return_def, write_storage_slot_eq] >>
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[static_path]:
+  `w2n w + 32 < dimword (:256) /\ w2n w + 32 <= t.vs_alloca_next` by
+    (fs[valueEncodingPropsTheory.type_memory_size_slots] >> decide_tac) >>
+  `32 * type_slot_size tvt DIV 32 = type_slot_size tvt` by
+    (irule arithmeticTheory.DIV_UNIQUE >> qexists_tac `0` >> simp[]) >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >>
+  simp[valueEncodingPropsTheory.type_memory_size_slots] >>
+  Cases_on `type_slot_size tvt = 1`
+  >- suspend "static_one" >>
+  simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
+       comp_bind_def, comp_return_def, AllCaseEqs()] >> strip_tac >>
+  fs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> rename1 `_ sB = (u,sf)` >>
+  `compile_word_copy_loop_op op (Lit (n2w slot)) (Lit (n2w (type_slot_size tvt)))
+     LocMemory (if tr then LocTransient else LocStorage) F sB = (u,sf)` by
+    (Cases_on `tr` >> gvs[compile_word_copy_loop_def]) >>
+  mp_tac (Q.GEN `RetQ` (Q.INST [`loc` |-> `if tr then LocTransient else LocStorage`,
+    `src` |-> `op`, `dst` |-> `Lit (n2w slot)`,
+    `cnt` |-> `Lit (n2w (type_slot_size tvt))`, `n` |-> `type_slot_size tvt`,
+    `s0` |-> `t`, `b` |-> `w`, `k` |-> `n2w slot`,
+    `sa` |-> `sB`, `sb` |-> `sf`, `ee` |-> `ee`]
+    (SPEC_ALL placeStaticCopyExitTheory.place_static_copy_op_exit_mem))) >>
+  disch_then (qspec_then `RetQ H1` mp_tac) >>
+  impl_tac >- (Cases_on `tr` >> simp[venomStateTheory.eval_operand_def]) >>
+  simp[]
+QED
+
+Resume compile_assign_storage_copy_stmt_frag_mem[static_one]:
+  simp[comp_bind_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `emit_op MLOAD [op] sB` >> gvs[] >>
+  rename1 `emit_op MLOAD [op] sB = (loaded,sm)` >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  `cs_extends sB sm` by
+    (mp_tac (Q.SPECL [`MLOAD`, `[op]`, `sB`] ci_mono_emit_op) >>
+     simp[ci_mono_def]) >>
+  `cs_extends sm sb` by
+    (mp_tac (Q.SPECL [`if tr then TSTORE else SSTORE`,
+       `[Lit (n2w slot); loaded]`, `sm`] ci_mono_emit_void) >>
+     simp[ci_mono_def]) >>
+  `fn_has_code sB sm func /\ fn_has_code sm sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `sm.cs_current_bb = sB.cs_current_bb /\
+   sm.cs_current_insts = sB.cs_current_insts ++ emitted_insts sB sm` by
+    fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+  qmatch_asmsub_abbrev_tac `Var out` >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `venomInst$get_instruction bb t.vs_inst_idx =
+    SOME (venomInst$mk_inst sB.cs_next_id MLOAD [op] [out])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qabbrev_tac `load_end = venomState$update_var out (venomState$mload (w2n w) t) t
+    with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `eval_operand loaded load_end = SOME (venomState$mload (w2n w) t) /\
+   load_end.vs_call_ctx.cc_static /\ ~load_end.vs_halted /\
+   load_end.vs_current_bb = sm.cs_current_bb /\
+   load_end.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (simp[Abbr `load_end`, Abbr `out`,
+         venomStateTheory.update_var_def, venomStateTheory.eval_operand_def,
+         venomStateTheory.lookup_var_def, FLOOKUP_UPDATE]) >>
+  `gas_marked_path T ctx func load_end 0
+    (Abort ExHalt_abort (venomState$halt_state (venomState$set_returndata [] load_end)))` by
+    (mp_tac (Q.INST [`memory` |-> `T`, `st` |-> `sm`, `st'` |-> `sb`,
+       `s` |-> `load_end`, `dst` |-> `Lit (n2w slot)`, `op` |-> `loaded`,
+       `addr` |-> `n2w slot`, `w` |-> `venomState$mload (w2n w) t`]
+       (SPEC_ALL storageStoreFrameTheory.storage_emit_static_path_memory)) >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  qexists_tac `Abort ExHalt_abort
+    (venomState$halt_state (venomState$set_returndata [] load_end))` >>
+  simp[fragExecTheory.exit_result_def, stmt_exit_def, expr_exit_def] >>
+  mp_tac (Q.SPECL [`T`, `ctx`, `func`, `t`, `bb`,
+    `venomInst$mk_inst sB.cs_next_id MLOAD [op] [out]`,
+    `venomState$update_var out (venomState$mload (w2n (w : 256 word)) t) t`, `0`,
+    `Abort ExHalt_abort (venomState$halt_state (venomState$set_returndata [] load_end))`]
+    fragGasSeqAbortTheory.gas_marked_path_step) >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def, Abbr `load_end`,
+       instMemFrontierTheory.below_frontier_MLOAD,
+       memSafeRunTheory.inst_dload_in_section_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       stepInstBaseLib.simp_opcode_clause ``MLOAD``] >> fs[]
 QED
 
 Finalise compile_assign_storage_copy_stmt_frag_mem

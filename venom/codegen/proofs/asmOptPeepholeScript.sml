@@ -48,7 +48,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem swap_prefix_unknown[local]:
+Theorem swap_prefix_unknown:
   isPREFIX "SWAP" name ∧ ALOOKUP swap_table name = NONE ⇒
   ¬MEM name (MAP FST asm_op_arity_table) ∧ ALOOKUP dup_table name = NONE
 Proof
@@ -72,7 +72,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem commutative_unknown[local]:
+Theorem commutative_unknown:
   asm_commutative_op (AsmOp name) ∧
   ¬MEM name ["ADD"; "MUL"; "EQ"; "AND"; "OR"; "XOR"] ⇒
   ¬MEM name (MAP FST asm_op_arity_table) ∧ ALOOKUP dup_table name = NONE ∧
@@ -100,7 +100,7 @@ Proof
   simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def]
 QED
 
-Theorem swap_swap_id[local]:
+Theorem swap_swap_id:
   n < LENGTH stk ∧ 0 < n ⇒
   LUPDATE (HD (LUPDATE (HD stk) n (LUPDATE (EL n stk) 0 stk))) n
     (LUPDATE (EL n (LUPDATE (HD stk) n (LUPDATE (EL n stk) 0 stk))) 0
@@ -345,7 +345,7 @@ QED
 
 (* ===== Splices ===== *)
 
-Theorem dup2_opcode[local]:
+Theorem dup2_opcode:
   IS_SOME (evm_opcode_byte "DUP2")
 Proof
   EVAL_TAC

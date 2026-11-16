@@ -5,7 +5,7 @@ Ancestors
   placeTypedCopyPrimitiveMem placeMemoryArrayForward placeMemoryDynarrayForward
   immutableMemoryFrame placeTypedFieldsMem freshWrites placeMemoryTypedBase
   placeMemoryCodeLayout
-  bodyDeclMemoryCounted fragGasPathMem fragExecMem instMemFrontier
+  bodyDeclMemoryCounted bodyDeclZeroGasPath fragGasPathMem fragExecMem instMemFrontier
   venomState venomExecSemantics venomInst context compileEnv emitHelper
   emitHelperProps exprLoweringProps valueEncodingProps list rich_list
   ASCIInumbers finite_map memSafeRun placeMemoryCopyEffect valueCopy placeMemoryTypedPrimitive

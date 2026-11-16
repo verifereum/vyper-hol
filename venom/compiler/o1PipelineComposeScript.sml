@@ -71,7 +71,7 @@ Proof
   simp[imms_agree_except_def, word_agree_except_def] >> metis_tac[]
 QED
 
-Theorem request_agree_except_empty[local]:
+Theorem request_agree_except_empty:
   request_agree_except
     <| d_stor := K (K {}); d_trans := K (K {});
        d_imm := K {}; d_ret := K {} |> r1 r2 ==>
@@ -96,7 +96,7 @@ Proof
   match_mp_tac LIST_REL_mono >> simp[request_agree_except_empty]
 QED
 
-Theorem ctx_sim_empty[local]:
+Theorem ctx_sim_empty:
   ctx_sim
     <| d_stor := K (K {}); d_trans := K (K {});
        d_imm := K {}; d_ret := K {} |> ctx ctx' s s' ==>
@@ -226,7 +226,7 @@ Proof
 QED
 
 (* Every pass of the walk before CFGNormalization keeps the fuel. *)
-Theorem pass_fuel_walk_I[local]:
+Theorem pass_fuel_walk_I:
   n < 8 ==> pass_fuel (EL n o1_fn_passes) C = I
 Proof
   strip_tac >>
@@ -270,22 +270,36 @@ Proof
   mp_tac ctx_dload_count_prune >> decide_tac
 QED
 
-Theorem o1_run_contracts:
-  k < LENGTH o1_fn_passes ==> o1_run_contract_gas rp D k
+Theorem o1_fn_passes_steps:
+  o1_step_contracts_from rp 0 o1_fn_passes
 Proof
-  strip_tac >>
-  `o1_run_contract rp D k \/ o1_run_contract_gas rp D k` suffices_by
-    metis_tac[o1_run_contract_def, o1_run_contract_gas_def,
-              o1_stage_contract_imp_gas] >>
-  fs[o1_fn_passes_def] >>
-  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 7 \/
-   k = 8` by decide_tac >>
+  simp[o1_fn_passes_def, o1_step_contracts_from_def,
+       o1_contract_make_ssa_1, o1_contract_lower_dload,
+       o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
+       o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
+       o1_contract_dft, o1_contract_cfg_normalization]
+QED
+
+Theorem o1_run_contracts_same:
+  k < LENGTH o1_fn_passes /\ k <> 7 ==> o1_run_contract rp D k
+Proof
+  simp[o1_fn_passes_def] >> strip_tac >>
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 8`
+    by decide_tac >>
   gvs[o1_contract_make_ssa_1, o1_contract_lower_dload,
       o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
       o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
-      o1_contract_cfg_normalization] >>
-  disj2_tac >> mp_tac (Q.INST [`rpolicy` |-> `rp`] o1_contract_dft) >>
-  simp[o1_run_contract_gas_def]
+      o1_contract_cfg_normalization]
+QED
+
+Theorem o1_run_contracts:
+  k < LENGTH o1_fn_passes ==> o1_run_contract_gas rp D k
+Proof
+  strip_tac >> Cases_on `k = 7`
+  >- (gvs[] >> mp_tac (Q.INST [`rpolicy` |-> `rp`] o1_contract_dft) >>
+      simp[o1_run_contract_gas_def]) >>
+  metis_tac[o1_run_contracts_same, o1_run_contract_def,
+            o1_run_contract_gas_def, o1_stage_contract_imp_gas]
 QED
 
 Theorem o1_run_contracts_all_dead[local]:

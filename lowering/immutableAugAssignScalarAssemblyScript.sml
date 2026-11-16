@@ -28,6 +28,14 @@ Theorem immutable_augassign_scalar_assembly:
 Proof
   strip_tac >> PairCases_on `nsid` >>
   rw[stmtSimDefsTheory.stmt_frag_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `alloca_inv s0` by metis_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   drule_all immutable_augassign_root_entry >> strip_tac >>
   `body_expr_mem_ok cx e` by metis_tac[] >>
@@ -62,8 +70,12 @@ Resume immutable_augassign_scalar_assembly[suffix_preparation]:
     (irule stmtSimAugAssignTheory.well_formed_type_bits >>
      qexists `get_tenv cx` >> simp[vyperTypeSystemTheory.well_formed_type_def] >>
      metis_tac[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
   `alloca_frame cenv es sa s0 cenv es u` by
-    (irule stmtSimDefsTheory.alloca_frame_of_mem_frame >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``]
+       stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
+     simp[] >> qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >>
+     metis_tac[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
   (conj_tac >- metis_tac[stmtSimDeclMemTheory.emit_void_nonterminator_open,

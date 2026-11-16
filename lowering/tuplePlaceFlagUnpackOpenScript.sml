@@ -42,7 +42,7 @@ Theorem tuple_place_flag_unpack_outcome_open:
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv ee su sv cenv ff t)
-    (\H res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   strip_tac >>
   mp_tac (Q.INST [`es1` |-> `ee`] tuple_place_compiler_flag_prefix_head) >>
@@ -76,7 +76,7 @@ Proof
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
          FLOOKUP q.vs_allocas aid = SOME entry) /\
        alloca_frame cenv ee ss t cenv ff q)
-     (\H res ff r. expr_exit res r)` by
+     (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)` by
     (irule (SRULE [] (DISCH_ALL (Q.SPEC `0` (UNDISCH (SPEC_ALL tuple_place_suffix_run_open))))) >>
      simp[] >> metis_tac[]) >>
   simp[Once evaluate_def] >>
