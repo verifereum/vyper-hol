@@ -2,9 +2,9 @@
    The quotations below are the installed Interface quotations. *)
 Theory bodyFullAbiDecodeCallerEntry
 Ancestors
-  bodyFullAbiDecodeInterface bodyInvNoDalloca
+  bodyFullAbiDecodeInterface bodyInvNoDalloca abiBuiltinDecodeSetup
   exprSimAbiDecodeResources exprSimAbiDecodeInputBound
-  exprSimAbiDecodeChildBounds abiDecoderLayoutBounds
+  exprSimAbiDecodeChildBounds exprSimAbiDecodeMinimumLayout abiDecoderLayoutBounds
   representationCleanPtr exprLoweringProps abiArgsLabelBoundary
 
 val owned_decoder_state = ``\st s G tn.
@@ -140,7 +140,7 @@ val caller_setup_success = ``\st ready ops s G tn b min_size max_size outsz t G'
       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))``;
 
-val caller_guarded_root_entry = ``\ready finish ops t G' tn' env sf ty tv outsz b st min_size max_size s d.
+val caller_guarded_root_entry = ``\ready finish ops t G' tn' env sf ty tv outsz b st min_size max_size (s:venom_state) d.
   (\live protected input output input_word output_base output_cap output_id.
     (^guarded_to_buf_entry) (FST ops) (Lit 0w) MLOAD (FST (SND ops))
       (SND (SND ops)) (type_to_abi_dec_info sf ce ty) env sf ty tv
@@ -151,6 +151,7 @@ val caller_guarded_root_entry = ``\ready finish ops t G' tn' env sf ty tv outsz 
     (abi_builtin_decode_output_site st min_size max_size)``;
 
 Theorem abi_decode_caller_guarded_entry:
+  !finish.
   (^caller_setup_pre) data min_size max_size outsz st ready ops s G tn b data_var d /\
   (^caller_setup_success) st ready ops s G tn b min_size max_size outsz t G' tn' d /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
@@ -162,10 +163,35 @@ Theorem abi_decode_caller_guarded_entry:
   (^caller_guarded_root_entry) ready finish ops t G' tn' env ce.ce_struct_fields ty tv
     outsz b st min_size max_size s d
 Proof
-  BETA_TAC >> strip_tac >>
+  BETA_TAC >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `?output input. _`
+    (qx_choose_then `output` (qx_choose_then `input`
+      (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>
   drule abi_builtin_decode_setup_shape >> strip_tac >>
   `local_ptrs_reserved ce ready` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
   drule abi_builtin_decode_setup_bounded_operands >> strip_tac >>
-  FAIL_TAC "entry"
+  asm_rewrite_tac [] >>
+  simp[NoAsms, venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+       ptrDisciplineTheory.op_taint_def,
+       abiDecoderReentryTheory.abi_decoder_operand_live_def] >>
+  asm_rewrite_tac [] >>
+  qpat_assum `outsz = type_memory_size tv` (fn th => rewrite_tac [GSYM th]) >>
+  `b+32 < dimword (:256)` by simp[] >>
+  `(b+32) MOD dimword (:256) = b+32` by simp[] >>
+  asm_rewrite_tac [] >>
+  conj_tac >- (qexistsl_tac [`0`, `LENGTH input_bytes`] >>
+    asm_rewrite_tac [] >> simp[NoAsms] >> strip_tac >>
+    drule_all abi_decode_scalar_member_head >> strip_tac >>
+    drule abi_decode_coherent_shape >>
+    simp[abiCallerAbiShapeTheory.abi_caller_abi_shape_def] >>
+    strip_tac >>
+    simp[abiDecodeRangesTheory.abi_member_head_size_def] >>
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- (qexistsl_tac [`0`, `LENGTH input_bytes`] >> simp[]) >>
+  conj_tac >- (qpat_assum `outsz = type_memory_size tv`
+    (fn th => rewrite_tac [GSYM th]) >> simp[arithmeticTheory.ADD_COMM]) >>
+  metis_tac[]
 QED
