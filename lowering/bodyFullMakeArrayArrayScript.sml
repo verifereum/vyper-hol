@@ -213,7 +213,68 @@ QED
 Resume make_array_vv_sim_full_conditional[package]:
   BETA_TAC >> rpt strip_tac >> gvs[] >>
   rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
-  FAIL_TAC "package"
+  `eval_expr cx (Builtin (ArrayT et n) (MakeArray (SOME et) n) args)
+     (es with gas_obs := xs) =
+     (INL (Value (ArrayV (make_array_value tv n vs))),ee)` by
+    (qpat_x_assum `!tail. _ = _` (qspec_then `[]` mp_tac) >>
+     simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA
+     [Lit (n2w (type_memory_bytes cenv (ArrayT et n)))] [q]) (fn_insts func)` by
+    (qpat_assum `compile_alloc_buffer _ sa = _`
+       (mp_tac o MATCH_MP abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape) >>
+     strip_tac >> drule emitted_insts_emit_op >> simp[] >> strip_tac >> gvs[]) >>
+  `!name b len. local_region cenv es.scopes si name b len <=>
+     local_region cenv es.scopes s0 name b len` by
+    (rpt gen_tac >> irule copy_buffer_local_region_frame >>
+     qexists_tac `sa` >> simp[]) >>
+  `!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+     val_in_memory (ArrayTV tv n) (ArrayV (make_array_value tv n vs)) (w2n w) m` by
+    (rpt strip_tac >> irule array_from_dense_memory >>
+     Cases_on `n` >> gvs[Abbr `header`] >> suspend "memory") >>
+  `ci_mono sa sh` by (irule ci_mono_trans >> qexists_tac `sm` >> simp[]) >>
+  `make_array_completed H (DF H) lo d ctx func cenv cx env
+    (Builtin (ArrayT et n) (MakeArray (SOME et) n) args) es sa sh sb s0 si
+    G0 tn0 ee (ArrayV (make_array_value tv n vs)) (ArrayTV tv n) (w2n (w:256 word))
+    (type_memory_bytes cenv (ArrayT et n)) q G' tn' t xs` by
+    (simp[make_array_completed_def,vyperASTTheory.expr_type_def,exprLoweringTheory.lowered_value_type_def,
+          compileEnvTheory.is_word_type_def] >> suspend "certificate") >>
+  qpat_x_assum `make_array_packaging_ok` mp_tac >>
+  rewrite_tac[make_array_packaging_ok_def] >> disch_then drule >>
+  simp[loweringPostsTheory.post_value_type_def,vyperASTTheory.expr_type_def]
+QED
+
+Resume make_array_vv_sim_full_conditional[memory]:
+  qpat_x_assum `!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory _ _ _ m`
+    (qspec_then `m` mp_tac) >>
+  simp[valueEncodingDefsTheory.val_in_memory_def,
+       valueEncodingTheory.val_to_w256_def,integer_wordTheory.i2w_pos]
+QED
+
+Resume make_array_vv_sim_full_conditional[certificate]:
+  conj_tac >- metis_tac[expr_sim_inv_memory_size] >>
+  conj_tac >-
+    (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]) >>
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ _ s0 /\ _`
+       drule >> simp[exprLoweringPropsTheory.stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def]) >>
+  `!name b sz. local_region cenv es.scopes sj name b sz <=>
+     local_region cenv es.scopes s0 name b sz` by
+    (rpt gen_tac >> irule exprSimSubscriptArrayFrameTheory.local_region_wb_frame >>
+     conj_tac >- (qexists_tac `func` >> simp[]) >>
+     qexistsl_tac [`es`,`sa`] >> simp[]) >>
+  qpat_x_assum `EVERY _ args ==> _` drule >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  map_every qx_gen_tac [`p`,`len`] >> disch_tac >>
+  `mem_bytes_at p len t.vs_memory = mem_bytes_at p len sj.vs_memory` by
+    (qpat_x_assum `!p sz. (_ \/ _) /\ _ ==> mem_bytes_at p sz t.vs_memory = _` irule >>
+     (metisTools.METIS_TAC [])) >>
+  `mem_bytes_at p len sj.vs_memory = mem_bytes_at p len s0.vs_memory` by
+    (qpat_x_assum `!p sz. _ \/ _ ==> mem_bytes_at p sz sj.vs_memory = _` irule >>
+     Cases_on `header` >> gvs[] >> decide_tac) >>
+  simp[]
 QED
 
 Finalise make_array_vv_sim_full_conditional
