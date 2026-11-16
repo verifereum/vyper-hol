@@ -5,7 +5,7 @@ Ancestors
   vyperFiniteStoragePreservation vyperStorageTrace vyperStorageFootprint
   vyperState vyperTypeSystem vyperTypeCallGraph vyperEvalMisc
   vyperEvalOutcomeSuffix vyperTypeEvalSoundness vyperTypeCallStackSoundness
-  vyperTypeEvalStoragePreservation
+  vyperTypeEvalStoragePreservation vyperTypeExprSoundness
 Libs
   guardSourceSchemaLib
 
