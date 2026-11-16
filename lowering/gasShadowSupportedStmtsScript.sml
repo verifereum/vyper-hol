@@ -2,7 +2,7 @@
 Theory gasShadowSupportedStmts
 Ancestors
   gasShadowShape supportedStmts supportedStmtTraverse supportedExprTraverse
-  supportedTargets supportedExprs supportedExprForms gasShadow vyperAST list pair combin
+  supportedTargets supportedExprs supportedExprForms gasShadow vyperExprEffects vyperAST list pair combin
 
 Theorem shadow_internal_root[local]:
   expr_internal_call_root (gas_shadow_expr e) = expr_internal_call_root e
@@ -186,6 +186,33 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem shadow_pure_identity[local]:
+  !e. pure_expr e ==> gas_shadow_expr e = e
+Proof
+  ho_match_mp_tac pure_expr_ind >>
+  rw[pure_expr_def, gas_shadow_expr_def, gas_shadow_builtin_def] >>
+  gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, FORALL_PROD] >>
+  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  rename1 `n < LENGTH xs` >>
+  `MEM (EL n xs) xs` by
+    (simp[MEM_EL] >> qexists_tac `n` >> simp[]) >> gvs[] >>
+  Cases_on `EL n xs` >> gvs[] >> metis_tac[]
+QED
+
+Theorem shadow_pure_target_identity[local]:
+  !target. ~supported_target_exists (\e. ~pure_expr e) target ==>
+    gas_shadow_target target = target
+Proof
+  `(!e:expr. T) /\
+   !target. ~supported_target_exists (\e. ~pure_expr e) target ==>
+     gas_shadow_target target = target` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  rw[gas_shadow_expr_def, supported_expr_exists_def] >>
+  irule shadow_pure_identity >> spose_not_then assume_tac >>
+  `supported_expr_exists (\e. ~pure_expr e) e` by
+    (irule supported_expr_exists_root >> simp[]) >> gvs[]
+QED
+
 Theorem shadow_stmt_support[local]:
   ((!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
    (!tops e. supported_effect_expr tops e ==> supported_effect_expr tops (gas_shadow_expr e)) /\
@@ -206,8 +233,13 @@ Proof
       Cases_on `supported_target_info tops bindings target` >> gvs[] >>
       Cases_on `x` >> gvs[] >> drule shadow_target_info >> disch_then drule >> simp[])
   >- (Cases_on `e` >> gvs[gas_shadow_expr_def, supported_nonnegative_literal_def])
-  >- (Cases_on `target` >> gvs[supported_append_target_def, gas_shadow_expr_def])
-  >- (Cases_on `target` >> gvs[gas_shadow_expr_def]) >>
+  >- (`~supported_target_exists (\key. ~pure_expr key) target` by
+        (Cases_on `target` >> gvs[supported_expr_exists_def]) >>
+      drule shadow_pure_target_identity >> simp[])
+  >- (`~supported_target_exists (\key. ~pure_expr key) target` by
+        (Cases_on `target` >> gvs[supported_expr_exists_def]) >>
+      drule shadow_pure_target_identity >> simp[] >>
+      Cases_on `target` >> gvs[]) >>
   gvs[supported_log_def, supported_pure_exprs_every, EVERY_MAP, MAP_MAP_o, o_DEF] >>
   conj_tac
   >- (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>

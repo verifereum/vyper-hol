@@ -73,7 +73,7 @@ Proof
   >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
   Cases_on `?id. t = NameTarget id`
   >- (gvs[] >> irule body_append_local_full >> first_assum ACCEPT_TAC) >>
-  irule body_append_nested_full >> simp[]
+  irule body_append_nested_full >> simp[] >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
