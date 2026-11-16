@@ -149,20 +149,30 @@ Proof
   disch_then (qspec_then `PG` assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ argsQ argsR` >>
   dep_rewrite.DEP_REWRITE_TAC [tuple_source_action] >> simp[] >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all >>
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+  rpt conj_tac
   >~ [`storage_trace_frame (eval_exprs _ _)`]
   >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
-  >~ [`!v. storage_trace_frame (next v)`]
-  >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> drule gasExemptCertTheory.gas_exempt_cert_bind_results >> simp[] >>
-      disch_then irule >> simp[])
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
+      goal_assum (drule_at Any) >> fs[])
   >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_results >>
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
       first_assum ACCEPT_TAC) >>
   qexists `argsQ` >> reverse conj_tac
   >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
       simp[Abbr `argsR`] >> rpt strip_tac >>
-      Cases_on `res` >> gvs[exprSimWordArgsTheory.wb_args_exit_def] >> metis_tac[]) >>
-  FAIL_TAC "tuple continuation"
+      Cases_on `res` >> gvs[exprSimWordArgsTheory.wb_args_exit_def] >>
+      conj_tac
+      >- (qpat_x_assum `expr_exit _ _` mp_tac >>
+          once_rewrite_tac[abi_args_exit_inr] >> simp[]) >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace`
+    by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> argsQ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  fs[Abbr `argsQ`] >>
+  FAIL_TAC "tuple physical continuation"
 QED
