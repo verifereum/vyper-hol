@@ -77,7 +77,7 @@ Theorem raw_log_dynamic_data_full:
       (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
         ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) G t) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
@@ -108,7 +108,8 @@ Proof
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
-  simp[Abbr `dataR`] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
+  simp[Abbr `dataR`] >> rpt gen_tac >> Cases_on `res` >>
+  simp[expr_exit_def, halt_exit_def]
 QED
 
 Resume raw_log_dynamic_data_full[suffix_frame]:
@@ -191,7 +192,7 @@ Resume raw_log_dynamic_data_full[selected]:
         `INR (Error (RuntimeError "write in static context"))`, `tn2`] >>
       simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
            ignore_bind_def, type_check_def, assert_def, return_def,
-           fragExecTheory.exit_result_def, expr_exit_def, Abbr `dataR`]) >>
+           fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def, Abbr `dataR`]) >>
   `?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK u,G2,tn2) /\
@@ -225,7 +226,7 @@ Resume raw_log_dynamic_data_full[selected]:
   qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  conj_tac
+  disj1_tac >> conj_tac
   >- (qpat_x_assum `expr_post H _ _ _ _ (Call _ RawLog _ _) _ _ _ _ _ _ _ _` mp_tac >>
       qpat_x_assum `expr_type (Call _ RawLog _ _) = NoneT` mp_tac >>
       rpt (pop_assum kall_tac) >>
