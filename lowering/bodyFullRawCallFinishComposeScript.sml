@@ -10,9 +10,57 @@ Ancestors
 Libs
   monadsyntax
 
-(* The three universally closed result-bridge antecedents are inserted here
-   when the independently owned literal interfaces are available. *)
+(* Closed bridge statements: their proofs are discharged only by Finish. *)
 Theorem raw_call_finish_from_result_bridges:
+ (!gop aop vop dp dl op cap sa ok sc inst func s ctx lo cx flags amount
+   gw aw ao az ro es st0 tn G DF explicit PG target bytes gas Q.
+  emit_op CALL [gop;aop;vop;dp;dl;op;Lit(n2w cap)] sa = (ok,sc) /\
+  inst = mk_inst sa.cs_next_id CALL [gop;aop;vop;dp;dl;op;Lit(n2w cap)]
+    [STRING #"%" (toString sa.cs_next_var)] /\
+  fn_has_code sa sc func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\ alloca_inv s /\ allocas_from lo s /\
+  cx.txn.is_static /\ s.vs_call_ctx.cc_static /\
+  ~flags.rcf_is_delegate /\ ~flags.rcf_is_static /\ flags.rcf_max_outsize = cap /\
+  0 < amount /\ amount < dimword(:256) /\ cap < dimword(:256) /\
+  eval_operand gop s = SOME gw /\ eval_operand aop s = SOME aw /\
+  eval_operand vop s = SOME (n2w amount) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME ro /\
+  es.gas_obs = [] /\ storage_trace_domain cx st0 es.storage_trace /\
+  EVERY (\p. op_taint tn p = {}) inst.inst_operands /\
+  (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
+  (az <> 0w ==> ?p. dp = Var p /\ ptr_covers G tn p s (w2n az)) /\
+  (cap <> 0 ==> ?p. op = Var p /\ ptr_covers G tn p s cap) /\
+  (w2n az = 0 \/ w2n ao + w2n az <= s.vs_alloca_next) /\
+  (cap = 0 \/ w2n ro + cap <= s.vs_alloca_next) /\
+  (cap = 0 \/ lo <= w2n ro) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (eval_raw_call cx flags target bytes amount gas) (es,s,G,tn) Q
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !t. r = Halt t ==> allocas_below_fmp t))) ==>
+ (!to_op dp dl gas_op val_op stat n ov op sa result sb ok sc s tn G func ctx lo
+   explicit PG.
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) n T ov op sa = (result,sb) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+  eval_operand ok s = SOME 0w /\ op_taint tn ok = {} /\ op_prov G ok = NONE /\
+  fn_has_code sc sb func /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?u Gf tnf.
+    u.vs_returndata = s.vs_returndata /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (Abort Revert_abort u,Gf,tnf)) /\
+    (!H cx ee.
+      expr_exit (INR (Error (RevertData s.vs_returndata))) (Abort Revert_abort u) /\
+      halt_exit H cx ee (INR (Error (RevertData s.vs_returndata)))
+        (Abort Revert_abort u) /\
+      (ctx_has_dalloca ctx ==> !t. Abort Revert_abort u = Halt t ==> allocas_below_fmp t))) ==>
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0.
@@ -453,7 +501,12 @@ Proof
      unabbrev_all_tac >>
      asm_simp_tac bool_ss [LET_THM, pairTheory.SND, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
      disch_then irule >>
-     FAIL_TAC "matched call antecedent") >>
+     Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >>
+     Cases_on `flags.rcf_max_outsize=0` >>
+     gvs[venomInstTheory.mk_inst_def, ptrDisciplineTheory.op_taint_def,
+         loweringStateRelDefsTheory.regions_disjoint_def,
+         wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+     metis_tac[wordsTheory.n2w_11, arithmeticTheory.LESS_EQ_TRANS]) >>
   POP_ASSUM_LIST (K all_tac) >> FAIL_TAC "actual ghost continuation"
 QED
 
