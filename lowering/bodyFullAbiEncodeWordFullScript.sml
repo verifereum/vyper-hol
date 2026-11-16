@@ -98,5 +98,42 @@ Proof
   simp[expr_sim_full_def] >> disch_then drule_all >>
   simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  FAIL_TAC "child outcome obtained"
+  simp[exprSimAbiEncodeNonwordCaseTheory.eval_expr_singleton_type_builtin_action,
+       type_builtin_args_length_ok_def] >>
+  irule gas_outcome_full_bind_all >> rpt conj_tac
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result])
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> drule gas_exempt_cert_bind_value >> simp[] >>
+      disch_then irule >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >>
+      first_assum ACCEPT_TAC) >>
+  qexists `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
+      simp[Abbr `childR`, exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
+      qpat_x_assum `expr_exit res r` mp_tac >>
+      Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def] >>
+      Cases_on `r` >> Cases_on `y` >>
+      simp[exprSimDefsTheory.expr_exit_def] >> gvs[] >>
+      rename1 `Error err` >> Cases_on `err` >>
+      simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+  suspend "word_continuation"
 QED
+
+Resume abi_encode_word_vv_full_from_packaging[word_continuation]:
+  qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  qunabbrev_tac `childQ` >> disch_then (strip_assume_tac o BETA_RULE) >> gvs[] >>
+  FAIL_TAC "physical word staging"
+QED
+
+Finalise abi_encode_word_vv_full_from_packaging
