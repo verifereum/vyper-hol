@@ -1276,10 +1276,15 @@ Resume body_for_local_array_full_from_contracts[common_round]:
      irule storage_trace_frame_bind_all >>
      simp[evaluate_storage_trace_frame,storage_trace_frame_return]) >>
   conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> Inv _ (a::rs) _ _ _ _`
-    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  qpat_assum `Abbrev (Inv = _)` (fn idef =>
+    qpat_assum `Abbrev (Head = _)` (fn hdef =>
+      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> Inv _ (a::rs) _ _ _ _`
+        (mk_asm "entry_inv" o SIMP_RULE bool_ss
+          [REWRITE_RULE [markerTheory.Abbrev_def] idef,
+           REWRITE_RULE [markerTheory.Abbrev_def] hdef]))) >>
+  asm "entry_inv" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
-  simp_tac (srw_ss()) [Abbr `Inv`,Abbr `Head`] >> strip_tac >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
   qabbrev_tac `k = LENGTH vs - SUC (LENGTH rs)` >>
   `k < LENGTH vs` by
     (qpat_x_assum `Abbrev (k = _)` mp_tac >>
@@ -1289,7 +1294,67 @@ Resume body_for_local_array_full_from_contracts[common_round]:
   rewrite_tac[MAP_EQ_CONS] >> strip_tac >>
   qpat_x_assum `a = Value _` SUBST_ALL_TAC >>
   pure_rewrite_tac[read_result_def,bind_return] >>
-  FAIL_TAC "common-round-entry"
+  rename1 `DROP k vs = v :: tail_vs` >>
+  `same_frame cenv bc /\ cenv_top_ext cenv bc (FEMPTY :: ee.scopes)` by
+    (qpat_x_assum `!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = _` mp_tac >>
+     qpat_x_assum `FLOOKUP bc.ce_vars id = SOME _` mp_tac >>
+     qpat_x_assum `bc with <|ce_vars := _; ce_var_type := _;
+       ce_dynarray_capacity := _|> = cenv` mp_tac >>
+     qpat_x_assum `FLOOKUP cenv.ce_vars id = NONE` mp_tac >>
+     qpat_x_assum `lookup_scopes id ee.scopes = NONE` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     rw[bodySimTheory.same_frame_def,cenv_top_ext_def] >>
+     Cases_on `n = id` >> gvs[]) >>
+  `cs_extends start sb0` by
+    (irule cs_extends_trans >> qexists_tac `scopy` >> simp[]) >>
+  `?ss Gs ts. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s,G,tn) [] (OK ss,Gs,ts) /\
+    expr_sim_inv bc cx (extend_local env id typ F)
+      (ee with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: ee.scopes;
+        gas_obs := []|>) /\
+    stmt_state_rel H ctx func bc cx
+      (ee with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: ee.scopes;
+        gas_obs := []|>) ss /\
+    storage_well_formed_on cx ee (FST H) /\
+    return_buf_frame d bc sb0 ss /\ alloca_history func ss /\
+    ghost_inv_at (DF H) lo d bc cx
+      (ee with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: ee.scopes;
+        gas_obs := []|>) Gs ts ss /\
+    ~ss.vs_halted /\ ss.vs_current_bb = sb0.cs_current_bb /\
+    ss.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ret_pc_ok bc sb0 ss /\
+    allocas_from lo ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
+    lookup_var p ss = SOME dst /\ ptr_covers Gs ts p ss (type_memory_bytes cenv typ) /\
+    FLOOKUP ss.vs_allocas ainst.inst_id = SOME (w2n dst,type_memory_bytes cenv typ) /\
+    w2n dst + type_memory_bytes cenv typ < dimword (:256) /\
+    w2n dst + type_memory_bytes cenv typ <= ss.vs_alloca_next /\
+    (!nm b len. local_region cenv ee.scopes ss nm b len ==>
+      regions_disjoint (w2n dst) (type_memory_bytes cenv typ) b len) /\
+    lookup_var idx ss = SOME (n2w k) /\
+    eval_operand bound_op ss = SOME (n2w (LENGTH vs)) /\
+    FLOOKUP Gs idx = NONE /\ op_prov Gs bound_op = NONE /\
+    op_taint ts (Var idx) = {} /\ op_taint ts bound_op = {} /\
+    lookup_scopes name ee.scopes = SOME ent /\
+    ent.type = ArrayTV tv bd /\ ent.value = ArrayV av /\
+    vs = array_elements ent.type av /\ eval_operand (Var ap) ss = SOME arr_base /\
+    (!x w. not_fresh_at start x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x ss = SOME w) /\
+    (!aid bl. FLOOKUP s0.vs_allocas aid = SOME bl ==>
+      FLOOKUP ss.vs_allocas aid = SOME bl) /\
+    (!x. not_fresh_at start x ==> FLOOKUP Gs x = FLOOKUP G0 x /\
+      op_taint ts (Var x) = op_taint tn0 (Var x))` by
+    (asm "entry" irule >> suspend "common_entry_premises") >>
+  suspend "common_round_body"
+QED
+
+Resume body_for_local_array_full_from_contracts[common_entry_premises]:
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+     "body_outcome","handler","entry"] >>
+  FAIL_TAC "entry-static-premises"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
