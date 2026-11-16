@@ -1261,6 +1261,23 @@ QED
 (* Calldata that dispatches to nothing (no fallback, a short head, or
    arguments the decoder rejects) makes the compiled contract revert with
    empty returndata, or run out of resources: the identity finalizer. *)
+Theorem o1_pipeline_reverts_empty:
+  !tops rpolicy unit out am tx vs fuel s.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_run_state_ok vs /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    run_context fuel out.po_unit.cu_context vs = Abort Revert_abort s
+    ==>
+    s.vs_returndata = []
+Proof
+  cheat
+QED
+
 Theorem vyper_call_reverts_identity:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
