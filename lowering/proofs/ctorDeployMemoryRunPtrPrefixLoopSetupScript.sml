@@ -283,6 +283,7 @@ Theorem prefix_loop_count_header_pair_interior:
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt) /\
     eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
     mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
     fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
@@ -324,6 +325,45 @@ Proof
     `step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
       (update_var x (abi_decode_load DLOAD a s) s) t
       (tn with t_var := tn.t_var |+ (x,{}))`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (gen_tac >>
+      mp_tac (Q.INST [`D` |-> `D'`, `fuel` |-> `0`]
+        prefix_loop_count_header_steps_interior) >>
+      simp[prefix_copy_pure_taint] >> strip_tac >>
+      `allocas_from lo (s with vs_inst_idx := SUC s.vs_inst_idx) /\
+       abi_decode_load DLOAD a (s with vs_inst_idx := SUC s.vs_inst_idx) =
+         abi_decode_load DLOAD a s` by
+        (fs[allocas_from_def,abi_decode_load_def,abi_decode_source_def] >>
+         metis_tac[]) >>
+      mp_tac (Q.INST [`D` |-> `D'`, `fuel` |-> `0`,
+        `s` |-> `s with vs_inst_idx := SUC s.vs_inst_idx`]
+        prefix_loop_count_header_steps_interior) >>
+      simp[prefix_copy_pure_taint,eval_op_inst_idx,update_var_idx,mstore_idx] >>
+      strip_tac >>
+      `ptr_inst_ok D' lo 0 ctx fn G tn (mk_inst iid DLOAD [src] [x]) s /\
+       step_prov PG G (mk_inst iid DLOAD [src] [x])
+         (update_var x (abi_decode_load DLOAD a s) s) = DRESTRICT G (COMPL {x}) /\
+       step_taint (mk_inst iid DLOAD [src] [x]) s
+         (update_var x (abi_decode_load DLOAD a s) s) tn =
+         tn with t_var := tn.t_var |+ (x,{})` by
+        (irule prefix_loop_step_seq_facts >>
+         asm_rewrite_tac[] >> simp[mk_inst_def]) >>
+      `ptr_inst_ok D' lo 0 ctx fn (DRESTRICT G (COMPL {x}))
+         (tn with t_var := tn.t_var |+ (x,{}))
+         (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+         (update_var x (abi_decode_load DLOAD a s) s) /\
+       step_prov PG (DRESTRICT G (COMPL {x}))
+         (mk_inst (iid+1) MSTORE [Var dst;Var x] []) t = DRESTRICT G (COMPL {x}) /\
+       step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+         (update_var x (abi_decode_load DLOAD a s) s) t
+         (tn with t_var := tn.t_var |+ (x,{})) =
+       step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+         (update_var x (abi_decode_load DLOAD a s) s) t
+         (tn with t_var := tn.t_var |+ (x,{}))` by
+        (irule prefix_loop_step_seq_facts >>
+         asm_rewrite_tac[] >> simp[mk_inst_def]) >>
+      simp[fragGasSeqPtrTheory.inst_seq_ptr_def] >>
+      fs[ptr_safe_step_def,mk_inst_def]) >>
   gvs[Abbr `t`,allocas_from_def,SRULE [LET_THM] prefix_mstore_taint_frame,
     FLOOKUP_DRESTRICT,op_taint_def,FLOOKUP_UPDATE,eval_operand_def,
     lookup_var_def,update_var_def] >> metis_tac[]
