@@ -3643,7 +3643,7 @@ Proof
   simp[]
 QED
 
-Theorem stmt_return_bind[local]:
+Theorem stmt_return_bind:
   comp_bind (comp_return x) f = f x
 Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]

@@ -20,15 +20,9 @@ Proof
   metis_tac[FST, SND]
 QED
 
-Theorem opcode_comp_bind_return[local]:
-  comp_bind (comp_return x) f = f x
-Proof
-  simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
-QED
-
 local
   fun preserve ths = rpt (FIRST [
-    CHANGED_TAC (simp[opcode_comp_bind_return]),
+    CHANGED_TAC (simp[stmt_return_bind]),
     IF_CASES_TAC >> gvs[] >> qid_spec_tac `st`,
     ho_match_mp_tac every_state_insts_defaults_bind >>
       (conj_tac >- (simp ths >> NO_TAC)) >> conj_tac,
