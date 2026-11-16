@@ -2507,6 +2507,47 @@ Proof
   irule native_success_suffix_gas_coverage >> simp[DROP_APPEND] >> metis_tac[]
 QED
 
+Theorem native_inventory_observation_origin:
+  !s kw.
+    MEM kw (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt s)) ==>
+    ?i a.
+      MEM i (DROP s.vs_inst_idx bt.bb_instructions) /\
+      MEM ((p,d,i.inst_id),fn',i,a)
+        (dftGasFromListTraceDefs$trace_block p d b C' fn' bt s) /\
+      ((i.inst_opcode = GAS /\ FST kw = (p,d,i.inst_id)) \/
+       (i.inst_opcode = INVOKE /\
+        MEM kw (trace_gas
+          (dftGasFromListTraceDefs$trace_step p d b C' fn' i a))))
+Proof
+  measureInduct_on `LENGTH bt.bb_instructions - s.vs_inst_idx` >>
+  rpt gen_tac >> disch_tac >> gvs[] >> gen_tac >>
+  Cases_on `get_instruction bt s.vs_inst_idx`
+  >- simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs)] >>
+  rename1 `get_instruction bt s.vs_inst_idx = SOME inst` >>
+  `s.vs_inst_idx < LENGTH bt.bb_instructions /\
+   EL s.vs_inst_idx bt.bb_instructions = inst` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `DROP s.vs_inst_idx bt.bb_instructions =
+     inst :: DROP (SUC s.vs_inst_idx) bt.bb_instructions` by
+    metis_tac[rich_listTheory.DROP_CONS_EL] >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[] >> strip_tac
+  >- (qexistsl_tac [`inst`, `s`] >>
+      Cases_on `inst.inst_opcode = GAS` >> gvs[visit_gas_def])
+  >- (qexistsl_tac [`inst`, `s`] >> simp[] >>
+      Cases_on `inst.inst_opcode = INVOKE` >> simp[] >>
+      gvs[dftGasFromListTraceDefsTheory.trace_step_noninvoke]) >>
+  Cases_on `step_inst b C' inst s` >> gvs[] >>
+  rename1 `step_inst b C' inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then drule >> strip_tac >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
