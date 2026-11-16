@@ -49,12 +49,13 @@ Proof
     gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (Abort a (t with vs_inst_idx := j),HG,th)` by
     (irule run_inst_seq_abort_origin_ptr_uniform >>
-     simp[EVERY_MEM] >> metis_tac[]) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   qexistsl_tac [`j`, `H`, `u`] >> simp[] >> rpt gen_tac >>
   `?H' u'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H' u'` by
     metis_tac[abi_decode_clamp_abort_ptr] >>
   `H' = H /\ u' = u` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
   first_x_assum irule >>
   irule inst_seq_ptr_lower_bound_transport >>
-  qexists_tac `0` >> simp[] >> fs[EVERY_MEM]
+  conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> qexists_tac `0` >> simp[]
 QED
