@@ -13,6 +13,7 @@
  *)
 Theory fmpStageOpSteps
 Ancestors
+  fmpStageOpSimMemEffects fmpStageTermSimJump
   fmpStageOpFrame fmpStageOpSimPure fmpStageOpSimMem fmpStageTermSim fmpStageControl
   fmpStageOpBase fmpStageRel ptrStaticDiscipline ptrDiscipline o1PassContract
   contextCodegenRel venomWf fmpReclaimDefs fmpAnalysisDefs
@@ -210,7 +211,7 @@ Proof
       drule_all fmp_stage_op_finish >> metis_tac[])
   >- (drule_all fmp_stage_sim_memory >> strip_tac >>
       drule_all fmp_stage_op_finish >> metis_tac[])
-  >- (drule_all fmp_stage_sim_effects >> strip_tac >>
+  >- (drule_all fmp_mem_effects_sim >> strip_tac >>
       drule_all fmp_stage_op_finish >> metis_tac[])
   >- (drule_all fmp_stage_sim_call >> strip_tac >>
       drule_all fmp_stage_op_finish >> metis_tac[])
@@ -248,7 +249,7 @@ Proof
   drule_all fmp_stage_sim_halt >> strip_tac >> metis_tac[]
 QED
 
-(* Why: as for halts, with fmp_stage_sim_jump. *)
+(* Why: as for halts, with fmp_stage_jump_result. *)
 Theorem fmp_stage_jump_step:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -265,7 +266,7 @@ Proof
   `~MEM inst.inst_opcode [DALLOCA; INVOKE; RETPC_PARAM]` by gvs[] >>
   `~T ==> ~is_terminator inst.inst_opcode` by simp[] >>
   drule_all fmp_stage_target_inst >> strip_tac >>
-  drule_all fmp_stage_sim_jump >> strip_tac >> metis_tac[]
+  drule_all fmp_stage_jump_result >> strip_tac >> metis_tac[]
 QED
 
 (* Why: a revert forwarding copies the callee's revert data and reverts

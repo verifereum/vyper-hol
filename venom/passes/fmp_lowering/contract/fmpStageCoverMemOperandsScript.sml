@@ -1,30 +1,12 @@
 (* Operand availability boundary for memory coverage. *)
 Theory fmpStageCoverMemOperands
 Ancestors
+  fmpStageCoverBack
   fmpStageOpBase fmpStageRel o1PassContract ptrDiscipline
   o1ContractSimplifyCfgSrcFrame simplifyCfgAvailability
   unitTransformDefs unitShapeDefs venomWf venomState list
   ptrStaticDiscipline memLocDefs pointerConfinedDefs pred_set finite_map
   frameViewFacts o1LowerDloadAddressArithmetic words arithmetic
-
-Theorem fmp_stage_var_defined:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands ==>
-  IS_SOME (lookup_var v s)
-Proof
-  strip_tac >>
-  drule_all fmp_stage_frame_facts >> strip_tac >>
-  `?r. fn_entry_state fn r /\ frame_reach C fn r inst s` by
-    (irule scfg_frame_reachable_entry_root >>
-     conj_tac
-     >- (gvs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
-         metis_tac[venomInstTheory.lookup_function_MEM]) >>
-     qexistsl_tac [`G`, `PG`, `stk`, `tn`, `vs`] >>
-     gvs[fmp_stage_ctx_def, o1_run_state_ok_def, o1_initial_state_ok_def]) >>
-  irule scfg_frame_operand_defined >>
-  gvs[o1_fn_shape_def, make_ssa_input_ok_def] >> metis_tac[]
-QED
 
 Theorem fmp_static_descriptor_size_nonpointer[local]:
   ptr_use_static_ok P pv inst /\
@@ -63,7 +45,7 @@ Proof
     (Cases_on `op`
      >- simp[eval_operand_def]
      >- (rename1 `MEM (Var v) inst.inst_operands` >>
-         drule_all fmp_stage_var_defined >>
+         drule_all fmp_stage_src_defined >>
          Cases_on `lookup_var v s` >> simp[eval_operand_def]) >>
      `s.vs_labels = t.vs_labels` by
        gvs[fmp_stage_rel_def, fmp_frame_rel_def] >>

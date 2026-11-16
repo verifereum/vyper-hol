@@ -5,7 +5,7 @@ Ancestors
   lowerDloadPtrForward o1PassContract contextCodegenRel venomExecSemantics
   venomExecProofs venomInst venomWf list
 
-Theorem fmp_cover_interval_opcode[local]:
+Theorem fmp_cover_interval_opcode:
   revert_forward_pair bb p j /\ p <= k /\ k <= j ==>
   k < LENGTH bb.bb_instructions /\
   MEM (EL k bb.bb_instructions).inst_opcode [RETURNDATACOPY; ASSIGN; REVERT]
@@ -19,7 +19,7 @@ Proof
   drule_all revert_forward_pair_interval_opcode >> simp[] >> metis_tac[]
 QED
 
-Theorem fmp_cover_interval_point[local]:
+Theorem fmp_cover_interval_point:
   revert_forward_pair bb p j /\ p <= k /\ k <= j /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
   ~((lbl,k) IN FDOM (fmp_stage_plan infos ctx fn))
@@ -29,7 +29,7 @@ Proof
   strip_tac >> drule fmp_reclaim_point_opcodes >> gvs[]
 QED
 
-Theorem fmp_cover_interval_tidx[local]:
+Theorem fmp_cover_interval_tidx:
   fmp_stage_lowered infos ctx runner fn fn' /\
   (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
     fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\
@@ -62,7 +62,7 @@ Proof
   gvs[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem fmp_cover_interval_fetch[local]:
+Theorem fmp_cover_interval_fetch:
   fmp_stage_lowered infos ctx runner fn fn' /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   revert_forward_pair bb p j /\ p <= idx /\ idx <= j ==>

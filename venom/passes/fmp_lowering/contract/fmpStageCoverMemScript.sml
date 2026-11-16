@@ -15,6 +15,7 @@
  *)
 Theory fmpStageCoverMem
 Ancestors
+  fmpStageCoverBack
   fmpStageOpBase fmpStageControl fmpStageRel o1PassContract ptrDiscipline
   contextCodegenRel unitMemInv venomExecSemantics venomState venomInst
   finite_map words list fmpStageCoverMemOperands lowerDloadRangeTransport
@@ -52,7 +53,7 @@ Proof
     (rpt strip_tac >> Cases_on `op`
      >- simp[eval_operand_def]
      >- (rename1 `MEM (Var v) inst.inst_operands` >>
-         drule_all fmp_stage_var_defined >>
+         drule_all fmp_stage_src_defined >>
          Cases_on `lookup_var v s` >> simp[eval_operand_def]) >>
      gvs[fmp_stage_rel_def, fmp_frame_rel_def, eval_operand_def]) >>
   `!ops szop. (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
