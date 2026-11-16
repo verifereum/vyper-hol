@@ -250,6 +250,56 @@ Inductive frame_stack_plan_reloc:
       (n2w ret_off) (saved ++ rest) cas.as_memory)
 End
 
+Theorem frame_stack_plan_reloc_specialize:
+  !rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
+    frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 <=>
+    frame_stack_plan_reloc (SND (compute_label_offsets prog))
+      rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 /\
+    (?tail. initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0)
+Proof
+  qsuff_tac
+    `(!rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
+        frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 ==>
+        frame_stack_plan_reloc (SND (compute_label_offsets prog))
+          rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 /\
+        (?tail. initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0)) /\
+     (!lo rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
+        frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 ==>
+        lo = SND (compute_label_offsets prog) ==>
+        (?tail. initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0) ==>
+        frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0)`
+  >- metis_tac[] >>
+  conj_tac
+  >- (ho_match_mp_tac frame_stack_plan_ind >> conj_tac >>
+      rpt gen_tac >> strip_tac
+      >- metis_tac[frame_stack_plan_reloc_entry] >>
+      qhdtm_x_assum `body_plan_inv` mp_tac >>
+      pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+      conj_tac >- (irule frame_stack_plan_reloc_call >> metis_tac[]) >>
+      metis_tac[]) >>
+  ho_match_mp_tac frame_stack_plan_reloc_ind >> conj_tac >>
+  rpt gen_tac >> strip_tac >> disch_then SUBST_ALL_TAC >> strip_tac
+  >- metis_tac[frame_stack_plan_entry] >>
+  irule frame_stack_plan_call >>
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> metis_tac[]
+QED
+
+Theorem frame_stack_plan_entry_fields_reloc:
+  !lo rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 ==>
+    mem0 = entry.as_memory /\
+    (entry.as_call_ctx, entry.as_tx_ctx, entry.as_block_ctx,
+     entry.as_code, entry.as_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes)
+Proof
+  ho_match_mp_tac frame_stack_plan_reloc_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac
+  >- fs[fn_entry_state_rel_def, shared_state_rel_def] >>
+  fs[fn_frame_inv_def, contextCodegenRelTheory.context_venom_asm_rel_def,
+     frame_view_def, shared_state_rel_def]
+QED
+
 Theorem frame_stack_plan_entry_fields:
   !rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0.
     frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 ==>
@@ -259,11 +309,8 @@ Theorem frame_stack_plan_entry_fields:
     (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
      vs0.vs_code, vs0.vs_prev_hashes)
 Proof
-  ho_match_mp_tac frame_stack_plan_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac
-  >- fs[fn_entry_state_rel_def, shared_state_rel_def] >>
-  fs[fn_frame_inv_def, contextCodegenRelTheory.context_venom_asm_rel_def,
-     frame_view_def, shared_state_rel_def]
+  pure_rewrite_tac[frame_stack_plan_reloc_specialize] >>
+  metis_tac[frame_stack_plan_entry_fields_reloc]
 QED
 
 Theorem frame_stack_plan_push:
