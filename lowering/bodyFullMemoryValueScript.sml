@@ -128,7 +128,8 @@ Resume body_full_memory_value_path[staged]:
     `xs` |-> `root`, `sa` |-> `sc'`, `s` |-> `t`,
     `sw` |-> `(n2w b):bytes32`, `G` |-> `Gf`, `tn` |-> `tf`]
     (SPEC_ALL body_full_memory_store_path)) >>
-  (impl_tac >- (simp[] >> fs[loweringStateRelDefsTheory.regions_disjoint_def])) >> strip_tac >>
+  (impl_tac >- (asm_rewrite_tac[] >>
+    fs[loweringStateRelDefsTheory.regions_disjoint_def])) >> strip_tac >>
   rename1 `typed_copy_state_frame sc' _ _ t t'` >>
   qexistsl_tac [`t'`,`Gf'`,`tf'`,`t`,`Gf`,`tf`,`sc'`] >>
   conj_tac >- suspend "join" >>
