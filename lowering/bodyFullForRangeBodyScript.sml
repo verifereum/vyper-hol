@@ -162,9 +162,16 @@ Proof
   disch_then (drule_at (Pos hd)) >>
   disch_then (drule_at (Pos hd)) >>
   disch_then (qspecl_then [`st0`,`sstart`,`Gstart`,`tnstart`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule gas_outcome_full_post_source >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >>
+      drule_all contextRawReachableTheory.frag_reachable_members >>
+      qpat_x_assum `~ctx_has_dalloca ctx` mp_tac >>
+      simp[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+           unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  strip_tac >>
+  drule gas_outcome_full_post_source >>
+  disch_then irule >> simp[]
 QED
 
 Theorem for_range_literal_body_invoke_full:
