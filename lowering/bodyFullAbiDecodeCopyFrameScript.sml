@@ -2,6 +2,7 @@ Theory bodyFullAbiDecodeCopyFrame
 Ancestors
   bodyFullUnwrapSlotPost bodyFullAbiDecodeDecoderBase typedCopyPtr
   exprSimConcatStore abiDecodePtrMemberFrame allocaHistory decoderGhostFramePtr
+  fragExecPtr
   venomState venomInst venomExecSemantics ptrDiscipline bodyPtrDefs
   finite_map pred_set words list pair valueEncodingProps
 
