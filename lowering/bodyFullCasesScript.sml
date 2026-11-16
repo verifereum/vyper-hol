@@ -12,6 +12,7 @@ Ancestors
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullStructLit bodyFullPop
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -642,11 +643,10 @@ Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, compile_pass_frag_full]
 QED
 
-(* Admitted: the joint twin of body_pop_case_ptr_at (bodyPtrExprCases). *)
 Theorem body_pop_case_full:
   !cx v10 bt. body_base_target_full_ok cx bt ==> body_expr_full_ok cx (Pop v10 bt)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullPopTheory.pop_expr_full_ok
 QED
 
 (* The joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -795,13 +795,12 @@ Proof
   rw[body_stmts_full_ok_def, stmt_frag_nil_full]
 QED
 
-(* Admitted: the joint twin of body_structlit_case_ptr_at (bodyPtrExprCases). *)
 Theorem body_structlit_case_full:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_full_ok cx (MAP SND kes)) ==>
     body_expr_full_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullStructLitTheory.structlit_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_subscript_case_ptr_at (bodyPtrExprCases). *)
