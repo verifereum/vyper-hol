@@ -925,8 +925,8 @@ Theorem body_inv_facts_reloc:
     LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) <= LENGTH prog
 Proof
   strip_tac >> drule body_inv_plan_reloc >>
-  disch_then (strip_assume_tac o MATCH_MP body_plan_inv_facts_reloc) >>
-  simp[SF SFY_ss] >> conj_tac
+  disch_then (map_every assume_tac o CONJUNCTS o MATCH_MP body_plan_inv_facts_reloc) >>
+  simp[] >> conj_tac
   >- (irule context_inst_count_block >> metis_tac[]) >>
   unpack_inv_reloc >> qpat_x_assum `asm_block_at prog pc0 _` mp_tac >>
   simp[asm_block_at_def, execute_plan_def, execute_plan_append]
@@ -1060,6 +1060,65 @@ Proof
   drule_all body_inv_inst_reloc >> simp[]
 QED
 
+Theorem body_plan_inv_step_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    ?ops ps' rest'.
+      generate_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+        (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+        bb.bb_label ps = SOME (ops, ps') /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (SUC k - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC k - LENGTH (get_params bb.bb_instructions))
+           (non_param_insts bb))
+        ps' = SOME (rest', ps_after) /\
+      rest_ops = ops ++ rest' /\
+      r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+      ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+      EVERY (\s. case s of SOSpill off => off < dimword(:256)
+        | SORestore off => off < dimword(:256) | _ => T) ops /\
+      (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+      asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp ops) /\
+      (!lbl j. j < LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+               EL j (execute_plan cpl.cp_initial_fmp ops) = AsmLabel lbl ==>
+               ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                     FLOOKUP o2pc off = SOME (as.as_pc + j))
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  drule_all block_insts_plan_step >> strip_tac >>
+  qpat_x_assum `EL k _ = inst` (SUBST_ALL_TAC o SYM) >>
+  qexistsl_tac [`ops`, `ps'`, `rest'`] >>
+  `ps'.ps_alloc.sa_spill_base = ps_after.ps_alloc.sa_spill_base /\
+   ps'.ps_alloc.sa_next_offset <= ps_after.ps_alloc.sa_next_offset` by
+    metis_tac[body_insts_plan_spill_base, body_insts_plan_next_offset] >>
+  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+         off < dimword (:256)` by
+    (gen_tac >> strip_tac >>
+     qspecl_then [`ctx`, `cpl`, `r`, `pre ++ SOLabel bb.bb_label :: prefix_ops`,
+                  `ops`, `rest' ++ post`, `off`] mp_tac
+       body_region_spill_offsets >>
+     impl_tac >- (gvs[] >> metis_tac[]) >> simp[]) >>
+  qspecl_then [`prog`, `pc0`, `cpl.cp_initial_fmp`, `bb.bb_label`,
+               `prefix_ops`, `ops`, `rest'`] mp_tac block_ops_at >>
+  impl_tac >- gvs[] >> strip_tac >>
+  rpt conj_tac
+  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
+  >- (first_assum ACCEPT_TAC)
+  >- fs[]
+  >- metis_tac[LESS_EQ_TRANS]
+  >- (rw[EVERY_MEM] >> Cases_on `s` >> simp[] >> metis_tac[])
+  >- metis_tac[]
+  >- gvs[]
+  >- ((metis_tac[asm_block_labels_reloc]))
+QED
+
 Theorem body_plan_inv_step:
   body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1091,38 +1150,46 @@ Theorem body_plan_inv_step:
                ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
                      FLOOKUP o2pc off = SOME (as.as_pc + j))
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >> unpack_plan_inv >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `bb`, `k`, `ps`, `rest_ops`,
-               `ps_after`] mp_tac block_insts_plan_step >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `EL k _ = inst` (SUBST_ALL_TAC o SYM) >>
-  qexistsl_tac [`ops`, `ps'`, `rest'`] >>
-  `ps'.ps_alloc.sa_spill_base = ps_after.ps_alloc.sa_spill_base /\
-   ps'.ps_alloc.sa_next_offset <= ps_after.ps_alloc.sa_next_offset` by
-    metis_tac[body_insts_plan_spill_base, body_insts_plan_next_offset] >>
-  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
-         off < dimword (:256)` by
-    (gen_tac >> strip_tac >>
-     qspecl_then [`ctx`, `cpl`, `r`, `pre ++ SOLabel bb.bb_label :: prefix_ops`,
-                  `ops`, `rest' ++ post`, `off`] mp_tac
-       body_region_spill_offsets >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-     simp[]) >>
-  qspecl_then [`prog`, `pc0`, `cpl.cp_initial_fmp`, `bb.bb_label`,
-               `prefix_ops`, `ops`, `rest'`] mp_tac block_ops_at >>
-  impl_tac >- gvs[] >> strip_tac >>
-  rpt conj_tac
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC)
-  >- fs[]
-  >- metis_tac[LESS_EQ_TRANS]
-  >- (rw[EVERY_MEM] >> Cases_on `s` >> simp[] >> metis_tac[])
-  >- metis_tac[]
-  >- gvs[]
-  >- (qspecl_then [`prog`, `lo`, `o2pc`, `as.as_pc`,
-                   `execute_plan cpl.cp_initial_fmp ops`] mp_tac
-        asm_block_labels >>
-      impl_tac >- gvs[] >> simp[])
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+  drule_all body_plan_inv_step_reloc >> simp[]
+QED
+
+Theorem body_inv_step_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    ?ops ps' rest'.
+      generate_inst_plan liveness dfg cfg fn inst
+        (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+        (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+        bb.bb_label ps = SOME (ops, ps') /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (SUC k - LENGTH (get_params bb.bb_instructions))
+        (DROP (SUC k - LENGTH (get_params bb.bb_instructions))
+           (non_param_insts bb))
+        ps' = SOME (rest', ps_after) /\
+      rest_ops = ops ++ rest' /\
+      r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+      ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+      EVERY (\s. case s of SOSpill off => off < dimword(:256)
+        | SORestore off => off < dimword(:256) | _ => T) ops /\
+      (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+      asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp ops) /\
+      LENGTH (execute_plan cpl.cp_initial_fmp ops) <= LENGTH prog /\
+      (!lbl j. j < LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+               EL j (execute_plan cpl.cp_initial_fmp ops) = AsmLabel lbl ==>
+               ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                     FLOOKUP o2pc off = SOME (as.as_pc + j))
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule_all body_plan_inv_step_reloc >> strip_tac >>
+  qexistsl_tac [`ops`, `ps'`, `rest'`] >> simp[] >>
+  irule asm_block_at_length >> metis_tac[]
 QED
 
 Theorem body_inv_step:
@@ -1157,10 +1224,91 @@ Theorem body_inv_step:
                ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
                      FLOOKUP o2pc off = SOME (as.as_pc + j))
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
-  qexistsl_tac [`ops`, `ps'`, `rest'`] >> simp[] >>
-  irule asm_block_at_length >> metis_tac[]
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule_all body_inv_step_reloc >> simp[]
+QED
+
+Theorem body_plan_inv_static_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    generated_plan_state_wf_marked spill_base ps /\
+    MEM inst (fn_insts fn) /\ inst_wf inst /\
+    ~is_param_opcode inst.inst_opcode /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) (live_vars_at liveness bb.bb_label (k + 1)) ps)).ps_stack /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+            ~MEM v inst.inst_outputs) /\
+    (inst.inst_opcode = JNZ ==>
+     !cond_op if_nz if_z.
+       inst.inst_operands = [cond_op; Label if_nz; Label if_z] ==>
+       1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] (live_vars_at liveness bb.bb_label (k + 1)) ps)).ps_stack /\
+       (is_var_operand cond_op ==>
+         IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
+         IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
+       cond_op <> dead_stack_marker /\
+       (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker)) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       pending_inventory_wf target_stack ps) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       LENGTH target_stack <=
+         LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack /\
+       EVERY (\op. op <> dead_stack_marker /\
+         !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+         target_stack) /\
+    (inst.inst_opcode = RET ==>
+     !ops ps'.
+       generate_inst_plan liveness dfg cfg fn inst (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+         (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+         bb.bb_label ps = SOME (ops, ps') ==>
+       ps'.ps_stack = []) /\
+    (!j. revert_forward_pair bb k j ==>
+     !k' inst' op.
+       k <= k' /\ get_instruction bb k' = SOME inst' /\
+       MEM op (compute_operands inst') /\ is_var_operand op /\
+       (!k'' inst'' x. k <= k'' /\ k'' < k' /\
+                       get_instruction bb k'' = SOME inst'' /\
+                       op = Var x ==> ~MEM x inst''.inst_outputs) ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!j. revert_forward_pair bb k j ==>
+     !ops ps_end.
+       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
+       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  drule codegen_ready_fn_no_marker >> strip_tac >>
+  match_mp_tac block_plan_state_static >> gvs[] >> metis_tac[]
 QED
 
 Theorem body_plan_inv_static:
@@ -1241,19 +1389,90 @@ Theorem body_plan_inv_static:
          (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
        !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >> unpack_plan_inv >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
-               `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `bb.bb_label`, `bb`,
-               `ps_l`, `ps_dfs`, `ps_dfs_after`, `h`, `promised`,
-               `block_ops`, `ps_after`, `k`, `ps`, `inst`,
-               `live_vars_at liveness bb.bb_label (k + 1)`,
-               `k + 1 < LENGTH bb.bb_instructions /\
-                is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`]
-    mp_tac block_plan_state_static >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      metis_tac[codegen_ready_fn_no_marker]) >>
-  disch_then ACCEPT_TAC
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+  drule_all body_plan_inv_static_reloc >> simp[]
+QED
+
+Theorem body_inv_static_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    generated_plan_state_wf_marked spill_base ps /\
+    MEM inst (fn_insts fn) /\ inst_wf inst /\
+    ~is_param_opcode inst.inst_opcode /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) (live_vars_at liveness bb.bb_label (k + 1)) ps)).ps_stack /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+            ~MEM v inst.inst_outputs) /\
+    (inst.inst_opcode = JNZ ==>
+     !cond_op if_nz if_z.
+       inst.inst_operands = [cond_op; Label if_nz; Label if_z] ==>
+       1 <= LENGTH (SND (emit_input_plan JNZ [cond_op] (live_vars_at liveness bb.bb_label (k + 1)) ps)).ps_stack /\
+       (is_var_operand cond_op ==>
+         IS_SOME (stack_get_depth cond_op ps.ps_stack) \/
+         IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
+       cond_op <> dead_stack_marker /\
+       (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker)) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       pending_inventory_wf target_stack ps) /\
+    (inst.inst_opcode = JMP ==>
+     !target target_bb target_stack.
+       inst.inst_operands = [Label target] /\
+       lookup_block target fn.fn_blocks = SOME target_bb /\
+       target_stack =
+         MAP Var (input_vars_from bb.bb_label target_bb.bb_instructions
+                    (live_vars_at liveness target 0)) ==>
+       LENGTH target_stack <=
+         LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack /\
+       EVERY (\op. op <> dead_stack_marker /\
+         !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+         target_stack) /\
+    (inst.inst_opcode = RET ==>
+     !ops ps'.
+       generate_inst_plan liveness dfg cfg fn inst (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+         (k + 1 < LENGTH bb.bb_instructions /\
+         is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+         bb.bb_label ps = SOME (ops, ps') ==>
+       ps'.ps_stack = []) /\
+    (!j. revert_forward_pair bb k j ==>
+     !k' inst' op.
+       k <= k' /\ get_instruction bb k' = SOME inst' /\
+       MEM op (compute_operands inst') /\ is_var_operand op /\
+       (!k'' inst'' x. k <= k'' /\ k'' < k' /\
+                       get_instruction bb k'' = SOME inst'' /\
+                       op = Var x ==> ~MEM x inst''.inst_outputs) ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!j. revert_forward_pair bb k j ==>
+     !ops ps_end.
+       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
+       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule_all body_plan_inv_static_reloc >> disch_then ACCEPT_TAC
 QED
 
 Theorem body_inv_static:
@@ -1334,8 +1553,25 @@ Theorem body_inv_static:
          (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
        !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule_all body_plan_inv_static >> disch_then ACCEPT_TAC
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule_all body_inv_static_reloc >> simp[]
+QED
+
+Theorem body_plan_inv_equiv_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    !op at. MEM op (compute_operands inst) /\
+            (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+             MEM at (compute_operands inst)) /\
+            operand_equiv dfg op at ==>
+            operand_val (frame_view fn ra vs) lo op =
+            operand_val (frame_view fn ra vs) lo at
+Proof
+  strip_tac >> drule_all body_plan_inv_static_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  match_mp_tac owned_operand_equiv >> gvs[] >> gvs[]
 QED
 
 Theorem body_plan_inv_equiv:
@@ -1351,11 +1587,25 @@ Theorem body_plan_inv_equiv:
             operand_val (frame_view fn ra vs) lo op =
             operand_val (frame_view fn ra vs) lo at
 Proof
-  strip_tac >> drule_all body_plan_inv_static >> strip_tac >> unpack_plan_inv >>
-  qspecl_then [`compute_operands inst`, `ps`, `fn`, `ra`, `vs`, `lo`, `dfg`]
-    mp_tac owned_operand_equiv >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+  drule body_plan_inv_equiv_reloc >> simp[]
+QED
+
+Theorem body_inv_equiv_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst ==>
+    !op at. MEM op (compute_operands inst) /\
+            (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+             MEM at (compute_operands inst)) /\
+            operand_equiv dfg op at ==>
+            operand_val (frame_view fn ra vs) lo op =
+            operand_val (frame_view fn ra vs) lo at
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule body_plan_inv_equiv_reloc >> simp[]
 QED
 
 Theorem body_inv_equiv:
@@ -1371,8 +1621,23 @@ Theorem body_inv_equiv:
             operand_val (frame_view fn ra vs) lo op =
             operand_val (frame_view fn ra vs) lo at
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule body_plan_inv_equiv >> simp[]
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule body_inv_equiv_reloc >> simp[]
+QED
+
+Theorem body_plan_inv_not_in_rf_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    (!j. ~revert_forward_pair bb k j) ==>
+    ~in_revert_forward fn vs
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >> unpack_plan_inv_reloc >>
+  simp[in_revert_forward_def, revert_forward_at_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!i j. revert_forward_pair _ _ _ ==> _` drule >>
+  fs[revert_forward_pair_def]
 QED
 
 Theorem body_plan_inv_not_in_rf:
@@ -1383,11 +1648,20 @@ Theorem body_plan_inv_not_in_rf:
     (!j. ~revert_forward_pair bb k j) ==>
     ~in_revert_forward fn vs
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >> unpack_plan_inv >>
-  simp[in_revert_forward_def, revert_forward_at_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!i j. revert_forward_pair _ _ _ ==> _` drule >>
-  fs[revert_forward_pair_def]
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >> strip_tac >>
+  drule body_plan_inv_not_in_rf_reloc >> simp[]
+QED
+
+Theorem body_inv_not_in_rf_reloc:
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+      ra pc_ret rest mem0 /\
+    (!j. ~revert_forward_pair bb k j) ==>
+    ~in_revert_forward fn vs
+Proof
+  strip_tac >> drule body_inv_plan_reloc >> strip_tac >>
+  drule body_plan_inv_not_in_rf_reloc >> simp[]
 QED
 
 Theorem body_inv_not_in_rf:
@@ -1398,8 +1672,8 @@ Theorem body_inv_not_in_rf:
     (!j. ~revert_forward_pair bb k j) ==>
     ~in_revert_forward fn vs
 Proof
-  strip_tac >> drule body_inv_plan >> strip_tac >>
-  drule body_plan_inv_not_in_rf >> simp[]
+  pure_rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
+  drule body_inv_not_in_rf_reloc >> simp[]
 QED
 
 Theorem body_inv_memory:
