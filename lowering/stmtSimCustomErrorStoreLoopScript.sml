@@ -236,7 +236,9 @@ Resume custom_error_store_args_sim_using_head[step]:
         simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
         disch_then (qspecl_then [`cx`, `st0`, `H`] mp_tac) >>
         asm_rewrite_tac[]) >>
-     metis_tac[]) >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\ _`
+       (qspec_then `H` (ACCEPT_TAC o CONJUNCT1 o UNDISCH))) >>
   `?ht tt. evaluate_type (get_tenv cx) (expr_type h) = SOME ht /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tt /\
     tvs = ht::tt` by fs[] >> gvs[] >>
