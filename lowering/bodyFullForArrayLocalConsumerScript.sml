@@ -23,6 +23,19 @@ val _ = Parse.hide "cond";
 val _ = Parse.hide "start";
 val _ = Parse.hide "finish";
 
+(* Non-logical diagnostic: prints the live sequent and its free-variable types.
+   suspend retains the obligation; no theorem is admitted or finalised. *)
+fun capture_goal name (g as (asl,w)) =
+  (print ("\nCAPTURE-BEGIN " ^ name ^ "\n");
+   List.app (fn v => print (fst (dest_var v) ^ " : " ^
+                            Parse.type_to_string (type_of v) ^ "\n"))
+            (free_varsl (w::asl));
+   print "ASSUMPTIONS\n";
+   List.app (fn a => print (Parse.term_to_string a ^ "\n;\n")) asl;
+   print ("CONCLUSION\n" ^ Parse.term_to_string w ^
+          "\nCAPTURE-END " ^ name ^ "\n");
+   suspend ("capture_" ^ name) g);
+
 val fixed_entry_contract = ``
   compile_alloc_buffer sz sa = (buf,sb) /\ buf.buf_operand = Var p /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1276,15 +1289,14 @@ Resume body_for_local_array_full_from_contracts[dynamic_staged_static]:
      rpt strip_tac >> gvs[] >>
      fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   qexistsl_tac [`bc`,`p`,`idx`,`dv`,`ov`,`tot`,`ep`,`nv`,`Var lv`,
-    `cond`,`bod`,`incr`,`exit`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
+    `cond`,`incr`,`sa`,`sb0`,`sb1`,`sj`,`ainst`,
     `start.cs_next_id + 8`,`start.cs_next_id + 9`,
     `start.cs_next_id + 10`,`start.cs_next_id + 11`,`start.cs_next_id + 12`,
     `sj.cs_next_id`,`sj.cs_next_id + 1`,`sj.cs_next_id + 2`,
     `st1`,`st1 with cs_next_var := st1.cs_next_var + 1`] >>
   fs[elem_size_in_location_def,is_slot_addressed_def,Abbr `ainst`,mk_inst_def,
      ALL_DISTINCT] >>
-  conj_tac >-
-    (qpat_x_assum `MEM _ (fn_insts func)` mp_tac >> simp[]) >>
+  conj_tac >- suspend "capture_dynamic_copy" >>
   conj_tac >- suspend "dynamic_init" >> suspend "dynamic_static"
 QED
 
@@ -1320,12 +1332,15 @@ Resume body_for_local_array_full_from_contracts[fixed_static]:
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_static]:
+  capture_goal "dynamic-static"
+  (* Preserved unfinished static proof:
   map_every (fn label => asm_x label kall_tac)
     ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
      "body_outcome","handler","entry"] >>
   simp[exprSimCopyTheory.copy_old_operand_def] >>
-  conj_tac >-
-    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+  conj_tac >- suspend "capture_dynamic_bound_fresh" >>
+  (* Diagnostic capture only: remaining static fields are not yet discharged. *)
+  reverse conj_tac >- suspend "capture_dynamic_static_fields" >>
   qspecl_then [`sb0`,`sb1`,`func`] mp_tac fn_has_code_start >>
   (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `isPREFIX _ _` mp_tac >>
@@ -1337,6 +1352,7 @@ Resume body_for_local_array_full_from_contracts[dynamic_static]:
   qexists_tac `l` >>
   qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
   simp[basic_block_component_equality]
+  *)
 QED
 
 Resume body_for_local_array_full_from_contracts[fixed_init]:
@@ -1446,7 +1462,7 @@ Resume body_for_local_array_full_from_contracts[fixed_init]:
         rpt (pop_assum kall_tac) >> decide_tac),
        (simp[NoAsms] >> first_assum ACCEPT_TAC),
        (qexists_tac `H` >> first_assum ACCEPT_TAC),
-       FAIL_TAC "fixed-residual"]) >> strip_tac >>
+       capture_goal "fixed-residual" (* original: FAIL_TAC "fixed-residual" *)]) >> strip_tac >>
   qexistsl_tac [`arr_base`,`dst`,`cc`,`Gentry`,`tnentry`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `H'` >> disch_tac >> conj_tac
@@ -1487,7 +1503,7 @@ Resume body_for_local_array_full_from_contracts[fixed_init]:
        rpt (pop_assum kall_tac) >> simp[ADD_COMM] >> NO_TAC),
     (qpat_assum `w2n dst + type_memory_size tv <= _` mp_tac >>
        rpt (pop_assum kall_tac) >> simp[ADD_COMM] >> NO_TAC),
-    FAIL_TAC "head-leaf"]
+    capture_goal "head-leaf" (* original: FAIL_TAC "head-leaf" *)]
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_init]:
@@ -1964,22 +1980,22 @@ Resume body_for_local_array_full_from_contracts[common_round_body]:
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[stmtSimPropsTheory.compile_stmts_env,pairTheory.SND]) >>
   qpat_x_assum `sb_body = sb1` SUBST_ALL_TAC >>
-  FAIL_TAC "body-shadow-packet"
+  capture_goal "body-shadow-packet" (* original: FAIL_TAC "body-shadow-packet" *)
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
-  FAIL_TAC "initialized-loop-suffix"
+  capture_goal "initialized-loop-suffix" (* original: FAIL_TAC "initialized-loop-suffix" *)
 QED
 
 (* The original typed-entry diagnostic is retained behind the external
    interface-approval gate; common-loop work does not use a changed cut. *)
 Resume body_for_local_array_full_from_contracts[dynamic_entry_pending]:
   asm "dynamic_entry" match_mp_tac >> simp[mk_inst_def] >>
-  FAIL_TAC "dynamic-entry-premises"
+  capture_goal "dynamic-entry-premises" (* original: FAIL_TAC "dynamic-entry-premises" *)
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_init_after_entry]:
-  FAIL_TAC "dynamic-entry-apply"
+  capture_goal "dynamic-entry-apply" (* original: FAIL_TAC "dynamic-entry-apply" *)
 QED
 
 Finalise body_for_local_array_full_from_contracts
