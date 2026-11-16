@@ -6,6 +6,7 @@ Ancestors
   o1SafeUpto dftGasInvForwardActive stepWriteFootprintBase
   dftFinitePacketReachability dftGasFromListLookup dftContractGas
   dftPacketRootedAlignment dftPacketRefinementBoundary
+  dftPacketNativeContinuation dftPacketNativeSlice
 
 (* Retained native DFT packet and the semantic suspended callers. *)
 Definition dft_focus_packet_rel_def:
@@ -785,7 +786,11 @@ Proof
   >- (drule_all dft_packet_cut_mem_inv >> simp[]) >>
   `active_inst sf inst u` by metis_tac[raw_reachable_active] >>
   `wf_function sf` by metis_tac[dft_fn_rel_def] >>
-  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM, MEM_APPEND] >>
+  `MEM inst bb.bb_instructions` by
+    (qpat_x_assum `q < LENGTH xs` mp_tac >>
+     qpat_x_assum `EL q xs = inst` mp_tac >>
+     qpat_x_assum `bb.bb_instructions = ps ++ xs` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[EL_MEM, MEM_APPEND]) >>
   `u.vs_current_bb = bb.bb_label` by
     (qpat_assum `wf_function sf` mp_tac >>
      qpat_assum `active_inst sf inst u` mp_tac >>
@@ -1802,6 +1807,175 @@ Proof
   `ALL_DISTINCT (MAP FST (trace_blocks [] 0 N C8 root_tf root_entry))` by
     (irule (cj 3 dftGasFromListTraceNamesTheory.trace_names_distinct) >> simp[]) >>
   drule_all dft_packet_trace_prefix_fresh >> simp[]
+QED
+
+Theorem dft_packet_body_native_data[local]:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d stk PG G tn fn inst s oms om hs h raw_slots sites unused
+    bb bt ps xs ys rho in_state h0 be hbe count.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) ==>
+  bt.bb_instructions = ps ++ ys /\ be.vs_inst_idx = LENGTH ps /\
+  hbe <= j /\ j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\
+  EL hbe (trace_blocks [] 0 N C8 root_tf root_entry) =
+    ((p,d,(HD ys).inst_id),fn,HD ys,be) /\
+  lookup_block be.vs_current_bb fn.fn_blocks = SOME bt /\
+  bb_well_formed bt /\
+  ALL_DISTINCT (MAP FST (trace_blocks [] 0 N C8 root_tf root_entry)) /\
+  FOLDR (dft_exec_cons (N-d) C8) OK (TAKE count ys) be = OK s
+Proof
+  rpt gen_tac >> strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==> _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts p = SOME (sf,_,_,_,_,NONE,NONE)` mp_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` mp_tac >>
+  qpat_x_assum `LIST_REL (\f g. g = dft_fn f) _ _` mp_tac >>
+  qpat_x_assum `LIST_REL dft_fn_rel _ _` mp_tac >>
+  qpat_x_assum `o1_ctx_shape C8` mp_tac >>
+  qpat_x_assum `lookup_function nm C8.ctx_functions = SOME root_tf` mp_tac >>
+  qpat_x_assum `j' < LENGTH _` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = _` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >> gvs[] >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==> _` drule >> strip_tac >>
+  qpat_x_assum `case SOME (be,hbe) of _ => _ | _ => _` mp_tac >>
+  simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` drule >> strip_tac >>
+  `MEM fn C8.ctx_functions` by
+    (qpat_x_assum `LIST_REL (\f g. g = dft_fn f) _ _` mp_tac >>
+     qpat_x_assum `MEM sf C7.ctx_functions` mp_tac >>
+     qpat_x_assum `fn = dft_fn sf` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_all LIST_REL_MEM_IMP >> simp[] >> metis_tac[]) >>
+  `wf_function fn` by
+    (qpat_assum `o1_ctx_shape C8` mp_tac >>
+     qpat_assum `MEM fn C8.ctx_functions` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[o1_ctx_shape_wf_functions, EVERY_MEM]) >>
+  `MEM bt fn.fn_blocks` by
+    (qpat_assum `lookup_block bb.bb_label fn.fn_blocks = SOME bt` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[venomExecPropsTheory.FIND_MEM, venomInstTheory.lookup_block_def]) >>
+  `bb_well_formed bt` by metis_tac[venomWfTheory.wf_function_def] >>
+  `EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id)
+    bb.bb_instructions)) f.fn_blocks) C8.ctx_functions` by
+    metis_tac[dft_ctx_block_ids_distinct] >>
+  `MEM root_tf C8.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+    root_tf.fn_blocks` by
+    (qpat_x_assum `EVERY _ C8.ctx_functions` mp_tac >>
+     pure_rewrite_tac [EVERY_MEM] >> disch_then (qspec_then `root_tf` mp_tac) >> simp[]) >>
+  `ALL_DISTINCT (MAP FST (trace_blocks [] 0 N C8 root_tf root_entry))` by
+    (irule (cj 3 dftGasFromListTraceNamesTheory.trace_names_distinct) >> simp[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_packet_body_native_slice:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d stk PG G tn fn inst s oms om hs h raw_slots sites unused
+    bb bt ps xs ys rho in_state h0 be hbe count fuel post t.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+  SUC count < LENGTH ys /\ inst = EL count ys /\
+  s.vs_inst_idx = LENGTH ps + count /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\ step_inst fuel C8 inst s = OK post /\
+  t = post with vs_inst_idx := SUC s.vs_inst_idx /\
+  SUC j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\
+  EL (SUC j) (trace_blocks [] 0 N C8 root_tf root_entry) =
+    ((p,d,(EL (SUC count) ys).inst_id),fn,EL (SUC count) ys,t) ==>
+  TAKE (SUC j) (trace_blocks [] 0 N C8 root_tf root_entry) =
+    TAKE hbe (trace_blocks [] 0 N C8 root_tf root_entry) ++
+    trace_block p d (N-d) C8 fn
+      (bt with bb_instructions := TAKE (LENGTH ps + SUC count) bt.bb_instructions) be
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dft_packet_body_native_data >> strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel` kall_tac >>
+  rename1 `SUC m < LENGTH ys` >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE (SUC m) ys)` by
+    (qpat_assum `bb_well_formed bt` mp_tac >>
+     qpat_assum `bt.bb_instructions = ps ++ ys` mp_tac >>
+     qpat_assum `SUC m < LENGTH ys` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[venomWfTheory.bb_well_formed_def] >>
+     simp[EVERY_EL, EL_TAKE] >> rpt strip_tac >>
+     qpat_x_assum `!i. i < _ /\ is_terminator _ ==> _`
+       (qspec_then `LENGTH ps + n` mp_tac) >>
+     simp[EL_APPEND2] >> decide_tac) >>
+  `step_inst (N-d) C8 inst s = OK post` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  `FOLDR (dft_exec_cons (N-d) C8) OK (TAKE (SUC m) ys) be = OK t` by
+    (`TAKE (SUC m) ys = TAKE m ys ++ [inst]` by
+       simp[TAKE_SUC_BY_TAKE, SNOC_APPEND] >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE m ys)` by
+       gvs[EVERY_APPEND] >>
+     asm_rewrite_tac[FOLDR_APPEND] >>
+     drule dftRunRelTheory.dft_exec_prefix_continue >>
+     disch_then assume_tac >> simp[] >>
+     qpat_assum `inst = _` mp_tac >>
+     qpat_assum `s.vs_inst_idx = _` mp_tac >>
+     qpat_assum `~is_terminator inst.inst_opcode` mp_tac >>
+     qpat_assum `step_inst (N-d) C8 inst s = OK post` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  `hbe < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry)` by decide_tac >>
+  `?rest. trace_blocks [] 0 N C8 root_tf root_entry =
+      TAKE hbe (trace_blocks [] 0 N C8 root_tf root_entry) ++
+      trace_block p d (N-d) C8 fn bt be ++ rest` by
+    (qpat_assum `hbe < LENGTH _` mp_tac >>
+     qpat_assum `EL hbe _ = _` mp_tac >>
+     qpat_assum `lookup_block be.vs_current_bb fn.fn_blocks = SOME bt` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_all native_trace_blocks_continuation >> strip_tac >> gvs[] >>
+     metis_tac[TAKE_DROP, APPEND_ASSOC]) >>
+  `t.vs_inst_idx = be.vs_inst_idx + SUC m` by simp[] >>
+  `get_instruction bt t.vs_inst_idx = SOME (EL (SUC m) ys)` by
+    simp[venomInstTheory.get_instruction_def, EL_APPEND2] >>
+  `be.vs_inst_idx + SUC m <= LENGTH bt.bb_instructions` by simp[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (TAKE (SUC m) (DROP be.vs_inst_idx bt.bb_instructions))` by simp[DROP_LENGTH_APPEND] >>
+  `FOLDR (dft_exec_cons (N-d) C8) OK
+    (TAKE (SUC m) (DROP be.vs_inst_idx bt.bb_instructions)) be = OK t` by simp[DROP_LENGTH_APPEND] >>
+  `hbe <= LENGTH (trace_blocks [] 0 N C8 root_tf root_entry)` by decide_tac >>
+  drule_all native_trace_embedded_prefix_cut >> simp[]
+QED
+
+Theorem dft_packet_body_target_observations:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d stk PG G tn fn inst s oms om hs h raw_slots sites unused
+    bb bt ps xs ys rho in_state h0 be hbe count fuel post t.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+  SUC count < LENGTH ys /\ inst = EL count ys /\
+  s.vs_inst_idx = LENGTH ps + count /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\ step_inst fuel C8 inst s = OK post /\
+  t = post with vs_inst_idx := SUC s.vs_inst_idx /\
+  SUC j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\
+  EL (SUC j) (trace_blocks [] 0 N C8 root_tf root_entry) =
+    ((p,d,(EL (SUC count) ys).inst_id),fn,EL (SUC count) ys,t) ==>
+  EVERY (\kw. MEM kw (trace_gas (TAKE (SUC j)
+      (trace_blocks [] 0 N C8 root_tf root_entry))))
+    (trace_gas (trace_block p d (N-d) C8 fn
+      (bt with bb_instructions := TAKE (LENGTH ps + SUC count) bt.bb_instructions) be))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dft_packet_body_native_slice >> disch_then SUBST1_TAC >>
+  simp[dftGasFromListReadingsTheory.trace_gas_append, EVERY_MEM]
 QED
 
 Theorem dft_packet_fresh_pair_none[local]:
