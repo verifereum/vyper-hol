@@ -4,7 +4,7 @@ Ancestors
   abiBuiltinDecodeHeader abiBuiltinLengthGuard abiBuiltinBoundTests
   bodyPtrBopScalarSeq bodyPtrBopScalarCompile
   emitHelperProps exprLoweringProps compileEnv emitHelper freshWrites
-  venomInst list rich_list pred_set
+  venomInst list rich_list pred_set loweringStateRelDefs
 
 Theorem abi_decode_caller_length_guard_scalar:
   abi_builtin_length_guard len mn mx sa = ((),sb) /\ len IN A /\
@@ -21,5 +21,7 @@ Proof
   pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, bop_scalar_seq_def, mk_inst_def] >>
   simp[SUBSET_DEF] >>
-  gvs[not_fresh_at_def] >> metis_tac[]
+  gvs[not_fresh_at_def, IN_INSERT, SUBSET_DEF] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD,
+    arithmeticTheory.LESS_EQ_TRANS]
 QED
