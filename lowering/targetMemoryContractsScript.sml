@@ -30,7 +30,7 @@ QED
 (* Even a zero-capacity dynamic array has a length word.  In particular
    the counted header load does not require a nonempty source array. *)
 Theorem target_memory_dynamic_header_frontier:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc
     (Type (ArrayT ety (Dynamic cap))) /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -58,7 +58,7 @@ QED
 (* Representative memory-touching subscript suffix: the dynamic local
    length load, with both allocation outputs retained. *)
 Theorem target_memory_dynamic_header_path_mem:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc
     (Type (ArrayT ety (Dynamic cap))) /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -72,7 +72,7 @@ Theorem target_memory_dynamic_header_path_mem:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
     eval_operand len u = SOME (n2w (array_length (ArrayTV etv (Dynamic cap)) av)) /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
