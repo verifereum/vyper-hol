@@ -207,7 +207,8 @@ Theorem extcall_request_oracle_core_initial_domain:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
     calldata has_default default_op default_ty default_opt ee t /\
-  take_call_outcome target calldata value_opt ee = (INL (rq,oc),consumed) /\
+  frame_call_value cx value_opt ee = (INL framed_value,ee) /\
+  take_call_outcome target calldata framed_value ee = (INL (rq,oc),consumed) /\
   storage_trace_domain cx st0 ee.storage_trace /\
   inst.inst_outputs = [out] ==>
   ?aw vw ao az ro gas u.
@@ -376,7 +377,7 @@ Theorem extcall_request_structural_frame:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
     calldata has_default default_op default_ty default_opt ee t /\
-  take_call_outcome target calldata value_opt ee = (INL (rq,oc),consumed) /\
+  take_call_outcome target calldata framed_value ee = (INL (rq,oc),consumed) /\
   valid_horizon cx st0 H (SND (adopt_call_outcome rq oc consumed)).storage_trace /\
   state_rel H func cenv cx (SND (adopt_call_outcome rq oc consumed))
     (update_var out word u) /\
