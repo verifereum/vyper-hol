@@ -45,6 +45,64 @@ Theorem body_annassign_word_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `assignable_type env.type_defs typ` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_full_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `expr_type e = typ` by
+    (irule type_widens_to_word >> simp[] >>
+     qexists_tac `env.type_defs` >>
+     gvs[type_stmt_def, AllCaseEqs()]) >>
+  `well_typed_expr env e /\ id NOTIN FDOM env.var_types` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule bodySimDeclCasesTheory.declared_name_unbound >> metis_tac[]) >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `declare_local cenv id typ sa` >> rename1 `declare_local _ _ _ _ = (ce,r)` >>
+  `ce = cenv' /\ compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sb)` by
+    (qpat_x_assum `stmt_env cenv _ _ _ sa = _` mp_tac >>
+     simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_return_def,
+          comp_ignore_bind_def] >>
+     Cases_on `compile_stmt ce lctx ret_ty (AnnAssign id typ e) r` >>
+     simp[] >> Cases_on `q` >> simp[]) >>
+  gvs[] >>
+  drule_all annassign_declared_rhs_pre_ptr >> strip_tac >>
+  drule_all annassign_word_full_declared_layout >> strip_tac >>
+  Cases_on `declare_local cenv id (expr_type e) shadow_sa` >>
+  rename1 `declare_local _ _ _ shadow_sa = (shadow_ce,shadow_r)` >>
+  `shadow_ce = ce /\ gas_shadow_state r shadow_r` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv`, `id` |-> `id`, `ty` |-> `expr_type e`]
+       gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local) >>
+     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+  gvs[] >>
+  `compile_stmt ce lctx ret_ty (AnnAssign id (expr_type e) (gas_shadow_expr e))
+     shadow_r = ((),shadow_sb)` by
+    (qpat_x_assum `stmt_env cenv _ _ _ shadow_sa = _` mp_tac >>
+     simp[stmt_env_def, declare_stmt_local_def, gas_shadow_stmt_def,
+          comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+     Cases_on `compile_stmt ce lctx ret_ty
+       (AnnAssign id (expr_type e) (gas_shadow_expr e)) shadow_r` >>
+     simp[] >> Cases_on `q` >> simp[]) >>
+  `fn_has_code shadow_r shadow_sb shadow_func` by
+    (drule_all stmtSimPropsTheory.declare_local_ptr >> strip_tac >>
+     fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def]) >>
+  drule_all (SRULE [] (Q.INST [`typ` |-> `expr_type e`, `sz` |-> `32`]
+    annassign_word_full_shadow_parts)) >> strip_tac >>
   cheat
 QED
 
