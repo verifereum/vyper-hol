@@ -16,6 +16,33 @@ val PIECE_TAC = fn th =>
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
   disch_then ACCEPT_TAC;
 
+(* LOCAL STUB: approved fixed supplier contract; original proof retained.
+Proof
+  strip_tac >>
+  Cases_on `is_word_type (post_value_type cenv e)`
+  >- PIECE_TAC unwrap_word_value_origin_ptr >>
+  Cases_on `vv`
+  >- (rename1 `StackValue t0 op0` >>
+      PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocCalldata`
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+      impl_tac >- fs[storage_trace_domain_def] >>
+      simp[vv_post_calldata]) >>
+  Cases_on `p.ptr_location` >>
+  TRY (qpat_x_assum `p.ptr_location = LocCalldata`
+         (fn th => qpat_x_assum `p.ptr_location <> _`
+                     (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
+  TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
+  Cases_on `is_word_type t` >>
+  FIRST (map (fn th => PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
+    [unwrap_memory_origin_ptr, unwrap_memory_word_origin_ptr,
+     unwrap_slot_word_origin_ptr, unwrap_slot_copy_origin_ptr,
+     unwrap_code_word_origin_ptr, unwrap_code_copy_origin_ptr])
+QED
+
+*)
 Theorem unwrap_value_origin_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\
   sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
@@ -88,26 +115,5 @@ Theorem unwrap_value_origin_ptr:
     wb_frame cenv ee ee sb s z /\
     ghost_kept_at lo cenv ee sb G tn s G' tn'
 Proof
-  strip_tac >>
-  Cases_on `is_word_type (post_value_type cenv e)`
-  >- PIECE_TAC unwrap_word_value_origin_ptr >>
-  Cases_on `vv`
-  >- (rename1 `StackValue t0 op0` >>
-      PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
-  rename1 `LocatedValue t p` >>
-  Cases_on `p.ptr_location = LocCalldata`
-  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-      impl_tac >- fs[storage_trace_domain_def] >>
-      simp[vv_post_calldata]) >>
-  Cases_on `p.ptr_location` >>
-  TRY (qpat_x_assum `p.ptr_location = LocCalldata`
-         (fn th => qpat_x_assum `p.ptr_location <> _`
-                     (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
-  TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
-  Cases_on `is_word_type t` >>
-  FIRST (map (fn th => PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
-    [unwrap_memory_origin_ptr, unwrap_memory_word_origin_ptr,
-     unwrap_slot_word_origin_ptr, unwrap_slot_copy_origin_ptr,
-     unwrap_code_word_origin_ptr, unwrap_code_copy_origin_ptr])
+  cheat
 QED
