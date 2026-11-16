@@ -11,6 +11,8 @@ Ancestors
   supportedStmts supportedStmtTraverse valueEncoding exprSimAggregateLayout
   exprSimHypsDefs loweringPosts bodyPtrDefs finite_map list words
   gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
+  stmtSimForArray stmtSimForArrayFrag
+  vyperStorageTrace exprSimProps vyperTypeValues vyperTypeInvariants
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "cond";
@@ -482,6 +484,82 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   rename1 `For id typ _ n stmts` >>
   `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
+  `?ent tv ap az av vs env_b.
+    env' = env /\
+    FLOOKUP env.var_types name = SOME (ArrayT typ bd) /\
+    id NOTIN FDOM env.var_types /\
+    iterator_unmodified (Array (Name (ArrayT typ bd) name)) stmts /\
+    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
+    supported_stmts tops bindings stmts /\
+    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+    lookup_scopes name es.scopes = SOME ent /\
+    evaluate_type (get_tenv cx) typ = SOME tv /\
+    ent.type = ArrayTV tv bd /\ value_has_type ent.type ent.value /\
+    well_formed_type_value ent.type /\ ent.value = ArrayV av /\
+    vs = array_elements ent.type av /\ LENGTH vs <= n /\
+    LENGTH vs < dimword (:256) /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az) /\
+    (!gs. eval_iterator cx (Array (Name (ArrayT typ bd) name))
+       (es with gas_obs := gs) = (INL (MAP Value vs),es with gas_obs := gs)) /\
+    body_for_full_ok cx tv id stmts (MAP Value vs) /\
+    FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE`
+    by suspend "source_packet" >>
+  gvs[] >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[evaluate_storage_trace_frame] >> strip_tac >>
+  suspend "runtime"
+QED
+
+Resume body_for_local_array_full_from_contracts[source_packet]:
+  Cases_on `bd`
+  >- (rename1 `Fixed m` >>
+      `m = n` by fs[supported_stmt_def,supported_iterator_def] >> gvs[] >>
+      drule array_for_hypotheses >> disch_then drule >> simp[] >> strip_tac >> gvs[] >>
+      drule_all array_name_local_binding >> strip_tac >>
+      rename1 `lookup_scopes name es.scopes = SOME ent` >>
+      rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
+      `?al. ent.value = ArrayV (SArrayV al)` by
+        (Cases_on `ent.value` >> gvs[value_has_type_def] >>
+         rename1 `value_has_type _ (ArrayV av)` >> Cases_on `av` >>
+         gvs[value_has_type_def]) >>
+      `evaluate_type (get_tenv cx) (ArrayT typ (Fixed n)) =
+        SOME (ArrayTV tv (Fixed n))` by
+        (fs[expr_sim_inv_def,well_typed_expr_def,env_consistent_def,
+            env_scopes_consistent_def] >> metis_tac[]) >>
+      `!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
+         (es with gas_obs := gs) =
+         (INL (MAP Value (array_elements (ArrayTV tv (Fixed n)) (SArrayV al))),
+          es with gas_obs := gs)` by
+        (gen_tac >> irule eval_iterator_fixed_name >> simp[]) >>
+      qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
+      `LENGTH vs = n` by simp[Abbr `vs`,fixed_array_elements_length] >>
+      `body_for_full_ok cx tv id stmts (MAP Value vs)` by
+        (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
+         simp[lift_option_type_def,return_def,check_def,assert_def,
+              compatible_bound_def] >> disch_then irule >> simp[] >>
+         qexistsl_tac [`es with gas_obs := []`,`es with gas_obs := []`] >> simp[]) >>
+      `FLOOKUP env.var_types name = SOME (ArrayT typ (Fixed n))` by
+        fs[well_typed_expr_def] >>
+      `FLOOKUP cenv.ce_vars id = NONE` by
+        (Cases_on `FLOOKUP cenv.ce_vars id` >> gvs[bodySimTheory.ce_locals_declared_def] >>
+         metis_tac[]) >>
+      `lookup_scopes id es.scopes = NONE` by
+        (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+         gvs[expr_sim_inv_def,env_consistent_def,env_scopes_consistent_def] >>
+         res_tac >> gvs[FLOOKUP_DEF]) >>
+      qexistsl_tac [`ent`,`tv`] >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexists_tac `SArrayV al` >> gvs[Abbr `vs`]) >>
+  suspend "dynamic_source"
+QED
+
+Resume body_for_local_array_full_from_contracts[dynamic_source]:
+  FAIL_TAC "dynamic-source"
+QED
+
+Resume body_for_local_array_full_from_contracts[runtime]:
   FAIL_TAC "local-consumer-runtime"
 QED
+
+Finalise body_for_local_array_full_from_contracts
