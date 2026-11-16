@@ -7,6 +7,8 @@ Ancestors
   (* property statements and proofs *)
   bodyFullExtCallRequestOperands
   bodyMemStorageCopyStage
+  loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
+  loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
