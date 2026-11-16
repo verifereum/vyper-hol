@@ -16,7 +16,7 @@ Proof
   Cases_on `signed` >> simp[mk_inst_def, is_terminator_def]
 QED
 
-Theorem exact_scalar_clamp_abort_joint[local]:
+Theorem exact_scalar_clamp_abort_joint:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\
   op_prov G value = NONE /\ op_taint tn value = {} /\
   (!x. x IN R ==> not_fresh_at sa x) /\
