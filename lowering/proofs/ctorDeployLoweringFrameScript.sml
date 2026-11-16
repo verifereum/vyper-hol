@@ -43,6 +43,11 @@ QED
 
 Theorem deploy_ctor_oracle_storage:
   deploy_state_rel tops deploy_bc am tx es /\
+  EVERY (\co.
+    contract_storage_well_formed (deploy_evaluation_context tops am tx)
+      (initial_state (am with <|accounts := co.co_accounts;
+                                tStorage := co.co_tStorage|>) []))
+    (MAP SND (call_trace es)) /\
   gas_variant vs (deploy_entry_state prog cplan tops es) ==>
   oracle_storage_ok (deploy_evaluation_context tops am tx)
     (es0 with outcomes := SOME vs.vs_outcomes)
@@ -494,7 +499,7 @@ QED
 
 Theorem deploy_frame_source_start_setup:
   !tops am tx mut nr body am_c es0 deploy_bc es.
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?deploy_art runtime_art args env_body env_after.
@@ -578,6 +583,9 @@ QED
 Theorem deploy_frame_start_storage:
   !tops am tx mut nr stmts am_c es0 deploy_bc es.
     deploy_source_ok tops am tx /\
+    storage_layout_safe (deploy_evaluation_context tops am tx) /\
+    contract_storage_well_formed (deploy_evaluation_context tops am tx)
+      (initial_state am []) /\
     deploy_state_rel tops deploy_bc am tx es /\
     deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
     storage_layout_safe (deploy_evaluation_context tops am tx) /\
@@ -587,7 +595,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >> gvs[] >>
   drule deploy_frame_ctor_start_scopes >> strip_tac >>
-  gvs[deploy_source_ok_def, deploy_storage_ok_def, deploy_ctor_start_def] >>
+  gvs[deploy_source_ok_def, deploy_ctor_start_def] >>
   qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
   simp[lock_if_nr_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
@@ -601,7 +609,7 @@ QED
 
 Theorem deploy_frame_semantic_setup:
   !tops am tx mut nr stmts am_c es0 deploy_bc es vs prog cplan.
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   deploy_state_rel tops deploy_bc am tx es /\
   call_outcomes_ok am tx (MAP SND (call_trace es)) /\
@@ -634,17 +642,13 @@ Theorem deploy_frame_semantic_setup:
     accounts_well_typed es0.accounts /\
     context_well_typed (deploy_evaluation_context tops am tx) /\
     functions_well_typed (deploy_evaluation_context tops am tx) /\
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    contract_storage_well_formed (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) /\
     popped_keys_indexed es0.scopes /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-    oracle_storage_ok (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes)
+    outcomes_accounts_typed (SOME vs.vs_outcomes)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
-  drule_all deploy_frame_start_storage >> strip_tac >>
+  `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >> gvs[] >>
+  drule deploy_frame_ctor_start_scopes >> strip_tac >>
   `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
@@ -654,14 +658,8 @@ Proof
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by
     metis_tac[deploy_frame_outcomes_accounts_typed] >>
-  `oracle_storage_ok (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes)` by
-    (irule deploy_ctor_oracle_storage >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any)) >>
   qexistsl [`deploy_art`, `runtime_art`, `args`, `bindings`, `env_body`, `env_after`] >>
-  simp[] >> conj_tac >- metis_tac[] >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `es0` >> simp[]
+  simp[] >> metis_tac[]
 QED
 
 Theorem deploy_frame_register_static_fields:
