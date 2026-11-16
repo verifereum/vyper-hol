@@ -689,8 +689,8 @@ Proof
   irule bodyPtrBopScalarSeqTheory.bop_inst_seq_ptr_append >> simp[] >> qexistsl_tac [`H`,`th`] >>
   simp[] >> once_rewrite_tac[ADD_COMM] >>
   irule bodyPtrBopScalarSeqTheory.bop_inst_seq_ptr_append >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`H'`,`th'`,`u with vs_inst_idx :=
-    s.vs_inst_idx + LENGTH (emitted_insts sa s1)`] >>
+  qexistsl_tac [`H'`,`u with vs_inst_idx :=
+    s.vs_inst_idx + LENGTH (emitted_insts sa s1)`,`th'`] >>
   simp[run_inst_seq_inst_idx, exec_result_map_def] >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ H' th' _ _ _ _` mp_tac >>
   simp_tac (pure_ss ++ boolSimps.BOOL_ss) [AC ADD_ASSOC ADD_COMM]
