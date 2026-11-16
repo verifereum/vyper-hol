@@ -61,7 +61,7 @@ Theorem ld_sync_ordinary_raw:
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   mem_inv dload_headroom_ok C vs0 /\ mem_inv raw_mem_ok C vs0 /\
   ~in_revert_forward fn s ==>
-  raw_mem_ok C fn inst t /\ inst_mem_below_frontier inst t
+  raw_mem_ok C fn inst t /\ inst_mem_below_frontiers inst t
 Proof
   strip_tac >>
   `fn_shape_ok fn` by
@@ -100,9 +100,9 @@ Resume ld_sync_ordinary_raw[ranges]:
      `eval_operand szop f.lf_src = eval_operand szop f.lf_tgt`
        suffices_by metis_tac[] >>
      irule ld_descriptor_size_equal >> metis_tac[]) >>
-  `inst_mem_below_frontier inst t` suffices_by
+  `inst_mem_below_frontiers inst t` suffices_by
     simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >>
-  pure_rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  pure_rewrite_tac[inst_mem_below_frontiers_def, EVERY_MEM] >>
   qx_gen_tac `r` >> PairCases_on `r` >> pure_rewrite_tac[UNCURRY] >>
   disch_tac >>
   `?getops ranges. ((getops = mem_read_ops /\ ranges = source_memory_read_ranges) \/
@@ -187,7 +187,7 @@ Proof
   `w2n t0.vs_initial_fmp <= w2n t0.vs_fmp` by metis_tac[ld_sync_target_fmp] >>
   Cases_on `h=0` >-
     (gvs[ld_prefix_zero] >> simp[raw_mem_ok_def, inst_mem_ok_in_fn_def,
-       dalloca_no_wrap_def, inst_mem_below_frontier_def, source_memory_read_ranges_def,
+       dalloca_no_wrap_def, inst_mem_below_frontiers_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def]) >>
   `h=1` by decide_tac >> gvs[] >>
   drule_at (Pat `ld_prefix _ _ _ _ _ _ _`) ld_dloadbytes_prefix_observations >>
@@ -205,7 +205,7 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
     (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >> disj1_tac >>
-  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+  simp[inst_mem_below_frontiers_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
        AllCaseEqs()] >>
   Cases_on `eval_operand dest t0` >> simp[] >>

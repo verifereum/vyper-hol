@@ -984,7 +984,7 @@ Theorem mem_corr_closed_rf_raw_mem_ok:
 Proof
   rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
      inst_mem_ok_in_fn_def, in_revert_forward_def,
-     REWRITE_RULE [GSYM inst_mem_ranges_def] inst_mem_below_frontier_def] >>
+     REWRITE_RULE [GSYM inst_mem_ranges_def] inst_mem_below_frontiers_def] >>
   fs[] >> metis_tac[]
 QED
 

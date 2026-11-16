@@ -46,7 +46,7 @@ Theorem lower_dload_pure_raw[local]:
   raw_mem_ok C fn inst s
 Proof
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def,
-       inst_mem_below_frontier_def] >> strip_tac >>
+       inst_mem_below_frontiers_def] >> strip_tac >>
   simp[source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
@@ -88,7 +88,7 @@ Proof
   `inst.inst_opcode <> DALLOCA` by (strip_tac >> fs[]) >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >>
   disj1_tac >>
-  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+  simp[inst_mem_below_frontiers_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
        eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP s.vs_vars z` >> simp[]

@@ -55,11 +55,11 @@ Theorem ld_source_range_frontier:
   w2n t.vs_initial_fmp <= off /\ off+len <= w2n t.vs_fmp
 Proof
   strip_tac >>
-  `inst_mem_below_frontier inst s` by
+  `inst_mem_below_frontiers inst s` by
     metis_tac[inst_mem_ok_in_fn_def, contextCodegenRelTheory.in_revert_forward_def] >>
   `MEM (off,len)
      (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)` by
     gvs[MEM_APPEND] >>
-  fs[inst_mem_below_frontier_def, EVERY_MEM] >>
+  fs[inst_mem_below_frontiers_def, EVERY_MEM] >>
   first_x_assum drule >> simp[] >> strip_tac >> gvs[] >> decide_tac
 QED

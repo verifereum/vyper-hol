@@ -9,9 +9,7 @@ Theorem rest_word_load_safety_checks:
   MEM opc [MLOAD; ILOAD; SLOAD; TLOAD; DLOAD] /\
   eval_operand addr s = SOME w ==>
   (run_inst_seq_mem_ok [mk_inst iid opc [addr] outs] s <=>
-   ((opc = MLOAD \/ opc = ILOAD) ==>
-    w2n w + 32 <= s.vs_alloca_next \/
-    w2n s.vs_initial_fmp <= w2n w /\ w2n w + 32 <= w2n s.vs_fmp) /\
+   ((opc = MLOAD \/ opc = ILOAD) ==> w2n w + 32 <= s.vs_alloca_next) /\
    (opc = DLOAD ==> w2n w <= LENGTH s.vs_data_section))
 Proof
   strip_tac >> fs[] >>

@@ -101,21 +101,34 @@ Definition o1_initial_state_ok_def:
     vs.vs_allocas = FEMPTY
 End
 
-(* Each range is empty, below the alloca frontier, or inside the dynamic
-   region [vs_initial_fmp, vs_fmp) that DALLOCA allocates from. *)
 Definition inst_mem_below_frontier_def:
   inst_mem_below_frontier inst s <=>
+    EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
+      (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
+End
+
+(* Each range is empty, below the alloca frontier, or inside the dynamic
+   region [vs_initial_fmp, vs_fmp) that DALLOCA allocates from. *)
+Definition inst_mem_below_frontiers_def:
+  inst_mem_below_frontiers inst s <=>
     EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next \/
                        w2n s.vs_initial_fmp <= off /\
                        off + len <= w2n s.vs_fmp)
       (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
 End
 
-(* The raw memory check at an instruction state of fn: below the frontier,
-   or part of a revert forwarding. *)
+Theorem inst_mem_below_frontier_frontiers:
+  !inst s. inst_mem_below_frontier inst s ==> inst_mem_below_frontiers inst s
+Proof
+  simp[inst_mem_below_frontier_def, inst_mem_below_frontiers_def,
+       EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
+(* Raw memory may lie below the alloca frontier, in the dynamic region,
+   or in a revert forwarding pair. *)
 Definition inst_mem_ok_in_fn_def:
   inst_mem_ok_in_fn fn inst s <=>
-    inst_mem_below_frontier inst s \/
+    inst_mem_below_frontiers inst s \/
     ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
          revert_forward_at bb s.vs_inst_idx
 End

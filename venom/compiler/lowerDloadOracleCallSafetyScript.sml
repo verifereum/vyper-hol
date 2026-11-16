@@ -143,7 +143,7 @@ Proof
     (fs[ld_nonghost_def, raw_mem_ok_def] >> metis_tac[]) >>
   `dalloca_no_wrap inst t` by gvs[dalloca_no_wrap_def] >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
-  pure_rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  pure_rewrite_tac[inst_mem_below_frontiers_def, EVERY_MEM] >>
   qx_gen_tac `r` >> PairCases_on `r` >> pure_rewrite_tac[UNCURRY] >>
   disch_tac >> Cases_on `r1 = 0` >- simp[] >> simp[] >>
   `?getops ranges. MEM (getops,ranges)

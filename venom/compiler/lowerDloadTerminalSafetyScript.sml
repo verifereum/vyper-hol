@@ -48,7 +48,7 @@ Proof
   `inst.inst_opcode = ASSIGN` by
     (gvs[revert_forward_pair_def] >> first_x_assum irule >>
      qexists_tac `s.vs_inst_idx` >> simp[] >> decide_tac) >>
-  disj1_tac >> simp[inst_mem_below_frontier_def,
+  disj1_tac >> simp[inst_mem_below_frontiers_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def,
     mem_read_ops_def, mem_write_ops_def]
 QED

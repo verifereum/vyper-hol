@@ -35,11 +35,11 @@ Proof
     metis_tac[frameRawProjectionTheory.frame_reachable_raw] >>
   `s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
     metis_tac[ld_raw_dyn_headroom] >>
-  `inst_mem_below_frontier inst s` by
+  `inst_mem_below_frontiers inst s` by
     (fs[raw_mem_ok_def, inst_mem_ok_in_fn_def, in_revert_forward_def] >>
      metis_tac[]) >>
-  qpat_x_assum `inst_mem_below_frontier _ _` mp_tac >>
-  rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  qpat_x_assum `inst_mem_below_frontiers _ _` mp_tac >>
+  rewrite_tac[inst_mem_below_frontiers_def, EVERY_MEM] >>
   disch_then (qspec_then `(off,len)` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
   simp[] >> decide_tac
