@@ -6,7 +6,6 @@ Ancestors
   emitHelper emitHelperProps loweringSlice fragExec compileEnv
   freshWrites finite_map venomInst
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_assign_value_typed_open:
   !cenv dst src loc dty sty bytes sa sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -29,18 +28,7 @@ Proof
   gvs[compile_assign_value_def] >>
   metis_tac[compile_store_memory_open]
 QED
-*)
-Theorem compile_assign_value_typed_open:
-  !cenv dst src loc dty sty bytes sa sb.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    ~block_is_terminated sa /\
-    compile_assign_value cenv dst LocMemory src F loc dty sty bytes sa = ((),sb) ==>
-    ~block_is_terminated sb
-Proof
-  cheat
-QED
 
-(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_typed_code_parts:
   !cenv lctx ty id vtyp e sa sf c func.
     stmt_env cenv lctx ty (AnnAssign id vtyp e) sa = (c, sf) /\
@@ -83,32 +71,4 @@ Proof
     metis_tac[fn_has_code_split] >>
   qexistsl [`st`, `sA`, `sV`, `sB`, `vv`, `op`,
             `STRING #"%" (toString sa.cs_next_var)`] >> gvs[]
-QED
-*)
-Theorem annassign_typed_code_parts:
-  !cenv lctx ty id vtyp e sa sf c func.
-    stmt_env cenv lctx ty (AnnAssign id vtyp e) sa = (c, sf) /\
-    cenv.ce_alloca_locals /\ ~is_word_type vtyp /\
-    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
-    fn_has_code sa sf func /\ local_ptrs_reserved cenv sa /\
-    (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
-       !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
-                cs_extends a b) ==>
-    ?st sA sV sB vv op p.
-      declare_local cenv id vtyp sa = (c, st) /\
-      FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes cenv vtyp)) /\
-      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((), sA) /\
-      compile_expr c (expr_type e) e sA = (vv, sV) /\
-      unwrap_value c vv sV = (op, sB) /\
-      lower_value compile_expr c (expr_type e) e sA = (op, sB) /\
-      compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
-        (lowered_value_type cenv e)
-        (type_memory_bytes c vtyp) sB = ((), sf) /\
-      local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
-      cs_extends st sA /\ cs_extends sA sB /\ cs_extends sB sf /\
-      fn_has_code st sA func /\ fn_has_code sA sB func /\ fn_has_code sB sf func /\
-      MEM (mk_inst st.cs_next_id ALLOCA
-             [Lit (n2w (type_memory_bytes cenv vtyp))] [p]) (fn_insts func)
-Proof
-  cheat
 QED
