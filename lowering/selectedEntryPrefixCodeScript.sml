@@ -6,7 +6,7 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
   fragExec compileVyper list packagedRegistrationProps argumentRegistrationOpen
   exprOpenPrimitives vyperLoweringCorrect vyperCompiler venomWf venomInst
   exprOpenTerminals allocaFrontierBound externalEntryChecks runtimeBodyStartDefs
-  entryDispatchProps
+  entryDispatchProps classifiedExternalLabels
 
 Theorem source_selected_entry_prefix_code_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -76,7 +76,7 @@ Proof
   `ALL_DISTINCT (MAP FST
      (l1 ++ (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt)::l2))` by
     (drule external_names_distinct_numeric_namespace >>
-     disch_then (mp_tac o MATCH_MP externalEntryChecksTheory.classified_external_labels_distinct) >>
+     disch_then (mp_tac o MATCH_MP classifiedExternalLabelsTheory.classified_external_labels_distinct) >>
      strip_tac >>
      qpat_x_assum `_ ++ _ = MAP _ _`
        (mp_tac o Q.AP_TERM `\ps. ALL_DISTINCT (MAP FST ps)`) >>
