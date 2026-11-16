@@ -170,7 +170,7 @@ Theorem assign_local_rhs_located_mem[local]:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
@@ -823,8 +823,8 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
-      metis_tac[expr_exit_INR_type]) >>
+      disj2_tac >> rpt strip_tac >> fs[halt_exit_def] >>
+      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   irule assign_local_exempt >> simp[] >>

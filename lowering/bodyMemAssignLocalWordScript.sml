@@ -187,7 +187,7 @@ Resume assign_local_word_frag_mem[exception]:
   >- (first_x_assum irule >> irule gas_marked_exec_bind_exception >>
       simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >> simp[stmt_exit_def] >>
+  rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type])
 QED
 
