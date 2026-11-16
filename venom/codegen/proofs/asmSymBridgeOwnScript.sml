@@ -3,7 +3,8 @@
 Theory asmSymBridgeOwn
 Ancestors
   asmSymBridge asmSymOwnCode asmSymSem asmSem asmWf symbolResolve
-  vfmTypes
+  vfmTypes asmOwnCodeInvariant asmSymOwnCopyBridge asmSymOwnRunBridge
+  asmSymOwnStepBridge
 
 (* sym_init erases as_code, so own must agree with the concrete code at
    each step. Concrete assembly never changes that field. Unchanged
@@ -19,5 +20,10 @@ Theorem asm_sym_backward_own:
           (asm_result_sym (asm_steps (SND (compute_label_offsets p))
              (build_offset_to_pc p) p n s))
 Proof
-  cheat
+  strip_tac >> irule asm_sym_run_own_backward_from_step >>
+  simp[asm_sym_rel_init] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule asm_sym_step_own_from_copy >> simp[] >>
+      metis_tac[sym_codecopy_own_sim]) >>
+  metis_tac[asm_step_code_preserved]
 QED
