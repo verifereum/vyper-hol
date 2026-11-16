@@ -343,7 +343,7 @@ Theorem deploy_variant_exit_facts[local]:
     (!obs. ~deploy_source_exempt tops
        (load_contract NONE obs am tx [(NONE, tops)] []))
     ==>
-    ?H gobs efuel.
+    ?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
       raw_unit_memory_ok dunit.cu_context vi /\
       ptr_discipline (imm_len tops) dunit.cu_context vi /\
       taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vi /\
@@ -390,7 +390,9 @@ Proof
                    `dunit.cu_context`, `"__deploy"`, `fn`, `"__deploy"`, `vi`]
         mp_tac lowered_unit_ptr_taint >> simp[])
   >- (irule lowered_unit_dload_offset_ok >> metis_tac[])
-  >> irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
+  >> qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`, `vi`]
+       mp_tac lowered_unit_dload_headroom_ok_from >>
+  impl_tac >- (simp[] >> decide_tac) >> simp[]
 QED
 
 (* e2e_deploy_correctness's hypotheses.  The constructor run's finite
