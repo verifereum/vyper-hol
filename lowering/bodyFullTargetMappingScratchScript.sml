@@ -66,6 +66,7 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split, ci_mono_def] >>
   `64 < dimword (:256)` by simp[dimword_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (INST_TYPE [beta |-> alpha] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
   suspend "tail"

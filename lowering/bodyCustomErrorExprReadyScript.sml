@@ -33,7 +33,7 @@ Proof
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
-  irule stmt_expr_body_pre >> simp[] >>
+  bodyConstNameLib.irule_body_pre stmt_expr_body_pre >> simp[] >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_raise_exists_def, supported_exprs_exists_every,
       listTheory.EXISTS_MEM, int_calls_stmt_def, int_calls_raise_reason_def] >>

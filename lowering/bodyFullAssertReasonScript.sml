@@ -11,6 +11,7 @@
 Theory bodyFullAssertReason
 Ancestors
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullShared
+  bodyFullRaiseReason
   bodyInvNoDalloca contextRawReachable unitMemInv ptrDiscipline
   decoderNavigationPtr gasOutcomeFullCompose gasOutcomeFullStmts fragGasEmitCtrl gasExemptCert
   stmtSimReason stmtSimProps stmtSimIfProps exprSimDefs bodyMemoryDefs bodyPtrDefs bodyExprPreFacts exprSimSource
@@ -269,5 +270,7 @@ Theorem compile_assert_reason_frag_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
-  cheat
+  mp_tac compile_assert_reason_frag_full_from_raise >>
+  (impl_tac >- ACCEPT_TAC compile_raise_reason_frag_full) >>
+  disch_then ACCEPT_TAC
 QED

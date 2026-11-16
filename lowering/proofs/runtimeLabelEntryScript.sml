@@ -3,7 +3,7 @@ Theory runtimeLabelEntry
 Ancestors
   e2eEntry e2eProducers immutableCodeLayout codegen asmIR symbolResolve
   runtimeLabelReadiness o1LabelStages o1PipelineCompose o1ComposeSupport
-  o1PassContract o1ContractTheorems o1DretDesugarContract
+  o1PassContract o1ContractTheorems o1DretDesugarContract o1LabelFlowStaticContracts
   o1FnScheduleDecompHelpers
   compileVyper venomPipelineDriver venomPipelineRunner venomFnScheduleRunner irSupply
   fcgPruning venomPassSchedule codegenAsmStaticWf unitShapeDefs finite_map list

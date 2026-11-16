@@ -1,6 +1,6 @@
 Theory bodyFullRawLogCompose
 Ancestors
-  exprSimCallRawLog
+  exprSimCallRawLog bodyInvNoDalloca
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
   bodyFullExprGeneric bodyFullPreds vyperTypeArgFits exprWordOperand
@@ -115,6 +115,7 @@ Proof
                 push_log (encode_raw_event_values cx.txn.target vs bs);
                 return NoneV od))` by
     simp[Abbr `source`, raw_log_eval, compatible_bound_def, bind_assoc, SF ETA_ss] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   mp_tac raw_log_topics_full >>
   (impl_tac >- MATCH_ACCEPT_TAC raw_log_full_data_reached_ready) >>
   disch_then drule_all >>
@@ -152,8 +153,8 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `topicR`] >> rpt strip_tac >>
-  Cases_on `res` >- fs[expr_exit_def] >>
-  simp[] >> metis_tac[expr_exit_INR_type])
+  Cases_on `res` >> gvs[expr_exit_def, halt_exit_def] >>
+  metis_tac[expr_exit_INR_type])
 QED
 
 Resume raw_log_expr_sim_full[continuation]:
@@ -305,7 +306,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
       (~is_word_type (post_value_type cenv rawlog) ==>
        ptr_buf_ok cenv rawlog (Lit 0w) G u) /\
       ghost_kept_at lo cenv mid sm G1 tn1 t G tn`,
-    `\H res ee gt r. expr_exit res r`] >>
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
   simp[Abbr `rawlog`] >> conj_tac >- suspend "dynamic_post" >>
   simp[expr_type_def] >>
   qpat_assum `LENGTH vs <= (4:num)` (fn bnd =>

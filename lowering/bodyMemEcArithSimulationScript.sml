@@ -15,21 +15,6 @@ fun at_horizon pat h =
   qpat_assum pat (qspec_then h mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac;
 
-(* ec_source_tail never touches the storage trace, so it is a trace frame. *)
-Theorem ec_source_tail_storage_frame[local]:
-  storage_trace_frame (ec_source_tail cx ann bt tys vs)
-Proof
-  `!v. storage_trace_frame
-         (do precompile_call_success bt; return (Value v) od)` by
-    (gen_tac >> irule storage_trace_frame_ignore_bind >>
-     simp[storage_trace_frame_precompile_call_success,
-          storage_trace_frame_return]) >>
-  rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
-  rewrite_tac[ec_source_tail_def] >> simp[] >>
-  Cases_on `exprSimWordArgs$builtin_result cx st.accounts ann bt tys vs` >>
-  simp[] >> fs[storage_trace_frame_def]
-QED
-
 Theorem ec_source_tail_trace[local]:
   (bt = ECAdd \/ bt = ECMul) /\
   ec_source_tail cx ann bt tys vs es = (r,es') ==>
@@ -123,9 +108,14 @@ Theorem ec_tail_lift_mem[local]:
        t'.vs_current_bb = sb.cs_current_bb /\
        t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t' /\ s0.vs_alloca_next <= t'.vs_alloca_next)
-    (\H r ee' k'. expr_exit r k')
+    (\H r ee' k'. expr_exit r k' /\ halt_exit H cx ee' r k')
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `res <> INR HaltException` by
+    (qpat_x_assum `bt = ECAdd \/ bt = ECMul` strip_assume_tac >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ es2 = _` mp_tac >>
+     simp[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `ee.storage_trace = es2.storage_trace` by
     (irule ec_source_tail_trace >> metis_tac[]) >>
   `!g. ec_source_tail cx ann bt tys vs (es2 with gas_obs := g) =
@@ -170,11 +160,12 @@ Proof
     (* success *)
     (disj1_tac >>
      `?rv. tv = Value rv` by
-       (qpat_x_assum `ec_source_tail _ _ _ _ _ _ = (INL tv, _)` mp_tac >>
+       (qpat_x_assum `bt = ECAdd \/ bt = ECMul` strip_assume_tac >>
+        qpat_x_assum `ec_source_tail _ _ _ _ _ _ = (res, _)` mp_tac >>
         simp[ec_source_tail_cases, AllCaseEqs()] >> metis_tac[]) >>
      qexists_tac `t0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-     conj_tac >- REFL_TAC >>
-     qx_gen_tac `H` >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     BETA_TAC >> qx_gen_tac `H` >> strip_tac >>
      `valid_horizon cx st0 H es2.storage_trace` by
        (qpat_x_assum `valid_horizon cx st0 H _` mp_tac >> simp[]) >>
      `valid_horizon cx st0 H es.storage_trace` by
@@ -194,16 +185,25 @@ Proof
         (t0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
        FIRST [drule_all ec_two_operand_post >> simp[],
               metis_tac[ec_two_operand_post]] >>
+     `stmt_state_rel H ctx func cenv cx (ee with gas_obs := [])
+        (t0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+       (qpat_assum `vv_post H ctx func cenv cx e es sa sb s0 ee (Value rv) _ _`
+          (fn th => mp_tac (Q.INST
+            [`readings` |-> `t0.vs_gas_readings`,
+             `k` |-> `LENGTH sb.cs_current_insts`, `gs` |-> `[]`]
+            (MATCH_MP (Q.SPEC `H` msg_gas_state_frame)
+              (CONJUNCT1 (REWRITE_RULE [vv_post_def] th))))) >>
+        simp[NoAsms]) >>
      qexists_tac `Value rv` >> rpt conj_tac
-     >- REFL_TAC
-     >- (simp[exprLoweringTheory.as_ptr_val_def] >>
-         irule memory_value_post_gas_obs >> conj_tac
-         >- simp[contextTheory.mk_ptr_def] >> conj_tac
-         >- (first_assum (fn th =>
-               ACCEPT_TAC (SRULE[exprLoweringTheory.as_ptr_val_def] th)))
-         >- (simp[] >>
-             first_assum (fn th =>
-               ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [vv_post_def] th)))))
+     >- simp[]
+     >- (pure_rewrite_tac[exprLoweringTheory.as_ptr_val_def, pairTheory.FST] >>
+         irule memory_value_post_gas_obs >>
+         conj_tac >- simp[contextTheory.mk_ptr_def] >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qpat_assum `vv_post H ctx func cenv cx e es sa sb s0 ee (Value rv) _ _`
+           mp_tac >>
+         pure_rewrite_tac[exprLoweringTheory.as_ptr_val_def, pairTheory.FST] >>
+         disch_then ACCEPT_TAC)
      >- (rewrite_tac[value_store_bound_gas_obs] >> first_assum ACCEPT_TAC)
      >- first_assum ACCEPT_TAC
      >- first_assum ACCEPT_TAC
@@ -212,7 +212,7 @@ Proof
          qexists_tac `u.vs_alloca_next` >> conj_tac >>
          first_assum ACCEPT_TAC)),
     (* exit *)
-    (disj2_tac >> simp[])
+    (disj2_tac >> simp[halt_exit_def])
   ]
 QED
 
@@ -233,8 +233,8 @@ Proof
   ho_match_mp_tac (Q.INST [`ann` |-> `ArrayT (BaseT (UintT 256)) (Fixed 2)`,
     `bt` |-> `ECMul`, `q` |-> `scalar`] ec_mem_operands_then) >>
   simp[ec_source_tail_storage_frame] >>
-  TRY (conj_tac >-
-    (rpt gen_tac >> strip_tac >>
+  (conj_tac >-
+    (rpt gen_tac >> strip_tac >> gvs[halt_exit_def] >>
      metis_tac[exprSimHashTheory.expr_exit_INR_cast])) >>
   rpt gen_tac >> strip_tac >> suspend "tail"
 QED
@@ -262,7 +262,7 @@ Resume ecmul_vv_sim_mem[tail]:
   Cases_on `ec_source_tail cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul
     [ArrayT (BaseT (UintT 256)) (Fixed 2);BaseT (UintT 256)] [v1;v2] es2` >>
   rename1 `ec_source_tail _ _ _ _ _ _ = (sr,ee)` >>
-  `ECMul = ECAdd \/ ECMul = ECMul` by simp[] >>
+  assume_tac (DISJ2 ``ECMul = ECAdd`` (REFL ``ECMul``)) >>
   `~expr_has_effect (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]) ==>
    ~expr_has_effect a /\ ~expr_has_effect b` by
     simp[supportedExprTraverseTheory.expr_has_effect_def] >>
@@ -290,13 +290,30 @@ Resume ecmul_vv_sim_mem[tail]:
      at_horizon `!H. valid_horizon cx st0 H es2.storage_trace ==>
                      expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
        `H` >>
-     drule_at (Pat `compile_ecmul_point _ _ _ = _`)
-       (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`] ecmul_points_path_mem) >>
-     simp[exprLoweringTheory.lowered_value_type_def,
-          vyperASTTheory.expr_type_def] >>
-     TRY (disch_then drule_all) >>
-     disch_then (strip_assume_tac o SPEC_ALL) >> metis_tac[]) >>
-  drule_all ec_tail_lift_mem >> simp[]
+     `storage_well_formed_on cx es2 (FST H)` by
+       (qpat_assum `expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 scalar u`
+          (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+           REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     mp_tac (Q.INST
+       [`p` |-> `p`, `scalar` |-> `scalar`, `sa` |-> `sm`,
+        `op` |-> `res`, `sb` |-> `sb`, `H` |-> `H`,
+        `ctx` |-> `ctx`, `func` |-> `func`, `cenv` |-> `cenv`, `cx` |-> `cx`,
+        `es` |-> `es2`, `s` |-> `u`, `point` |-> `w`, `sw` |-> `sw`,
+        `v` |-> `v1`, `k` |-> `v2`, `lo` |-> `sa`,
+        `e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`,
+        `r` |-> `sr`, `es'` |-> `ee`]
+       (INST_TYPE [alpha |-> ``:256``] ecmul_points_path_mem)) >>
+     (impl_tac >-
+       (simp[exprLoweringTheory.lowered_value_type_def,
+            vyperASTTheory.expr_type_def] >>
+        rpt strip_tac >> metis_tac[])) >>
+     strip_tac >>
+     gvs[exprLoweringTheory.lowered_value_type_def,
+         vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es2.scopes` by metis_tac[] >>
+  `lower_value compile_expr cenv (expr_type b) b s1 = (scalar,sm)` by simp[] >>
+  drule_all ec_tail_lift_mem >>
+  simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
 QED
 Finalise ecmul_vv_sim_mem
 
@@ -317,8 +334,8 @@ Proof
   ho_match_mp_tac (Q.INST [`ann` |-> `ArrayT (BaseT (UintT 256)) (Fixed 2)`,
     `bt` |-> `ECAdd`] ec_mem_operands_then) >>
   simp[ec_source_tail_storage_frame] >>
-  TRY (conj_tac >-
-    (rpt gen_tac >> strip_tac >>
+  (conj_tac >-
+    (rpt gen_tac >> strip_tac >> gvs[halt_exit_def] >>
      metis_tac[exprSimHashTheory.expr_exit_INR_cast])) >>
   rpt gen_tac >> strip_tac >> suspend "typed"
 QED
@@ -361,7 +378,7 @@ Resume ecadd_vv_sim_mem[typed]:
     [ArrayT (BaseT (UintT 256)) (Fixed 2);ArrayT (BaseT (UintT 256)) (Fixed 2)]
     [v1;v2] es2` >>
   rename1 `ec_source_tail _ _ _ _ _ _ = (sr,ee)` >>
-  `ECAdd = ECAdd \/ ECAdd = ECMul` by simp[] >>
+  assume_tac (DISJ1 (REFL ``ECAdd``) ``ECAdd = ECMul``) >>
   `~expr_has_effect (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]) ==>
    ~expr_has_effect a /\ ~expr_has_effect b` by
     simp[supportedExprTraverseTheory.expr_has_effect_def] >>
@@ -389,13 +406,30 @@ Resume ecadd_vv_sim_mem[typed]:
      at_horizon `!H. valid_horizon cx st0 H es2.storage_trace ==>
                      expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
        `H` >>
-     drule_at (Pat `compile_ecadd_points _ _ _ = _`)
-       (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]`] ecadd_points_path_mem) >>
-     simp[exprLoweringTheory.lowered_value_type_def,
-          vyperASTTheory.expr_type_def] >>
-     TRY (disch_then drule_all) >>
-     disch_then (strip_assume_tac o SPEC_ALL) >> metis_tac[]) >>
-  drule_all ec_tail_lift_mem >> simp[]
+     `storage_well_formed_on cx es2 (FST H)` by
+       (qpat_assum `expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u`
+          (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+           REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     mp_tac (Q.INST
+       [`p` |-> `p`, `q` |-> `q`, `sa` |-> `sm`,
+        `op` |-> `res`, `sb` |-> `sb`, `H` |-> `H`,
+        `ctx` |-> `ctx`, `func` |-> `func`, `cenv` |-> `cenv`, `cx` |-> `cx`,
+        `es` |-> `es2`, `s` |-> `u`, `point` |-> `w`, `point2` |-> `w2`,
+        `v` |-> `v1`, `v2` |-> `v2`, `lo` |-> `sa`,
+        `e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]`,
+        `r` |-> `sr`, `es'` |-> `ee`]
+       (INST_TYPE [alpha |-> ``:256``] ecadd_points_path_mem)) >>
+     (impl_tac >-
+       (simp[exprLoweringTheory.lowered_value_type_def,
+            vyperASTTheory.expr_type_def] >>
+        rpt strip_tac >> metis_tac[])) >>
+     strip_tac >>
+     gvs[exprLoweringTheory.lowered_value_type_def,
+         vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es2.scopes` by metis_tac[] >>
+  `lower_value compile_expr cenv (expr_type b) b s1 = (q,sm)` by simp[] >>
+  drule_all ec_tail_lift_mem >>
+  simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
 QED
 Finalise ecadd_vv_sim_mem
 

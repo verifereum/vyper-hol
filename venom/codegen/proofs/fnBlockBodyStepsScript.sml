@@ -671,47 +671,12 @@ Theorem body_inv_facts:
     LENGTH bb.bb_instructions <= context_inst_count ctx /\
     LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) <= LENGTH prog
 Proof
-  strip_tac >> unpack_inv >>
-  qspecl_then [`ctx`, `unit`, `Inv`, `cpl`, `i`, `fn`] mp_tac body_fn_shape >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`ctx`, `cpl`, `i`] mp_tac body_context_region_fn_name >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `bb.bb_label = vs.vs_current_bb` by metis_tac[lookup_block_label] >>
-  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by metis_tac[] >>
-  `bb_well_formed bb` by fs[codegen_ready_fn_def, wf_function_def] >>
-  `canonical_param_prefix fn` by fs[codegen_ready_fn_def] >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`, `spill_base`,
-               `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`, `bb`,
-               `block_ops`, `ps_dfs_after`] mp_tac body_dfs_block_alloc_bounded >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`, `spill_base`,
-               `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`, `bb`,
-               `block_ops`, `ps_dfs_after`] mp_tac dfs_block_plan_contained >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`] mp_tac
-    revert_postamble_placed >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  rpt conj_tac
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC)
-  >- metis_tac[EL_MEM]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- metis_tac[non_param_insts_drop]
-  >- fs[block_plan_state_def]
-  >- metis_tac[codegen_assembly_symbols_ok]
-  >- metis_tac[]
-  >- metis_tac[LESS_EQ_TRANS]
-  >- metis_tac[]
-  >- fs[]
-  >- metis_tac[]
-  >- (irule context_inst_count_block >> metis_tac[EL_MEM])
-  >- (qpat_x_assum `asm_block_at prog pc0 _` mp_tac >>
-      simp[asm_block_at_def, execute_plan_def, execute_plan_append])
+  strip_tac >> drule body_inv_plan >>
+  disch_then (map_every assume_tac o CONJUNCTS o MATCH_MP body_plan_inv_facts) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (irule context_inst_count_block >> metis_tac[]) >>
+  unpack_inv >> qpat_x_assum `asm_block_at prog pc0 _` mp_tac >>
+  simp[asm_block_at_def, execute_plan_def, execute_plan_append]
 QED
 
 Theorem body_plan_inv_inst:
@@ -769,30 +734,9 @@ Theorem body_inv_inst:
           eval_operand op (frame_view fn ra vs) =
           operand_val (frame_view fn ra vs) lo op)
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
-  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
-  qspecl_then [`fn`, `bb`, `inst`] mp_tac body_inst_ready >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  `inst_shape_ok inst` by fs[EVERY_MEM] >>
-  `get_instruction bb k = SOME inst` by simp[get_instruction_def] >>
-  `active_inst fn inst vs` by
-    (simp[active_inst_def] >> qexists_tac `bb` >> simp[]) >>
-  `inst.inst_opcode <> PHI` by
-    (`!i j. i < j /\ j < LENGTH bb.bb_instructions /\
-            (EL j bb.bb_instructions).inst_opcode = PHI ==>
-            (EL i bb.bb_instructions).inst_opcode = PHI` by
-       fs[bb_well_formed_def] >>
-     qspecl_then [`bb.bb_instructions`, `k`] mp_tac phi_prefix_not_phi >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     qpat_x_assum `EL k _ = inst` (fn th => simp[th])) >>
-  rpt conj_tac
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- res_tac
-  >- (strip_tac >> fs[inst_shape_ok_def] >> metis_tac[ef_read0_is_read0])
-  >- metis_tac[eval_operand_frame_view]
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  simp[] >> fs[body_inv_bundle_def]
 QED
 
 Theorem body_plan_inv_step:
@@ -892,39 +836,10 @@ Theorem body_inv_step:
                ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
                      FLOOKUP o2pc off = SOME (as.as_pc + j))
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `bb`, `k`, `ps`, `rest_ops`,
-               `ps_after`] mp_tac block_insts_plan_step >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `EL k _ = inst` (SUBST_ALL_TAC o SYM) >>
-  qexistsl_tac [`ops`, `ps'`, `rest'`] >>
-  `ps'.ps_alloc.sa_spill_base = ps_after.ps_alloc.sa_spill_base /\
-   ps'.ps_alloc.sa_next_offset <= ps_after.ps_alloc.sa_next_offset` by
-    metis_tac[body_insts_plan_spill_base, body_insts_plan_next_offset] >>
-  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
-         off < dimword (:256)` by
-    (gen_tac >> strip_tac >>
-     qspecl_then [`ctx`, `cpl`, `r`, `pre ++ SOLabel bb.bb_label :: prefix_ops`,
-                  `ops`, `rest' ++ post`, `off`] mp_tac
-       body_region_spill_offsets >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-     simp[]) >>
-  qspecl_then [`prog`, `pc0`, `cpl.cp_initial_fmp`, `bb.bb_label`,
-               `prefix_ops`, `ops`, `rest'`] mp_tac block_ops_at >>
-  impl_tac >- gvs[] >> strip_tac >>
-  rpt conj_tac
-  >- (first_assum ACCEPT_TAC) >- (first_assum ACCEPT_TAC)
-  >- (first_assum ACCEPT_TAC)
-  >- fs[]
-  >- metis_tac[LESS_EQ_TRANS]
-  >- (rw[EVERY_MEM] >> Cases_on `s` >> simp[] >> metis_tac[])
-  >- metis_tac[]
-  >- gvs[]
-  >- (irule asm_block_at_length >> metis_tac[])
-  >- (qspecl_then [`prog`, `lo`, `o2pc`, `as.as_pc`,
-                   `execute_plan cpl.cp_initial_fmp ops`] mp_tac
-        asm_block_labels >>
-      impl_tac >- gvs[] >> simp[])
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule_all body_plan_inv_step >> strip_tac >>
+  qexistsl_tac [`ops`, `ps'`, `rest'`] >> simp[] >>
+  irule asm_block_at_length >> metis_tac[]
 QED
 
 Theorem body_plan_inv_static:
@@ -1098,19 +1013,8 @@ Theorem body_inv_static:
          (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
        !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
-               `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `bb.bb_label`, `bb`,
-               `ps_l`, `ps_dfs`, `ps_dfs_after`, `h`, `promised`,
-               `block_ops`, `ps_after`, `k`, `ps`, `inst`,
-               `live_vars_at liveness bb.bb_label (k + 1)`,
-               `k + 1 < LENGTH bb.bb_instructions /\
-                is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`]
-    mp_tac block_plan_state_static >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      metis_tac[codegen_ready_fn_no_marker]) >>
-  disch_then ACCEPT_TAC
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule_all body_plan_inv_static >> disch_then ACCEPT_TAC
 QED
 
 Theorem body_plan_inv_equiv:
@@ -1146,11 +1050,8 @@ Theorem body_inv_equiv:
             operand_val (frame_view fn ra vs) lo op =
             operand_val (frame_view fn ra vs) lo at
 Proof
-  strip_tac >> drule_all body_inv_static >> strip_tac >> unpack_inv >>
-  qspecl_then [`compute_operands inst`, `ps`, `fn`, `ra`, `vs`, `lo`, `dfg`]
-    mp_tac owned_operand_equiv >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule body_plan_inv_equiv >> simp[]
 QED
 
 Theorem body_plan_inv_not_in_rf:
@@ -1176,11 +1077,8 @@ Theorem body_inv_not_in_rf:
     (!j. ~revert_forward_pair bb k j) ==>
     ~in_revert_forward fn vs
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
-  simp[in_revert_forward_def, revert_forward_at_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!i j. revert_forward_pair _ _ _ ==> _` drule >>
-  fs[revert_forward_pair_def]
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule body_plan_inv_not_in_rf >> simp[]
 QED
 
 Theorem body_inv_memory:
@@ -1244,12 +1142,6 @@ Theorem body_inv_label_resolve:
     (!e. step_inst fuel ctx inst vs <> Error e) ==>
     !l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >> unpack_inv >>
-  rpt strip_tac >>
-  `step_inst fuel ctx inst vs = step_inst_base inst vs` by
-    metis_tac[step_inst_non_invoke] >>
-  qspecl_then [`inst`, `vs`, `l`] mp_tac step_label_operands_resolve >>
-  impl_tac >- (fs[inst_shape_ok_def] >> metis_tac[]) >>
-  qpat_x_assum `!l. FLOOKUP vs.vs_labels l = _` (fn th => simp[th]) >>
-  simp[IS_SOME_MAP]
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule body_plan_inv_label_resolve >> simp[] >> metis_tac[]
 QED

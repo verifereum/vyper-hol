@@ -2944,9 +2944,9 @@ Proof
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >>
-      gvs[expr_exit_def, halt_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- (irule expr_exit_INR_cast >> first_assum ACCEPT_TAC) >>
+      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >> simp[halt_exit_def]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
