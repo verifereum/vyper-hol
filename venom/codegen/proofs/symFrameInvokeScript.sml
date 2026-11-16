@@ -17,14 +17,23 @@ Ancestors
   dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim gasFrameSim
   fnFrameStepsRevertForward
 
-(* INVOKE cannot consume the opaque code-end pointer. *)
+(* INVOKE cannot consume the opaque code-end pointer in either mode. *)
+Theorem sym_invoke_argument_not_code_end_own:
+  label_flow_own_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
+Proof
+  rw[codegenSymOwnRelTheory.label_flow_own_ok_def] >>
+  first_x_assum drule_all >> simp[] >> metis_tac[]
+QED
+
 Theorem sym_invoke_argument_not_code_end:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
 Proof
-  rw[label_flow_ok_def] >>
-  first_x_assum drule_all >> simp[] >> metis_tac[]
+  metis_tac[sym_invoke_argument_not_code_end_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_argument_shape:
@@ -38,8 +47,8 @@ Proof
   gvs[label_positions_ok_def]
 QED
 
-Theorem sym_invoke_argument_word_kind:
-  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+Theorem sym_invoke_argument_word_kind_own:
+  fn_shape_ok fn /\ label_flow_own_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   inst.inst_operands = Label nm :: args /\ MEM op args /\
   op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
@@ -50,7 +59,18 @@ Proof
   `~is_label_operand op` by gvs[EVERY_MEM] >>
   Cases_on `op` >> gvs[is_label_operand_def, op_kind_ok_def] >>
   metis_tac[fnFrameBoundaryInvokeTheory.invoke_arguments_not_retpc,
-            sym_invoke_argument_not_code_end, MEM]
+            sym_invoke_argument_not_code_end_own, MEM]
+QED
+
+Theorem sym_invoke_argument_word_kind:
+  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: args /\ MEM op args /\
+  op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
+  ?w. sv = Val w
+Proof
+  metis_tac[sym_invoke_argument_word_kind_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_output_not_code_end:
@@ -226,8 +246,8 @@ Proof
   rpt strip_tac >> gvs[sval_conc_def] >> metis_tac[]
 QED
 
-Theorem sym_invoke_argument_list_words:
-  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+Theorem sym_invoke_argument_list_words_own:
+  fn_shape_ok fn /\ label_flow_own_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   inst.inst_operands = Label nm :: args /\
   EVERY (\op. op <> dead_stack_marker) args /\
@@ -238,7 +258,19 @@ Proof
   drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
   gvs[MEM_REVERSE] >>
   `x <> dead_stack_marker` by metis_tac[] >>
-  drule_all sym_invoke_argument_word_kind >> simp[]
+  drule_all sym_invoke_argument_word_kind_own >> simp[]
+QED
+
+Theorem sym_invoke_argument_list_words:
+  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: args /\
+  EVERY (\op. op <> dead_stack_marker) args /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE args) svs ==>
+  EVERY (\sv. ?w. sv = Val w) svs
+Proof
+  metis_tac[sym_invoke_argument_list_words_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_arranged_stack:
