@@ -1354,7 +1354,57 @@ Resume body_for_local_array_full_from_contracts[common_entry_premises]:
   map_every (fn label => asm_x label kall_tac)
     ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
      "body_outcome","handler","entry"] >>
-  FAIL_TAC "entry-static-premises"
+  conj_tac >-
+    (qpat_x_assum `!x sz. cenv.ce_return_buf = _ ==> _` mp_tac >>
+     qpat_x_assum `ret_pc_ok cenv start s0` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ret_pc_ok_def] >> metis_tac[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qexists_tac `MAP Value tail_vs` >>
+     qpat_x_assum `DROP k vs = _` (fn th => rewrite_tac[th,MAP])) >>
+  rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, REFL_TAC]) >>
+  conj_tac >- (qexistsl_tac [`ap`,`az`] >>
+    simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexistsl_tac [`sdecl`,`sdecl'`] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `ArrayT typ bd` >> REFL_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qexistsl_tac [`body_lbl`,`type_memory_bytes cenv typ`,`cond_lbl`,
+       `dv`,`ep`,`exit_lbl`,`j1`,`j2`,`j3`,`j4`,`joff`,`nv`,`ov`,`scopy`,
+       `tail_code`,`tov`] >>
+     suspend "common_entry_code") >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`bindings`,`env_b`,`ret_ty`,`stmts`,`tops`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_x_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vyperTypeCallGraphTheory.int_calls_stmt_def,
+       vyperTypeCallGraphTheory.int_calls_iterator_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume body_for_local_array_full_from_contracts[common_entry_code]:
+  conj_tac >-
+    (gen_tac >> disch_tac >> asm "entry_inv" drule >>
+     simp_tac (srw_ss()) [Abbr `k`] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_x_assum `~MEM ap _` mp_tac >>
+     qpat_x_assum `bd = Dynamic _ ==> ap <> tov` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[MEM] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _` mp_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at sb0 x /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `ALL_DISTINCT [idx;dv;ov;ep;p] /\ p <> ep /\ p <> ov` by
+    (qpat_x_assum `ALL_DISTINCT [idx;dv;ov;ep;nv;p]` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ALL_DISTINCT] >> metis_tac[]) >>
+  rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, REFL_TAC]) >>
+  FAIL_TAC "entry-code-dynamic"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
