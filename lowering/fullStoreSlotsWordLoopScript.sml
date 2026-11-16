@@ -4,6 +4,8 @@ Ancestors
   fullStoreSlotsWordCode fullStoreSlotsWordBody fullStoreSlotsUniformLoop
   placeStoreCopyPath fragGasCopyLoop fragGasSeqAbort bodyMemAssignTopCopyPaths
   codegenRel ptrDiscipline bodyPtrDefs memSafeRun venomState venomInst venomExecSemantics
+  ptrSafeRun instMemFrontier fragExecMem fragExec fragGasSeqPtr fragGasOriginPtrLoop
+  contextCodegenRel exprLoweringProps stmtSimStoreCopy
   words finite_map pred_set list rich_list arithmetic
 
 Theorem store_slots_word_init:
@@ -40,10 +42,13 @@ Proof
        step_prov PG G (mk_inst id ASSIGN [Lit 0w] [cv]) (update_var cv 0w s),
        step_taint (mk_inst id ASSIGN [Lit 0w] [cv]) s (update_var cv 0w s) tn)` by
     (rpt gen_tac >>
+     `step_inst_base (mk_inst id ASSIGN [Lit 0w] [cv]) s =
+        OK (update_var cv 0w s)` by
+       simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
      `ptr_inst_ok D 0 0 ctx func G tn (mk_inst id ASSIGN [Lit 0w] [cv]) s` by
-       simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-         mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
-         GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+       (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+          mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+        simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def]) >>
      `inst_seq_ptr D 0 ctx func PG G tn [mk_inst id ASSIGN [Lit 0w] [cv]] s
        (step_prov PG G (mk_inst id ASSIGN [Lit 0w] [cv]) (update_var cv 0w s))
        (step_taint (mk_inst id ASSIGN [Lit 0w] [cv]) s (update_var cv 0w s) tn)` by
@@ -53,12 +58,17 @@ Proof
      `run_inst_seq_mem_ok [mk_inst id ASSIGN [Lit 0w] [cv]] s` by
        (simp[run_inst_seq_mem_ok_last, inst_dload_in_section_def, mk_inst_def] >>
         irule below_frontier_no_ranges >> simp[]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+         i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
+         [mk_inst id ASSIGN [Lit 0w] [cv]]` by
+       simp[mk_inst_def, is_terminator_def] >>
      drule_all run_inst_seq_origin_ptr_lift >>
      disch_then (qspec_then `explicit` strip_assume_tac) >>
      irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
-     irule copy_jmp_origin_ptr >> simp[update_var_def] >>
+     simp[] >> irule copy_jmp_origin_ptr >> simp[update_var_def] >>
      gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >>
      metis_tac[]) >>
+  qpat_x_assum `!D explicit PG G tn. _` mp_tac >>
   simp[step_prov_def,out_prov_def,first_prov_def,op_prov_def,set_prov_def,
     step_taint_def,set_var_taint_def,out_taint_def,mem_taint_def,
     imm_taint_def,store_taint_def,adopt_reset_def,step_writes_def,
@@ -299,6 +309,17 @@ Proof
 QED
 
 Resume memory_copy_loop_op_origin_ptr_exact[iterate]:
+  `!i. allocas_below_fmp (store_copy_prefix loc b k s i) <=> allocas_below_fmp s` by
+    (Induct >> simp[topcopy_prefix_suc] >>
+     Cases_on `loc = LocStorage` >>
+     gvs[allocas_below_fmp_def, sstore_def, tstore_def]) >>
+  `!i r. store_copy_frame sa loc b k s i r ==>
+    (allocas_below_fmp r <=> allocas_below_fmp s)` by
+    (rpt gen_tac >> simp[store_copy_frame_def] >> strip_tac >>
+     `allocas_below_fmp (store_copy_normalize s r) <=> allocas_below_fmp s` by
+       metis_tac[] >>
+     pop_assum mp_tac >>
+     simp[NoAsms, store_copy_normalize_def, allocas_below_fmp_def]) >>
   `!j Gj tj r. j<=n /\ Inv j Gj tj r /\ ~r.vs_halted /\
     r.vs_current_bb=hdr /\ r.vs_inst_idx=0 ==>
     ?z Gz tz. (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -319,7 +340,7 @@ Resume memory_copy_loop_op_origin_ptr_exact[iterate]:
      >- (qexistsl_tac [`body_lbl`,`hdr`] >> asm_rewrite_tac[]) >>
      qexistsl_tac [`0`,`n`] >> simp[]) >>
   qexistsl_tac [`t`,`Gf`,`tf`] >>
-  conj_tac >- metis_tac[origin_ptr_path_then] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
   qpat_x_assum `Inv n Gf tf t` mp_tac >> simp[Abbr `Inv`]
 QED
 
@@ -344,6 +365,8 @@ Resume memory_copy_loop_op_origin_ptr_exact[header]:
   disch_then (drule_at (Pat `Inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   simp[Excl "isPREFIX"] >> disch_then irule >> simp[Excl "isPREFIX"] >>
+  reverse conj_tac
+  >- (qpat_x_assum `Inv j Gj tj r` mp_tac >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`idh`,`idh+1`,`tv`] >> simp[] >> conj_tac >- metis_tac[] >>
   qpat_x_assum `get_instruction bbh (SUC 0) = _` mp_tac >> simp[]
 QED
@@ -366,6 +389,8 @@ Resume memory_copy_loop_op_origin_ptr_exact[body]:
   CONV_TAC (RAND_CONV (STRIP_QUANT_CONV
     (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV CONJ_COMM)))))) >>
   disch_then irule >> simp[Excl "isPREFIX"] >>
+  conj_tac
+  >- (qpat_x_assum `Inv j Gj tj r` mp_tac >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`dst`,`dv`,`idb`,`mv`,`nv`,`sv`,`vv`] >>
   conj_tac >- (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[]) >>
   qpat_x_assum `ALL_DISTINCT _` (strip_assume_tac o SRULE []) >>
@@ -385,7 +410,14 @@ Theorem store_slots_taint_fold_bound:
 Proof
   Induct >- simp[] >>
   simp[GENLIST, FOLDL_SNOC] >>
-  drule copy_store_taint_bound_step >> simp[ADD1]
+  fs[SUBSET_DEF, key_update_def, mem_word_taint_def, PULL_EXISTS,
+     pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (first_x_assum drule >> strip_tac >> gvs[]
+      >- (disj1_tac >> rpt strip_tac >> gvs[] >>
+          `i < n \/ i = n` by decide_tac >> gvs[] >> metis_tac[]) >>
+      disj2_tac >> qexists_tac `i` >> simp[]) >>
+  disj2_tac >> qexists_tac `n` >> simp[]
 QED
 
 Theorem memory_copy_loop_op_origin_ptr:
