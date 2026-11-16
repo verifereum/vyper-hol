@@ -68,7 +68,7 @@ Proof
   pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem lower_vyper_deploy_unit_runtime_section[local]:
+Theorem lower_vyper_deploy_unit_runtime_section:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit ==>
     MEM <| ds_label := "runtime_begin"; ds_items := [DataBytes runtime_bc] |>
