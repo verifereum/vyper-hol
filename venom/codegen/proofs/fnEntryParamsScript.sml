@@ -310,10 +310,9 @@ Proof
   metis_tac[entry_params_inventory]
 QED
 
-Theorem entry_prefix_asm_exact:
+Theorem entry_prefix_asm_exact_reloc:
   !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs a ra rest vp.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
     codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
     ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
@@ -391,10 +390,9 @@ Proof
     arithmeticTheory.ADD1]
 QED
 
-Theorem entry_prefix_asm:
+Theorem entry_prefix_asm_reloc:
   !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs a ra rest vp.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
     codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
     ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
@@ -420,7 +418,7 @@ Theorem entry_prefix_asm:
         (LENGTH (execute_plan cp.cp_initial_fmp
           (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a
 Proof
-  rpt gen_tac >> strip_tac >> drule_all entry_prefix_asm_exact >>
+  rpt gen_tac >> strip_tac >> drule_all entry_prefix_asm_exact_reloc >>
   metis_tac[]
 QED
 
@@ -436,10 +434,9 @@ QED
      the parameters' outputs (from the empty initial stack), defined by
      PARAM / FMP_PARAM / RETPC_PARAM, not ASSIGN, so normalize_operand
      returns them unchanged. *)
-Theorem entry_prefix_frame_sim:
+Theorem entry_prefix_frame_sim_reloc:
   !fuel ctx cp lo o2pc prog liveness dfg fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs as ra rest Inv.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
@@ -484,8 +481,8 @@ Proof
     (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
     with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
     simp[Abbr `vp`] >>
-  drule_all entry_prefix_asm >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all entry_prefix_asm_reloc >>
+  disch_then (qspecl_then [`ctx`, `lo`] strip_assume_tac) >>
   `exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
    exec_block fuel ctx (HD fn.fn_blocks) vp` by
     (unabbrev_all_tac >> irule bounded_entry_param_skip >> metis_tac[]) >>
@@ -505,4 +502,111 @@ Proof
   rpt strip_tac >>
   `normalize_operand (dfg_build_function fn) [] at = at` by metis_tac[] >>
   pure_asm_rewrite_tac[] >> REFL_TAC
+QED
+
+Theorem entry_prefix_asm_exact:
+  !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs a ra rest vp.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs a ra rest /\
+    vp = (entry_bind_pairs
+      (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+      with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) ==>
+    ?a'. asm_steps lo o2pc prog
+      (LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a = AsmOK a' /\
+      a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a' /\
+      create_safe_prefix lo o2pc prog
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a
+Proof
+  rpt strip_tac >> drule_all entry_prefix_asm_exact_reloc >> metis_tac[]
+QED
+
+Theorem entry_prefix_asm:
+  !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs a ra rest vp.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs a ra rest /\
+    vp = (entry_bind_pairs
+      (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+      with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) ==>
+    ?n a'. n = LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      asm_steps lo o2pc prog n a = AsmOK a' /\
+      a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a' /\
+      create_safe_prefix lo o2pc prog
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a
+Proof
+  rpt strip_tac >> drule_all entry_prefix_asm_reloc >> metis_tac[]
+QED
+
+Theorem entry_prefix_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness dfg fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs as ra rest Inv.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs as ra rest /\
+    fn_entry_inv Inv ctx fn vs /\ reachability_closed Inv ctx /\
+    asm_block_at prog as.as_pc
+      (execute_plan cp.cp_initial_fmp
+         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))
+    ==>
+    ?n as' vs_p.
+      n = LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc +
+        LENGTH (execute_plan cp.cp_initial_fmp
+                  (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+        exec_block fuel ctx (HD fn.fn_blocks) vs_p /\
+      vs_p.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+      fn_frame_inv ctx cp lo fn ra rest as.as_memory ps1 vs_p as' /\
+      vs_p.vs_current_bb = vs.vs_current_bb /\
+      vs_p.vs_labels = vs.vs_labels /\
+      vs_p.vs_call_ctx = vs.vs_call_ctx /\
+      (!inst. active_inst fn inst vs_p ==> Inv ctx fn inst vs_p) /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra vs_p) lo at =
+         operand_val (frame_view fn ra vs_p) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
+Proof
+  rpt gen_tac >> strip_tac >> drule_all entry_prefix_frame_sim_reloc >> simp[]
 QED
