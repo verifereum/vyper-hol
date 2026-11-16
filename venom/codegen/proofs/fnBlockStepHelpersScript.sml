@@ -507,8 +507,7 @@ Theorem block_prefix_step:
          operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
       create_safe_prefix lo o2pc prog n as
 Proof
-  rpt gen_tac >> strip_tac >> irule block_prefix_step_reloc >>
-  first_assum (irule_at Any) >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all block_prefix_step_reloc >> simp[]
 QED
 
 (* ===== From the block boundary to the block body ===== *)
@@ -641,13 +640,10 @@ Proof
     qpat_assum `asm_block_at _ _ _` (fn th =>
       strip_assume_tac (MATCH_MP (Q.SPECL [`lo`, `o2pc`] label_block_steps)
                           (REWRITE_RULE [eq, APPEND] th))) >> assume_tac eq) >>
-  mp_tac (Q.SPECL [`ctx`, `cpl`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`,
-    `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`, `fn`, `bb`, `pred`, `ps`,
-    `h`, `promised`, `vs`, `as with as_pc := as.as_pc + 1`, `s_phi`,
-    `clean_ops`, `ps2`, `inst_ops`, `ps_after`, `r`, `ra`, `rest`, `mem0`]
-    block_prefix_step_reloc) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-               simp[fn_frame_inv_pc]) >>
+  drule_all (GEN_ALL (REWRITE_RULE
+    [asm_state_accfupds, combinTheory.K_THM, fn_frame_inv_pc]
+    (Q.INST [`as` |-> `as with as_pc := as.as_pc + 1`]
+       (SPEC_ALL block_prefix_step_reloc)))) >>
   strip_tac >>
   `EL as.as_pc prog = AsmLabel bb.bb_label` by
     (qpat_x_assum `block_ops = _` (fn eq =>
@@ -761,8 +757,7 @@ Theorem block_step_prefix:
            (normalize_operand dfg [] at)) /\
       create_safe_prefix lo o2pc prog n as
 Proof
-  rpt gen_tac >> strip_tac >> irule block_step_prefix_reloc >>
-  first_assum (irule_at Any) >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all block_step_prefix_reloc >> simp[]
 QED
 
 (* A revert forwarding starts at a RETURNDATACOPY, not a PHI, so it lies
