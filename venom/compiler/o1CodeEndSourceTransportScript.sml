@@ -1,5 +1,6 @@
 Theory o1CodeEndSourceTransport
 Ancestors
+  o1LabelReadinessSsa
   o1CodeEndCfgBoundary o1ContractSimplifyCfg
   o1ContractMakeSsa o1ContractMakeSsaSrc makeSsaCurrentLockstep
   o1FrameLockstep lowerDloadPublicTrace memSafeRun
@@ -122,7 +123,9 @@ Proof
   `EVERY (\i. ~MEM (Label "code_end") i.inst_operands)
      (fn_insts (EL n C.ctx_functions))` by
     (simp[EVERY_MEM] >> metis_tac[EL_MEM]) >>
-  drule_all make_ssa_current_fn_label_absent >> gvs[EVERY_MEM]
+  `wf_function (EL n C.ctx_functions)` by fs[o1_fn_shape_def] >>
+  fs[EVERY_MEM] >>
+  metis_tac[o1LabelReadinessSsaTheory.make_ssa_current_fn_label_absent]
 QED
 
 Theorem code_end_pre_walk_section[local]:

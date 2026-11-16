@@ -4,7 +4,7 @@ Ancestors
   o1LabelFlowMiddleInsertion o1LabelFlowMiddleSsa
   codegenSymRel o1LabelFlowMiddleCleanup makeSsaCurrentLockstepShape list
   o1MakeSsaVisitTrace makeSsaCurrentProps o1MakeSsaOwnership pred_set
-  makeSsaCurrentNonDegShape makeSsaCurrentNonDegCleanup o1MakeSsaActualMaps
+  makeSsaCurrentNonDegShape makeSsaCurrentNonDegCleanup dominatorQueryProofs
   o1MakeSsaRootedTree venomWf venomInst
   o1MakeSsaEventOwnership makeSsaCurrentTraceCertificate makeSsaCurrentLockstep
   makeSsaCurrentWfSsa makeSsaCurrentTreeTrace pair

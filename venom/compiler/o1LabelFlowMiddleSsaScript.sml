@@ -3,7 +3,7 @@ Ancestors
   o1LabelFlowMiddleInsertion o1LabelFlowMiddleOwnership
   o1LabelFlowMiddleTraversal o1LabelFlowMiddleCleanup
   o1MakeSsaCallAssembly o1MakeSsaRootedTree
-  o1MakeSsaActualMaps makeSsaCurrentProps o1PassContract
+  dominatorQueryProofs makeSsaCurrentProps o1PassContract
   o1MakeSsaOwnership o1MakeSsaEventOwnership irSupply venomInst
   venomFnScheduleRunner venomWf makeSsaDefs makeSsaCurrentAnalysis
   venomExecProofs makeSsaRfPipeline makeSsaCurrentNonDegCleanup

@@ -13,7 +13,7 @@ Proof
   drule lookup_function_name >> simp[]
 QED
 
-Theorem fmp_lower_inst_label_origin:
+Theorem fmp_lower_inst_any_label_origin[local]:
   fmp_lower_inst infos ctx runner s inst = SOME (head,s') ==>
   !i. MEM i head /\ MEM (Label label) i.inst_operands ==>
       MEM (Label label) inst.inst_operands
@@ -58,7 +58,7 @@ Proof
   qexistsl [`ctx`, `fn`, `s`, `s'`] >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
-      drule_all fmp_lower_inst_label_origin >>
+      drule_all fmp_lower_inst_any_label_origin >>
       gvs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[fmp_make_root_layout_label_free]
 QED

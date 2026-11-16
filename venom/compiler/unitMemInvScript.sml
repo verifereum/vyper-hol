@@ -175,7 +175,7 @@ Proof
   rw[lowered_mem_ok_def, EVERY_MEM] >> res_tac >> fs[]
 QED
 
-Theorem lowered_reads_disjoint[local]:
+Theorem lowered_reads_disjoint:
   lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   source_memory_reads_disjoint cp inst s
@@ -187,7 +187,7 @@ Proof
   disj2_tac >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
-Theorem lowered_writes_disjoint[local]:
+Theorem lowered_writes_disjoint:
   lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
   (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
   context_source_memory_writes_disjoint cp inst s
@@ -241,4 +241,13 @@ Proof
   rw[codegen_memory_obligations_def] >>
   metis_tac[lowered_reads_disjoint, lowered_writes_disjoint,
             lowered_spill_step_safe]
+QED
+
+Theorem static_mem_ok_codegen_disjoint:
+  static_mem_ok eom ctx fn inst s /\ ~in_revert_forward fn s /\
+  (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
+  source_memory_reads_disjoint cp inst s /\
+  context_source_memory_writes_disjoint cp inst s
+Proof
+  metis_tac[static_mem_ok_lowered, lowered_reads_disjoint, lowered_writes_disjoint]
 QED

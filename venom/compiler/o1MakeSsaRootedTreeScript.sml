@@ -1,6 +1,6 @@
 Theory o1MakeSsaRootedTree
 Ancestors
-  o1MakeSsaActualMaps dominatorProofs makeSsaDefs venomInst list
+  dominatorQueryProofs dominatorProofs makeSsaDefs venomInst list
 
 (* Ancestors are stored nearest first; the endpoint is separate. *)
 Definition rooted_parent_path_def:
@@ -129,8 +129,8 @@ Proof
     metis_tac[idom_entry_none] >>
   simp[current_dom_tree_def] >>
   irule rooted_tree_postorder_distinct >>
-  simp[actual_dom_children_distinct] >>
+  simp[dominated_query_distinct] >>
   qexistsl [`[]`, `idom_of (dom_analyze (cfg_analyze fn) fn)`, `entry`] >>
-  simp[rooted_parent_path_def, actual_dom_children_distinct,
-    actual_dom_children]
+  simp[rooted_parent_path_def, dominated_query_distinct,
+    dominated_query_membership]
 QED
