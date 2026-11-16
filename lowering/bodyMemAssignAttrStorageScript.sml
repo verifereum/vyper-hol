@@ -2,7 +2,7 @@
    (bodyMemAssign's dispatch): a word field of a storage or transient struct (S1's body_assign_attr_storage). *)
 Theory bodyMemAssignAttrStorage
 Ancestors
-  fragGasSeqAbort
+  fragGasSeqAbort venomInst
   supportedExprTraverse allocLimits allocLimitsProps
   bodySimStmtCases
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
@@ -351,7 +351,7 @@ Theorem compile_expr_add_read_outcome_mem_src[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       eval_operand dst u = SOME (kb + ko))
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -413,9 +413,11 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          drule_at (Pat `emit_op _ _ _ = _`) vv_post_add_read_mem_src >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-          disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
+          mp_tac (Q.INST
+            [`H` |-> `storage_trace_horizon es_end.storage_trace`,
+             `ee` |-> `es_end with gas_obs := []`, `s` |-> `t1`]
+            (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
+              vv_post_add_read_mem_src))) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           `s0.vs_alloca_next <= u2.vs_alloca_next` by decide_tac >>
@@ -433,7 +435,8 @@ Proof
              qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u2`
                (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                   exprSimUnwrapTheory.expr_post_fields_transport) th)) >>
-             qexists_tac `t1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+             simp[] >> qexists_tac `t1` >>
+             fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
           `marks = marks ++ []` by simp[] >>
@@ -450,8 +453,10 @@ Proof
          gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
          Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      conj_tac
+      >- (irule gas_marked_exec_bind_exception >> goal_assum drule) >>
       simp[GSYM expr_exit_exception_transport] >>
-      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+      disj2_tac >> rpt strip_tac >> fs[halt_exit_def] >> metis_tac[]) >>
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[force_exempt_cert]
 QED
@@ -526,6 +531,15 @@ Proof
      simp[ci_mono_def] >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >>
+  rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >> BETA_TAC >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >~ [`expr_exit (INR _) _`]
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -534,13 +548,6 @@ Proof
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     eval_operand dst t = SOME (n2w slot + n2w off)` >>
   rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (gen_tac >> BETA_TAC >>
-      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
-           vyperStorageTraceTheory.storage_trace_frame_write_place])
-  >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
   >- (BETA_TAC >> irule compile_expr_add_read_outcome_mem_src >>
       simp[] >> qexistsl_tac [`sm`, `sn`, `expr_type e`, `vv`] >> simp[]) >>
@@ -552,7 +559,8 @@ Resume compile_assign_attr_storage_mem[store]:
   rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
   `value_has_type ftv v` by metis_tac[] >>
   `encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)]` by
-    (irule encode_value_word_typed >> metis_tac[]) >>
+    (irule stmtSimAssignStorageFactsTheory.encode_value_word_typed >>
+     metis_tac[]) >>
   `well_formed_type_value ftv` by
     metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -610,7 +618,8 @@ Resume compile_assign_attr_storage_mem[store]:
         simp[ignore_bind_def,bind_def,record_storage_event_def,return_def,
              write_place_def,write_storage_slot_eq] >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+      disj2_tac >>
+      simp[exit_result_def,stmt_exit_def,expr_exit_def,halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `alloca_inv t` by
@@ -646,10 +655,13 @@ Resume compile_assign_attr_storage_mem[store]:
        valid_horizon cx st0 H ee.storage_trace /\
        MEM (tr, n2w slot, StructTV fs) (FST H) /\ regions_consistent (FST H)` by
     (gen_tac >> strip_tac >>
-     fs[vyperStorageFootprintTheory.valid_horizon_def,
+     qpat_x_assum `valid_horizon _ _ H ee'.storage_trace` mp_tac >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def,
         vyperStorageFootprintTheory.storage_observations_ok_def,
         listTheory.EVERY_APPEND,
-        vyperStorageFootprintTheory.storage_trace_regions_def]) >>
+        vyperStorageFootprintTheory.storage_trace_regions_def,
+        vyperStorageFootprintTheory.storage_trace_locks_def] >>
+     strip_tac >> simp[]) >>
   qspecl_then [`ctx`, `func`, `tr`, `dst`, `n2w slot + n2w off`, `op`,
     `typed_val_to_w256 ftv v`, `t`, `su`, `sb`] mp_tac
     storage_store_op_exact_mem_src >>
@@ -701,17 +713,24 @@ Resume compile_assign_attr_storage_mem[store]:
        (drule_all
           vyperStorageRegionWriteTheory.storage_subregion_typed_write_preserves_root >>
         simp[]) >>
-     irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee1`, `n2w slot + n2w off`, `ftv`, `v`] >> simp[] >>
-     decide_tac) >>
+     mp_tac (Q.INST
+       [`cx` |-> `cx`, `st` |-> `ee1`, `st'` |-> `ee'`,
+        `regions` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+        `b` |-> `tr`,
+        `root_slot` |-> `n2w slot : bytes32`, `root_tv` |-> `StructTV fs`,
+        `wr_slot` |-> `n2w slot + n2w off : bytes32`,
+        `wr_tv` |-> `ftv`, `v` |-> `v`]
+       vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on) >>
+     impl_tac >- (simp[Abbr `ee1`] >> decide_tac) >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx ee' u` by
     (qpat_x_assum `u = _` SUBST1_TAC >>
      REWRITE_TAC [stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
+  conj_tac
+  >- (REWRITE_TAC [stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
   irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`cenv`, `s0`, `sa`] >>
+  Cases_on `tr` >> fs[sstore_def, tstore_def, lookup_var_def]
 QED
 
 Finalise compile_assign_attr_storage_mem
