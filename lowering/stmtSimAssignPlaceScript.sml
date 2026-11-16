@@ -34,7 +34,6 @@ Ancestors
   vyperInterpreter vyperState vyperTypeSystem
   venomState
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem compile_assign_place_case:
   !ctx func cx lctx RetQ cenv ty env bt e es dty.
     ~expr_can_mutate cenv (target_to_expr bt) /\
@@ -87,77 +86,66 @@ Proof
    fn_has_code st su func /\ fn_has_code su sb func` by
     metis_tac[exprLoweringPropsTheory.ci_mono_def,
               fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
-  irule assign_place_result_outcome >>
-  qexistsl_tac [
-    `\res ee r. expr_exit res r`,
-    `\res ee t. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sm s0 ee tv vv t /\
+  MATCH_MP_TAC (Q.INST [
+    `Exit` |-> `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`,
+    `P` |-> `\H res ee t. ?tv. res = INL tv /\
+       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
        t.vs_current_bb = sm.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sm.cs_current_insts`] >>
+       t.vs_inst_idx = LENGTH sm.cs_current_insts`]
+    assign_place_result_outcome) >>
   conj_tac
-  >- (BETA_TAC >> Cases >- simp[exprSimDefsTheory.expr_exit_INL] >>
+  >- (qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+      disch_then irule >> simp[] >>
+      metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible]) >>
+  conj_tac >- (rpt gen_tac >> BETA_TAC >> metis_tac[]) >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> Cases >- simp[exprSimDefsTheory.expr_exit_INL] >>
       rpt gen_tac >> strip_tac >> qexists_tac `y` >>
-      simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  conj_tac
-  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
-      qpat_x_assum `INL _ = INL _` (assume_tac o SRULE []) >>
-      rpt BasicProvers.VAR_EQ_TAC >>
-      `?v. read_result cx pv (mid with gas_obs := []) =
-            (INL v,mid with gas_obs := [])` by
-        metis_tac[exprSimAggregateSourceTheory.vv_post_materialises] >>
-      `target_case F ctx func cenv cx bt` by
-        (drule stmtSimAugAssignTheory.gas_marked_exec_observation >>
-         disch_then (qspec_then `[]` assume_tac) >>
-         metis_tac[]) >>
-      drule_all assign_place_pure_continuation >>
-      disch_then (qspec_then `RetQ` assume_tac) >>
-      irule exprSimMemDefsTheory.gas_outcome_post_mono >>
-      goal_assum (drule_at Any) >>
-      rpt strip_tac >> BETA_TAC >>
-      pop_assum (mp_tac o BETA_RULE) >>
-      disch_then (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
-  conj_tac >- metis_tac[] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then irule >> simp[] >>
-  metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible]
-QED
-*)
-Theorem compile_assign_place_case:
-  !ctx func cx lctx RetQ cenv ty env bt e es dty.
-    ~expr_can_mutate cenv (target_to_expr bt) /\
-    cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
-    (!vis mut nr rr fn args dflts ret body.
-       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
-       function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
-    get_module_code cx NONE = SOME (cx_tops cx) /\
-    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
-    type_place_target env bt = SOME (Type dty) /\
-    type_widens_to env.type_defs (expr_type e) dty /\
-    assignable_type env.type_defs (expr_type e) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
-    ((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
-                           read_result cx pv sread = (INL v,s2)) ==>
-     target_case F ctx func cenv cx bt) /\
-    ~immutable_root cx bt /\
-    assign_alloc_ok cenv bt e /\
-    target_indices_pre cenv cx env bt /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
-    acyclic_struct_metadata cenv.ce_struct_fields ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
-      (eval_stmt cx (Assign (BaseTarget bt) e)) es
-Proof
-  cheat
+      simp[stmt_exit_def] >> conj_tac
+      >- (rpt gen_tac >> disj1_tac >>
+          metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >> simp[] >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+      gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    vv_post H ctx func cenv cx e es sa sm s0 (mid with gas_obs := []) pv vv t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >> gvs[]) >>
+  `target_case F ctx func cenv cx bt` by
+    (drule stmtSimAugAssignTheory.gas_marked_exec_observation >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     metis_tac[exprSimAggregateSourceTheory.vv_post_materialises]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (read_result cx pv)
+      (\v. bind (eval_target_place cx bt) (\p. write_place cx p v)))
+    (mid with gas_obs := [],t)
+    (\H res ee u. !tail. stmt_post H ctx func cx lctx cenv cenv sa sb es s0
+      res (ee with gas_obs := tail) u)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)` by
+    (irule assign_place_pure_continuation >> simp[] >> metis_tac[]) >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  goal_assum (drule_at Any) >>
+  rpt strip_tac >> BETA_TAC >>
+  pop_assum (mp_tac o BETA_RULE) >>
+  disch_then (qspec_then `ee.gas_obs` mp_tac) >> simp[]
 QED
 
 (* Assignment with effectful indices or a physically widened RHS. *)
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem assign_place_effectful_index_case:
   !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
     ~supported_target_pure tops bt /\
@@ -211,36 +199,11 @@ Proof
       irule compile_assign_place_case >> simp[] >> metis_tac[]) >>
   irule assign_place_nonmutating_widened_case >> metis_tac[]
 QED
-*)
-Theorem assign_place_effectful_index_case:
-  !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
-    ~supported_target_pure tops bt /\
-    type_place_target env bt = SOME (Type dty) /\
-    type_widens_to env.type_defs (expr_type e) dty /\
-    assignable_type env.type_defs (expr_type e) /\
-    ((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
-                           read_result cx pv sread = (INL v,s2)) ==>
-     target_case F ctx func cenv cx bt) /\
-    ~immutable_root cx bt /\
-    assign_alloc_ok cenv bt e /\
-    target_indices_pre cenv cx env bt /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    body_inv tops ctx cenv cx /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
-      (eval_stmt cx (Assign (BaseTarget bt) e)) es
-Proof
-  cheat
-QED
 
 (* ADMITTED: an immutable written by the constructor (see the header).
    assignable_type excludes the empty struct, the one zero-size value type:
    its unwrap still emits an MLOAD/ISTORE that clobbers a neighbouring
    immutable (checked counterexample), and Vyper rejects empty structs. *)
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem immutable_deploy_assign_case:
   !ctx func cx lctx RetQ cenv ty env tops nsid e es ity.
     body_inv tops ctx cenv cx /\ cx.in_deploy /\
@@ -327,20 +290,4 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`INL ()`,`fin`,`OK q`] >>
   fs[stmtSimDeclComposeTheory.stmt_post_end_gas_obs] >> metis_tac[])
-QED
-*)
-Theorem immutable_deploy_assign_case:
-  !ctx func cx lctx RetQ cenv ty env tops nsid e es ity.
-    body_inv tops ctx cenv cx /\ cx.in_deploy /\
-    supported_immutable_type tops nsid = SOME ity /\
-    type_place_target env (TopLevelNameTarget nsid) = SOME (Type ity) /\
-    type_widens_to env.type_defs (expr_type e) ity /\
-    assignable_type env.type_defs (expr_type e) /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
-Proof
-  cheat
 QED

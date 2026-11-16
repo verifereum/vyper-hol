@@ -48,7 +48,6 @@ Ancestors
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem assign_place_typing:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
   well_typed_expr env e /\
@@ -60,18 +59,7 @@ Proof
   rpt strip_tac >> Cases_on `type_place_target env t` >> gvs[] >>
   rename1 `SOME pt` >> Cases_on `pt` >> gvs[]
 QED
-*)
-Theorem assign_place_typing:
-  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
-  well_typed_expr env e /\
-  ?dty. type_place_target env t = SOME (Type dty) /\
-        type_widens_to env.type_defs (expr_type e) dty /\
-        assignable_type env.type_defs (expr_type e)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
@@ -86,14 +74,7 @@ Proof
       vyperCompilerTheory.run_grouped_lowering_def, AllCaseEqs(),
       vyperCompilerTheory.lowering_policy_ok_def]
 QED
-*)
-Theorem body_inv_mcopy:
-  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem base_assignment_target_induct[local]:
   !P. (!id. P (NameTarget id)) /\ (!nsid. P (TopLevelNameTarget nsid)) /\
       (!bt e. P bt ==> P (SubscriptTarget bt e)) /\
@@ -103,16 +84,7 @@ Proof
   `(!e:expr. T) /\ !bt. P bt` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
 QED
-*)
-Theorem base_assignment_target_induct[local]:
-  !P. (!id. P (NameTarget id)) /\ (!nsid. P (TopLevelNameTarget nsid)) /\
-      (!bt e. P bt ==> P (SubscriptTarget bt e)) /\
-      (!bt s. P bt ==> P (AttributeTarget bt s)) ==> !bt. P bt
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_target_idx_case[local]:
   !t tops ctx func cenv cx.
     body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
@@ -122,16 +94,7 @@ Proof
   simp[body_base_target_ok_def, target_idx_case_def] >> rpt strip_tac >>
   gvs[expr_sim_case_def, expr_vv_case_def, Once body_expr_ok_def] >> metis_tac[]
 QED
-*)
-Theorem body_target_idx_case[local]:
-  !t tops ctx func cenv cx.
-    body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
-    target_idx_case F ctx func cenv cx t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_target_case[local]:
   !tops ctx func cenv cx t.
     body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
@@ -139,16 +102,7 @@ Theorem body_target_case[local]:
 Proof
   metis_tac[body_target_idx_case, target_case_all]
 QED
-*)
-Theorem body_target_case[local]:
-  !tops ctx func cenv cx t.
-    body_inv tops ctx cenv cx /\ body_base_target_ok cx t ==>
-    target_case F ctx func cenv cx t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assign_place_rhs_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -188,23 +142,7 @@ Proof
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
-*)
-Theorem body_assign_place_rhs_pre:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-  body_stmt_safe tops (Assign (BaseTarget t) e) /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) ==>
-  expr_body_pre cenv cx env e es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_subscript_target_shape[local]:
   !tops bindings t k.
     supported_target tops bindings (SubscriptTarget t k) \/
@@ -217,19 +155,7 @@ Proof
   gvs[supported_target_def, supported_target_info_def, AllCaseEqs(),
       optionTheory.IS_SOME_EXISTS]
 QED
-*)
-Theorem supported_subscript_target_shape[local]:
-  !tops bindings t k.
-    supported_target tops bindings (SubscriptTarget t k) \/
-    IS_SOME (supported_target_info tops bindings (SubscriptTarget t k)) ==>
-    supported_expr tops k /\
-    ((?id. t = TopLevelNameTarget id) \/
-     IS_SOME (supported_target_info tops bindings t))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_attribute_target_shape[local]:
   !tops bindings t f.
     supported_target tops bindings (AttributeTarget t f) \/
@@ -241,18 +167,7 @@ Proof
   gvs[supported_target_def, supported_target_info_def, AllCaseEqs(),
       optionTheory.IS_SOME_EXISTS]
 QED
-*)
-Theorem supported_attribute_target_shape[local]:
-  !tops bindings t f.
-    supported_target tops bindings (AttributeTarget t f) \/
-    IS_SOME (supported_target_info tops bindings (AttributeTarget t f)) ==>
-    (?id. t = TopLevelNameTarget id) \/
-    IS_SOME (supported_target_info tops bindings t)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem target_indices_body_pre[local]:
   !tops bindings ctx t cenv cx env pt.
     body_inv tops ctx cenv cx /\
@@ -291,34 +206,7 @@ Proof
         metis_tac[call_evaluation_safe_append_right]) >>
   metis_tac[call_evaluation_safe_append_left, target_indices_pre_def]
 QED
-*)
-Theorem target_indices_body_pre[local]:
-  !tops bindings ctx t cenv cx env pt.
-    body_inv tops ctx cenv cx /\
-    ~supported_target_exists call_operands_effect_root t /\
-    EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
-    EVERY (\e. ~is_extcode e) (target_indices t) /\
-    type_place_target env t = SOME pt /\
-    (supported_target tops bindings t \/
-     IS_SOME (supported_target_info tops bindings t)) /\
-    alloc_limits_target cenv t /\
-    ~supported_target_exists
-      (\e. ~is_extcode e /\
-           ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
-    call_evaluation_safe cx (int_calls_target t) /\
-    ~supported_target_exists expr_evm_run_root t /\
-    EVERY (\c. FST c = NONE) (int_calls_target t) /\
-    supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
-       occurs_abi_decode_target target (cx_tops cx)) /\
-    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
-    target_indices_pre cenv cx env t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assign_place_indices_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -358,22 +246,7 @@ Proof
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def, listTheory.EVERY_CONJ] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
-*)
-Theorem body_assign_place_indices_pre:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
-  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-  body_stmt_safe tops (Assign (BaseTarget t) e) /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) ==>
-  target_indices_pre cenv cx env t
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_decl_storage_exists[local]:
   !tops src id.
     ((?vis mut ty slot.
@@ -391,19 +264,7 @@ Proof
   simp[] >> Cases_on `s = id` >> gvs[] >>
   Cases_on `v0 = Storage \/ v0 = Transient` >> gvs[] >> metis_tac[]
 QED
-*)
-Theorem supported_decl_storage_exists[local]:
-  !tops src id.
-    ((?vis mut ty slot.
-       supported_variable_decl tops (src,id) = SOME (vis,mut,ty,slot) /\
-       (mut = Storage \/ mut = Transient)) \/
-     IS_SOME (supported_hashmap_decl tops (src,id))) ==>
-    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_place_root_decl[local]:
   !tops src id. supported_place_root tops (src,id) ==>
     src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
@@ -416,15 +277,7 @@ Proof
   Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
   gvs[] >> metis_tac[]
 QED
-*)
-Theorem supported_place_root_decl[local]:
-  !tops src id. supported_place_root tops (src,id) ==>
-    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_target_info_root[local]:
   !t tops bindings.
     IS_SOME (supported_target_info tops bindings t) ==>
@@ -436,17 +289,7 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   metis_tac[optionTheory.IS_SOME_EXISTS]
 QED
-*)
-Theorem supported_target_info_root[local]:
-  !t tops bindings.
-    IS_SOME (supported_target_info tops bindings t) ==>
-    (?id. target_root t = NameTarget id) \/
-    (?nsid. target_root t = TopLevelNameTarget nsid /\ supported_place_root tops nsid)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_legacy_root_decl[local]:
   !tops src id field.
     (supported_scalar_target tops (src,id) \/
@@ -466,18 +309,7 @@ Proof
   simp[] >> Cases_on `decl2` >> simp[] >>
   Cases_on `supported_hashmap_decl tops (src,id)` >> simp[]
 QED
-*)
-Theorem supported_legacy_root_decl[local]:
-  !tops src id field.
-    (supported_scalar_target tops (src,id) \/
-     supported_subscript_base tops (src,id) \/
-     supported_storage_field_write tops (src,id) field) ==>
-    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem supported_legacy_target_root[local]:
   !t tops bindings.
     supported_target tops bindings t ==>
@@ -494,19 +326,7 @@ Proof
   PairCases_on `p` >>
   metis_tac[supported_legacy_root_decl]
 QED
-*)
-Theorem supported_legacy_target_root[local]:
-  !t tops bindings.
-    supported_target tops bindings t ==>
-    (?id. target_root t = NameTarget id) \/
-    (?src id. target_root t = TopLevelNameTarget (src,id) /\
-      src = NONE /\ IS_SOME (find_var_decl_by_name id tops)) \/
-    (?nsid. t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid))
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assign_immutable_target:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -528,18 +348,7 @@ Proof
   drule_then strip_assume_tac supported_place_root_decl >>
   fs[immutable_root_def] >> metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]
 QED
-*)
-Theorem body_assign_immutable_target:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  immutable_root cx t ==>
-  ?nsid. t = TopLevelNameTarget nsid /\
-         IS_SOME (supported_immutable_type tops nsid)
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_immutable_target_type:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   supported_immutable_type tops nsid = SOME ity /\
@@ -567,17 +376,7 @@ Proof
          metis_tac[bare_global_assignable_complete_def] >> fs[]) >>
   fs[bare_global_assignable_complete_def]
 QED
-*)
-Theorem body_immutable_target_type:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  supported_immutable_type tops nsid = SOME ity /\
-  type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) ==>
-  cx.in_deploy /\ dty = ity
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem target_indices_pre_int_calls_local[local]:
   !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
        EVERY (\c. FST c = NONE) (int_calls_target bt)
@@ -590,17 +389,9 @@ Proof
   qpat_x_assum `!es. expr_sim_inv _ _ _ _ ==> _` drule >>
   simp[exprSimHypsDefsTheory.expr_body_pre_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
-*)
-Theorem target_indices_pre_int_calls_local[local]:
-  !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
-       EVERY (\c. FST c = NONE) (int_calls_target bt)
-Proof
-  cheat
-QED
 
 (* An effectful target with any RHS, a widened one included: since Assign
    reads the RHS first, the effectful-index root covers both. *)
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assign_place_effectful_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -639,31 +430,7 @@ Proof
     fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
   metis_tac[assign_place_effectful_index_case]
 QED
-*)
-Theorem body_assign_place_effectful_case:
-  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_ok cx t) /\
-    body_expr_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-                (Assign (BaseTarget t) e) ==>
-              occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-    ~supported_target_pure tops t /\ ~immutable_root cx t ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -723,31 +490,4 @@ Proof
   `EVERY (\c. FST c = NONE) (int_calls_target t)` by
     metis_tac[target_indices_pre_int_calls_local] >>
   irule compile_assign_place_case >> simp[] >> metis_tac[]
-QED
-*)
-Theorem body_assign_place_case:
-  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_ok cx t) /\
-    body_expr_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-                (Assign (BaseTarget t) e) ==>
-              occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-    body_stmt_safe tops (Assign (BaseTarget t) e) /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
-Proof
-  cheat
 QED

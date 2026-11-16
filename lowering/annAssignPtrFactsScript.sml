@@ -12,7 +12,6 @@ Ancestors
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem annassign_rhs_pre_ptr:
   !cenv cx env e es tops id typ ctx.
     body_stmt_safe tops (AnnAssign id typ e) /\
@@ -46,23 +45,7 @@ Proof
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
 QED
-*)
-Theorem annassign_rhs_pre_ptr:
-  !cenv cx env e es tops id typ ctx.
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
-    expr_body_pre cenv cx env e es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem annassign_declared_rhs_pre_ptr:
   !cenv cx env e es tops id typ st c st1 ctx.
     body_stmt_safe tops (AnnAssign id typ e) /\
@@ -87,25 +70,7 @@ Proof
   `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
   irule annassign_rhs_pre_ptr >> metis_tac[]
 QED
-*)
-Theorem annassign_declared_rhs_pre_ptr:
-  !cenv cx env e es tops id typ st c st1 ctx.
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    declare_local cenv id typ st = (c,st1) ==>
-    body_inv tops ctx c cx /\ expr_body_pre c cx env e es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem annassign_declared_expr_sim_ptr:
   !cenv cx env e es tops id typ st c st1 ctx func d PG.
     body_stmt_safe tops (AnnAssign id typ e) /\
@@ -124,25 +89,7 @@ Proof
   drule_all annassign_declared_rhs_pre_ptr >> strip_tac >>
   fs[body_expr_ptr_ok_def] >> metis_tac[]
 QED
-*)
-Theorem annassign_declared_expr_sim_ptr:
-  !cenv cx env e es tops id typ st c st1 ctx func d PG.
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    body_expr_ptr_ok cx e /\ declare_local cenv id typ st = (c,st1) ==>
-    expr_sim_ptr d ctx PG func c cx (expr_type e) e es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem annassign_declared_expr_vv_sim_ptr:
   !cenv cx env e es tops id typ st c st1 ctx func d PG.
     body_stmt_safe tops (AnnAssign id typ e) /\
@@ -161,25 +108,7 @@ Proof
   drule_all annassign_declared_rhs_pre_ptr >> strip_tac >>
   fs[body_expr_ptr_ok_def] >> metis_tac[]
 QED
-*)
-Theorem annassign_declared_expr_vv_sim_ptr:
-  !cenv cx env e es tops id typ st c st1 ctx func d PG.
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    body_expr_ptr_ok cx e /\ declare_local cenv id typ st = (c,st1) ==>
-    expr_vv_sim_ptr d ctx PG func c cx (expr_type e) e es
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem annassign_ih_ptr:
   !cx id typ e env ret_ty env' cenv es.
     (!tenv s'' tyv t.
@@ -201,21 +130,7 @@ Proof
   qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
   simp[lift_option_type_def, return_def]
 QED
-*)
-Theorem annassign_ih_ptr:
-  !cx id typ e env ret_ty env' cenv es.
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-         (INL tyv,t) ==> body_expr_ptr_ok cx e) /\
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
-    body_expr_ptr_ok cx e
-Proof
-  cheat
-QED
 
-(* LOCAL STUB: foreign static supplier closure; never deliver.
 Theorem copy_types_not_word_bytestring_ptr:
   !dst src.
     supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
@@ -228,12 +143,4 @@ Proof
   gvs[is_bytestring_type_def, is_word_type_def] >>
   Cases_on `b'` >> gvs[is_bytestring_type_def, AllCaseEqs()] >>
   Cases_on `b` >> gvs[] >> Cases_on `b''` >> gvs[is_bytestring_type_def]
-QED
-*)
-Theorem copy_types_not_word_bytestring_ptr:
-  !dst src.
-    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
-    is_bytestring_type dst
-Proof
-  cheat
 QED
