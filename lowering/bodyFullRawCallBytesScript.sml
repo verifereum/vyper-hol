@@ -3,6 +3,8 @@ Ancestors
   exprSimRawCall fragGasSeqPtr wordLoadStorePtr bodyFullGhostFrame
   rawCallBufferPtr representationCleanPtr builtinSimple emitHelper compileEnv
   venomState venomInst fragExec exprLoweringProps list ptrDisciplineEmptyTaint
+  augAssignPtrScalarRun augAssignPtrScalarCertificate instSeqComposePtr
+  bodyFullRawCallCallFrame
 Libs
   monadsyntax
 
@@ -151,11 +153,51 @@ Resume raw_call_bytes_success_full_path[checks]:
     ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
     ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
     ptrDisciplineTheory.imm_taint_def, mk_inst_def, update_var_def] >>
-  simp[Once inst_seq_ptr_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
-    mk_inst_def, venomExecSemanticsTheory.exec_pure2_def, eval_operand_def,
-    lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, update_var_def] >>
-  conj_tac >- suspend "ltcheck" >>
-  suspend "ltghost"
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr D lo ctx func PG G0 tn0 _ s0 Gf tf` >>
+  qabbrev_tac `C =
+    [mk_inst (sa.cs_next_id+1) LT [Var a0;Lit (n2w n)] [a1];
+     mk_inst (sa.cs_next_id+2) XOR [Var a0;Lit (n2w n)] [a2];
+     mk_inst (sa.cs_next_id+3) MUL [Var a1;Var a2] [a3];
+     mk_inst (sa.cs_next_id+4) XOR [Lit (n2w n);Var a3] [a4]]` >>
+  `scalar_code {a0} C` by
+    simp[Abbr `C`, scalar_code_def, scalar_shape_def,
+         scalar_binary_def, scalar_available_def, mk_inst_def] >>
+  `?H tm. inst_seq_ptr D lo ctx func PG G0 tn0 C s0 H tm` by
+    (irule scalar_code_inst_seq_ptr_lo >>
+     simp[Abbr `s0`, ptrDisciplineTheory.allocas_from_def] >>
+     conj_tac >- (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+     qexists_tac `{a0}` >>
+     simp[Abbr `G0`, Abbr `tn0`,
+       ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE,
+       ptrDisciplineTheory.allocas_from_def]) >>
+  pop_assum strip_assume_tac >>
+  `H = Gf /\ tm = tp` by (
+    qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ C _ _ _` mp_tac >>
+    simp[Abbr `C`, Abbr `s0`, inst_seq_ptr_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      mk_inst_def, venomExecSemanticsTheory.exec_pure2_def, eval_operand_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, update_var_def] >>
+    disch_then (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2) >>
+    strip_tac >> conj_tac >- (
+      qpat_x_assum `H = _` SUBST1_TAC >>
+      simp[Abbr `G0`, Abbr `Gf`, ptrDisciplineTheory.step_prov_def,
+        ptrDisciplineTheory.set_prov_def, ptrDisciplineTheory.out_prov_def,
+        finite_mapTheory.DRESTRICT_DRESTRICT, pred_setTheory.EXTENSION] >>
+      metis_tac[]) >>
+    qpat_x_assum `tm = _` SUBST1_TAC >>
+    simp[Abbr `tn0`, Abbr `tp`,
+      ptrDisciplineTheory.step_taint_def,
+      ptrDisciplineTheory.mem_taint_def, new_site_bytes_unchanged,
+      ptrDisciplineTheory.step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+      ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.written_taint_def,
+      ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.out_taint_def,
+      ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+      ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.op_taint_def,
+      ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.first_prov_def,
+      finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
+    suspend "metadata") >>
+  gvs[] >> suspend "middlejoin"
 QED
 
 Resume raw_call_bytes_success_full_path[path]:
@@ -204,21 +246,8 @@ Resume raw_call_bytes_success_full_path[frame]:
   cheat
 QED
 
-Resume raw_call_bytes_success_full_path[ltcheck]:
-  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
-    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
-    codegenRelTheory.source_memory_write_ranges_def,
-    contextCodegenRelTheory.source_memory_read_ranges_def,
-    venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
-    venomExecSemanticsTheory.exec_pure2_def, eval_operand_def, lookup_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE, ptrDisciplineTheory.op_taint_def] >>
-  rpt strip_tac >> gvs[]
-  >- (Cases_on `op` >> gvs[]) >>
-  fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
-QED
-Resume raw_call_bytes_success_full_path[ltghost]:
-  FAIL_TAC "ltghost"
+Resume raw_call_bytes_success_full_path[middlejoin]:
+  FAIL_TAC "middlejoin"
 QED
 
 Finalise raw_call_bytes_success_full_path
