@@ -85,11 +85,12 @@ Proof
     (strip_tac >> qexists_tac `u` >> gvs[] >> rpt strip_tac >>
      qpat_x_assum `!tv'. _` irule >>
      fs[vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
-  mp_tac (Q.INST [`arm_ty` |-> `at`, `origin` |-> `sa`, `sa` |-> `sm`]
-            bodyIfExpBytesAdapterTheory.ifexp_bytestring_adapter_path_mem) >>
-  impl_tac
-  >- (simp[] >> conj_tac >- (qpat_x_assum `!tv. _ ==> _ /\ _` drule >> simp[]) >>
-      gvs[]) >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (INST_TYPE [alpha |-> ``:256``]
+      bodyIfExpBytesAdapterTheory.ifexp_bytestring_adapter_path_mem) >>
+  disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
+  disch_then (mp_tac o SPEC_ALL) >>
+  impl_tac >- gvs[] >>
   strip_tac >> qexists_tac `u` >> simp[]
 QED
 
@@ -219,7 +220,8 @@ Proof
              drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
           qpat_x_assum `!res ee u. _` (qspecl_then [`res`, `es_end with gas_obs := []`, `t`]
             mp_tac) >>
-          (impl_tac >- (rpt conj_tac >> simp[])) >> strip_tac >>
+          (impl_tac >- (rpt conj_tac >> simp[] >>
+                       qexists_tac `H0` >> first_assum ACCEPT_TAC)) >> strip_tac >>
           qexistsl_tac [`res`, `es_end`, `OK v`] >> conj_tac
           >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
               simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
@@ -228,7 +230,7 @@ Proof
           disj1_tac >> qexists_tac `v` >> simp[]) >>
       qexistsl_tac [`res`, `es_end`, `r`] >> conj_tac
       >- first_assum ACCEPT_TAC >>
-      disj2_tac >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   first_assum ACCEPT_TAC
 QED
@@ -278,11 +280,12 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
     (qspec_then `H2` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> BETA_TAC >> strip_tac >>
-  drule ifexp_selected_arm_path_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_selected_arm_path_mem >>
+  disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (qspec_then `H1` mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `gas_path_mem ctx func u 0 (OK u')` >>
   qexists_tac `u'` >> conj_tac >- first_assum ACCEPT_TAC >>

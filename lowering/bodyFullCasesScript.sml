@@ -13,6 +13,7 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -23,14 +24,16 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* Admitted: the joint twin of body_expr_ptr_ok_at_leaf (bodySimPtrMain). *)
+(* Join the four joint expression leaves. *)
 Theorem body_expr_full_ok_leaf:
   !cx e.
     (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
     (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
     body_expr_full_ok cx e
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  simp[name_expr_full_ok, toplevel_name_expr_full_ok,
+       flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
 (* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
@@ -629,11 +632,12 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint Log case. *)
+(* Log, by bodyFullLog's joint fragment. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  irule compile_log_frag_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
@@ -672,13 +676,13 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
+(* The joint raw_call-with-calldata case. *)
 Theorem body_raw_call_calldata_case_full:
   !cx ty flags es v19.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)

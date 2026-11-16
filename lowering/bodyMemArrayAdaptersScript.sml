@@ -97,14 +97,28 @@ Proof
   pure_rewrite_tac[exprSimAggregateEncodingTheory.type_memory_size_list_replicate] >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[])) >>
   strip_tac >> conj_tac >- asm_rewrite_tac[] >>
-  irule struct_gas_outcome_post >> goal_assum (drule_at Any) >>
-  BETA_TAC >> rpt strip_tac >>
-  `!vs n p. tuple_in_memory vs (REPLICATE n tv) p r.vs_memory ==>
-            elems_in_memory vs p tv r.vs_memory` by
-    (Induct >> Cases >>
-     simp[valueEncodingDefsTheory.val_in_memory_def, rich_listTheory.REPLICATE] >>
-     metis_tac[]) >>
-  qexists_tac `vs` >> asm_rewrite_tac[] >> metis_tac[]
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  pure_rewrite_tac [gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac [gas_marked_exec_def] >> strip_tac >>
+      first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
+      disj1_tac >> gen_tac >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+      gvs[] >> drule vyperInterpreterTheory.eval_exprs_length >> strip_tac >>
+      qpat_assum `LENGTH vs = LENGTH args` (fn th =>
+        qpat_x_assum `tuple_in_memory _ _ _ _`
+          (assume_tac o REWRITE_RULE
+            [GSYM th, exprSimAggregateEncodingTheory.tuple_in_memory_replicate_elems])) >>
+      simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> asm_rewrite_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ _ (err,ee) (leaf,target_end)` >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `target_end`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem array_header_frames[local]:
@@ -368,13 +382,16 @@ Proof
     (rpt strip_tac >>
      drule_all (SRULE [] (Q.INST [`off` |-> `0`, `n` |-> `asz`, `r` |-> `s0`]
        aggregate_alloca_slice_excludes_local)) >> decide_tac) >>
-  drule array_header_mem_entry >>
+  drule (Q.INST [`H` |-> `H0`]
+    (INST_TYPE [alpha |-> ``:256``] array_header_mem_entry)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
   disch_then (qspec_then `sh` mp_tac) >>
   (impl_tac >-
-    (simp[Abbr `sh`] >> rpt strip_tac >> first_x_assum drule_all >>
+    (simp[Abbr `sh`] >> rpt strip_tac >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
   `sh.vs_accounts = s0.vs_accounts /\ sh.vs_transient = s0.vs_transient /\
    sh.vs_requests = s0.vs_requests /\ sh.vs_call_ctx = s0.vs_call_ctx` by
@@ -382,12 +399,24 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func ce cx es sh /\
      storage_well_formed_on cx es (FST H)` by
-    (rpt strip_tac >> res_tac >> asm_rewrite_tac[] >>
-     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     asm_rewrite_tac[] >>
+     MATCH_MP_TAC
+       (Q.INST [`H0` |-> `H0`, `H` |-> `H`, `ctx` |-> `ctx`,
+                `func` |-> `func`, `cenv` |-> `ce`, `cx` |-> `cx`,
+                `es` |-> `es`, `u` |-> `sh`, `s` |-> `s0`]
+         (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+           exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`header` |-> `T`, `idx` |-> `0`, `off` |-> `32`,
      `sa` |-> `sm`, `s0` |-> `sh`] (SPEC_ALL aggregate_make_array_elems_body_sim_mem)) >>
   (impl_tac >-
-    (simp[] >> rpt strip_tac >> first_x_assum drule_all >>
+    (simp[] >> rpt strip_tac >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   strip_tac >>
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
