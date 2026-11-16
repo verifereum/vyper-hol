@@ -498,7 +498,8 @@ Resume raw_call_prefix_sim_mem[keyword_endpoint]:
 QED
 
 Resume raw_call_prefix_sim_mem[optional_path]:
-  `!H. stmt_state_rel H ctx func cenv cx ee t ==> stmt_state_rel H ctx func cenv cx ee t'` by
+  `!(H : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H ctx func cenv cx ee t ==> stmt_state_rel H ctx func cenv cx ee t'` by
     (rpt strip_tac >> irule (raw_call_optional_gas_rel
        |> Q.INST [`sa` |-> `s5`, `sb` |-> `s6`, `s` |-> `t`, `t` |-> `t'`,
             `ctx` |-> `ctx`, `func` |-> `func`, `cx` |-> `cx`, `es` |-> `ee`,
@@ -570,16 +571,19 @@ Resume raw_call_prefix_sim_mem[frame_slice]:
     (simp[Abbr `tm`, wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
      fs[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def]) >>
   `wb_frame cenv es esD sa s0 tm` by
-    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >> conj_tac
-     >- (goal_assum (drule_at Any)) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >>
+     reverse conj_tac
+     >- (goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ es s0`))) >>
      qexistsl_tac [`esD`,`s2`,`tD`] >> fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 t` by
-    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >> conj_tac
-     >- (goal_assum (drule_at Any)) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >>
+     reverse conj_tac
+     >- (goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ es s0`))) >>
      qexistsl_tac [`esD`,`s4`,`tm`] >> fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 t'` by
-    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >> conj_tac
-     >- (goal_assum (drule_at Any)) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] wb_frame_trans) >> simp[] >>
+     reverse conj_tac
+     >- (goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ es s0`))) >>
      qexistsl_tac [`ee`,`s5`,`t`] >> fs[ci_mono_def] >> decide_tac) >>
   suspend "pack"
 QED
