@@ -587,10 +587,10 @@ Theorem deploy_snapshot_observations[local]:
       (lookup_account tx.target st.accounts).storage)
     (lookup_account tx.target st.accounts).storage
     (lookup_account tx.target before.vs_accounts).storage /\
-  transient_agree H (deploy_evaluation_context tops am tx) st.tStorage before.vs_transient /\
+  transient_agree H (deploy_evaluation_context tops am tx).txn.target st.tStorage before.vs_transient /\
   logs_correspond (compiled_event_info tops) (type_env tops)
     tx.target st.logs before.vs_logs /\
-  LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
+  LIST_REL (request_agree H (deploy_evaluation_context tops am tx).txn.target)
     st.requests before.vs_requests
 Proof
   strip_tac >>
@@ -602,7 +602,7 @@ Proof
   `st.logs = before.vs_logs` by
     (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
-  `LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
+  `LIST_REL (request_agree H (deploy_evaluation_context tops am tx).txn.target)
      st.requests before.vs_requests` by
     (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def] >> metis_tac[]) >>
@@ -926,14 +926,14 @@ QED
 Theorem deploy_result_context_agree[local]:
   am_c.sources = am.sources /\ am_c.layouts = am.layouts ==>
   accounts_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    accounts_agree H (deploy_evaluation_context tops am tx) /\
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    accounts_agree H (deploy_evaluation_context tops am tx).txn.target /\
   transient_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    transient_agree H (deploy_evaluation_context tops am tx) /\
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    transient_agree H (deploy_evaluation_context tops am tx).txn.target /\
   request_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    request_agree H (deploy_evaluation_context tops am tx)
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    request_agree H (deploy_evaluation_context tops am tx).txn.target
 Proof
   strip_tac >> irule accountsRelPropsTheory.agree_cx_cong >>
   simp[initial_evaluation_context_def, e2eDeployDefsTheory.deploy_evaluation_context_def]
