@@ -13,19 +13,11 @@
  *)
 Theory fmpStageOpBase
 Ancestors
+  concretizePtrOperationalOpcodes
   fmpStageRel ptrStaticDiscipline ptrDiscipline o1PassContract
   fmpStepBridge fmpLowerDefs fmpWfDefs livenessProofs cfgHelpers pred_set
   contextCodegenRel venomExecSemantics venomInst list
   fmpStageOpBaseRoot fmpStageOpBaseActual o1LowerDloadGhost finite_map
-
-Theorem frame_reachable_fn_mem[local]:
-  !vs ctx stk PG G tn fn inst s.
-    frame_reachable vs ctx stk PG G tn fn inst s ==>
-    MEM fn ctx.ctx_functions /\ EVERY (\f. MEM f.cf_fn ctx.ctx_functions) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rw[] >>
-  metis_tac[venomInstTheory.lookup_function_MEM]
-QED
 
 (* Why: o1_inv 3 and o1_ctx_shape hold of every function, and
    o1_static_inv's access_ok/taint_ok of every frame_reachable point, at
@@ -41,7 +33,7 @@ Theorem fmp_stage_frame_facts:
   ?P. EVERY (fn_static_ptr_ok P) C.ctx_functions
 Proof
   strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_fn_mem] >>
+  `MEM fn C.ctx_functions` by metis_tac[concretizePtrOperationalOpcodesTheory.ptr_frame_context_membership] >>
   `MEM inst (fn_insts fn)` by
     (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[MEM_EL]) >>

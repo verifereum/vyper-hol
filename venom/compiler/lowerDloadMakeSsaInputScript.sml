@@ -444,7 +444,7 @@ Proof
   simp[] >> strip_tac >> gvs[fn_phis_non_degenerate_def] >> metis_tac[]
 QED
 
-Theorem lower_dload_source_var_reserved[local]:
+Theorem lower_dload_source_var_reserved:
   ir_supply_covers_fn s f /\ MEM b f.fn_blocks /\
   MEM i b.bb_instructions /\ MEM v (inst_ir_vars i) ==>
   MEM v s.irs_used_vars
