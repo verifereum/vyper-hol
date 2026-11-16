@@ -70,3 +70,4 @@ Ancestors
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
   (* providers awaiting their consumers *)
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
+  internalReturnMemoryMem
