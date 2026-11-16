@@ -833,6 +833,7 @@ Resume return_selected_valued_frag_full[buffered_normalize_copy]:
         [`w2n norm_dw + type_memory_bytes ce ret <= norm_alloc.vs_alloca_next`,
          `type_memory_bytes ce ret=type_memory_size dtv`] >>
       POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp norm_alloc)` by simp[] >>
   drule_all (Q.INST
     [`cenv` |-> `ce`,`xd` |-> `norm_dst`,`dty` |-> `ret`,
      `xs` |-> `norm_src`,`sty` |-> `lowered_value_type ce e`,
@@ -870,8 +871,17 @@ Resume return_selected_valued_frag_full[buffered_normalize_copied]:
      POP_ASSUM_LIST (K ALL_TAC) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
   `evaluate_type (get_tenv cx) ret=SOME dtv` by asm_rewrite_tac[] >>
   `ptr_val_ok cx ret v (Var norm_dst) copy_G copy_tn norm_copy` by
-    (irule rawCallBufferPtrTheory.ptr_val_ok_from_type_covers >>
-     asm_rewrite_tac[] >> metis_tac[optionTheory.SOME_11]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`~is_word_type ret`, `evaluate_type (get_tenv cx) ret=SOME dtv`,
+        `val_wf dtv v`,
+        `ptr_covers copy_G copy_tn norm_dst norm_copy (type_memory_size dtv)`,
+        `lookup_var norm_dst norm_copy=SOME norm_dw`,
+        `!mem. mem_agree_outside copy_tn.t_mem norm_copy.vs_memory mem ==>
+           val_in_memory dtv v (w2n norm_dw) mem`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     irule (Q.INST [`tv` |-> `dtv`]
+       rawCallBufferPtrTheory.ptr_val_ok_from_type_covers) >>
+     simp[] >> rpt strip_tac >> fs[]) >>
   `copy_static norm_copy=copy_static norm_alloc` by
     (qpat_assum `norm_copy with <|vs_vars:=norm_alloc.vs_vars;
        vs_memory:=norm_alloc.vs_memory; vs_prev_bb:=norm_alloc.vs_prev_bb;
