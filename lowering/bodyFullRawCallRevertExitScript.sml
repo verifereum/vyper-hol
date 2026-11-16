@@ -121,9 +121,14 @@ Resume raw_call_revert_suffix_full_exit[run]:
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  simp[emitted_insts_def,GSYM APPEND_ASSOC,rich_listTheory.DROP_LENGTH_APPEND] >>
+  pure_rewrite_tac[emitted_insts_def,compile_state_accfupds,
+    compile_state_accessors,combinTheory.K_THM,GSYM APPEND_ASSOC,
+    rich_listTheory.DROP_LENGTH_APPEND,APPEND] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq code js` >>
+  `s.vs_returndata = js.vs_returndata` by simp[Abbr `js`,jump_to_def] >>
+  pop_assum SUBST1_TAC >> qunabbrev_tac `code` >>
   irule raw_call_revert_run >>
-  simp[ASCIInumbersTheory.toString_11,jump_to_def]
+  simp[ASCIInumbersTheory.toString_11,Abbr `js`,jump_to_def]
 QED
 
 Finalise raw_call_revert_suffix_full_exit
