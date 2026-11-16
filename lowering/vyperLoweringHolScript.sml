@@ -50,4 +50,5 @@ Ancestors
   asmSymOwnCode
   finalizerContractOwn
   asmSpliceOwn
+  asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
