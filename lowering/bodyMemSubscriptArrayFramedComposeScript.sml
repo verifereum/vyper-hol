@@ -233,7 +233,9 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[pointer_setup]:
      disch_then irule >> simp[] >>
      (conj_tac >- (qpat_assum `(_ \/ _) /\ _` (mp_tac o CONJUNCT2) >>
                     rpt (pop_assum kall_tac) >> metis_tac[])) >> qexists_tac `env` >>
-     fs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+     qpat_assum `expr_body_pre cenv cx env obj es`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `expr_body_pre cenv cx env idx
      (mid with gas_obs := gas_explicit marks' t.vs_gas_readings)` by fs[] >>
   qpat_assum `eval_expr cx idx _ = _`
@@ -313,6 +315,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_preparati
      rpt strip_tac >> simp[]) >>
   `?w0. eval_operand p.ptr_operand t = SOME w0` by
     (qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `expr_type obj = ArrayT et bd` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[vv_post_def, vv_holds_def, vyperASTTheory.expr_type_def] >>
      rpt strip_tac >> metis_tac[]) >>

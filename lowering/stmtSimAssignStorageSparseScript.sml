@@ -285,7 +285,7 @@ Proof
         `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
         `r`] >>
       fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
-         write_storage_slot_eq, stmt_exit_def]) >>
+         write_storage_slot_eq, stmt_exit_def, halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule typed_storage_copy_write >>
