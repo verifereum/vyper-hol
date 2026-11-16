@@ -1484,24 +1484,44 @@ Proof
   irule insert_split_supply_frame_sim >> metis_tac[]
 QED
 
+Theorem supply_iter_relation:
+  (!s fn. supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) ==>
+    R fn fn) /\
+  (!f g h. R f g /\ R g h ==> R f h) /\
+  (!s fn fn' changed s'.
+    supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
+    cfg_norm_round_supply s fn = (fn',changed,s') ==> R fn fn') ==>
+  !n s fn fn' s'.
+  supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  cfg_norm_iter_supply n s fn = (fn',s') ==>
+  R fn fn'
+Proof
+  strip_tac >> Induct_on `n` >> rpt gen_tac >> strip_tac
+  >- (gvs[cfg_norm_iter_supply_def] >> metis_tac[]) >>
+  Cases_on `cfg_norm_round_supply s fn` >> PairCases_on `r` >>
+  rename1 `cfg_norm_round_supply s fn = (mid,changed,s1)` >>
+  `supply_norm_inv s1 mid /\ EVERY label_positions_ok (fn_insts mid)` by
+    metis_tac[supply_round_semantics] >>
+  `R fn mid` by metis_tac[] >>
+  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def] >>
+  metis_tac[]
+QED
+
 Theorem supply_iter_semantics:
   !n s fn fn' s'.
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_iter_supply n s fn = (fn',s') ==>
   fn_bisim fn fn' /\ frame_sim L C C fn fn'
 Proof
-  Induct_on `n` >> rpt gen_tac
-  >- (strip_tac >> gvs[cfg_norm_iter_supply_def] >>
-      metis_tac[supply_fn_bisim_refl, supply_frame_sim_refl,
-                supply_norm_inv_projections]) >>
-  strip_tac >>
-  Cases_on `cfg_norm_round_supply s fn` >> PairCases_on `r` >>
-  rename1 `cfg_norm_round_supply s fn = (mid,changed,s1)` >>
-  `supply_norm_inv s1 mid /\ EVERY label_positions_ok (fn_insts mid) /\
-   fn_entry_label mid = fn_entry_label fn /\ fn_bisim fn mid /\ frame_sim L C C fn mid` by
-    metis_tac[supply_round_semantics] >>
-  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def]
-  >- metis_tac[supply_fn_bisim_trans, supply_frame_sim_trans] >>
+  mp_tac (Q.INST [`R` |-> `\f g. fn_entry_label g = fn_entry_label f /\
+    fn_bisim f g /\ frame_sim L C C f g`]
+    supply_iter_relation) >> BETA_TAC >> impl_tac
+  >- (rpt conj_tac
+      >- metis_tac[supply_fn_bisim_refl, supply_frame_sim_refl,
+                   supply_norm_inv_projections]
+      >- (rpt gen_tac >> strip_tac >>
+          metis_tac[supply_fn_bisim_trans, supply_frame_sim_trans]) >>
+      metis_tac[supply_round_semantics]) >>
   metis_tac[]
 QED
 
