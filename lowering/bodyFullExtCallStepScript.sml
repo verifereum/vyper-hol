@@ -31,9 +31,10 @@ Proof
 QED
 
 Theorem extcall_success_tail[local]:
-  ee.outcomes = SOME os /\ ~cx.txn.is_static /\
+  ee.outcomes = SOME os /\
+  frame_call_value cx value_opt ee = (INL framed_value, ee) /\
   ext_call_precheck_ok skip ret_type target ee.accounts /\
-  take_call_outcome target calldata value_opt ee = (INL (rq,oc),consumed) /\
+  take_call_outcome target calldata framed_value ee = (INL (rq,oc),consumed) /\
   oc.co_success /\ ee' = SND (adopt_call_outcome rq oc consumed) ==>
   !tail.
     (do accounts <- get_accounts;
@@ -45,10 +46,16 @@ Theorem extcall_success_tail[local]:
     k oc.co_returnData (ee' with gas_obs := tail)
 Proof
   strip_tac >> gen_tac >>
-  `take_call_outcome target calldata value_opt (ee with gas_obs := tail) =
+  `take_call_outcome target calldata framed_value (ee with gas_obs := tail) =
     (INL (rq,oc),consumed with gas_obs := tail)` by simp[extcall_take_tail] >>
+  `frame_call_value cx value_opt (ee with gas_obs := tail) =
+    (INL framed_value, ee with gas_obs := tail)` by
+    (drule extCallOracleStepTheory.frame_call_value_success >> strip_tac >>
+     Cases_on `cx.txn.is_static` >>
+     gvs[frame_call_value_def, bind_def, ignore_bind_def, return_def,
+         check_def, assert_def]) >>
   simp[get_accounts_def, bind_def, ignore_bind_def, return_def,
-       check_def, assert_def, frame_call_value_def, eval_ext_call_effects_def] >>
+       check_def, assert_def, eval_ext_call_effects_def] >>
   gvs[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
   Cases_on `rq.cr_static` >> simp[]
 QED
@@ -58,7 +65,109 @@ QED
    source's precheck, the CALL or STATICCALL as an oracle step, a failed
    call's returndata copy and REVERT; a successful call reaches sr with
    the returndata in the buffer and the pointer facts kept. *)
-(* LOCAL STUB - owned launch stand-in; this run must replace it with a checked proof. Never push.
+Theorem extcall_call_full_default_frame:
+  !DF lo d explicit ctx PG func cenv cx es st0 sa s0 G0 tn0 sp sr u
+   is_static skip ret_type addr_op value_op gas_op buf_op call_offset
+   call_len cap target value_opt calldata gas has_default default_op
+   default_ty default_opt ee t G tn k Q.
+    comp_ignore_bind
+      (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr_op
+       else comp_return ())
+      (comp_bind
+         (if is_static then
+            emit_op STATICCALL
+              [gas_op; addr_op; call_offset; call_len; buf_op; Lit (n2w cap)]
+          else
+            emit_op CALL
+              [gas_op; addr_op; value_op; call_offset; call_len; buf_op;
+               Lit (n2w cap)])
+      (\success. comp_bind (fresh_label "extcall_fail") (\fail_lbl.
+       comp_bind (fresh_label "extcall_cont") (\cont_lbl.
+       comp_ignore_bind
+         (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
+       (comp_ignore_bind (new_block fail_lbl)
+       (comp_bind (emit_op RETURNDATASIZE []) (\rds.
+       comp_bind (compile_alloc_buffer 0) (\fail_buf.
+       comp_ignore_bind
+         (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
+       (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
+          (new_block cont_lbl)))))))))) sp = (u, sr) /\
+    fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
+    MEM func ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+            not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+            not_fresh_at sa x) /\
+    extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp is_static
+      addr_op value_op gas_op buf_op call_offset call_len cap
+      target value_opt calldata has_default default_op default_ty default_opt
+      ee t /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+    EVERY (\op. op_taint tn op = {})
+      [addr_op; value_op; gas_op; buf_op; call_offset; call_len; default_op] /\
+    (?ao az. eval_operand call_offset t = SOME ao /\
+       eval_operand call_len t = SOME az /\
+       (w2n az <> 0 ==> w2n ao + w2n az <= t.vs_alloca_next) /\
+       (!i. w2n ao <= i /\ i < w2n ao + w2n az ==> i NOTIN tn.t_mem) /\
+       (w2n az <> 0 ==>
+        ?v b sz. call_offset = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+                 b <= w2n ao /\ w2n ao + w2n az <= b + sz)) /\
+    (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+       ptr_mem_ok cx default_ty dv default_op G tn t /\
+       (type_memory_bytes cenv default_ty <> 0 ==>
+        ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
+          eval_operand default_op t = SOME w /\ b <= w2n w /\
+          w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
+    (cap <> 0 ==>
+     ?v b sz ro. buf_op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+       eval_operand buf_op t = SOME ro /\ b <= w2n ro /\
+       w2n ro + cap <= b + sz) /\
+    (!returnData. storage_trace_frame (k returnData)) /\
+    (!returnData ee' t' G' tn'.
+       extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op
+         buf_op cap target has_default default_op default_ty default_opt
+         returnData ee' t' /\
+       t.vs_alloca_next <= t'.vs_alloca_next /\
+       eval_operand default_op t' = eval_operand default_op t /\
+       alloca_history func t' /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
+       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+          ghost_inv_at (DF H) lo d cenv cx ee' G' tn' t') /\
+       ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
+       EVERY (\op. op_taint tn' op = {}) [addr_op; buf_op; default_op] /\
+       (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+          ptr_mem_ok cx default_ty dv default_op G' tn' t' /\
+          (type_memory_bytes cenv default_ty <> 0 ==>
+           ?x b sz w. default_op = Var x /\ FLOOKUP G' x = SOME (b,sz) /\
+             eval_operand default_op t' = SOME w /\ b <= w2n w /\
+             w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
+       (cap <> 0 ==>
+        ?v b sz ro. buf_op = Var v /\ FLOOKUP G' v = SOME (b,sz) /\
+          eval_operand buf_op t' = SOME ro /\ b <= w2n ro /\
+          w2n ro + cap <= b + sz /\
+          (!i. w2n ro <= i /\ i < w2n ro + MIN cap (LENGTH returnData) ==>
+              i NOTIN tn'.t_mem)) ==>
+       ?res r G'' tn''.
+         (!tail. k returnData (ee' with gas_obs := tail) =
+           (res, ee' with gas_obs := tail)) /\
+         (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+             (t', G', tn') [] (r, G'', tn'') /\
+           ((?t''. r = OK t'' /\
+               Q H res (ee' with gas_obs := []) G'' tn'' t'') \/
+            (exit_result r /\ expr_exit res r)))) ==>
+    gas_outcome_full (DF, lo, explicit, ctx, func, PG) (cx_tops cx) cx st0
+      (do accounts <- get_accounts;
+          check (ext_call_precheck_ok skip ret_type target accounts)
+                "ExtCall target has no code";
+          value_opt' <- frame_call_value cx value_opt;
+          returnData <- eval_ext_call_effects cx target calldata value_opt'
+                          gas accounts;
+          k returnData
+       od) (ee, t, G, tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
@@ -84,10 +193,17 @@ Proof
   >- (fs[EVERY_DEF] >>
       drule_all extcall_precheck_success_boundary >>
       disch_then (qspecl_then [`tn0`, `explicit`, `PG`, `G0`] strip_assume_tac) >>
+      Cases_on `frame_call_value cx value_opt ee` >>
+      rename1 `frame_call_value cx value_opt ee = (frame_res, frame_ee)` >>
+      `frame_ee = ee` by metis_tac[frame_call_value_state] >>
+      qpat_x_assum `frame_ee = ee` SUBST_ALL_TAC >>
+      reverse (Cases_on `frame_res`)
+      >- suspend "static_abort" >>
+      rename1 `frame_call_value cx value_opt ee = (INL framed_value, ee)` >>
       `outcomes_accounts_typed ee.outcomes /\
        accounts_runtime_well_typed ee.accounts` by
         fs[extcall_request_ready_def] >>
-      `?rq oc consumed. take_call_outcome target calldata value_opt ee =
+      `?rq oc consumed. take_call_outcome target calldata framed_value ee =
          (INL (rq,oc),consumed)` by
         (simp[vyperCallOutcomeTheory.take_call_outcome_def,
               vyperCallOutcomeTheory.take_request_outcome_def] >>
@@ -96,7 +212,7 @@ Proof
              ~accounts_runtime_well_typed outcome.co_accounts)` by
            (gvs[outcomes_accounts_typed_def, extCallOracleTheory.take_outcome_def] >>
             Cases_on `t.vs_outcomes` >> gvs[extCallOracleTheory.failed_outcome_def] >>
-            Cases_on `computed_precompile (call_outcome_request target calldata value_opt ee)` >>
+            Cases_on `computed_precompile (call_outcome_request target calldata framed_value ee)` >>
             gvs[AllCaseEqs(), extCallOracleTheory.failed_outcome_def,
                 vyperCallOutcomeTheory.call_outcome_request_def] >> metis_tac[]) >>
          IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
@@ -250,30 +366,42 @@ Proof
          `z.vs_inst_idx = t1.vs_inst_idx` by
            (simp[Abbr `z`, venomStateTheory.update_var_def] >>
             qpat_x_assum `u' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-         `~t1.vs_call_ctx.cc_static` by
-           (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t1 /\ _`
-              (qspec_then `H` mp_tac) >>
-            (impl_tac >- first_assum ACCEPT_TAC) >>
-            pure_rewrite_tac[ghost_inv_at_def, exprLoweringPropsTheory.stmt_state_rel_def,
-              loweringStateRelDefsTheory.state_rel_def] >>
-            rpt strip_tac >> first_assum ACCEPT_TAC) >>
+         `(~is_static' /\ t1.vs_call_ctx.cc_static ==> vw = 0w)` by
+           (`t1.vs_call_ctx.cc_static = cx.txn.is_static` by
+              (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t1 /\ _`
+                 (qspec_then `H` mp_tac) >>
+               (impl_tac >- first_assum ACCEPT_TAC) >>
+               pure_rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+                    loweringStateRelDefsTheory.state_rel_def] >>
+               rpt strip_tac >>
+               qpat_x_assum `call_ctx_rel cx.txn t1.vs_call_ctx _ _` mp_tac >>
+               simp[loweringStateRelDefsTheory.call_ctx_rel_def]) >>
+            drule extCallOracleStepTheory.frame_call_value_success >> strip_tac >>
+            strip_tac >>
+            qpat_assum `w2n vw = _` mp_tac >>
+            qpat_assum `cx.txn.is_static ==> _` mp_tac >>
+            qpat_assum `t1.vs_call_ctx.cc_static = cx.txn.is_static` mp_tac >>
+            qpat_assum `t1.vs_call_ctx.cc_static` mp_tac >>
+            rpt (pop_assum kall_tac) >>
+            Cases_on `value_opt` >> simp[wordsTheory.w2n_eq_0]) >>
          pure_rewrite_tac[venomStateTheory.next_inst_def] >>
          qpat_assum `z.vs_inst_idx = t1.vs_inst_idx`
            (fn th => pure_rewrite_tac[th]) >>
          pure_rewrite_tac[GSYM arithmeticTheory.ADD1] >>
-         irule bodyFullExtCallCallPathTheory.extcall_checked_oracle_call >>
-         rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-           goal_assum (drule_at Any) >>
-           goal_assum (drule_at Any) >> rpt conj_tac >> first_assum ACCEPT_TAC]) >>
+         qpat_assum `exec_ext_call inst t1 _ _ (if is_static' then _ else _) _ _ _ _ is_static' = OK z`
+           (mp_then (Pat `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
+             bodyFullExtCallCallPathTheory.extcall_checked_oracle_call) >>
+         disch_then irule >>
+         rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >>
       `~z.vs_halted` by metis_tac[] >>
       `z.vs_alloca_next = t1.vs_alloca_next` by
         (simp[Abbr `z`, venomStateTheory.update_var_def] >>
          qpat_x_assum `u' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
       (Cases_on `oc.co_success`
-      >- (`eval_ext_call_effects cx target calldata value_opt gas ee.accounts ee =
+      >- (`eval_ext_call_effects cx target calldata framed_value gas ee.accounts ee =
               (INL oc.co_returnData, SND (adopt_call_outcome rq oc consumed))` by
             (simp[eval_ext_call_effects_def, bind_def, ignore_bind_def, return_def] >>
-             qpat_assum `take_call_outcome target calldata value_opt ee = _`
+             qpat_assum `take_call_outcome target calldata framed_value ee = _`
                (fn th => rewrite_tac[th]) >>
              simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
              Cases_on `rq.cr_static` >> simp[]) >>
@@ -297,9 +425,12 @@ Proof
                  compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
                  compileEnvTheory.emit_def]) >>
           drule_at (Pat `eval_ext_call_effects _ _ _ _ _ _ _ = _`)
-            extcall_success_return_boundary >>
+            bodyFullExtCallSuccessSourceTheory.extcall_success_source_boundary >>
           simp[] >>
           disch_then (drule_at (Pat `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          simp[] >> strip_tac >>
+          qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ s1 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+            (mp_then Any mp_tac extcall_success_target_boundary) >>
           disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >> simp[] >>
           disch_then (drule_at (Pat `new_block _ _ = _`)) >> simp[] >>
           strip_tac >>
@@ -396,19 +527,29 @@ Proof
                (fs[EVERY_DEF] >> NO_TAC),
                (qpat_assum `!dv. _ ==> ptr_mem_ok _ _ _ _ (step_prov _ _ _ _) _ z /\ _` mp_tac >>
                 rpt (pop_assum kall_tac) >>
+                Cases_on `default_op` >>
                 simp[venomStateTheory.jump_to_def, venomStateTheory.next_inst_def,
                   bodyPtrDefsTheory.ptr_mem_ok_def, venomStateTheory.eval_operand_def,
-                  venomStateTheory.lookup_var_def] >>
-                Cases_on `default_op` >>
-                simp[venomStateTheory.eval_operand_def, venomStateTheory.next_inst_def,
                   venomStateTheory.lookup_var_def] >> NO_TAC),
-               gvs[venomStateTheory.jump_to_def, venomStateTheory.next_inst_def,
-                 bodyPtrDefsTheory.ptr_mem_ok_def, venomStateTheory.eval_operand_def,
-                 venomStateTheory.lookup_var_def]])) >>
+               (qpat_assum `!dv. _ ==> ptr_mem_ok _ _ _ _ (step_prov _ _ _ _) _ z /\ _` mp_tac >>
+                qpat_assum `eval_operand default_op z = _` mp_tac >>
+                qpat_assum `eval_operand default_op t1 = _` mp_tac >>
+                rpt (pop_assum kall_tac) >>
+                Cases_on `default_op` >>
+                gvs[venomStateTheory.jump_to_def, venomStateTheory.next_inst_def,
+                  bodyPtrDefsTheory.ptr_mem_ok_def, venomStateTheory.eval_operand_def,
+                  venomStateTheory.lookup_var_def] >> NO_TAC),
+               (qpat_assum `cap <> 0 ==> ?v b sz rw. _ /\ _ /\ _ /\ _ /\ _ /\ _` mp_tac >>
+                rpt (pop_assum kall_tac) >>
+                Cases_on `buf_op` >>
+                simp[venomStateTheory.jump_to_def, venomStateTheory.next_inst_def,
+                  venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])])) >>
           strip_tac >>
           drule_at (Pat `take_call_outcome _ _ _ _ = _`) extcall_success_tail >>
           simp[] >>
-          disch_then (qspecl_then [`skip`, `ret_type`, `k`, `gas`, `cx`] mp_tac) >>
+          disch_then (drule_at (Pat `frame_call_value _ _ _ = _`)) >>
+          disch_then (drule_at (Pat `ext_call_precheck_ok _ _ _ _`)) >>
+          disch_then (qspecl_then [`k`, `gas`] mp_tac) >>
           simp[] >> strip_tac >>
           Cases_on `storage_trace_domain cx st0 (SND (adopt_call_outcome rq oc consumed)).storage_trace`
           >- (irule gas_outcome_full_intro >>
@@ -471,10 +612,14 @@ Proof
            (simp[Abbr `z`, venomStateTheory.update_var_def] >>
             qpat_assum `u' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
          simp[venomStateTheory.next_inst_def, arithmeticTheory.ADD1]) >>
-      qpat_assum `frame_call_value cx value_opt = _`
-        (fn th => irule (REWRITE_RULE [th] extcall_failed_call_exit_full)) >>
+      drule extCallOracleStepTheory.frame_call_value_success >> strip_tac >>
+      qpat_assum `take_call_outcome _ _ _ _ = _`
+        (mp_then (Pat `take_call_outcome _ _ _ _ = _`) mp_tac
+          extcall_failed_call_exit_full) >>
+      disch_then irule >>
       simp[] >>
       (conj_tac >- fs[extcall_request_ready_def]) >>
+      (conj_tac >- metis_tac[]) >>
       goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
       simp[venomStateTheory.next_inst_def] >>
       qexistsl_tac [`step_prov PG G1 inst z`, `[]`, `next_inst z`,
@@ -516,113 +661,163 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >> simp[]
 QED
-*)
-Theorem extcall_call_full_default_frame:
-  !DF lo d explicit ctx PG func cenv cx es st0 sa s0 G0 tn0 sp sr u
-   is_static skip ret_type addr_op value_op gas_op buf_op call_offset
-   call_len cap target value_opt calldata gas has_default default_op
-   default_ty default_opt ee t G tn k Q.
-    comp_ignore_bind
-      (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr_op
-       else comp_return ())
-      (comp_bind
-         (if is_static then
-            emit_op STATICCALL
-              [gas_op; addr_op; call_offset; call_len; buf_op; Lit (n2w cap)]
-          else
-            emit_op CALL
-              [gas_op; addr_op; value_op; call_offset; call_len; buf_op;
-               Lit (n2w cap)])
-      (\success. comp_bind (fresh_label "extcall_fail") (\fail_lbl.
-       comp_bind (fresh_label "extcall_cont") (\cont_lbl.
-       comp_ignore_bind
-         (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
-       (comp_ignore_bind (new_block fail_lbl)
-       (comp_bind (emit_op RETURNDATASIZE []) (\rds.
-       comp_bind (compile_alloc_buffer 0) (\fail_buf.
-       comp_ignore_bind
-         (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
-       (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
-          (new_block cont_lbl)))))))))) sp = (u, sr) /\
-    fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
-    MEM func ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-            not_fresh_at sa x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-            not_fresh_at sa x) /\
-    extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp is_static
-      addr_op value_op gas_op buf_op call_offset call_len cap
-      target value_opt calldata has_default default_op default_ty default_opt
-      ee t /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-    EVERY (\op. op_taint tn op = {})
-      [addr_op; value_op; gas_op; buf_op; call_offset; call_len; default_op] /\
-    (?ao az. eval_operand call_offset t = SOME ao /\
-       eval_operand call_len t = SOME az /\
-       (w2n az <> 0 ==> w2n ao + w2n az <= t.vs_alloca_next) /\
-       (!i. w2n ao <= i /\ i < w2n ao + w2n az ==> i NOTIN tn.t_mem) /\
-       (w2n az <> 0 ==>
-        ?v b sz. call_offset = Var v /\ FLOOKUP G v = SOME (b,sz) /\
-                 b <= w2n ao /\ w2n ao + w2n az <= b + sz)) /\
-    (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
-       ptr_mem_ok cx default_ty dv default_op G tn t /\
-       (type_memory_bytes cenv default_ty <> 0 ==>
-        ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
-          eval_operand default_op t = SOME w /\ b <= w2n w /\
-          w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
-    (cap <> 0 ==>
-     ?v b sz ro. buf_op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
-       eval_operand buf_op t = SOME ro /\ b <= w2n ro /\
-       w2n ro + cap <= b + sz) /\
-    (!returnData. storage_trace_frame (k returnData)) /\
-    (!returnData ee' t' G' tn'.
-       extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op
-         buf_op cap target has_default default_op default_ty default_opt
-         returnData ee' t' /\
-       t.vs_alloca_next <= t'.vs_alloca_next /\
-       eval_operand default_op t' = eval_operand default_op t /\
-       alloca_history func t' /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
-       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
-          ghost_inv_at (DF H) lo d cenv cx ee' G' tn' t') /\
-       ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
-       EVERY (\op. op_taint tn' op = {}) [addr_op; buf_op; default_op] /\
-       (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
-          ptr_mem_ok cx default_ty dv default_op G' tn' t' /\
-          (type_memory_bytes cenv default_ty <> 0 ==>
-           ?x b sz w. default_op = Var x /\ FLOOKUP G' x = SOME (b,sz) /\
-             eval_operand default_op t' = SOME w /\ b <= w2n w /\
-             w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
-       (cap <> 0 ==>
-        ?v b sz ro. buf_op = Var v /\ FLOOKUP G' v = SOME (b,sz) /\
-          eval_operand buf_op t' = SOME ro /\ b <= w2n ro /\
-          w2n ro + cap <= b + sz /\
-          (!i. w2n ro <= i /\ i < w2n ro + MIN cap (LENGTH returnData) ==>
-              i NOTIN tn'.t_mem)) ==>
-       ?res r G'' tn''.
-         (!tail. k returnData (ee' with gas_obs := tail) =
-           (res, ee' with gas_obs := tail)) /\
-         (!H. valid_horizon cx st0 H ee'.storage_trace ==>
-           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
-             (t', G', tn') [] (r, G'', tn'') /\
-           ((?t''. r = OK t'' /\
-               Q H res (ee' with gas_obs := []) G'' tn'' t'') \/
-            (exit_result r /\ expr_exit res r)))) ==>
-    gas_outcome_full (DF, lo, explicit, ctx, func, PG) (cx_tops cx) cx st0
-      (do accounts <- get_accounts;
-          check (ext_call_precheck_ok skip ret_type target accounts)
-                "ExtCall target has no code";
-          value_opt' <- frame_call_value cx value_opt;
-          returnData <- eval_ext_call_effects cx target calldata value_opt'
-                          gas accounts;
-          k returnData
-       od) (ee, t, G, tn) Q (\H res ee gt r. expr_exit res r)
-Proof
-  cheat
+
+Resume extcall_call_full_default_frame[static_abort]:
+  `cx.txn.is_static /\ value_opt <> NONE /\ value_opt <> SOME 0` by
+    (qpat_assum `frame_call_value _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `cx.txn.is_static` >>
+     simp[frame_call_value_def, bind_def, ignore_bind_def, check_def,
+       assert_def, raise_def, return_def] >>
+     rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  `~is_static'` by metis_tac[] >>
+  qpat_x_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ s1 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[extcall_request_ready_def]) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t1 /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `state_rel (storage_trace_horizon ee.storage_trace) func cenv cx ee t1` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `vw <> 0w /\ value_opt = SOME (w2n vw)` by
+    (qpat_assum `w2n vw = _` mp_tac >>
+     qpat_assum `value_opt <> NONE` mp_tac >>
+     qpat_assum `value_opt <> SOME 0` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `value_opt` >>
+     simp[] >> rpt strip_tac >> gvs[] >> metis_tac[wordsTheory.w2n_eq_0]) >>
+  qpat_assum `emit_op _ _ s1 = _`
+    (strip_assume_tac o MATCH_MP compilerInstructionSuffixTheory.added_insts_emit_op) >>
+  qmatch_asmsub_abbrev_tac `added_insts s1 s2 = [inst]` >>
+  `inst.inst_opcode = CALL /\ inst.inst_operands =
+    [gas_op; addr_op; value_op; call_offset; call_len; buf_op; Lit (n2w cap)]` by
+    simp[Abbr `inst`, venomInstTheory.mk_inst_def] >>
+  `?gw. eval_operand gas_op t1 = SOME gw` by fs[optionTheory.IS_SOME_EXISTS] >>
+  `eval_operand (Lit (n2w cap)) t1 = SOME (n2w cap)` by
+    simp[venomStateTheory.eval_operand_def] >>
+  `step_inst_base inst t1 = Abort ExHalt_abort (halt_state (set_returndata [] t1))` by
+    (drule_all extCallOracleStepTheory.call_static_value_abort >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  drule_all bodyPtrMakeArrayEmissionTheory.emit_op_fetch_boundary >> strip_tac >>
+  `tmp = q` by
+    (qpat_assum `success = Var tmp` mp_tac >>
+     qpat_assum `success = Var q` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  `get_instruction bb t1.vs_inst_idx = SOME inst` by
+    simp[Abbr `inst`] >>
+  `safe_operand sp call_offset /\ safe_operand sp call_len` by
+    (qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ sp _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[extcall_request_ready_def, EVERY_DEF]) >>
+  `ao' = ao /\ az' = az` by
+    (qpat_assum `!op. safe_operand sp op ==> _` (qspec_then `call_offset` mp_tac) >>
+     qpat_assum `!op. safe_operand sp op ==> _` (qspec_then `call_len` mp_tac) >>
+     qpat_assum `safe_operand sp call_offset` mp_tac >>
+     qpat_assum `safe_operand sp call_len` mp_tac >>
+     qpat_assum `eval_operand call_offset t = _` mp_tac >>
+     qpat_assum `eval_operand call_len t = _` mp_tac >>
+     qpat_assum `eval_operand call_offset t1 = _` mp_tac >>
+     qpat_assum `eval_operand call_len t1 = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
+  `w2n (n2w cap : bytes32) = cap` by
+    (simp[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >> decide_tac) >>
+  `w2n ro + cap <= t1.vs_alloca_next` by
+    (`alloca_next_valid t1` by
+       (qpat_assum `stmt_state_rel _ _ _ _ _ _ t1` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[exprLoweringPropsTheory.stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     qpat_assum `alloca_next_valid t1` mp_tac >>
+     qpat_assum `FLOOKUP t1.vs_allocas live = _` mp_tac >>
+     qpat_assum `cap <= buf_size` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[venomMemDefsTheory.alloca_next_valid_def] >> rpt strip_tac >>
+     first_x_assum drule >> decide_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    access_ok lo G1 func inst t1 /\ taint_ok func tn1 inst t1 /\
+    inst_mem_below_frontier inst t1 /\ allocas_from lo t1 /\
+    stor_taint_ok_at (DF H) tn1 t1` by
+    (gen_tac >> disch_tac >>
+     irule bodyFullExtCallGhostTheory.extcall_call_pointer_conditions >>
+     simp[] >>
+     (conj_tac >-
+       (`EVERY (safe_operand sp) [gas_op; addr_op; value_op; buf_op]` by
+          (qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ sp _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+           rpt (pop_assum kall_tac) >> simp[extcall_request_ready_def, EVERY_DEF]) >>
+        qpat_assum `EVERY (safe_operand sp) [gas_op; addr_op; value_op; buf_op]` mp_tac >>
+        qpat_assum `!op. safe_operand sp op ==> _` mp_tac >>
+        map_every (fn opq => qpat_assum opq mp_tac)
+          [`op_taint tn gas_op = {}`, `op_taint tn addr_op = {}`,
+           `op_taint tn value_op = {}`, `op_taint tn buf_op = {}`] >>
+        rpt (pop_assum kall_tac) >>
+        simp[EVERY_DEF, ptrDisciplineTheory.op_taint_def] >> metis_tac[])) >>
+     reverse conj_tac
+     >- (qexistsl_tac [`cenv`, `cx`, `d`, `ee`] >> simp[]) >>
+     conj_tac
+     >- (strip_tac >> qpat_x_assum `az <> 0w ==> ?v b sz. _` drule >>
+         strip_tac >> qexistsl_tac [`v`, `b`, `sz`] >>
+         qpat_assum `!op. safe_operand sp op ==> _` (qspec_then `call_offset` mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     strip_tac >> qpat_x_assum `cap <> 0 ==> ?v b sz rw. _` drule >>
+     strip_tac >> qexistsl_tac [`v`, `b`, `sz`] >>
+     `safe_operand sp buf_op` by
+       (qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ sp _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[extcall_request_ready_def, EVERY_DEF]) >>
+     qpat_assum `!op. safe_operand sp op ==> _` (qspec_then `buf_op` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `step_inst 0 ctx inst t1 = Abort ExHalt_abort (halt_state (set_returndata [] t1))` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (t1,G1,tn1) []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t1)),G1,tn1)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> access_ok _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `ptr_inst_ok (DF H) lo 0 ctx func G1 tn1 inst t1` by
+       simp[ptrSafeRunTheory.ptr_inst_ok_def] >>
+     qpat_x_assum `t1.vs_inst_idx = LENGTH s1.cs_current_insts` kall_tac >>
+     qpat_x_assum `t1.vs_current_bb = s1.cs_current_bb` kall_tac >>
+     qpat_x_assum `t1.vs_current_bb = s2.cs_current_bb` kall_tac >>
+     rewrite_tac[fragGasOriginPtrTheory.gas_origin_ptr_edge_def] >> conj_tac
+     >- (rewrite_tac[fragGasOriginTheory.gas_origin_edge_def] >>
+         conj_tac >- simp[] >>
+         qexistsl_tac [`0`, `bb`, `inst`,
+           `Abort ExHalt_abort (halt_state (set_returndata [] t1))`] >>
+         simp[gasEventsTheory.gas_events_step_def,
+           memSafeRunTheory.mem_safe_step_non_invoke, fragExecTheory.exit_result_def]) >>
+     rewrite_tac[fragGasPathPtrTheory.gas_path_ptr_edge_def] >> simp[] >>
+     qexists_tac `0` >>
+     simp[gasCountTheory.gas_count_step_def, ptrSafeRunTheory.ptr_safe_step_def,
+       fragExecTheory.exit_result_def]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t1)),G1,tn1)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> gas_origin_ptr_path _ (t,G,tn) _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+     simp[] >> disch_then irule >>
+     irule (cj 3 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
+     simp[fragExecTheory.exit_result_def]) >>
+  irule gas_outcome_full_exit >>
+  reverse conj_tac
+  >- (qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ sp _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      rpt (pop_assum kall_tac) >> simp[extcall_request_ready_def]) >>
+  qexistsl_tac [`G1`, `ee`,
+    `Abort ExHalt_abort (halt_state (set_returndata [] t1))`, `INR y`, `tn1`] >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> gas_origin_ptr_path _ (t,G,tn) [] (Abort _ _,G1,tn1)` mp_tac >>
+  qpat_assum `frame_call_value _ _ _ = _` mp_tac >>
+  qpat_assum `ext_call_precheck_ok skip ret_type target ee.accounts` mp_tac >>
+  qpat_assum `cx.txn.is_static` mp_tac >>
+  qpat_assum `value_opt <> NONE` mp_tac >>
+  qpat_assum `value_opt <> SOME 0` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  gvs[frame_call_value_def, bind_def, ignore_bind_def, check_def,
+    assert_def, raise_def, return_def] >>
+  simp[vyperStateTheory.get_accounts_def, bind_def, ignore_bind_def,
+    check_def, assert_def, return_def, raise_def,
+    fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
 QED
+
+Finalise extcall_call_full_default_frame
 
 Theorem extcall_call_full:
   !DF lo d explicit ctx PG func cenv cx es st0 sa s0 G0 tn0 sp sr u
