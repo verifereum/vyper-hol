@@ -130,7 +130,8 @@ drule_all hash_sha256_source_failure >> strip_tac >>
          qpat_assum `!tail. _ = (INR _,ef with gas_obs := tail)`
            (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ty_eq,state_eq])))) >>
   rpt strip_tac >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _` mp_tac >>
   qpat_assum `ef.storage_trace = mid.storage_trace` mp_tac >>
   qpat_assum `valid_horizon cx st0 H ef.storage_trace` mp_tac >>
@@ -262,6 +263,11 @@ irule gas_outcome_full_intro >>
         qpat_assum `run_inst_seq (emitted_insts sm sn) s = OK t`
           (fn th => once_rewrite_tac[th]) >> simp[]) >>
      qpat_x_assum `u = t` SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `vv_post H ctx func cenv cx _ es sa sn s0 _ _ _ t`
+      (ACCEPT_TAC o MATCH_MP
+        bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
   simp[vyperASTTheory.expr_type_def, exprSimMemDefsTheory.vv_store_bound_stack_word,
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,
@@ -337,7 +343,8 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
     `v`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
   rewrite_tac[eval_expr_sha256_action] >> irule gas_outcome_full_bind_all >>
   `!res : value + exception. !r.
@@ -358,8 +365,13 @@ Proof
   >- suspend "hashed" >>
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-  conj_tac >- simp[Abbr `baseR`] >>
-  simp[Abbr `baseQ`, Abbr `baseR`]
+  conj_tac >- (simp[Abbr `baseR`] >> rpt strip_tac >> Cases_on `res` >>
+    gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+    metis_tac[expr_exit_INR_type]) >>
+  simp[Abbr `baseQ`, Abbr `baseR`] >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume sha_vv_sim_full[hashed]:
@@ -535,7 +547,8 @@ Resume sha_vv_sim_full[fixed_abort]:
          qpat_assum `!tail. _ = (INR _,ef with gas_obs := tail)`
            (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ty_eq,state_eq])))) >>
   rpt strip_tac >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _` mp_tac >>
   qpat_assum `ef.storage_trace = mid.storage_trace` mp_tac >>
   qpat_assum `valid_horizon cx st0 H ef.storage_trace` mp_tac >>
@@ -806,6 +819,11 @@ Resume sha_vv_sim_full[fixed_success]:
     (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
       (mp_then Any mp_tac sha256_fixed_post_run) >> simp[] >> strip_tac >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `vv_post H ctx func cenv cx _ es sa sn s0 _ _ _ t`
+      (ACCEPT_TAC o MATCH_MP
+        bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
   simp[vyperASTTheory.expr_type_def, exprSimMemDefsTheory.vv_store_bound_stack_word,
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,

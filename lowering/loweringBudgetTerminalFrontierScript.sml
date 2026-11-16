@@ -23,7 +23,8 @@ Proof
   strip_tac >>
   qpat_x_assum `lower_budget_path _ _ _ (_ ++ [_]) _ _` mp_tac >>
   pure_once_rewrite_tac[lower_budget_path_cases] >> strip_tac >>
-  gvs[GSYM SNOC_APPEND] >>
+  full_simp_tac pure_ss
+    [pairTheory.PAIR_EQ, GSYM SNOC_APPEND, SNOC_11, NOT_SNOC_NIL] >>
   qpat_x_assum `!m s. lower_budget_path _ _ _ _ m s ==> _` drule >>
   strip_tac >> gvs[] >>
   first_x_assum drule >> strip_tac >> gvs[] >>

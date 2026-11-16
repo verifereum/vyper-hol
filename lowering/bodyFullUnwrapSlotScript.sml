@@ -27,7 +27,7 @@ Theorem unwrap_slot_copy_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -67,6 +67,14 @@ Theorem unwrap_slot_copy_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -510,6 +518,19 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
    ptr_buf_ok cenv e (Var root) Gf z` by
     (irule exprPtrUnwrapStoragePostTheory.unwrap_storage_pointer_posts >>
      metis_tac[]) >>
+  `vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+     (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z` by
+    suspend "memory_vv" >>
+  `vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+     (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z` by
+    (`sa.cs_next_id <= sb.cs_next_id` by decide_tac >>
+     qpat_assum `vv_at _ _ _ sb sc _ _ _ _` mp_tac >>
+     qpat_assum `sa.cs_next_id <= sb.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vv_at_def, mk_ptr_def] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[]
+     >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >> first_assum ACCEPT_TAC) >>
+     metis_tac[]) >>
   qexistsl [`v`, `z`, `Gf`, `tnf`] >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >-
@@ -518,7 +539,9 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
        (irule fragGasOriginPtrDeadTheory.gas_origin_ptr_path_from_no_dead >>
         first_assum ACCEPT_TAC) >>
      metis_tac[]) >>
-  conj_tac >- suspend "memory_vv" >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
   conj_tac >- suspend "store_bound" >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
@@ -534,7 +557,6 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
   suspend "kept_current"
 QED
 Resume unwrap_slot_copy_origin_ptr[memory_vv]:
-  disch_tac >>
   `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n dstword,type_memory_bytes cenv t)` by
     (drule copy_static_fields >> strip_tac >>
      qpat_assum `FLOOKUP u.vs_allocas _ = _` mp_tac >>

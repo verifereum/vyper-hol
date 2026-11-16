@@ -84,7 +84,7 @@ Theorem deploy_ctor_entry_gas_path:
                ?fuel'. run_context fuel' dunit.cu_context vs = r
 Proof
   rpt gen_tac >> strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
   drule_all deploy_ctor_entry_body_resources_gas_path >> strip_tac >>
   drule_all deploy_ctor_body_entry_static >> strip_tac >>
@@ -157,27 +157,30 @@ Theorem deploy_ctor_entry_joint:
             [] (OK s0, G0, tn0)
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
   drule_all ctorDeployLoweringEntrySelectionTheory.deploy_ctor_entry_selection_agrees >>
   strip_tac >> gvs[] >>
   `nr = F` by
     (drule_all (cj 1 deploy_ctor_entry_body_resources) >> simp[]) >>
   drule_all deploy_ctor_body_entry_static >> strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
-  drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
+  drule_all (INST_TYPE [alpha |-> ``:256``]
+    deploy_ptr_entry_prefix_related_checked) >> strip_tac >>
   drule gas_path_mem_exec >> simp[fragExecTheory.exit_result_def] >> strip_tac >> gvs[] >>
   qexistsl [`actual`,`H`,`qt`] >>
   rpt conj_tac
   >~ [`valid_horizon`]
   >- (qx_genl_tac [`st0`, `HZ`] >> strip_tac >>
-      first_x_assum (qspec_then `HZ` strip_assume_tac) >>
+      first_assum (qspec_then `HZ` strip_assume_tac) >>
       rpt conj_tac
       >- (strip_tac >>
           qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
-          disch_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>
+          disch_tac >> gen_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>
           simp[eval_phis_no_phi] >>
           qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ FEMPTY entry_taint _`
-            (qspec_then `n` mp_tac) >> simp[ptr_safe_run_def])
+            (qspec_then `n` mp_tac) >>
+          qpat_assum `lookup_block "__deploy" func.fn_blocks = SOME bb`
+            (fn th => simp_tac (srw_ss()) [ptr_safe_run_def, th]))
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC >>

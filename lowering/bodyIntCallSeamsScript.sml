@@ -233,7 +233,8 @@ Theorem intcall_args_frame_setup:
        storage_well_formed_on cx es0 (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!H res ee r. expr_exit res r ==> R H res ee r) /\
+    (!H res ee r. expr_exit res r /\ halt_exit H cx ee res r ==>
+       R H res ee r) /\
     (!prev penv rtv es1 t.
        (!H. valid_horizon cx st0 H es1.storage_trace ==>
           intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
@@ -320,7 +321,7 @@ Theorem intcall_return_restore:
            es0 sa sb s0 ee tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   cheat
 QED

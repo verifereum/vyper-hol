@@ -170,13 +170,13 @@ QED
 Resume aggregate_store_body_rebased_slice_path_mem[frame]:
   markerLib.RESUME_TAC >>
   `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
-    (qpat_assum `typed_copy_state_frame _ _ _ s t` mp_tac >>
-     simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
-          typedMemoryCopyTheory.typed_copy_frame_def] >> strip_tac >>
-     qpat_assum `t with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
-       vs_current_bb := _; vs_inst_idx := _|> = s`
-       (fn th => once_rewrite_tac [GSYM th]) >> simp[]) >>
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
+   t.vs_allocas = s.vs_allocas` by
+    (qpat_assum `typed_copy_state_frame _ _ _ s t`
+       (mp_tac o Q.AP_TERM
+         `\z. (z.vs_accounts,z.vs_transient,z.vs_requests,z.vs_call_ctx,z.vs_allocas)` o
+         CONJUNCT1 o REWRITE_RULE [typedMemoryCopyTheory.typed_copy_state_frame_def]) >>
+     simp[]) >>
   qexists_tac `t` >> simp[] >>
   drule aggregate_store_rebased_control_frame >>
   disch_then (qspecl_then [`t`, `type_memory_size tv`, `w2n w`] mp_tac) >>
@@ -187,11 +187,9 @@ Resume aggregate_store_body_rebased_slice_path_mem[frame]:
   strip_tac >> gvs[] >>
   gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
       typedMemoryCopyTheory.typed_copy_frame_def,
+      venomStateTheory.venom_state_component_equality,
       arithmeticTheory.ADD_COMM] >>
-  qpat_x_assum `t with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
-    vs_current_bb := _; vs_inst_idx := _|> = s`
-    (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[] >>
-  strip_tac >> simp[] >> rpt conj_tac >>
+  simp[] >> rpt conj_tac >>
   first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
 

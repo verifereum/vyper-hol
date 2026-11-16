@@ -55,7 +55,7 @@ Theorem tuple_immutable_unpack_outcome_open:
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv ee su sv cenv ff t)
-    (\H res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   strip_tac >>
   mp_tac (Q.INST [`es1` |-> `ee`] tuple_place_compiler_flag_prefix_head) >>
@@ -94,7 +94,7 @@ Proof
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
          FLOOKUP q.vs_allocas aid = SOME entry) /\
        alloca_frame cenv ee ss t cenv ff q)
-     (\H res ff r. expr_exit res r)` by
+     (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)` by
     (irule (SRULE [] (DISCH_ALL (Q.SPEC `0`
        (UNDISCH (SPEC_ALL tuple_mixed_suffix_from_steps))))) >>
      simp[] >>
@@ -208,7 +208,7 @@ Proof
   >~ [`exit_result _`]
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `res` >> fs[expr_exit_def] >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
   `valid_horizon cx st0 H0 mid.storage_trace` by
@@ -267,11 +267,7 @@ Proof
     tuple_immutable_unpack_outcome_open) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
-  goal_assum (drule_at Any) >> rpt conj_tac
-  >~ [`stmt_exit _ _ _ _`]
-  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
-      Cases_on `res` >> fs[expr_exit_def] >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  goal_assum (drule_at Any) >> simp[stmt_exit_def] >>
   qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>

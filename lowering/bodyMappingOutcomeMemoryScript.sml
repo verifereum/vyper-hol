@@ -98,9 +98,10 @@ Theorem compile_mapping_subscript_outcome_mem_given_tail:
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
-  disch_then (CONJUNCTS_THEN2 (mk_asm "tail") strip_assume_tac) >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "tail")
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
   >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_initial >> simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
@@ -139,7 +140,7 @@ Proof
   conj_tac
   >- (rpt gen_tac >> simp[] >> rpt strip_tac >> simp[]) >>
   conj_tac
-  >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
+  >- (rpt gen_tac >> Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]) >>
   reverse conj_tac
   >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all, vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_read_result, vyperStorageTraceTheory.storage_trace_frame_select] >>
@@ -183,7 +184,7 @@ Proof
      disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
      simp[] >> strip_tac >>
      first_x_assum (qspec_then `HashMapT kt vt` mp_tac) >>
-     simp[eval_result_typed_def]) >>
+     simp[vyperTypeInvariantsTheory.eval_result_typed_def]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
@@ -199,14 +200,21 @@ Proof
      goal_assum (drule_at Any) >>
      qexistsl_tac [`A`, `ann`] >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
-    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >>
      drule gas_path_normal >> simp[]) >>
   `expr_sim_mem ctx func cenv cx (expr_type idx) idx (mid with gas_obs := [])` by
-    (irule mapping_index_sim_mem >> simp[] >> metis_tac[]) >>
+    (qpat_assum `!s tv t. eval_expr cx obj s = (INL tv,t) ==> _` mp_tac >>
+     qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+     qpat_assum `expr_body_pre _ _ _ (Subscript ann obj idx) es \/ expr_map_pre _ _ _ _ _` mp_tac >>
+     qpat_assum `place_type cenv obj = MapPT kt vt` mp_tac >>
+     qpat_assum `gas_marked_exec _ _ (eval_expr cx obj) _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[mapping_index_sim_mem]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_mem_def] >>
   disch_then (qspecl_then [`st0`, `sm`, `sn`, `key`, `t`] mp_tac) >>
@@ -224,7 +232,12 @@ Proof
   conj_tac >- (simp[Abbr `start`] >> first_assum ACCEPT_TAC) >>
   reverse conj_tac
   >- (simp[vyperStorageTraceTheory.storage_trace_frame_select] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      rpt gen_tac >> strip_tac >> conj_tac
+      >- (qpat_x_assum `expr_exit (INR ex) r` mp_tac >>
+          POP_ASSUM_LIST (K ALL_TAC) >>
+          metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
+      simp[exprSimDefsTheory.halt_exit_def]) >>
   simp[Abbr `start`] >>
   map_every qx_gen_tac [`imarks`, `kv`, `fin`, `it`] >> strip_tac >>
   `expr_sim_inv cenv cx env (fin with gas_obs := []) /\
@@ -287,7 +300,11 @@ Proof
         `em` |-> `mid with gas_obs := []`,
         `H0` |-> `storage_trace_horizon fin.storage_trace`,
         `base_op` |-> `vv_operand bvv`, `tv` |-> `key_ty`]
-       (SPEC_ALL th)))) >> fs[] >> metis_tac[]) >>
+       (SPEC_ALL th)))) >> fs[] >>
+     rpt (qpat_x_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+       (impl_tac >- simp[]) >> strip_tac) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es (fin with gas_obs := []) sa s0 out` by
     (irule (Q.INST [`H` |-> `H0`]
        (INST_TYPE [alpha |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans)) >>
@@ -317,7 +334,20 @@ Proof
      qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
   `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
     (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
-  `s0.vs_alloca_next <= out.vs_alloca_next` by decide_tac >>
+  `s0.vs_alloca_next <= out.vs_alloca_next` by
+    (rpt (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+       (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+       strip_tac) >>
+     rpt (qpat_x_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+       (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+       strip_tac) >>
+     fs[] >>
+     qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+     qpat_assum `t.vs_alloca_next <= it.vs_alloca_next` mp_tac >>
+     qpat_assum `it.vs_alloca_next <= out.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   qexistsl_tac [`INL selected`, `selected_state`, `OK out`] >>
   conj_tac >- simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> qexists_tac `out` >> simp[] >> rpt strip_tac >>

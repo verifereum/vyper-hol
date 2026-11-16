@@ -248,7 +248,8 @@ Resume array_body_round_outcome_mem[summary]:
   reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
   >- (strip_tac >> qexists_tac `marks` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
-      goal_assum (drule_at Any) >> simp[]) >>
+      qpat_assum `gas_marked_exec _ _ (ignore_bind _ _) _ _ _ _ _`
+        (irule_at Any) >> simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
      es_end.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>

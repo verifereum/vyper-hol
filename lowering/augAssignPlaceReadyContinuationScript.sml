@@ -43,7 +43,8 @@ Theorem aug_place_target_ready_mem_continuation:
     gas_outcome T (cx_tops cx) (ctx,func) cx st0
       ((k p) : evaluation_state -> 'a evaluation_result) (mid,t) Q R) /\
   (!p. storage_trace_frame ((k p) : evaluation_state -> 'a evaluation_result)) /\
-  (!H res ee rr. expr_exit (res : eval_result + exception) rr ==>
+  (!H res ee rr. expr_exit (res : eval_result + exception) rr /\
+    halt_exit H cx ee res rr ==>
     ?ex. res = INR ex /\ R H (INR ex) ee rr) ==>
   gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx bt) k) (es,s0) Q R
@@ -67,11 +68,11 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   rewrite_tac[aug_place_target_bind_base] >>
   irule gas_outcome_bind_result_exec >>
+  conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   rpt conj_tac
-  >- (rpt strip_tac >> gvs[])
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >> first_x_assum irule >>
-      first_assum ACCEPT_TAC)
+      simp[])
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
       reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -85,9 +86,11 @@ Proof
         (qpat_x_assum `gas_admissible (bind _ get_place) _ _`
            (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
          disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
-         qpat_assum `!tail. eval_base_place _ _ _ = _` (qspec_then `[]` mp_tac) >>
-         simp[bind_def] >> strip_tac >> Cases_on `v` >>
-         simp[get_place_def, raise_def, target_place_res_ok_def]) >>
+         qpat_assum `!tail. eval_base_place _ _ _ = _`
+           (qspec_then `[]` (fn th =>
+             simp[bind_def, SIMP_RULE (srw_ss()) [] th])) >>
+         strip_tac >> Cases_on `v` >>
+         fs[get_place_def, raise_def, target_place_res_ok_def]) >>
       rpt BasicProvers.VAR_EQ_TAC >>
       `gas_outcome T (cx_tops cx) (ctx,func) cx st0 (k p)
          (mid with gas_obs := [],t) Q R` suffices_by
@@ -97,16 +100,16 @@ Proof
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
         (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
            (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-         simp[]) >>
+         strip_tac >> gvs[]) >>
       first_x_assum (qspecl_then [`p`, `mid with gas_obs := []`, `t`, `marks`]
                        mp_tac) >>
       impl_tac
       >- (conj_tac >- simp[] >>
           conj_tac
           >- (rpt strip_tac >>
-              qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-                (qspec_then `H` mp_tac) >>
-              impl_tac >- gvs[] >> simp[]) >>
+              (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+                 (qspec_then `H` mp_tac) >>
+               impl_tac >- gvs[] >> strip_tac >> gvs[])) >>
           rpt (conj_tac >- first_assum ACCEPT_TAC) >>
           conj_tac
           >- (gen_tac >>
@@ -116,5 +119,5 @@ Proof
                    bind_def, get_place_def, return_def]) >>
           first_assum ACCEPT_TAC) >>
       simp[])
-  >- (gen_tac >> BETA_TAC >> first_assum ACCEPT_TAC)
+  >- (rpt strip_tac >> gvs[])
 QED

@@ -18,7 +18,8 @@ Theorem raw_call_mem_value_bind:
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+    halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
@@ -125,7 +126,7 @@ Theorem raw_call_kwargs_sim_mem[local]:
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
   drule_all lower_typed_args_sim_mem >>
@@ -145,7 +146,8 @@ Theorem raw_call_kwargs_mem_bind:
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r /\
+    halt_exit H cx ee (INR exc : value list + exception) r ==> R H (INR exc) ee r) /\
   (!vs. storage_trace_frame (k vs)) /\
   (!gs vs ee t xs.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\

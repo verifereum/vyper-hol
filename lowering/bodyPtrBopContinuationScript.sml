@@ -8,49 +8,6 @@ Ancestors
   list rich_list fragExec bodyPtrBopAnchored bodyPtrBopTypedSource
   bodyPtrBopTypedBytes bodyPtrBopClassification valueEncoding
 
-Theorem bop_pair_source_facts:
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
-  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
-        (INL v1,es1)) /\
-  (?gs. bind (eval_expr cx e2) (read_result cx) (es1 with gas_obs := gs) =
-        (INL v2,es2)) ==>
-  well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  type_bits (expr_type e1) MOD 8 = 0 /\
-  (bop = Exp ==> IS_SOME (expr_int_literal e1) \/
-    ?n. expr_int_literal e2 = SOME n /\ 0 <= n) /\
-  (!n. expr_int_literal e1 = SOME n ==> v1 = IntV n) /\
-  (!n. expr_int_literal e2 = SOME n ==> v2 = IntV n) /\
-  (bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i) /\
-  (?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-         value_has_type tv1 v1) /\
-  (?tv2. evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
-         value_has_type tv2 v2) /\
-  expr_res_ok (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es2) /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  MAP FDOM es1.scopes = MAP FDOM es2.scopes
-Proof
-  strip_tac >> drule expr_body_pre_bop >> strip_tac >>
-  drule bop_typed_source_witness >>
-  disch_then (qspecl_then [`v1`, `es1`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `expr_body_pre cenv cx env e2 es1` by metis_tac[] >>
-  drule bop_typed_source_witness >>
-  disch_then (qspecl_then [`v2`, `es2`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `is_word_type ann` by
-    (Cases_on `bop` >> gvs[well_typed_binop_def, is_word_type_def]) >>
-  `type_bits (expr_type e1) MOD 8 = 0` by
-    (irule byte_widths_expr_type >> gvs[expr_body_pre_def]) >>
-  `IS_SOME (evaluate_type (get_tenv cx) ann)` by
-    metis_tac[expr_body_pre_type_evaluates, vyperASTTheory.expr_type_def] >>
-  `expr_res_ok (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es2)` by
-    (irule bop_typed_source_result_ok >> simp[] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
-  drule expr_body_pre_bop_operands >> strip_tac >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem bop_pair_scalar_run:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\

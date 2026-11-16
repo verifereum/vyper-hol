@@ -241,24 +241,25 @@ Proof
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
     (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
       val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem)` by
-    (BETA_TAC >> asm "child" (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_prepared_path_mode)) >>
-     (impl_tac >- (
-     asm_rewrite_tac[] >>
-     conj_tac >- (strip_tac >> fs[]) >>
-     conj_tac
-     >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-           (irule_at Any) >> simp[] >> rpt strip_tac >> fs[]) >>
-     qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (irule_at Any) >>
-     qexistsl [`loop_st.cs_current_insts`,`jump_id`,`hdr_bb'`,`entry_bb`] >>
-     simp_tac std_ss [SUBSET_REFL] >> asm_rewrite_tac[] >> simp[])) >>
+    (BETA_TAC >> asm "child" (mp_tac o MATCH_MP
+       (BETA_RULE (Q.INST
+         [`st` |-> `body_st`, `next` |-> `loop_st.cs_next_var`,
+          `slot_id` |-> `header_st.cs_next_id`, `initial` |-> `prepared`,
+          `cap` |-> `sz`, `G` |-> `H`, `tn` |-> `qt`,
+          `B` |-> `range_bytes [(d,32)]`,
+          `prefix` |-> `loop_st.cs_current_insts`, `id` |-> `jump_id`,
+          `hdr_bb` |-> `hdr_bb'`, `bb` |-> `entry_bb`]
+         prefix_complete_array_prepared_path_mode))) >>
+     (impl_tac >-
+       (asm_simp_tac std_ss [SUBSET_REFL] >> rpt strip_tac >> fs[])) >>
      disch_then (qx_choosel_then [`actual`,`Hout`,`qout`,`A`] strip_assume_tac) >>
      qexistsl [`actual`,`Hout`,`qout`,`A`] >> fs[]) >>
   qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
-  conj_tac >- (strip_tac >> fs[] >> metis_tac[gas_origin_ptr_path_trans]) >>
+  conj_tac >- (strip_tac >> fs[] >>
+    metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
   conj_tac >-
     (strip_tac >> fs[] >>
      irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE std_ss []) >> qexists `prepared` >> simp[]) >>

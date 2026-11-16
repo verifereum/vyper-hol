@@ -2686,7 +2686,7 @@ End
    them while storing it, exactly as for external-call arguments. *)
 Definition compile_create_ctor_tuple_def:
   compile_create_ctor_tuple cfn cenv args =
-    let tys = MAP expr_type args in
+    let tys = MAP (lowered_value_type cenv) args in
     do vals <- compile_multi_vvs cfn cenv args;
        tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
        compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
@@ -2707,7 +2707,7 @@ Definition compile_create_blueprint_args_def:
        | _ => do emit_inst INVALID [] []; return (Lit 0w,Lit 0w) od)
     else if args = [] then return (Lit 0w,Lit 0w)
     else
-      let tuple_ty = TupleT (MAP expr_type args) in
+      let tuple_ty = TupleT (MAP (lowered_value_type cenv) args) in
       let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
       do buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
          src <- compile_create_ctor_tuple cfn cenv args;
@@ -2751,7 +2751,7 @@ Definition compile_raw_create_def:
        capacity and slot copying, while evaluating the original expression. *)
     let maxlen = 49152 in
     let bytecode_ty = BaseT (BytesT (Dynamic maxlen)) in
-    let tuple_ty = TupleT (MAP expr_type ctor_args) in
+    let tuple_ty = TupleT (MAP (lowered_value_type cenv) ctor_args) in
     let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
     let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
     do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;

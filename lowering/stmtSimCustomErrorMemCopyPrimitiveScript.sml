@@ -1,6 +1,6 @@
 Theory stmtSimCustomErrorMemCopyPrimitive
 Ancestors
-  placeMemoryTypedPrimitive bodyCopyMemory exprSimMemUnwrap
+  placeMemoryTypedPrimitive bodyCopyMemory bodyCopyMemoryBase exprSimMemUnwrap
   externalReturnNormalizeMem list venomState venomExecSemantics
   placeMemoryTypedBase exprSimBufferStore bodyMemAggregateStore
   context compileEnv exprLoweringProps valueCopyBytes typedCopyAgreement

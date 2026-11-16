@@ -1,0 +1,88 @@
+NONLOGICAL DIAGNOSTIC TRANSCRIPT -- fixed-premise-assembly
+
+Source evidence: TO_statement_cases-L0016-20261116T193214352355Z_m1042_t001
+Complete readback: TO_statement_cases-L0016-20261116T200109121105Z_m1065_t004
+ASCII spelling below preserves the printed HOL term (Unicode logical and
+comparison symbols replaced by their ordinary HOL ASCII spellings).
+This is an observed sequent, NOT a theorem declaration or an admission.
+
+CAPTURE-BEGIN fixed-premise-assembly
+FREE VARIABLE TYPES
+typ : type
+p : string
+idx : string
+cenv : compile_env
+ap : string
+tv : type_value
+vs : value list
+ent : scope_entry
+av : array_value
+func : ir_function
+cx : evaluation_context
+st0 : evaluation_state
+H : (bool # 256 word # type_value) list # num list
+es : evaluation_state
+ctx : venom_context
+start : compile_state
+s0 : venom_state
+
+ASSUMPTIONS (numbering of original failure output)
+ 0. s0.vs_inst_idx = LENGTH start.cs_current_insts
+ 1. s0.vs_current_bb = start.cs_current_bb
+ 2. ~s0.vs_halted
+ 3. ~ctx_has_dalloca ctx
+ 4. valid_horizon cx st0 H es.storage_trace
+ 5. alloca_history func s0
+ 6. vs = array_elements ent.type av
+ 7. ent.value = ArrayV av
+ 8. ent.type = ArrayTV tv (Fixed (LENGTH vs))
+ 9. not_fresh_at start ap
+10. !x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at start x
+11. !x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x
+12. local_ptrs_reserved cenv start
+13. !x. not_fresh_at start x ==> x <> idx
+14. p <> idx
+15. LENGTH vs < dimword (:256)
+16. type_memory_bytes cenv typ = type_memory_size tv
+17. type_memory_bytes cenv typ + 64 < dimword (:256)
+18. fn_inst_ids_distinct func
+
+CONCLUSION
+fn_inst_ids_distinct func /\ type_memory_size tv < dimword (:256) /\
+LENGTH vs < dimword (:256) /\ p <> idx /\
+(!x. not_fresh_at start x ==> x <> idx) /\
+local_ptrs_reserved cenv start /\
+(!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at start x) /\
+(!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at start x) /\
+(!x. Var ap = Var x ==> not_fresh_at start x) /\
+ent.type = ArrayTV tv (Fixed (LENGTH vs)) /\ ent.value = ArrayV av /\
+vs = array_elements ent.type av /\ alloca_history func s0 /\
+(?H. valid_horizon cx st0 H es.storage_trace) /\ ~ctx_has_dalloca ctx /\
+~s0.vs_halted /\ s0.vs_current_bb = start.cs_current_bb /\
+s0.vs_inst_idx = LENGTH start.cs_current_insts
+CAPTURE-END fixed-premise-assembly
+
+DISPOSITION
+The capture intentionally failed before solving this conjunction. In the
+subsequent run the retained FIRST proof solved it in this reduced context;
+fixed_init then closed and emitted FIXED-INIT-AND-REDUCED-ASSEMBLY-CLOSED.
+Evidence: TO_statement_cases-L0016-20261116T193214352355Z_m1044_t001 and
+TO_statement_cases-L0016-20261116T193214352355Z_m1045_t001.
+Neither fixed-residual nor head-leaf fallback was reached in that execution.
+This is not an outstanding fixed-residual helper interface.
+
+LATER FAILURE (not part of the fixed sequent)
+TO_statement_cases-L0016-20261116T193214352355Z_m1050_t005, read back as
+TO_statement_cases-L0016-20261116T200109121105Z_m1066_t004, records the later
+failure at Consumer:1547-1550 in dynamic_init. It is the by-proof of:
+  load_result = Var lv /\
+  load_cs.cs_current_bb = start.cs_current_bb /\
+  load_cs.cs_current_insts = start.cs_current_insts ++
+    [mk_inst start.cs_next_id MLOAD [Var ap] [lv]] /\
+  load_cs.cs_blocks = start.cs_blocks /\
+  load_cs.cs_next_id = start.cs_next_id + 1 /\
+  load_cs.cs_next_var = start.cs_next_var + 1
+following Cases_on `emit_op MLOAD [Var ap] start`.
+The failed branch had two unsolved goals. This excerpt is a location and
+stage-equation record, NOT a complete dynamic sequent or helper contract.
+The dynamic capture owner must capture its necessary full context separately.

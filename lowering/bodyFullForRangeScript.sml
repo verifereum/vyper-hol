@@ -2111,13 +2111,13 @@ Proof
         allocLimitsTheory.alloc_limits_iterator_def] >>
      metis_tac[alloc_limits_expr_not_extcode]) >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule stmt_expr_body_pre_alloc >>
+    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def,
          supported_iterator_exists_def,int_calls_stmt_def,int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def,allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts stmts` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def,
          supported_iterator_exists_def,int_calls_stmt_def,int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def,allocLimitsTheory.alloc_limits_iterator_def] >>
