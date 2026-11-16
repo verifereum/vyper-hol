@@ -2933,6 +2933,65 @@ Proof
   gvs[handle_def] >> irule handle_exception_singleton_no_return >> simp[]
 QED
 
+Theorem shadow_root_step_from_real_continue[local]:
+  es.contexts <> [] /\ step es = (INL (), next) ==>
+  step (shadow_root es) = (INL (), shadow_root next) /\
+  next.contexts <> []
+Proof
+  strip_tac >> drule shadow_root_step_body_raw >>
+  disch_then (qx_choosel_then [`body_result`, `mid`] strip_assume_tac) >>
+  Cases_on `body_result`
+  >- gvs[step_eq_handle_step_inner, handle_def] >>
+  rename1 `step_inner es = (INR e, mid)` >>
+  `1 < LENGTH mid.contexts \/ e <> NONE` by
+    (spose_not_then assume_tac >> gvs[] >>
+     `LENGTH mid.contexts = 1` by
+       (Cases_on `mid.contexts` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+     fs[step_eq_handle_step_inner, handle_def] >>
+     metis_tac[handle_step_singleton_no_return]) >>
+  mp_tac (Q.INST [`es` |-> `mid`] shadow_root_handle_step_exact) >>
+  impl_tac >- simp[] >> strip_tac >>
+  gvs[step_eq_handle_step_inner, handle_def]
+QED
+
+Theorem shadow_root_step_from_real_terminal[local]:
+  es.contexts <> [] /\ step es = (INR e_out, final) ==>
+  ?e ghost. step (shadow_root es) = (INR e, ghost)
+Proof
+  strip_tac >> drule shadow_root_step_body_raw >>
+  disch_then (qx_choosel_then [`body_result`, `mid`] strip_assume_tac) >>
+  Cases_on `body_result`
+  >- gvs[step_eq_handle_step_inner, handle_def] >>
+  rename1 `step_inner es = (INR e, mid)` >>
+  Cases_on `1 < LENGTH mid.contexts \/ e <> NONE`
+  >- (mp_tac (Q.INST [`es` |-> `mid`] shadow_root_handle_step_exact) >>
+      impl_tac >- simp[] >> strip_tac >>
+      gvs[step_eq_handle_step_inner, handle_def] >> metis_tac[]) >>
+  gvs[] >>
+  `?ctxt rb. mid.contexts = [(ctxt, rb)]` by
+    (Cases_on `mid.contexts` >> gvs[] >> Cases_on `t` >> gvs[] >>
+     Cases_on `h` >> simp[]) >>
+  drule shadow_root_handle_halt_singleton >>
+  simp[step_eq_handle_step_inner, handle_def] >> metis_tac[]
+QED
+
+(* Root code-deposit handling may change the terminal result, but cannot
+   prevent the memory-output shadow from reaching its own terminal. *)
+Theorem shadow_root_run_exists:
+  !es r es'.
+    es.contexts <> [] /\ run es = SOME (r, es') ==>
+    ?sr sg. run (shadow_root es) = SOME (sr, sg)
+Proof
+  `!s result. run s = SOME result ==>
+     s.contexts <> [] ==> ?sr sg. run (shadow_root s) = SOME (sr, sg)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac root_replay_run_induct >> conj_tac
+  >- (rpt strip_tac >> drule_all shadow_root_step_from_real_terminal >>
+      strip_tac >> metis_tac[run_step_inr]) >>
+  rpt strip_tac >> drule_all shadow_root_step_from_real_continue >>
+  strip_tac >> metis_tac[run_step_inl]
+QED
+
 Theorem root_replay_run_empty[local]:
   es.contexts = [] ==> run es = SOME (INR (SOME Impossible),es)
 Proof
