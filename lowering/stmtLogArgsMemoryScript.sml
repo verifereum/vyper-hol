@@ -23,14 +23,6 @@ Proof
     supported_string_type_def]
 QED
 
-Theorem log_mem_ignore_bind_bind[local]:
-  ignore_bind (bind a k) (return ()) =
-    bind a (\v. ignore_bind (k v) (return ()))
-Proof
-  simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
-  Cases_on `a x` >> rename1 `a x = (r1, st1)` >> Cases_on `r1` >> simp[]
-QED
-
 Theorem log_mem_state_rel_gas_obs[local]:
   stmt_state_rel H ctx func cenv cx es s ==>
   stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s
