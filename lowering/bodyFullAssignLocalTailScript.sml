@@ -9,14 +9,15 @@ Ancestors
   vyperLookup loweringStateRelDefs stmtSimDeclStore ptrDiscipline
   venomExecProofs venomState venomInst bodyFullUnwrapRun bodyMemoryDefs
   stmtSimDefs vyperStorageFootprint vyperStorageBackend emitHelper list rich_list
-  loweringPosts stmtSimProps
+  loweringPosts stmtSimProps bodyFullHashKeccakFixed
 
 Theorem body_assign_local_word_full_edge:
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ptr_covers G tn p s 32 /\ allocas_from lo s /\
@@ -59,7 +60,7 @@ Theorem body_assign_local_word_full_store:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es0 /\
@@ -82,6 +83,8 @@ Theorem body_assign_local_word_full_store:
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G tf t
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
   `local_ptrs_rel func cenv es.scopes s` by fs[stmt_state_rel_def,state_rel_def] >>
@@ -164,6 +167,7 @@ Theorem body_assign_local_word_full_post:
     stmt_state_rel H ctx func ce cx ef t /\
     storage_well_formed_on cx ef (FST H) /\
     return_buf_frame d ce sb t /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at D lo d ce cx ef G tf t /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -171,6 +175,8 @@ Theorem body_assign_local_word_full_post:
       op_taint tf (Var x) = op_taint tn0 (Var x))
 Proof
   strip_tac >> drule_all assign_local_word_code_parts >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `sb.cs_current_bb = sm.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sm.cs_current_insts) /\
    ~block_is_terminated sb` by
@@ -225,7 +231,7 @@ Theorem body_assign_local_word_full_tail:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es /\
@@ -254,6 +260,7 @@ Theorem body_assign_local_word_full_tail:
       storage_well_formed_on cx
         (ee with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) (FST H) /\
       return_buf_frame d ce sb t /\ alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at D lo d ce cx
         (ee with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G tf t /\

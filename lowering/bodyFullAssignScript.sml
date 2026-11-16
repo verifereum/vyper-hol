@@ -86,7 +86,7 @@ Theorem body_assign_local_word_full_continue[local]:
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
   FLOOKUP env.var_types id = SOME (expr_type e) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   expr_body_pre cenv cx env e es /\ local_ptrs_reserved cenv sa /\
   return_buf_frame d cenv sa s0 /\
@@ -105,7 +105,9 @@ Theorem body_assign_local_word_full_continue[local]:
        (mid with gas_obs := []) v op t /\
       expr_store_bound cx (expr_type e) v op t /\
       t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx (mid with gas_obs := []) G1 tn1 t /\
       ptr_val_ok cx (expr_type e) v op G1 tn1 t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1)) ==>
@@ -116,7 +118,9 @@ Theorem body_assign_local_word_full_continue[local]:
       (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
       cenv_top_ext cenv ce ee.scopes /\ stmt_state_rel H ctx func ce cx ee t /\
       storage_well_formed_on cx ee (FST H) /\ return_buf_frame d ce sb t /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d ce cx ee G tn t /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -200,16 +204,19 @@ Proof
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
     `op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
   irule body_assign_local_word_full_source >>
   conj_tac >- metis_tac[] >> qexists_tac `Q1` >>
   reverse conj_tac >- (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
     goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >>
-    Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def] >>
+    POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+    Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
     Cases_on `y` >> Cases_on `r` >>
-    simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def] >>
-    Cases_on `e'` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+    gvs[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,
+        exprSimDefsTheory.halt_exit_def] >>
+    rename1 `Error err` >> Cases_on `err` >>
+    gvs[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   irule body_assign_local_word_full_continue >>
   goal_assum (drule_at Any) >> simp[Abbr `Q1`] >> metis_tac[]
@@ -291,21 +298,9 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e)` by
     metis_tac[supported_stmt_body_safe] >>
-  `supported_expr tops e` by
-    gvs[supported_stmt_def, supported_assignment_def] >>
-  `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ty` by
-    (gvs[type_stmt_def, atarget_accepts_def, well_typed_expr_def, AllCaseEqs()] >>
-     Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
-     rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> fs[body_inv_def]) >>
-  `expr_body_pre cenv cx env e es` by
-    (irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
-     fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def,
-       int_calls_expr_def] >>
-     drule supported_expr_body_calls >> strip_tac >>
-     fs[body_inv_def] >> metis_tac[]) >>
   drule_all assign_relayout_source_classify >> strip_tac >>
   drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
@@ -351,7 +346,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sB`,`shadow_sa`,`shadow_sB`,`op`,
     `s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   qpat_x_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
   irule assign_local_memory_full_outcome >>
