@@ -19,6 +19,7 @@ Ancestors
   bodyFullAssignLocalSetup bodyFullAssignLocalSource bodyFullAssignLocalTail
   bodyFullMemoryFrames bodyFullMemoryCopy bodyFullMemoryStore
   bodyFullLocalCopy bodyFullMemoryStage bodyFullAssignMemoryCompose
+  bodyFullAssignMemoryExitCompose
   bodyFullAssignMemoryValue assignRelayoutCaller assignRelayoutFrag
   assignBasePtrLocalBodyFacts stmtSimAssign stmtSimAssignStore
   gasShadowCompileStmtHelpers gasShadowState stmtSimAssignSource loweringPosts
@@ -360,13 +361,14 @@ Proof
     `s0`,`G0`,`tn0`] mp_tac) >>
   simp[] >> disch_then drule >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  qpat_x_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
-  irule assign_local_memory_full_outcome >>
+  qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
+  irule assign_local_memory_full_outcome_exit >>
   conj_tac >- (qexists_tac `lctx` >> first_assum ACCEPT_TAC) >>
   qexists_tac `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
   conj_tac >- suspend "memory_continue" >>
   conj_tac >- (simp[Abbr `childQ`] >> metis_tac[]) >>
   qunabbrev_tac `childR` >>
+  qpat_assum `cx_tops cx = tops` SUBST1_TAC >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[]
@@ -383,7 +385,7 @@ Resume body_assign_local_widened_full[memory_continue]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >>
   qpat_x_assum `INL v = INL _` (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
-  rename1 `expr_store_bound cx (post_value_type cenv e) v op u` >>
+  rename1 `expr_store_bound cx (lowered_value_type cenv e) v op u` >>
   drule_all stmtSimAssignSourceTheory.assign_local_continuation_all_tails >>
   disch_then (qx_choosel_then [`pre`,`sc`,`ent`,`rest`] strip_assume_tac) >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid u` by
@@ -569,6 +571,10 @@ Resume body_assign_local_widened_full[memory_continue]:
     fs[loweringPostsTheory.expr_post_def] >>
   first_x_assum (qspecl_then [`H`,`DF H`,`d`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H ctx _ _ _ _ t` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]) >>
   simp[loweringPostsTheory.stmt_lands_def,
        stmtSimPropsTheory.cenv_top_ext_refl] >>
   conj_tac
