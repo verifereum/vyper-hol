@@ -128,7 +128,9 @@ Theorem abi_encode_tuple_allocate_origin:
             (val_footprint (EL i tvs) (EL i vs) = 0 \/
              loweringStateRelDefs$regions_disjoint (w2n bw) sz (w2n w) (val_footprint (EL i tvs) (EL i vs))) /\
             (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
-              val_in_memory (EL i tvs) (EL i vs) (w2n w) mem))))
+              val_in_memory (EL i tvs) (EL i vs) (w2n w) mem)))) /\
+    t.vs_allocas = (abi_builtin_allocate_state a.cs_next_id sz s).vs_allocas /\
+    t.vs_alloca_next = (abi_builtin_allocate_state a.cs_next_id sz s).vs_alloca_next
 Proof
   strip_tac >> drule_all (INST_TYPE [``:'b`` |-> ``:'a``] abi_encode_alloc_origin_exact) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
