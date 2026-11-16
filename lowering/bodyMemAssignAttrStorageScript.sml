@@ -658,7 +658,8 @@ Resume compile_assign_attr_storage_mem[store]:
      fs[vyperStorageFootprintTheory.valid_horizon_def,
         vyperStorageFootprintTheory.storage_observations_ok_def,
         listTheory.EVERY_APPEND,
-        vyperStorageFootprintTheory.storage_trace_regions_def]) >>
+        vyperStorageFootprintTheory.storage_trace_regions_def,
+        vyperStorageFootprintTheory.storage_trace_locks_def]) >>
   qspecl_then [`ctx`, `func`, `tr`, `dst`, `n2w slot + n2w off`, `op`,
     `typed_val_to_w256 ftv v`, `t`, `su`, `sb`] mp_tac
     storage_store_op_exact_mem_src >>
