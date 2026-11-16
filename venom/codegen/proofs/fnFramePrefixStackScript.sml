@@ -313,6 +313,53 @@ Proof
   metis_tac[frame_stack_plan_entry_fields_reloc]
 QED
 
+Theorem frame_stack_plan_push_reloc:
+  frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 stk fn caller_entry
+    ra rest mem0 /\
+  frame_history vs0 unit.cu_context stk PG G tn fn inst vs hs history /\
+  body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
+    lo (build_offset_to_pc prog)
+    i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+    bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+    rest_ops k ps pc0 vs ast ra pc_ret rest mem0 /\
+  f.cf_fn = fn /\ f.cf_inst = inst /\ f.cf_state = vs /\
+  active_inst fn inst vs /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+  eval_operands arg_ops vs = SOME args /\ setup_callee callee args vs = SOME cvs ==>
+  ?n cas ret_off saved j.
+    0 < n /\
+    asm_steps lo (build_offset_to_pc prog)
+      prog n ast = AsmOK cas /\
+    frame_stack_plan_reloc lo rpolicy unit cpl prog vs0 es0 (f::stk) callee cas
+      (n2w ret_off) (saved ++ rest) cas.as_memory /\
+    fn_entry_state_rel cpl callee cvs cas (n2w ret_off) (saved ++ rest) /\
+    j < LENGTH unit.cu_context.ctx_functions /\
+    EL j unit.cu_context.ctx_functions = callee /\
+    MEM callee.fn_name (fcg_analyze unit.cu_context).fcg_reachable /\
+    asm_block_at prog cas.as_pc
+      (execute_plan cpl.cp_initial_fmp (EL j cpl.cp_regions).sr_plan) /\
+    LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_has_retpc callee /\
+    FLOOKUP (build_offset_to_pc prog) (w2n ((n2w ret_off):bytes32)) =
+      SOME (ast.as_pc + n)
+Proof
+  strip_tac >> drule_all body_plan_active_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule body_plan_inv_facts_reloc >> strip_tac >>
+  drule_all body_operands_le_16 >> strip_tac >>
+  drule frame_history_readonly >> strip_tac >>
+  drule_all body_plan_call_entry_reloc >> strip_tac >>
+  drule_all frame_stack_plan_reloc_call >> strip_tac >>
+  qexistsl_tac [`LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3`,
+    `cas`, `ret_off`, `saved`, `j`] >>
+  conj_tac >- decide_tac >>
+  conj_tac >- (irule asm_steps_compose_ok >> qexists_tac `mid` >>
+              conj_tac >> first_assum ACCEPT_TAC) >>
+  once_rewrite_tac[ADD_ASSOC] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem frame_stack_plan_push:
   frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn caller_entry
     ra rest mem0 /\
@@ -344,20 +391,11 @@ Theorem frame_stack_plan_push:
     FLOOKUP (build_offset_to_pc prog) (w2n ((n2w ret_off):bytes32)) =
       SOME (ast.as_pc + n)
 Proof
-  strip_tac >> drule_all body_plan_active_inst >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule body_plan_inv_facts >> strip_tac >>
-  drule_all body_operands_le_16 >> strip_tac >>
-  drule frame_history_readonly >> strip_tac >>
-  drule_all body_plan_call_entry >> strip_tac >>
-  drule_all frame_stack_plan_call >> strip_tac >>
-  qexistsl_tac [`LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3`,
-    `cas`, `ret_off`, `saved`, `j`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (decide_tac) >>
-  FIRST [ONCE_REWRITE_TAC [ADD_ASSOC] >> first_assum ACCEPT_TAC,
-    irule asm_steps_compose_ok >> qexists_tac `mid` >>
-    conj_tac >> first_assum ACCEPT_TAC]
+  pure_rewrite_tac[frame_stack_plan_reloc_specialize,
+    body_plan_inv_reloc_specialize] >>
+  strip_tac >> drule_all frame_stack_plan_push_reloc >> strip_tac >>
+  qexistsl_tac [`n`, `cas`, `ret_off`, `saved`, `j`] >>
+  rpt conj_tac >> metis_tac[]
 QED
 
 Theorem frame_stack_plan_ret_reloc:
