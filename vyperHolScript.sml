@@ -63,7 +63,7 @@ Ancestors
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
   typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* end-to-end runtime correctness *)
-  e2eCorrectness
+  e2eCorrectness guardRequestAlignment
   (* sufficient gas, the companions to the call and deploy theorems *)
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
