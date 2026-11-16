@@ -18,7 +18,10 @@ Theorem augassign_rhs_invoke_full:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+     dalloca_no_wrap inst s) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -40,7 +43,9 @@ Theorem augassign_rhs_invoke_full:
       expr_store_bound cx (post_value_type cenv e) v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
       ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
       (~is_word_type (post_value_type cenv e) ==>
@@ -53,9 +58,6 @@ Theorem augassign_rhs_invoke_full:
         (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
-     dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all pow_compose_reachable_no_wrap >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e es` by
     (qpat_assum `body_expr_full_ok cx e`
@@ -71,5 +73,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `res` >> fs[expr_exit_def] >>
   simp[stmt_exit_ptr_def, halt_exit_def] >>
-  fs[halt_exit_def] >> metis_tac[expr_exit_INR_type]
+  fs[halt_exit_def] >>
+  conj_tac
+  >- (qpat_assum `expr_exit (INR _) _` mp_tac >>
+      rpt (pop_assum kall_tac) >> metis_tac[expr_exit_INR_type]) >>
+  Cases_on `r` >> fs[expr_exit_def]
 QED
