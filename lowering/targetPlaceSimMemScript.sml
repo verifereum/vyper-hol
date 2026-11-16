@@ -11,7 +11,7 @@ Ancestors
   stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
   venomState targetRootAttributeMemory targetAttributeMemory
-  targetSubscriptCompositionMemory targetPlaceSimCasesBase
+  targetSubscriptCompositionMemory targetPlaceSimCasesBase gasSummaryCompose
 Libs
   pairLib
 
