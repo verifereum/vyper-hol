@@ -42,12 +42,12 @@ Theorem tuple_place_head_gas_continuation_open:
     alloca_frame cenv es sp s0 cenv ff t /\
     (?ast ax ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL ax,ast')) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0 next (ff with gas_obs := [],t) Q
-      (\H res ee r. expr_exit res r)) /\
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) /\
   storage_trace_frame next ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx bt)
       (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
@@ -60,7 +60,7 @@ Proof
     (\H res ee t. ?p. res = INL p /\
       target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (irule target_place_sim >> simp[] >>
      qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [tuplePlaceHeadTheory.tuple_place_head_def]) >>
@@ -73,7 +73,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `res` >>
-      gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gvs[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_def]) >>
   reverse conj_tac
   >- (rpt strip_tac >> metis_tac[]) >>
   rpt strip_tac >>
@@ -101,6 +101,7 @@ Proof
   `~t.vs_halted` by
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [LET_THM]) >>
   drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >>
   disch_then (DISJ_CASES_THEN strip_assume_tac)
   >- (`?ast ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL (),ast')` by
@@ -124,7 +125,13 @@ Proof
   `exit_result rr` by
     (Cases_on `rr` >>
      gvs[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
-  irule tuple_place_write_gas_exit >>
-  qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-  goal_assum (drule_at Any) >> simp[]
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl [`INR (Error (RuntimeError "write in static context"))`, `ff`, `rr`] >>
+  simp[gas_marked_exec_def, exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >>
+  drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  fs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def]
 QED
