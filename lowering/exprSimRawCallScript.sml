@@ -2397,7 +2397,9 @@ Resume raw_call_prefix_sim[keyword_setup]:
   qpat_assum `typed_args_ready _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `lower_word_args _ _ _ _ = _` (irule_at Any) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> fs[wb_args_exit_def] >> metis_tac[]) >>
+  >- (rpt strip_tac >> fs[wb_args_exit_def] >>
+      qpat_x_assum `!H exc ee r. expr_exit _ _ /\ halt_exit _ _ _ _ _ ==> R _ _ _ _`
+        irule >> simp[] >> fs[halt_exit_def]) >>
   rpt strip_tac >> suspend "keyword_endpoint"
 QED
 
