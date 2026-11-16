@@ -260,7 +260,7 @@ Proof
        nh_base)
 QED
 
-Theorem extend_place_nh[local]:
+Theorem extend_place_nh:
   extend_place cx pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def]
