@@ -7,7 +7,7 @@ Ancestors
   bodyFullBuiltinUint2Str
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
-  fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr bodyPtrDefs ptrSafeRun
   ptrDiscipline gasShadow gasSummary gasOracleReplay allocaHistory
   exprSimMemDefs exprSimStack exprSimIfExp exprSimProps exprLoweringProps
   loweringPosts exprLowering compileEnv emitHelper vyperStorageTrace
@@ -24,7 +24,8 @@ Theorem msg_gas_full_witness[local]:
   gas_shadow_state sa shadow_sa /\ gas_shadow_function func shadow_func /\
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   alloca_history func s0 /\ ~s0.vs_halted /\
@@ -99,8 +100,11 @@ Proof
   pop_assum SUBST1_TAC >>
   rpt conj_tac
   >- (`ptr_inst_ok D lo 0 ctx func G0 tn0 inst s0` by
-        (simp[Abbr `inst`] >> irule ptr_inst_ok_scalar_builtin_at >>
-         gvs[ghost_inv_at_def]) >>
+        (irule ptr_inst_ok_restore_ctx >> simp[] >>
+         conj_tac >- simp[Abbr `inst`, mk_inst_def] >>
+         simp[Abbr `inst`] >>
+         irule ptr_inst_ok_scalar_builtin_at >>
+         gvs[ghost_inv_at_def, ctx_has_dalloca_def]) >>
       `gas_origin_ptr_edge (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (s0,G0,tn0)
          (if inst.inst_opcode = GAS then
@@ -194,7 +198,8 @@ Proof
       drule_all msg_gas_post_frame >>
       disch_then (qspec_then `w` assume_tac) >>
       gvs[expr_store_bound_word, expr_type_def, env_item_type_def,
-          is_word_type_def, update_var_def]) >>
+          is_word_type_def, update_var_def, allocas_below_fmp_def] >>
+      Cases_on `ctx_has_dalloca ctx` >> gvs[] >> first_assum ACCEPT_TAC) >>
   rw[expr_vv_sim_full_def] >>
   Cases_on `compile_env_var MsgGas sa` >>
   rename1 `compile_env_var MsgGas sa = (mop, _)` >>
@@ -246,6 +251,7 @@ Proof
   drule_at (Pos last) vv_post_of_expr_post >>
   simp[post_value_type_def, expr_type_def] >> strip_tac >>
   gvs[expr_type_def, vv_store_bound_stack_word, env_item_type_def,
-      is_word_type_def, ptr_vv_ok_def, vv_location_def, read_result_def,
-      return_def, update_var_def]
+      is_word_type_def, ptr_vv_ok_def, ptr_val_ok_def, vv_location_def, read_result_def,
+      return_def, update_var_def, allocas_below_fmp_def] >>
+  Cases_on `ctx_has_dalloca ctx` >> gvs[] >> first_assum ACCEPT_TAC
 QED
