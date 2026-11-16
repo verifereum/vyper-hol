@@ -145,7 +145,7 @@ Proof
    ghost_inv_at (DF H0) lo d cenv cx es G0 tn0 s0` by metis_tac[] >>
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by fs[ghost_inv_at_def] >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
-  drule_all alloc_buffer_origin_ptr_path >>
+  drule_all (INST_TYPE [beta |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn0`,`explicit`,`PG`,`G0`] strip_assume_tac) >>
   `q = p` by metis_tac[operand_11] >> qpat_x_assum `q = p` SUBST_ALL_TAC >>
   `~t.vs_halted` by
