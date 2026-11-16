@@ -141,17 +141,20 @@ Proof
   `val_wf tv (EL k xs)` by metis_tac[EVERY_EL] >>
   `val_footprint tv (EL k xs) <= stride` by metis_tac[val_footprint_le] >>
   rpt strip_tac >> irule calldata_member_robust_window_frame >>
-  qexistsl_tac [`dirty`, `s.vs_memory`] >> simp[] >>
+  simp[] >>
+  qexistsl_tac [`t.vs_memory`, `dirty'`, `s.vs_memory`, `dirty`] >> simp[] >>
   `SUC k * stride <= j * stride` by simp[] >>
   `32+k*stride+val_footprint tv (EL k xs) <= 32+j*stride` by
-    (fs[MULT_CLAUSES] >> decide_tac) >>
+    (qpat_x_assum `SUC k * stride <= j * stride` mp_tac >>
+     pure_rewrite_tac [MULT_CLAUSES] >> decide_tac) >>
   drule mem_bytes_at_translated_window >>
   disch_then (qspecl_then [`32+k*stride`, `val_footprint tv (EL k xs)`] mp_tac) >>
-  simp[ADD_ASSOC]
+  gvs[]
 QED
 
 Theorem array_iteration_index_edges[local]:
-  (0 < count /\ count < dimword (:256) ==>
+  !count j.
+  ((0:num) < count /\ count < dimword (:256) ==>
     w2n (n2w (0:num):bytes32) = 0 /\ SUC 0 <= count) /\
   (j < count /\ count < dimword (:256) /\ j+1 = count ==>
     (n2w j:bytes32)+1w = n2w count /\ SUC j = count) /\
@@ -160,5 +163,150 @@ Theorem array_iteration_index_edges[local]:
     !m. mem_agree_outside dirty mem m ==>
       val_in_memory tv (EL k []) (dst+32+k*type_memory_size tv) m)
 Proof
-  simp[] >> metis_tac[abi_decode_loop_increment_word, ADD1]
+  simp[word_add_n2w]
 QED
+
+(* Application probes are ML terms only. Instantiating a schema is NOT proving
+   it or assuming its universally closed all-types version. *)
+local
+  fun check msg b = if b then print (msg ^ "\n") else raise Fail msg;
+  fun has_const name tm = can (find_term (fn t => is_const t andalso
+    (#Name (dest_thy_const t) = name orelse
+     String.isSuffix ("." ^ name) (#Name (dest_thy_const t))))) tm;
+  fun parts th = dest_imp (#2 (strip_forall (concl th)));
+  val (params,body) = strip_forall fixed_element_contract;
+  val parse = Parse.parse_in_context (params @ free_vars body);
+  fun parameter name = valOf (List.find (fn v => fst (dest_var v) = name) params);
+  fun specialize sub = Term.subst (map (fn {redex,residue} =>
+    {redex=redex, residue=Term.inst (match_type (type_of residue) (type_of redex)) residue}) sub);
+  val instance = specialize
+    [parameter "st" |-> parse `ready`,
+     parameter "last" |-> parse `child_end`,
+     parameter "initial" |-> parse `a`,
+     parameter "src" |-> parse `FST (SND ops)`,
+     parameter "child" |-> parse `child_name`,
+     parameter "p" |-> parse `n2w (cd_member_ptr F a.vs_call_ctx.cc_calldata tv
+       (cd_at F sb 32) (j*tv_abi_size tv))`,
+     parameter "d" |-> parse `dst+32+j*type_memory_size tv`] body;
+  val (child_in,child_out) = dest_imp instance;
+  val loop_prefix = ``
+    !j count.
+    j < count /\ count <= bound /\ count < dimword (:256) /\
+    LENGTH xs = j /\ EVERY (val_wf tv) xs /\
+    (!k. k < j ==> cd_decode F initial.vs_call_ctx.cc_calldata tv
+      (cd_member_ptr F initial.vs_call_ctx.cc_calldata tv
+        (cd_at F sb 32) (k*tv_abi_size tv)) = SOME (EL k xs)) /\
+    (!k. k < j ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv (EL k xs) (dst+32+k*type_memory_size tv) mem) /\
+    lookup_var q s = SOME (n2w slot) /\ mload slot s = n2w j /\
+    FLOOKUP s.vs_allocas counter_id = SOME (slot,32) /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    ptr_covers G tn q s 32 /\ ptr_covers G tn root s cap /\
+    (!a. slot <= a /\ a < slot+32 ==> a NOTIN tn.t_mem) /\
+    eval_operand src s = SOME (n2w sb) /\ lookup_var root s = SOME (n2w dst) /\
+    base_addr <= dst /\ dst+32+bound*type_memory_size tv <= base_addr+cap /\
+    dst+32+bound*type_memory_size tv < dimword (:256) /\
+    alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+    fresh_vars_wrt limit s /\ allocas_from lower s /\
+    lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    (!id off sz. lo <= id /\ id < hi /\
+      FLOOKUP s.vs_allocas id = SOME (off,sz) ==>
+      sz = 32 /\ off < dimword (:256) /\ off+32 <= s.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    (?scratch. abi_decode_footprint_frame
+      ((dst,32+bound*type_memory_size tv)::scratch) initial s /\
+      !off sz. MEM (off,sz) scratch ==>
+        ?id. lo <= id /\ id < hi /\ FLOOKUP s.vs_allocas id = SOME (off,sz))``;
+  val (raw_in,_) = parts calldata_array_raw_child_callsite;
+  val (setup_in,setup_out) = parts calldataDynStepTheory.calldata_element_setup_reentry;
+  val (ptr_in,ptr_out) = parts decoderArraySetupPtrTheory.calldata_array_element_setup_endpoint_ptr_origin_core;
+  val (return_in,return_out) = parts calldata_array_raw_child_return_frame;
+  val (_,step_out) = parts calldata_owned_header_step_observed;
+  (* Explicit term applications at this same iteration. These carry the
+     supplier antecedents; none is discharged by merely forming the term. *)
+  fun instantiate th substitutions = let
+    val tm = #2 (strip_forall (concl th));
+    val vs = free_vars tm;
+    val p = Parse.parse_in_context vs;
+    fun one (name,q) = let
+      val v = valOf (List.find (fn v => fst (dest_var v) = name) vs)
+    in v |-> p q end
+  in specialize (map one substitutions) tm end;
+  val setup_instance = instantiate calldataDynStepTheory.calldata_element_setup_reentry
+    [("ip",`Var q`),("dst",`Var root`),("abi_sz",`tv_abi_size tv`),
+     ("mem_sz",`type_memory_size tv`)];
+  val return_instance = instantiate calldata_array_raw_child_return_frame
+    [("stride",`type_memory_size tv`),("s",`a`),("t",`v`),
+     ("scratch",`sc`),("lo",`ready.cs_next_id`),("hi",`child_end.cs_next_id`)];
+  val backedge_instance = instantiate calldata_owned_header_step_observed
+    [("st0",`body_st`),("middle",`ready`),("st1",`child_end`),
+     ("abi_sz",`tv_abi_size tv`)];
+  val scratch_instance = instantiate calldata_footprint_accumulate
+    [("d",`dst`),("sz",`32+bound*type_memory_size tv`),
+     ("e",`dst+32+j*type_memory_size tv`),("stride",`type_memory_size tv`),
+     ("new",`sc`),("u",`a`)];
+  val (_,accepted) = dest_disj child_out;
+  val (_,accepted_body) = strip_exists accepted;
+  val (return_need,_) = dest_imp return_instance;
+  val child_frame = hd (List.filter (has_const "abi_decode_footprint_frame")
+    (strip_conj accepted_body));
+  val return_frame = hd (List.filter (has_const "abi_decode_footprint_frame")
+    (strip_conj return_need));
+  val scratch_frames = List.filter (has_const "abi_decode_footprint_frame")
+    (strip_conj (fst (dest_imp scratch_instance)));
+in
+  val _ = check "Setup, accepted-return and observed-backedge instances typecheck (antecedents remain obligations)."
+    (List.all (fn t => type_of t = bool)
+      [setup_instance,return_instance,backedge_instance]);
+  val _ = check "Accepted child's footprint matches return-frame premise at this exact cell."
+    (aconv child_frame return_frame);
+  val _ = check "Accepted child's footprint also matches scratch accumulation's second frame."
+    (aconv child_frame (List.nth (scratch_frames,1)));
+  val _ = check "Fixed child: baseline resource and execution premise names retained."
+    (List.all (fn n => if has_const n child_in then true else
+      (print ("Missing constant name: " ^ n ^ "\n");
+       List.app (fn t => print (#Name (dest_thy_const t) ^ " "))
+         (find_terms is_const child_in); print "\n"; false))
+      ["abi_decoder_coherent","fn_has_code","fn_inst_ids_distinct",
+       "unit_alloca_budget","phi_prefix_length","eval_operand",
+       "alloca_inv","alloca_frontier_inv","FLOOKUP","ptr_covers",
+       "op_taint","op_prov","fresh_vars_wrt","allocas_from",
+       "ctx_has_dalloca","vs_halted","vs_current_bb","vs_inst_idx"]);
+  val _ = check "Fixed child: only ce/env/sf/ty/tv free before specialization."
+    (length (free_vars fixed_element_contract) = 5);
+  val _ = check "Child instance: setup operands, modular source and current cell typecheck."
+    (type_of instance = bool andalso has_const "cd_member_ptr" child_in);
+  val _ = check "Loop prefix: exact source values, robust old cells, local ownership and ambient freshness typecheck."
+    (type_of loop_prefix = bool andalso has_const "cd_decode" loop_prefix andalso
+     has_const "mem_agree_outside" loop_prefix andalso
+     has_const "fresh_vars_wrt" loop_prefix);
+  val _ = check "Child instance retains rejection, common ghosts, robust result and all world fields."
+    (List.all (fn n => has_const n child_out)
+      ["cd_decode","gas_origin_ptr_path","mem_agree_outside",
+       "vs_accounts","vs_transient","vs_logs","vs_outcomes","vs_requests",
+       "vs_pending_deletions","vs_tx_ctx","vs_block_ctx","vs_fmp","vs_gas_readings"]);
+  val _ = check "Residual: raw wrapper requires global history; loop schema does not provide it."
+    (has_const "alloca_history" raw_in andalso not (has_const "alloca_history" child_in));
+  val _ = check "Lower setup and pointer core avoid global history and accept arbitrary sb."
+    (not (has_const "alloca_history" setup_in) andalso
+     not (has_const "alloca_history" ptr_in) andalso
+     has_const "run_inst_seq" setup_out andalso
+     has_const "run_inst_seq" ptr_in andalso has_const "gas_origin_ptr_path" ptr_out);
+  val _ = check "Return applies to accepted child's footprint/local allocations; outputs counter and prefix window."
+    (has_const "abi_decode_footprint_frame" return_in andalso
+     has_const "FLOOKUP" return_in andalso has_const "mload" return_out andalso
+     has_const "mem_bytes_at" return_out);
+  val _ = check "Robust-prefix and boundary cases have checked propositions, not just quotations."
+    (List.all (fn th => null (hyp th))
+      [array_iteration_wrapping_header,array_iteration_modular_header,
+       array_iteration_normalized_member,array_iteration_cursor_frontier,
+       array_iteration_robust_prefix,array_iteration_index_edges]);
+  val _ = check "Scratch accumulation has an explicit containment antecedent, not an assumption of clean capacity."
+    (has_const "abi_decode_footprint_frame" (concl calldata_footprint_accumulate));
+  val _ = check "Observed backedge preserves physical prefix, but lacks robust values and origin-pointer paths."
+    (has_const "mem_bytes_at" step_out andalso
+     not (has_const "mem_agree_outside" step_out) andalso
+     not (has_const "gas_origin_ptr_path" step_out));
+  val _ = print "Residual application obligations: interval restriction/code shape, modular setup join, ambient freshness, counter write ghost frame, zero-event backedge and robust new cell after counter write. No full loop theorem asserted.\n";
+end;
