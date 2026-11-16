@@ -1618,6 +1618,7 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
         (fn th => REWRITE_TAC [th]) >>
       qpat_assum `slot = n2w offset` (fn th => REWRITE_TAC [th]) >>
       simp_tac std_ss [arithmeticTheory.ADD_COMM]) >>
+  simp_tac pure_ss [LET_THM] >>
   qpat_assum `(if tr then tload slot staged else sload slot staged) = _`
     (fn th => PURE_REWRITE_TAC [th]) >>
   qpat_assum `slot = n2w offset`
