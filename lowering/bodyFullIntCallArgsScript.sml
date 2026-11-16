@@ -3090,17 +3090,24 @@ QED
    to push_function, then any source continuation f, on one witness: the
    arguments' judgments run their staging, and whatever runs the rest of
    the call and f from an intcall_entry_full state (source, memory and
-   pointer facts at t) runs the whole call and f.  A supported callee has
-   no defaults (body_intcall_source_selection). *)
+   pointer facts at t) runs the whole call and f.  Supplied arguments and
+   omitted defaults use their respective expression-list judgments. *)
 Theorem intcall_args_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
-   es dflt es0 mut nr args ret ss rr.
+   es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) ==>
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
+    (!s1 vs t1.
+       ~MEM (NONE,name) cx.stk /\
+       eval_exprs cx es s1 = (INL vs,t1) ==>
+       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
       (!v. storage_trace_frame (f v)) /\
       (!v. cs_appends (kc v)) /\
