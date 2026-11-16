@@ -26,7 +26,8 @@ Proof
        `st` |-> `initial_state am' []`,
        `st'` |-> `empty_state with
          <|accounts := process_deletions e'.rollback.toDelete e'.rollback.accounts;
-           tStorage := e'.rollback.tStorage|>`]) >> fs[initial_state_def]) >>
+           tStorage := e'.rollback.tStorage|>`]) >>
+     fs[initial_state_def] >> metis_tac[]) >>
   `process_deletions e'.rollback.toDelete e'.rollback.accounts tx.target =
     e'.rollback.accounts tx.target` by
     (mp_tac (lookup_account_process_deletions_other |> Q.INST
