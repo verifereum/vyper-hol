@@ -99,7 +99,51 @@ Proof
 QED
 
 Resume make_array_vv_sim_full_conditional[header]:
+  `ci_mono sm sh` by
+    (Cases_on `header` >> gvs[compileEnvTheory.comp_return_def] >-
+      metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+     simp[ci_mono_def,compileEnvTheory.cs_extends_refl]) >>
+  `ci_mono sh sb` by
+    (qpat_assum `compile_make_array_elems _ _ args _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `type_memory_bytes cenv et = _`
+       (fn th => pure_rewrite_tac[GSYM th,compile_make_array_elems_as_tuple]) >> strip_tac >>
+     qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[] >> strip_tac >>
+     metis_tac[ci_mono_compile_make_tuple_cfn,compile_expr_ci_mono,pairTheory.SND]) >>
+  `fn_has_code sm sh func /\ fn_has_code sh sb func` by
+    (irule fragExecTheory.fn_has_code_split >> gvs[ci_mono_def]) >>
+  `0 < type_slot_size tv` by
+    (qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+     simp[Once vyperValueTheory.evaluate_type_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `0 < type_memory_size tv` by metis_tac[valueEncodingPropsTheory.type_memory_size_pos] >>
+  `LENGTH args < dimword (:256)` by
+    (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `type_memory_bytes cenv (ArrayT et n)` >>
+     conj_tac >- decide_tac >>
+     irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `LENGTH args * type_memory_size tv` >>
+     conj_tac >- simp[] >>
+     qpat_x_assum `_ + _ <= type_memory_bytes cenv (ArrayT et n)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     qmatch_goalsub_abbrev_tac `sz + _ <= cap` >> decide_tac) >>
+  `header ==> 32 <= type_memory_bytes cenv (ArrayT et n)` by
+    (strip_tac >> gvs[]) >>
+  mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
+    `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
+    `base` |-> `w2n (w:256 word)`, `cap` |-> `type_memory_bytes cenv (ArrayT et n)`,
+    `s` |-> `si`, `G` |-> `Gi`, `tn` |-> `tni`, `len` |-> `LENGTH (args:expr list)`,
+    `ai` |-> `mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes cenv (ArrayT et n)))]
+      [STRING #"%" (toString sa.cs_next_var)]`]
+    make_array_header_full) >>
+  (impl_tac >- suspend "header_pre") >>
+  disch_then (qx_choosel_then [`sj`,`Gj`,`tnj`,`ps`] strip_assume_tac) >>
   cheat
+QED
+
+Resume make_array_vv_sim_full_conditional[header_pre]:
+  simp[] >> FAIL_TAC "header pre"
 QED
 
 Finalise make_array_vv_sim_full_conditional
