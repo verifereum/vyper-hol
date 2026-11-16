@@ -1,7 +1,7 @@
 (* Shared own-code splice simulation. Static facts stay in asmSplice. *)
 Theory asmSpliceOwn
 Ancestors
-  asmSplice finalizerContractOwn
+  asmSymPcOwn asmSplice finalizerContractOwn
   asmSymOwnCode asmSymPc asmSymSem asmOptimizer asmSem
 
 Definition sym_steps_own_def:
@@ -32,3 +32,12 @@ Definition asm_window_refines_own_def:
          sym_result_rel (sym_steps_own (pfx ++ pat ++ sfx) env own j ss)
            (sym_steps_own (pfx ++ repl ++ sfx) env own j' ss))
 End
+
+Theorem asm_splice_window_refines_own:
+  asm_splice_ok pat repl ∧
+  (∀l. MEM (AsmLabel l) pat ⇒ ¬MEM l (asm_label_refs (pfx ++ pat ++ sfx))) ∧
+  asm_window_refines_own pfx pat repl sfx ⇒
+  asm_refines_own (pfx ++ pat ++ sfx) (pfx ++ repl ++ sfx)
+Proof
+  cheat
+QED
