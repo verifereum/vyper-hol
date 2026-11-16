@@ -374,6 +374,7 @@ Proof
      qpat_assum `am_e.sources = am.sources` (fn sources_eq =>
        qpat_assum `am_e.layouts = am.layouts` (fn layouts_eq =>
        qpat_assum `tx_e.target = tx.target` (fn target_eq =>
+          PURE_REWRITE_TAC [sources_eq,layouts_eq,target_eq] >>
          RULE_ASSUM_TAC (PURE_REWRITE_RULE [sources_eq,layouts_eq,target_eq]) >>
          drule_all (PURE_REWRITE_RULE [sources_eq,layouts_eq,target_eq]
            (SPEC_ALL source_compiled_request_alignment |> Q.INST
