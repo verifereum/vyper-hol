@@ -29,7 +29,7 @@ Proof
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
-  drule external_source_context_typed >> strip_tac >>
+  drule_all external_source_context_typed >> strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   `no_type_error_eval (eval_stmts cx fbody (es0 with gas_obs := gs))` by
     (irule eval_stmts_no_type_error >> simp[] >> metis_tac[]) >>
