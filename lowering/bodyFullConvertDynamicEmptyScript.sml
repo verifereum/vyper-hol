@@ -75,7 +75,7 @@ Proof
   drule_all dynamic_run_read_fresh >> strip_tac >>
   drule_at (Pat `compile_type_convert _ _ _ = _`) bytes_word_convert_parts >>
   (impl_tac >-
-    (drule_all bytestring_scalar_type_partition >> strip_tac >>
+    (drule_all bytestring_scalar_type_partition_cases >> strip_tac >>
      gvs[mk_convert_op_def] >> metis_tac[])) >> strip_tac >>
   drule_all bytes_word_loader_run_actual >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
