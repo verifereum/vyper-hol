@@ -15,7 +15,7 @@ Theorem method_id_literal_dynamic_endpoint_post:
     compile_bytelike_literal (TAKE 4 (Keccak_256_w64 bs))
       (LENGTH (TAKE 4 (Keccak_256_w64 bs))) sa = (buf,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
