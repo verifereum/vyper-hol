@@ -356,7 +356,7 @@ Proof
   simp[sym_with_pc_def]
 QED
 
-Theorem sym_set_stack_pc_add[local]:
+Theorem sym_set_stack_pc_add:
   sym_set_stack stk (sym_with_pc (n + ss.sym_base.as_pc) ss) =
   sym_result_pc_add n (sym_set_stack stk ss)
 Proof
@@ -387,7 +387,7 @@ Proof
 QED
 
 (* A lifted concrete step f that commutes with moving the PC. *)
-Theorem sym_lift_step_pc_add[local]:
+Theorem sym_lift_step_pc_add:
   (∀s. f (s with as_pc := s.as_pc + n) = asm_result_pc_add n (f s)) ∧
   q = n + ss.sym_base.as_pc ⇒
   sym_lift k labs (sym_with_pc q ss)
@@ -478,7 +478,7 @@ Proof
   Cases_on `r` >> simp[sym_lift_def] >> strip_tac >> gvs[]
 QED
 
-Theorem sym_set_stack_pc_next[local]:
+Theorem sym_set_stack_pc_next:
   sym_set_stack stk ss = SymOK ss' ⇒
   ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
@@ -543,7 +543,7 @@ QED
 
 (* ===== sym_base.as_stack stays empty ===== *)
 
-Theorem sym_set_stack_base[local]:
+Theorem sym_set_stack_base:
   sym_set_stack stk ss = SymOK ss' ⇒ ss'.sym_base = asm_next ss.sym_base
 Proof
   simp[sym_set_stack_def] >> strip_tac >> gvs[]
