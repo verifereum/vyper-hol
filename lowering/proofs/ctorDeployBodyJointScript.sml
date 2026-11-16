@@ -806,13 +806,16 @@ Proof
             `gas_explicit_sites dunit.cu_context shadow_ctx`]
            mp_tac deploy_ctor_fallthrough_joint >>
          impl_tac >- fs[] >>
-         strip_tac >> qexistsl_tac [`Halt final`, `G''`, `tn''`] >>
+         disch_then (qx_choose_then `final`
+           (qx_choose_then `fall_G`
+             (qx_choose_then `fall_tn` strip_assume_tac))) >>
+         qexistsl_tac [`Halt final`, `fall_G`, `fall_tn`] >>
          simp[exit_result_def] >> gen_tac >> strip_tac >>
          `gas_origin_ptr_path
             (deploy_dead H tops runtime_bc am tx, imm_len tops,
              gas_explicit_sites dunit.cu_context shadow_ctx,
              dunit.cu_context, func, [])
-            (s0, G0, tn0) marks (Halt final, G'', tn'')` by
+            (s0, G0, tn0) marks (Halt final, fall_G, fall_tn)` by
            (qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
                 gas_origin_ptr_path _ _ _ _ /\ _`
               (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
@@ -822,7 +825,7 @@ Proof
               (qspec_then `H` mp_tac) >> simp[] >> disch_tac >>
             qpat_x_assum `gas_origin_ptr_path _ (s0, G0, tn0) marks (OK t, G', tn')`
               (mp_tac o MATCH_MP gas_origin_ptr_path_append) >> simp[] >>
-            disch_then (qspecl_then [`[]`, `Halt final`, `G''`, `tn''`] mp_tac) >>
+            disch_then (qspecl_then [`[]`, `Halt final`, `fall_G`, `fall_tn`] mp_tac) >>
             simp[]) >>
          simp[] >>
          `final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels` by
