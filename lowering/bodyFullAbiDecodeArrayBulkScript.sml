@@ -7,6 +7,7 @@ Ancestors
   exprSimAccounts externalEntryShape freshWrites emitHelperProps
   abiEncoder compileEnv emitHelper venomState venomExecSemantics venomInst
   ptrDiscipline words arithmetic list rich_list finite_map pred_set pair
+  loweringStateRelDefs exprLoweringProps
 
 val owned_decoder_state = ``\st s G tn.
   alloca_history fn s /\ lo <= s.vs_alloca_next /\
@@ -91,7 +92,9 @@ Proof
   simp_tac (srw_ss()) [emitted_insts_def] >>
   pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp_tac (srw_ss()) [DROP_LENGTH_APPEND] >>
+  gvs[MULT_COMM] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, lookup_var_update_var,
-       ASCIInumbersTheory.toString_inj, word_mul_n2w, word_add_n2w]
+       ASCIInumbersTheory.toString_inj, word_mul_n2w, word_add_n2w,
+       MULT_COMM]
 QED
