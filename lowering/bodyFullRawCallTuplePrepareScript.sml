@@ -448,23 +448,66 @@ QED
 
 Resume raw_call_tuple_suffix_prepared[copy_separation]:
   `allocas_from lo u /\ lo <= u.vs_alloca_next` by
-    fs[ptrDisciplineTheory.allocas_from_def] >>
+    (fs[ptrDisciplineTheory.allocas_from_def] >> (gvs[ptrDisciplineTheory.allocas_from_def])) >>
   `allocas_from lo u2` by
     (irule frameActivationSeparationTheory.allocas_from_step >>
-     qexistsl_tac [`u`,`0`,`ctx`,
-       `mk_inst s4.cs_next_id ALLOCA [Lit (n2w (32*((n+31) DIV 32)+64))] [out]`] >>
+     qexistsl_tac [`ctx`,`0`,
+       `mk_inst s4.cs_next_id ALLOCA [Lit (n2w (32*((n+31) DIV 32)+64))] [out]`,`u`] >>
      simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
   `not_local_ptr cenv es.scopes out` by
     (qpat_assum `STRING #"%" _ = out` (SUBST1_TAC o SYM) >>
      irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
      qexists_tac `s4` >> simp[]) >>
+  `sf.cs_next_id <= s4.cs_next_id /\ alloc.inst_id < s4.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   asm "separation" (fn sep =>
     qpat_assum `stmt_state_rel H0 ctx func cenv cx es u2`
       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac sep)) >>
-  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
-  disch_then (qspecl_then [`out`,`sf`,`es`,`u2`,`lo`] mp_tac) >>
-  simp[venomInstTheory.mk_inst_def] >> strip_tac >>
-  FAIL_TAC "separation at tuple"
+  disch_then (qspec_then
+    `mk_inst s4.cs_next_id ALLOCA [Lit (n2w (32*((n+31) DIV 32)+64))] [out]` mp_tac) >>
+  simp[venomInstTheory.mk_inst_def] >>
+  disch_then (qspecl_then [`sf`,`es`,`u2`,`lo`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `FLOOKUP u2.vs_allocas alloc.inst_id =
+      SOME (w2n w,32*((n+31) DIV 32)+32)` by metis_tac[] >>
+  `w2n w + 32 + LENGTH (TAKE n s.vs_returndata) <= b \/ b + 32 <= w2n w` by
+    (qpat_x_assum `!aid a m. FLOOKUP u2.vs_allocas aid = SOME (a,m) /\ _ ==> _`
+       (qspecl_then [`alloc.inst_id`,`w2n w`,`32*((n+31) DIV 32)+32`] mp_tac) >>
+     simp[] >>
+     mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >>
+     simp[listTheory.LENGTH_TAKE_EQ, vfmConstantsTheory.word_size_def] >> decide_tac) >>
+  suspend "copy_scalar"
+QED
+
+Resume raw_call_tuple_suffix_prepared[copy_scalar]:
+  markerLib.RESUME_TAC >>
+  `!x. ok = Var x ==> not_fresh_at s4 x /\ x <> out` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x` by fs[exprSafeOperandTheory.safe_operand_def] >>
+     `not_fresh_at s4 x` by
+       (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+        fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL]) >>
+  `eval_operand ok u2 = SOME (if success then 1w else 0w)` by
+    (`eval_operand ok u = SOME (if success then 1w else 0w)` by simp[] >>
+     Cases_on `ok` >> fs[eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
+     metis_tac[]) >>
+  `op_taint tn1 ok = {}` by
+    (Cases_on `ok` >> fs[ptrDisciplineTheory.op_taint_def,
+      exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+  `op_taint tn2 ok = {}` by
+    (simp[Abbr `tn2`, bodyPtrIfExpAllocSourceTheory.alloca_step_operand_taint]) >>
+  asm "copy" (fn cp =>
+    qpat_assum `emit_void MSTORE [buf.buf_operand;ok] s5 = _`
+      (mp_then (Pat `emit_void MSTORE _ _ = _`) mp_tac cp)) >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_void MCOPY _ _ = _`)) >>
+  disch_then (qspecl_then [`TAKE n s.vs_returndata`,`w2n w`,`b`,`u2`] mp_tac) >>
+  simp[arithmeticTheory.MULT_COMM, eval_operand_def, listTheory.LENGTH_TAKE_EQ] >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`func`,`PG`] mp_tac) >>
+  disch_then (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac)) >>
+  FAIL_TAC "copy applied"
 QED
 
 Finalise raw_call_tuple_suffix_prepared
