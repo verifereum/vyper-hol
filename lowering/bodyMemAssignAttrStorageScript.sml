@@ -713,11 +713,15 @@ Resume compile_assign_attr_storage_mem[store]:
        (drule_all
           vyperStorageRegionWriteTheory.storage_subregion_typed_write_preserves_root >>
         simp[]) >>
-     irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee1`, `n2w slot + n2w off`, `ftv`, `v`] >> simp[] >>
-     decide_tac) >>
+     mp_tac (Q.INST
+       [`cx` |-> `cx`, `st` |-> `ee1`, `st'` |-> `ee'`,
+        `regions` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+        `b` |-> `tr`,
+        `root_slot` |-> `n2w slot : bytes32`, `root_tv` |-> `StructTV fs`,
+        `wr_slot` |-> `n2w slot + n2w off : bytes32`,
+        `wr_tv` |-> `ftv`, `v` |-> `v`]
+       vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on) >>
+     impl_tac >- (simp[Abbr `ee1`] >> decide_tac) >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx ee' u` by
     (qpat_x_assum `u = _` SUBST1_TAC >>
      REWRITE_TAC [stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
