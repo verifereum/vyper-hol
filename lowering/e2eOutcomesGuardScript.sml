@@ -327,6 +327,8 @@ Proof
      drule call_external_trace_result >> simp[]) >>
   `~source_exempt tops (res_e,am_f,rqs_e)` by
     (drule call_external_trace_result >> metis_tac[]) >>
+  `source_deployment_rel tops am_e tx_e` by
+    fs[vyper_call_staging_def, call_state_rel_def] >>
   `storage_observations_ok
     (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE) H obs_e` by
     (mp_tac (aligned_trace_storage_observations |> Q.INST
@@ -416,7 +418,8 @@ Proof
     (`?art_e. check_contract F am_e.layouts tx_e.target [(NONE,tops)] = SOME art_e /\
        checked_contract_runtime_ready art_e [(NONE,tops)] am_e tx_e /\
        machine_well_typed am_e /\ call_tx_well_typed tx_e` by
-       (simp[GSYM source_typing_ok_def] >> fs[vyper_call_staging_def]) >>
+       (irule source_typing_ok_runtime_ready >>
+        fs[vyper_call_staging_def, call_state_rel_def]) >>
         mp_tac (checked_call_external_preserves_storage_well_formed_on |> Q.INST
        [`am` |-> `am_e`, `tx` |-> `tx_e`, `mods` |-> `[(NONE,tops)]`,
         `art` |-> `art_e`, `orc` |-> `SOME (MAP SND (call_trace e))`,
@@ -568,6 +571,8 @@ Proof
      irule entry_venom_state_initial_venom_state_rel >> simp[]) >>
   `mem_inv dload_headroom_ok unit.cu_context vs` by
     (drule_all lower_vyper_runtime_unit_dload_headroom_ok >> simp[]) >>
+  `source_deployment_rel tops am tx` by
+    fs[vyper_call_staging_def, call_state_rel_def] >>
   `storage_observations_ok
      (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
     (mp_tac (SPEC_ALL aligned_trace_storage_observations |> Q.INST

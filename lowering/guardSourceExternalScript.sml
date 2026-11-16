@@ -305,7 +305,7 @@ Proof
 QED
 
 Theorem call_external_trace_storage_finite_prefix:
-  source_typing_ok tops am tx /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx (initial_state am []) (FST H) /\
   cx = initial_evaluation_context am.sources am.layouts tx NONE /\
@@ -325,8 +325,7 @@ Proof
   `!c. storage_observations_ok c H []` by
     simp[storage_observations_ok_def, storage_trace_regions_def, storage_trace_locks_def,
          storage_roots_fit_def, storage_trace_backends_well_formed_def] >>
-  qpat_x_assum `source_typing_ok tops am tx`
-    (strip_assume_tac o REWRITE_RULE [source_typing_ok_def]) >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
     gvs[checked_contract_runtime_ready_def] >>
   qpat_x_assum `call_external_trace _ _ _ _ = _` mp_tac >>

@@ -5,7 +5,7 @@ Ancestors
   e2eDefs vyperInterpreter vyperStorageFootprint list
 
 Theorem aligned_trace_storage_observations:
-  source_typing_ok tops am tx /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx (initial_state am []) (FST H) /\
