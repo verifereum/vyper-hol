@@ -7,7 +7,7 @@ Ancestors
   compileEnv vyperState venomState finite_map list arithmetic
 
 Theorem compile_internal_return_buffer_path_mem:
-  compile_return_unlock cenv sa = ((),su) /\
+  ~cx.txn.is_static /\ compile_return_unlock cenv sa = ((),su) /\
   compile_internal_return cenv (SOME src) rpc cenv.ce_returns_count
     ty sty ets (SOME dst) su = ((),sb) /\
   cenv.ce_returns_count = 0 /\
@@ -30,7 +30,7 @@ Theorem compile_internal_return_buffer_path_mem:
      regions_disjoint off (type_memory_size itv) (w2n bw)
        (type_memory_size tv)) /\
   fn_has_code sa sb func /\ fn_has_code sa su func /\ fn_has_code su sb func /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
   expr_val_rel cx sty v src s /\ eval_operand src s = SOME sw /\
   eval_operand dst s = SOME bw /\ eval_operand rpc s = SOME pc /\
   (val_store_size stv v = 0 \/
@@ -39,18 +39,18 @@ Theorem compile_internal_return_buffer_path_mem:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?n r. gas_path_mem ctx func s n r /\
-    intret_mem_q func cenv cx tv bw v (es with scopes := []) r
+    intret_mem_q H func cenv cx tv bw v (es with scopes := []) r
 Proof
   strip_tac >>
   `~is_word_type sty` by metis_tac[is_bytestring_word_type] >>
   `val_in_memory stv v (w2n sw) s.vs_memory` by fs[expr_val_rel_def] >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `type_memory_size tv + 64 < dimword (:256)` by decide_tac >>
   `frag_exec ctx sa sb
-     (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+     (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
           expr_val_rel cx sty v src s /\ eval_operand dst s = SOME bw /\
           ?pc. eval_operand rpc s = SOME pc)
-     (\s. F) (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (\s. F) (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule compile_internal_return_buffer_value_frag >> metis_tac[]) >>
   pop_assum mp_tac >> simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >>

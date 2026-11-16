@@ -3,7 +3,7 @@ Theory runtimeLabelGenerators
 Ancestors
   runtimeLabelExprCallbacks runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   moduleLowering stmtLowering compileEnv context emitHelper venomInst list
-  loweringShapeDefs combinatorics alist
+  loweringShapeDefs alist
 
 Theorem rb_compile_selector_checks:
   !sels. rb_operand_ok mid /\
@@ -131,9 +131,10 @@ Proof
   strip_tac >> simp[EVERY_GENLIST] >> gen_tac >> strip_tac >>
   CASE_TAC >> gvs[] >>
   drule alistTheory.ALOOKUP_MEM >>
-  disch_then (mp_tac o MATCH_MP combinatoricsTheory.MEM_MAP2) >>
-  simp[pairTheory.EXISTS_PROD] >> rpt strip_tac >> gvs[] >>
-  gvs[EVERY_MEM]
+  simp[MEM_EL, LENGTH_MAP2] >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >>
+  fs[] >> Cases_on `EL j buckets` >> gvs[EL_MAP2, EVERY_EL] >>
+  first_x_assum irule >> fs[]
 QED
 
 Theorem rb_compile_selector_dispatch_sparse:

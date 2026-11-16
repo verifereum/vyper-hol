@@ -150,10 +150,11 @@ Theorem framed_array_after_base:
      u.vs_inst_idx = LENGTH si.cs_current_insts ==>
      gas_outcome F (cx_tops cx) (ctx,func) cx st0
        (select_result cx (expr_type obj) captured (ValueSubscript v))
-       (raw with gas_obs := [],u) Q (\H res ee out. expr_exit res out)) ==>
+       (raw with gas_obs := [],u) Q
+       (\H res ee out. expr_exit res out /\ halt_exit H cx ee res out)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
-    Q (\H res ee out. expr_exit res out)
+    Q (\H res ee out. expr_exit res out /\ halt_exit H cx ee res out)
 Proof
   disch_tac >> strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
@@ -169,14 +170,20 @@ Proof
     u.vs_current_bb = si.cs_current_bb /\
     u.vs_inst_idx = LENGTH si.cs_current_insts` >>
   simp[vyperStorageTraceTheory.storage_trace_frame_select] >>
-  `(!res out. (?exc. res = (INR exc : value + exception) /\
-        expr_exit (INR exc : eval_result + exception) out) = expr_exit res out)` by
-    (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
+  `(!H res ee out. (?exc. res = (INR exc : value + exception) /\
+        expr_exit (INR exc : eval_result + exception) out /\
+        halt_exit H cx ee (INR exc : eval_result + exception) out) =
+        (expr_exit res out /\ halt_exit H cx ee res out))` by
+    (rpt gen_tac >> Cases_on `res` >> simp[halt_exit_def] >> rename1 `INR exc` >>
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
   simp[] >> reverse conj_tac
   >- (irule counted_outcome_conseq >>
-      goal_assum (drule_at Any) >> simp[]) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      rpt gen_tac >> Cases_on `res` >> simp[halt_exit_def] >>
+      rename1 `INR exc` >>
+      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
+      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
   rpt strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 raw.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>

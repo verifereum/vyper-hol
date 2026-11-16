@@ -2,7 +2,7 @@
 Theory targetCompilerOpenness
 Ancestors
   targetStorageContinuationMemory targetSubscriptSplit targetPlaceSimCasesBase
-  bodySimStmtCases exprOpenTerminals exprOpenPrimitives exprLowering
+  exprOpenMain exprOpenTerminals exprOpenPrimitives exprLowering
   compileEnv vyperInterpreter vyperState targetPlaceSim exprSimHypsDefs
   targetPlaceLive targetSubscriptContinuation
 Libs
@@ -40,7 +40,7 @@ Resume target_compiler_open[subscript]:
     (qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
      simp[lower_value_def, comp_bind_def] >> pairarg_tac >> strip_tac >> gvs[] >>
      irule unwrap_value_open >> goal_assum (drule_at Any) >>
-     irule compile_expr_open >> goal_assum (drule_at Any) >> metis_tac[]) >>
+     irule compile_expr_open_general >> goal_assum (drule_at Any) >> metis_tac[]) >>
   Cases_on `SND (SND rb')`
   >- (qpat_x_assum `target_subscript_suffix _ _ _ _ _ = _` mp_tac >>
       simp[target_subscript_suffix_def, comp_bind_def, comp_return_def] >>

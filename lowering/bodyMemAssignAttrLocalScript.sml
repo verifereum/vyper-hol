@@ -18,6 +18,9 @@ Ancestors
   gasSummaryCompose stmtSimProps exprSimUnwrapProps exprSimUnwrap
   vyperLookup valueEncoding allocaFootprint bodyDeclMemoryCore bodyMemoryDefs
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem assign_attr_local_add_exact_mem[local]:
   emit_op ADD [Var p; Lit (n2w off)] sm = (dst,sn) /\
   lookup_var p s = SOME w /\
@@ -398,7 +401,7 @@ Proof
   simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
 
-Theorem assign_attr_local_suffix_mem[local]:
+Theorem assign_attr_local_suffix_mem:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   emit_op ADD [Var p; Lit (n2w (struct_field_offset fields fld))] sm = (dst,sn) /\
@@ -648,7 +651,8 @@ val attr_bad_storage_tac =
 (* The suffix of the assignment at the horizon of the one vv_post in scope;
    k takes the theorem for the end state. *)
 fun attr_suffix_tac k =
-  drule_at (Pat `emit_void _ _ _ = _`) assign_attr_local_suffix_layout_mem >>
+  drule_at (Pat `emit_void _ _ _ = _`)
+    (INST_TYPE [alpha |-> ``:256``] assign_attr_local_suffix_layout_mem) >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`) o SRULE []) >>
@@ -706,14 +710,15 @@ Proof
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `res` (qx_choose_then `es_end`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
-      qexists_tac `marks` >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
-      >- (disch_then kall_tac >> disj1_tac >> attr_bad_storage_tac >>
+      >- (disch_then kall_tac >> qexists_tac `marks` >>
+          disj1_tac >> attr_bad_storage_tac >>
           irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
           metis_tac[]) >>
       `?H1. valid_horizon cx st0 H1 es_end.storage_trace` by
         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
+      qexists_tac `marks` >>
       disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
       >- suspend "normal"
@@ -735,8 +740,9 @@ Resume assign_attr_local_frag_mem[exception]:
       (conj_tac >- (qexists_tac `lctx` >> simp[])) >>
       ntac 2 (irule gas_marked_exec_bind_exception) >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >> simp[stmt_exit_def] >>
-  metis_tac[expr_exit_INR_type])
+  rpt strip_tac
+  >- (simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  fs[exprSimDefsTheory.halt_exit_def])
 QED
 
 Resume assign_attr_local_frag_mem[normal]:
@@ -744,23 +750,19 @@ Resume assign_attr_local_frag_mem[normal]:
   qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `lookup_scopes id es.scopes = _` kall_tac >>
   qpat_x_assum `evaluate_type _ (StructT sid) = _` kall_tac >>
-  qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _` (fn PREM =>
   qpat_x_assum `!H. valid_horizon _ _ H (es_end with gas_obs := []).storage_trace ==> _`
-    (fn SIM0 =>
-  let val SIM = SIMP_RULE (srw_ss()) [] SIM0 in
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
-  `?tv. res = INL tv` by metis_tac[SIM] >>
+  `?tv. res = INL tv` by metis_tac[] >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 (es_end with gas_obs := []) tv vv t` by
-    (gen_tac >> strip_tac >> metis_tac[SIM, sumTheory.INL_11]) >>
-  qpat_x_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-                    vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (fn F1 =>
+    (gen_tac >> strip_tac >> metis_tac[sumTheory.INL_11]) >>
   `vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
      (es_end with gas_obs := []) tv vv t /\
    t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
-    metis_tac[SIM, sumTheory.INL_11] >>
+    metis_tac[sumTheory.INL_11] >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
        valid_horizon cx st0 H es.storage_trace` by
     (qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
@@ -768,10 +770,8 @@ Resume assign_attr_local_frag_mem[normal]:
                           gas_marked_exec_valid_prefix)) >>
      impl_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
      simp[]) >>
-  qpat_x_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-                    valid_horizon cx st0 H es.storage_trace` (fn VP =>
   `vv_post H1 ctx func cenv cx e es sa sm s0 (es_end with gas_obs := []) tv vv t` by
-    metis_tac[F1] >>
+    metis_tac[] >>
   Cases_on `read_result cx tv (es_end with gas_obs := [])` >>
   rename1 `_ = (rr, ee)` >>
   `ee = es_end with gas_obs := []` by metis_tac[read_result_state] >> gvs[] >>
@@ -783,6 +783,8 @@ Resume assign_attr_local_frag_mem[normal]:
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      first_x_assum irule >> metis_tac[]) >>
+  `vv_post H1 ctx func cenv cx e es sa sm s0
+     (es_end with gas_obs := []) tv vv t` by metis_tac[] >>
   drule_all vv_post_read_result >> strip_tac >>
   `!tail. vyperState$bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -814,7 +816,7 @@ Resume assign_attr_local_frag_mem[normal]:
      qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
      simp[local_ptrs_rel_def] >> strip_tac >>
      first_x_assum drule_all >> metis_tac[]) >>
-  `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[PREM, VP] >>
+  `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
   attr_suffix_tac (qx_choose_then `t1` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `stmt_state_rel H1 ctx func cenv cx ff t1` >>
   `gas_marked_path T ctx func s0 (LENGTH marks) (OK t1)` by
@@ -836,14 +838,18 @@ Resume assign_attr_local_frag_mem[normal]:
         (Value v) vv t` by
        (irule vv_post_read_result >> qexists_tac `tv` >> conj_tac
         >- metis_tac[]
-        >- (mp_tac (Q.SPEC `H` F1) >> impl_tac >- first_assum ACCEPT_TAC >>
+        >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+              (qspec_then `H` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
             simp[])) >>
-     `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[PREM, VP] >>
+     `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
      attr_suffix_tac (qx_choose_then `t2` strip_assume_tac) >>
-     irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H1`, `t2`] >> fs[Abbr `ff`] >> metis_tac[]) >>
+     irule (Q.INST [`H0` |-> `H1`, `s` |-> `t2`]
+       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     fs[Abbr `ff`] >> metis_tac[]) >>
   `storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
-    (mp_tac (Q.SPEC `H` F1) >> impl_tac >- first_assum ACCEPT_TAC >>
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
      rewrite_tac[vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `storage_well_formed_on cx ff (FST H)` by
     (`ff.accounts = (es_end with gas_obs := []).accounts /\
@@ -870,8 +876,7 @@ Resume assign_attr_local_frag_mem[normal]:
       drule emitted_insts_emit_void >> strip_tac >>
       fs[ci_mono_def] >> decide_tac)
   >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC))
-  end)))
+  >- first_assum ACCEPT_TAC)
 QED
 
 Finalise assign_attr_local_frag_mem
@@ -923,7 +928,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

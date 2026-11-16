@@ -51,9 +51,10 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_create_blueprint_check:
-  gas_shadow_compiles (compile_create_blueprint_check target_op code_offset_op)
-    (compile_create_blueprint_check target_op code_offset_op)
+  gas_shadow_compiles (compile_create_blueprint_check is_lit target_op code_offset_op)
+    (compile_create_blueprint_check is_lit target_op code_offset_op)
 Proof
+  Cases_on `is_lit` >>
   simp[compile_create_blueprint_check_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void] >>
