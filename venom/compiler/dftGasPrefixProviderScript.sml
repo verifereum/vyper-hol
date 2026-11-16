@@ -4462,6 +4462,65 @@ Proof
   suspend "extension"
 QED
 Resume native_successful_cut_inventory[extension]:
+  `LENGTH A < LENGTH P` by simp[] >>
+  `LENGTH A < LENGTH key_rows /\ LENGTH A < LENGTH site_rows` by metis_tac[] >>
+  qmatch_asmsub_abbrev_tac `ALL_DISTINCT keys_all` >>
+  qabbrev_tac `Kpre = FLAT (TAKE (LENGTH A) key_rows)` >>
+  qabbrev_tac `Kc = EL (LENGTH A) key_rows` >>
+  qabbrev_tac `Kpost = FLAT (DROP (SUC (LENGTH A)) key_rows)` >>
+  qabbrev_tac `Sc = EL (LENGTH A) site_rows` >>
+  `keys_all = Kpre ++ Kc ++ Kpost` by
+    (simp_tac pure_ss [Abbr `keys_all`, Abbr `Kpre`, Abbr `Kc`, Abbr `Kpost`] >>
+     qspecl_then [`LENGTH A`, `key_rows`] mp_tac rich_listTheory.TAKE_DROP_SUC >>
+     simp[] >> disch_then (mp_tac o Q.AP_TERM `FLAT`) >> simp[]) >>
+  `FLAT (TAKE (LENGTH A + 1) key_rows) = Kpre ++ Kc /\
+   FLAT (TAKE (LENGTH A + 1) site_rows) = FLAT (TAKE (LENGTH A) site_rows) ++ Sc` by
+    simp[rich_listTheory.TAKE_EL_SNOC, rich_listTheory.SNOC_APPEND,
+         Abbr `Kpre`, Abbr `Kc`, Abbr `Sc`] >>
+  `LENGTH keys_all = LENGTH g` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  `?gpre gc gpost. g = gpre ++ gc ++ gpost /\
+    LENGTH Kpre = LENGTH gpre /\ LENGTH Kc = LENGTH gc /\ LENGTH Kpost = LENGTH gpost` by
+    (qexistsl_tac [`TAKE (LENGTH Kpre) g`,
+       `TAKE (LENGTH Kc) (DROP (LENGTH Kpre) g)`,
+       `DROP (LENGTH Kc) (DROP (LENGTH Kpre) g)`] >>
+     conj_tac >- metis_tac[TAKE_DROP, APPEND_ASSOC] >> simp[] >> gvs[] >> simp[]) >>
+  `^native_inventory_Rq
+    (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))
+    i Kc Sc (EL (LENGTH A) certs)` by
+    (qpat_x_assum `!h. h < LENGTH P ==> _` (qspec_then `LENGTH A` mp_tac) >>
+     simp[EL_APPEND_EQN, Abbr `Kc`, Abbr `Sc`]) >>
+  `ev_step
+    (\key. case ALOOKUP
+      (trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t) ++ ZIP (keys_all,g)) key of
+      NONE => 0w | SOME w => w)
+    p d b C' i (u with vs_gas_readings := []) = OK (r with vs_gas_readings := []) /\
+    r.vs_gas_readings = gpost ++ tail /\
+    trace_gas (((p,d,i.inst_id),fn,i,u)::
+      dftGasFromListTraceDefs$trace_step p d n C fn i u) = ZIP (Kc,gc) /\
+    gas_events_step n C fn.fn_name i u = Sc` by suspend "row_step" >>
+  suspend "append_rows"
+QED
+Resume native_successful_cut_inventory[row_step]:
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[visit_gas_def] >>
+      qpat_x_assum `(\obs i Kc Sc cert. _) _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [LET_THM] >> simp[] >> strip_tac >>
+      `MEM i scheduled` by
+        (`PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+         metis_tac[PERM_MEM_EQ, MEM_APPEND, MEM]) >>
+      `?consumed later. scheduled = consumed ++ i::later` by metis_tac[MEM_SPLIT] >>
+      irule (BETA_RULE native_cut_invoke_extension) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      gvs[Abbr `Kpre`, Abbr `keys_all`] >>
+      rpt conj_tac >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  suspend "plain_step"
+QED
+Resume native_successful_cut_inventory[append_rows]:
+  cheat
+QED
+Resume native_successful_cut_inventory[plain_step]:
   cheat
 QED
 Finalise native_successful_cut_inventory
