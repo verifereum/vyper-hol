@@ -39,7 +39,7 @@ Theorem send_tail_path_full[local]:
       ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next) \/
-     (exit_result r /\ expr_exit res r))
+     (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r))
 Proof
   strip_tac >>
   reverse (Cases_on `?H0. valid_horizon cx st0 H0 es'.storage_trace`)
@@ -75,7 +75,8 @@ Resume send_tail_path_full[static]:
   qexistsl_tac [`G`,`tn`,
     `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
   rpt strip_tac >> res_tac >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def]
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume send_tail_path_full[failed]:
@@ -84,7 +85,8 @@ Resume send_tail_path_full[failed]:
     `Abort Revert_abort (revert_state
       (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))`] >>
   rpt strip_tac >> res_tac >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def]
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume send_tail_path_full[normal]:
@@ -177,7 +179,7 @@ Theorem send_tail_outcome_full:
       ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next)
-    (\H res ee gt r. exprSimDefs$expr_exit res r)
+    (\H res ee gt r. exprSimDefs$expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
