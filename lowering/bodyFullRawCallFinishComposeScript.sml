@@ -808,6 +808,71 @@ Proof
      gvs[Abbr `uc`, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
           loweringPostsTheory.popped_kept_def, venomStateTheory.lookup_var_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ci_mono s7 sc` by
+    (qpat_assum `emit_op _ _ s7 = (ok,sc)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND]) >>
+  `local_ptrs_reserved cenv sc /\ safe_operand sc ov /\ safe_operand sc ok` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ci_mono s7 sc`, `local_ptrs_reserved cenv s7`,
+        `EVERY (safe_operand s7) _`, `emit_op _ _ s7 = (ok,sc)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     fs[listTheory.EVERY_DEF] >>
+     rpt conj_tac
+     >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+                  exprLoweringPropsTheory.ci_mono_def]
+     >- metis_tac[exprSafeOperandTheory.safe_operand_mono,
+                  exprLoweringPropsTheory.ci_mono_def] >>
+     drule loweringShapeRulesTheory.emit_op_facts >>
+     strip_tac >> gvs[exprSafeOperandTheory.safe_operand_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `eval_operand ov uc = SOME(n2w ob) /\
+   op_prov HG ov = op_prov G7 ov /\ op_taint un ov = {}` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ghost_kept_at lo cenv esK s7 G7 tn7 t7 HG un`,
+        `!p. safe_operand s7 p ==> eval_operand p u = eval_operand p t7`,
+        `EVERY (safe_operand s7) _`,
+        `!x. MEM (Var x) _ ==> not_fresh_at s7 x`,
+        `op_prov G7 ov = SOME _`, `op_taint tn7 ov = {}`,
+        `eval_operand ov t7 = SOME _`, `Abbrev(uc=_)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     fs[listTheory.EVERY_DEF, bodyPtrDefsTheory.ghost_kept_at_def] >>
+     Cases_on `ov` >>
+     fs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def,
+        Abbr `uc`, venomStateTheory.eval_operand_def,
+        venomStateTheory.lookup_var_def] >>
+     first_x_assum (qspec_then `Var s` mp_tac) >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM esK.scopes /\
+   MAP FDOM es.scopes = MAP FDOM es2.scopes` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`bind (eval_expr cx a) _ _ = _`, `bind (eval_expr cx d) _ _ = _`,
+        `eval_exprs cx kws _ = _`, `es2.scopes = esK.scopes`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >>
+     qpat_assum `bind (eval_expr cx d) _ _ = _`
+       (mp_then Any mp_tac stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     drule vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom >>
+     simp[]) >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 HG un` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ghost_kept_at lo cenv es sa G0 tn0 s0 G7 tn7`,
+        `ghost_kept_at lo cenv esK s7 G7 tn7 t7 HG un`,
+        `wb_frame cenv es esK sa s0 t7`, `ci_mono sa s7`,
+        `stmt_state_rel _ ctx func cenv cx es s0`, `local_ptrs_reserved cenv sa`,
+        `MAP FDOM es.scopes = MAP FDOM esK.scopes`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     irule wordArgsPtrTheory.ghost_kept_at_trans >>
+     goal_assum (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ HG un`)) >>
+     simp[] >>
+     `!n b sz. local_region cenv es.scopes s0 n b sz <=>
+        local_region cenv esK.scopes t7 n b sz` by
+       (irule wordArgsPtrTheory.wb_frame_local_regions >>
+        goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)) >>
+     fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.wb_frame_def] >>
+     metis_tac[]) >>
   Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success`
   >- suspend "revert_result" >>
   Cases_on `flags.rcf_max_outsize=0`
