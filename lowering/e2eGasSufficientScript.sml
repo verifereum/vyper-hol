@@ -440,7 +440,9 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
   `lowering_context_ok dunit.cu_context` by metis_tac[deploy_unit_context_ok] >>
-  drule_all deploy_unit_fns_fuel_stable >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `runtime_bc`, `dunit`, `am`, `tx`]
+    mp_tac deploy_unit_fns_fuel_stable >>
+  impl_tac >- simp[] >> strip_tac >>
   drule_all run_context_uniform_fuel >>
   disch_then (qx_choose_then `fuel` assume_tac) >>
   qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `cplan`, `fuel`]
@@ -449,7 +451,7 @@ Proof
   disch_then (qx_choosel_then [`fuel'`, `M`] assume_tac) >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
                `dout`, `prog`, `cplan`, `fuel'`, `M`] mp_tac
-    deploy_frame_gas_sufficient >>
+    (INST_TYPE [alpha |-> ``:256``] deploy_frame_gas_sufficient) >>
   impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
   (* the creation frame at the new gas *)
@@ -468,7 +470,7 @@ Proof
   `dead_wf Du` by simp[Abbr`Du`, dead_wf_def] >>
   (* every gas variant of vs: its own exit arm *)
   `!vi. gas_variant vi vs ==>
-        ?H gobs efuel.
+        ?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
           raw_unit_memory_ok dunit.cu_context vi /\
           ptr_discipline (imm_len tops) dunit.cu_context vi /\
           taint_within (deploy_dead H tops runtime_bc am tx)
@@ -496,14 +498,14 @@ Proof
      metis_tac[deploy_venom_result_rel_terminates]) >>
   `venom_run_bounded fuel' M dout.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
-     qexists_tac `Du` >> simp[] >> rpt strip_tac >>
+     simp[] >> qexists_tac `Du` >> simp[] >> rpt strip_tac >>
      TRY (simp[Abbr`Du`, taint_within_def] >> NO_TAC) >>
      metis_tac[]) >>
   (* S4's input state, picked before its dead set *)
   qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`] mp_tac
     run_venom_pipeline_correct_all_dead >>
   impl_tac >- simp[] >> strip_tac >>
-  `?H gobs efuel.
+  `?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
      raw_unit_memory_ok dunit.cu_context vs_in /\
      ptr_discipline (imm_len tops) dunit.cu_context vs_in /\
      taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vs_in /\
