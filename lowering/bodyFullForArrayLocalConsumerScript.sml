@@ -1404,7 +1404,47 @@ Resume body_for_local_array_full_from_contracts[common_entry_code]:
     (qpat_x_assum `ALL_DISTINCT [idx;dv;ov;ep;nv;p]` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[ALL_DISTINCT] >> metis_tac[]) >>
   rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, REFL_TAC]) >>
-  FAIL_TAC "entry-code-dynamic"
+  conj_tac >-
+    (qpat_x_assum `bd = Dynamic _ ==> ALL_DISTINCT _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ALL_DISTINCT] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_x_assum `bd = Dynamic _ ==> not_fresh_at scopy tov /\ _` mp_tac >>
+     qpat_x_assum `!x. not_fresh_at start x ==> not_fresh_at scopy x /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!scs. not_local_ptr cenv scs idx /\ _` (qspec_then `ee.scopes` mp_tac) >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
+Resume body_for_local_array_full_from_contracts[common_round_body]:
+  simp_tac bool_ss [] >>
+  qabbrev_tac `be = ee with <|scopes :=
+    (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: ee.scopes;
+    gas_obs := []|>` >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+    gas_origin_ptr_path _ (s,G,tn) [] (OK ss,Gs,ts) /\ _`
+    (mk_asm "entry_packet") >>
+  asm "entry_packet" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  simp_tac bool_ss [] >> strip_tac >>
+  `body_stmts_full_ok cx stmts` by
+    (qpat_x_assum `body_for_full_ok cx tv id stmts _` mp_tac >>
+     qpat_x_assum `DROP k vs = v::tail_vs` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `vs` >> simp[body_for_full_ok_def,MAP,read_result_def] >>
+     rpt strip_tac >> first_x_assum irule >>
+     qexistsl_tac [`ee`,`h`,`ee`] >> simp[read_result_def,return_def]) >>
+  `stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx (InLoop exit_lbl incr_lbl) RetQ bc
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty stmts)
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt stmts))
+    (eval_stmts cx stmts) be` by
+    (asm "body_fragment" irule >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bindings`,`cenv`,`env`,`env`,`id`,
+       `Array (Name (ArrayT typ bd) name)`,`n`,`sdecl`,`sdecl'`,`tops`,`typ`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  FAIL_TAC "body-fragment-ready"
 QED
 
 Resume body_for_local_array_full_from_contracts[initialized_loop_suffix]:
