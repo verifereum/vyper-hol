@@ -109,6 +109,11 @@ Theorem selected_call_trace_body[local]:
          am' = finalize_pending_deletions
                  (abstract_machine_from_state am.sources am.exports
                     am.layouts ee)) /\
+      (res = INR HaltException ==>
+         r = INR HaltException /\ rqs = ee.requests /\
+         am' = finalize_pending_deletions
+                 (abstract_machine_from_state am.sources am.exports
+                    am.layouts ee)) /\
       (!v. res = INR (ReturnException v) ==>
          rqs = ee.requests /\
          (r, am') =
@@ -136,15 +141,30 @@ Proof
   `es0.scopes = [env]` by
     (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
   `(es0 with gas_obs := gx).scopes = [env]` by simp[] >>
+  `res = INR HaltException ==>
+     call_external_body am
+       (initial_evaluation_context am.sources am.layouts tx NONE)
+       F mut (type_env tops) (es0 with gas_obs := gx) env fbody ret =
+       (INR HaltException,
+        abstract_machine_from_state am.sources am.exports am.layouts ee,
+        ee.requests)` by
+    (strip_tac >>
+     `(es0 with gas_obs := gx) with scopes := [env] =
+      es0 with gas_obs := gx` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     simp[call_external_body_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+          vyperStateTheory.set_scopes_def]) >>
   drule_all call_external_body_run >>
   disch_then (qspecl_then [`am`, `mut`, `type_env tops`, `ret`]
                 strip_assume_tac) >>
   rpt conj_tac
   >- (strip_tac >> gvs[])
+  >- (strip_tac >> gvs[])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `!v. res = INR (ReturnException v) ==> _`
         (qspec_then `v` mp_tac) >>
-      gvs[] >> strip_tac >> gvs[] >> BasicProvers.EVERY_CASE_TAC >> gvs[]) >>
+      gvs[] >> strip_tac >> gvs[] >> BasicProvers.every_case_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!e. res = INR e /\ _ ==> _` (qspec_then `e` mp_tac) >>
   simp[] >> strip_tac >> Cases_on `e` >> gvs[]
@@ -185,7 +205,17 @@ Theorem selected_call_trace_gas_cong[local]:
     call_external_trace (SOME os) g1 am tx =
     call_external_trace (SOME os) g2 am tx
 Proof
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `args`, `fbody`, `env`,
+               `os`, `g1`, `es0`, `res`, `ee with gas_obs := o1`] mp_tac
+    selected_call_trace_body >>
+  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `args`, `fbody`, `env`,
+               `os`, `g2`, `es0`, `res`, `ee with gas_obs := o2`] mp_tac
+    selected_call_trace_body >>
+  simp[] >> rpt strip_tac >> simp[] >>
+  qpat_x_assum `stmt_res_ok _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_res_ok_def]) >>
+  gvs[abstract_machine_from_state_def] >> BasicProvers.every_case_tac >> gvs[]
 QED
 
 (* The call's fourth component is its storage observations. *)
@@ -213,7 +243,7 @@ Proof
   Cases_on `b` >>
   rw[get_storage_def, accounts_after_transfer_def, LET_THM,
      vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
-     combinTheory.APPLY_UPDATE_THM]
+     combinTheory.APPLY_UPDATE_THM] >> gvs[]
 QED
 
 (* So the body starts on the initial storage. *)
@@ -261,45 +291,51 @@ Proof
    st'.cs_current_insts =
      sb.cs_current_insts ++ [mk_inst sb.cs_next_id STOP [] []]` by
     (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, comp_get_def, emitHelperTheory.emit_inst_def,
-          fresh_id_def, emit_def] >>
+     simp[compile_guarded_body_def, compileEnvTheory.comp_bind_def,
+          compileEnvTheory.comp_ignore_bind_def,
+          compileEnvTheory.comp_return_def, compileEnvTheory.comp_get_def,
+          emitHelperTheory.emit_inst_def, compileEnvTheory.fresh_id_def,
+          compileEnvTheory.emit_def] >>
      rpt strip_tac >> gvs[]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   `!fuel. step_inst fuel ctx (mk_inst sb.cs_next_id STOP [] []) t =
           Halt (halt_state (t with vs_returndata := []))` by
-    simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs] >>
+    simp[venomExecSemanticsTheory.step_inst_non_invoke,
+         venomInstTheory.mk_inst_def,
+         venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   `!fuel. gas_count_step fuel ctx (mk_inst sb.cs_next_id STOP [] []) t = 0` by
-    simp[gas_count_step_def, mk_inst_def] >>
+    simp[gasCountTheory.gas_count_step_def, venomInstTheory.mk_inst_def] >>
   `!fuel. gas_events_step fuel ctx func.fn_name
             (mk_inst sb.cs_next_id STOP [] []) t = []` by
-    metis_tac[cj 1 gas_events_length, LENGTH_NIL] >>
+    metis_tac[cj 1 gasEventsTheory.gas_events_length, listTheory.LENGTH_NIL] >>
   `!fuel. mem_safe_step fuel ctx (mk_inst sb.cs_next_id STOP [] []) t` by
-    simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
-         inst_dload_in_section_def, source_memory_read_ranges_def,
-         codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
+    simp[memSafeRunTheory.mem_safe_step_non_invoke,
+         unitTransformDefsTheory.inst_mem_below_frontier_def,
+         memSafeRunTheory.inst_dload_in_section_def,
+         contextCodegenRelTheory.source_memory_read_ranges_def,
+         codegenRelTheory.source_memory_write_ranges_def,
+         venomInstTheory.mk_inst_def] >>
   qexists_tac `halt_state (t with vs_returndata := [])` >>
   rpt conj_tac >~ [`gas_origin_ptr_path`]
   >- (rpt strip_tac >> qexistsl_tac [`G`, `tn`] >>
       `!fuel. ptr_safe_step (cx_dead H cx) 0 fuel ctx func [] G tn
                 (mk_inst sb.cs_next_id STOP [] []) t` by
-        (gen_tac >> simp[ptr_safe_step_def, ptr_inst_ok_def] >>
-         gvs[access_ok_def, taint_ok_def, allocas_from_def,
-             source_memory_read_ranges_def,
-             codegenRelTheory.source_memory_write_ranges_def, mk_inst_def,
-             step_taint_def, store_taint_def, adopt_reset_def,
-             imm_taint_def, ret_taint_def, halt_state_def,
+        (gen_tac >> simp[ptrSafeRunTheory.ptr_safe_step_def,
+                        ptrSafeRunTheory.ptr_inst_ok_def] >>
+         gvs[ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+             ptrDisciplineTheory.allocas_from_def,
+             contextCodegenRelTheory.source_memory_read_ranges_def,
+             codegenRelTheory.source_memory_write_ranges_def,
+             venomInstTheory.mk_inst_def,
+             ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.store_taint_def,
+             ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.imm_taint_def,
+             ptrDisciplineTheory.ret_taint_def, venomStateTheory.halt_state_def,
              stor_taint_ok_def, cx_dead_def]) >>
       irule (cj 3 gas_origin_ptr_path_rules) >>
-      simp[exit_result_def, gas_origin_ptr_edge_def] >> conj_tac
-      >- (simp[gas_origin_edge_def] >>
-          qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
-          simp[]) >>
-      simp[gas_path_ptr_edge_def] >>
-      qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
-      simp[]) >>
-  simp[halt_state_def]
+      simp[exit_result_def, gas_origin_ptr_edge_def, gas_origin_edge_def,
+           fragGasPathPtrTheory.gas_path_ptr_edge_def]) >>
+  simp[venomStateTheory.halt_state_def]
 QED
 
 (* That halt is the source's success without a return value. *)
@@ -330,7 +366,8 @@ Proof
   impl_tac
   >- simp[initial_evaluation_context_def, vyperStateTheory.return_def] >>
   strip_tac >>
-  simp[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def]
+  gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
+      abstract_machine_from_state_def, finalize_pending_deletions_def]
 QED
 
 (* ===== S1 ===== *)
@@ -385,7 +422,7 @@ Proof
   `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) =
    tops` by
     (irule cx_tops_module >>
-     gvs[source_deployment_rel_def, get_module_code_def,
+     gvs[source_deployment_rel_def, vyperContextTheory.get_module_code_def,
          initial_evaluation_context_def]) >>
   `~cenv.ce_is_ctor` by
     gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
