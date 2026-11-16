@@ -8,7 +8,11 @@
  *)
 Theory internalReturnMemoryMem
 Ancestors
-  internalReturnImmutableTypes intCallReturnMem stmtSimReturn intCallResult
+  internalReturnImmutableTypes internalReturnMemoryInputs
+  internalReturnMemoryExitFrame bodyFullMemorySameTypeStore
+  typedCopyOriginPtrBase vyperTypeEnvPreservation loweringStateRelDefs
+  gasExemptCert exprSimDefs
+  intCallReturnMem stmtSimReturn intCallResult
   loweringSlice instIdxIndep vyperStorageTrace vyperStatePreservation
   vyperStorageFootprint
   ptrSafetyTransport
@@ -26,126 +30,6 @@ Ancestors
   list rich_list
 Libs
   monadsyntax
-
-Theorem internal_return_store_mem_ok[local]:
-  compile_store_memory ce src dst ty ty sa = ((),sb) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  expr_val_rel cx ty v src s /\ expr_store_bound cx ty v src s /\
-  type_memory_bytes ce ty = type_memory_size tv /\
-  type_memory_size tv < dimword (:256) /\
-  eval_operand dst s = SOME d /\
-  w2n d + type_memory_size tv <= s.vs_alloca_next /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  strip_tac >> Cases_on `is_word_type ty`
-  >- (gvs[compile_store_memory_def] >>
-      drule emitted_insts_emit_void >> strip_tac >>
-      simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
-      `type_memory_size tv = 32` by metis_tac[word_tv_memory_size] >> gvs[]) >>
-  `?w. eval_operand src s = SOME w /\
-       val_in_memory tv v (w2n w) s.vs_memory` by gvs[expr_val_rel_def] >>
-  Cases_on `type_memory_size tv = 0`
-  >- (`val_store_size tv v = 0` by
-        (drule val_store_size_le >> simp[]) >>
-      `~is_bytestring_type ty` by
-        (strip_tac >> drule_all buffer_typed_bytestring_header >> simp[]) >>
-      gvs[compile_store_memory_def, compile_copy_memory_def, comp_return_def,
-          emitted_insts_def, run_inst_seq_mem_ok_def]) >>
-  `0 < val_store_size tv v` by metis_tac[val_store_size_pos, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
-  `w2n w + val_store_size tv v <= s.vs_alloca_next` by
-    (fs[expr_store_bound_def] >> gvs[]) >>
-  irule body_typed_store_memory_mem_ok >>
-  goal_assum (drule_at Any) >> metis_tac[]
-QED
-
-Theorem internal_return_store_path_mem[local]:
-  compile_store_memory ce src dst ty ty sa = ((),sb) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  expr_val_rel cx ty v src s /\ expr_store_bound cx ty v src s /\
-  type_memory_bytes ce ty = type_memory_size tv /\
-  w2n d + type_memory_size tv + 64 < dimword (:256) /\
-  eval_operand dst s = SOME d /\
-  w2n d + type_memory_size tv <= s.vs_alloca_next /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0
-        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-      run_inst_seq (emitted_insts sa sb) s = OK t /\
-      val_in_memory tv v (w2n d) t.vs_memory /\
-      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!a len. a + len <= w2n d \/ w2n d + type_memory_size tv <= a ==>
-         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-      LENGTH sa.cs_current_insts <= LENGTH sb.cs_current_insts
-Proof
-  strip_tac >>
-  `?w. eval_operand src s = SOME w /\
-       (if is_word_type ty then w = typed_val_to_w256 tv v
-        else val_in_memory tv v (w2n w) s.vs_memory)` by
-    gvs[expr_val_rel_def] >>
-  `!x. src = Var x ==> not_fresh_at sa x` by metis_tac[] >>
-  `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
-  drule_all compile_store_memory_run_capacity >> strip_tac >>
-  `type_memory_size tv < dimword (:256)` by decide_tac >>
-  drule_all internal_return_store_mem_ok >> strip_tac >>
-  drule tuple_local_copy_code_shape >> strip_tac >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
-    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
-  `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-     DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
-    (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
-     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
-  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
-    (qpat_x_assum `sb.cs_current_insts = sa.cs_current_insts ++ _`
-       (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
-  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
-    simp[IS_PREFIX_APPEND] >>
-  drule_all run_inst_seq_gas_path_mem >> simp[] >> gvs[]
-QED
-
-
-Theorem internal_ret_path_mem[local]:
-  ~s.vs_halted /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst iid RET ops []) /\
-  step_inst_base (mk_inst iid RET ops []) s = IntRet ir t ==>
-  gas_path_mem ctx func s 0 (IntRet ir t)
-Proof
-  strip_tac >> irule (cj 3 gas_path_mem_rules) >> simp[exit_result_def] >>
-  simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
-  simp[step_inst_non_invoke, gas_count_step_def, mk_inst_def,
-       mem_safe_step_non_invoke, below_frontier_no_ranges,
-       inst_dload_in_section_def, exit_result_def]
-QED
-
-Theorem emit_internal_ret_path_mem[local]:
-  emit_inst RET (ops ++ [Var rpc]) [] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  eval_operands ops s = SOME vals /\ lookup_var rpc s = SOME pc ==>
-  gas_path_mem ctx func s 0
-    (IntRet <|iret_values := vals; iret_adopt_fmp := NONE|> s)
-Proof
-  strip_tac >> drule emit_inst_extends >> strip_tac >>
-  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb (LENGTH sa.cs_current_insts) =
-      SOME (mk_inst sa.cs_next_id RET (ops ++ [Var rpc]) [])` by
-    (drule fn_has_code_same_block >>
-     disch_then (qspec_then `[mk_inst sa.cs_next_id RET (ops ++ [Var rpc]) []]`
-       mp_tac) >> simp[] >> metis_tac[arithmeticTheory.ADD_CLAUSES]) >>
-  irule internal_ret_path_mem >> simp[] >>
-  qexistsl_tac [`sa.cs_next_id`, `ops ++ [Var rpc]`] >>
-  simp[] >> irule stmtSimReturnTheory.step_ret_values >> simp[] >> metis_tac[]
-QED
-
-
 
 
 Theorem internal_return_full_shadow_copy[local]:
@@ -184,35 +68,6 @@ Proof
   irule eval_expr_preserves_ec >> metis_tac[vyperTypeInvariantsTheory.gas_obs_type_invariants]
 QED
 
-Theorem internal_return_buffer_ret_ptr[local]:
-  emit_inst RET [Var rpc] [] sa = ((),sb) /\
-  fn_has_code sa sb func /\ lookup_var rpc s = SOME pc /\
-  op_taint tn (Var rpc) = {} /\ ~ctx_has_dalloca ctx /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_path_ptr D 0 ctx func PG G tn s 0 G tn
-    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> s)
-Proof
-  strip_tac >>
-  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
-  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  drule fn_has_code_same_block >> simp[] >> strip_tac >>
-  `!fuel. step_inst fuel ctx (mk_inst sa.cs_next_id RET [Var rpc] []) s =
-    IntRet <|iret_values := []; iret_adopt_fmp := NONE|> s` by
-    (simp[step_inst_non_invoke, mk_inst_def] >>
-     irule (step_ret_values |> Q.SPEC `sa.cs_next_id` |> Q.SPEC `[]` |> SRULE [mk_inst_def, eval_operands_def]) >>
-     metis_tac[]) >>
-  irule (cj 3 fragGasPathPtrTheory.gas_path_ptr_rules) >>
-  simp[exit_result_def, fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
-  qexists_tac `0` >>
-  simp[gasCountTheory.gas_count_step_def, ptrSafeRunTheory.ptr_safe_step_def,
-       ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def,
-       ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
-       ptrDisciplineTheory.allocas_from_def,
-       contextCodegenRelTheory.source_memory_read_ranges_def,
-       codegenRelTheory.source_memory_write_ranges_def]
-QED
 Theorem compile_internal_memory_return_parts[local]:
   cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
   cenv.ce_returns_count = 0 /\
@@ -270,8 +125,8 @@ Proof
   `cs_extends sa sm` by metis_tac[compile_expr_grows] >>
   `cs_extends su sc` by
     metis_tac[compile_store_memory_labels, pairTheory.SND] >>
-  `cs_extends sc sb'` by metis_tac[cs_extends_emit_inst] >>
-  `cs_extends sm su /\ cs_extends sm sb'` by metis_tac[cs_extends_trans] >>
+  `cs_extends sc sb` by metis_tac[cs_extends_emit_inst] >>
+  `cs_extends sm su /\ cs_extends sm sb` by metis_tac[cs_extends_trans] >>
   metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
@@ -286,36 +141,6 @@ Proof
   simp[return_unlock_state_def, tstore_def, sstore_def]
 QED
 
-Theorem stmt_state_rel_scopes_nil[local]:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with scopes := []) s
-Proof
-  rw[stmt_state_rel_def, state_rel_scopes_nil] >>
-  fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
-     lookup_scopes_def] >>
-  metis_tac[]
-QED
-
-Theorem internal_return_memory_exit[local]:
-  same_frame ce cenv /\
-  intret_mem_q H func cenv cx tv bw v (ee with scopes := []) r ==>
-  !tail. intret_mem_q H func ce cx tv bw v
-    ((ee with gas_obs := tail) with scopes := []) r
-Proof
-  simp[intret_mem_q_def, intret_q_def] >> rpt strip_tac >>
-  gvs[result_rel_def] >>
-  `ce.ce_nonreentrant = cenv.ce_nonreentrant /\
-   ce.ce_returns_count = cenv.ce_returns_count` by
-    fs[same_frame_def, compile_env_component_equality] >>
-  `return_unlock_state ce s = return_unlock_state cenv s` by
-    simp[return_unlock_state_def] >>
-  qexistsl_tac [`s`, `i`] >> simp[] >>
-  qmatch_goalsub_abbrev_tac `state_rel H func ce cx es1 s` >>
-  `es1 = (ee with scopes := []) with gas_obs := tail` by
-    simp[Abbr `es1`, evaluation_state_component_equality] >>
-  pop_assum SUBST1_TAC >> simp[state_rel_gas_obs] >>
-  drule_all constructor_exit_state_rel >> simp[]
-QED
 
 (* From the state after the value, the release, the copy and RET: one
    checked path, with ghosts fixed before the dead bytes are chosen, that
@@ -341,7 +166,10 @@ Theorem return_memory_suffix_origin_ptr[local]:
   (!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
        val_in_memory tv v (w2n a) m) /\
   op_taint tn (Var rpc) = {} /\
-  ~ctx_has_dalloca ctx /\
+  0 < type_memory_size tv /\
+  w2n a + val_store_size tv v < dimword (:256) /\
+  w2n a + val_store_size tv v <= t.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
     ~t.vs_call_ctx.cc_static) /\
   allocas_from lo t /\ lo <= t.vs_alloca_next /\ ~t.vs_halted /\
@@ -364,7 +192,7 @@ Theorem return_memory_suffix_origin_ptr[local]:
 Proof
   strip_tac >>
   mp_tac (Q.INST [`sa` |-> `sm`, `s` |-> `t`] return_unlock_origin_ptr) >>
-  impl_tac >- fs[] >> strip_tac >>
+  (impl_tac >- fs[]) >> strip_tac >>
   rename1 `tn1.t_var = tn.t_var` >>
   qpat_x_assum `G' = G` SUBST_ALL_TAC >>
   drule compile_return_unlock_shape >> strip_tac >>
@@ -372,10 +200,8 @@ Proof
   `u.vs_vars = t.vs_vars /\ u.vs_memory = t.vs_memory /\
    u.vs_alloca_next = t.vs_alloca_next /\ u.vs_allocas = t.vs_allocas /\
    ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
-   u.vs_inst_idx = LENGTH su.cs_current_insts` by
-    (fs[Abbr `u`, return_unlock_alloca_frames] >>
-     qspecl_then [`cenv`, `t`, `sm.cs_next_id`] mp_tac
-       return_unlock_state_frames >> fs[]) >>
+   u.vs_inst_idx = LENGTH su.cs_current_insts /\
+   (allocas_below_fmp u <=> allocas_below_fmp t)` by suspend "unlock_frame" >>
   `!x. lookup_var x u = lookup_var x t` by fs[lookup_var_def] >>
   `!x k. ptr_covers G tn1 x u k <=> ptr_covers G tn x t k` by
     fs[ptr_covers_def, op_taint_def] >>
@@ -383,114 +209,72 @@ Proof
        mem_agree_outside tn.t_mem t.vs_memory m` by fs[] >>
   `not_fresh_at su src /\ not_fresh_at su bp /\ not_fresh_at su rpc` by
     fs[not_fresh_at_def] >>
-  `allocas_from lo u /\ lo <= u.vs_alloca_next` by fs[allocas_from_def] >>
-  `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le] >>
-  `type_memory_size tv < dimword (:256)` by decide_tac >>
-  `mload (w2n a) u = mload (w2n a) t` by fs[mload_def] >>
-  (* the window the copy reads and writes *)
-  `?len k. k < dimword (:256) /\ k <= type_memory_size tv /\
-     (if is_bytestring_type ty then
-        k = 32 + 32 * ((len + 31) DIV 32) /\ mload (w2n a) u = n2w len /\
-        (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn1.t_mem)
-      else k = type_memory_bytes cenv ty) /\ val_footprint tv v <= k` by
-    (Cases_on `is_bytestring_type ty`
-     >- (qspecl_then [`get_tenv cx`, `ty`, `ty`, `tv`, `tv`, `v`, `w2n a`,
-                      `t`, `tn`] mp_tac annassign_bytestring_window_ptr >>
-         impl_tac >- fs[] >> strip_tac >>
-         qexistsl_tac [`len`, `32 + 32 * ((len + 31) DIV 32)`] >>
-         fs[]) >>
-     qexistsl_tac [`0`, `type_memory_size tv`] >> fs[]) >>
-  `!x. ptr_covers G tn x t (type_memory_size tv) ==> ptr_covers G tn x t k` by
-    (rw[ptr_covers_def] >> qexistsl_tac [`w`, `b`, `sz'`] >> simp[] >>
-     decide_tac) >>
-  `ptr_covers G tn1 src u k /\ ptr_covers G tn1 bp u k` by fs[] >>
-  qabbrev_tac `D0 = <| d_stor := K (K {}); d_trans := K (K {});
-                       d_imm := K {}; d_ret := K {} |>` >>
-  qspecl_then [`D0`, `ctx`, `func`, `PG`, `G`, `tn1`, `u`, `su`, `sc`, `cenv`,
-               `ty`, `ty`, `src`, `bp`, `a`, `bw`, `len`, `k`, `tv`, `v`]
-    mp_tac annassign_store_memory_path_ptr >>
-  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
-  `lookup_var rpc sf = SOME pc /\ op_taint tnf (Var rpc) = {}` by
-    (qpat_assum `!p. not_fresh_at su p ==> _` (qspec_then `rpc` mp_tac) >>
-     fs[op_taint_def]) >>
-  `gas_path_ptr D0 0 ctx func PG Gf tnf sf 0 Gf tnf
-     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf)` by
-    (irule internal_return_buffer_ret_ptr >> metis_tac[]) >>
-  `gas_path_ptr D0 0 ctx func PG G tn1 u 0 Gf tnf
-     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf)` by
-    metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_0] >>
-  (* the memory checks of the same steps *)
-  `expr_val_rel cx ty v (Var src) u /\ expr_store_bound cx ty v (Var src) u /\
-   eval_operand (Var bp) u = SOME bw` by
-    (fs[expr_val_rel_def, expr_store_bound_def, eval_operand_def] >>
-     metis_tac[]) >>
-  mp_tac (Q.INST [`ce` |-> `cenv`, `src` |-> `Var src`, `dst` |-> `Var bp`,
-                  `sa` |-> `su`, `sb` |-> `sc`, `s` |-> `u`, `d` |-> `bw`]
-            internal_return_store_path_mem) >>
-  impl_tac >- (fs[] >> rw[] >> fs[]) >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts su sc) u = OK t'` >>
-  `t'.vs_current_bb = u.vs_current_bb /\ t'.vs_halted = u.vs_halted` by
-    (qpat_x_assum `t' with <|vs_vars := _; vs_memory := _|> = u`
-       (mp_tac o AP_TERM ``\z:venom_state. (z.vs_current_bb, z.vs_halted)``) >>
-     simp[]) >>
-  qabbrev_tac `t2 = t' with vs_inst_idx := LENGTH sc.cs_current_insts` >>
-  `lookup_var rpc t2 = SOME pc` by
-    (fs[Abbr `t2`, lookup_var_def] >> metis_tac[lookup_var_def]) >>
-  mp_tac (Q.INST [`ops` |-> `[]`, `sa` |-> `sc`, `s` |-> `t2`, `vals` |-> `[]`]
-            emit_internal_ret_path_mem) >>
-  impl_tac >- fs[Abbr `t2`, eval_operands_def] >> strip_tac >>
-  `gas_path_mem ctx func u 0
-     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t2)` by
-    metis_tac[gas_path_mem_then, arithmeticTheory.ADD_0] >>
-  (* one deterministic run *)
-  `?f1. run_from f1 ctx func u =
-        IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t2` by
-    (qpat_assum `gas_path_mem ctx func u 0 (IntRet _ _)`
-       (mp_tac o MATCH_MP gas_path_mem_exec) >>
-     simp[exit_result_def] >> metis_tac[]) >>
-  `?f2. run_from f2 ctx func u =
-        IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf` by
-    (qpat_assum `gas_path_ptr D0 0 ctx func PG G tn1 u 0 Gf tnf _`
-       (mp_tac o MATCH_MP gas_path_ptr_exec) >>
-     simp[exit_result_def] >> metis_tac[]) >>
-  `IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t2 =
-   IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf` by
-    (`(!e. IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t2 <> Error e) /\
-      (!e. IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf <> Error e)` by
-       simp[] >>
-     `f1 <= f2 \/ f2 <= f1` by decide_tac >>
-     metis_tac[gas_run_from_fuel_mono]) >>
-  `t2 = sf` by fs[] >>
-  `sf = t' with vs_inst_idx := LENGTH sc.cs_current_insts` by
-    fs[Abbr `t2`] >>
-  `LENGTH (return_unlock_insts cenv sm.cs_next_id) <=
-     LENGTH sc.cs_current_insts` by
-    (fs[] >> decide_tac) >>
-  qpat_x_assum `t2 = sf` SUBST_ALL_TAC >>
-  `!D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (u, G, tn1) []
-         (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf, Gf, tnf)` by
-    (gen_tac >> irule gas_zero_paths_joint >> simp[exit_result_def] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     irule gas_path_ptr_zero_to_lo >> qexists_tac `D0` >>
-     fs[Abbr `D0`]) >>
-  `!D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (t, G, tn) []
-         (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf, Gf, tnf)` by
-    (gen_tac >>
-     mp_tac (Q.SPECL [`(D, lo, explicit, ctx, func, PG)`, `(t, G, tn)`, `[]`,
-                      `(OK u, G, tn1)`] gas_origin_ptr_path_append) >>
-     impl_tac >- fs[] >>
-     disch_then (qspecl_then [`u`, `G`, `tn1`, `[]`,
-       `IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf`, `Gf`, `tnf`]
-       mp_tac) >>
-     fs[]) >>
-  qexistsl_tac [`IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf`,
-                `Gf`, `tnf`, `t'`] >>
-  simp[exit_result_def, Abbr `u`] >>
-  qpat_assum `!D. gas_origin_ptr_path _ (t, _, _) _ _`
-    (qspec_then `D0` assume_tac) >>
-  drule gas_origin_ptr_path_exec >> simp[exit_result_def] >> metis_tac[]
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by (fs[allocas_from_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`s` |-> `u`, `sa` |-> `su`, `sb` |-> `sc`,
+    `xs` |-> `src`, `xd` |-> `bp`, `sw` |-> `a`, `dw` |-> `bw`,
+    `tenv` |-> `get_tenv cx`, `tn` |-> `tn1`]
+      body_full_memory_same_type_store_path) >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
+  rename1 `typed_copy_state_frame su (w2n bw) (type_memory_size tv) u copied` >>
+  `lookup_var rpc copied = SOME pc /\ op_taint tf (Var rpc) = {} /\
+   allocas_from lo copied /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp copied)` by suspend "copy_frame" >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (copied,Gf,tf) []
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> copied,Gf,tf)` by
+    suspend "ret" >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> copied,Gf,tf)` by
+    suspend "compose" >>
+  qexistsl_tac [`IntRet <|iret_values := []; iret_adopt_fmp := NONE|> copied`,
+    `Gf`,`tf`,`copied`] >>
+  simp[exit_result_def] >>
+  rpt conj_tac
+  >- suspend "exec"
+  >- suspend "state_frame"
+  >- suspend "vars"
+  >- suspend "memory"
+  >- suspend "length" >> suspend "index"
 QED
+
+Resume return_memory_suffix_origin_ptr[unlock_frame]:
+  simp[Abbr `u`, return_unlock_state_frames, return_unlock_alloca_frames,
+       return_unlock_frames] >>
+  simp[allocas_below_fmp_def, return_unlock_alloca_frames] >>
+  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+  qpat_x_assum `Abbrev (_ = cenv.ce_nonreentrant)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  simp[return_unlock_state_def, return_unlock_insts_def, tstore_def, sstore_def]
+QED
+Resume return_memory_suffix_origin_ptr[copy_frame]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[ret]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[compose]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[exec]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[state_frame]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[vars]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[memory]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[length]:
+  cheat
+QED
+Resume return_memory_suffix_origin_ptr[index]:
+  cheat
+QED
+Finalise return_memory_suffix_origin_ptr
 
 Theorem internal_return_memory_full:
   !DF lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
@@ -580,6 +364,8 @@ Proof
      expr_post H ctx func cenv cx e es sa sm s0 mid v op t /\
      expr_store_bound cx (expr_type e) v op t /\
      s0.vs_alloca_next <= t.vs_alloca_next /\
+     alloca_history func t /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
      ghost_inv_at (DF H) lo (SOME (bw,type_memory_size tv)) cenv cx mid
        G1 tn1 t /\
      ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
@@ -627,12 +413,10 @@ Proof
   `?src a. op = Var src /\ lookup_var src t = SOME a /\
      ptr_covers G1 tn1 src t (type_memory_bytes cenv (lowered_value_type cenv e)) /\
      (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
-          val_in_memory tv v (w2n a) m)` by
-    (mp_tac (Q.INST [`H` |-> `H0`] (Q.SPECL
-       [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `s0`, `mid`, `v`,
-        `op`, `t`, `G1`, `tn1`, `tv`, `ty`, `tv`]
-       annassign_memory_rhs_layout_ptr)) >>
-     impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >> simp[]) >>
+          val_in_memory tv v (w2n a) m) /\
+     w2n a + val_store_size tv v <= t.vs_alloca_next` by
+    (irule internal_return_memory_value_inputs >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qpat_x_assum `op = Var src` SUBST_ALL_TAC >>
   `ptr_covers G1 tn1 bp t (type_memory_size tv) /\
    op_taint tn1 (Var rpc) = {} /\
@@ -671,50 +455,7 @@ Proof
     (strip_tac >>
      drule_at (Pos (el 5)) internal_return_immutable_separation >>
      simp[] >> metis_tac[]) >>
-  `copied = (return_unlock_state cenv t) with
-      <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>` by
-    (qpat_x_assum `copied with <|vs_vars := _; vs_memory := _|> = _`
-       (mp_tac o AP_TERM ``\z. z with
-          <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>``) >>
-     simp[]) >>
-  qabbrev_tac `pre = t with
-    <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory;
-      vs_inst_idx := LENGTH sc.cs_current_insts -
-        LENGTH (return_unlock_insts cenv sm.cs_next_id)|>` >>
-  `(return_unlock_state cenv t) with vs_memory := copied.vs_memory =
-    return_unlock_state cenv (t with vs_memory := copied.vs_memory)` by
-    (qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
-     Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
-     simp[return_unlock_state_def, tstore_def, sstore_def]) >>
-  `copied with vs_inst_idx := LENGTH sc.cs_current_insts =
-    return_unlock_state cenv pre` by
-    (qpat_assum `copied = _ with <|vs_vars := _; vs_memory := _|>`
-       (fn th => once_rewrite_tac[th]) >>
-     qspecl_then [`cenv`, `t with vs_memory := copied.vs_memory`,
-                  `copied.vs_vars`, `LENGTH sc.cs_current_insts`,
-                  `sm.cs_next_id`] mp_tac return_unlock_load_frame >>
-     simp[Abbr `pre`]) >>
-  `stmt_state_rel H ctx func cenv cx (mid with scopes := []) t` by
-    (irule stmt_state_rel_scopes_nil >> fs[expr_post_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (mid with scopes := [])
-     (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `t` >>
-     fs[stmt_state_rel_def, state_rel_def] >> rpt strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> fs[regions_disjoint_def] >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx (mid with scopes := [])
-     (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
-    (irule result_state_memory_frame >> qexists_tac `t` >>
-     simp[local_region_def, lookup_scopes_def]) >>
-  `stmt_state_rel H ctx func cenv cx (mid with scopes := []) pre` by
-    (fs[Abbr `pre`, stmt_state_rel_inst_idx]) >>
-  `intret_mem_q H func cenv cx tv bw v (mid with scopes := []) r` by
-    (simp[intret_mem_q_def, intret_q_def, result_rel_def,
-          intret_vals_match_def] >>
-     qexistsl_tac [`pre`, `(return_unlock_state cenv pre).vs_inst_idx`] >>
-     fs[stmt_state_rel_def, venom_state_component_equality]) >>
-  drule_all internal_return_memory_exit >>
+  drule_all internal_return_memory_copy_exit >>
   disch_then (qspec_then `tail` mp_tac) >>
   simp[]
 QED
