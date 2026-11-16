@@ -4,7 +4,7 @@ Ancestors
   wordLoadStorePtr allocationPtr typedCopyPtr exprSimLiteralBuffer exprSimHypsDefs
   exprLowering ptrDiscipline venomExecSemantics venomMemDefs finite_map
   vyperTypeSystem vyperValue vyperAST exprSimProps compileEnv venomState venomInst
-  fragExecPtr ptrSafeRun codegenRel contextCodegenRel bodyPtrDefs words
+  fragExecPtr ptrSafeRun codegenRel contextCodegenRel bodyPtrDefs words memLocDefs
 
 Theorem literal_nonword_classify:
   expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem literal_add_ptr_inst_ok:
-  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var src) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id ADD [Var src; Lit off] [dst]) s
 Proof
@@ -91,19 +91,36 @@ Proof
 QED
 
 Theorem literal_mstore_ptr_inst_ok:
-  ptr_covers G tn dst s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn dst s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id MSTORE [Var dst; Lit w] []) s
 Proof
-  strip_tac >> irule ptr_inst_ok_mstore >> simp[op_taint_def]
+  strip_tac >> gvs[ptr_covers_def] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, fixed_source_write_range_def,
+       eval_operand_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+       eval_operand_def, AllCaseEqs(), mstore_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem literal_alloca_ptr_inst_ok:
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id ALLOCA [Lit n] [dst]) s
 Proof
-  simp[ptr_inst_ok_alloca]
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem literal_add_ptr_covers:
