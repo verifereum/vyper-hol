@@ -120,9 +120,37 @@ Proof
        (fn th => rewrite_tac[GSYM th]) >>
      irule memory_window_word >>
      irule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
-     qexistsl [`LENGTH input_bytes`, `LENGTH input_bytes`] >>
-     simp[] ) >>
-  fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-     GSYM not_fresh_at_def] >>
-  simp[] >> FAIL_TAC "residual reconstruction"
+     qexists `LENGTH input_bytes` >>
+     simp[] >> decide_tac) >>
+  `not_fresh_at anchor dst /\ not_fresh_at anchor counter` by
+    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       GSYM not_fresh_at_def] >>
+  simp[] >> rpt conj_tac >> asm_rewrite_tac[]
+  >- (simp[EVERY_MEM] >> qx_gen_tac `entry` >> strip_tac >>
+      PairCases_on `entry` >>
+      qpat_assum `EVERY (\(id,p,b,k,bytes). id < anchor.cs_next_id /\
+        FLOOKUP s.vs_allocas id = SOME (b,k) /\ _) live`
+        (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      disch_then drule >> simp[] >> strip_tac >>
+      qpat_assum `EVERY (\(id,p,b,k,bytes). id < returned.cs_next_id /\ _) live`
+        (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      disch_then drule >> simp[] >> strip_tac >>
+      qpat_assum `EVERY (\(id,p,b,k,bytes). not_fresh_at anchor p) live`
+        (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      disch_then drule >> simp[] >> strip_tac >>
+      qpat_assum `EVERY (\x. _ (_ x)) live`
+        (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      disch_then drule >> simp[] >> strip_tac >>
+      simp[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _`
+        (qspec_then `H` mp_tac) >> simp[])
+  >- (qpat_x_assum `!p k. not_fresh_at anchor p /\ ptr_covers G tn p s k ==> _`
+        irule >> simp[] >>
+      qpat_x_assum `ptr_covers G tn dst s _` mp_tac >>
+      simp[MULT_COMM, ADD_COMM])
+  >- (qpat_x_assum `mem_word_at (w2n input_word+srcoff) u.vs_memory = _`
+        mp_tac >> simp[ADD_COMM]) >>
+  qpat_x_assum `DISJOINT _ tnu.t_mem` mp_tac >>
+  simp[DISJOINT_DEF, EXTENSION] >> metis_tac[]
 QED
