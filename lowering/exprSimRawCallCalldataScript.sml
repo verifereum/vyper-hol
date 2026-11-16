@@ -4777,14 +4777,18 @@ Proof
   `typed_args_post H0 ctx func cenv cx (es with gas_obs := gs) sa s0 ee
      (addr::kws) (addr_op::ops) vs t` by
     simp[calldata_typed_args_post_gas_obs] >>
-  pop_assum (mp_then (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+  qpat_assum `typed_args_post H0 ctx func cenv cx (es with gas_obs := gs) sa s0 ee
+    (addr::kws) (addr_op::ops) vs t`
+    (mp_then (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
     (INST_TYPE [``:'b`` |-> ``:256``] calldata_call_success_frag)) >>
   disch_then drule_all >>
   simp[calldata_typed_args_post_gas_obs, calldata_vv_post_gas_obs] >>
   strip_tac >>
+  `res <> INR HaltException` by
+    (drule_all calldata_call_source_outcome >> strip_tac >> gvs[AllCaseEqs()]) >>
   irule calldata_tail_summary >> simp[] >>
   qexistsl_tac [`fin`, `res`, `sb`, `s2`] >> simp[] >>
-  drule_then irule frag_path_conseq >> simp[] >>
+  drule_then irule frag_path_conseq >> simp[halt_exit_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ /\ _ ==> _` irule >>
   `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
