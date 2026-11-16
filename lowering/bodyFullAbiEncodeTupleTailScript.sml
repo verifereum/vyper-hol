@@ -8,7 +8,7 @@ Ancestors
   exprSimAbiEncodeTupleResources abiBuiltinAllocation allocationPtr
   bodyFullUnwrapRun ptrSafetyTransport fragGasSeqPtr fragExecPtr
   instMemFrontier memSafeRun literalAllocPathPtr exprLoweringProps localPtrsProps
-  loweringHalt fragExec fragExecMem emitHelperProps rich_list words
+  loweringHalt fragExec fragExecMem emitHelper emitHelperProps rich_list words
   venomMemDefs bodyPtrDefs
   venomExecSemantics venomState venomInst ptrDiscipline finite_map pred_set
 
@@ -25,7 +25,7 @@ Theorem abi_encode_alloc_rows_origin:
     FLOOKUP s.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   ?root t b G1 tn1.
-    buf.buf_operand = Var root /\ not_fresh_at sc root /\
+    (buf.buf_operand = Var root /\ not_fresh_at sc root /\
     (~not_fresh_at sa root) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK t,G1,tn1)) /\
@@ -46,7 +46,14 @@ Theorem abi_encode_alloc_rows_origin:
     tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
-      op_taint tn1 (Var x) = op_taint tn (Var x))
+      op_taint tn1 (Var x) = op_taint tn (Var x))) /\
+    (t.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id cap s).vs_allocas /\
+     t.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id cap s).vs_alloca_next /\
+     (t with <|vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+       vs_alloca_next := s.vs_alloca_next; vs_inst_idx := s.vs_inst_idx|>) = s /\
+     allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+     b + cap <= t.vs_alloca_next /\ lo <= b /\
+     (!i. i IN tn1.t_mem <=> i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < b+cap)))
 Proof
   strip_tac >> drule compile_alloc_buffer_emission >> strip_tac >>
   drule compile_alloc_buffer_insts >> strip_tac >>
@@ -71,7 +78,7 @@ Proof
      irule ptr_inst_ok_lower_bound_transport >>
      simp[] >> qexists `0` >> simp[ptr_inst_ok_alloca]) >>
   qexistsl [`p`,`t with vs_inst_idx := LENGTH sc.cs_current_insts`,`b`,`g1`,`tn1`] >>
-  suspend "endpoint"
+  conj_tac >- suspend "endpoint" >> suspend "effects"
 QED
 Resume abi_encode_alloc_rows_origin[endpoint]:
   `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
@@ -103,6 +110,33 @@ Resume abi_encode_alloc_rows_origin[endpoint]:
   drule_at (Pat `step_inst_base _ _ = _`) literal_alloca_old_observations >>
   disch_then (qspec_then `x` mp_tac) >>
   simp[Abbr `g1`, Abbr `tn1`, lookup_var_def]
+QED
+Resume abi_encode_alloc_rows_origin[effects]:
+  simp[Abbr `tn1`] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  qpat_x_assum `cap < dimword (:256)` mp_tac >>
+  qpat_x_assum `FLOOKUP t.vs_allocas _ = SOME (b,cap)` mp_tac >>
+  qpat_x_assum `alloca_inv s` mp_tac >>
+  qpat_x_assum `allocas_from lo s` mp_tac >>
+  qpat_x_assum `lo <= s.vs_alloca_next` mp_tac >>
+  qpat_x_assum `s.vs_inst_idx = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[step_inst_base_opcode_eqs,mk_inst_def,exec_alloca_def,AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[update_var_def,abi_builtin_allocate_state_def,FLOOKUP_UPDATE] >>
+  simp[venom_state_component_equality,allocas_from_def,FLOOKUP_UPDATE] >>
+  gvs[allocas_from_def,alloca_inv_def,alloca_next_valid_def,
+    step_taint_def,mem_taint_def,step_writes_def,written_taint_def,
+    new_site_bytes_def,codegenRelTheory.source_memory_write_ranges_def,range_bytes_def,
+    codegenRelTheory.sized_source_write_range_def,codegenRelTheory.fixed_source_write_range_def,FLOOKUP_UPDATE,
+    EXTENSION] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+  >- metis_tac[]
+  >- (gvs[FLOOKUP_DEF,FAPPLY_FUPDATE_THM] >>
+      metis_tac[arithmeticTheory.ADD_COMM])
+  >- metis_tac[]
+  >- metis_tac[] >>
+  `b + cap <= s.vs_alloca_next` by metis_tac[] >> simp[FLOOKUP_DEF] >> metis_tac[]
 QED
 Finalise abi_encode_alloc_rows_origin
 
@@ -252,5 +286,126 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule abi_builtin_encode_setup_trace >> strip_tac >>
   rename1 `compile_alloc_buffer _ staged = (output_buf,output_allocated)` >>
-  FAIL_TAC "tuple tail output allocation"
+  `cs_extends address_st ready` by
+    (qpat_x_assum `abi_builtin_encode_method_id _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `OPTION_MAP bytes_method_id_word mid` >>
+     simp[abi_builtin_encode_method_id_def,comp_bind_def,comp_ignore_bind_def,
+       comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+     simp[cs_extends_def,inst_extends_def,IS_PREFIX_APPEND]) >>
+  `fn_has_code staged output_allocated func` by
+    (irule (cj 1 fn_has_code_split) >>
+     conj_tac >- metis_tac[compile_alloc_buffer_extends] >>
+     qexists `ready` >> simp[] >>
+     irule cs_extends_trans >> qexists `address_st` >>
+     simp[] >>
+     qpat_x_assum `emit_op _ _ output_allocated = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     qmatch_asmsub_abbrev_tac `emit_op opc operands output_allocated` >>
+     mp_tac (Q.SPECL [`opc`,`operands`,`output_allocated`]
+       ci_mono_emit_op) >> simp[ci_mono_def]) >>
+  `!i w b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+      i.inst_operands = [Lit w] /\
+      FLOOKUP initial.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w` by
+    (qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_args_post_def,stmt_state_rel_def] >> metis_tac[]) >>
+  `MEM (mk_inst st.cs_next_id ALLOCA
+      [Lit (n2w (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))))]
+      [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)` by
+    (qpat_x_assum `compile_alloc_buffer _ st = _` mp_tac >>
+     qpat_x_assum `fn_has_code st allocated func` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule compile_alloc_buffer_emission >> strip_tac >>
+     drule compile_alloc_buffer_insts >> strip_tac >>
+     drule_all fn_has_code_split >> strip_tac >>
+     drule_all emit_inst_fn_member >> gvs[]) >>
+  `!i w b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+      i.inst_operands = [Lit w] /\
+      FLOOKUP prepared.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w` by
+    (qpat_x_assum `!i w b sz. _` mp_tac >>
+     qpat_x_assum `prepared.vs_allocas = _` mp_tac >>
+     qpat_x_assum `MEM (mk_inst st.cs_next_id _ _ _) _` mp_tac >>
+     qpat_x_assum `fn_inst_ids_distinct func` mp_tac >>
+     qpat_x_assum `sb0 + _ < dimword (:256)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     qmatch_goalsub_abbrev_tac `abi_builtin_allocate_state site cap initial` >>
+     rpt strip_tac >>
+     Cases_on `FLOOKUP initial.vs_allocas site = NONE`
+     >- (gvs[abi_builtin_allocate_state_def,FLOOKUP_UPDATE] >>
+         Cases_on `i.inst_id = site`
+         >- (gvs[] >>
+             qabbrev_tac `inst = mk_inst i.inst_id ALLOCA [Lit (n2w cap)]
+               [STRING #"%" (toString st.cs_next_var)]` >>
+             `i = inst` by
+               (irule fn_inst_ids_distinct_inj >>
+                conj_tac >- simp[Abbr `inst`,mk_inst_def] >>
+                qexists `func` >> simp[Abbr `inst`]) >>
+             `i.inst_operands = [Lit (n2w cap)]` by
+               (qpat_x_assum `i = inst` (pure_once_rewrite_tac o single) >>
+                simp[Abbr `inst`,mk_inst_def]) >>
+             gvs[w2n_n2w]) >>
+         gvs[] >> metis_tac[]) >>
+     gvs[abi_builtin_allocate_state_def] >> metis_tac[]) >>
+  drule abi_encode_alloc_rows_origin >>
+  disch_then (drule_at (Pat `alloca_inv _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (qspecl_then [`tnp`,`lo`,`explicit`,`ctx`,`PG`,`Gp`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  rename1 `output_buf.buf_operand = Var outroot` >>
+  rename1 `lookup_var outroot output_state = SOME (n2w outbase)` >>
+  rename1 `ptr_covers Gout tnout outroot output_state _` >>
+  `cs_extends output_allocated address_st` by
+    (qpat_x_assum `emit_op ADD _ output_allocated = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     qmatch_asmsub_abbrev_tac `emit_op ADD operands output_allocated` >>
+     mp_tac (Q.SPECL [`ADD`,`operands`,`output_allocated`] ci_mono_emit_op) >>
+     simp[ci_mono_def]) >>
+  `fn_has_code output_allocated ready func` by
+    (irule (cj 2 fn_has_code_split) >>
+     conj_tac
+     >- (irule cs_extends_trans >> qexists `address_st` >> simp[]) >>
+     qexists `staged` >> simp[] >>
+     metis_tac[compile_alloc_buffer_extends]) >>
+  qpat_assum `output_buf.buf_operand = Var outroot` SUBST_ALL_TAC >>
+  drule_at (Pat `emit_op ADD _ _ = _`) abi_encode_setup_tail_origin >>
+  disch_then (drule_at (Pat `abi_builtin_encode_method_id _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code output_allocated _ _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ outroot _ _`)) >>
+  disch_then (qspec_then `(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME w => 32)` mp_tac) >>
+  disch_then (qspecl_then [`outbase`,
+    `abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))`,
+    `lo`,`explicit`,`ctx`,`PG`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC])) >>
+  strip_tac >>
+  rename1 `ptr_covers Gsetup tnsetup dp setup_state _` >>
+  `tvs = ts` by
+    (qpat_x_assum `LENGTH tvs = _` mp_tac >>
+     qpat_x_assum `LENGTH ts = _` mp_tac >>
+     qpat_x_assum `!i. _ ==> evaluate_type _ _ = SOME (EL i tvs)` mp_tac >>
+     qpat_x_assum `!i. _ ==> evaluate_type _ _ = SOME (EL i ts) /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     irule listTheory.LIST_EQ >> simp[] >> metis_tac[optionTheory.SOME_11]) >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
+   type_memory_size (TupleTV tvs) =
+     abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))` by
+    suspend "source_shape" >>
+  `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `w2n bw = sb` by suspend "source_address" >>
+  `!mem. mem_agree_outside tnout.t_mem output_state.vs_memory mem ==>
+     val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n bw) mem` by
+    suspend "source_alloc" >>
+  FAIL_TAC "source after allocation"
+QED
+Resume abi_encode_staged_tuple_full_tail[source_shape]:
+  gvs[] >>
+  FAIL_TAC "source shape"
+QED
+Resume abi_encode_staged_tuple_full_tail[source_address]:
+  FAIL_TAC "source address"
+QED
+Resume abi_encode_staged_tuple_full_tail[source_alloc]:
+  FAIL_TAC "source alloc"
 QED
