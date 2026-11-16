@@ -13,6 +13,8 @@ Ancestors
   gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
   stmtSimForArray stmtSimForArrayFrag
   vyperStorageTrace exprSimProps vyperTypeValues vyperTypeInvariants
+  vyperAST vyperArray vyperTypeEnv arithmetic vyperValueOperation
+  exprSimHyps allocLimits gasShadow
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "cond";
@@ -512,9 +514,13 @@ Proof
 QED
 
 Resume body_for_local_array_full_from_contracts[source_packet]:
+  map_every (fn label => asm_x label kall_tac)
+    ["fixed","dynamic_prefix","dynamic_entry","body_fragment",
+     "body_outcome","handler","entry"] >>
   Cases_on `bd`
   >- (rename1 `Fixed m` >>
       `m = n` by fs[supported_stmt_def,supported_iterator_def] >> gvs[] >>
+      rename1 `For id typ (Array (Name (ArrayT typ (Fixed n)) name)) n stmts` >>
       drule array_for_hypotheses >> disch_then drule >> simp[] >> strip_tac >> gvs[] >>
       drule_all array_name_local_binding >> strip_tac >>
       rename1 `lookup_scopes name es.scopes = SOME ent` >>
@@ -555,11 +561,95 @@ Resume body_for_local_array_full_from_contracts[source_packet]:
 QED
 
 Resume body_for_local_array_full_from_contracts[dynamic_source]:
-  FAIL_TAC "dynamic-source"
+  rename1 `Dynamic c` >>
+  `c <= n` by fs[supported_stmt_def,supported_iterator_def] >>
+  `env' = env /\ FLOOKUP env.var_types name = SOME (ArrayT typ (Dynamic c)) /\
+   id NOTIN FDOM env.var_types /\
+   iterator_unmodified (Array (Name (ArrayT typ (Dynamic c)) name)) stmts /\
+   ?env_b. type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b` by
+    gvs[type_stmt_def,well_typed_iterator_def,well_typed_expr_def,
+        expr_type_def,optionTheory.IS_SOME_EXISTS,AllCaseEqs()] >>
+  `supported_stmts tops bindings stmts /\
+   ~supported_stmts_expr_exists expr_internal_call_root stmts` by
+    fs[supported_stmt_def] >>
+  `?ent. lookup_scopes name es.scopes = SOME ent` by
+    (gvs[expr_sim_inv_def,env_consistent_def,env_scopes_consistent_def,
+         optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  `evaluate_type (get_tenv cx) (ArrayT typ (Dynamic c)) = SOME ent.type` by
+    (fs[expr_sim_inv_def,env_consistent_def,env_scopes_consistent_def] >>
+     metis_tac[]) >>
+  `c < dimword (:256)` by
+    (qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+     simp[evaluate_type_def,AllCaseEqs(),type_slot_size_def,bound_length_def] >>
+     rpt strip_tac >> rename1 `0 < type_slot_size elem_tv` >>
+     `c <= c * type_slot_size elem_tv` by
+       (irule LESS_EQ_TRANS >> qexists_tac `c * 1` >> simp[]) >> decide_tac) >>
+  drule evaluate_type_ArrayT_cases >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
+  `value_has_type ent.type ent.value /\ well_formed_type_value ent.type` by
+    (irule scope_well_typed_lookup_scopes >>
+     fs[expr_sim_inv_def,state_well_typed_def] >> metis_tac[]) >>
+  `?vs. ent.value = ArrayV (DynArrayV vs) /\ LENGTH vs <= c` by
+    (Cases_on `ent.value` >> gvs[value_has_type_def] >>
+     rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
+  `?ap az. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az)` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `!gs. eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name))
+       (es with gas_obs := gs) = (INL (MAP Value vs),es with gas_obs := gs)` by
+    (gen_tac >> simp[Once evaluate_def] >> simp[Once evaluate_def] >>
+     simp[array_iterator_results_def,read_result_def,read_place_def,
+          read_memory_path_def,evaluate_subscripts_def,get_scopes_def,
+          type_check_def,vyperStateTheory.assert_def,lift_option_type_def,
+          lift_sum_def,ignore_bind_def,vyperStateTheory.bind_def,
+          vyperStateTheory.return_def,expr_type_def,extract_elements_def,
+          array_elements_def]) >>
+  `body_for_full_ok cx tv id stmts (MAP Value vs)` by
+    (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
+     simp[lift_option_type_def,return_def,check_def,assert_def,
+          compatible_bound_def] >> disch_then irule >> simp[] >>
+     qexistsl_tac [`es with gas_obs := []`,`es with gas_obs := []`] >> simp[]) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (Cases_on `FLOOKUP cenv.ce_vars id` >> gvs[bodySimTheory.ce_locals_declared_def] >>
+     metis_tac[]) >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def,env_consistent_def,env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  qexistsl_tac [`ent`,`tv`,`ap`,`az`,`DynArrayV vs`,`vs`,`env_b`] >>
+  simp[array_elements_def]
 QED
 
 Resume body_for_local_array_full_from_contracts[runtime]:
-  FAIL_TAC "local-consumer-runtime"
+  qmatch_asmsub_abbrev_tac `body_for_full_ok cx tv id stmts (MAP Value vs)` >>
+  `cenv.ce_alloca_locals` by fs[bodySimTheory.body_inv_def] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    fs[bodySimTheory.stmt_exprs_ok_def,alloc_limits_stmt_def] >>
+  `type_memory_bytes cenv typ = type_memory_size tv` by
+    (irule expr_sim_inv_memory_size >> goal_assum (drule_at Any) >> simp[]) >>
+  `type_memory_bytes cenv typ + 64 < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `!c lc a b. compile_stmts c lc ret_ty stmts a = ((),b) ==>
+      cs_extends a b /\ a.cs_next_var <= b.cs_next_var` by
+    (rpt strip_tac >>
+     qspecl_then [`c`,`lc`,`ret_ty`,`stmts`,`a`] mp_tac (cj 2 compile_stmt_ci_mono) >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  `cenv' = cenv /\
+   compile_stmt cenv lctx ret_ty
+     (For id typ (Array (Name (ArrayT typ bd) name)) n stmts) sa = ((),sb)` by
+    (qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
+     simp[stmt_env_def,declare_stmt_local_def,comp_bind_def,comp_return_def] >>
+     pairarg_tac >> simp[]) >>
+  Cases_on `bd`
+  >- suspend "fixed_runtime" >>
+  suspend "dynamic_runtime"
+QED
+
+Resume body_for_local_array_full_from_contracts[fixed_runtime]:
+  FAIL_TAC "fixed-runtime"
+QED
+
+Resume body_for_local_array_full_from_contracts[dynamic_runtime]:
+  FAIL_TAC "dynamic-runtime"
 QED
 
 Finalise body_for_local_array_full_from_contracts
