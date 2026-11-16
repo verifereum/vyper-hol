@@ -140,5 +140,10 @@ Proof
   qexistsl_tac [`root`,`p`,`u`,`t`,`G1`,`tn2`] >>
   asm_simp_tac bool_ss [] >>
   simp[Abbr `t`,mstore_def,write_memory_with_expansion_def] >>
-  rpt strip_tac >> simp[] >> decide_tac
+  rpt strip_tac >> simp[]
+  >- (qpat_assum `!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==> _`
+        irule >> qexists_tac `aid` >> simp[])
+  >- (qpat_assum `!name b len. local_region cenv es.scopes u name b len ==> _`
+        irule >> qexists_tac `name` >> simp[])
+  >> gvs[] >> decide_tac
 QED
