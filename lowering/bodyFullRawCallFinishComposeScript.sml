@@ -610,7 +610,7 @@ Proof
      disch_then irule >>
      Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >>
      Cases_on `flags.rcf_max_outsize=0` >>
-     gvs[venomInstTheory.mk_inst_def, ptrDisciplineTheory.op_taint_def,
+     simp[venomInstTheory.mk_inst_def, ptrDisciplineTheory.op_taint_def,
          loweringStateRelDefsTheory.regions_disjoint_def,
          wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
      metis_tac[wordsTheory.n2w_11, arithmeticTheory.LESS_EQ_TRANS]) >>
@@ -771,8 +771,11 @@ Proof
         `~t7.vs_halted`, `t7.vs_current_bb=s7.cs_current_bb`,
         `emit_op _ _ s7 = (ok,sc)`] >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     qpat_x_assum `t=t7 with _`
+       (mp_tac o Q.AP_TERM `\s. (s.vs_halted,s.vs_current_bb,s.vs_allocas,s.vs_alloca_next)`) >>
+     simp[] >> strip_tac >>
      gvs[Abbr `uc`, venomStateTheory.update_var_def] >>
-     metis_tac[emitHelperPropsTheory.emit_op_state]) >>
+     metis_tac[loweringShapeRulesTheory.emit_op_facts]) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es2 uc /\
     ghost_inv_at (DF H) lo dframe cenv cx es2 HG un uc` by
@@ -786,8 +789,9 @@ Proof
      fs[Abbr `uc`]) >>
   `wb_frame cenv es es2 sa s0 uc` by
     (qpat_assum `wb_frame cenv es es2 sa s0 u` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+     qpat_assum `Abbrev(uc=_)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[Abbr `uc`, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
           loweringPostsTheory.popped_kept_def]) >>
   Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success`
   >- suspend "revert_result" >>
