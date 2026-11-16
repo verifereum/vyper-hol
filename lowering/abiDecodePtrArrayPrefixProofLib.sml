@@ -1,6 +1,7 @@
 (* Shared implementation for allocation-backed dynamic-array prefix proofs.
-   The actual-count core does not use maximum-product totality. Local
-   payload-scalar and code facts are supplied by the canonical producer.
+   The actual-count core does not use maximum-product totality. The
+   payload-scalar proof is shared below; only public code facts are supplied
+   by the canonical producer.
 
    fresh_* phases run in order on the fresh-pointer existential goal, with
    the canonical names sa/sb, s/u, source, pos/hi, B/L/p, maxn/stride, G/tn,
@@ -34,6 +35,50 @@ open abiDecoderDynarrayPrefixTheory abiDecoderDynarrayBoundTheory abiMalformedBu
  abiEncoderTheory compileEnvTheory loweringStateRelDefsTheory bodyPtrDefsTheory ptrDisciplineTheory fragExecMemTheory fragExecTheory fragGasSeqPtrTheory
  venomExecSemanticsTheory venomStateTheory venomInstTheory venomMemDefsTheory instIdxIndepTheory
  finite_mapTheory pred_setTheory wordsTheory listTheory rich_listTheory arithmeticTheory fragExecPtrTheory moduleLoweringPropsTheory
+
+(* Shared proof of the unchanged local scalar boundary. It is also used
+   under universal binders in fresh_tail, so no private theorem handle or
+   provider theory import is needed. *)
+fun payload_guard_scalar () =
+ strip_tac >>
+ qpat_x_assum `abi_decode_dynarray_payload_guard _ _ _ _ _ = _` mp_tac >>
+ simp[abi_decode_dynarray_payload_guard_def, comp_bind_def] >>
+ pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+ rename1 `emit_op MUL [cnt; Lit (n2w stride)] sa = (payload,c1)` >>
+ rename1 `emit_op ADD [head;payload] c1 = (e,c2)` >>
+ `bop_scalar_seq R A (emitted_insts sa c1) (payload INSERT A)` by
+   (qpat_assum `emit_op MUL _ _ = _`
+      (mp_then Any mp_tac bop_scalar_seq_emit_op) >>
+    disch_then (qspecl_then [`R`, `A`] mp_tac) >> simp[]) >>
+ `!x. x IN R ==> not_fresh_at c1 x` by
+   (qpat_assum `emit_op MUL _ _ = _`
+      (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+    fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
+ `!x. x IN R ==> not_fresh_at c2 x` by
+   (qpat_assum `emit_op ADD _ _ = _`
+      (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+    fs[not_fresh_at_def] >> rpt strip_tac >>
+    metis_tac[DECIDE ``a+1 <= n ==> a <= n``]) >>
+ `bop_scalar_seq R (payload INSERT A) (emitted_insts c1 c2)
+    (e INSERT payload INSERT A)` by
+   (qpat_assum `emit_op ADD _ _ = _`
+      (mp_then Any mp_tac bop_scalar_seq_emit_op) >>
+    disch_then (qspecl_then [`R`, `payload INSERT A`] mp_tac) >> simp[]) >>
+ `?B. bop_scalar_seq R (e INSERT payload INSERT A)
+    (emitted_insts c2 sb) B` by
+   (drule abi_decode_range_scalar >>
+    disch_then (qspecl_then [`R`, `e INSERT payload INSERT A`] mp_tac) >> simp[]) >>
+ `inst_extends sa c1 /\ inst_extends c1 c2 /\ inst_extends c2 sb` by
+   metis_tac[inst_extends_emit_op, compile_abi_decode_range_check_shape] >>
+ `inst_extends sa c2` by metis_tac[inst_extends_trans] >>
+ `emitted_insts sa c2 = emitted_insts sa c1 ++ emitted_insts c1 c2 /\
+  emitted_insts sa sb = emitted_insts sa c2 ++ emitted_insts c2 sb` by
+   (conj_tac >> irule emitted_insts_append >> fs[inst_extends_def]) >>
+ `bop_scalar_seq R A (emitted_insts sa c2) (e INSERT payload INSERT A)` by
+   metis_tac[bop_scalar_seq_append] >>
+ `bop_scalar_seq R A (emitted_insts sa sb) B` by
+   metis_tac[bop_scalar_seq_append] >>
+ qexists_tac `B` >> simp[] >> metis_tac[bop_scalar_seq_available]
 
 fun fresh_head () =
  `p+32 <= L` by decide_tac >>
@@ -187,17 +232,24 @@ fun fresh_guards () =
  (impl_tac >- (simp[] >> qexistsl_tac [`p+32`, `w2n (mload (B+p) s)`, `L`] >> simp[])) >>
  strip_tac >> rename1 `run_inst_seq (emitted_insts c4 sb) sl = OK sp`
 
-fun fresh_tail payload_scalar =
+fun fresh_tail () =
+ `!head cnt stride hi sa sb R A.
+   abi_decode_dynarray_payload_guard head cnt stride hi sa = ((),sb) /\
+   hi <> Lit 0w /\ head IN A /\ cnt IN A /\ hi IN A /\
+   Lit (n2w stride) IN A /\ (!x. x IN R ==> not_fresh_at sa x) ==>
+   ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B` by
+   (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >> payload_guard_scalar ()) >>
  `?A2. bop_scalar_seq {x | not_fresh_at c3 x}
    ({head;Var countvar;hi} UNION IMAGE Lit UNIV) (emitted_insts c3 c4) A2 /\
    ({head;Var countvar;hi} UNION IMAGE Lit UNIV) SUBSET A2` by
    (irule abi_decode_le_guard_scalar >> simp[] >> metis_tac[]) >>
  `?A3. bop_scalar_seq {x | not_fresh_at c3 x} A2
    (emitted_insts c4 sb) A3 /\ A2 SUBSET A3` by
-   (mp_tac (payload_scalar |> Q.INST
-      [`sa` |-> `c4`, `R` |-> `{x | not_fresh_at c3 x}`, `A` |-> `A2`]) >>
+   (qpat_x_assum `!head cnt stride hi sa sb R A. _` drule >>
+    disch_then (qspecl_then [`{x | not_fresh_at c3 x}`, `A2`] mp_tac) >>
     (impl_tac >- (simp[] >> fs[SUBSET_DEF, not_fresh_at_def] >>
       metis_tac[LESS_EQ_TRANS])) >> simp[]) >>
+ qpat_x_assum `!head cnt stride hi sa sb R A. _` kall_tac >>
  `emitted_insts c3 sb = emitted_insts c3 c4 ++ emitted_insts c4 sb` by
    (irule emitted_insts_append >> fs[inst_extends_def]) >>
  `bop_scalar_seq {x | not_fresh_at c3 x}
@@ -264,11 +316,13 @@ fun fresh_slice joint_code =
     qpat_assum `emitted_insts sa sb = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
     simp[EVERY_MEM, MEM_APPEND] >> metis_tac[])
 
-fun fresh_normalize () =
+fun fresh_normalize_runs () =
  `run_inst_seq (emitted_insts sa c1) s = OK (s1 with vs_inst_idx := s.vs_inst_idx) /\
   run_inst_seq (emitted_insts c3 sb) s3 = OK (s5 with vs_inst_idx := s3.vs_inst_idx)` by
    (simp[Abbr `s1`, Abbr `s5`, venom_state_component_equality] >>
-    fs[venom_state_component_equality]) >>
+    fs[venom_state_component_equality])
+
+fun fresh_normalize_lengths () =
  `LENGTH c1.cs_current_insts = LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa c1) /\
   LENGTH c3.cs_current_insts = LENGTH c1.cs_current_insts + LENGTH (emitted_insts c1 c3) /\
   LENGTH sb.cs_current_insts = LENGTH c3.cs_current_insts + LENGTH (emitted_insts c3 sb)` by
@@ -280,13 +334,17 @@ fun fresh_normalize () =
  `s1.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c1) /\
   s3.vs_inst_idx = s1.vs_inst_idx + LENGTH (emitted_insts c1 c3) /\
   s5.vs_inst_idx = s3.vs_inst_idx + LENGTH (emitted_insts c3 sb)` by
-   (simp_tac (srw_ss()) [Abbr `s1`, Abbr `s5`] >> decide_tac) >>
+   (simp_tac (srw_ss()) [Abbr `s1`, Abbr `s5`] >> decide_tac)
+
+fun fresh_normalize () =
  `EVERY (\i. ~is_terminator i.inst_opcode)
    (emitted_insts c1 c3 ++ emitted_insts c3 sb)` by simp[EVERY_APPEND] >>
  drule_all inst_seq_ptr_append_normalized >> strip_tac >>
  qpat_assum `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa c1) s G1 tn1`
    (mp_then Any mp_tac inst_seq_ptr_append_normalized) >>
- disch_then drule_all >> strip_tac >>
+ disch_then drule_all >> strip_tac
+
+fun fresh_normalize_endpoint () =
  `u = s5 with vs_inst_idx := s.vs_inst_idx` by gvs[]
 
 fun fresh_memory () =
@@ -298,7 +356,15 @@ fun fresh_memory () =
  `lookup_var source s1 = SOME (n2w B) /\
   w2n (n2w B : bytes32)+p < dimword (:256) /\
   w2n (n2w B : bytes32)+p+32 <= s1.vs_alloca_next` by
-   (fs[abi_decode_ptr_window_def, Abbr `s1`, w2n_n2w] >> decide_tac) >>
+   (qpat_assum `abi_decode_ptr_window G1 tn1 s1 source _ _` mp_tac >>
+    qpat_assum `sh.vs_alloca_next = s.vs_alloca_next` mp_tac >>
+    qpat_assum `p+32 <= L` mp_tac >>
+    qpat_assum `B+L <= s.vs_alloca_next` mp_tac >>
+    qpat_assum `B+L < dimword (:256)` mp_tac >>
+    qpat_assum `B < dimword (:256)` mp_tac >>
+    simp_tac bool_ss [Abbr `s1`] >> POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[abi_decode_ptr_window_def, w2n_n2w, lookup_var_def] >>
+    rpt strip_tac >> simp[] >> decide_tac) >>
  `run_inst_seq_mem_ok (emitted_insts c1 c3) s1` by
    (drule_all abi_decode_relative_load_mem_ok >> simp[]) >>
  `run_inst_seq_mem_ok (emitted_insts c1 c3 ++ emitted_insts c3 sb) s1` by
@@ -318,7 +384,10 @@ fun fresh_memory () =
 
 fun fresh_finish () =
  `not_fresh_at sb ar` by
-   (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+   (qpat_assum `not_fresh_at c3 ar` mp_tac >>
+    qpat_assum `c3.cs_next_var <= c4.cs_next_var` mp_tac >>
+    qpat_assum `c4.cs_next_var <= sb.cs_next_var` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[not_fresh_at_def] >> decide_tac) >>
  `u = s with vs_vars := u.vs_vars` by
    (mp_tac (abi_malformed_dynarray_prefix_exact |> Q.INST
       [`st` |-> `sa`, `en` |-> `sb`, `src` |-> `pos`,

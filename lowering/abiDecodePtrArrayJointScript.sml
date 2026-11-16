@@ -191,45 +191,7 @@ Theorem abi_decode_dynarray_payload_guard_scalar[local]:
  Lit (n2w stride) IN A /\ (!x. x IN R ==> not_fresh_at sa x) ==>
  ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B
 Proof
- strip_tac >>
- qpat_x_assum `abi_decode_dynarray_payload_guard _ _ _ _ _ = _` mp_tac >>
- simp[abi_decode_dynarray_payload_guard_def, comp_bind_def] >>
- pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
- rename1 `emit_op MUL [cnt; Lit (n2w stride)] sa = (payload,c1)` >>
- rename1 `emit_op ADD [head;payload] c1 = (e,c2)` >>
- `bop_scalar_seq R A (emitted_insts sa c1) (payload INSERT A)` by
-   (qpat_assum `emit_op MUL _ _ = _`
-      (mp_then Any mp_tac bop_scalar_seq_emit_op) >>
-    disch_then (qspecl_then [`R`, `A`] mp_tac) >> simp[]) >>
- `!x. x IN R ==> not_fresh_at c1 x` by
-   (qpat_assum `emit_op MUL _ _ = _`
-      (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-    fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
- `!x. x IN R ==> not_fresh_at c2 x` by
-   (qpat_assum `emit_op ADD _ _ = _`
-      (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-    fs[not_fresh_at_def] >> rpt strip_tac >>
-    metis_tac[DECIDE ``a+1 <= n ==> a <= n``]) >>
- `bop_scalar_seq R (payload INSERT A) (emitted_insts c1 c2)
-    (e INSERT payload INSERT A)` by
-   (qpat_assum `emit_op ADD _ _ = _`
-      (mp_then Any mp_tac bop_scalar_seq_emit_op) >>
-    disch_then (qspecl_then [`R`, `payload INSERT A`] mp_tac) >> simp[]) >>
- `?B. bop_scalar_seq R (e INSERT payload INSERT A)
-    (emitted_insts c2 sb) B` by
-   (drule abi_decode_range_scalar >>
-    disch_then (qspecl_then [`R`, `e INSERT payload INSERT A`] mp_tac) >> simp[]) >>
- `inst_extends sa c1 /\ inst_extends c1 c2 /\ inst_extends c2 sb` by
-   metis_tac[inst_extends_emit_op, compile_abi_decode_range_check_shape] >>
- `inst_extends sa c2` by metis_tac[inst_extends_trans] >>
- `emitted_insts sa c2 = emitted_insts sa c1 ++ emitted_insts c1 c2 /\
-  emitted_insts sa sb = emitted_insts sa c2 ++ emitted_insts c2 sb` by
-   (conj_tac >> irule emitted_insts_append >> fs[inst_extends_def]) >>
- `bop_scalar_seq R A (emitted_insts sa c2) (e INSERT payload INSERT A)` by
-   metis_tac[bop_scalar_seq_append] >>
- `bop_scalar_seq R A (emitted_insts sa sb) B` by
-   metis_tac[bop_scalar_seq_append] >>
- qexists_tac `B` >> simp[] >> metis_tac[bop_scalar_seq_available]
+ abiDecodePtrArrayPrefixProofLib.payload_guard_scalar ()
 QED
 
 Theorem abi_decode_dynarray_position_prefix_joint_code:
@@ -299,10 +261,13 @@ Proof
  abiDecodePtrArrayPrefixProofLib.fresh_code () >>
  abiDecodePtrArrayPrefixProofLib.fresh_load () >>
  abiDecodePtrArrayPrefixProofLib.fresh_guards () >>
- abiDecodePtrArrayPrefixProofLib.fresh_tail abi_decode_dynarray_payload_guard_scalar >>
+ abiDecodePtrArrayPrefixProofLib.fresh_tail () >>
  abiDecodePtrArrayPrefixProofLib.fresh_tail_frame () >>
  abiDecodePtrArrayPrefixProofLib.fresh_slice abi_decode_dynarray_position_prefix_joint_code >>
+ abiDecodePtrArrayPrefixProofLib.fresh_normalize_runs () >>
+ abiDecodePtrArrayPrefixProofLib.fresh_normalize_lengths () >>
  abiDecodePtrArrayPrefixProofLib.fresh_normalize () >>
+ abiDecodePtrArrayPrefixProofLib.fresh_normalize_endpoint () >>
  abiDecodePtrArrayPrefixProofLib.fresh_memory () >>
  abiDecodePtrArrayPrefixProofLib.fresh_finish () >>
  abiDecodePtrArrayPrefixProofLib.fresh_finish_frame ()
@@ -384,10 +349,13 @@ Proof
     abiDecodePtrArrayPrefixProofLib.fresh_code () >>
     abiDecodePtrArrayPrefixProofLib.fresh_load () >>
     abiDecodePtrArrayPrefixProofLib.fresh_guards () >>
-    abiDecodePtrArrayPrefixProofLib.fresh_tail abi_decode_dynarray_payload_guard_scalar >>
+    abiDecodePtrArrayPrefixProofLib.fresh_tail () >>
     abiDecodePtrArrayPrefixProofLib.fresh_tail_frame () >>
     abiDecodePtrArrayPrefixProofLib.fresh_slice abi_decode_dynarray_position_prefix_joint_code >>
+    abiDecodePtrArrayPrefixProofLib.fresh_normalize_runs () >>
+    abiDecodePtrArrayPrefixProofLib.fresh_normalize_lengths () >>
     abiDecodePtrArrayPrefixProofLib.fresh_normalize () >>
+    abiDecodePtrArrayPrefixProofLib.fresh_normalize_endpoint () >>
     abiDecodePtrArrayPrefixProofLib.fresh_memory () >>
     abiDecodePtrArrayPrefixProofLib.fresh_finish () >>
     abiDecodePtrArrayPrefixProofLib.fresh_finish_frame ()) >>
