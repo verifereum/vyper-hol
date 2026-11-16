@@ -13,6 +13,7 @@ Ancestors
   unitTransformDefs memSafeRun contextCodegenRel codegenRel fragExecMem
   context ptrDiscipline ptrSafeRun venomInst venomInstProofs venomExecSemantics
   venomState vyperState vyperLookup finite_map pred_set list rich_list words
+  bodyFullHashKeccakFixed
 
 (* A positive local cannot sit inside the contiguous immutable prefix. *)
 Theorem immutable_intervals_lower_bound[local]:
@@ -237,7 +238,7 @@ Theorem body_full_alloc_buffer_path:
   stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -271,6 +272,7 @@ Theorem body_full_alloc_buffer_path:
     not_fresh_at sb root /\
     (!x. not_fresh_at sa x ==> not_fresh_at sb x) /\
     allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels /\
     u.vs_accounts = s.vs_accounts /\ u.vs_call_ctx = s.vs_call_ctx /\
     u.vs_transient = s.vs_transient /\ u.vs_immutables = s.vs_immutables /\
@@ -305,6 +307,12 @@ Proof
   `!x. not_fresh_at sa x ==>
     lookup_var x t = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
     op_taint tn1 (Var x) = op_taint tn (Var x)` by suspend "old" >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
+       (fn th => POP_ASSUM_LIST (K all_tac) >>
+          mp_tac (MATCH_MP stmt_state_rel_allocas_below_fmp th)) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`,
     `p`,`w2n w`,`G1`,`tn1`] >>
   simp[lookup_var_def] >>
@@ -381,10 +389,16 @@ QED
 
 Resume body_full_alloc_buffer_path[path]:
   gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
   `inst_seq_ptr D lo ctx func PG G tn [inst] s G1 tn1` by
     (simp[inst_seq_ptr_def,Abbr `G1`,Abbr `tn1`,Abbr `inst`] >>
-     irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >>
-     simp[ptr_inst_ok_alloca]) >>
+     simp[ptr_inst_ok_def,access_ok_def,taint_ok_def,mk_inst_def,
+          source_memory_write_ranges_def,source_memory_read_ranges_def,
+          op_taint_def,step_inst_non_invoke,step_inst_base_opcode_eqs,
+          exec_alloca_def,AllCaseEqs(),update_var_def] >>
+     rpt strip_tac >> gvs[]) >>
   qspecl_then [`[inst]`,`sa`,`sb`,`s`,`t`,`G`,`tn`,`G1`,`tn1`]
     mp_tac emitted_origin_ptr_path >>
   simp[Abbr `inst`,mk_inst_def,is_terminator_def,run_inst_seq_def,

@@ -9,7 +9,7 @@ Ancestors
   bodyMemBopRestWordPath fragGasOrigin fragGasMode fragGasPath
   assignTuplePtrCopyLen freshWrites exprSimStorageCopy
   loweringStateRelDefs
-  bodyMemAggregatePath
+  bodyMemAggregatePath typedCopyOriginPtrBase
 
 Theorem body_full_memory_stage_path:
   stmt_state_rel H0 ctx func cenv cx es s /\
@@ -17,7 +17,7 @@ Theorem body_full_memory_stage_path:
   compile_copy_memory buf.buf_operand (Var xs) n sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -49,6 +49,7 @@ Theorem body_full_memory_stage_path:
     (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
       val_in_memory tv v b mem) /\
     allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
       FLOOKUP t.vs_allocas aid = SOME ent) /\
     (!x. not_fresh_at sa x ==>
@@ -92,6 +93,8 @@ Proof
     (SPEC_ALL body_full_memory_copy_path)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `typed_copy_state_frame sm _ _ u t` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   `!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
     ghost_inv_at D lo d cenv cx es Gf tf t` by suspend "ghost" >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_copy_memory,pairTheory.SND] >>

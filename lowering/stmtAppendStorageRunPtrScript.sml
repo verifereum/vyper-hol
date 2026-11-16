@@ -195,6 +195,33 @@ Proof
        op_taint_def, FLOOKUP_UPDATE]
 QED
 
+Theorem emit_storage_store_ptr_fmp:
+  emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn a = {} /\ op_taint tn v = {} /\
+  eval_operand a s = SOME slot /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G
+    (if tr then tn with t_trans := key_update tn.t_trans slot {}
+     else tn with t_stor := key_update tn.t_stor slot {})
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (Cases_on `tr` >> gvs[] >>
+     simp[Abbr `i`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >> metis_tac[]) >>
+  simp[inst_seq_ptr_def] >>
+  conj_tac >- simp[Abbr `i`, scalar_void_prov] >>
+  simp[Abbr `i`] >> sym_tac >> irule scalar_storage_store_taint >> simp[]
+QED
+
 Theorem emit_storage_store_ptr:
   emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
@@ -206,16 +233,7 @@ Theorem emit_storage_store_ptr:
     (if tr then tn with t_trans := key_update tn.t_trans slot {}
      else tn with t_stor := key_update tn.t_stor slot {})
 Proof
-  strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
-  `step_inst_base i s = OK t` by
-    (fs[run_inst_seq_def, AllCaseEqs()]) >>
-  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
-    (simp[Abbr `i`] >> irule append_scalar_inst_check >>
-     Cases_on `tr` >> gvs[] >> metis_tac[]) >>
-  simp[inst_seq_ptr_def] >>
-  conj_tac >- simp[Abbr `i`, scalar_void_prov] >>
-  simp[Abbr `i`] >> sym_tac >> irule scalar_storage_store_taint >> simp[]
+  metis_tac[emit_storage_store_ptr_fmp]
 QED
 
 Theorem emit_append_assert_ptr:
