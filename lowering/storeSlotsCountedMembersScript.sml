@@ -67,13 +67,13 @@ Proof
    (!x. ms = Var x \/ ds = Var x ==> not_fresh_at b x)` by
     metis_tac[store_slots_lit_offset_fresh, typed_copy_operand_fresh_mono] >>
   qpat_assum `compile_lit_byte_offset src _ _ = _` mp_tac >>
-  disch_then (mp_then Any mp_tac store_slots_lit_offset_path_mem) >>
+  disch_then (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
   disch_then (qspecl_then [`s`, `sw`, `func`, `ctx`] mp_tac) >>
   simp[] >> disch_then (qx_choose_then `q1` strip_assume_tac) >>
   `eval_operand slot q1 = SOME dw` by
     metis_tac[typed_copy_state_frame_operand] >>
   qpat_assum `compile_lit_byte_offset slot _ _ = _` mp_tac >>
-  disch_then (mp_then Any mp_tac store_slots_lit_offset_path_mem) >>
+  disch_then (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
   disch_then (qspecl_then [`q1`, `dw`, `func`, `ctx`] mp_tac) >>
   simp[] >> disch_then (qx_choose_then `q2` strip_assume_tac) >>
   `eval_operand ms q2 = SOME (sw + n2w mo)` by
