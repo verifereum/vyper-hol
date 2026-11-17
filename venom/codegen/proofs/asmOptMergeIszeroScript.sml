@@ -35,6 +35,7 @@ Theorem consume_zero_or_one[local]:
   asm_consume_call_outcome rq ro rs stk s = AsmOK t ==>
   ?w tail. t.as_stack = w :: tail /\ (w = 0w \/ w = 1w)
 Proof
+  Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_call_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   simp[asm_next_def] >> strip_tac >> gvs[] >>
