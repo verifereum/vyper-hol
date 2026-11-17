@@ -484,13 +484,6 @@ Proof
      contract_transient_def, update_var_def]
 QED
 
-Theorem write_mem_expand_update_var[local]:
-  (write_memory_with_expansion off bytes (update_var x v s)).vs_memory =
-    (write_memory_with_expansion off bytes s).vs_memory
-Proof
-  rw[write_memory_with_expansion_def, update_var_def]
-QED
-
 (* resolve_phi returns an element of the operand list *)
 Theorem resolve_phi_MEM:
   !prev ops op. resolve_phi prev ops = SOME op ==> MEM op ops

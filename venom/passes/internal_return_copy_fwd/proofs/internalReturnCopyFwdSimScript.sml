@@ -935,6 +935,8 @@ Theorem ircf_redirect_create_abort:
     MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   `inst.inst_opcode <> ASSIGN` by fs[MEM] >>
   `MEM bb fn.fn_blocks /\ ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
     metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>

@@ -432,6 +432,9 @@ Theorem related_call_completion[local]:
       (cs with as_memory := asm_call_memory ao az ro rs cs.as_memory))
 Proof
   strip_tac >> gvs[asm_sym_rel_def] >>
+  Cases_on `cs.as_outcomes = []`
+  >- simp[asm_consume_call_outcome_def, sym_lift_def,
+          asm_sym_step_rel_def, sym_obs_def, sym_init_def] >>
   simp[asm_consume_call_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   simp[sym_lift_def, asm_sym_step_rel_def, asm_sym_rel_def, asm_next_def,
@@ -477,6 +480,9 @@ Theorem related_create_completion[local]:
 Proof
   strip_tac >>
   gvs[asm_sym_rel_def] >>
+  Cases_on `cs.as_outcomes = []`
+  >- simp[asm_consume_create_outcome_def, sym_lift_def,
+          asm_sym_step_rel_def, sym_obs_def, sym_init_def] >>
   simp[asm_consume_create_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   simp[sym_lift_def, asm_sym_step_rel_def, asm_sym_rel_def, asm_next_def,

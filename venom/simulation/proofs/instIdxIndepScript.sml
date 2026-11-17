@@ -259,15 +259,6 @@ Theorem venom_to_tx_params_idx[local]:
 Proof simp[venom_to_tx_params_def]
 QED
 
-Theorem make_venom_call_state_idx[local]:
-  !s target gas value calldata code is_static n.
-    make_venom_call_state (s with vs_inst_idx := n) target gas value
-      calldata code is_static =
-    make_venom_call_state s target gas value calldata code is_static
-Proof
-  simp[make_venom_call_state_def, LET_THM, venom_to_tx_params_idx]
-QED
-
 Theorem make_venom_delegatecall_state_idx[local]:
   !s target gas calldata code is_static n.
     make_venom_delegatecall_state (s with vs_inst_idx := n) target gas
