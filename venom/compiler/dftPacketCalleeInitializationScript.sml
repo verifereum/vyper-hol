@@ -52,3 +52,58 @@ Proof
   qexistsl_tac [`sf`,`i`] >> simp[fn_insts_def] >>
   irule (iffRL fn_insts_blocks_MEM) >> qexists_tac `bb` >> simp[]
 QED
+
+Theorem dft_packet_callee_native_initialization:
+  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\
+  EL j (trace_blocks [] 0 N C8 root_tf root_entry) = ((p,d,i.inst_id),fn,i,s) /\
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C8.ctx_functions = SOME tf /\
+  eval_operands ops s = SOME args /\ setup_callee tf args s = SOME cs /\
+  enters_block tf cs s1 /\ ALL_DISTINCT (fn_labels tf) /\ active_inst tf ci s1 /\
+  bt.bb_instructions = ps ++ ys /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) ys /\
+  eval_phis cs bt.bb_instructions = OK sp /\
+  s1 = sp with vs_inst_idx := phi_prefix_length bt.bb_instructions /\
+  get_instruction bt s1.vs_inst_idx = SOME ci /\
+  (s1.vs_inst_idx = LENGTH ps ==> dft_remaining_inv sf bb xs s1) ==>
+  ?N' suffix body_entry.
+    N <= N' /\
+    trace_blocks [] 0 N' C8 root_tf root_entry =
+      trace_blocks [] 0 N C8 root_tf root_entry ++ suffix /\
+    SUC j < LENGTH (trace_blocks [] 0 N' C8 root_tf root_entry) /\
+    EL (SUC j) (trace_blocks [] 0 N' C8 root_tf root_entry) =
+      (((d,i.inst_id)::p,SUC d,ci.inst_id),tf,ci,s1) /\
+    TAKE (SUC j) (trace_blocks [] 0 N' C8 root_tf root_entry) =
+      TAKE (SUC j) (trace_blocks [] 0 N C8 root_tf root_entry) /\
+    (!h. h < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) ==>
+      EL h (trace_blocks [] 0 N' C8 root_tf root_entry) =
+      EL h (trace_blocks [] 0 N C8 root_tf root_entry)) /\
+    phi_prefix_length bt.bb_instructions <= s1.vs_inst_idx /\
+    s1.vs_inst_idx <= LENGTH ps /\
+    (case body_entry of
+       NONE => s1.vs_inst_idx < LENGTH ps /\
+         (!f C. FOLDR (dft_exec_cons f C) OK
+           (DROP (phi_prefix_length bt.bb_instructions) (TAKE s1.vs_inst_idx ps))
+           (sp with vs_inst_idx := phi_prefix_length bt.bb_instructions) = OK s1)
+     | SOME (be,hbe) =>
+         be = s1 /\ hbe = SUC j /\ s1.vs_inst_idx = LENGTH ps /\
+         ys <> [] /\ ci = HD ys /\ dft_remaining_inv sf bb xs s1 /\
+         (!f C. FOLDR (dft_exec_cons f C) OK
+           (DROP (phi_prefix_length bt.bb_instructions) ps)
+           (sp with vs_inst_idx := phi_prefix_length bt.bb_instructions) = OK s1))
+Proof
+  strip_tac >>
+  drule_all dft_packet_native_call_entry >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) ys` by
+    (gvs[EVERY_MEM] >> metis_tac[is_pseudo_def]) >>
+  `phi_prefix_length bt.bb_instructions <= LENGTH ps` by
+    simp[dft_phi_prefix_append,phi_prefix_length_le] >>
+  qexistsl_tac [`m`,`suffix`] >> simp[EL_APPEND1] >>
+  Cases_on `s1.vs_inst_idx < LENGTH ps`
+  >- (qexists_tac `NONE` >> simp[] >> gvs[] >> simp[DROP_TAKE]) >>
+  `s1.vs_inst_idx = LENGTH ps` by gvs[] >>
+  `ys <> [] /\ ci = HD ys` by
+    (gvs[get_instruction_def,EL_APPEND2] >> Cases_on `ys` >> gvs[]) >>
+  qexists_tac `SOME (s1,SUC j)` >> simp[] >>
+  gvs[] >> simp[DROP_LENGTH_TOO_LONG]
+QED
