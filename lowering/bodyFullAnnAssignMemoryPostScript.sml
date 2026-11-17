@@ -165,19 +165,73 @@ Proof
      simp[ci_mono_def] >> metis_tac[pairTheory.SND,cs_extends_trans]) >>
   `fn_has_code (sa with cs_next_var := sa.cs_next_var+1) sf func` by
     fs[fn_has_code_def,emitted_blocks_def] >>
+  `cs_extends a sf` by metis_tac[cs_extends_trans] >>
   drule_all annassign_alloca_code >> strip_tac >>
+  `a.cs_next_var <= b.cs_next_var` by metis_tac[compile_expr_grows] >>
   `local_ptrs_reserved ce b /\ not_fresh_at b (STRING #"%" (toString sa.cs_next_var))` by
-    (drule_all (cj 2 compile_expr_grows) >> strip_tac >>
-     metis_tac[local_ptrs_reserved_next_var,loweringStateRelDefsTheory.not_fresh_at_def]) >>
+    (conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `sa.cs_next_id < a.cs_next_id /\
    (!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x)` by
-    (drule compile_alloc_buffer_parts >> strip_tac >>
-     drule_all (cj 2 compile_expr_grows) >> strip_tac >>
-     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
-  simp[] >> metis_tac[fn_has_code_split,cs_extends_trans]
-
-
+    (qspecl_then [`type_memory_bytes old typ`,`sa`] mp_tac compile_alloc_buffer_parts >>
+     simp[] >> strip_tac >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qspecl_then [`sa`,`a`,`sf`,`func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qspecl_then [`a`,`b`,`sf`,`func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qspecl_then [`a`,`sv`,`b`,`func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `cs_extends shadow_a shadow_sf` by metis_tac[cs_extends_trans] >>
+  qspecl_then [`shadow_sa`,`shadow_a`,`shadow_sf`,`shadow_func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qspecl_then [`shadow_a`,`shadow_b`,`shadow_sf`,`shadow_func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`op`,`b`,`shadow_b`] >>
+  `~(has_length_word typ /\ is_empty_value_expr e)` by simp[] >>
+  fs[]
 QED
+
+Resume annassign_full_prefix_parts[empty]:
+  gvs[comp_return_def] >>
+  rename1 `compile_expr ce (expr_type e) e a = (vv,sv)` >>
+  `emit_void MSTORE [Var (STRING #"%" (toString sa.cs_next_var)); Lit 0w]
+    shadow_sv = ((),shadow_sf)` by
+    (qpat_x_assum `compile_stmt _ _ _ (AnnAssign _ _ (gas_shadow_expr _)) _ = _` mp_tac >>
+     simp[Once compile_stmt_def,emit_local_alloca_def,comp_bind_def,
+       comp_ignore_bind_def,comp_return_def,gas_shadow_expr_type]) >>
+  `cs_extends sa a /\ cs_extends a sv /\ cs_extends sv sf /\
+   cs_extends shadow_sa shadow_a /\ cs_extends shadow_a shadow_sv /\
+   cs_extends shadow_sv shadow_sf` by
+    (mp_tac ci_mono_emit_void >> mp_tac compile_expr_grows >>
+     mp_tac compile_alloc_buffer_extends >> simp[ci_mono_def] >>
+     metis_tac[pairTheory.SND]) >>
+  `cs_extends a sf` by metis_tac[cs_extends_trans] >>
+  `fn_has_code (sa with cs_next_var := sa.cs_next_var+1) sf func` by
+    fs[fn_has_code_def,emitted_blocks_def] >>
+  drule_all annassign_alloca_code >> strip_tac >>
+  `a.cs_next_var <= sv.cs_next_var` by metis_tac[compile_expr_grows] >>
+  `local_ptrs_reserved ce sv /\ not_fresh_at sv (STRING #"%" (toString sa.cs_next_var))` by
+    (conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  `sa.cs_next_id < a.cs_next_id /\
+   (!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at sv x)` by
+    (qspecl_then [`type_memory_bytes old typ`,`sa`] mp_tac compile_alloc_buffer_parts >>
+     simp[] >> strip_tac >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qspecl_then [`sa`,`a`,`sf`,`func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qspecl_then [`a`,`sv`,`sf`,`func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `cs_extends shadow_a shadow_sf` by metis_tac[cs_extends_trans] >>
+  qspecl_then [`shadow_sa`,`shadow_a`,`shadow_sf`,`shadow_func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qspecl_then [`shadow_a`,`shadow_sv`,`shadow_sf`,`shadow_func`] mp_tac fn_has_code_split >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  fs[cs_extends_refl]
+QED
+
+Finalise annassign_full_prefix_parts
 
 Theorem annassign_memory_full_assign_path:
   !H0 ctx func ce cx mid s sa sf xs p sw dw src_loc dty sty stv dtv v
