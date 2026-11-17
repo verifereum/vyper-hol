@@ -21,7 +21,7 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
-  dftPacketFreshChildStop
+  dftPacketFreshChildStop dftPacketFreshSingletonStop
   dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
   dftPacketKeyMap
