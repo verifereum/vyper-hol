@@ -2,7 +2,8 @@
  * Venom unit-transform boundary (PLAN §5.8, D17-D20).
  * TOP-LEVEL: unit_result_rel, ctx_transform_correct,
  *   checked_unit_transform_correct, o1_initial_state_ok,
- *   inst_mem_below_frontier, inst_mem_ok_in_fn, raw_unit_memory_ok.
+ *   inst_mem_below_frontier, inst_mem_ok_in_fn, dalloca_no_wrap,
+ *   raw_unit_memory_ok.
  * Forward simulation only, from ONE initial state; no GAS-reading list.
  * Successful runs compare observable_equiv, including executed requests.
  * Aborts compare neither states nor requests: REVERT alone must stay REVERT.
@@ -133,11 +134,24 @@ Definition inst_mem_ok_in_fn_def:
          revert_forward_at bb s.vs_inst_idx
 End
 
+(* A DALLOCA's new free-memory pointer fits a word. *)
+Definition dalloca_no_wrap_def:
+  dalloca_no_wrap inst s <=>
+    inst.inst_opcode = DALLOCA ==>
+    !sz_op sz.
+      inst.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
+      w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
+End
+
+(* S3's raw memory fact: the frontier fits a word and every access is below
+   it or part of a revert forwarding; DALLOCA does not wrap and the
+   free-memory pointer stays at or above its initial value. *)
 Definition raw_unit_memory_ok_def:
   raw_unit_memory_ok ctx vs <=>
     ?Inv. codegen_reachability_package Inv ctx vs /\
       !fn inst s. Inv ctx fn inst s ==>
-        s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s
+        s.vs_alloca_next < dimword (:256) /\ inst_mem_ok_in_fn fn inst s /\
+        dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
 End
 
 (* Boundary elimination keeps all three corrected reachability clauses. *)

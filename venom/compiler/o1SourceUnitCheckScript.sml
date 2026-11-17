@@ -204,7 +204,8 @@ Proof
 QED
 
 (* Checking every non-head function is stronger than internal_termination_ok
-   only when the head function also occurs in the tail. *)
+   only when the head function also occurs in the tail.  The check rejects
+   DALLOCA, so it needs no check of DALLOCA outputs. *)
 Definition o1_source_unit_check_def:
   o1_source_unit_check unit <=>
     unit.cu_context.ctx_functions <> [] /\
@@ -213,7 +214,8 @@ Definition o1_source_unit_check_def:
     entry_fn_no_ret (HD unit.cu_context.ctx_functions) /\
     get_params (HD (HD unit.cu_context.ctx_functions).fn_blocks).bb_instructions = [] /\
     EVERY fn_shape_check unit.cu_context.ctx_functions /\
-    EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
+    EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode /\
+                               inst.inst_opcode <> DALLOCA) (fn_insts fn))
           unit.cu_context.ctx_functions /\
     EVERY (\fn. EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
           (TL unit.cu_context.ctx_functions) /\

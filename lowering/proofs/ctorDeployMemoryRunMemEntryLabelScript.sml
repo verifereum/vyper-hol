@@ -139,8 +139,9 @@ Proof
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  irule ctor_checked_internal_shape >> simp[]
+  simp[EVERY_MEM] >> rpt strip_tac
+  >- (irule ctor_checked_internal_shape >> gs[]) >>
+  fs[EVERY_MEM]
 QED
 
 Theorem ctor_checked_deploy_entry_label:

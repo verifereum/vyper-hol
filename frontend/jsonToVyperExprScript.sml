@@ -1484,11 +1484,13 @@ Definition translate_expr_with_policy_def:
     if is_calldata_len_call func args kwargs then
       Builtin (BaseT (UintT 256)) CalldataLen []
     else if is_calldata_slice_call func args then
-      (let args' = translate_expr_list_with_policy resolve ctx args in
-       case calldata_slice_bound args' kwargs of
-       | SOME n => Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n)
-                     [EL 1 args']
-       | NONE => rejected_expr)
+      (let args' = translate_expr_list_with_policy resolve ctx args;
+           target_ty = translate_type (expr_type_ctx ctx) ret_ty in
+       case (calldata_slice_bound args' kwargs, target_ty) of
+       | (SOME n, BaseT (BytesT (Dynamic m))) =>
+           if n <= m then Builtin target_ty (CalldataSlice n) [EL 1 args']
+           else rejected_expr
+       | _ => rejected_expr)
     else if is_raw_call_calldata_call func args then
       let kwargs' = translate_kwargs_with_policy resolve ctx kwargs in
       kwargs_checked kwargs' (
