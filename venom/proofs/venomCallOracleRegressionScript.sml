@@ -78,8 +78,8 @@ QED
  *)
 Theorem unequal_targets_not_transport:
   let s = call_probe_state with vs_outcomes := [call_probe_outcome];
-      rq1 = venom_call_request s 8w 0w 0w 1w F;
-      rq2 = venom_call_request s 9w 0w 0w 1w F;
+      rq1 = venom_call_request s 8w 0w 0w 1w F with cr_gas := SOME 7;
+      rq2 = venom_call_request s 9w 0w 0w 1w F with cr_gas := SOME 7;
       t1 = SND (consume_call_outcome rq1 1 3 s);
       t2 = SND (consume_call_outcome rq2 1 3 s)
   in t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests <> t2.vs_requests
@@ -219,8 +219,8 @@ QED
 Theorem consume_computed_empty_ec:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
                                   vs_requests := [call_probe_request] |>;
-      rq6 = venom_call_request s 6w 0w 0w 0w F;
-      rq7 = venom_call_request s 7w 0w 0w 0w F
+      rq6 = venom_call_request s 6w 0w 0w 0w F with cr_gas := SOME 7;
+      rq7 = venom_call_request s 7w 0w 0w 0w F with cr_gas := SOME 7
   in consume_call_outcome rq6 1 0 s =
        (1w, s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>) /\
      consume_call_outcome rq7 1 0 s =
@@ -240,8 +240,8 @@ Theorem consume_computed_invalid_ec:
         vs_memory := REPLICATE 63 0w ++ [1w];
         vs_outcomes := [call_probe_outcome];
         vs_requests := [call_probe_request] |>;
-      rq6 = venom_call_request s 6w 0w 0w 64w F;
-      rq7 = venom_call_request s 7w 0w 0w 64w F
+      rq6 = venom_call_request s 6w 0w 0w 64w F with cr_gas := SOME 7;
+      rq7 = venom_call_request s 7w 0w 0w 64w F with cr_gas := SOME 7
   in consume_call_outcome rq6 1 3 s =
        (0w, s with <|vs_returndata := []; vs_outcomes := []|>) /\
      consume_call_outcome rq7 1 3 s =
