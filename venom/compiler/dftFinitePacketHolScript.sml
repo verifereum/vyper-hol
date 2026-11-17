@@ -6,6 +6,7 @@ Ancestors
   dftNativePlanPrefix
   dftPacketCallNative
   dftPacketCallUpdate
+  dftPacketCallEdgeClauses
   dftPacketCalleeAlignment
   dftPacketClosedRowNative
   dftPacketClosedRows
@@ -43,6 +44,7 @@ Ancestors
   dftPacketSlotRefine
   dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
+  dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
