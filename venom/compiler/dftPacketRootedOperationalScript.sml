@@ -155,7 +155,7 @@ Proof
   CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >> simp[]
 QED
 
-Theorem dft_packet_plan_prefix_operational[local]:
+Theorem dft_packet_plan_prefix_operational:
   !F C sf a R P plan entry.
     R = (\(bb,e,z) s.
       case eval_phis s bb.bb_instructions of
