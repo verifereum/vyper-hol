@@ -895,6 +895,7 @@ QED
 val prefix_suffix_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
   [eval_outcomes_suffix_with_results, outcomes_suffix_ext_call,
    outcomes_suffix_send, outcomes_suffix_raw_call, outcomes_suffix_create,
+   outcomes_suffix_create_operands,
    outcomes_suffix_precompile_call_success]) @
   map (GEN_ALL o MATCH_MP outcomes_suffix_frame o SPEC_ALL)
     (List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -1501,7 +1502,7 @@ Proof
   rpt gen_tac >> PREFIX_ATOM_TAC
 QED
 
-(* Full source evaluator prefix law, with the reviewed eleven-function API.
+(* Full source evaluator prefix law, with the ten live evaluator functions.
  * Constructor proofs below use checked action interfaces and guarded composition. *)
 Theorem eval_outcome_prefix_causal_mutual:
   (!cx s. outcome_prefix_causal (eval_stmt cx s)) /\
@@ -1513,8 +1514,7 @@ Theorem eval_outcome_prefix_causal_mutual:
   (!cx t. outcome_prefix_causal (eval_base_place cx t)) /\
   (!cx t. outcome_prefix_causal (eval_target_place cx t)) /\
   (!cx g v. outcome_prefix_causal (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. outcome_prefix_causal (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. outcome_prefix_causal (eval_expr_results cx es))
+  (!cx gs vs. outcome_prefix_causal (assign_tuple_target_list cx gs vs))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- suspend "c01" >- suspend "c02" >- suspend "c03"
@@ -1537,7 +1537,7 @@ Proof
   >- suspend "c52" >- suspend "c53" >- suspend "c54"
   >- suspend "c55" >- suspend "c56" >- suspend "c57"
   >- suspend "c58" >- suspend "c59" >- suspend "c60"
-  >- suspend "c61" >- suspend "c62" >> suspend "c63"
+  >> suspend "c61"
 QED
 
 (* Assembly uses checked action interfaces rather than unfolding compound actions. *)
@@ -1787,7 +1787,13 @@ Resume eval_outcome_prefix_causal_mutual[c47]:
   PREFIX_CONSTRUCTOR_TAC
 QED
 Resume eval_outcome_prefix_causal_mutual[c48]:
-  PREFIX_CONSTRUCTOR_TAC
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  match_mp_tac outcome_prefix_causal_bind >> conj_tac
+  >- simp[eval_outcomes_suffix_with_results] >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  gen_tac >> Cases_on `kind` >>
+  simp_tac bool_ss [vyperCreateTheory.eval_create_operands_def, LET_THM] >>
+  rpt PREFIX_STEP
 QED
 Resume eval_outcome_prefix_causal_mutual[c49]:
   PREFIX_CONSTRUCTOR_TAC
@@ -1827,12 +1833,6 @@ Resume eval_outcome_prefix_causal_mutual[c60]:
   PREFIX_CONSTRUCTOR_TAC
 QED
 Resume eval_outcome_prefix_causal_mutual[c61]:
-  PREFIX_CONSTRUCTOR_TAC
-QED
-Resume eval_outcome_prefix_causal_mutual[c62]:
-  PREFIX_CONSTRUCTOR_TAC
-QED
-Resume eval_outcome_prefix_causal_mutual[c63]:
   PREFIX_CONSTRUCTOR_TAC
 QED
 
@@ -3444,8 +3444,8 @@ Theorem source_type_pure_exclusions[local]:
     INR (RuntimeError "create outcome accounts")
 Proof
   strip_tac >> rpt gen_tac >> Cases_on `tb` >>
-  simp[source_type_builtin_eq,
-       source_convert_from_excludes_create_error,
+  simp_tac (srw_ss()) [source_type_builtin_eq] >>
+  simp[source_convert_from_excludes_create_error,
        source_extract32_excludes_create_error,
        oneline vyperValueOperationTheory.evaluate_max_value_def,
        oneline vyperValueOperationTheory.evaluate_min_value_def,
@@ -3710,7 +3710,7 @@ fun EXHAUSTED_RECURSIVE_TAC (g as (asl,w)) =
   in if List.exists (fn n => n = name)
     ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for", "eval_expr",
      "eval_exprs", "eval_base_place", "eval_target_place", "assign_tuple_targets",
-     "assign_tuple_target_list", "eval_expr_results"]
+     "assign_tuple_target_list"]
     then (RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] o
         CONV_RULE exhausted_wrap_conv o
           SIMP_RULE bool_ss (vyperStateTheory.return_def ::
@@ -3813,8 +3813,7 @@ Theorem source_exhausted_eval_safety_mutual:
   (!cx t. source_exhausted_safe (eval_base_place cx t)) /\
   (!cx t. source_exhausted_safe (eval_target_place cx t)) /\
   (!cx g v. source_exhausted_safe (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. source_exhausted_safe (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. source_exhausted_safe (eval_expr_results cx es))
+  (!cx gs vs. source_exhausted_safe (assign_tuple_target_list cx gs vs))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- suspend "c01" >- suspend "c02" >- suspend "c03"
@@ -3837,7 +3836,7 @@ Proof
   >- suspend "c52" >- suspend "c53" >- suspend "c54"
   >- suspend "c55" >- suspend "c56" >- suspend "c57"
   >- suspend "c58" >- suspend "c59" >- suspend "c60"
-  >- suspend "c61" >- suspend "c62" >> suspend "c63"
+  >> suspend "c61"
 QED
 
 fun exhausted_conclusion_conv c tm =
@@ -4171,7 +4170,9 @@ Resume source_exhausted_eval_safety_mutual[c48]:
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [create_kind_distinct,
     GSYM create_kind_distinct, create_kind_11]) >>
   CONV_TAC (exhausted_conclusion_conv
-    (evalWalkLib.unfold_conv [evaluate_def])) >> rpt EXHAUSTED_HEAD_STEP >>
+    (evalWalkLib.unfold_conv [evaluate_def])) >>
+  rewrite_tac[vyperCreateTheory.eval_create_operands_def, LET_THM] >>
+  rpt EXHAUSTED_HEAD_STEP >>
   gvs[vyperCreateTheory.check_create_blueprint_def,
     vyperStateTheory.bind_def, vyperStateTheory.get_accounts_def,
     vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -4215,12 +4216,6 @@ Resume source_exhausted_eval_safety_mutual[c60]:
   EXHAUSTED_CONSTRUCTOR_TAC
 QED
 Resume source_exhausted_eval_safety_mutual[c61]:
-  EXHAUSTED_CONSTRUCTOR_TAC
-QED
-Resume source_exhausted_eval_safety_mutual[c62]:
-  EXHAUSTED_CONSTRUCTOR_TAC
-QED
-Resume source_exhausted_eval_safety_mutual[c63]:
   EXHAUSTED_CONSTRUCTOR_TAC
 QED
 Finalise source_exhausted_eval_safety_mutual
@@ -4951,7 +4946,7 @@ fun replay_recursive tm = List.exists (fn n => n =
     fst (dest_const (fst (strip_comb tm))))
   ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for", "eval_expr",
    "eval_exprs", "eval_base_place", "eval_target_place", "assign_tuple_targets",
-   "assign_tuple_target_list", "eval_expr_results"];
+   "assign_tuple_target_list"];
 fun REPLAY_CUT_STEP g = FIRST
   [MATCH_ACCEPT_TAC source_replay_precompile_cut,
    MATCH_ACCEPT_TAC (cj 1 source_ordinary_eval_cuts),
@@ -5180,8 +5175,7 @@ Theorem eval_outcome_probe_cut_mutual:
   (!cx t s os. source_wrapper_cut_at (eval_base_place cx t) s os) /\
   (!cx t s os. source_wrapper_cut_at (eval_target_place cx t) s os) /\
   (!cx g v s os. source_wrapper_cut_at (assign_tuple_targets cx g v) s os) /\
-  (!cx gs vs s os. source_wrapper_cut_at (assign_tuple_target_list cx gs vs) s os) /\
-  (!cx es s os. source_wrapper_cut_at (eval_expr_results cx es) s os)
+  (!cx gs vs s os. source_wrapper_cut_at (assign_tuple_target_list cx gs vs) s os)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
@@ -5596,63 +5590,32 @@ Proof
       conj_tac >- (REPLAY_TRACE_TAC >>
         MATCH_ACCEPT_TAC storage_trace_frame_transfer_value) >> REPLAY_SAFETY_TAC)
   >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 48 evaluate_def] >>
-      Cases_on `kind` >> rewrite_tac[create_kind_case_def] >>
-      RULE_ASSUM_TAC (PURE_REWRITE_RULE [create_kind_distinct, create_kind_11,
-        REFL_CLAUSE, AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP]) >>
-      (ntac 2 gen_tac >>
+      ntac 2 gen_tac >>
       MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
       >- REPLAY_CUT_IH_TAC >>
       conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+        Cases_on `kind` >>
+        simp_tac bool_ss [vyperCreateTheory.eval_create_operands_def,
+          create_kind_case_def, LET_THM] >>
         FIRST [MATCH_ACCEPT_TAC source_create_eval_cut,
-          IF (CONV_TAC (replay_cut_at (CHANGED_CONV (SIMP_CONV bool_ss [LET_THM]))))
-            (MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-             >- REPLAY_CUT_IH_TAC >>
-             conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-               MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-               >- (rpt REPLAY_CUT_STEP) >>
-               conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-                 MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-                 >- REPLAY_CUT_IH_TAC >>
-                 conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-                   MATCH_ACCEPT_TAC source_create_eval_cut) >>
-                 gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-                 conj_tac >- (BETA_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-                 REPLAY_SAFETY_TAC) >>
-               gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-               conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-               REPLAY_SAFETY_TAC) >>
-             gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-             conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-             REPLAY_SAFETY_TAC)
-            (MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-          >- (rpt REPLAY_CUT_STEP) >>
+          MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+          >- rpt REPLAY_CUT_STEP >>
           conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-            >- REPLAY_CUT_IH_TAC >>
-            conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-              MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
-              >- (rpt REPLAY_CUT_STEP) >>
-              conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
-                MATCH_ACCEPT_TAC source_create_eval_cut) >>
-              gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-              conj_tac >- (BETA_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-              REPLAY_SAFETY_TAC) >>
-            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-            conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-            REPLAY_SAFETY_TAC) >>
+            MATCH_ACCEPT_TAC source_create_eval_cut) >>
           gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-          conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
-          REPLAY_SAFETY_TAC)]) >>
-      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
-      conj_tac >- (REPLAY_TRACE_TAC >>
-        FIRST [MATCH_ACCEPT_TAC storage_trace_frame_create,
-          MATCH_ACCEPT_TAC storage_trace_frame_check_create_blueprint]) >>
+          conj_tac >- (BETA_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+          REPLAY_SAFETY_TAC]) >>
+      gen_tac >> BETA_TAC >> conj_tac
+      >- MATCH_ACCEPT_TAC outcomes_suffix_create_operands >> conj_tac
+      >- MATCH_ACCEPT_TAC storage_trace_frame_create_operands >>
+      rewrite_tac[vyperCreateTheory.eval_create_operands_def, LET_THM] >>
+      Cases_on `kind` >> simp_tac bool_ss [create_kind_case_def] >>
       REPLAY_SAFETY_TAC >>
       gvs[vyperCreateTheory.check_create_blueprint_def,
         vyperStateTheory.bind_def, vyperStateTheory.get_accounts_def,
         vyperStateTheory.return_def, vyperStateTheory.raise_def,
         vyperStateTheory.lift_option_def, vyperMiscTheory.option_CASE_rator,
-        AllCaseEqs()]))
+        AllCaseEqs()])
   >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
       simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
       simp[cj 49 evaluate_def])
@@ -5686,12 +5649,8 @@ Proof
       rpt REPLAY_CUT_STEP)
   >- (ntac 3 gen_tac >> rewrite_tac[cj 60 evaluate_def] >>
       rpt REPLAY_CUT_STEP >> gvs[])
-  >- (ntac 3 gen_tac >> rewrite_tac[cj 61 evaluate_def] >>
+  >> (ntac 3 gen_tac >> rewrite_tac[cj 61 evaluate_def] >>
       rpt REPLAY_CUT_STEP >> gvs[])
-  >- (gen_tac >> rewrite_tac[cj 62 evaluate_def] >>
-      rpt REPLAY_CUT_STEP >> gvs[]) >>
-  ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 63 evaluate_def] >>
-  rpt REPLAY_CUT_STEP
 QED
 
 val _ = clear_overloads_on "source_wrapper_cut_at";
@@ -5840,21 +5799,6 @@ Theorem eval_outcome_probe_replay_mutual:
     (\(r,s). (r,erase_storage_trace s))
       (assign_tuple_target_list cx gs vs (st0 with outcomes := SOME
       (os ++ [case assign_tuple_target_list cx gs vs (st0 with outcomes :=
-                    SOME (os ++ [empty_failed_outcome])) of
-        (res_e,_) =>
-          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
-             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
-             ~NULL st_p.requests
-          then failed_outcome (LAST st_p.requests)
-          else empty_failed_outcome])))) /\
-  (!cx es st0 os res_p st_p.
-    eval_expr_results cx es (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
-      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
-    (\(r,s). (r,erase_storage_trace s))
-      (eval_expr_results cx es (st0 with outcomes := SOME os)) =
-    (\(r,s). (r,erase_storage_trace s))
-      (eval_expr_results cx es (st0 with outcomes := SOME
-      (os ++ [case eval_expr_results cx es (st0 with outcomes :=
                     SOME (os ++ [empty_failed_outcome])) of
         (res_e,_) =>
           if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
