@@ -111,7 +111,8 @@ End
 Definition declaration_abi_decode_target_def:
   declaration_abi_decode_target target
     (FunctionDecl vis mut nr rr name args defaults ret body) =
-      supported_stmts_expr_exists (expr_abi_decode_target_root target) body /\
+      (supported_stmts_expr_exists (expr_abi_decode_target_root target) body \/
+       supported_exprs_exists (expr_abi_decode_target_root target) defaults) /\
   declaration_abi_decode_target target (VariableDecl vis mut name ty slot) = F /\
   declaration_abi_decode_target target (HashMapDecl vis trans name kt vt slot) = F /\
   declaration_abi_decode_target target (StructDecl name fields) = F /\
@@ -220,7 +221,8 @@ QED
 Theorem occurs_abi_decode_target_function:
   occurs_abi_decode_target target
     [FunctionDecl vis mut nr rr name args defaults ret stmts] <=>
-  supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts
+  supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts \/
+  supported_exprs_exists (expr_abi_decode_target_root target) defaults
 Proof
   simp[occurs_abi_decode_target_def, declaration_abi_decode_target_def]
 QED
