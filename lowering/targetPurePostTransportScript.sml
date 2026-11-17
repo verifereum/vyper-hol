@@ -265,6 +265,16 @@ Proof
 QED
 
 
+Theorem target_saved_place_ptr_oracles:
+  vv_place_ptr cenv cx
+    (es with <|gas_obs := gs; outcomes := os; requests := rq;
+               logs := lg; storage_trace := st|>) s r vv <=>
+  vv_place_ptr cenv cx es s r vv
+Proof
+  Cases_on `vv` >> Cases_on `r` >> simp[vv_place_ptr_def] >>
+  rename1 `PlaceR place` >> Cases_on `place` >> simp[vv_place_ptr_def]
+QED
+
 Theorem target_saved_post_transport:
   vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
   target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
@@ -301,7 +311,8 @@ Proof
   simp[] >>
   gvs[vv_post_def] >>
   simp[SRULE [] target_saved_holds_oracles,
-       SRULE [] target_saved_regions_oracles] >>
+       SRULE [] target_saved_regions_oracles,
+       SRULE [] target_saved_place_ptr_oracles] >>
   rpt conj_tac
   >- gvs[target_post_def]
   >- gvs[target_post_def]
@@ -309,6 +320,17 @@ Proof
       simp[] >> qexistsl_tac [`H`, `s`, `sa`, `sm`] >> simp[])
   >- (irule (cj 1 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
+  >- (`eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
+        (drule target_saved_operand_exists >> strip_tac >> metis_tac[]) >>
+      `!id q sz w.
+        FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+        lookup_var q s = SOME w ==> lookup_var q u = SOME w` by
+        (rpt strip_tac >>
+         `not_fresh_at sm q` by metis_tac[local_ptrs_reserved_def] >>
+         fs[wb_frame_def] >> metis_tac[]) >>
+      Cases_on `vv` >> Cases_on `r` >> gvs[vv_place_ptr_def,vv_operand_def] >>
+      rename1 `PlaceR place` >> Cases_on `place` >>
+      gvs[vv_place_ptr_def,vv_operand_def] >> metis_tac[])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule target_saved_storage_live_frame >>

@@ -13,7 +13,6 @@ Ancestors
   unitTransformDefs memSafeRun contextCodegenRel codegenRel fragExecMem
   context ptrDiscipline ptrSafeRun venomInst venomInstProofs venomExecSemantics
   venomState vyperState vyperLookup finite_map pred_set list rich_list words
-  bodyFullHashKeccakFixed
 
 (* A positive local cannot sit inside the contiguous immutable prefix. *)
 Theorem immutable_intervals_lower_bound[local]:
@@ -311,8 +310,10 @@ Proof
     allocas_below_fmp (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
        (fn th => POP_ASSUM_LIST (K all_tac) >>
-          mp_tac (MATCH_MP stmt_state_rel_allocas_below_fmp th)) >>
-     simp[allocas_below_fmp_def] >> metis_tac[]) >>
+          mp_tac th) >>
+     rw[stmt_state_rel_def,fmp_room_def,allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.alloca_next_valid_def] >>
+     res_tac >> decide_tac) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`,
     `p`,`w2n w`,`G1`,`tn1`] >>
   simp[lookup_var_def] >>
@@ -391,7 +392,10 @@ Resume body_full_alloc_buffer_path[path]:
   gen_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
-       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+       (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+     rw[stmt_state_rel_def,fmp_room_def,allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.alloca_next_valid_def] >>
+     res_tac >> decide_tac) >>
   `inst_seq_ptr D lo ctx func PG G tn [inst] s G1 tn1` by
     (simp[inst_seq_ptr_def,Abbr `G1`,Abbr `tn1`,Abbr `inst`] >>
      simp[ptr_inst_ok_def,access_ok_def,taint_ok_def,mk_inst_def,

@@ -8,10 +8,10 @@ Ancestors
   memSafeRun fragExec emitHelperProps exprSimPtrLiteralBuffer arithmetic
   bodyMemBopRestWordPath fragGasOrigin fragGasMode fragGasPath
   assignTuplePtrCopyLen freshWrites exprSimStorageCopy
-  loweringStateRelDefs
+  loweringStateRelDefs stmtSimDefs
   bodyMemAggregatePath typedCopyOriginPtrBase
 
-Theorem body_full_memory_stage_path:
+Theorem body_full_memory_stage_effect:
   stmt_state_rel H0 ctx func cenv cx es s /\
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand (Var xs) n sm = ((),sb) /\
@@ -54,7 +54,12 @@ Theorem body_full_memory_stage_path:
       FLOOKUP t.vs_allocas aid = SOME ent) /\
     (!x. not_fresh_at sa x ==>
       not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
-      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame cenv es sa s cenv es t /\
+    (!aid off sz i.
+      FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      off <= i /\ i < off+sz /\ i IN tf.t_mem ==> i IN tn.t_mem)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all body_full_alloc_buffer_path >>
@@ -134,10 +139,11 @@ Proof
         (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
       disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK t`,`Gf`,`tf`] mp_tac) >>
       simp[]) >>
-  conj_tac >- suspend "state" >> first_assum ACCEPT_TAC
+  conj_tac >- suspend "state" >>
+  conj_tac >- first_assum ACCEPT_TAC >> suspend "frame"
 QED
 
-Resume body_full_memory_stage_path[source]:
+Resume body_full_memory_stage_effect[source]:
   mp_tac (Q.SPECL [`tn.t_mem`,`tn1.t_mem`,`s.vs_memory`,`u.vs_memory`,
     `{i | b <= i /\ i < b+n}`,`tv`,`v`,`w2n (sw:bytes32)`]
     robust_val_in_memory_exterior_frame) >>
@@ -149,7 +155,7 @@ Resume body_full_memory_stage_path[source]:
        gvs[regions_disjoint_def] >> res_tac >> decide_tac)) >> simp[]
 QED
 
-Resume body_full_memory_stage_path[frontier]:
+Resume body_full_memory_stage_effect[frontier]:
   qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
     (qspec_then `cx_dead H0 cx` mp_tac) >>
   disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
@@ -158,7 +164,7 @@ Resume body_full_memory_stage_path[frontier]:
   drule rest_word_path_frontier >> simp[]
 QED
 
-Resume body_full_memory_stage_path[state]:
+Resume body_full_memory_stage_effect[state]:
   rpt strip_tac >>
   `copy_static t = copy_static u` by
     (qpat_assum `typed_copy_state_frame _ _ _ _ _`
@@ -179,7 +185,7 @@ Resume body_full_memory_stage_path[state]:
     (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[]
 QED
 
-Resume body_full_memory_stage_path[ghost]:
+Resume body_full_memory_stage_effect[ghost]:
   rpt strip_tac >>
   `ghost_inv_at D lo d cenv cx es G1 tn1 u` by metis_tac[] >>
   qpat_assum `w2n ((n2w b):bytes32) = b`
@@ -236,4 +242,79 @@ Resume body_full_memory_stage_path[ghost]:
   metis_tac[]
 QED
 
-Finalise body_full_memory_stage_path
+Resume body_full_memory_stage_effect[frame]:
+  `!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    aid < sa.cs_next_id ==> off+sz <= b \/ b+n <= off` by
+    (gvs[regions_disjoint_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[alloca_frame_def] >> rpt gen_tac >> strip_tac >> conj_tac
+      >- (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+            (strip_assume_tac o REWRITE_RULE
+              [typed_copy_state_frame_def,typed_copy_frame_def]) >>
+          `mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz u.vs_memory` by
+            (qpat_x_assum `!a len. a+len <= b \/ b+n <= a ==> _` irule >>
+             metis_tac[]) >> metis_tac[]) >>
+      rpt strip_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  `off+sz <= b \/ b+n <= off` by metis_tac[] >>
+  `~(b <= i /\ i < b+n)` by
+    (irule (DECIDE ``!off sz b n i:num.
+       off <= i /\ i < off+sz /\ (off+sz <= b \/ b+n <= off) ==>
+       ~(b <= i /\ i < b+n)``) >>
+     qexistsl_tac [`off`,`sz`] >> simp[]) >>
+  metis_tac[]
+QED
+
+Finalise body_full_memory_stage_effect
+
+Theorem body_full_memory_stage_path:
+  stmt_state_rel H0 ctx func cenv cx es s /\
+  compile_alloc_buffer n sa = (buf,sm) /\
+  compile_copy_memory buf.buf_operand (Var xs) n sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
+  n < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
+  evaluate_type (get_tenv cx) sty = SOME tv /\ ~is_word_type sty /\
+  type_memory_size tv = n /\ val_wf tv v /\
+  expr_val_at cenv cx sty start sa es v (Var xs) s /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n sw) mem) /\
+  ptr_covers G tn xs s n /\ w2n sw+n < dimword (:256) /\
+  (n = 0 \/ w2n sw+n <= s.vs_alloca_next) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t root b Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es Gf tf t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    buf.buf_operand = Var root /\ not_fresh_at sb root /\
+    lookup_var root t = SOME (n2w b) /\ ptr_covers Gf tf root t n /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,n) /\
+    lo <= b /\ b+n < dimword (:256) /\ b+n <= t.vs_alloca_next /\
+    (!name a len. local_region cenv es.scopes t name a len ==>
+      regions_disjoint b n a len) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory tv v b mem) /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
+      FLOOKUP t.vs_allocas aid = SOME ent) /\
+    (!x. not_fresh_at sa x ==>
+      not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all body_full_memory_stage_effect >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`root`,`b`,`Gf`,`tf`] >> simp[] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
