@@ -30,9 +30,8 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  placeMemoryFieldRebuild assignTuplePtrStoreWord stmtSimDeclStore
-  targetPlaceSim sum venomState stateRelProj stateRelProjStorage
-  memoryPlaceStorePost stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
+  placeMemoryFieldRebuild assignTuplePtrStoreWord stmtSimDeclStore targetPlaceSim sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
+  stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
   vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
   exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline placeStore valueEncodingProps venomMemProofs
@@ -54,7 +53,8 @@ Ancestors
   valueCopyBytes bodyMemSnapshotSourceLocation aggregateEvaluatedLayout
   ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
-  bodyFullUnwrapWord exprSimCopy exprSafeOperand exprReasonOperand bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
+  bodyFullUnwrapWord exprSimCopy exprSafeOperand exprReasonOperand
+  bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
   contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
   representationCleanPtr typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc
   abiDecodeStaticProps assignPlaceLayout bodyPtrMakeArrayCopyStateFrame
@@ -3308,6 +3308,78 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_sensitivity_base:
+  (!bt v a mem dirty.
+     well_formed_type_value (BaseTV bt) /\
+     (value_has_type (BaseTV bt) v \/ v = default_value (BaseTV bt)) /\
+     val_wf (BaseTV bt) v /\
+     (!m. mem_agree_outside dirty mem m ==>
+          val_in_memory (BaseTV bt) v a m) ==>
+     !j. j < type_memory_size (BaseTV bt) /\ a+j IN dirty ==>
+          mem_dead_bytes mem a (BaseTV bt) (a+j)) /\
+  (!n v a mem dirty.
+     well_formed_type_value (FlagTV n) /\
+     (value_has_type (FlagTV n) v \/ v = default_value (FlagTV n)) /\
+     val_wf (FlagTV n) v /\
+     (!m. mem_agree_outside dirty mem m ==>
+          val_in_memory (FlagTV n) v a m) ==>
+     !j. j < type_memory_size (FlagTV n) /\ a+j IN dirty ==>
+          mem_dead_bytes mem a (FlagTV n) (a+j)) /\
+  (!v a mem dirty.
+     well_formed_type_value NoneTV /\
+     (value_has_type NoneTV v \/ v = default_value NoneTV) /\
+     val_wf NoneTV v /\
+     (!m. mem_agree_outside dirty mem m ==>
+          val_in_memory NoneTV v a m) ==>
+     !j. j < type_memory_size NoneTV /\ a+j IN dirty ==>
+          mem_dead_bytes mem a NoneTV (a+j))
+Proof
+  conj_tac
+  >- (Cases_on `bt` >> rpt gen_tac
+      >~ [`BaseTV (BytesT bd)`]
+      >- (Cases_on `bd` >> Cases_on `v` >>
+          simp[value_has_type_def, default_value_def]
+          >- (rpt strip_tac >>
+              drule robust_val_in_memory_bytes_clean >> simp[] >>
+              disch_then (qspec_then `a+j` mp_tac) >>
+              gvs[type_memory_size_def]) >>
+          rpt strip_tac >>
+          drule robust_val_in_memory_bytes_clean >> simp[] >> strip_tac >>
+          qpat_assum `!m. mem_agree_outside _ _ _ ==> _`
+            (qspec_then `mem` mp_tac) >>
+          simp_tac (srw_ss()) [mem_agree_outside_def, val_in_memory_def] >> strip_tac >>
+          gvs[well_formed_type_value_def] >>
+          simp[mem_dead_bytes_def] >>
+          rpt (first_x_assum (qspec_then `a+j` mp_tac)) >>
+          simp[] >> decide_tac) >>
+      Cases_on `v` >> simp[value_has_type_def, default_value_def]
+      >~ [`BaseTV (StringT n)`]
+      >- (rpt strip_tac >>
+          drule robust_val_in_memory_string_clean >> strip_tac >>
+          qpat_assum `!m. mem_agree_outside _ _ _ ==> _`
+            (qspec_then `mem` mp_tac) >>
+          simp_tac (srw_ss())
+            [mem_agree_outside_def, val_in_memory_def, LENGTH_MAP] >> strip_tac >>
+          gvs[well_formed_type_value_def] >> simp[mem_dead_bytes_def] >>
+          rpt (first_x_assum (qspec_then `a+j` mp_tac)) >>
+          simp[] >> decide_tac)
+      >~ [`BytesV bs`]
+      >- (rpt strip_tac >>
+          drule robust_val_in_memory_bytes_clean >> simp[] >>
+          disch_then (qspec_then `a+j` mp_tac) >>
+          gvs[type_memory_size_def]) >>
+      rpt strip_tac >> gvs[val_in_memory_def] >> drule robust_mem_word_at_clean >> simp[] >>
+      disch_then (qspec_then `a+j` mp_tac) >>
+      gvs[type_memory_size_def]) >>
+  conj_tac
+  >- (rpt gen_tac >> Cases_on `v` >>
+      simp[value_has_type_def, default_value_def] >> rpt strip_tac >>
+      gvs[val_in_memory_def] >> drule robust_mem_word_at_clean >>
+      simp[] >> disch_then (qspec_then `a+j` mp_tac) >>
+      gvs[type_memory_size_def]) >>
+  simp[type_memory_size_def]
 QED
 
 Theorem body_assign_immutable_sensitivity_tuple_list[local]:
