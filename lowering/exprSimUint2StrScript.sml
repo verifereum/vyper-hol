@@ -14,7 +14,7 @@
  *)
 Theory exprSimUint2Str
 Ancestors
-  exprSimHashBoundary
+  exprSimHashBoundary vyperTypeBuiltins
   exprLowering exprLoweringProps exprBopLowering vyperAST vyperContext valueEncoding
   vyperValue vfmConstants exprSimSource exprWordOperand vyperTyping integer
   exprBopSimProps
@@ -67,7 +67,8 @@ QED
 
 Theorem uint2str_builtin_types:
   well_typed_builtin_app ty (Uint2Str n) ts ==>
-  ?k. ts = [BaseT (UintT k)] /\ ty = BaseT (StringT n) /\ 78 <= n
+  ?k. ts = [BaseT (UintT k)] /\ ty = BaseT (StringT n) /\
+      LENGTH (num_to_dec_string (2 ** k - 1)) <= n
 Proof
   simp[well_typed_builtin_app_def] >>
   Cases_on `ts` >> simp[] >>
@@ -86,7 +87,7 @@ QED
 Theorem uint2str_expr_types:
   well_typed_expr env (Builtin ann (Uint2Str n) args) ==>
   ?e k. args = [e] /\ ann = BaseT (StringT n) /\
-        expr_type e = BaseT (UintT k) /\ 78 <= n
+        expr_type e = BaseT (UintT k) /\ LENGTH (num_to_dec_string (2 ** k - 1)) <= n
 Proof
   simp[well_typed_expr_def] >> strip_tac >>
   drule uint2str_builtin_types >> strip_tac >>
@@ -784,13 +785,12 @@ QED
 
 Theorem u2s_digits_room:
   u2s_digits a b n X x str s /\ 0 < x /\
-  X < dimword (:256) /\ 78 <= n ==> LENGTH str < n
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n ==> LENGTH str < n
 Proof
   simp[u2s_digits_def] >> strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `1 <= LENGTH (num_to_dec_string x)` by
     (irule (cj 1 uint256_decimal_length) >> gvs[dimword_def]) >>
-  `LENGTH (num_to_dec_string X) <= 78` by
-    (irule (cj 2 uint256_decimal_length) >> gvs[dimword_def]) >>
   qpat_x_assum `num_to_dec_string X = _` (mp_tac o AP_TERM ``LENGTH : string -> num``) >>
   simp[]
 QED
@@ -1837,7 +1837,7 @@ Theorem u2s_loop:
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
@@ -1849,6 +1849,7 @@ Theorem u2s_loop:
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `?c. u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        u2s_digits a b n X x str c /\
        c.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
@@ -1990,7 +1991,7 @@ Theorem u2s_check_exit:
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
@@ -2001,7 +2002,8 @@ Theorem u2s_check_exit:
       (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
-  strip_tac >> Cases_on `X = 0`
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> Cases_on `X = 0`
   >- suspend "zero_input" >>
   `u2s_digits a b n X X [] s` by (irule u2s_digits_initial >> simp[]) >>
   `?c. u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
@@ -2103,7 +2105,7 @@ Theorem u2s_setup_exit:
   u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
@@ -2115,6 +2117,7 @@ Theorem u2s_setup_exit:
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   drule_at (Pat `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ _`) u2s_setup_transition >>
   disch_then (qspecl_then [`pre`, `op`, `fn`, `bb`, `X`] mp_tac) >> simp[] >> strip_tac >>
   drule_at (Pat `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ _`) u2s_check_exit >>
@@ -2135,7 +2138,7 @@ Theorem u2s_setup_entry_exit:
   u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
@@ -2146,7 +2149,8 @@ Theorem u2s_setup_entry_exit:
       (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
-  strip_tac >> irule u2s_setup_exit >> simp[] >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> irule u2s_setup_exit >> simp[] >>
   qexistsl_tac [`op`, `a.cs_current_insts`] >> simp[]
 QED
 
@@ -2419,7 +2423,7 @@ Theorem u2s_loop_path:
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
       u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
@@ -2430,6 +2434,7 @@ Theorem u2s_loop_path:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `?c. gas_marked_path F ctx fn s 0 (OK c) /\
        u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        u2s_digits a b n X x str c /\
@@ -2493,7 +2498,7 @@ Theorem u2s_check_exit_path:
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
       u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
@@ -2504,6 +2509,7 @@ Theorem u2s_check_exit_path:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `?c. gas_marked_path F ctx fn s 0 (OK c) /\
        u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        (!y str. u2s_digits a b n X y str c <=> u2s_digits a b n X y str s) /\
@@ -2547,7 +2553,7 @@ Theorem u2s_setup_entry_path:
   u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
       u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
@@ -2558,6 +2564,7 @@ Theorem u2s_setup_entry_path:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `eval_operand buf s = SOME (n2w b)` by gvs[u2s_safe_def] >>
   qabbrev_tac `t = update_var (u2s_var a 2) (n2w b)
     (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
@@ -2757,7 +2764,7 @@ Theorem u2s_alloc_vv_path:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2770,7 +2777,8 @@ Theorem u2s_alloc_vv_path:
       t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
       t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
-  strip_tac >> drule compile_uint2str_layout >> strip_tac >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> drule compile_uint2str_layout >> strip_tac >>
   drule_all u2s_alloc_ready_path >> strip_tac >>
   mp_tac (Q.INST [`s` |-> `ready`, `buf` |-> `ba.buf_operand`, `ty` |-> `tv`,
                   `sz` |-> `sz + n`]
@@ -2811,7 +2819,7 @@ Theorem u2s_alloc_vv_exit:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2823,7 +2831,8 @@ Theorem u2s_alloc_vv_exit:
       (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
-  strip_tac >> mp_tac u2s_alloc_vv_path >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> mp_tac u2s_alloc_vv_path >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexists_tac `t` >> simp[] >> metis_tac[u2s_path_continue]
 QED
@@ -2836,7 +2845,7 @@ Theorem u2s_alloc_vv_frag:
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz + n < dimword (:256) /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
@@ -2845,7 +2854,8 @@ Theorem u2s_alloc_vv_frag:
     (\t. vv_post H ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
         (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t) R
 Proof
-  strip_tac >> simp[frag_exec_def] >> rpt strip_tac >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> simp[frag_exec_def] >> rpt strip_tac >>
   drule_all u2s_alloc_vv_exit >> metis_tac[]
 QED
 
@@ -2987,14 +2997,13 @@ Proof
 QED
 
 Theorem uint2str_result_memory_bounds:
-  X < dimword (:256) /\ 78 <= n ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n ==>
   val_wf (BaseTV (StringT n)) (StringV (num_to_dec_string X)) /\
   val_footprint (BaseTV (StringT n)) (StringV (num_to_dec_string X)) =
     32 + LENGTH (num_to_dec_string X) /\ n + 32 <= 32 + 32 * word_size n
 Proof
   strip_tac >>
-  `LENGTH (num_to_dec_string X) <= 78` by
-    (irule (cj 2 uint256_decimal_length) >> gvs[wordsTheory.dimword_def]) >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   qspec_then `n` assume_tac le_word_size_mul >>
   simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
        val_footprint_def] >> decide_tac
@@ -3017,13 +3026,14 @@ Theorem uint2str_numeric_suffix:
   local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   frag_exec ctx sm sb (\t. t = s)
     (\t. vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
       (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t) R
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
@@ -3057,7 +3067,7 @@ QED
 
 Theorem uint2str_typed_suffix:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
-  expr_type e = BaseT (UintT k) /\ 78 <= n /\
+  expr_type e = BaseT (UintT k) /\ LENGTH (num_to_dec_string (2 ** k - 1)) <= n /\
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   as_ptr_val (BaseT (StringT n)) LocMemory
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
@@ -3083,6 +3093,9 @@ Proof
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qmatch_goalsub_abbrev_tac `IntV (&X)` >>
   `X < dimword (:256)` by simp[Abbr `X`, wordsTheory.w2n_lt] >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    (`X < 2 ** k` by gvs[value_has_type_def] >>
+     metis_tac[uint2str_width_bound, LESS_EQ_TRANS]) >>
   gvs[uint2str_source_result] >>
   Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
   gvs[exprLoweringTheory.as_ptr_val_def, contextTheory.mk_ptr_def] >>
@@ -3108,7 +3121,7 @@ Theorem uint2str_numeric_path:
   expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
         es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
@@ -3119,6 +3132,7 @@ Theorem uint2str_numeric_path:
       t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
@@ -3152,7 +3166,7 @@ QED
 
 Theorem uint2str_typed_path:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
-  expr_type e = BaseT (UintT k) /\ 78 <= n /\
+  expr_type e = BaseT (UintT k) /\ LENGTH (num_to_dec_string (2 ** k - 1)) <= n /\
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   as_ptr_val (BaseT (StringT n)) LocMemory
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
@@ -3191,6 +3205,9 @@ Proof
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qmatch_goalsub_abbrev_tac `IntV (&X)` >>
   `X < dimword (:256)` by simp[Abbr `X`, wordsTheory.w2n_lt] >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    (`X < 2 ** k` by gvs[value_has_type_def] >>
+     metis_tac[uint2str_width_bound, LESS_EQ_TRANS]) >>
   `?out. compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm =
            (out,sb) /\
          vv = LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)` by
@@ -3317,7 +3334,7 @@ QED
 
 Theorem u2s_builtin_result_requirements:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) args) es /\
-  X < dimword(:256) /\ 78 <= n /\
+  X < dimword(:256) /\ LENGTH (num_to_dec_string X) <= n /\
   sz = type_memory_bytes cenv (BaseT (StringT n)) ==>
   ~is_word_type (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) /\
   evaluate_type (get_tenv cx)
@@ -3332,11 +3349,9 @@ Theorem u2s_builtin_result_requirements:
   LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT n)) /\
   val_footprint (BaseTV (StringT n)) (StringV (num_to_dec_string X)) <= sz
 Proof
-  strip_tac >> drule_all uint2str_result_memory_bounds >> strip_tac >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> drule_all uint2str_result_memory_bounds >> strip_tac >>
   drule uint2str_body_capacity >> strip_tac >>
-  `LENGTH (num_to_dec_string X) <= n` by
-    (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >>
-     fs[dimword_def] >> decide_tac) >>
   simp[expr_type_def, is_word_type_def, evaluate_type_def,
        type_slot_size_def, lowered_value_type_def, type_memory_size_def, type_memory_bytes_def,
        word_size_def] >>
@@ -3350,7 +3365,7 @@ Theorem uint2str_operand_endpoint:
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks readings ++ tail) =
       (INL v,ee0 with gas_obs := tail)) ==>
-  ?a. v = IntV (&a) /\ a < dimword(:256) /\
+  ?a. v = IntV (&a) /\ a < 2 ** k /\ a < dimword(:256) /\
     eval_operand op t = SOME (n2w a) /\ expr_sim_inv cenv cx env ee
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

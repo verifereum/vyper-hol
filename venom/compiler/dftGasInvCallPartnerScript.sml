@@ -75,8 +75,6 @@ Proof
        exec_read0_def, exec_read1_def, AllCaseEqs()] >> strip_tac >>
   gvs[inv_partner_inputs_def, MEM] >>
   FIRST [
-    qmatch_goalsub_abbrev_tac `update_var out2 value2 (update_var out1 value1 s)` >>
-      qexists_tac `[(out1,value1); (out2,value2)]` >> simp[],
     qmatch_goalsub_abbrev_tac `update_var out value s` >>
       qexists_tac `[(out,value)]` >> simp[] >>
       gvs[Abbr `value`] >> metis_tac[], 

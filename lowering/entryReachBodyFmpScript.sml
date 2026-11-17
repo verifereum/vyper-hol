@@ -9,8 +9,8 @@ Theorem entry_runtime_no_dalloca:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops ==> ~ctx_has_dalloca unit.cu_context
 Proof
-  strip_tac >> irule o1_source_unit_ok_no_dalloca >>
-  irule lower_vyper_runtime_unit_source_unit_ok_shape >>
+  strip_tac >> irule every_no_dalloca >>
+  irule lower_vyper_runtime_unit_no_dalloca >>
   goal_assum $ drule_at Any >>
   reverse conj_tac >- metis_tac[supported_program_runtime_bodies_shape_ok] >>
   irule supported_names_internal_names_distinct >>

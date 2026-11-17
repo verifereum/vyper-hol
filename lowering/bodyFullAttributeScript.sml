@@ -178,6 +178,7 @@ Resume attribute_vv_sim_full[endpoint_posts]:
   conj_tac >- simp[venomStateTheory.update_var_def] >>
   conj_tac >- suspend "ghost_inv" >>
   conj_tac >- suspend "selected_ptr" >>
+  conj_tac >- suspend "owned_value" >>
   conj_tac >- suspend "code_field" >>
   conj_tac >- suspend "ptr_buf" >>
   suspend "ghost_kept"
@@ -219,7 +220,81 @@ QED
 Resume attribute_vv_sim_full[ghost_kept]:
   qpat_x_assum `out = STRING _ _` SUBST_ALL_TAC >>
   drule_all attribute_fresh_full_ghost_update >> strip_tac >>
-  metis_tac[]
+  qpat_x_assum `!w s'' n. _` (qspecl_then [`w`, `s`, `0`] mp_tac) >>
+  simp[]
+QED
+
+Resume attribute_vv_sim_full[owned_value]:
+  qx_gen_tac `child` >> strip_tac >>
+  `?sv. tv = Value sv` by
+    (Cases_on `tv` >> simp[] >>
+     qpat_x_assum `select_result _ _ _ _ _ = (INL tv',_)`
+       (mp_tac o MATCH_MP vyperPlaceResultTypingTheory.extend_place_result_shape o
+        REWRITE_RULE [select_result_def]) >> simp[]) >>
+  `vv_own cenv cx (StructT sid) sa sm mid tv bvv s /\
+   vv_loc bvv = LocMemory` by
+    (qpat_x_assum `!v. tv = Value v /\ _ ==> _` mp_tac >>
+     simp[compileEnvTheory.is_word_type_def, compileEnvTheory.is_bytestring_type_def] >>
+     strip_tac >> Cases_on `bvv` >>
+     gvs[exprSimAttributePropsTheory.vv_loc_def, contextTheory.vv_location_def]) >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
+  `!n lb sz. local_region cenv mid.scopes t n lb sz ==>
+             local_region cenv mid.scopes s n lb sz` by
+    (rpt strip_tac >>
+     qpat_x_assum `local_region _ _ t _ _ _` mp_tac >>
+     simp[loweringStateRelDefsTheory.local_region_def,
+          venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     rpt strip_tac >>
+     qmatch_asmsub_rename_tac `PtrVar (Var local_ptr) sz` >>
+     `not_fresh_at sa local_ptr` by
+       (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+     gvs[] >> metis_tac[]) >>
+  `vv_own cenv cx (StructT sid) sa sb mid tv bvv t` by
+    (irule exprSimVVFrameTheory.vv_own_vars_frame >>
+     qexistsl_tac [`s`, `sm`] >>
+     simp[venomStateTheory.update_var_def] >>
+     drule emitted_insts_emit_op >> simp[]) >>
+  `vv_own cenv cx (StructT sid) sa sb mid tv
+     (LocatedValue (StructT sid) (mk_ptr (vv_operand bvv) LocMemory)) t` by
+    (qpat_x_assum `vv_own _ _ _ sa sb _ _ _ t` mp_tac >>
+     qpat_x_assum `vv_loc bvv = LocMemory` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `bvv` >>
+     simp[vv_own_def, expr_val_own_def, contextTheory.mk_ptr_def,
+         contextTheory.vv_operand_def, exprSimAttributePropsTheory.vv_loc_def,
+         contextTheory.vv_location_def, compileEnvTheory.is_word_type_def] >>
+     metis_tac[]) >>
+  `w2n (w + n2w (struct_field_offset
+       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
+     w2n w + struct_field_offset
+       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld` by
+    (drule_all bodyPtrAttributeSourceTheory.attribute_memory_field_address >> simp[]) >>
+  `struct_field_offset
+       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld +
+     val_footprint ftv fv <= val_footprint (StructTV fs) (StructV vals)` by
+    (`val_footprint ftv fv <= type_memory_size ftv` by
+       simp[exprSimPropsTheory.val_footprint_le] >>
+     drule_all exprSimFieldLayoutTheory.struct_field_offset_le >>
+     strip_tac >>
+     CONV_TAC (RAND_CONV (SIMP_CONV (srw_ss())
+       [val_footprint_def, valueEncodingTheory.type_memory_size_def])) >>
+     decide_tac) >>
+  qpat_assum `vv_loc bvv = LocMemory`
+    (fn th => rewrite_tac[th, vyperASTTheory.expr_type_def]) >>
+  reverse conj_tac >- simp[contextTheory.mk_ptr_def] >>
+  irule exprSimVVFrameTheory.vv_own_memory_slice >>
+  qexistsl_tac [`StructT sid`, `ftv`, `fv`,
+                `w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)`,
+                `struct_field_offset
+                  (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld`,
+                `vv_operand bvv`, `tv`, `StructTV fs`, `StructT sid`,
+                `StructV vals`, `w`] >>
+  simp[exprSimAttributePropsTheory.attr_offset_def, contextTheory.mk_ptr_def] >>
+  qpat_assum `tv' = Value child` (fn eq =>
+    qpat_assum `read_result cx tv' mid = (INL fv,mid)`
+      (ACCEPT_TAC o REWRITE_RULE [eq]))
 QED
 
 Resume attribute_vv_sim_full[code_field]:

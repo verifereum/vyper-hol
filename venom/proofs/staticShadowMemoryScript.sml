@@ -40,7 +40,7 @@ Proof
         venom_state_component_equality] >>
   `!op. eval_operand op sh = eval_operand op s` by
     metis_tac[static_shadow_rel_eval_operand] >>
-  simp[static_mem_ok_def, dalloca_no_wrap_def]
+  simp[static_mem_ok_def, unitTransformDefsTheory.dalloca_no_wrap_def]
 QED
 
 Theorem static_shadow_lowered_mem_ok:

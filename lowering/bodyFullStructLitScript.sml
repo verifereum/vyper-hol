@@ -680,7 +680,7 @@ Proof
     (rpt strip_tac >>
      drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `si`, `sm`, `shadow_si`, `shadow_sm`,
@@ -1642,7 +1642,19 @@ Proof
   (impl_tac >- (simp[] >>
     qpat_assum `!name p k. local_region cenv ee.scopes t' name p k ==> _` mp_tac >>
     simp[NoAsms, arithmeticTheory.ADD_COMM])) >> strip_tac >>
-  simp[contextTheory.base_ptr_def, contextTheory.vv_location_def]
+  simp[contextTheory.base_ptr_def, contextTheory.vv_location_def] >>
+  simp[vv_own_def, post_value_type_def, expr_type_def,
+    contextTheory.base_ptr_def, read_result_def, return_def,
+    venomStateTheory.eval_operand_def] >>
+  rpt strip_tac >> gvs[] >>
+  disj1_tac >>
+  qexistsl_tac [`sa.cs_next_id`, `w2n w`, `type_memory_size_list tvs`] >>
+  simp[] >> conj_tac
+  >- simp[val_footprint_def,
+          valueEncodingTheory.type_memory_size_def, struct_layout_size_zip] >>
+  rpt strip_tac >>
+  qpat_x_assum `!name p k. local_region cenv ee.scopes t' name p k ==> _`
+    (drule_then mp_tac) >> decide_tac
 
 QED
 

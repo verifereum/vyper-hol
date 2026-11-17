@@ -44,6 +44,16 @@ Proof
   irule entry_code_bind >> simp[]
 QED
 
+Theorem entry_code_bind_result:
+  (!st. Q (FST (m st))) /\
+  entry_preserves_code P m /\
+  (!x. Q x ==> entry_preserves_code P (f x)) ==>
+  entry_preserves_code P (comp_bind m f)
+Proof
+  rw[entry_preserves_code_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> metis_tac[pairTheory.FST]
+QED
+
 Theorem entry_code_emit:
   P i ==> entry_preserves_code P (emit i)
 Proof

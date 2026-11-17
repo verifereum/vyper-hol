@@ -14,7 +14,8 @@ Theorem runtime_entry_compiler_provenance:
       exts_pkg = MAP (set_external_package_target rp.rpol_target o
         package_external_fn tops T (K global_nonreentrant_slot)) exts /\
       ints_pkg = MAP (set_internal_package_target rp.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints /\
+        package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+        (order_internals (runtime_internal_order tops ints) ints) /\
       fb_pkg = set_fallback_package_target rp.rpol_target
         (package_fallback_fn tops T (K global_nonreentrant_slot) fb) /\
       groups = MAP (package_external_group tops rp.rpol_target T
