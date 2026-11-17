@@ -2,8 +2,10 @@ Theory dftFinitePacketHol
 Ancestors
   dftFinitePacket
   dftFinitePacketReachability
+  dftPacketBlockRootedAppend
   dftGasPrefixProvider
   dftNativePlanPrefix
+  dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
@@ -17,10 +19,13 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshChildStop
   dftPacketFreshRow
+  dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
+  dftPacketLastRowValidity
   dftPacketNativeContinuation
   dftPacketNativePrefixBoundary
+  dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
@@ -43,6 +48,9 @@ Ancestors
   dftPacketSlotRefine
   dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
+  dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
+  dftPacketBlockTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
+  dftPacketExistingPathRows
