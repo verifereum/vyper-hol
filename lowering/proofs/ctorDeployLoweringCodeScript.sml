@@ -99,11 +99,11 @@ Proof
 QED
 
 Theorem deploy_internal_package_certificates:
-  !tops target ut key is_ctor cap ifns.
+  !tops target ut key is_ctor cap srcs ifns.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) ==>
+      package_internal_fn tops ut key is_ctor cap) srcs ==>
     EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
@@ -122,11 +122,11 @@ Proof
 QED
 
 Theorem deploy_internal_body_certificates:
-  !tops target ut key is_ctor cap ifns st_final post.
+  !tops target ut key is_ctor cap srcs ifns st_final post.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) /\
+      package_internal_fn tops ut key is_ctor cap) srcs /\
     shape_state st_final /\
     compile_internal_fn_bodies ifns st_final = ((),post) ==>
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
