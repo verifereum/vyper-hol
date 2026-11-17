@@ -70,17 +70,3 @@ Proof
   rename1 `BaseT b` >> Cases_on `b` >> fs[]
 QED
 
-Theorem type_stmt_raise_reason:
-  type_stmt env ret_ty (Raise (RaiseReason e)) =
-    (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n))
-     then SOME env else NONE)
-Proof
-  simp[Once type_stmt_def]
-QED
-
-Theorem supported_stmt_raise_reason:
-  supported_stmt tops bindings (Raise (RaiseReason e)) =
-    supported_raise_reason tops (RaiseReason e)
-Proof
-  simp[Once supported_stmt_def]
-QED

@@ -1,6 +1,7 @@
 (* Nonliteral RaiseReason over the joint finite-horizon judgment. *)
 Theory bodyFullRaiseReasonNonliteral
 Ancestors
+  stateRelProj
   bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
   reasonResourcesPtr bodyFullRaiseReasonSource

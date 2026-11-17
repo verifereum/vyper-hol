@@ -1,7 +1,7 @@
 (* Literal RaiseReason over one joint finite-horizon execution. *)
 Theory bodyFullRaiseReasonLiteral
 Ancestors
-  bodyFullRaiseReasonSource
+  stateRelProj
   bodyFullRaiseReasonLiteralEntry bodyFullRaiseReasonLiteralEncoder
   bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca reasonCompilerProps reasonSourceProps
   reasonResourcesPtr reasonTypingProps gasOutcomeFullCompose gasOutcomeFull
