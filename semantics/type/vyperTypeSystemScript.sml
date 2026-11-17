@@ -671,7 +671,6 @@ Definition valid_conversion_def:
   valid_conversion (BaseT DecimalT) (BaseT (BytesT (Fixed m))) = (168 <= 8 * m) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
   valid_conversion (BaseT (StringT n)) (BaseT (StringT k)) = (k < n) /\
-  valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
   valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
