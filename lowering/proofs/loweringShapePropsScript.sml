@@ -61,18 +61,19 @@ Definition type_builtin_arity_def:
     | _ => 0
 End
 
-(* raw_call lowers to
-   DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
-   selfdestruct emits SELFDESTRUCT, excluded by the current instruction shape
-   policy; create calls emit CREATE/CREATE2, outside inst_shape_ok;
-   a builtin with too few arguments compiles HD []. *)
+(* The forms the body-shape proof has no case for: raw_call,
+   raw_call(t, msg.data) (which still restores the free memory pointer with
+   SETFMP), selfdestruct, create_minimal_proxy_to and raw_create; and a
+   builtin with too few arguments, which compiles HD [].  create_copy_of and
+   create_from_blueprint, which allocate with DALLOCA, are covered. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty es d. e = Call ty SelfDestructTarget es d) \/
     (?ty kind salted rof order es d.
-       e = Call ty (CreateTarget kind salted rof order) es d) \/
+       e = Call ty (CreateTarget kind salted rof order) es d /\
+       (kind = CreateMinimalProxy \/ kind = RawCreate)) \/
     (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
     (?ty tb target es. e = TypeBuiltin ty tb target es /\
                        LENGTH es < type_builtin_arity tb)

@@ -27,18 +27,6 @@ End
 
 (* ===== S4: semantic forward simulation ===== *)
 
-(* The O1 source shape excludes DALLOCA. *)
-Theorem o1_source_unit_ok_no_dalloca:
-  o1_source_unit_ok unit ==> ~ctx_has_dalloca unit.cu_context
-Proof
-  rw[o1_source_unit_ok_def, ctx_has_dalloca_def, listTheory.EVERY_MEM,
-     listTheory.EXISTS_MEM] >>
-  CCONTR_TAC >> gvs[] >>
-  rename1 `MEM i (fn_insts f)` >>
-  `raw_opcode_ok i.inst_opcode` by metis_tac[] >>
-  gvs[raw_opcode_ok_def]
-QED
-
 (* S4 -- Milestone 3, from the per-pass contracts.
  * Premises added to the original admission: the source's entry function
  * has no PARAM (unit_entry_no_params); every variable a use reads is
@@ -59,7 +47,8 @@ QED
  * The source's static invariant rows remain premises: no function has
  * an eom, and the fixed region is reserved. Raw memory safety, pointer
  * discipline, taint bounds and DLOAD bounds guard the reconstructed
- * input oracle together. No DALLOCA follows from o1_source_unit_ok.
+ * input oracle together; raw_unit_memory_ok includes DALLOCA's no-wrap
+ * bound and the dynamic region's floor.
  * The input state runs at a free-memory pointer fmp of the caller's
  * choice (raw_variant: its FMP fields are fmp, the rest as vs_out's up to
  * the GAS oracle), which FmpLowering relocates to the output state's

@@ -1,4 +1,6 @@
-(* CREATE opcodes can only come from source create calls, outside the gate. *)
+(* CREATE opcodes can only come from source create calls.  Outside the
+   body-shape roots only create_copy_of and create_from_blueprint remain, and
+   both allocate with DALLOCA, so code without DALLOCA has no CREATE. *)
 Theory loweringRuntimeNoCreate
 Ancestors
   loweringRuntimeOpcodes loweringPackageInsts ctorCallFreeExpr ctorCallFreeStmt
@@ -7,6 +9,8 @@ Ancestors
 
 Theorem compile_runtime_stmts_no_create:
   ~supported_stmts_expr_exists expr_shape_root ss /\
+  EVERY (\i. i.inst_opcode <> DALLOCA)
+    (state_insts (SND (compile_stmts ce lc ty ss st))) /\
   EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
@@ -27,7 +31,9 @@ QED
 Theorem run_lowering_no_create:
   run_lowering sels exts ints fb rp buckets metadata dense info entry = SOME unit ==>
   EVERY external_fn_shape_ok exts /\ EVERY internal_fn_shape_ok ints /\
-  fallback_shape_ok fb ==>
+  fallback_shape_ok fb /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn))
+    unit.cu_context.ctx_functions ==>
   EVERY (\fn. EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (fn_insts fn)) unit.cu_context.ctx_functions
 Proof

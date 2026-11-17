@@ -281,12 +281,6 @@ QED
 
 (* ===== Source shape ===== *)
 
-Theorem raw_opcode_ok_not_raw_fmp[local]:
-  raw_opcode_ok op ==> ~is_raw_fmp_opcode op
-Proof
-  Cases_on `op` >> simp[raw_opcode_ok_def, is_raw_fmp_opcode_def]
-QED
-
 Theorem source_pre_fmp_ops:
   o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
   pre_fmp_ops fn
@@ -294,14 +288,6 @@ Proof
   rw[o1_source_unit_ok_def, pre_fmp_ops_def, EVERY_MEM] >>
   `raw_opcode_ok inst.inst_opcode` by metis_tac[] >>
   Cases_on `inst.inst_opcode` >> fs[raw_opcode_ok_def, pre_fmp_opcode_def]
-QED
-
-Theorem source_no_raw_fmp_ops:
-  o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
-  no_raw_fmp_ops fn
-Proof
-  rw[o1_source_unit_ok_def, no_raw_fmp_ops_def, EVERY_MEM] >>
-  metis_tac[raw_opcode_ok_not_raw_fmp]
 QED
 
 Theorem source_fmp_free:
@@ -451,9 +437,8 @@ QED
 
 (* The walk's input is at row 0: SimplifyCFG's pre-walk run makes every
    function a MakeSSA input (the source has no PHI and definite
-   assignment), both pre-walk runs keep the source's freedom from raw FMP
-   operations and its unset FMP conventions, and DretDesugar is the
-   identity. *)
+   assignment), both pre-walk runs keep the source's unset FMP
+   conventions, and DretDesugar is the identity. *)
 Theorem o1_pre_walk_rows:
   run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit s =
     SOME (unit', s') /\
@@ -462,7 +447,6 @@ Theorem o1_pre_walk_rows:
   o1_source_unit_ok unit /\ unit_defs_reach_uses unit /\
   unit_fmp_unsealed unit ==>
   EVERY (o1_fn_row 0) unit'.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops unit'.cu_context.ctx_functions /\
   EVERY fmp_sig_no_param unit'.cu_context.ctx_functions
 Proof
   strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
