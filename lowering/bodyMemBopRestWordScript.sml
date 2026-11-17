@@ -38,15 +38,19 @@ Proof
   `ann = expr_type e1 /\ is_word_type ann /\
    is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
    ~is_bytestring_type (expr_type e1) /\ ~is_ArrayT (expr_type e2)` by
-    (qpat_assum `MEM bop [And;Or;XOr;ShL;ShR]`
-       (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     gvs[well_typed_binop_def, is_word_type_def, is_int_type_def,
-         is_bytestring_type_def, vyperValueTheory.evaluate_type_def,
-         optionTheory.IF_EQUALS_OPTION]) >>
+    (qpat_x_assum `expr_type e1 = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+     gvs[well_typed_binop_def, is_word_type_def,
+                  is_int_type_def, is_bytestring_type_def,
+                  vyperValueTheory.evaluate_type_def,
+                  optionTheory.IF_EQUALS_OPTION] >>
+     Cases_on `expr_type e2` >> gvs[is_int_type_def, is_word_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_word_type_def]) >>
   `body_expr_mem_ok cx e1 /\
    ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv,t) /\
                       read_result cx tv s1 = (INL v,t1)) ==>
-    body_expr_mem_ok cx e2)` by fs[body_exprs_mem_ok_def] >>
+    body_expr_mem_ok cx e2)` by
+    (fs[body_exprs_mem_ok_def] >> first_assum ACCEPT_TAC) >>
   irule compile_bop_rel_sim_mem >> rpt conj_tac
   >~ [`binop_frag_mem_post`] >- suspend "fragment"
   >~ [`compile_binop`]
@@ -115,14 +119,15 @@ Proof
     (drule_all rest_word_typed_membership >> strip_tac
      >- (conj_tac
          >- (irule body_bop_bytes_sim_mem >> metis_tac[]) >>
+         qpat_x_assum `expr_type e1 = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
          qpat_assum `MEM bop [And;Or;XOr;ShL;ShR]`
            (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
          gvs[well_typed_binop_def, is_word_type_def,
              vyperValueTheory.evaluate_type_def,
              optionTheory.IF_EQUALS_OPTION, IS_SOME_EXISTS]) >>
-     conj_tac
+     (conj_tac
      >- (irule compile_rest_word_membership_sim_mem >> metis_tac[]) >>
-     gvs[well_typed_binop_def, is_word_type_def]) >>
+     gvs[well_typed_binop_def, is_word_type_def])) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule body_expr_vv_sim_mem_stack_word >> simp[compile_bop_stack] >>
   rpt conj_tac
