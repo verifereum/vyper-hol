@@ -7,7 +7,7 @@ Ancestors
   stmtLoweringMono allocLimits exprSimAggregateLayout bodyDeclCopyMemory
   annassignRelayoutSource memoryLocalRhsProps exprSimHyps exprSimHypsDefs
   stmtSimDeclTypedCode stmtSimDeclSourceSeparation externalNormalizePremises
-  assignBasePtrBoundary
+  assignBasePtrBoundary stateRelProj exprOpenMain exprOpenTerminals
   exprOperandVar bodyPtrDefs exprSimMemDefs loweringPosts
   vyperTypeValues vyperTypeInvariants vyperTypeExprSoundness valueTypingMemoryProps
   compileEnv exprLowering stmtLowering vyperInterpreter vyperState
@@ -383,6 +383,32 @@ Resume annassign_other_typed_full_execution[success]:
     inst.inst_opcode = ALLOCA` by simp[Abbr `inst`, venomInstTheory.mk_inst_def, NoAsms] >>
    `inst.inst_id < a.cs_next_id \/ b.cs_next_id <= inst.inst_id` by fs[] >>
    `FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,type_memory_size dtv)` by fs[] >>
+   `acyclic_struct_metadata cenv'.ce_struct_fields` by
+     (qpat_assum `body_inv tops ctx cenv' cx`
+       (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
+      first_assum ACCEPT_TAC) >>
+   `storage_vars_rel cenv' cx /\ transient_vars_rel cenv' cx` by
+     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_post_def]) >>
+      drule stmt_state_rel_vars_rels >> simp[]) >>
+   `~block_is_terminated a` by
+     (irule emit_inst_nonterminator_open >>
+      qpat_assum `emit_inst ALLOCA _ _ _ = _` (irule_at Any) >>
+      simp[venomInstTheory.is_terminator_def]) >>
+   `?tv es1. eval_expr cx e
+       (es with gas_obs := gas_explicit marks entry.vs_gas_readings) = (INL tv,es1)` by
+     (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL v,_)`
+        (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+   `~block_is_terminated sv` by
+     (irule compile_expr_open_general >>
+      qpat_assum `compile_expr cenv' (expr_type e) e a = (vv,sv)` (irule_at Any) >>
+      qpat_assum `eval_expr cx e _ = (INL tv,es1)` (irule_at Any) >>
+      qexistsl_tac [`tops`,`env`,`ctx`] >> simp[]) >>
+   `~block_is_terminated b` by
+     (irule unwrap_value_open >>
+      qpat_assum `unwrap_value cenv' vv sv = (op,b)` (irule_at Any) >>
+      first_assum ACCEPT_TAC) >>
    `?xs sw.
       op = Var xs /\ lookup_var xs t = SOME sw /\ not_fresh_at b xs /\
       ptr_covers G1 tn1 xs t (type_memory_size stv) /\
@@ -459,8 +485,38 @@ Resume annassign_other_typed_full_execution[success]:
               qpat_assum `compile_assign_value cenv' _ _ op _ _ _ _ _ b = ((),sb)` mp_tac >>
               simp[NoAsms,eq,decl,sz])))) >>
       TRY (strip_tac >> decide_tac) >>
-      FAIL_TAC "suffix witnesses") >>
-   FAIL_TAC "suffix obtained")
+      TRY (qpat_assum `!x. not_fresh_at sa x ==> _ /\ _`
+        (fn th => POP_ASSUM_LIST (K all_tac) >> metis_tac[th])) >>
+      TRY (qpat_assum `lower_value compile_expr cenv' (expr_type e) e a = (op,b)`
+            (mp_tac o MATCH_MP (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
+          strip_tac >>
+          qpat_assum `inst.inst_id = sa.cs_next_id` mp_tac >>
+          qpat_assum `sa.cs_next_id < a.cs_next_id` mp_tac >> decide_tac) >>
+      TRY (qpat_assum `compile_assign_value cenv' _ _ op _ _ _ _ _ b = ((),sb)`
+        (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+        metis_tac[cj 1 ci_mono_stmt_helpers, exprLoweringPropsTheory.ci_mono_def, pairTheory.SND]) >>
+      TRY (qpat_assum `op = Var xs` (fn eq =>
+        qpat_assum `!ty. type_memory_bytes cenv' ty = type_memory_bytes cenv ty` (fn decl =>
+        qpat_assum `type_memory_bytes cenv typ = type_memory_size dtv` (fn sz =>
+        qpat_assum `compile_assign_value cenv' _ _ op _ _ _ _ _ b = ((),sb)` mp_tac >>
+        simp[NoAsms,eq,decl,sz] >> first_assum ACCEPT_TAC)))) >>
+      TRY (rpt strip_tac >> first_assum ACCEPT_TAC) >>
+      TRY (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o PURE_REWRITE_RULE [expr_post_def]) >> first_assum ACCEPT_TAC) >>
+      NO_TAC) >>
+   irule gas_outcome_full_pure >>
+   reverse conj_tac >- first_assum ACCEPT_TAC >>
+   qexistsl_tac [`Gf`,`out`,`INL ()`,`u`,`tf`] >>
+   conj_tac
+   >- (drule new_variable_success_gas_obs >> simp[NoAsms]) >>
+   gen_tac >> disch_tac >> conj_tac
+   >- first_assum MATCH_ACCEPT_TAC >>
+   qexists_tac `cenv'` >>
+   qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
+     (qspec_then `H` mp_tac) >>
+   (impl_tac >- first_assum ACCEPT_TAC) >>
+   POP_ASSUM_LIST (K all_tac) >>
+   simp[Abbr `out`, vyperStateTheory.evaluation_state_component_equality])
 QED
 
 Finalise annassign_other_typed_full_execution
