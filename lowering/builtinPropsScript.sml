@@ -729,35 +729,6 @@ Proof
   Cases_on `eval_operand (Var v) ss'` >> fs[]
 QED
 
-(* Shift: defer to after compile_select infrastructure is defined *)
-Theorem compile_shift_correct_weak[local]:
-  ∀ val_op bits_op is_signed ss st op st' v b.
-    compile_shift val_op bits_op is_signed st = (op, st') ∧
-    eval_operand val_op ss = SOME v ∧
-    eval_operand bits_op ss = SOME b
-    ⇒
-    ∃ ss' w.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME w
-Proof
-  rpt strip_tac >>
-  Cases_on `is_signed` >>
-  gvs[compile_shift_def, compile_select_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  qmatch_goalsub_abbrev_tac `run_inst_seq insts ss` >>
-  qmatch_goalsub_abbrev_tac `eval_operand (Var out) _` >>
-  irule (Q.SPECL [`insts`, `operand_vars [val_op; bits_op]`, `ss`, `out`]
-          run_inst_seq_check_chain_output) >>
-  simp[Abbr`insts`, Abbr`out`, check_chain_def, chain_labels_def,
-       pure_opc_arity_def, mk_inst_def, operand_vars_def] >>
-  rpt conj_tac >>
-  TRY (MAP_EVERY qexists_tac [`bits_op`, `val_op`]) >>
-  Cases_on `val_op` >> Cases_on `bits_op` >>
-  rw[operand_vars_def, operand_var_def, eval_operand_def] >>
-  fs[eval_operand_def]
-QED
-
 (* ===== Simple Builtins ===== *)
 
 (* compile_select: branchless ternary via XOR/MUL/XOR.
@@ -1377,8 +1348,7 @@ QED
    Proof: step through each emit_op using emit_op_pure2_correct,
    then use compile_select_correct for the selection. *)
 (* Shift strong spec: TODO - emit_op_pure2_correct MATCH_MP fails after
-   pairarg_tac rewriting. Need to investigate the interaction.
-   The weak spec (compile_shift_correct_weak) is proved above. *)
+   pairarg_tac rewriting. Need to investigate the interaction. *)
 Theorem compile_shift_correct:
   ∀ val_op bits_op is_signed ss st op st' v b.
     compile_shift val_op bits_op is_signed st = (op, st') ∧

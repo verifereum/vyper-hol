@@ -6,7 +6,7 @@ Ancestors
   loweringPosts loweringStateRelDefs vyperTypeStatePreservation placeStore
   valueEncodingProofs venomState compileEnv words list rich_list arithmetic
 
-Theorem memory_place_replace_robust[local]:
+Theorem memory_place_replace_robust:
   mem_path_offset entry.type path = SOME (k,ptv) /\
   value_has_type entry.type entry.value /\ value_has_type ptv v /\
   replace_memory_entry entry path v = INL entry' /\
