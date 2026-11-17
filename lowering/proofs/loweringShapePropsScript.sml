@@ -61,19 +61,18 @@ Definition type_builtin_arity_def:
     | _ => 0
 End
 
-(* The forms the body-shape proof has no case for: raw_call,
-   raw_call(t, msg.data) (which still restores the free memory pointer with
-   SETFMP), selfdestruct, create_minimal_proxy_to and raw_create; and a
-   builtin with too few arguments, which compiles HD [].  create_copy_of and
-   create_from_blueprint, which allocate with DALLOCA, are covered. *)
+(* raw_call lowers to
+   DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
+   selfdestruct emits SELFDESTRUCT, excluded by the current instruction shape
+   policy; create calls emit CREATE/CREATE2, outside inst_shape_ok;
+   a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty es d. e = Call ty SelfDestructTarget es d) \/
     (?ty kind salted rof order es d.
-       e = Call ty (CreateTarget kind salted rof order) es d /\
-       (kind = CreateMinimalProxy \/ kind = RawCreate)) \/
+       e = Call ty (CreateTarget kind salted rof order) es d) \/
     (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
     (?ty tb target es. e = TypeBuiltin ty tb target es /\
                        LENGTH es < type_builtin_arity tb)
@@ -14764,6 +14763,7 @@ Proof
   simp[mk_raw_function_def]
 QED
 
+(* The packaged unit has the O1 source shape, for code without DALLOCA. *)
 Theorem entry_unit_source_ok:
   !entry_label entry descs segs data.
     ~jump_label_ok entry_label /\ ~reserved_label entry_label /\
@@ -14784,6 +14784,8 @@ Theorem entry_unit_source_ok:
        MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
        i.inst_opcode = RETPC_PARAM /\
        MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    EVERY (\i. i.inst_opcode <> DALLOCA)
+      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
     rets_scoped (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=
@@ -14839,10 +14841,18 @@ Proof
   `!fn. MEM fn ifns ==>
         EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
     by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
+  `!fn inst. MEM fn ifns /\ MEM inst (fn_insts fn) ==> MEM inst insts`
+    by (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `MEM fn ifns` mp_tac >> simp[Abbr `ifns`] >> strip_tac >>
+        drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
+        gvs[Abbr `insts`, fn_insts_def, MEM_fn_insts_blocks_iff,
+            mk_internal_function_metadata, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+        metis_tac[]) >>
   simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
        mk_venom_context_def, internal_termination_ok_def,
        mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM] >>
+  rpt strip_tac >> res_tac >> res_tac >> gvs[]
 QED
 
 Theorem lowered_unit_source_ok:
@@ -14864,6 +14874,8 @@ Theorem lowered_unit_source_ok:
        MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
        i.inst_opcode = RETPC_PARAM /\
        MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
+    EVERY (\i. i.inst_opcode <> DALLOCA)
+      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
     rets_scoped (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=

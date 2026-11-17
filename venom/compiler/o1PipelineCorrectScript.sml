@@ -48,7 +48,8 @@ End
  * an eom, and the fixed region is reserved. Raw memory safety, pointer
  * discipline, taint bounds and DLOAD bounds guard the reconstructed
  * input oracle together; raw_unit_memory_ok includes DALLOCA's no-wrap
- * bound and the dynamic region's floor.
+ * bound and the dynamic region's floor. The source has no DALLOCA
+ * (~ctx_has_dalloca) here and in the theorems below.
  * The input state runs at a free-memory pointer fmp of the caller's
  * choice (raw_variant: its FMP fields are fmp, the rest as vs_out's up to
  * the GAS oracle), which FmpLowering relocates to the output state's
@@ -57,7 +58,8 @@ End
 Theorem run_venom_pipeline_fuel:
   !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -81,7 +83,7 @@ Proof
   `EVERY pre_fmp_ops unit.cu_context.ctx_functions /\
    ~ctx_has_dalloca unit.cu_context` by
     (simp[EVERY_MEM] >>
-     metis_tac[source_pre_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
+     metis_tac[source_pre_fmp_ops]) >>
   (* At an input state whose free-memory pointer is its initial one, no
      reachable state moves it: the raw phase's FMP facts hold. *)
   `!vi. vi.vs_fmp = vi.vs_initial_fmp /\
@@ -129,7 +131,8 @@ QED
 Theorem run_venom_pipeline_correct:
   !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -157,7 +160,8 @@ QED
 Theorem run_venom_pipeline_correct_all_dead:
   !lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -180,7 +184,7 @@ Proof
   `EVERY pre_fmp_ops unit.cu_context.ctx_functions /\
    ~ctx_has_dalloca unit.cu_context` by
     (simp[EVERY_MEM] >>
-     metis_tac[source_pre_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
+     metis_tac[source_pre_fmp_ops]) >>
   (* At an input state whose free-memory pointer is its initial one, no
      reachable state moves it: the raw phase's FMP facts hold. *)
   `!D vi. vi.vs_fmp = vi.vs_initial_fmp /\
@@ -231,7 +235,8 @@ QED
 Theorem run_venom_pipeline_mem_inv:
   !lo rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -310,7 +315,8 @@ Theorem run_venom_pipeline_run_bounded_raw:
     generate_context_plan out.po_unit.cu_context = SOME cp
     ==>
     ?fuel' M. !D vs fmp.
-      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+      unit_entry_no_params unit /\
       unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
       o1_run_state_ok vs /\
       reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
@@ -403,7 +409,8 @@ Theorem run_venom_pipeline_run_bounded:
     generate_context_plan out.po_unit.cu_context = SOME cp
     ==>
     ?fuel' M. !D vs.
-      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+      unit_entry_no_params unit /\
       unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
       o1_run_state_ok vs /\
       reserved_intervals_wf unit.cu_context.ctx_global_reserved /\

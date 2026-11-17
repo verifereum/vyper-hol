@@ -10,7 +10,8 @@ Ancestors
 Theorem o1_pipeline_code_end_offset_ok:
   !D lo rpolicy unit out vs_out.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
@@ -40,7 +41,7 @@ Proof
   `EVERY no_raw_fmp_ops unit.cu_context.ctx_functions /\
    ~ctx_has_dalloca unit.cu_context` by
     (simp[listTheory.EVERY_MEM] >>
-     metis_tac[source_no_raw_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
+     metis_tac[source_no_raw_fmp_ops]) >>
   `!vi. o1_run_state_ok vi /\ raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline lo unit.cu_context vi /\
         taint_within D unit.cu_context vi /\

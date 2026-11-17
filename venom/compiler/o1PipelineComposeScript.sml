@@ -281,6 +281,23 @@ QED
 
 (* ===== Source shape ===== *)
 
+Theorem raw_opcode_ok_not_raw_fmp[local]:
+  raw_opcode_ok op /\ op <> DALLOCA ==> ~is_raw_fmp_opcode op
+Proof
+  Cases_on `op` >> simp[raw_opcode_ok_def, is_raw_fmp_opcode_def]
+QED
+
+(* The source's only FMP operations are its DALLOCAs. *)
+Theorem source_no_raw_fmp_ops:
+  o1_source_unit_ok u /\ ~ctx_has_dalloca u.cu_context /\
+  MEM fn u.cu_context.ctx_functions ==>
+  no_raw_fmp_ops fn
+Proof
+  rw[o1_source_unit_ok_def, ctx_has_dalloca_def, no_raw_fmp_ops_def,
+     EVERY_MEM, EXISTS_MEM] >>
+  metis_tac[raw_opcode_ok_not_raw_fmp]
+QED
+
 Theorem source_pre_fmp_ops:
   o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
   pre_fmp_ops fn
@@ -320,9 +337,8 @@ Proof
   drule_all source_member_shape >> strip_tac >>
   simp[o1_fn_shape_def] >> rpt conj_tac
   >- gvs[unit_label_refs_ok_def, EVERY_MEM]
-  >- (rpt strip_tac >> drule_all source_no_raw_fmp_ops >>
-      simp[no_raw_fmp_ops_def] >> qexists_tac `inst` >>
-      simp[is_raw_fmp_opcode_def])
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[])
   >- metis_tac[source_entry_shape]
   >> strip_tac >> drule_all source_internal_shape >> simp[]
 QED
@@ -472,21 +488,6 @@ Proof
      >- (fs[o1_source_unit_ok_def, EVERY_MEM] >> rpt strip_tac >>
          res_tac >> gvs[raw_opcode_ok_def]) >>
      qexists_tac `unit.cu_context` >> fs[o1_ctx_shape_def, EVERY_MEM]) >>
-  `EVERY no_raw_fmp_ops mid.cu_context.ctx_functions` by
-    (mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
-                     `pass` |-> `CFP_Simple VP_SimplifyCFG`,
-                     `view` |-> `any_view`, `P` |-> `no_raw_fmp_ops`]
-               ctx_pass_stage_every) >>
-     impl_tac >- (
-     rpt conj_tac
-     >- first_assum ACCEPT_TAC
-     >- (rpt strip_tac >>
-         qpat_x_assum `fn_pass_step _ _ _ _ _ _`
-           (strip_assume_tac o REWRITE_RULE [fn_pass_step_def]) >>
-         drule_at (Pos last) execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops >>
-         simp[] >> metis_tac[]) >>
-     simp[EVERY_MEM] >> metis_tac[source_no_raw_fmp_ops]) >>
-     simp[]) >>
   `EVERY pre_fmp_ops mid.cu_context.ctx_functions` by
     (`mid.cu_context.ctx_functions =
         MAP simplify_cfg_fn unit.cu_context.ctx_functions` by
@@ -509,6 +510,44 @@ Proof
      fs[unit_fmp_unsealed_def, EVERY_MEM, fmp_sig_no_param_def]) >>
      simp[]) >>
   fs[EVERY_MEM, o1_fn_row_def]
+QED
+
+(* Without DALLOCA, both pre-walk runs keep the source's freedom from raw
+   FMP operations. *)
+Theorem o1_pre_walk_no_raw_fmp_ops:
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit s =
+    SOME (unit', s') /\
+  o1_ctx_shape unit.cu_context /\
+  ALL_DISTINCT (unit_label_namespace unit) /\ ir_supply_inst_ok s /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context ==>
+  EVERY no_raw_fmp_ops unit'.cu_context.ctx_functions
+Proof
+  strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                  `u` |-> `unit`, `u'` |-> `mid`, `s'` |-> `t`]
+            mapped_pass_stage) >>
+  impl_tac >- simp[o1_contract_simplify_cfg_pre_walk] >> strip_tac >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `pass` |-> `CFP_Simple VP_DretDesugar`,
+                  `u` |-> `mid`, `s` |-> `t`, `u'` |-> `unit'`]
+            mapped_pass_stage) >>
+  impl_tac
+  >- simp[o1_contract_dret_desugar_pre_walk, unit_labels_wf_namespace] >>
+  strip_tac >>
+  `unit'.cu_context = mid.cu_context` by metis_tac[dret_desugar_stage_identity] >>
+  mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
+                   `pass` |-> `CFP_Simple VP_SimplifyCFG`,
+                   `view` |-> `any_view`, `P` |-> `no_raw_fmp_ops`]
+             ctx_pass_stage_every) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- (rpt strip_tac >>
+        qpat_x_assum `fn_pass_step _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [fn_pass_step_def]) >>
+        drule_at (Pos last) execute_configured_fn_pass_o1_suffix_no_raw_fmp_ops >>
+        simp[] >> metis_tac[]) >>
+    simp[EVERY_MEM] >> metis_tac[source_no_raw_fmp_ops]) >>
+  simp[]
 QED
 
 (* ===== Pruning ===== *)
