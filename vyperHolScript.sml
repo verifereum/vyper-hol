@@ -60,8 +60,17 @@ Ancestors
      statement reason theories *)
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
-  stmtReasonKindsMemory stmtSimAssignPlace stmtSimAugAssignPlaceStorage
+  stmtReasonKindsMemory stmtSimAugAssignPlaceStorage
   stmtSimIfCounted stmtSimRaise stmtSimSeqMem
+  (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
+  immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
+  immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
+  immutableAssignCompose immutableAssignOpen
+  assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
+  assignPlaceEmptyCompose assignPlaceContinuation assignPlaceCallerFacts
+  assignPlaceGasCompose assignPlaceStoreReady
+  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
+  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
