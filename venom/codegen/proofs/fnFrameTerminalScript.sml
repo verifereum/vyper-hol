@@ -254,7 +254,7 @@ Proof
   >- (drule_all gen_inst_invalid_frame_sim >>
       disch_then (qspec_then `o2pc` strip_assume_tac) >>
       qexistsl_tac [`n`, `out`] >> simp[]) >>
-  `MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY]` by
+  `MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL]` by
     (drule step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
   drule_all gen_inst_ext_fault_frame_sim >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
