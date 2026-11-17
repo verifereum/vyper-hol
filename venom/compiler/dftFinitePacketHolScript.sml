@@ -27,6 +27,7 @@ Ancestors
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPseudoAdvance
+  dftPacketPseudoCursor
   dftPacketRefinementBoundary
   dftPacketReturnLocal
   dftPacketReturnNative
