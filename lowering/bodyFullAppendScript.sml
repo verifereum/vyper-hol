@@ -226,6 +226,80 @@ QED
 
 Finalise append_storage_guard_abort_uniform[local]
 
+(* Staging ends before the storage guard; it needs no static/no-dalloca
+   restriction.  The allocation/copy compiler cut is kept explicit. *)
+Theorem append_storage_aggregate_stage_ready[local]:
+  stmt_state_rel H0 ctx func cenv cx es s /\
+  compile_alloc_buffer n sa = (buf,sm) /\
+  compile_copy_memory buf.buf_operand (Var xs) n sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
+  n < dimword (:256) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  alloca_history func s /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
+  evaluate_type (get_tenv cx) sty = SOME tv /\ ~is_word_type sty /\
+  type_memory_size tv = n /\ val_wf tv v /\
+  expr_val_at cenv cx sty start sa es v (Var xs) s /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n sw) mem) /\
+  ptr_covers G tn xs s n /\ w2n sw+n < dimword (:256) /\
+  (n = 0 \/ w2n sw+n <= s.vs_alloca_next) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t root b Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es Gf tf t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    buf.buf_operand = Var root /\ not_fresh_at sb root /\
+    lookup_var root t = SOME (n2w b) /\ ptr_covers Gf tf root t n /\
+    op_taint tf buf.buf_operand = {} /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,n) /\
+    lo <= b /\ b+n < dimword (:256) /\ b+n <= t.vs_alloca_next /\
+    (!name a len. local_region cenv es.scopes t name a len ==>
+      regions_disjoint b n a len) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory tv v b mem) /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
+      FLOOKUP t.vs_allocas aid = SOME ent) /\
+    (!x. not_fresh_at sa x ==>
+      not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    alloca_history func t /\ alloca_frame cenv es sa s cenv es t /\
+    (!aid off sz. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (off,sz) ==>
+      !i. off <= i /\ i < off+sz ==> (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bodyFullMemoryStageTheory.body_full_memory_stage_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `op_taint tf buf.buf_operand = {}` by fs[bodyPtrDefsTheory.ptr_covers_def] >>
+  `alloca_history func t` by
+    (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
+     goal_assum (drule_at Any) >>
+     metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
+  qexistsl_tac [`t`,`root`,`b`,`Gf`,`tf`] >> asm_rewrite_tac[] >>
+  conj_tac >- suspend "frame" >> suspend "older_taint"
+QED
+
+Resume append_storage_aggregate_stage_ready[frame]:
+  cheat
+QED
+
+Resume append_storage_aggregate_stage_ready[older_taint]:
+  cheat
+QED
+
+Finalise append_storage_aggregate_stage_ready[local]
+
 (* The top-level storage/transient dynamic array. *)
 (* The sparse endpoint bridge is independent of the implementation of the
    slots path.  In particular, it assumes neither nonstatic execution nor a
