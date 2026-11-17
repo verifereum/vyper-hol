@@ -299,7 +299,7 @@ Resume reason_literal_message_full_entry[kept]:
       regions_disjoint b (32+32*word_size ml) a len` by
     (drule_all literal_ptr_local_region_frame >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s Gf tnf` by
-    (irule bodyPtrMakeArrayAllocationFrameTheory.ghost_kept_disjoint_taint_frame >>
+    (irule exprSimPtrLiteralBufferTheory.ghost_kept_disjoint_taint_frame >>
      conj_tac >- (simp[ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
      qexistsl_tac [`b`,`32+32*word_size ml`] >>
      conj_tac >- metis_tac[] >>
