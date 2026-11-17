@@ -82,7 +82,8 @@ Proof
                    (run_inst_seq (emitted_insts sa sb) s)` by
     (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
      fs[EVERY_MEM]) >>
-  gvs[vars_ext_result_def] >> metis_tac[vars_ext_eval_operand]
+  gvs[vars_ext_result_def, vars_ext_def] >>
+  metis_tac[eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]
 QED
 
 Theorem binop_frag_bytes_bitwise:

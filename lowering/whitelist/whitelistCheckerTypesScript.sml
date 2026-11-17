@@ -307,9 +307,12 @@ Theorem well_typed_binop_bitwise_supported:
   MEM op [And;Or;XOr] ==>
   supported_binop op t1 t2 lb ne \/ is_flag_type t1
 Proof
+  Cases_on `is_bool_type t1`
+  >- (Cases_on `t1` >> gvs[is_bool_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_bool_type_def, well_typed_binop_def, supported_binop_def]) >>
   rw[] >> gvs[well_typed_binop_def, supported_binop_def] >>
-  imp_res_tac well_formed_integer_type >> gvs[is_bool_type_def] >>
-  qpat_x_assum `?m. t1 = BaseT (BytesT (Fixed m))` strip_assume_tac >>
+  imp_res_tac well_formed_integer_type >> gvs[] >>
   gvs[well_formed_type_def, evaluate_type_def, IS_SOME_COND]
 QED
 
