@@ -90,8 +90,10 @@ Definition pad_right_zeros_def:
 End
 
 
-Definition decimal_string_to_int_def:
-  decimal_string_to_int s : int =
+(* Parses an unsigned decimal literal ("1.5", "15e-10"); a leading sign is
+   honoured too. *)
+Definition decimal_literal_to_int_def:
+  decimal_literal_to_int s : int =
     let (obj, exp) = split_at_e s in
     let (neg_exp, exp_rest) = strip_sign exp in
     let exp_digits = FILTER isDigit exp_rest in
@@ -108,6 +110,38 @@ Definition decimal_string_to_int_def:
     let digits = FILTER isDigit ds_rest in
     let n = num_from_dec_string digits in
       if neg then &0 - &n else &n
+End
+
+
+(* Python comments run from "#" to the end of the line. *)
+Definition strip_comments_def:
+  (strip_comments in_comment [] = []) /\
+  (strip_comments in_comment (c::cs) =
+     if c = #"\n" then c :: strip_comments F cs
+     else if in_comment \/ c = #"#" then strip_comments T cs
+     else c :: strip_comments F cs)
+End
+
+
+(* Splits off what precedes the first digit or ".", and says whether it holds
+   an odd number of minus signs. *)
+Definition split_sign_prefix_def:
+  (split_sign_prefix [] = (F, [])) /\
+  (split_sign_prefix (c::cs) =
+     if isDigit c \/ c = #"." then (F, c::cs)
+     else let (neg, r) = split_sign_prefix cs in
+       ((if c = #"-" then ~neg else neg), r))
+End
+
+
+(* A Decimal node's value is its source span, which covers any unary minus
+   signs Vyper folded into the literal and any comments between them:
+   "--1.5", "-(-2.25)", "-( # note\n 3.0)". *)
+Definition decimal_string_to_int_def:
+  decimal_string_to_int s : int =
+    let (neg, lit) = split_sign_prefix (strip_comments F s) in
+    let n = decimal_literal_to_int lit in
+      if neg then &0 - n else n
 End
 
 
@@ -436,29 +470,31 @@ Definition make_builtin_call_def:
         (create_keyword_order RawCreate (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE)
     else if name = "shift" then
-      (let original = Call ty (IntCall (NONE,"shift")) args NONE in
-       case MAP origin_fold_value args of
+      (* Only a shift Vyper folds is supported: a runtime shift() is rejected,
+         never read as a call to a function of that name. *)
+      (case MAP origin_fold_value args of
        | [Literal _ (IntL i); Literal _ (IntL bits)] =>
            if -256 <= bits /\ bits <= 256 then
              if bits < 0 then
                Literal ty (IntL (int_shift_right (Num (-bits)) i))
              else
-               (case pin_fold_result ty original
+               (case pin_fold_result ty rejected_expr
                   (wrapped_int_op (if i < 0 then Signed 256 else Unsigned 256)
                     (int_shift_left (Num bits) i) : value + error) of
                 | Literal lty l => Literal lty l
-                | _ => original)
-           else original
-       | _ => original)
+                | _ => rejected_expr)
+           else rejected_expr
+       | _ => rejected_expr)
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
-      fold_pin_constant (case args of
-         (v::d::_) =>
+      (* Vyper takes exactly two arguments, the second a string; one that
+         doesn't reduce to a literal here is rejected, not read as wei. *)
+      (case args of
+         [v; d] =>
            (case denomination_of_expr d of
-              SOME dn => Builtin ty (AsWeiValue dn) [v]
-            | NONE => Builtin ty (AsWeiValue Wei) [v])
-       | (v::_) => Builtin ty (AsWeiValue Wei) [v]
-       | _ => Builtin ty (AsWeiValue Wei) [])
+              SOME dn => fold_pin_constant (Builtin ty (AsWeiValue dn) [v])
+            | NONE => rejected_expr)
+       | _ => rejected_expr)
     else if name = "uint2str" then
       fold_pin_constant
         (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
@@ -500,12 +536,12 @@ Definition make_builtin_call_def:
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call ty (IntCall (NONE, name)) args NONE))
+                            | _ => rejected_expr))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call ty (IntCall (NONE, name)) args NONE)
-                else Call ty (IntCall (NONE, name)) args NONE
+                       | _ => rejected_expr)
+                else rejected_expr
           | _ =>
               if is_cast_name name then
                   if is_builtin_cast_name name then
@@ -517,12 +553,12 @@ Definition make_builtin_call_def:
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call ty (IntCall (NONE, name)) args NONE))
+                          | _ => rejected_expr))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call ty (IntCall (NONE, name)) args NONE)
-              else Call ty (IntCall (NONE, name)) args NONE)
+                     | _ => rejected_expr)
+              else rejected_expr)
 End
 
 

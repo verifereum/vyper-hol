@@ -62,9 +62,15 @@ val _ = check_bool_call "interface before builtin"
 val _ = app (fn tc => check_bool_call "builtin with negative interface tag"
   (call_name ``"len"`` tc) ``Builtin (BaseT BoolT) Len [^call_arg]``)
   [``NONE : string option``, ``SOME "interfaces"``];
+val rejected = rhs (concl (EVAL ``rejected_expr``));
+(* A bare-name call is always a builtin in Vyper (functions are called through
+   self), so an unknown name is rejected rather than read as an internal call. *)
 val _ = app (fn tc => check_bool_call "non-interface name"
-  (call_name ``"unknown"`` tc) (internal_call ``NONE : num option`` ``"unknown"``))
+  (call_name ``"unknown"`` tc) rejected)
   [``NONE : string option``, ``SOME "interfaces"``, ``SOME "module"``];
+val _ = app (fn name => check_bool_call "unsupported builtin" (call_name name
+  ``SOME "builtin_function"``) rejected)
+  [``"print"``, ``"breakpoint"``, ``"shift"``];
 val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
   (call_attr self_name shortcut ``NONE : string option``) iface_result)
   [``"__at__"``, ``"__interface__"``];
@@ -527,6 +533,32 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
+fun check_fixture_rejected path =
+  ((check_fixture false path;
+    raise Fail ("frontend contract checker accepted " ^ path))
+   handle Fail message =>
+     if String.isSubstring "check_contract returned NONE" message then ()
+     else raise Fail message);
+
+(* A same-named internal function doesn't capture a bare builtin call: Vyper
+   compiles these to the builtin (a console call, INVALID, a runtime shift),
+   which the frontend doesn't support. *)
+val _ = check_fixture_rejected "builtin_shadow_print.json";
+val _ = check_fixture_rejected "builtin_shadow_breakpoint.json";
+val _ = check_fixture_rejected "builtin_shadow_shift.json";
+
+(* A Decimal node's value is its source span, signs Vyper folded and comments
+   included; the values are those the pinned compiler stores. *)
+val _ = app (fn (span, expected) =>
+    if aconv (rhs (concl (EVAL ``decimal_string_to_int ^(stringSyntax.fromMLstring span)``)))
+             expected then ()
+    else raise Fail ("decimal span " ^ span))
+  [("--1.5", ``15000000000 : int``),
+   ("-(-2.25)", ``22500000000 : int``),
+   ("-( # e9\n        3.0)", ``-30000000000 : int``),
+   ("1.5", ``15000000000 : int``),
+   ("-15e-10", ``-15 : int``)];
+
 (* A runtime length bounds the result by the source: Bytes[64] fits a
    Bytes[64] result but not a Bytes[63] one. *)
 Theorem slice_runtime_length_source_bound:
@@ -558,6 +590,20 @@ fun fixture_input path = vyperCheckContractFrontendLib.prepare_check_input
      (fixture_dir ^ path),
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
      (fixture_dir ^ path)};
+
+(* Vyper reads the denomination from a constant's folded value; the frontend
+   substitutes the constant before resolving it, so this one is ether. *)
+val _ = check_fixture false "aswei_constant_denomination.json";
+val _ = if null (find_terms (aconv ``AsWeiValue Ether``)
+                  (#modules (fixture_input "aswei_constant_denomination.json")))
+  then raise Fail "as_wei_value constant denomination not read as ether"
+  else ();
+(* A denomination the frontend can't resolve is rejected, not read as wei. *)
+val _ = if aconv (rhs (concl (EVAL
+    ``make_builtin_call (BaseT (UintT 256)) "as_wei_value"
+        [Name (BaseT (UintT 256)) "amount"; Name (BaseT (StringT 5)) "unit"]
+        [] (JT_Integer 256 F)``))) rejected then ()
+  else raise Fail "unresolved as_wei_value denomination not rejected";
 
 (* token (source 1) nests ownable (source 2) under its own alias; the
    main module's owner keeps its own key. *)
