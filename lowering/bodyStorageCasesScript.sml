@@ -329,6 +329,7 @@ Theorem supported_callable_storage_syntax:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
+  ~supported_exprs_exists expr_halt_root defaults /\
   ~supported_exprs_exists expr_evm_run_root defaults /\
   EVERY (\c. FST c = NONE /\
              IS_SOME (supported_function_decl tops c Internal))
