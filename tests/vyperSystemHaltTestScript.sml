@@ -218,7 +218,10 @@ Proof
   simp[adopt_call_outcome_equation, consume_call_outcome_def,
        asm_consume_call_outcome_def, adopt_outcome_def,
        adopt_outcome_deletions_def] >>
-  rpt strip_tac >> simp[]
+  rpt strip_tac >>
+  `asm.as_outcomes <> []` by
+    (strip_tac >> gvs[take_outcome_def, failed_outcome_def]) >>
+  simp[]
 QED
 
 Theorem static_and_failed_deletions_are_ignored:
