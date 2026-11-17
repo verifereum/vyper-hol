@@ -13,7 +13,7 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand typedMemoryCopy
   logStoreDataOriginPtr annassignRelayoutSource bodyFullPathHistory
-  exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
+  wideningZeroLayout exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
 
@@ -154,6 +154,140 @@ Proof
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
   disch_then (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
   simp[]
+QED
+
+(* The staging traversal never reads metadata past its expression prefix. *)
+Theorem intcall_args_stage_take:
+  !es flags dtys.
+    LENGTH es <= LENGTH flags /\ LENGTH es <= LENGTH dtys ==>
+    compile_stage_intcall_args compile_expr cenv es flags dtys si =
+    compile_stage_intcall_args compile_expr cenv es
+      (TAKE (LENGTH es) flags) (TAKE (LENGTH es) dtys) si
+Proof
+  `!es flags dtys.
+    LENGTH es <= LENGTH flags /\ LENGTH es <= LENGTH dtys ==>
+    compile_stage_intcall_args compile_expr cenv es flags dtys =
+    compile_stage_intcall_args compile_expr cenv es
+      (TAKE (LENGTH es) flags) (TAKE (LENGTH es) dtys)` suffices_by metis_tac[] >>
+  Induct_on `es` >- simp[compile_stage_intcall_args_def] >>
+  namedCases_on `flags` ["", "flag flags'"] >- simp[] >>
+  namedCases_on `dtys` ["", "dty dtys'"] >- simp[] >>
+  Cases_on `flag` >> simp[compile_stage_intcall_args_def]
+QED
+
+Theorem intcall_args_parameter_allocation_bounds_defaults:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args)
+Proof
+  rpt strip_tac >>
+  `MEM (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss))
+      (FST (SND (classify_functions tops)))` by
+    (simp[constSubstTheory.subst_consts_fn_def,
+          loweringShapePropsTheory.MEM_classify_internal] >>
+     qexistsl [`dflts`,`ss`] >> simp[]) >>
+  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+  simp[bodySimTheory.body_inv_def] >> strip_tac >>
+  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
+  PairCases_on `rest` >>
+  `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss))` by
+    (Cases_on `cx.in_deploy`
+     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
+         metis_tac[]) >>
+     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
+     metis_tac[]) >>
+  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
+  simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
+  strip_tac >>
+  `type_memory_bytes
+     (build_compile_env tops Internal mut name args ret
+       (subst_consts_stmts (module_consts_env tops []) ss) F) =
+     type_memory_bytes cenv` by
+    (irule compileEnvTheory.type_memory_bytes_frame >>
+     simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >>
+  gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
+
+(* The compiler table selects exactly the source's omitted-default suffix. *)
+Theorem intcall_args_omitted_defaults:
+  body_inv tops ctx cenv cx /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  LENGTH args - LENGTH dflts <= LENGTH es /\
+  LENGTH es <= LENGTH args /\ ~MEM (NONE,name) cx.stk ==>
+  omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) =
+    DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+  LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) =
+    LENGTH args - LENGTH es /\
+  cenv.ce_func_param_types name =
+    TAKE (LENGTH es) (MAP SND args) ++ DROP (LENGTH es) (MAP SND args) /\
+  LENGTH (TAKE (LENGTH es) (cenv.ce_func_param_types name)) = LENGTH es /\
+  LENGTH (DROP (LENGTH es) (cenv.ce_func_param_types name)) =
+    LENGTH args - LENGTH es
+Proof
+  strip_tac >>
+  `supported_program tops /\
+   cenv.ce_func_param_types = build_func_param_types tops /\
+   ALOOKUP cenv.ce_func_defaults name = ALOOKUP (build_func_defaults tops) name`
+    by gvs[bodySimTheory.body_inv_def] >>
+  `ALL_DISTINCT (supported_function_names tops) /\
+   EVERY (supported_declaration_header tops) tops` by
+    gvs[supportedProgramTheory.supported_program_def,
+        supportedNamesTheory.supported_declaration_names_def,
+        supportedDeclsTheory.supported_declaration_headers_def] >>
+  `module_consts_env tops [] = []` by
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
+     qexists_tac `tops` >> simp[]) >>
+  `cenv.ce_func_param_types name = MAP SND args` by
+    (gvs[] >> irule intCallLookupTheory.build_func_param_types_distinct >>
+     conj_tac >- simp[] >>
+     first_assum (irule_at Any) >> simp[]) >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+      (FST (SND (classify_functions tops)))` by
+    (simp[loweringShapePropsTheory.MEM_classify_internal] >>
+     qexistsl [`dflts`,`ss`] >> simp[]) >>
+  `ALOOKUP (build_func_defaults tops) name = SOME dflts` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     conj_tac
+     >- (drule loweringShapeSourceTheory.supported_names_internal_names_distinct >>
+         simp[compileVyperTheory.build_func_defaults_def, MAP_MAP_o,
+              combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
+     simp[compileVyperTheory.build_func_defaults_def, MEM_MAP,
+          pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  gvs[omitted_defaults_def, nsid_to_string_def, TAKE_DROP] >>
+  decide_tac
+QED
+
+(* The concrete emitted word store preserves the execution's allocation history. *)
+Theorem intcall_args_word_store_history:
+  !cenv op aq dty sty cu cs func z w aw.
+    compile_store_memory cenv op (Var aq) dty sty cu = ((),cs) /\
+    is_word_type dty /\
+    fn_has_code cu cs func /\ fn_inst_ids_distinct func /\
+    eval_operand op z = SOME w /\ lookup_var aq z = SOME aw /\
+    alloca_history func z /\ alloca_inv z /\ ~z.vs_halted /\
+    z.vs_current_bb = cu.cs_current_bb /\
+    z.vs_inst_idx = LENGTH cu.cs_current_insts ==>
+    alloca_history func
+      ((mstore (w2n aw) w z) with vs_inst_idx := LENGTH cs.cs_current_insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `emit_inst MSTORE [Var aq;op] [] cu = ((),cs)` by
+    gvs[contextTheory.compile_store_memory_def,
+        emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def] >>
+  drule emitHelperPropsTheory.emit_inst_extends >> strip_tac >>
+  irule bodyFullUnwrapRunTheory.emitted_alloca_history >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`[mk_inst cu.cs_next_id MSTORE [Var aq;op] []]`,`z`,`cu`] >>
+  `eval_operand (Var aq) z = SOME aw` by simp[venomStateTheory.eval_operand_def] >>
+  `step_inst_base (mk_inst cu.cs_next_id MSTORE [Var aq;op] []) z =
+     OK (mstore (w2n aw) w z)` by
+    (irule emitHelperPropsTheory.step_MSTORE >> simp[]) >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
 (* Empty local typing maps can be weakened without changing static maps. *)
@@ -1414,6 +1548,80 @@ Proof
   rpt strip_tac >>
   irule gasExemptCertTheory.gas_exempt_cert_error_value >>
   first_assum ACCEPT_TAC
+QED
+
+(* Zero physical layout is rigid under widening.  Consequently this is the
+   actual empty-copy compiler branch, with the unwrap endpoint and all of its
+   allocation history and taints retained, not an independent execution. *)
+Theorem intcall_args_aggregate_store_zero:
+  compile_store_memory cenv op (Var aq) dty sty cu = ((),cs) /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME rty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  type_memory_size rty = 0 /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  value_has_type dtv v /\ val_wf dtv v /\ alloca_history func z /\
+  ~z.vs_halted /\ z.vs_current_bb = cu.cs_current_bb /\
+  z.vs_inst_idx = LENGTH cu.cs_current_insts /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (t,G1,tn1) [] (OK z,G',tn')) ==>
+  ?wt wG wtn nw.
+    nw <= MAX 32 (type_memory_bytes cenv dty) /\
+    typed_copy_state_frame cu (w2n aw) nw z wt /\
+    ~wt.vs_halted /\ wt.vs_current_bb = cs.cs_current_bb /\
+    wt.vs_inst_idx = LENGTH cs.cs_current_insts /\ alloca_history func wt /\
+    wtn.t_stor = tn'.t_stor /\ wtn.t_trans = tn'.t_trans /\ wtn.t_imm = tn'.t_imm /\
+    (!p. not_fresh_at cu p ==> FLOOKUP wG p = FLOOKUP G' p /\
+      op_taint wtn (Var p) = op_taint tn' (Var p)) /\
+    (!i. ~(w2n aw <= i /\ i < w2n aw + nw) ==>
+      (i IN wtn.t_mem <=> i IN tn'.t_mem)) /\
+    (!rt. evaluate_type (get_tenv cx) dty = SOME rt ==>
+      value_has_type rt v /\ val_wf rt v /\
+      type_memory_size rt <= MAX 32 (type_memory_bytes cenv dty) /\
+      (!mem. mem_agree_outside wtn.t_mem wt.vs_memory mem ==>
+        val_in_memory rt v (w2n aw) mem)) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK wt,wG,wtn))
+Proof
+  strip_tac >>
+  `sty = dty` by metis_tac[wideningZeroLayoutTheory.type_widens_to_zero_layout] >>
+  gvs[] >>
+  `cs = cu` by
+    gvs[contextTheory.compile_store_memory_def, contextPropsTheory.compile_copy_memory_zero,
+        compileEnvTheory.comp_return_def] >>
+  gvs[] >> qexistsl_tac [`z`, `G'`, `tn'`, `0`] >>
+  simp[typedMemoryCopyTheory.typed_copy_state_frame_refl,
+       valueEncodingProofsTheory.return_zero_wf_memory]
+QED
+
+(* Widen only the interpreted bytestring representation, at the same address. *)
+Theorem intcall_args_bytestring_widen:
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\
+  evaluate_type tenv dty = SOME dtv /\ value_has_type stv v /\
+  val_in_memory stv v a mem ==>
+  value_has_type dtv v /\ val_wf dtv v /\
+  type_memory_size dtv <= MAX 32 (type_memory_bytes cenv dty) /\
+  val_in_memory dtv v a mem
+Proof
+  strip_tac >>
+  `value_has_type dtv v` by
+    (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+     strip_tac >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  reverse conj_tac
+  >- (irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  qpat_x_assum `is_bytestring_type dty` mp_tac >>
+  simp[exprSimConvertBytesTheory.bytestring_type_cases] >>
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def,
+    valueEncodingTheory.type_memory_size_def, compileEnvTheory.type_memory_bytes_def,
+    vfmConstantsTheory.word_size_def]
 QED
 
 Theorem intcall_args_stage_full:
