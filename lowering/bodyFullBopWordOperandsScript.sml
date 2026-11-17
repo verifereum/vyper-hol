@@ -95,7 +95,7 @@ Proof
     dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule frag_reachable_members >>
      disch_then drule >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >>
      metis_tac[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e1) e1 es` by

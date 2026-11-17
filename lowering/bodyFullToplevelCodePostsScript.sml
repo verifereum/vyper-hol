@@ -126,17 +126,10 @@ Proof
      goal_assum (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
      qexistsl [`buf`, `n2w (buffer_allocation_base s sm.cs_next_id):bytes32`, `mid`, `nb`] >>
      simp[] >> metis_tac[ADD_COMM]) >>
-  `lo <= buffer_allocation_base s sm.cs_next_id` by
-    (Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >>
-     gvs[buffer_allocation_base_def, allocas_from_def] >>
-     PairCases_on `x` >> gvs[] >> metis_tac[]) >>
-  rewrite_tac[ghost_kept_at_def] >>
-  (conj_tac >- (fs[ghost_kept_def] >> metis_tac[])) >>
-  (conj_tac >- (fs[ghost_kept_def] >> metis_tac[])) >>
-  (conj_tac >- (fs[ghost_kept_def] >> metis_tac[])) >>
-  rpt strip_tac >>
-  `i < buffer_allocation_base s sm.cs_next_id` by decide_tac >>
-  fs[ghost_kept_at_def] >> metis_tac[]
+  qpat_x_assum `ghost_kept cenv es sa Gi ti s0 HG tf` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rewrite_tac[ghost_kept_def, ghost_kept_at_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem toplevel_code_runtime_wb_frame:

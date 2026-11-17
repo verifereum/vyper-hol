@@ -483,7 +483,7 @@ Proof
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok]
       >~ [`dalloca_no_wrap inst s`]
       >- (drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-          fs[unitMemInvTheory.dalloca_no_wrap_def,
+          fs[unitTransformDefsTheory.dalloca_no_wrap_def,
              ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
           metis_tac[])
       >~ [`storage_well_formed_on`]

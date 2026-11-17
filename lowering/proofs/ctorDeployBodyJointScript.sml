@@ -644,7 +644,7 @@ Proof
       emit_inst JMP [Label exit_lbl] [] sb = ((), sj))` by
     (qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
      simp[deploy_ctor_code_def, comp_return_def, new_block_def] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> FIRST [gvs[]]) >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb /\
    SND (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa) =
      shadow_sb` by fs[compile_stmts_env] >>
@@ -691,7 +691,7 @@ Proof
       >- (rpt strip_tac >>
           drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
           fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-             unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[])
+             unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])
       >> gen_tac >> disch_tac >>
       qpat_x_assum `!st0 H. valid_horizon _ st0 H _ ==> _`
         (qspecl_then [`initial_state am []`, `H`] mp_tac) >>

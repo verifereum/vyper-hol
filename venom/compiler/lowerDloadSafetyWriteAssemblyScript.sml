@@ -4,6 +4,7 @@ Ancestors
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyTaintWidth
   lowerDloadSafetyMemoryWriteEffects lowerDloadSafetyMemoryCopyEffects
   lowerDloadSafetyEmptyCopy lowerDloadSafetyValues lowerDloadSafetyRelation
+  lowerDloadSafetyAmbient
   codegenRel contextCodegenRel venomWf ptrDiscipline pointerConfinedDefs memLocDefs venomInst venomExecSemantics venomState finite_map list pred_set
 
 Theorem ld_write_value_nonpointer:
@@ -188,6 +189,7 @@ Theorem ld_sync_memory_write_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn /\
   ptr_discipline lo C vs0 /\ fn_shape_ok fn /\ fn_inst_wf fn /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   s.vs_labels = t.vs_labels /\ ~in_revert_forward fn s /\
   t.vs_alloca_next < dimword(:256) /\
   MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\
@@ -198,6 +200,8 @@ Theorem ld_sync_memory_write_effect:
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
     step_prov PG G inst ss = G /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = s.vs_allocas /\ ss.vs_alloca_next = s.vs_alloca_next /\
     ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
     ss.vs_inst_idx = s.vs_inst_idx /\
@@ -234,6 +238,11 @@ Proof
     (fs[ld_global_def] >> metis_tac[]) >>
   `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_alloc_target_no_wrap >> simp[] >> metis_tac[]) >>
+  `lo <= dyn_floor C vs0 /\
+   !a u v z. FLOOKUP A a = SOME (u,v,z) ==>
+     u+z <= dyn_floor C vs0 /\ v+z <= dyn_floor C vs0` by
+    (drule_all ld_sync_dyn_floor >> metis_tac[]) >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   `inst.inst_opcode <> INVOKE` by
     (qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> simp[] >> strip_tac >> gvs[]) >>
   gvs[step_inst_non_invoke]
@@ -259,20 +268,29 @@ Resume ld_sync_memory_write_effect[mstore]:
     (irule ld_write_address_observation >> simp[] >> conj_tac
      >- (qexists_tac `tn` >> simp[]) >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
+  `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = a` by
+    simp[mem_write_ops_def] >>
+  `MEM (w2n dst,32) (source_memory_write_ranges inst f.lf_src)` by
+    simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+         eval_operands_def, mem_write_ops_def] >>
+  `0 < (32:num)` by simp[] >>
+  `(op_prov f.lf_H ops.iao_ofst = NONE ==> dst = dst') /\
+   (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dst dst')` by
+    simp[] >>
   Q.SUBGOAL_THEN `((w2n dst+32 <= lo /\ dst'=dst) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+32 <= sz))` ASSUME_TAC >-
-    (irule ld_write_access_classified >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`f.lf_H`,`f.lf_fn`,`inst`] >>
-     simp[mem_write_ops_def] >> qexists_tac `f.lf_src` >>
-     simp[mem_write_ops_def, source_memory_write_ranges_def,
-          fixed_source_write_range_def, eval_operands_def]) >>
+      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+32 <= sz) \/
+    (dst'=dst /\ dyn_floor C vs0 <= w2n dst))` ASSUME_TAC >-
+    (drule_all (Q.INST [`n` |-> `32`] (cj 2 ld_access_dyn_cases)) >>
+     strip_tac
+     >- (disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (disj2_tac >> disj1_tac >> metis_tac[]) >>
+     disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `op_taint tn v SUBSET {j | j < 32}` by
     (drule ld_sync_source >> strip_tac >> irule ld_reachable_op_taint_width >> metis_tac[]) >>
   `tn.t_var = f.lf_tv /\ EVERY (ld_maps A) (f::fs)` by simp[] >>
   drule_all ld_mstore_effect >> strip_tac >>
-  qexists_tac `ss` >> simp[]
+  qexists_tac `ss` >> simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]
 QED
 Resume ld_sync_memory_write_effect[mstore8]:
   `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
@@ -292,19 +310,28 @@ Resume ld_sync_memory_write_effect[mstore8]:
     (irule ld_write_address_observation >> simp[] >> conj_tac
      >- (qexists_tac `tn` >> simp[]) >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
+  `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = a` by
+    simp[mem_write_ops_def] >>
+  `MEM (w2n dst,1) (source_memory_write_ranges inst f.lf_src)` by
+    simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+         eval_operands_def, mem_write_ops_def] >>
+  `0 < (1:num)` by simp[] >>
+  `(op_prov f.lf_H ops.iao_ofst = NONE ==> dst = dst') /\
+   (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dst dst')` by
+    simp[] >>
   Q.SUBGOAL_THEN `((w2n dst+1 <= lo /\ dst'=dst) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+1 <= sz))` ASSUME_TAC >-
-    (irule ld_write_access_classified >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`f.lf_H`,`f.lf_fn`,`inst`] >>
-     simp[mem_write_ops_def] >> qexists_tac `f.lf_src` >>
-     simp[mem_write_ops_def, source_memory_write_ranges_def,
-          fixed_source_write_range_def, eval_operands_def]) >>
+      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+1 <= sz) \/
+    (dst'=dst /\ dyn_floor C vs0 <= w2n dst))` ASSUME_TAC >-
+    (drule_all (Q.INST [`n` |-> `1`] (cj 2 ld_access_dyn_cases)) >>
+     strip_tac
+     >- (disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (disj2_tac >> disj1_tac >> metis_tac[]) >>
+     disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `tn.t_var = f.lf_tv /\ EVERY (ld_maps A) (f::fs) /\
     (w2w x : word8) = w2w y` by simp[] >>
   drule_all ld_mstore8_effect >> strip_tac >>
-  qexists_tac `ss` >> simp[]
+  qexists_tac `ss` >> simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]
 QED
 Resume ld_sync_memory_write_effect[mcopy]:
   `LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []` by
@@ -343,7 +370,8 @@ Resume ld_sync_memory_write_effect[mcopy]:
   gvs[] >>
   `tn.t_var = f.lf_tv /\ EVERY (ld_maps A) (f::fs)` by simp[] >>
   Cases_on `w2n len = 0`
-  >- (drule_all ld_mcopy_zero_effect >> strip_tac >> qexists_tac `ss` >> simp[]) >>
+  >- (drule_all ld_mcopy_zero_effect >> strip_tac >> qexists_tac `ss` >>
+      simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]) >>
   `!op x y. MEM op inst.inst_operands /\
       eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y ==>
       (op_prov f.lf_H op = NONE ==> x=y) /\
@@ -357,23 +385,42 @@ Resume ld_sync_memory_write_effect[mcopy]:
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- (qexists_tac `inst` >> asm_rewrite_tac[] >> simp[]) >>
      qexists_tac `P` >> first_assum ACCEPT_TAC) >>
+  `?wops. mem_write_ops inst = SOME wops /\ wops.iao_ofst = d` by
+    simp[mem_write_ops_def] >>
+  `?rops. mem_read_ops inst = SOME rops /\ rops.iao_ofst = r` by
+    simp[mem_read_ops_def] >>
+  `MEM (w2n dst,w2n len) (source_memory_write_ranges inst f.lf_src)` by
+    simp[source_memory_write_ranges_def, sized_source_write_range_def,
+         eval_operands_def, mem_write_ops_def] >>
+  `MEM (w2n src,w2n len) (source_memory_read_ranges inst f.lf_src)` by
+    simp[source_memory_read_ranges_def, eval_operands_def, mem_read_ops_def] >>
+  `0 < w2n len` by decide_tac >>
+  `(op_prov f.lf_H wops.iao_ofst = NONE ==> dst = dst') /\
+   (!k. op_prov f.lf_H wops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dst dst')` by
+    (simp[] >> metis_tac[MEM]) >>
+  `(op_prov f.lf_H rops.iao_ofst = NONE ==> src = src') /\
+   (!k. op_prov f.lf_H rops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) src src')` by
+    (simp[] >> metis_tac[MEM]) >>
   Q.SUBGOAL_THEN `((w2n dst+w2n len <= lo /\ dst'=dst) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+w2n len <= sz))` ASSUME_TAC >-
-    (irule ld_write_access_classified >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`f.lf_H`,`f.lf_fn`,`inst`] >>
-     simp[mem_write_ops_def] >> qexists_tac `f.lf_src` >>
-     simp[source_memory_write_ranges_def, sized_source_write_range_def,
-          eval_operands_def] >> metis_tac[MEM]) >>
+      w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+w2n len <= sz) \/
+    (dst'=dst /\ dyn_floor C vs0 <= w2n dst))` ASSUME_TAC >-
+    (drule_all (Q.INST [`n` |-> `w2n len`] (cj 2 ld_access_dyn_cases)) >>
+     strip_tac
+     >- (disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (disj2_tac >> disj1_tac >> metis_tac[]) >>
+     disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   Q.SUBGOAL_THEN `((w2n src+w2n len <= lo /\ src'=src) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n src=b+delta /\ w2n src'=c+delta /\ delta+w2n len <= sz))` ASSUME_TAC >-
-    (irule ld_read_access_classified >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`f.lf_H`,`f.lf_fn`,`inst`] >>
-     simp[mem_read_ops_def] >> qexists_tac `f.lf_src` >>
-     simp[source_memory_read_ranges_def, eval_operands_def] >> metis_tac[MEM]) >>
-  drule_all ld_mcopy_effect >> strip_tac >> qexists_tac `ss` >> simp[]
+      w2n src=b+delta /\ w2n src'=c+delta /\ delta+w2n len <= sz) \/
+    (src'=src /\ dyn_floor C vs0 <= w2n src /\
+     w2n src + w2n len < dimword (:256)))` ASSUME_TAC >-
+    (drule_all (Q.INST [`n` |-> `w2n len`] (cj 1 ld_access_dyn_cases)) >>
+     strip_tac
+     >- (disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (disj2_tac >> disj1_tac >> metis_tac[]) >>
+     disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all ld_mcopy_effect >> strip_tac >> qexists_tac `ss` >>
+  simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]
 QED
 Finalise ld_sync_memory_write_effect

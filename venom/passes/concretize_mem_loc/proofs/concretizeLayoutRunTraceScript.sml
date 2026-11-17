@@ -1,6 +1,7 @@
 Theory concretizeLayoutRunTrace
 Ancestors concretizeLayoutPhaseOrigin frameJointTrace frameResolvedTrace
-  frameActivationLifetime frameJointTransition frameOriginHistory finite_map
+  frameActivationLifetime frameJointTransition frameOriginHistory frameResolvedCoherent
+  finite_map
 
 (* Ready trace bookkeeping does not constrain p.  Ordinary state alignment
    must separately identify p with the actual sampled configuration state. *)
@@ -11,7 +12,8 @@ Theorem layout_run_initial_trace:
       lop_config := q0; lop_ids := [0]; lop_anns := [([],FEMPTY)]|>) p
 Proof
   strip_tac >> simp[layout_ordinary_trace_def] >>
-  metis_tac[joint_trace_def, resolved_config_initial, lifetime_initial]
+  metis_tac[joint_trace_def, resolved_config_initial, resolved_complete_initial,
+            lifetime_initial]
 QED
 
 Theorem layout_run_block_trace:
@@ -28,7 +30,10 @@ Proof
   drule_all joint_trace_edge_at >> strip_tac >>
   qpat_x_assum `joint_transition C _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule_all resolved_config_block >> disch_then (qx_choose_then `anns` assume_tac) >>
+  drule_all resolved_config_block_complete >>
+  disch_then (qx_choose_then `anns` strip_assume_tac) >>
+  `~ctx_has_dalloca C ==> resolved_complete (EL (SUC a.lop_cursor) (q0::qs)) anns` by
+    metis_tac[] >>
   `lifetime_ok (SUC a.lop_bound) a.lop_ids
     (EL (SUC a.lop_cursor) (q0::qs))` by
     (drule_all lifetime_transition >> simp[lifetime_step_def]) >>

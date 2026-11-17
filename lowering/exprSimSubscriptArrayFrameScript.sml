@@ -2,6 +2,7 @@
 Theory exprSimSubscriptArrayFrame
 Ancestors
   exprSimSubscriptArraySource exprSimProps exprSimAttributeFields
+  vyperLocalAccessFrame
   loweringPosts valueEncodingProofs valueEncoding valueEncodingDefs exprBopSimProps
   list rich_list finite_map pair vyperState compileEnv loweringStateRelDefs exprLoweringProps vyperValue
 
@@ -36,6 +37,33 @@ Proof
   disch_then irule >>
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
   drule_all local_val_at_dynarray_apart >> simp[]
+QED
+
+(* A captured subvalue needs only its own representation.  When evaluation
+   leaves its root local unchanged, locals_kept preserves the entire region,
+   including values read through the local's popped history. *)
+Theorem subscript_nonoverlap_memory_value:
+  !mods cx obj idx es mid res fin id path cenv u u' b sz off tv v.
+    eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
+    is_ArrayT (expr_type obj) /\ base_through_dynarray obj /\
+    ~subscript_overlap mods obj idx /\
+    eval_expr cx idx mid = (res,fin) /\
+    locals_kept cenv mid fin u u' /\
+    local_region cenv mid.scopes u id b sz /\
+    b <= off /\ off + val_footprint tv v <= b + sz /\
+    val_wf tv v /\ val_in_memory tv v off u.vs_memory ==>
+    val_in_memory tv v off u'.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes id fin.scopes = lookup_scopes id mid.scopes` by
+    metis_tac[subscript_nonoverlap_local_frame] >>
+  `mem_bytes_at b sz u'.vs_memory = mem_bytes_at b sz u.vs_memory` by
+    (gvs[locals_kept_def] >> metis_tac[]) >>
+  `mem_bytes_at off (val_footprint tv v) u.vs_memory =
+   mem_bytes_at off (val_footprint tv v) u'.vs_memory` by
+    (drule mem_bytes_at_agree_window >> simp[]) >>
+  irule val_in_memory_footprint_agree >> simp[] >>
+  qexists_tac `u.vs_memory` >> simp[]
 QED
 
 Theorem vv_at_memory_bytes_frame:

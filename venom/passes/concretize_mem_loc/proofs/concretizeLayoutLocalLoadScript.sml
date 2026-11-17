@@ -22,11 +22,11 @@ Proof
        taint_component_equality]
 QED
 
-Theorem concretize_word_load_local_complete:
+Theorem concretize_word_load_local_complete_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -34,6 +34,7 @@ Theorem concretize_word_load_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -61,8 +62,8 @@ Theorem concretize_word_load_local_complete:
       (step_taint inst s post tn) (step_taint inst t tpost un)
 Proof
   strip_tac >>
-  drule_all concretize_word_load_execution_clean_lanes >> strip_tac >>
-  drule_all concretize_word_load_demand_execution >> strip_tac >> gvs[] >>
+  drule_all concretize_word_load_execution_clean_lanes_headroom_static >> strip_tac >>
+  drule_all concretize_word_load_demand_execution_headroom_static >> strip_tac >> gvs[] >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>
@@ -78,7 +79,7 @@ Proof
   suspend "taint"
 QED
 
-Resume concretize_word_load_local_complete[values]:
+Resume concretize_word_load_local_complete_headroom_static[values]:
   markerLib.RESUME_TAC >> (simp[word_load_taint_update] >>
   `local_rel (\u. F)
     (guarded_ptr (retpc_var fn)
@@ -104,7 +105,7 @@ Resume concretize_word_load_local_complete[values]:
   simp[local_rel_def, demand_agree_def] >> metis_tac[])
 QED
 
-Resume concretize_word_load_local_complete[taint]:
+Resume concretize_word_load_local_complete_headroom_static[taint]:
   markerLib.RESUME_TAC >> (`mem_word_taint un.t_mem (w2n dstT) SUBSET
    mem_word_taint tn.t_mem (w2n dst)` by
     (qpat_x_assum `relocation_taint_le _ _ _` mp_tac >>
@@ -116,7 +117,51 @@ Resume concretize_word_load_local_complete[taint]:
   gen_tac >> IF_CASES_TAC >> simp[] >> gvs[op_taint_def])
 QED
 
-Finalise concretize_word_load_local_complete
+Finalise concretize_word_load_local_complete_headroom_static
+
+Theorem concretize_word_load_local_complete:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
+    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+  MEM inst.inst_opcode [MLOAD;ILOAD] /\ inst.inst_operands = [opd] /\
+  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst /\
+  relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    local_rel (\u. F)
+      (guarded_ptr (retpc_var fn)
+        (activation_lookup (0:num) (concretize_positions C')
+          (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (origin_set rv [v] NONE))
+      (guarded_bytes (retpc_var fn) (origin_set rv [v] NONE)
+        (step_taint inst s post tn))
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
+    relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (step_taint inst s post tn) (step_taint inst t tpost un)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_local_complete_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 
 Theorem concretize_mload_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -130,6 +175,7 @@ Theorem concretize_mload_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -171,6 +217,7 @@ Theorem concretize_iload_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -196,7 +243,6 @@ Theorem concretize_iload_local_complete:
       (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    step_prov PG G inst post = SND o_f (origin_set rv [v] NONE) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
@@ -204,14 +250,5 @@ Proof
   `MEM inst.inst_opcode [MLOAD;ILOAD]` by simp[] >>
   drule_all concretize_word_load_local_complete >> strip_tac >>
   drule_all concretize_word_load_execution_clean_lanes >> strip_tac >> gvs[] >>
-  (conj_tac >- suspend "ghost") >>
   fs[relocation_env_def, relocation_reader_context_def, update_var_def]
 QED
-Resume concretize_iload_local_complete[ghost]:
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
-  gvs[] >> simp[step_prov_def, out_prov_def, set_prov_def,
-    origin_set_def, fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-  gen_tac >> IF_CASES_TAC >> simp[]
-QED
-Finalise concretize_iload_local_complete

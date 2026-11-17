@@ -728,6 +728,17 @@ Definition evaluate_convert_def:
     (if m ≤ 32
      then INL $ BytesV (DROP (32 - m) (word_to_bytes_be ((i2w i):bytes32)))
      else INR (RuntimeError "convert int to bytes")) ∧
+  (* BoolV and DecimalV → bytesM: low m bytes of the word, left-aligned, as for
+     IntV (_convert.py to_bytes_m: shl(256 - 8 * M, x)). *)
+  evaluate_convert _ (BoolV b) (BaseT (BytesT (Fixed m))) =
+    (if m ≤ 32
+     then INL $ BytesV (DROP (32 - m) (word_to_bytes_be
+                          ((if b then 1w else 0w) : bytes32)))
+     else INR (RuntimeError "convert bool to bytes")) ∧
+  evaluate_convert _ (DecimalV i) (BaseT (BytesT (Fixed m))) =
+    (if m ≤ 32
+     then INL $ BytesV (DROP (32 - m) (word_to_bytes_be ((i2w i):bytes32)))
+     else INR (RuntimeError "convert decimal to bytes")) ∧
   evaluate_convert _ (IntV i) (BaseT (BytesT (Dynamic n))) =
     (if n ≥ 32
      then INL $ BytesV (word_to_bytes_be ((i2w i):bytes32))
@@ -754,6 +765,9 @@ Definition evaluate_convert_def:
        (8 * (32 - LENGTH bs)))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * decimal_scale) ∧
+  evaluate_convert _ (BoolV b) (BaseT DecimalT) =
+    INL $ DecimalV (if b then decimal_scale else 0) ∧
+  evaluate_convert _ (DecimalV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   (* Check exact scaled bounds BEFORE truncation. Signed division truncates
      toward zero (EVM SDIV); unsigned division follows the nonnegative check. *)
   evaluate_convert _ (DecimalV i) (BaseT (IntT n)) =

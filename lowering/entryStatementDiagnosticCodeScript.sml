@@ -23,8 +23,8 @@ Proof
 QED
 
 Theorem entry_code_log_eval_all:
-  !es. (!e ce et. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr ce et e)) ==>
+  !es. (!e et. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_log_eval_all cenv es)
 Proof
   Induct >> simp[compile_log_eval_all_def, entry_code_return] >> rpt strip_tac >>
@@ -70,10 +70,12 @@ Proof
 QED
 
 Theorem entry_code_reason_message:
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults /\
   supported_string_reason tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_reason_message ce e)
 Proof
+  strip_tac >> qpat_x_assum `supported_string_reason tops e` mp_tac >>
   Cases_on `e`
   >~ [`compile_reason_message ce (Literal source_ty lit)`]
   >- (namedCases_on `source_ty` ["bt", "tys", "elem bound", "nsid", "flag", ""] >> Cases_on `lit` >>

@@ -341,8 +341,8 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty CalldataLen ts =
     (ts = [] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty (CalldataSlice n) ts =
-    (0 < n /\ n < 2 ** 256 /\ ts = [BaseT (UintT 256)] /\
-     ty = BaseT (BytesT (Dynamic n))) /\
+    (?m. ts = [BaseT (UintT 256)] /\ 0 < n /\ n <= m /\ m < 2 ** 256 /\
+         ty = BaseT (BytesT (Dynamic m))) /\
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
@@ -365,7 +365,9 @@ Definition well_typed_builtin_app_def:
      ((ty = BaseT (BytesT (Dynamic n)) /\ ?bd. HD ts = BaseT (BytesT bd)) \/
       (ty = BaseT (StringT n) /\ ?m. HD ts = BaseT (StringT m)))) /\
   well_typed_builtin_app ty (Uint2Str n) ts =
-    (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\ (?k. HD ts = BaseT (UintT k)) /\ 78 <= n) /\
+    (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\
+     (?k. HD ts = BaseT (UintT k) /\
+          LENGTH (num_to_dec_string (2 ** k - 1)) <= n)) /\
   well_typed_builtin_app ty (MakeArray NONE bd) ts =
     ((?tys. ty = TupleT tys /\ arg_types_fit ts tys) /\
      compatible_bound bd (LENGTH ts)) /\
@@ -633,6 +635,8 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (StringT n)) (BaseT BoolT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT DecimalT) (BaseT BoolT) = T /\
+  valid_conversion (BaseT AddressT) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
@@ -654,20 +658,25 @@ Definition valid_conversion_def:
   (* Vyper's to_bytes_m needs 160 <= 8 * m; evaluate_convert_from left-pads. *)
   valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed m))) =
     (20 <= m /\ m <= 32) /\
+  (* Addresses are unsigned: Vyper rejects signed int -> address
+     (_convert_rules.py: (IntegerT, AddressT, not i.is_signed)). *)
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
-  valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   (* Vyper converts flags only to and from uint256 (vyperlang/vyper#5127). *)
   valid_conversion (FlagT _) (BaseT (UintT n)) = (n = 256) /\
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
   valid_conversion (BaseT (UintT n)) (FlagT _) = (n = 256) /\
   valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
   valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  (* Bool -> bytesM needs 1 <= m (bytesM is only defined for 1 <= M <= 32); a
+     decimal is 168 bits wide (_convert_rules.py: _fits_bytesm). *)
+  valid_conversion (BaseT BoolT) (BaseT (BytesT (Fixed m))) = (0 < m) /\
+  valid_conversion (BaseT DecimalT) (BaseT (BytesT (Fixed m))) = (168 <= 8 * m) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
   valid_conversion (BaseT (StringT n)) (BaseT (StringT k)) = (k < n) /\
-  valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
   valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT BoolT) (BaseT DecimalT) = T /\
   valid_conversion (BaseT DecimalT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT DecimalT) (BaseT (UintT _)) = T /\
   valid_conversion _ _ = F

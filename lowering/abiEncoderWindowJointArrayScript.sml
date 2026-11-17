@@ -5414,7 +5414,7 @@ Proof
     (qpat_assum `!k u hg ht. _`
        (qspecl_then [`LENGTH (avs:abi_value list)`, `loop_s`, `loopG`, `looptn`] mp_tac) >>
      impl_tac
-     >- (asm_rewrite_tac[] >> simp[]) >>
+     >- (asm_rewrite_tac[] >> simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
      simp_tac (srw_ss()) [Abbr `exit_s`, Excl "enc_def"]) >>
   `window_array_transition ctx func owner
       (window_alloca_sites func (frag_ids st en))
