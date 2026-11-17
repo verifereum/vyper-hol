@@ -828,7 +828,8 @@ Proof
   >- (conj_tac
       >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
       rpt strip_tac >> rule_assum_tac BETA_RULE >>
-      `!x. x IN R ==> not_fresh_at m x` by metis_tac[not_fresh_at_mono] >>
+      `!x. x IN R ==> not_fresh_at m x` by
+        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
       `value IN B` by metis_tac[SUBSET_DEF] >>
       Cases_on `v` >> drule bop_scalar_compile_emit_checked >> simp[]) >> simp[])
 QED

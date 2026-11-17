@@ -507,6 +507,8 @@ Proof
   qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`,
     `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`,
     `tx.function_name`, `args`, `ret`, `fbody`] strip_assume_tac externalEntryChecksTheory.selected_external_package >>
+  rename1 `set_external_package_target _ _ =
+    (_,ce,pa,mc,pay,F,key,ut,iv,_,rt)` >>
   `calldata_dispatch tops cd = SOME ("__default__",vals)` by fs[] >>
   `vyperInterpreter$lookup_function NONE "__default__" External tops =
     SOME (mut,F,args,([]:expr list),ret,fbody)` by metis_tac[] >>

@@ -388,7 +388,7 @@ Proof
        accounts_rel_def]
 QED
 
-Theorem body_entry_state_rel_runtime[local]:
+Theorem body_entry_state_rel_runtime:
   !(H:(bool # bytes32 # type_value) list # num list) tops func cenv cx am tx vs ss mut env es.
     initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
     send_call_value mut cx
