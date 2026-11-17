@@ -918,7 +918,10 @@ Theorem create_oracle_result_accounts_well_typed:
   create_oracle_result salt value code rof st = (res,st') ==>
   accounts_well_typed st'.accounts
 Proof
+  rpt strip_tac >>
   Cases_on `salt` >> Cases_on `st.outcomes` >>
+  gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
   rpt strip_tac >> gvs[] >> pairarg_tac >>
   rw[vyperCallOutcomeTheory.adopt_call_outcome_equation,
