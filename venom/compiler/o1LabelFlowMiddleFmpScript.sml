@@ -36,21 +36,34 @@ Proof
   metis_tac[label_flow_ok_closed_retention]
 QED
 
+(* FmpLowering adds no label and reads no code_end pointer: its restores
+   copy DALLOCA results, which the lifetime clause keeps apart from the
+   code_end pointers. *)
 Theorem fmp_row_label_flow_ok:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
-  label_flow_ok (ctx with ctx_functions := [f]) ==>
+  o1_fn_row 3 f /\ dalloca_code_end_free f /\
+  label_flow_ok (ctx with ctx_functions := [f]) /\
+  (!x. code_end_var f x ==>
+    ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
+      d.inst_operands = [op; Label "code_end"] /\ d.inst_outputs = [x] /\
+      (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+      (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+         MEM (Var x) j.inst_operands ==>
+         j.inst_opcode = CODECOPY /\
+         (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+                   dst <> Var x /\ sz <> Var x) /\
+         ?pre post. bb.bb_instructions = pre ++ d::j::post)) ==>
   label_flow_ok (ctx with ctx_functions := [out.fpo_function])
 Proof
   strip_tac >> drule_all fmp_row_blocks_unchanged >>
   metis_tac[label_flow_ok_same_blocks]
 QED
 
+(* The lowering inserts nothing between an ADD and its CODECOPY: restores
+   sit only before reclaim points, and the root only in the entry prefix. *)
 Theorem fmp_row_code_end_lifetime:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
+  o1_fn_row 3 f /\ dalloca_code_end_free f /\
   (!x. code_end_var f x ==>
     ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
       d.inst_operands = [op; Label "code_end"] /\ d.inst_outputs = [x] /\

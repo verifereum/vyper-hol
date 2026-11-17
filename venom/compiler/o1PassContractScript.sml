@@ -609,6 +609,17 @@ Definition pre_fmp_ops_def:
   pre_fmp_ops fn <=> EVERY (\inst. pre_fmp_opcode inst.inst_opcode) (fn_insts fn)
 End
 
+(* No DALLOCA reads the code_end label.  FmpLowering puts a DALLOCA's
+   size operand second in an ADD, which with this label would start a
+   code_end pointer that the AND after it reads.  The source has no
+   code_end label and the passes before FmpLowering add one only as
+   LowerDload's ADD operand. *)
+Definition dalloca_code_end_free_def:
+  dalloca_code_end_free fn <=>
+    !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = DALLOCA ==>
+           ~MEM (Label "code_end") inst.inst_operands
+End
+
 (* The per-function stage rows: what a run may assume of the function it
    is given and must establish of the one it returns, where the stage
    table o1_inv below cannot reach, since the walk runs each pass on one

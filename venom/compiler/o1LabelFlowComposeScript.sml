@@ -14,10 +14,12 @@ Ancestors
   fmpStepBridge fmpStepContract o1ContractLowerDload lowerDloadDefs
 
 (* A named runner invariant avoids repeating the three phase boundaries in
-   every contract. It adds no assumptions to the source or pass contracts. *)
+   every contract. It adds no assumptions to the source or pass contracts.
+   Up to FmpLowering no DALLOCA reads the code_end label, which
+   FmpLowering's expansion of a DALLOCA needs. *)
 Definition label_flow_row_extra_def:
   label_flow_row_extra ctx k f <=>
-    fmp_sig_no_param f /\ (k <= 3 ==> no_raw_fmp_ops f) /\
+    (k <= 3 ==> dalloca_code_end_free f) /\
     label_flow_ok (ctx with ctx_functions := [f]) /\
     (k <= 1 ==> !i. MEM i (fn_insts f) ==>
       ~MEM (Label "code_end") i.inst_operands) /\
@@ -118,7 +120,6 @@ QED
 
 Theorem compose_fmp[local]:
   fn_pass_step rp (CFP_Simple VP_FmpLowering) observed s f out /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 3 f /\ label_flow_row_extra ctx 3 f ==>
   label_flow_row_extra ctx 4 out.fpo_function
 Proof
@@ -207,8 +208,6 @@ Theorem o1_label_flow_walk:
   ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
   (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
   ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops u.cu_context.ctx_functions /\
-  EVERY fmp_sig_no_param u.cu_context.ctx_functions /\
   (!f i. MEM f u.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands /\ i.inst_opcode <> CODESIZE /\
     (i.inst_opcode = CODECOPY ==>

@@ -90,9 +90,9 @@ label_flow_own_ok (ctx with ctx_functions := [f]) /\
 (k <= 1 ==> !i. MEM i (fn_insts f) ==>
   ~MEM (Label "code_end") i.inst_operands) /\
 (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f) /\
-(k <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f
+(k <= 3 ==> dalloca_code_end_free f)
 
-The last two conjuncts keep the static FMP facts local to label-flow rows, as in the pending static-guard port. They do not restrict the shared O1 rows or change the top pipeline premises.
+The last conjunct keeps the static code_end fact for DALLOCA local to label-flow rows. It does not restrict the shared O1 rows or change the top pipeline premises.
 
 Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`, `O_concretize`, `O_fmp`, `O_second`, or `O_late` respectively. Each is a hypothesis of the composition theorem, independently discharged by its phase worker.
 
@@ -116,7 +116,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
 !rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_MakeSSA) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 0 f /\ R ctx 0 f ==>
   R ctx 1 out.fpo_function
 
@@ -125,7 +124,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
 !rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_LowerDload) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 1 f /\ R ctx 1 f ==> R ctx 2 out.fpo_function
 
 `compose_concretize_own` (`O_concretize`):
@@ -133,7 +131,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
 !rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_ConcretizeMemLoc) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 2 f /\ R ctx 2 f ==> R ctx 3 out.fpo_function
 
 `compose_fmp_own` (`O_fmp`):
@@ -141,7 +138,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
 !rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_FmpLowering) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 3 f /\ R ctx 3 f ==> R ctx 4 out.fpo_function
 
 `compose_second_ssa_own` (`O_second`):
@@ -149,7 +145,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
 !rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_MakeSSA) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 4 f /\ R ctx 4 f ==> R ctx 5 out.fpo_function
 
 `compose_late_own` (`O_late`, four obligations when specialized):
@@ -161,7 +156,6 @@ Name each universally quantified proposition below `O_pre`, `O_first`, `O_dload`
    (k = 8 /\ pass = CFP_Simple VP_CFGNormalization)) /\
   fn_pass_step rp pass observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row k f /\ R ctx k f ==>
   R ctx (SUC k) out.fpo_function
 
@@ -174,8 +168,6 @@ O_first /\ O_dload /\ O_concretize /\ O_fmp /\ O_second /\ O_late ==>
   ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
   (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
   ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops u.cu_context.ctx_functions /\
-  EVERY fmp_sig_no_param u.cu_context.ctx_functions /\
   label_flow_own_ok u.cu_context /\
   (!f i. MEM f u.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) ==>

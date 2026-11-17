@@ -11,23 +11,20 @@ Theorem o1_code_end_walk_stages_sim:
   (!k. k < LENGTH o1_fn_passes ==>
     ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
       (stage k) (stage (SUC k))) /\
-  ctx_pass_stage rpolicy (EL 3 o1_fn_passes)
-    (\C' f observed. o1_walk_view rpolicy 3 C' f observed /\
-      EVERY fmp_sig_no_param observed.cu_context.ctx_functions)
-    (stage 3) (stage 4) /\
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
   (!k. k <= LENGTH o1_fn_passes ==>
     EVERY (o1_fn_row k) (stage k).ctx_functions) /\
-  (!k. k <= 3 ==> EVERY no_raw_fmp_ops (stage k).ctx_functions) /\
+  (!k. k <= 3 ==> EVERY dalloca_code_end_free (stage k).ctx_functions) /\
   dead_wf D /\ o1_run_state_ok vs_out /\
   LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
-  ?vi. gas_variant vi vs_out /\
+  ?vi. raw_variant fmp vi vs_out /\
     (o1_inv D 0 (stage 0) vi /\
      mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
        s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
        (stage 1) vi /\
      (!f i. MEM f (stage 1).ctx_functions /\ MEM i (fn_insts f) ==>
-       ~MEM (Label "code_end") i.inst_operands) ==>
+       ~MEM (Label "code_end") i.inst_operands) /\
+     fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
      ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D
        (stage 0) (stage (LENGTH o1_fn_passes)) vi vs_out /\
      o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs_out /\

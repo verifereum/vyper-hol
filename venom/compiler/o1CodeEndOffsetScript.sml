@@ -8,7 +8,7 @@ Ancestors
 
 (* The source DLOAD bound is needed only at reached CODECOPY reads. *)
 Theorem o1_pipeline_code_end_offset_ok:
-  !D lo rpolicy unit out vs_out.
+  !D lo rpolicy unit out vs_out fmp.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
@@ -17,9 +17,12 @@ Theorem o1_pipeline_code_end_offset_ok:
     fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
                ~MEM (Label "code_end") inst.inst_operands) /\
-    LENGTH vs_out.vs_data_section < dimword (:256) DIV 2
+    LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp
     ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. raw_variant fmp vs_in vs_out /\
       (raw_unit_memory_ok unit.cu_context vs_in /\
        ptr_discipline lo unit.cu_context vs_in /\
        taint_within D unit.cu_context vs_in /\

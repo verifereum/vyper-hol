@@ -27,11 +27,9 @@ QED
 
 Theorem rows_step_contract_enrich_invariant:
   rows_step_contract o1_fn_row k rp pass /\
-  (!j g. P j g ==> fmp_sig_no_param g) /\
   (!observed s f out.
     fn_pass_step rp pass observed s f out /\
     o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-    EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
     o1_fn_row k f /\ P k f ==> P (SUC k) out.fpo_function) ==>
   rows_step_contract (\j f. o1_fn_row j f /\ P j f) k rp pass
 Proof
@@ -45,8 +43,7 @@ QED
 
 Theorem o1_fn_passes_guard_rows:
   rows_step_contracts_from
-    (\k f. o1_fn_row k f /\ (k <= 3 ==> no_raw_fmp_ops f) /\
-           fmp_sig_no_param f)
+    (\k f. o1_fn_row k f /\ (k <= 3 ==> dalloca_code_end_free f))
     rp 0 o1_fn_passes
 Proof
   mp_tac (Q.SPEC `rp` (GEN_ALL o1_fn_passes_steps)) >>

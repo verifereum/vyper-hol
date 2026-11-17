@@ -11,19 +11,15 @@ Theorem o1_code_end_named_schedules_stages:
   o1_ctx_shape u.cu_context /\ ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
   (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\ ir_supply_inst_ok s /\
   EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\ callee_first names u.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops u.cu_context.ctx_functions /\
-  EVERY fmp_sig_no_param u.cu_context.ctx_functions ==>
+  EVERY dalloca_code_end_free u.cu_context.ctx_functions ==>
   ?stage. stage 0 = u.cu_context /\ stage (LENGTH o1_fn_passes) = u'.cu_context /\
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k) /\
     (stage k).ctx_entry = u.cu_context.ctx_entry /\
     (stage k).ctx_global_reserved = u.cu_context.ctx_global_reserved /\
     ctx_fn_names (stage k) = ctx_fn_names u.cu_context /\ EVERY (o1_fn_row k) (stage k).ctx_functions) /\
-  (!k. k <= 3 ==> EVERY no_raw_fmp_ops (stage k).ctx_functions) /\
+  (!k. k <= 3 ==> EVERY dalloca_code_end_free (stage k).ctx_functions) /\
   (!k. k < LENGTH o1_fn_passes ==> ctx_pass_stage rp (EL k o1_fn_passes)
-    (o1_walk_view rp k) (stage k) (stage (SUC k))) /\
-  ctx_pass_stage rp (EL 3 o1_fn_passes)
-    (\C' f observed. o1_walk_view rp 3 C' f observed /\ EVERY fmp_sig_no_param observed.cu_context.ctx_functions)
-    (stage 3) (stage 4)
+    (o1_walk_view rp k) (stage k) (stage (SUC k)))
 Proof
   rpt strip_tac >>
   mp_tac (Q.INST [`R` |-> `\k f. o1_fn_row k f /\

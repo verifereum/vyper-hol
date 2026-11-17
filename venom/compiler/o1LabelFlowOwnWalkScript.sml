@@ -16,73 +16,68 @@ Theorem o1_label_flow_own_walk:
   (!rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_MakeSSA) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 0 f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (0 <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 0 /\ 0 <= 4 ==> middle_code_end_lifetime f) /\
-  (0 <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (0 <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   (1 <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 1 /\ 1 <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  (1 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) /\
+  (1 <= 3 ==> dalloca_code_end_free out.fpo_function))) /\
 (!rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_LowerDload) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 1 f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (1 <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 1 /\ 1 <= 4 ==> middle_code_end_lifetime f) /\
-  (1 <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (1 <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   (2 <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 2 /\ 2 <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  (2 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) /\
+  (2 <= 3 ==> dalloca_code_end_free out.fpo_function))) /\
 (!rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_ConcretizeMemLoc) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 2 f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (2 <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 2 /\ 2 <= 4 ==> middle_code_end_lifetime f) /\
-  (2 <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (2 <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   (3 <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 3 /\ 3 <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  (3 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) /\
+  (3 <= 3 ==> dalloca_code_end_free out.fpo_function))) /\
 (!rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_FmpLowering) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 3 f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (3 <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 3 /\ 3 <= 4 ==> middle_code_end_lifetime f) /\
-  (3 <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (3 <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   (4 <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 4 /\ 4 <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  (4 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) /\
+  (4 <= 3 ==> dalloca_code_end_free out.fpo_function))) /\
 (!rp observed s f out ctx.
   fn_pass_step rp (CFP_Simple VP_MakeSSA) observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row 4 f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (4 <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 4 /\ 4 <= 4 ==> middle_code_end_lifetime f) /\
-  (4 <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (4 <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   (5 <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= 5 /\ 5 <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  (5 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) /\
+  (5 <= 3 ==> dalloca_code_end_free out.fpo_function))) /\
 (!k pass rp observed s f out ctx.
   ((k = 5 /\ pass = CFP_Simple VP_SimplifyCFG) \/
    (k = 6 /\ pass = CFP_Simple VP_SingleUseExpansion) \/
@@ -90,25 +85,22 @@ Theorem o1_label_flow_own_walk:
    (k = 8 /\ pass = CFP_Simple VP_CFGNormalization)) /\
   fn_pass_step rp pass observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row k f /\ (label_flow_own_ok (ctx with ctx_functions := [f]) /\
   (k <= 1 ==> !i. MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f) /\
-  (k <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (k <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
   ((SUC k) <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
     ~MEM (Label "code_end") i.inst_operands) /\
   (2 <= (SUC k) /\ (SUC k) <= 4 ==> middle_code_end_lifetime out.fpo_function) /\
-  ((SUC k) <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)) ==>
+  ((SUC k) <= 3 ==> dalloca_code_end_free out.fpo_function))) ==>
 !rp names u s u' s'.
   run_named_fn_schedules execute_configured_fn_pass rp o1_fn_passes names u s =
     SOME (u',s') /\ o1_ctx_shape u.cu_context /\
   ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
   (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
   ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops u.cu_context.ctx_functions /\
-  EVERY fmp_sig_no_param u.cu_context.ctx_functions /\
   label_flow_own_ok u.cu_context /\
   (!f i. MEM f u.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
     ~MEM (Label "code_end") i.inst_operands) ==>

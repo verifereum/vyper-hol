@@ -63,3 +63,30 @@ Proof
   disch_then (qspec_then `s` mp_tac) >>
   simp[o1_lowered_inv_def, pass_fuel_def]
 QED
+
+(* The FmpLowering stage keeps code_end offsets for units that may contain
+   DALLOCA.  The lowering relocates the frame pointer, so the input state
+   is the output one up to raw_variant fmp; the lowered ADDs never read
+   code_end and the code_end pointers keep their ADD-then-CODECOPY
+   lifetime.  The run contract above is its DALLOCA-free case.
+   ADMITTED: proved with the DALLOCA FmpLowering stage. *)
+Theorem fmp_lowering_code_end_stage_contract_gas:
+  o1_stage_contract_gas rpolicy D (SOME fmp) (EL 3 o1_fn_passes)
+    (o1_walk_view rpolicy 3) (o1_pre 3)
+    (\C s. o1_inv D 3 C s /\ code_end_offset_ok (raw_reachable s) C /\
+      EVERY (\f. dalloca_code_end_free f /\
+        !x. code_end_var f x ==>
+          ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
+            d.inst_operands = [op; Label "code_end"] /\ d.inst_outputs = [x] /\
+            (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+            (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+               MEM (Var x) j.inst_operands ==>
+               j.inst_opcode = CODECOPY /\
+               (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+                         dst <> Var x /\ sz <> Var x) /\
+               ?pre post. bb.bb_instructions = pre ++ d::j::post))
+        C.ctx_functions)
+    (\C s. o1_inv D 4 C s /\ code_end_offset_ok (raw_reachable s) C)
+Proof
+  cheat
+QED

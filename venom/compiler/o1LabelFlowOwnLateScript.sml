@@ -21,20 +21,18 @@ Theorem compose_late_own:
    (k = 8 /\ pass = CFP_Simple VP_CFGNormalization)) /\
   fn_pass_step rp pass observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   o1_fn_row k f /\
   (label_flow_own_ok (ctx with ctx_functions := [f]) /\
    (k <= 1 ==> !i. MEM i (fn_insts f) ==>
      ~MEM (Label "code_end") i.inst_operands) /\
    (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f) /\
-   (k <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+   (k <= 3 ==> dalloca_code_end_free f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
    (SUC k <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
      ~MEM (Label "code_end") i.inst_operands) /\
    (2 <= SUC k /\ SUC k <= 4 ==>
      middle_code_end_lifetime out.fpo_function) /\
-   (SUC k <= 3 ==> no_raw_fmp_ops out.fpo_function) /\
-   fmp_sig_no_param out.fpo_function)
+   (SUC k <= 3 ==> dalloca_code_end_free out.fpo_function))
 Proof
   mp_tac simplify_row5_code_end_uses_conditional >>
   (impl_tac >-
