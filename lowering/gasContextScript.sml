@@ -41,3 +41,15 @@ Theorem gas_admissible_result:
 Proof
   simp[gas_admissible_def] >> metis_tac[]
 QED
+
+Theorem gas_admissible_bind_head:
+  gas_admissible (bind a k) Q es /\
+  (!v. P (INL v)) /\ (!ex. Q (INR ex) ==> P (INR ex)) ==>
+  gas_admissible a P es
+Proof
+  simp[gas_admissible_def] >> rpt strip_tac >>
+  Cases_on `res` >> simp[] >>
+  first_x_assum irule >>
+  qpat_x_assum `!gs res ee. _ ==> Q res` irule >>
+  qexistsl_tac [`ee`, `gs`] >> simp[bind_def]
+QED
