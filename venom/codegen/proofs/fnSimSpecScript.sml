@@ -361,3 +361,35 @@ End
 Definition gen_fn_frame_sim_at_simple_reloc_def:
   gen_fn_frame_sim_at_simple_reloc fuel <=> gen_fn_frame_sim_at_reloc F NONE fuel
 End
+
+Theorem gen_fn_sim_at_reloc_specialize:
+  !safe q fuel. gen_fn_sim_at_reloc safe q fuel ==> gen_fn_sim_at safe q fuel
+Proof
+  simp[gen_fn_sim_at_reloc_def, gen_fn_sim_at_def] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem gen_fn_frame_sim_at_reloc_specialize:
+  !safe q fuel.
+    gen_fn_frame_sim_at_reloc safe q fuel ==> gen_fn_frame_sim_at safe q fuel
+Proof
+  simp[gen_fn_frame_sim_at_reloc_def, gen_fn_frame_sim_at_def] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem gen_fn_sim_at_simple_reloc_specialize:
+  !fuel. gen_fn_sim_at_simple_reloc fuel ==> gen_fn_sim_at_simple fuel
+Proof
+  simp[gen_fn_sim_at_simple_reloc_def, gen_fn_sim_at_simple_def,
+       gen_fn_sim_at_reloc_specialize]
+QED
+
+Theorem gen_fn_frame_sim_at_simple_reloc_specialize:
+  !fuel.
+    gen_fn_frame_sim_at_simple_reloc fuel ==> gen_fn_frame_sim_at_simple fuel
+Proof
+  simp[gen_fn_frame_sim_at_simple_reloc_def, gen_fn_frame_sim_at_simple_def,
+       gen_fn_frame_sim_at_reloc_specialize]
+QED
