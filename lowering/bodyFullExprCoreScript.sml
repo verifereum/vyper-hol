@@ -1070,10 +1070,18 @@ Proof
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule expr_body_pre_bop >> strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv` by
+    (qpat_assum `expr_body_pre _ _ _ e1 _`
+       (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >>
+     simp[optionTheory.IS_SOME_EXISTS]) >>
   `is_word_type ann /\ is_word_type (expr_type e1) /\
    is_word_type (expr_type e2)` by
-    (Cases_on `bop` >>
-     gvs[well_typed_binop_def, is_int_type_def, is_word_type_def]) >>
+    (qpat_x_assum `expr_type e1 = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+     gvs[well_typed_binop_def, is_int_type_def, is_word_type_def,
+         vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
+     Cases_on `expr_type e2` >> gvs[is_int_type_def, is_word_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_word_type_def]) >>
   `post_value_type cenv (Builtin ann (Bop bop) [e1;e2]) = ann` by
     simp[post_value_type_word, expr_type_def] >>
   simp[] >>
@@ -1087,18 +1095,20 @@ Proof
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)`
   >- suspend "exit_transport" >>
-  irule (SRULE [LET_THM] bop_operands_full_cps) >>
-  simp[] >>
-  qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
-    `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
-  simp[] >>
-  rpt gen_tac >> strip_tac >> simp[] >>
-  mp_tac (SRULE [LET_THM] bop_bytes_suffix_extract) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (SRULE [LET_THM] bop_suffix_full) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  simp[Abbr `Q`, expr_type_def]
+  mp_tac (SRULE [LET_THM] bop_operands_full_cps) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rpt gen_tac >> strip_tac >>
+     mp_tac (SRULE [LET_THM] bop_bytes_suffix_extract) >>
+     (impl_tac >-
+       (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+        >~ [`?n. expr_type e1 = BaseT (BytesT (Fixed n))`]
+        >- (qexists_tac `m` >> first_assum ACCEPT_TAC) >>
+        fs[])) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     mp_tac (SRULE [LET_THM] bop_suffix_full) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     simp[Abbr `Q`, expr_type_def])) >> simp[]
 QED
 
 Resume bop_bytes_sim_full[exit_transport]:
