@@ -39,7 +39,7 @@ Ancestors
   exprSimMemDefs valueCopyBytes bodyMemSnapshotSourceLocation aggregateEvaluatedLayout fragGasOriginPtr fragGasSeqPtr exprPtrUnwrapCopyEdges instMemFrontier wordLoadStorePtr bodyFullUnwrapRun emitHelperProps localPtrsProps venomExecProofs venomInst vyperLookup pred_set rich_list emitHelper placeStore valueEncodingProps memSafeRun venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
   immutableAssignCompose immutableAssignStore immutableDeployAssignFacts
   exprPtrCtorImmStore fragExecMem unitTransformDefs immutableWordExecution
-  immutableCopyExecution context venomExecSemantics words exprSimCopy
+  immutableCopyExecution context venomExecSemantics words exprSimCopy ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
 Libs
   monadsyntax
 
@@ -2215,4 +2215,55 @@ Proof
        mem_bytes_at q 1 mix = mem_bytes_at q 1 mem` by
     (rpt gen_tac >> disch_tac >> first_x_assum irule >> decide_tac) >>
   drule_all place_store_replace_memory_entry >> simp[]
+QED
+
+Theorem body_assign_immutable_section_replace:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\
+  off = compute_immutables_len
+          (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec1 = lo /\ LENGTH sec2 = lo /\
+  off + type_memory_size tv <= lo /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
+       EL j sec2 = EL j sec1) /\
+  (!j. j < lo /\ j IN M1 ==> imm_section_dead tops sec1 j) /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) /\
+       j IN M2 ==> j IN M1) /\
+  (!j. off <= j /\ j < off + type_memory_size tv /\ j IN M2 ==>
+       mem_dead_bytes sec2 off tv j) ==>
+  !j. j < lo /\ j IN M2 ==> imm_section_dead tops sec2 j
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  Cases_on `off <= j /\ j < off + type_memory_size tv`
+  >- metis_tac[imm_frame_restrict] >>
+  `imm_section_dead tops sec1 j` by metis_tac[] >>
+  qpat_x_assum `imm_section_dead tops sec1 j` mp_tac >>
+  rewrite_tac[imm_section_dead_def] >> strip_tac >>
+  rename1 `evaluate_type (type_env tops) ty' = SOME tv'` >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+     type_memory_size tv` by metis_tac[imm_frame_size] >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' =
+     type_memory_size tv'` by metis_tac[imm_frame_size] >>
+  drule (CONJUNCT1 mem_dead_bytes_range) >> strip_tac >>
+  `pre ++ VariableDecl vis Immutable name ty slot :: post =
+     pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post'`
+    by metis_tac[] >>
+  drule imm_frame_occurrence_separation >>
+  disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
+  strip_tac
+  >- (fs[] >> gvs[]) >>
+  `mem_dead_bytes sec2
+      (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv' =
+    mem_dead_bytes sec1
+      (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv'`
+    by (irule mem_dead_bytes_frame >> reverse conj_tac >- simp[] >>
+        ntac 2 (qpat_x_assum `tops = _` kall_tac) >>
+        qpat_x_assum `_ ++ _ = _ ++ _` kall_tac >>
+        rpt strip_tac >>
+        qpat_x_assum `!j. _ ==> EL j sec2 = EL j sec1` irule >>
+        gvs[] >> decide_tac) >>
+  rewrite_tac[imm_section_dead_def] >>
+  qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
+  gvs[]
 QED
