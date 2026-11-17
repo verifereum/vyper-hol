@@ -2894,7 +2894,7 @@ Theorem calldata_call_source_args[local]:
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
   typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
   expr_sim_inv cenv cx env es1 /\
-  ?aw amount vals. eval_operand aop entry = SOME aw /\
+  ?aw amount vals. vals = TL vs /\ eval_operand aop entry = SOME aw /\
     amount < dimword (:256) /\ (flags.rcf_is_static ==> amount = 0) /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws ops of
       NONE => Lit 0w | SOME p => p) entry = SOME (n2w amount) /\
@@ -2917,7 +2917,7 @@ Proof
      `~MEM EKValue flags.rcf_kws` by fs[raw_call_kws_ok_def] >>
      fs[raw_call_value_def, ext_call_kwarg_not_mem]) >>
   rename1 `eval_exprs cx (addr::kws) es = (INL (v::vals),es1)` >>
-  qexistsl_tac [`amount`,`vals`] >> simp[] >>
+  qexists_tac `amount` >> simp[] >>
   irule calldata_call_eval >> simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -3683,27 +3683,7 @@ Theorem calldata_call_source_outcome[local]:
       else ArrayV (TupleV [BoolV outcome.co_success;
         BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))))))
 Proof
-  strip_tac >> drule_all calldata_call_args_values >> strip_tac >>
-  drule calldata_call_pre >> strip_tac >> gvs[] >>
-  `EVERY (\e. expr_type e = BaseT (UintT 256)) kws` by
-    (irule raw_call_kw_types >> qexists_tac `flags.rcf_kws` >>
-     gvs[raw_call_kws_ok_def]) >>
-  gvs[typed_args_post_def, evaluate_type_def] >>
-  drule_all calldata_kwarg_words >> strip_tac >>
-  drule calldata_kwarg_value >>
-  disch_then (qspec_then `flags.rcf_kws` strip_assume_tac) >>
-  drule address_typed_dest >> strip_tac >>
-  `flags.rcf_is_static ==> amount = 0` by
-    (strip_tac >>
-     `~MEM EKValue flags.rcf_kws` by fs[raw_call_kws_ok_def] >>
-     fs[raw_call_value_def, ext_call_kwarg_not_mem]) >>
-  rename1 `eval_exprs cx (addr::kws) es = (INL (v::vals),es1)` >>
-  qmatch_asmsub_abbrev_tac `eval_operand aop entry = SOME aw` >>
-  `eval_expr cx (Call (raw_call_return_type flags) (RawCallCalldataTarget flags)
-      (addr::kws) NONE) es =
-    eval_raw_call cx flags (w2w aw) cx.txn.calldata amount
-      (ext_call_kwarg EKGas flags.rcf_kws vals) es1` by
-    (irule calldata_call_eval >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> drule_all calldata_call_source_args >> strip_tac >>
   Cases_on `cx.txn.is_static /\ amount <> 0`
   >- (`~flags.rcf_is_static /\ ~flags.rcf_is_delegate` by
         (drule calldata_call_pre >> fs[]) >>
@@ -3726,7 +3706,7 @@ Proof
   drule calldata_call_pre >> strip_tac >>
   drule_all raw_call_oracle_result >>
   disch_then assume_tac >>
-  qexistsl_tac [`amount`,`rq`,`outcome`,`es1'`] >>
+  qexistsl_tac [`aw`,`amount`,`rq`,`outcome`,`es1'`] >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `outcome.co_success` >>
   gvs[]
 QED
@@ -4214,9 +4194,11 @@ Proof
   `eval_operand aop t = SOME aw /\
    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws ops of
      NONE => Lit 0w | SOME p => p) t = SOME (n2w amount)` by
-    (fs[calldata_prepared_def] >> metis_tac[]) >>
-  qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[calldata_prepared_def] >> strip_tac >>
+    (qpat_assum `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [calldata_prepared_def]) >>
+     metis_tac[]) >>
+  qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [calldata_prepared_def]) >>
   qpat_assum `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
       raw_call_finish_vv_frag) >>
