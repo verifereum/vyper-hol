@@ -1291,7 +1291,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
         tv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
+       (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      simp[] >>
      qpat_x_assum `k ee = _` mp_tac >>
      simp[Abbr `k`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -1491,7 +1491,9 @@ Proof
   `?info. supported_target_info tops bindings bt = SOME info` by
     (drule_all aug_place_supported_stmt_target_info >> simp[]) >>
   qpat_x_assum `(?b fld. bt = AttributeTarget b fld) \/ _` kall_tac >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all aug_place_typing_word >> strip_tac >>
   drule_all aug_place_code_parts >>
