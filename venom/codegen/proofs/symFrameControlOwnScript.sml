@@ -258,3 +258,122 @@ Proof
     simp[] >> metis_tac[])) >>
   strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
+
+Theorem sym_jmp_prepare_frame_sim_own:
+  !allow_own lo own base.
+  code_labels_agree p lo /\
+  generated_plan_state_wf_marked base ps /\
+  pending_inventory_wf pending ps /\
+  restore_spilled_plan pending ps = (restore_ops,prepared) /\
+  reorder_plan dfg pending prepared = (reorder_ops,arranged) /\
+  (!off. MEM (SORestore off) restore_ops ==> off < dimword(:256)) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) reorder_ops /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) pending /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (restore_ops ++ reorder_ops)) ==>
+  ?cs' ss'.
+    asm_steps lo (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))) cs = AsmOK cs' /\
+    sym_steps_mode allow_own p env own
+      (LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))) ss = SymOK ss' /\
+    sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 arranged cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))
+Proof
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_own_def] >>
+  `!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel_own lo p env own cs' ss'` by
+    metis_tac[asm_sym_steps_mode_sim] >>
+  mp_tac (SRULE [asm_sym_rel_core_own]
+    (Q.INST [`code_ok` |-> `\code. asm_data_env_lo_ok lo p env own /\ code = own`,
+             `dfg` |-> `dfg_build_function fn`]
+      (SPEC_ALL sym_jmp_prepare_frame_sim_mode_conditional))) >>
+  (impl_tac >- metis_tac[]) >>
+  (impl_tac >- (rpt gen_tac >> strip_tac >>
+    drule_at (Pat `asm_block_at _ _ _`)
+      (SRULE [sym_frame_inv_own_def] sym_do_swap_pair_frame_sim_own) >>
+    disch_then drule_all >>
+    disch_then (qspec_then `allow_own` strip_assume_tac) >> simp[])) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  qexistsl [`cs'`, `ss'`] >> simp[]
+QED
+
+Theorem sym_jmp_frame_sim_deep_own:
+  !allow_own own fuel cplan base.
+  code_labels_agree p lo /\
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\ inst.inst_outputs = [] /\
+  lookup_block target fn.fn_blocks = SOME target_bb /\
+  target_stack = MAP Var (input_vars_from bb_label target_bb.bb_instructions
+    (live_vars_at liveness target 0)) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked base ps /\
+  (!off. MEM (SORestore off) (FST (restore_spilled_plan target_stack ps)) ==>
+    off < dimword(:256)) /\
+  LENGTH target_stack <= LENGTH (SND (restore_spilled_plan target_stack ps)).ps_stack /\
+  pending_inventory_wf target_stack ps /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) target_stack /\
+  (!op at. MEM op target_stack /\ (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  FLOOKUP lo target = SOME off /\ off < dimword(:256) /\
+  FLOOKUP (build_offset_to_pc p) off = SOME pc_t /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  generate_inst_plan liveness dfg cfg fn inst next_liveness is_halting
+    next_is_term bb_label ps = SOME (ops, ps') /\
+  asm_block_at p cs.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  asm_static_wf p /\ codegen_ready_fn fn /\ MEM (AsmLabel target) p /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps cs ss ==>
+  !vs'. step_inst fuel ctx inst vs = OK vs' ==>
+    ?n cs' ss'.
+      asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      fn_frame_inv ctx cplan lo fn ra rest mem0 ps' vs' cs' /\
+      cs'.as_pc = pc_t /\ vs' = jump_to target vs /\
+      sym_steps_mode allow_own p env own n ss = SymOK ss' /\
+      sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps' cs' ss'
+Proof
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_own_def] >>
+  `!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel_own lo p env own cs' ss'` by
+    metis_tac[asm_sym_steps_mode_sim] >>
+  `!l off pc. MEM (AsmLabel l) p /\ FLOOKUP lo l = SOME off /\
+    FLOOKUP (build_offset_to_pc p) off = SOME pc ==>
+    sym_jump_dest p (Lab l 0) = SOME pc` by
+    metis_tac[sym_code_label_dest_reloc] >>
+  qx_gen_tac `vs'` >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked mark_base ps` >>
+  mp_tac (SRULE [asm_sym_rel_core_own]
+    (Q.INST [`code_ok` |-> `\code. asm_data_env_lo_ok lo p env own /\ code = own`,
+             `dfg` |-> `dfg_build_function fn`]
+      (Q.SPECL [`fuel`, `cplan`, `mark_base`] sym_jmp_frame_sim_deep_mode_conditional))) >>
+  (impl_tac >- (conj_tac >- metis_tac[] >> conj_tac
+    >- (map_every qx_gen_tac
+          [`base0`, `pending0`, `ps0`, `rops`, `prep0`, `reops`, `arr0`, `ac`, `sy`] >>
+      strip_tac >>
+      `sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps0 ac sy` by
+        simp[sym_frame_inv_own_def] >>
+      drule_at (Pat `asm_block_at _ _ _`)
+        (SRULE [sym_frame_inv_own_def]
+          (Q.INST [`dfg` |-> `dfg_build_function fn`] (SPEC_ALL sym_jmp_prepare_frame_sim_own))) >>
+      disch_then drule_all >>
+      disch_then (qspec_then `allow_own` strip_assume_tac) >>
+      fs[sym_frame_inv_own_def] >> metis_tac[]) >>
+    gvs[sym_frame_inv_own_def] >> metis_tac[])) >>
+  disch_then drule_all >> strip_tac >> qexistsl [`n`, `cs'`, `ss'`] >> simp[]
+QED
