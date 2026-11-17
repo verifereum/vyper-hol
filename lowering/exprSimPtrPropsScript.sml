@@ -7,7 +7,6 @@
  * TOP-LEVEL:
  *   expr_stack_outcome_ptr -- the counted path for the lowered value is
  *     the counted path for the value_vv
- *   expr_vv_sim_ptr_stack -- expr_vv_sim_ptr from expr_sim_ptr
  *   ghost_inv_fresh_frame -- ghost_inv survives a step that touches only
  *     fresh variables (and not memory, storage or their taint)
  *   emit_mload_ptr_path -- emit_op MLOAD through a covered pointer at
@@ -68,15 +67,6 @@ Proof
       disj2_tac >> fs[expr_exit_success_map]) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
-QED
-
-Theorem expr_vv_sim_ptr_stack:
-  expr_sim_ptr d ctx PG func cenv cx ty e es /\
-  (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-  (!s tv es'. eval_expr cx e s = (INL tv,es') ==> ?v. tv = Value v) ==>
-  expr_vv_sim_ptr d ctx PG func cenv cx ty e es
-Proof
-  metis_tac[exprStackPtrTheory.expr_vv_sim_stack_ptr]
 QED
 
 Theorem ghost_inv_fresh_frame:
