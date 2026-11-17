@@ -168,10 +168,9 @@ QED
    context memory relation and spill bytes outside the frame's closure are
    unchanged.  The surviving slots are a subset of the old ones plus
    markers. *)
-Theorem clean_stack_plan_frame_sim:
+Theorem clean_stack_plan_frame_sim_reloc:
   !ctx cp lo o2pc prog liveness cfg fn bb base ps vs as clean_ops ps2
    r ra rest mem0.
-    lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     generated_plan_state_wf_marked base ps /\
     fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
@@ -217,4 +216,37 @@ Proof
   conj_tac
   >- (irule fnFrameBoundaryInvokeTheory.invoke_prefix_frame_transport >> metis_tac[]) >>
   simp[] >> metis_tac[clean_stack_plan_inventory]
+QED
+
+Theorem clean_stack_plan_frame_sim:
+  !ctx cp lo o2pc prog liveness cfg fn bb base ps vs as clean_ops ps2
+   r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generated_plan_state_wf_marked base ps /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    clean_stack_plan liveness cfg fn bb ps = (clean_ops, ps2) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+    ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) clean_ops \/ MEM (SORestore off) clean_ops ==>
+           off < dimword (:256)) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp clean_ops)
+    ==>
+    ?n as2.
+      n = LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
+      asm_steps lo o2pc prog n as = AsmOK as2 /\
+      as2.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
+      fn_frame_inv ctx cp lo fn ra rest mem0 ps2 vs as2 /\
+      generated_plan_state_wf_marked base ps2 /\
+      (!op. MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled ==>
+            op = dead_stack_marker \/ MEM op ps.ps_stack \/
+            op IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule clean_stack_plan_frame_sim_reloc >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexistsl [`bb`, `cfg`, `liveness`] >> simp[]) >>
+  qexists `r` >> simp[]
 QED
