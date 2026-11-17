@@ -4,6 +4,7 @@ Ancestors
   dftFinitePacketReachability
   dftGasPrefixProvider
   dftNativePlanPrefix
+  dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCalleeAlignment
