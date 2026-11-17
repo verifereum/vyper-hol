@@ -168,8 +168,9 @@ Proof
   qabbrev_tac `v1 = STRING #"%" (toString a.cs_next_var)` >>
   qabbrev_tac `v2 = STRING #"%" (toString b.cs_next_var)` >>
   `lv <> v1 /\ lv <> v2 /\ v1 <> v2` by
-    (gvs[Abbr `v1`, Abbr `v2`, loweringStateRelDefsTheory.not_fresh_at_def] >>
-     metis_tac[DECIDE ``~(n < n) /\ ~(n < n + 1)``]) >>
+    (gvs[Abbr `v1`, Abbr `v2`, loweringStateRelDefsTheory.not_fresh_at_def,
+       ASCIInumbersTheory.toString_inj] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
   qabbrev_tac `i1 = mk_inst a.cs_next_id GT [Var lv; Lit (n2w C)] [v1]` >>
   qabbrev_tac `i2 = mk_inst b.cs_next_id ISZERO [Var v1] [v2]` >>
   qabbrev_tac `i3 = mk_inst c.cs_next_id ASSERT [Var v2] []` >>
@@ -254,7 +255,7 @@ Proof
   simp[Abbr `u`, Abbr `Gf`, Abbr `tnf`, venomStateTheory.update_var_def] >>
   `!p. not_fresh_at a p ==> p <> v1 /\ p <> v2` by
     (gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `v1`, Abbr `v2`] >>
-     metis_tac[DECIDE ``~(n < n) /\ ~(n < n + 1)``]) >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
   simp[typed_copy_state_frame_def, typed_copy_frame_def,
     venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def,
     finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT,
