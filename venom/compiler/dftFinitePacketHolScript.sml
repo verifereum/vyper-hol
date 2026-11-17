@@ -6,6 +6,7 @@ Ancestors
   dftNativePlanPrefix
   dftPacketCallNative
   dftPacketCallUpdate
+  dftPacketCallEdgeClauses
   dftPacketCalleeAlignment
   dftPacketClosedRowNative
   dftPacketClosedRows
