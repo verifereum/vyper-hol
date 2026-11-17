@@ -12,33 +12,6 @@ Proof
   simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
 QED
 
-Theorem ld_delegatecall_state_shared:
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
-  make_venom_delegatecall_state s target gas calldata code is_static =
-  make_venom_delegatecall_state t target gas calldata code is_static
-Proof
-  strip_tac >> drule_all ld_shared_state_empty_exact >> strip_tac >>
-  drule ld_shared_state_environment >> strip_tac >>
-  irule ld_delegatecall_state_exact >> simp[]
-QED
-
-(* The actual concrete evaluation inputs used by exec_delegatecall. *)
-Theorem ld_delegatecall_run_shared:
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory ao az s = read_memory bo bz t ==>
-  vfmExecution$run (make_venom_delegatecall_state s target gas
-    (read_memory ao az s) (lookup_account target s.vs_accounts).code
-    s.vs_call_ctx.cc_static) =
-  vfmExecution$run (make_venom_delegatecall_state t target gas
-    (read_memory bo bz t) (lookup_account target t.vs_accounts).code
-    t.vs_call_ctx.cc_static)
-Proof
-  strip_tac >> drule_all ld_shared_state_empty_exact >> strip_tac >>
-  drule ld_shared_state_environment >> strip_tac >>
-  AP_TERM_TAC >> asm_rewrite_tac[] >>
-  irule ld_delegatecall_state_exact >> simp[]
-QED
-
 (* Memory outputs may have unrelated offsets: this boundary covers only
    shared state.  The relocation consumer owns the memory-write relation. *)
 Theorem ld_extract_result_shared:
