@@ -147,7 +147,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_paired_selected_jump_entry[local]:
+Theorem ptr_paired_selected_jump_entry:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
