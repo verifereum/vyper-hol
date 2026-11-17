@@ -66,15 +66,19 @@ Proof
   >- (IF_CASES_TAC >> simp[entry_code_return] >>
       irule entry_code_bind >> simp[entry_code_emit_op, entry_code_return]) >>
   rpt gen_tac >> BETA_TAC >>
-  rpt (FIRST [
-    match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
+  NTAC 6 (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_return, entry_code_internal_param_decls,
+            entry_code_emit_op] >> rpt gen_tac >> BETA_TAC) >>
+  match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
     (Q.GEN `Q` entry_code_bind_result)) >>
-      (conj_tac >- simp[materialize_internal_params_defaults, comp_return_def]) >>
-      (conj_tac >- simp[entry_code_materialize_internal_params, entry_code_return]) >>
-      gen_tac >> strip_tac >> fs[] >> BETA_TAC,
-    irule entry_code_bind >> reverse conj_tac
-      >- simp[entry_code_return, entry_code_internal_param_decls,
-              entry_code_emit_op] >> rpt gen_tac >> BETA_TAC]) >>
+  (conj_tac >- simp[comp_return_def]) >>
+  (conj_tac >- simp[entry_code_return]) >>
+  gen_tac >> strip_tac >> fs[] >> BETA_TAC >>
+  match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
+    (Q.GEN `Q` entry_code_bind_result)) >>
+  (conj_tac >- simp[materialize_internal_params_defaults]) >>
+  (conj_tac >- simp[entry_code_materialize_internal_params]) >>
+  gen_tac >> strip_tac >> fs[] >> BETA_TAC >>
   irule entry_code_bind >> reverse conj_tac
   >- (Cases_on `ret` >> simp[entry_code_return] >>
       IF_CASES_TAC >> simp[entry_code_return] >>
