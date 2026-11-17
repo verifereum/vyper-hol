@@ -190,7 +190,9 @@ Resume uint2str_builtin_sim_full[suffix]:
   qexistsl_tac [`HG`, `mid`, `INL (Value (StringV (num_to_dec_string X)))`, `u`, `tm`] >>
   simp[uint2str_source_result] >>
   rpt strip_tac >> simp[expr_type_def, lowered_value_type_def, post_value_type_def] >>
-  Cases_on `vv` >> gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+      expr_type_def, is_bytestring_type_def] >>
   rpt conj_tac >> simp[] >> decide_tac
 QED
 
