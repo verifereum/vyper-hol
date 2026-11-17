@@ -149,6 +149,8 @@ QED
 Resume dft_packet_native_supplier_replay[tail]:
   qpat_x_assum `keys = _ ++ extra` kall_tac >>
   qpat_x_assum `!v. step_inst _ _ _ _ = OK v ==> _` kall_tac >>
+  qpat_x_assum `step_inst fuel C h _ = _`
+    (assume_tac o PURE_REWRITE_RULE[APPEND_ASSOC]) >>
   `!q u. q < LENGTH pre /\ (EL q pre).inst_opcode = INVOKE /\
       FOLDR (dft_exec_cons fuel C) OK (TAKE q pre)
         ((out with vs_inst_idx := SUC s.vs_inst_idx)
@@ -160,7 +162,7 @@ Resume dft_packet_native_supplier_replay[tail]:
           (dftGasFromListTraceDefs$trace_step p d fuel C fn (EL q pre) u)) = EL q rows)` by
     (rpt strip_tac >>
      qpat_x_assum `!q u. _` (qspecl_then [`SUC q`, `u`] mp_tac) >>
-     simp[dft_exec_cons_def, GSYM APPEND_ASSOC]) >>
+     gvs[TAKE, EL, FOLDR, dft_exec_cons_def, APPEND_ASSOC]) >>
   `FOLDR (dft_exec_cons fuel C) OK pre
      ((out with vs_inst_idx := SUC s.vs_inst_idx)
        with vs_gas_readings := FLAT readings ++ tail) =
@@ -170,9 +172,14 @@ Resume dft_packet_native_supplier_replay[tail]:
        with vs_gas_readings := FLAT readings ++ tail)) = ZIP (FLAT rows,FLAT readings)` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   conj_tac
-  >- simp[dft_exec_cons_def, GSYM APPEND_ASSOC] >>
+  >- gvs[dft_exec_cons_def, APPEND_ASSOC] >>
   simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def,
-       GSYM APPEND_ASSOC, ZIP_APPEND]
+       APPEND_ASSOC, ZIP_APPEND] >>
+  gvs[APPEND_ASSOC] >> irule ZIP_APPEND >> simp[] >>
+  simp[LENGTH_FLAT] >> AP_TERM_TAC >>
+  qpat_x_assum `LIST_REL (\ks gs. LENGTH ks = LENGTH gs) rows readings` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]
 QED
 
 Finalise dft_packet_native_supplier_replay
