@@ -276,7 +276,8 @@ Proof
           (mut,nr,rr,name,args,dflts,ret,stmts))
        (internal_fn_descriptors
           (MAP (set_internal_package_target rpolicy.rpol_target o
-                package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints))`
+                package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+             (order_internals (runtime_internal_order tops ints) ints)))`
     by (simp[GSYM MAP_MAP_o,
             internal_fn_descriptors_set_internal_package_target,
             internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP] >>

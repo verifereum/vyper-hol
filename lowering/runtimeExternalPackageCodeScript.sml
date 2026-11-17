@@ -65,8 +65,12 @@ Proof
      irule package_internal_fn_shape_ok >> gs[]) >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))`
-    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
-                 PERM_order_runtime_internals] >>
+    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
+                (order_internals (runtime_internal_order tops ints) ints)))
+              (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))`
+          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+              simp[PERM_order_runtime_internals]) >>
+        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
     (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
