@@ -26,15 +26,17 @@ Proof
     (Cases_on `nocalls` >> gvs[int_calls_expr_def]) >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
-  `ann = expr_type e1 /\ is_word_type ann /\
-   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-   ~is_bytestring_type (expr_type e1) /\ ~is_ArrayT (expr_type e2)` by
-    (gvs[] >> gvs[well_typed_binop_def, is_word_type_def,
-                  is_int_type_def, is_bytestring_type_def]) >>
   `?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1` by
     (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
   `?tv2. evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2` by
     (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
+  `ann = expr_type e1 /\ is_word_type ann /\
+   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+   ~is_bytestring_type (expr_type e1) /\ ~is_ArrayT (expr_type e2)` by
+    (gvs[] >> gvs[well_typed_binop_def, is_word_type_def,
+                  is_int_type_def, is_bytestring_type_def,
+                  vyperValueTheory.evaluate_type_def,
+                  optionTheory.IF_EQUALS_OPTION]) >>
   irule compile_bop_rel_sim >> rpt conj_tac
   >~ [`binop_frag_post`]
   >- (qexistsl_tac [`tv1`, `tv2`] >>
