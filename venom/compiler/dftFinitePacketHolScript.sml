@@ -5,7 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftPacketBlockCutAggregate dftPacketBlockAppendSemantics
   dftPacketBlockAppendNative dftPacketBlockAppendShape dftGasPrefixProvider
-  dftNativePlanPrefix
+  dftPacketBlockAppendTraceBoundary dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
@@ -47,7 +47,7 @@ Ancestors
   dftPacketPseudoHistoryCuts dftPacketPseudoHistoryReplay dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative dftPacketReturnRecordFrame dftPacketReturnRowSupply
+  dftPacketReturnNative dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts dftPacketReturnRowSupply
   dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
