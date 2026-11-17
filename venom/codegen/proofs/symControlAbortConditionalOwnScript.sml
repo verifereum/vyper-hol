@@ -306,24 +306,36 @@ Proof
   asm_rewrite_tac[] >>
   disch_then (qx_choose_then `pre` (qx_choose_then `arranged`
     (qx_choose_then `mid` (qx_choose_then `ss_mid`
-      (qx_choose_then `suffix` strip_assume_tac))))) >>
-  `arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ compute_operands inst` by gvs[] >>
+      (qx_choose_then `suffix`
+        (let fun keep 0 = assume_tac
+               | keep n = CONJUNCTS_THEN2 assume_tac (keep (n - 1))
+         in keep 8 end)))))) >>
+  `arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ compute_operands inst` by
+    (qpat_assum `compute_operands inst = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `arranged.ps_stack = _` ACCEPT_TAC) >>
+  Q.SUBGOAL_THEN
+    `control_frame lo code_ok prog ctx cplan fn ret srest labs0 arranged
+       (mid with as_stack := mid.as_stack ++ rest) ss_mid` assume_tac
+  >- (qpat_assum `bridge_core _ _ _ _ /\ _` mp_tac >> simp[]) >>
+  qpat_assum `control_frame _ _ _ _ _ _ _ _ _ arranged _ ss_mid`
+    (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   drule_all sym_conditional_abort_zero_stack_mode >> strip_tac >>
   `ss_mid.sym_base.as_pc = mid.as_pc` by
-    (drule asmSymBridgeTheory.asm_sym_rel_core_pc >> simp[]) >>
+    (qpat_assum `?m. ss_mid.sym_base = _ /\ _`
+       (qx_choose_then `m` (fn th => rewrite_tac[CONJUNCT1 th])) >> simp[]) >>
   reverse (Cases_on `inst.inst_opcode = ASSERT`)
   >- (`sym_terminal (sym_steps_mode allow_own prog env own 3 ss_mid)` by
         (irule sym_assert_unreachable_suffix_terminal_mode >>
          gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
-      qexists `LENGTH (execute_plan cp.cp_initial_fmp pre) + 3` >>
+      qexists `LENGTH (execute_plan cplan.cp_initial_fmp pre) + 3` >>
       asm_rewrite_tac[sym_steps_mode_add] >> simp[]) >>
   `?off pc. FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
      FLOOKUP o2pc off = SOME pc /\
-     asm_block_at prog pc (execute_plan cp.cp_initial_fmp revert_postamble)` by metis_tac[] >>
+     asm_block_at prog pc (execute_plan cplan.cp_initial_fmp revert_postamble)` by metis_tac[] >>
   `sym_jump_dest prog (Lab "revert" 0) = SOME pc` by metis_tac[] >>
   `sym_terminal (sym_steps_mode allow_own prog env own 7 ss_mid)` by
     (irule sym_assert_suffix_terminal_mode >>
      gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
-  qexists `LENGTH (execute_plan cp.cp_initial_fmp pre) + 7` >>
+  qexists `LENGTH (execute_plan cplan.cp_initial_fmp pre) + 7` >>
   asm_rewrite_tac[sym_steps_mode_add] >> simp[]
 QED
