@@ -81,11 +81,14 @@ Definition read_effects_def:
   (* Frame-memory-pointer operations *)
   read_effects GETFMP = {Eff_FMP} /\
   read_effects DALLOCA = {Eff_FMP} /\
-  read_effects INITIAL_FMP = {Eff_FMP} /\
   read_effects RETFMP = {Eff_FMP} /\
   read_effects DRET = {Eff_FMP; Eff_MEMORY} /\
   read_effects SETFMP = empty_effects /\
-  read_effects BUMP = empty_effects /\
+  (* As in effects.py: BUMP's FMP read and write only order it against other
+     FMP operations; its step reads only its operands. INITIAL_FMP is a pure
+     value with no effects. *)
+  read_effects BUMP = {Eff_FMP} /\
+  read_effects INITIAL_FMP = empty_effects /\
   (* Parameter and data-section metadata are explicit pure reads. *)
   read_effects PARAM = empty_effects /\
   read_effects FMP_PARAM = empty_effects /\
@@ -135,11 +138,11 @@ Definition write_effects_def:
   (* Frame-memory-pointer operations *)
   write_effects SETFMP = {Eff_FMP} /\
   write_effects DALLOCA = {Eff_FMP} /\
+  write_effects BUMP = {Eff_FMP} /\
   write_effects DRET = {Eff_FMP; Eff_MEMORY} /\
   write_effects GETFMP = empty_effects /\
   write_effects RETFMP = empty_effects /\
   write_effects INITIAL_FMP = empty_effects /\
-  write_effects BUMP = empty_effects /\
   (* Pure parameter/offset metadata has no state write effect. *)
   write_effects PARAM = empty_effects /\
   write_effects FMP_PARAM = empty_effects /\
