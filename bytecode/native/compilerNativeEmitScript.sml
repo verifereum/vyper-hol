@@ -42,6 +42,7 @@ val () = holbuild_extra_deps
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle",
+   "../upstream-fixes/oracle",
    "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
@@ -268,7 +269,10 @@ val suite_fixtures = [
     "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
-    "slice_storage_bytes", "slice_string_lit"])];
+    "slice_storage_bytes", "slice_string_lit"]),
+  ("upstream-fixes", [
+    "uf5236_ifexp_nested_narrow", "uf5256_tuple_widen_bytes",
+    "uf5298_int_to_decimal_bound", "uf5331_ifexp_narrow_string"])];
 
 
 (* The compilation each oracle is compared with: Python's O1 without the final
