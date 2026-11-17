@@ -147,7 +147,7 @@ Proof
   asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
-  rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  asm_rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
     (build_selectors (type_env tops) exts)` by
     rewrite_tac[build_selectors_fn_labels] >>
@@ -158,13 +158,22 @@ Proof
      irule package_external_fn_shape_ok >> gs[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops ints) ints))` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
     (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
+     (order_internals (runtime_internal_order tops ints) ints)))` by
+    (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
+              (order_internals (runtime_internal_order tops ints) ints)))
+           (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))` by
+       (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+        simp[PERM_order_runtime_internals]) >>
+     drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
   qmatch_asmsub_abbrev_tac `run_lowering sels extpkgs intpkgs fbpkg` >>
@@ -179,8 +188,9 @@ Proof
   impl_tac >- simp[shape_state_initial_compile_state] >> strip_tac >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors intpkgs) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors intpkgs))` by
-    simp[Abbr `intpkgs`, internal_fn_descriptors_set_internal_package_target,
-      internal_fn_descriptors_MAP_package_internal_fn] >>
+    (simp[Abbr `intpkgs`, internal_fn_descriptors_set_internal_package_target,
+       internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
+     fs[EVERY_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
   `MEM (mk_raw_function "__entry" (all_blocks entry_end))
     unit.cu_context.ctx_functions` by
     (drule run_lowering_packaged_entry_member >>

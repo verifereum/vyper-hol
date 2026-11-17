@@ -492,6 +492,8 @@ Proof
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
   rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  qpat_assum `classify_functions tops = _`
+    (fn th => rule_assum_tac (REWRITE_RULE [th]) >> assume_tac th) >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
     (build_selectors (type_env tops) exts)` by
     rewrite_tac[build_selectors_fn_labels] >>
@@ -502,22 +504,34 @@ Proof
      rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops ints) ints))` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
   `lowering_policy_ok rpolicy` by
     (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      rw[run_lowering_def]) >>
   `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
+     (order_internals (runtime_internal_order tops ints) ints)))` by
+    (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
+              (order_internals (runtime_internal_order tops ints) ints)))
+           (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))` by
+       (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+        simp[PERM_order_runtime_internals]) >>
+     drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
   `EVERY (\d. internal_label_ok (FST d))
      (internal_fn_descriptors
        (MAP (set_internal_package_target rpolicy.rpol_target o
-         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)) /\
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+         (order_internals (runtime_internal_order tops ints) ints))) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors
        (MAP (set_internal_package_target rpolicy.rpol_target o
-         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)))` by
-    gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-         internal_fn_descriptors_MAP_package_internal_fn] >>
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+         (order_internals (runtime_internal_order tops ints) ints))))` by
+    (gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+         internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
+     fs[MEM_MAP, PULL_EXISTS]) >>
   `fresh_label "fallback" (initial_compile_state "__entry") =
      (fallback_lbl,label_st)` by simp[] >>
   qmatch_asmsub_abbrev_tac
