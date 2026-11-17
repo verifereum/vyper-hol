@@ -34,7 +34,7 @@ Ancestors
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
-  dftPacketOperationalPrefix
+  dftPacketOperationalPrefix dftPacketInvokePrefixStop
   dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
