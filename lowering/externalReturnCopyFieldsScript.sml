@@ -1,6 +1,7 @@
 (* Task-owned sequential field-copy interfaces. *)
 Theory externalReturnCopyFields
 Ancestors
+  typedMemoryCopy
   externalReturnCopyTransport externalReturnCopyFrame fragExec
   exprLoweringProps valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   vyperTypeSystem vyperTyping list rich_list pair alist arithmetic words
@@ -79,16 +80,6 @@ Proof
   simp[val_in_memory_def]
 QED
 
-Theorem return_copy_tuple_frame:
-  LENGTH vs = LENGTH tvs /\ tuple_val_wf vs tvs /\
-  tuple_in_memory vs tvs off mem /\ return_copy_memory_frame dst len mem mem' /\
-  (off + type_memory_size_list tvs <= dst \/ dst + len <= off) ==>
-  tuple_in_memory vs tvs off mem'
-Proof
-  rpt strip_tac >> irule (cj 5 val_in_memory_mem_agree_proof) >>
-  simp[] >> qexists_tac `mem` >> gvs[return_copy_memory_frame_def]
-QED
-
 Theorem return_copy_entry_offset_frag:
   !cenv ctx tenv dty sty dtv stv v dst src doff soff sa s1 s2 sb dp sp s dw sw.
   return_copy_entry cenv ctx tenv dty sty dtv stv v /\
@@ -109,7 +100,7 @@ Theorem return_copy_entry_offset_frag:
      w2n dw + doff + type_memory_size dtv <= w2n sw + soff)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory dtv v (w2n dw + doff) t.vs_memory /\
-         return_copy_frame sa (w2n dw + doff) (type_memory_size dtv) s t)
+         typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) s t)
     (\r. F)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -151,14 +142,14 @@ QED
 
 Theorem return_copy_tuple_frame_cond:
   LENGTH vs = LENGTH tvs /\ tuple_val_wf vs tvs /\
-  tuple_in_memory vs tvs off mem /\ return_copy_memory_frame dst len mem mem' /\
+  tuple_in_memory vs tvs off mem /\ typed_copy_frame dst len mem mem' /\
   (type_memory_size_list tvs <> 0 ==>
     off + type_memory_size_list tvs <= dst \/ dst + len <= off) ==>
   tuple_in_memory vs tvs off mem'
 Proof
   strip_tac >> Cases_on `type_memory_size_list tvs = 0`
   >- metis_tac[return_copy_tuple_zero_memory] >>
-  irule return_copy_tuple_frame >> metis_tac[]
+  irule typed_copy_tuple_frame >> metis_tac[]
 QED
 
 Theorem return_copy_tuple_suffix_frag:
@@ -177,7 +168,7 @@ Theorem return_copy_tuple_suffix_frag:
        w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff)) ==>
     frag_exec ctx sa sb (\u. u = s)
       (\t. tuple_in_memory vs dtvs (w2n dw + doff) t.vs_memory /\
-           return_copy_frame sa (w2n dw + doff)
+           typed_copy_state_frame sa (w2n dw + doff)
              (type_memory_size_list dtvs) s t) (\r. F)
 Proof
   Induct
@@ -227,9 +218,9 @@ Resume return_copy_tuple_suffix_frag[suffix]:
   `tuple_in_memory vs stvs (soff + (type_memory_size stv + w2n sw)) t.vs_memory` by
     (irule return_copy_tuple_frame_cond >> simp[] >>
      qexistsl_tac [`doff + w2n dw`, `type_memory_size dtv`, `s.vs_memory`] >>
-     gvs[return_copy_frame_def] >> decide_tac) >>
+     gvs[typed_copy_state_frame_def] >> decide_tac) >>
   `eval_operand dst t = SOME dw /\ eval_operand src t = SOME sw` by
-    metis_tac[return_copy_frame_operand] >>
+    metis_tac[typed_copy_state_frame_operand] >>
   `(!x. dst = Var x ==> not_fresh_at sc x) /\
    (!x. src = Var x ==> not_fresh_at sc x)` by
     metis_tac[return_copy_operand_fresh_mono] >>
@@ -246,17 +237,17 @@ QED
 Resume return_copy_tuple_suffix_frag[preserve_head]:
   irule val_in_memory_mem_agree >> simp[] >>
   qexistsl_tac [`type_memory_size dtv`, `t.vs_memory`] >>
-  gvs[return_copy_frame_def, return_copy_memory_frame_def] >>
+  gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
   first_x_assum irule >> decide_tac
 QED
 
 Resume return_copy_tuple_suffix_frag[frames]:
-  irule return_copy_frame_trans >> qexists_tac `t` >>
+  irule typed_copy_state_frame_trans >> qexists_tac `t` >>
   conj_tac
-  >- (irule return_copy_frame_subinterval >>
+  >- (irule typed_copy_state_frame_subinterval >>
       qexistsl_tac [`doff + w2n dw`, `type_memory_size dtv`] >> simp[]) >>
-  irule return_copy_frame_mono >> qexists_tac `sc` >> simp[] >>
-  irule return_copy_frame_subinterval >>
+  irule typed_copy_state_frame_mono >> qexists_tac `sc` >> simp[] >>
+  irule typed_copy_state_frame_subinterval >>
   qexistsl_tac [`doff + (type_memory_size dtv + w2n dw)`,
     `type_memory_size_list dtvs`] >> simp[]
 QED
@@ -283,7 +274,7 @@ Theorem return_copy_struct_suffix_frag:
        w2n dw + doff + type_memory_size_list tvs <= w2n sw + soff)) ==>
     frag_exec ctx sa sb (\u. u = s)
       (\t. tuple_in_memory vs tvs (w2n dw + doff) t.vs_memory /\
-           return_copy_frame sa (w2n dw + doff)
+           typed_copy_state_frame sa (w2n dw + doff)
              (type_memory_size_list tvs) s t) (\r. F)
 Proof
   rpt strip_tac >>
