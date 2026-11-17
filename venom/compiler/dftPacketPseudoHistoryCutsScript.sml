@@ -130,9 +130,22 @@ Theorem dft_packet_pseudo_history_cut_frame:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all dft_packet_pseudo_history_frame >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   irule dft_packet_pseudo_selected_cut_frame >>
   rpt (first_assum (irule_at Any)) >>
-  qexistsl [`ys0`,`xs0`,`tf0`,`sf0`,`rho0`,`ps0`,`p`,`ord0`,`new_body`,
-    `in0`,`inc0`,`h0`,`ent0`,`d`,`bt0`,`bb0`,`s1`,`s`] >>
-  asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[]
+  qexistsl [`z`,`q`,`e`,`a`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!a e bb bt ps xs ys rho hin h be hbe pos front closed brest k. _`
+        (drule_all_then strip_assume_tac) >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!a e cid q h b done_at_call child_entry ret.
+        _ ==> ?bb bt ps xs ys rho hin h0 be hbe pos front closed brest. _`
+        (drule_then strip_assume_tac) >>
+      rpt (first_assum (irule_at Any))) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!a e cid q h b done_at_call child_entry ret.
+    _ ==> TAKE _ _ = _ /\ _`
+    (drule_then strip_assume_tac) >> simp[]
 QED
