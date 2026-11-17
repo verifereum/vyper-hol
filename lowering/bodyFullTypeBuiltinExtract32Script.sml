@@ -4,7 +4,7 @@ Ancestors
   typeBuiltinPrereqs
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
-  bodyFullExtract32Prepare bodyFullExtract32Suffix
+  bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit
   bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
@@ -92,7 +92,17 @@ Proof
   conj_tac >- suspend "source_continuation" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`srcQ`,`srcR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `srcR`] >> metis_tac[]
+  asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> simp[]) >>
+  conj_tac >-
+    (simp[Abbr `srcR`] >>
+     qpat_x_assum `!res r. (?exc. _ /\ _) <=> expr_exit res r`
+       (fn th => POP_ASSUM_LIST (K (mp_tac th))) >>
+     strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!res r. _` (qspecl_then [`res`,`r`] mp_tac) >>
+     asm_rewrite_tac[] >> strip_tac >> gvs[] >>
+     metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC
 QED
 
 Resume extract32_vv_full[source_continuation]:
@@ -238,7 +248,12 @@ Resume extract32_vv_full[offset_inputs]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-  simp[fragExecTheory.exit_result_def]
+  simp[fragExecTheory.exit_result_def] >>
+  rpt strip_tac >>
+  drule contextRawReachableTheory.frag_reachable_members >>
+  disch_then drule >> strip_tac >>
+  fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+  simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]
 QED
 
 Resume extract32_vv_full[offset_continuation]:
@@ -259,7 +274,17 @@ Resume extract32_vv_full[offset_continuation]:
   conj_tac >- suspend "suffix_entry" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`offQ`,`offR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `offR`] >> metis_tac[]
+  asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> simp[]) >>
+  conj_tac >-
+    (simp[Abbr `offR`] >>
+     qpat_x_assum `!res r. (?exc. _ /\ _) <=> expr_exit res r`
+       (fn th => POP_ASSUM_LIST (K (mp_tac th))) >>
+     strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!res r. _` (qspecl_then [`res`,`r`] mp_tac) >>
+     asm_rewrite_tac[] >> strip_tac >> gvs[] >>
+     metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC
 QED
 
 Resume extract32_vv_full[suffix_entry]:
@@ -365,14 +390,23 @@ Resume extract32_vv_full[suffix_entry]:
      qexists_tac `cx` >> simp[]) >>
   qpat_assum `expr_type src = _` (fn th => once_rewrite_tac[GSYM th]) >>
   qpat_assum `expr_type off = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  `(case bt of UintT k => k <= 256 | IntT k => 0 < k /\ k <= 256 |
+      BytesT (Fixed k) => k <= 32 | _ => T)` by suspend "result_bounds" >>
+  `is_word_type (BaseT bt)` by
+    (Cases_on `bt` >>
+     gvs[vyperTypeSystemTheory.extract32_result_base_ok_def,
+         compileEnvTheory.is_word_type_def] >>
+     rename1 `BytesT b` >> Cases_on `b` >>
+     gvs[vyperTypeSystemTheory.extract32_result_base_ok_def,
+         compileEnvTheory.is_word_type_def]) >>
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  irule_at Any extract32_lift_sum_value_exit_full >>
   irule_at Any (Q.INST [`srcop` |-> `Var sv`] extract32_suffix_full) >>
   qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
   qexistsl_tac [`tn0`, `sv`, `sa`, `s0`, `p'`, `es`, `d`, `cenv`, `G0`] >>
   simp[] >>
-  conj_tac >- suspend "result_bounds" >>
   conj_tac >- (rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `op_prov G3 off_op = NONE /\ op_taint tn3 off_op = {}` by
     (`post_value_type cenv off = expr_type off` by
@@ -393,6 +427,9 @@ Resume extract32_vv_full[suffix_entry]:
   conj_tac >-
     (asm "offset_post" (mp_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
      simp[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  reverse conj_tac >-
+    (rpt strip_tac >>
+     gvs[loweringPostsTheory.post_value_type_def, vyperASTTheory.expr_type_def]) >>
   qx_gen_tac `H` >> disch_tac >>
   `expr_post H ctx func cenv cx off mid s2 s3 u ee (IntV i) off_op t /\
    ghost_inv_at (DF H) lo d cenv cx ee G3 tn3 t` by metis_tac[] >>

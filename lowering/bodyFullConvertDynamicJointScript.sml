@@ -145,7 +145,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[convert_operand_admissible,
       exprSimStackTheory.eval_expr_force_admissible, eval_expr_type_builtin_value] >>
-  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_post_buffer)) >>
+  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_post_buffer_exit)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
@@ -186,9 +186,8 @@ Proof
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> Cases_on `res` >> simp[Abbr `childR`] >>
-  Cases_on `y` >> Cases_on `r` >> simp[exprSimDefsTheory.expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >>
-  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
+  POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_INR_type]
 QED
 
 Resume convert_dynamic_vv_sim_full[continuation]:
