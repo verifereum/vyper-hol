@@ -14,6 +14,7 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
+  dftPacketFreshChildStop
   dftPacketFreshRow
   dftPacketKeyMap
   dftPacketKeySubstitution
@@ -24,6 +25,7 @@ Ancestors
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
+  dftPacketPreterminalOracle
   dftPacketPseudoAdvance
   dftPacketRefinementBoundary
   dftPacketReturnLocal
@@ -39,3 +41,4 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketTableSplice
   dftPacketTerminalPhi
+  dftPacketSuccessorObservation
