@@ -16,6 +16,7 @@ Ancestors
   venomState typedCopyOriginPtrBase decoderSetupStepPtr exprPtrCtorImmStore
   stateFrame ghostPcTransportPtr emitHelperProps arithmetic bodyPtrDefs ptrDiscipline
   tupleLoadProps fragExec fragGasOriginPtrLoop
+  assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
 
 val _ = Parse.hide "body";
 
@@ -569,6 +570,128 @@ Proof
       Cases_on `is_word_type h` >> gvs[op_prov_def] >>
       irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
   simp[] >> metis_tac[]
+QED
+
+(* Typed and relational postconditions at the joint load endpoint. *)
+Theorem body_assign_tuple_load_all_path:
+  compile_tuple_load_all cenv (Var root) tys off sa = (elems,sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME w /\
+  ptr_covers G tn root s capacity /\ off + type_memory_size_list tvs <= capacity /\
+  w2n w + capacity < dimword (:256) /\ w2n w + capacity <= s.vs_alloca_next /\
+  LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv) tys tvs /\
+  LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv) tys tvs /\
+  values_have_types tvs vs /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    tuple_in_memory vs tvs (w2n w + off) mem) /\
+  local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  LENGTH elems = LENGTH tys /\ local_ptrs_reserved cenv sb /\
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es Gf tf t) /\
+    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==>
+      ptr_covers Gf tf x t cap) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      tuple_in_memory vs tvs (w2n w + off) mem) /\
+    (!i. i < LENGTH tys ==>
+      ?x. EL i elems = Var x /\ not_fresh_at sb x /\ op_taint tf (Var x) = {} /\
+        (if is_word_type (EL i tys) then
+           lookup_var x t = SOME (typed_val_to_w256 (EL i tvs) (EL i vs)) /\
+           op_prov Gf (Var x) = NONE
+         else lookup_var x t = SOME (n2w (w2n w + off +
+                SUM (MAP type_memory_size (TAKE i tvs)))) /\
+           ptr_covers Gf tf x t (type_memory_size (EL i tvs))))
+Proof
+  strip_tac >>
+  `LENGTH tys = LENGTH tvs` by metis_tac[LIST_REL_LENGTH] >>
+  `!i. SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) =
+       SUM (MAP type_memory_size (TAKE i tvs))` by
+    metis_tac[tuple_prefix_sizes] >>
+  `SUM (MAP (type_memory_bytes cenv) tys) = type_memory_size_list tvs` by
+    (first_x_assum (qspec_then `LENGTH tys` mp_tac) >>
+     simp[valueEncodingProofsTheory.type_memory_size_list_sum]) >>
+  `EVERY (\ty. is_word_type ty ==> type_memory_bytes cenv ty = 32) tys` by
+    (simp[EVERY_EL] >> rpt strip_tac >>
+     fs[LIST_REL_EL_EQN] >> metis_tac[stmtSimReturnTheory.word_type_sizes]) >>
+  `w2n w + off + type_memory_size_list tvs < dimword (:256)` by decide_tac >>
+  `!i j. i < LENGTH tys /\ is_word_type (EL i tys) /\
+    w2n w + off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) <= j /\
+    j < w2n w + off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) + 32 ==>
+    j NOTIN tn.t_mem` by
+    (rpt strip_tac >> metis_tac[tuple_word_member_clean]) >>
+  `off + SUM (MAP (type_memory_bytes cenv) tys) <= capacity` by simp[] >>
+  drule_all body_assign_tuple_load_all_core >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  drule compile_tuple_load_all_values >>
+  disch_then (qspecl_then [`s`,`w`] mp_tac) >>
+  (impl_tac >- simp[eval_operand_def]) >> strip_tac >>
+  `t' = t with vs_inst_idx := s.vs_inst_idx` by metis_tac[venomExecSemanticsTheory.exec_result_11] >>
+  qpat_x_assum `t' = s with vs_vars := _` kall_tac >>
+  qpat_x_assum `t' = t with vs_inst_idx := _` SUBST_ALL_TAC >>
+  qpat_x_assum `eval_operands _ _ = _` mp_tac >>
+  rewrite_tac[instIdxIndepTheory.eval_ops_inst_idx] >> disch_tac >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >> asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >>
+    irule stmt_state_rel_old_vars_frame_ptr >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    irule ghost_inv_at_exterior_frame >>
+    goal_assum (drule_at Any) >> fs[state_frame_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
+  qx_gen_tac `i` >> strip_tac >>
+  `i < LENGTH tys` by simp[] >>
+  qpat_x_assum `!i. i < LENGTH tys ==> ?x. _`
+    (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  qexists `x` >> asm_rewrite_tac[] >>
+  `type_memory_bytes cenv (EL i tys) = type_memory_size (EL i tvs)` by
+    (qpat_assum `LIST_REL (\ty tv. type_memory_bytes cenv ty = _) _ _`
+       (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >> simp[]) >>
+  `eval_operand (EL i elems) t = SOME
+    (if is_word_type (EL i tys) then
+       mem_word_at (w2n (w + n2w (off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys)))) ) s.vs_memory
+     else w + n2w (off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys))))` by
+    (drule eval_operands_index >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  drule tuple_typed_load_value >>
+  disch_then (drule_at (Pat `values_have_types _ _`)) >>
+  disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
+  disch_then (qspecl_then [`n2w (w2n w + off)`,`s.vs_memory`,`i`] mp_tac) >>
+  `w2n w + off < dimword (:256)` by decide_tac >>
+  (impl_tac >- (simp[wordsTheory.w2n_n2w] >>
+    qpat_x_assum `!mem. mem_agree_outside _ _ mem ==> _`
+      (qspec_then `s.vs_memory` mp_tac) >>
+    simp_tac bool_ss [mem_agree_outside_def] >> metis_tac[ADD_COMM])) >>
+  simp[wordsTheory.w2n_n2w] >>
+  qpat_x_assum `eval_operand (EL i elems) t = _` mp_tac >>
+  qpat_x_assum `if is_word_type _ then _ else _` mp_tac >>
+  qpat_x_assum `EL i elems = _` mp_tac >>
+  qpat_x_assum `type_memory_bytes cenv (EL i tys) = _` mp_tac >>
+  qpat_x_assum `!i. SUM _ = _` (qspec_then `i` mp_tac) >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `is_word_type (EL i tys)` >>
+  Cases_on `w` >>
+  asm_simp_tac std_ss [wordsTheory.word_add_n2w,wordsTheory.w2n_n2w,
+    LESS_MOD,eval_operand_def,AC ADD_ASSOC ADD_COMM]
 QED
 
 (* A source that is a widened aggregate call. *)
