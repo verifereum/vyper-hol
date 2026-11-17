@@ -46,12 +46,11 @@ Ancestors
 
 Theorem calldata_slice_typing:
   well_typed_expr env (Builtin ann (CalldataSlice n) args) ==>
-  ?e. args = [e] /\ expr_type e = BaseT (UintT 256) /\
-      ann = BaseT (BytesT (Dynamic n)) /\ 0 < n /\ n < 2 ** 256
+  ?e m. args = [e] /\ expr_type e = BaseT (UintT 256) /\
+        ann = BaseT (BytesT (Dynamic m)) /\ 0 < n /\ n <= m /\ m < 2 ** 256
 Proof
   simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
-  strip_tac >> Cases_on `args` >> gvs[] >>
-  rename1 `MAP expr_type rest = []` >> Cases_on `rest` >> gvs[]
+  strip_tac >> Cases_on `args` >> gvs[]
 QED
 
 Theorem names_builtin_calldata_slice:

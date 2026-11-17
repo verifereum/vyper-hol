@@ -41,8 +41,8 @@ Theorem calldata_slice_start_translation_test:
     (JE_Call (JE_Name "slice" tc src fn_ty)
       [JE_Attribute (JE_Name "msg" mtc msrc mty)
          "data" atc bn btc asrc dty; start; JE_Int 4 (JT_Integer 256 F)]
-      [] ret_ty call_src) =
-  Builtin (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
+      [] (JT_Bytes 100) call_src) =
+  Builtin (BaseT (BytesT (Dynamic 100))) (CalldataSlice 4)
     [translate_expr ctx start]
 Proof
   simp[Once translate_expr_def, is_calldata_len_call_def,
