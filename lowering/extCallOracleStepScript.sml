@@ -379,6 +379,6 @@ Proof
           vyperStateTheory.return_def]) >>
   strip_tac >> disj1_tac >>
   qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
-  Cases_on `s.vs_outcomes` >>
+  Cases_on `s.vs_outcomes` >> gvs[] >>
   simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
 QED

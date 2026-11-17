@@ -363,7 +363,8 @@ Theorem extcall_argument_first_pop[local]:
        popped := [([ValueSubscript (IntV 1)],IntV 2)]|>)])
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 
@@ -383,7 +384,8 @@ Theorem extcall_argument_second_pop[local]:
                   ([ValueSubscript (IntV 1)],IntV 2)]|>)])
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 
@@ -399,7 +401,8 @@ Theorem extcall_argument_keyword_read[local]:
   (INL (IntV 1),s2)
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 

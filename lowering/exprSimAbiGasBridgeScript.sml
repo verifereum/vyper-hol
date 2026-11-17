@@ -1949,7 +1949,9 @@ Proof
   simp[exec_ext_call_def, frag_call_request_control,
        venomCallOracleDefsTheory.consume_call_outcome_eq,
        write_memory_with_expansion_def, update_var_def,
-       instIdxIndepTheory.exec_result_map_def]
+       halt_state_def, set_returndata_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
 Theorem frag_create_control:
@@ -1980,7 +1982,9 @@ Proof
   simp[exec_delegatecall_def, frag_call_request_control,
        venomCallOracleDefsTheory.consume_call_outcome_eq,
        write_memory_with_expansion_def, update_var_def,
-       instIdxIndepTheory.exec_result_map_def]
+       halt_state_def, set_returndata_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
 Theorem frag_read0_control:

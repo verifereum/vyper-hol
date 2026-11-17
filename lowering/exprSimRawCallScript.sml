@@ -4685,7 +4685,7 @@ Proof
   drule_all raw_call_source_tail >>
   disch_then (qspecl_then [`target`,
     `ext_call_kwarg EKGas flags.rcf_kws kvs`,`bs`]
-    strip_assume_tac) >>
+    strip_assume_tac)
   >- suspend "exhausted" >>
   suspend "ready"
 QED
