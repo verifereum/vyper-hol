@@ -300,7 +300,7 @@ Definition accounts_after_transfer_def:
         accounts
 End
 
-(* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
+(* ===== Fresh frame: LIVE post-transfer accounts ===== *)
 
 Definition evm_state_ok_def:
   evm_state_ok s <=>
@@ -313,7 +313,7 @@ Definition call_state_rel_def:
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
       evm_state_ok es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
+      ctxt.jumpDest = NONE /\ ctxt.msgParams.static = tx.is_static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\

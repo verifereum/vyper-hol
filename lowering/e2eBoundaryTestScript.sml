@@ -53,7 +53,7 @@ Theorem boundary_live_and_fresh:
   source_deployment_rel tops am tx /\ tx_block_fields_rel tx es.txParams /\
   ?ctxt rb rest.
     es.contexts = (ctxt,rb)::rest /\
-    ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
+    ctxt.msgParams.static = tx.is_static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
     buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
     installed_code_rel tops code (account_immutables am tx.target)
