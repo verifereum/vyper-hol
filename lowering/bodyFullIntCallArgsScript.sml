@@ -242,6 +242,353 @@ Proof
   metis_tac[exprSimPropsTheory.select_result_memory_place]
 QED
 
+(* The support induction keeps success nonlocality alongside scope action. *)
+Theorem intcall_args_defaults_scope_mutual_from_actions:
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx s sc. conditional_result cx r (s with scopes := sc) =
+      (FST (conditional_result cx r s),
+       SND (conditional_result cx r s) with scopes := sc)) /\
+  (!r cx s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
+    conditional_result cx r s = (INL r',t) ==>
+    !id path. r' <> PlaceR (MemoryPlace id path)) /\
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx s sc. result_array_length cx r (s with scopes := sc) =
+      (FST (result_array_length cx r s),
+       SND (result_array_length cx r s) with scopes := sc)) /\
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx ty sb s sc. select_result cx ty r sb (s with scopes := sc) =
+      (FST (select_result cx ty r sb s),
+       SND (select_result cx ty r sb s) with scopes := sc)) /\
+  (!r cx ty sb s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
+    select_result cx ty r sb s = (INL r',t) ==>
+    !id path. r' <> PlaceR (MemoryPlace id path)) ==>
+  (!tops e. supported_pure_expr tops e ==>
+    !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path))) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    (!tenv. well_typed_exprs (defaults_env tenv) es ==> !cx s sc.
+      eval_exprs cx es (s with scopes := sc) =
+        (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with scopes := sc)) /\
+    (!e. MEM e es ==> !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path)))) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    !tenv. well_typed_named_exprs (defaults_env tenv) fields ==> !cx s sc.
+      eval_exprs cx (MAP SND fields) (s with scopes := sc) =
+        (FST (eval_exprs cx (MAP SND fields) s),
+         SND (eval_exprs cx (MAP SND fields) s) with scopes := sc)) /\
+  (!tops e. supported_place_expr tops e ==>
+    !tenv. (well_typed_expr (defaults_env tenv) e \/
+      ?vt. type_place_expr (defaults_env tenv) e = SOME vt) ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path)))
+Proof
+  strip_tac >> ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> simp[supportedExprsTheory.supported_pure_expr_def]
+  >- simp[cj 1 well_typed_expr_def, defaults_env_def]
+  >- simp[cj 33 evaluate_def, return_def]
+  >- suspend "global"
+  >- suspend "ifexp"
+  >- suspend "structlit"
+  >- suspend "subscript"
+  >- suspend "attribute"
+  >- suspend "builtin"
+  >- suspend "typebuiltin"
+  >- simp[cj 30 well_typed_expr_def, cj 49 evaluate_def, return_def]
+  >- suspend "cons"
+  >- simp[cj 34 well_typed_expr_def, cj 49 evaluate_def, return_def]
+  >- suspend "fields_cons"
+  >- simp[cj 1 well_typed_expr_def, defaults_env_def, well_typed_expr_def]
+  >- suspend "place_global"
+  >- suspend "place_subscript"
+  >> suspend "place_rest"
+QED
+
+Resume intcall_args_defaults_scope_mutual_from_actions[global]:
+  PairCases_on `id` >> disch_tac >> gen_tac >> disch_tac >> gen_tac >>
+  conj_tac
+  >- (rpt gen_tac >> simp[cj 30 evaluate_def,
+        vyperLookupStorageScopesTheory.lookup_global_with_scopes] >>
+      Cases_on `lookup_global cx id0 id1 s` >> simp[]) >>
+  simp[cj 30 evaluate_def] >>
+  metis_tac[vyperLocalAccessFrameTheory.lookup_global_not_memory]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[ifexp]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 4 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  ntac 3 (first_x_assum
+    (drule_all_then (qspec_then `cx` strip_assume_tac))) >>
+  conj_tac
+  >- (pure_rewrite_tac[cj 32 evaluate_def] >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- (rewrite_tac[switch_BoolV_def] >>
+          irule intcall_args_scope_bind >> reverse conj_tac
+          >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+          rpt gen_tac >> disch_tac >> BETA_TAC >>
+          rpt IF_CASES_TAC >> simp[raise_def]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      gvs[switch_BoolV_def, bind_def, AllCaseEqs(), COND_RATOR, raise_def] >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[cj 32 evaluate_def, switch_BoolV_def, bind_def, AllCaseEqs(),
+      COND_RATOR, raise_def] >> metis_tac[]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[structlit]:
+  PairCases_on `id` >> strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 6 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  first_x_assum (drule_all_then assume_tac) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      gvs[cj 34 evaluate_def, bind_def, return_def, AllCaseEqs()]) >>
+  pure_rewrite_tac[cj 34 evaluate_def, LET_THM] >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  simp[return_def]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[subscript]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 7 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  qpat_x_assum `!tenv. _ \/ _ ==> _` (qspec_then `tenv` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspec_then `cx` strip_assume_tac) >>
+  first_x_assum (drule_all_then (qspec_then `cx` strip_assume_tac)) >>
+  (conj_tac
+  >- (pure_rewrite_tac[cj 35 evaluate_def] >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- (IF_CASES_TAC >> simp[return_def] >>
+          irule intcall_args_scope_bind >> reverse conj_tac
+          >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+          simp[return_def]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      gvs[bind_def, AllCaseEqs(), COND_RATOR, return_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[cj 35 evaluate_def, bind_def, AllCaseEqs(), COND_RATOR, return_def]
+  >- (qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `select_result _ _ ibaser _ _` >>
+      `!j p. ibaser <> PlaceR (MemoryPlace j p)` by simp[Abbr `ibaser`] >>
+      qpat_x_assum `!j p. ibaser <> _` mp_tac >>
+      qpat_x_assum `!r cx ty sb s r' t.
+        _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
+  >- (`!j p. res <> PlaceR (MemoryPlace j p)` by metis_tac[] >>
+      qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `!j p. res <> _` mp_tac >>
+      qpat_x_assum `!r cx ty sb s r' t.
+        _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]))
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[attribute]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 8 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  qpat_x_assum `!tenv. _ \/ _ ==> _` (qspec_then `tenv` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspec_then `cx` strip_assume_tac) >>
+  (conj_tac
+   >- (pure_rewrite_tac[cj 36 evaluate_def] >>
+       irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+       rpt gen_tac >> disch_tac >> BETA_TAC >> metis_tac[]) >>
+   rpt strip_tac >>
+   gvs[cj 36 evaluate_def, bind_def, AllCaseEqs()] >>
+   `!j p. res <> PlaceR (MemoryPlace j p)` by metis_tac[] >>
+   qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+   qpat_x_assum `!j p. res <> _` mp_tac >>
+   qpat_x_assum `!r cx ty sb s r' t.
+     _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[builtin]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 9 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  `code_slice_source blt es = NONE` by
+    (Cases_on `code_slice_source blt es` >> simp[] >>
+     PairCases_on `x` >> gvs[code_slice_source_SOME] >>
+     drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
+     simp[supportedExprTraverseTheory.supported_expr_exists_def,
+          is_extcode_def]) >>
+  first_x_assum (drule_all_then assume_tac) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      gvs[cj 37 evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()]) >>
+  pure_rewrite_tac[cj 37 evaluate_def, ignore_bind_def] >>
+  irule intcall_args_scope_bind >> reverse conj_tac
+  >- simp[type_check_def, assert_def, return_def, raise_def] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac
+  >- (Cases_on `blt = Len` >> simp[]
+      >- (gvs[well_typed_builtin_app_def] >>
+          `MEM (HD es) es` by (Cases_on `es` >> gvs[]) >>
+          `well_typed_expr (defaults_env tenv) (HD es)` by
+            metis_tac[exprSimSourceTheory.well_typed_exprs_member] >>
+          qpat_x_assum `!e. MEM e es ==> _` drule >>
+          disch_then (drule_all_then (qspec_then `cx` strip_assume_tac)) >>
+          irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+          rpt gen_tac >> disch_tac >> BETA_TAC >>
+          irule intcall_args_scope_bind >> reverse conj_tac
+          >- metis_tac[] >> simp[return_def]) >>
+      Cases_on `blt = Bop In \/ blt = Bop NotIn` >> simp[]
+      >- (irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+          rpt gen_tac >> disch_tac >> BETA_TAC >>
+          simp[type_check_def, assert_def, lift_option_type_def, lift_sum_def,
+               bind_def, return_def, raise_def] >>
+          rpt IF_CASES_TAC >> simp[bind_def, raise_def] >>
+          Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+          simp[bind_def, return_def, raise_def] >>
+          Cases_on `evaluate_membership x (blt = Bop NotIn) (HD v') (EL 1 v')` >>
+          simp[return_def, raise_def]) >>
+      Cases_on `blt = Env MsgGas` >> simp[]
+      >- (rpt gen_tac >> simp[next_gas_reading_def] >>
+          Cases_on `s.gas_obs` >> simp[return_def, raise_def]) >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      simp[get_accounts_def, lift_sum_def, bind_def, return_def] >>
+      rpt gen_tac >> Cases_on `evaluate_builtin cx s.accounts ty blt (MAP expr_type es) v'` >>
+      simp[return_def, raise_def] >>
+      simp[precompile_call_success_def, check_def, assert_def,
+           bind_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
+      Cases_on `s.outcomes` >> simp[bind_def, return_def, raise_def] >>
+      Cases_on `x'` >> simp[bind_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def]) >>
+  simp[return_def]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[typebuiltin]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 10 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
+  first_x_assum (drule_all_then assume_tac) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      gvs[cj 39 evaluate_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()]) >>
+  pure_rewrite_tac[cj 39 evaluate_def, ignore_bind_def] >>
+  irule intcall_args_scope_bind >> reverse conj_tac
+  >- simp[type_check_def, assert_def, return_def, raise_def] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  simp[lift_sum_def, bind_def, return_def] >>
+  Cases_on `evaluate_type_builtin cx blt target (MAP expr_type es) v'` >>
+  simp[return_def, raise_def]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[cons]:
+  strip_tac >> strip_tac >> gvs[] >> reverse conj_tac >- metis_tac[] >>
+  gen_tac >> simp[Once well_typed_expr_def] >> strip_tac >> gen_tac >>
+  qpat_x_assum `!tenv. well_typed_expr _ e ==> _`
+    (drule_all_then (qspec_then `cx` strip_assume_tac)) >>
+  first_x_assum (drule_all_then assume_tac) >>
+  pure_rewrite_tac[cj 50 evaluate_def] >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac
+  >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  simp[return_def]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[fields_cons]:
+  strip_tac >> strip_tac >> gvs[] >>
+  gen_tac >> simp[Once well_typed_expr_def] >> strip_tac >> gen_tac >>
+  qpat_x_assum `!tenv. well_typed_expr _ e ==> _`
+    (drule_all_then (qspec_then `cx` strip_assume_tac)) >>
+  first_x_assum (drule_all_then assume_tac) >>
+  pure_rewrite_tac[cj 50 evaluate_def] >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac
+  >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+  rpt gen_tac >> disch_tac >> BETA_TAC >>
+  irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+  simp[return_def]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[place_global]:
+  PairCases_on `id` >> disch_tac >> gen_tac >> disch_tac >> gen_tac >>
+  conj_tac
+  >- (rpt gen_tac >> simp[cj 30 evaluate_def,
+        vyperLookupStorageScopesTheory.lookup_global_with_scopes] >>
+      Cases_on `lookup_global cx id0 id1 s` >> simp[]) >>
+  simp[cj 30 evaluate_def] >>
+  metis_tac[vyperLocalAccessFrameTheory.lookup_global_not_memory]
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[place_subscript]:
+  strip_tac >> strip_tac >> gen_tac >>
+  simp[cj 7 well_typed_expr_def] >>
+  simp[Once well_typed_expr_def] >> strip_tac >> gen_tac >>
+  gvs[AllCaseEqs()] >>
+  qpat_x_assum `!tenv. _ \/ _ ==> _` (qspec_then `tenv` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspec_then `cx` strip_assume_tac) >>
+  first_x_assum (drule_all_then (qspec_then `cx` strip_assume_tac)) >>
+  (conj_tac
+  >- (pure_rewrite_tac[cj 35 evaluate_def] >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- (IF_CASES_TAC >> simp[return_def] >>
+          irule intcall_args_scope_bind >> reverse conj_tac
+          >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+          simp[return_def]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- (irule intcall_args_read_result_scope_action >> metis_tac[]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      gvs[bind_def, AllCaseEqs(), COND_RATOR, return_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[cj 35 evaluate_def, bind_def, AllCaseEqs(), COND_RATOR, return_def]
+  >- (qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `select_result _ _ ibaser _ _` >>
+      `!j p. ibaser <> PlaceR (MemoryPlace j p)` by simp[Abbr `ibaser`] >>
+      qpat_x_assum `!j p. ibaser <> _` mp_tac >>
+      qpat_x_assum `!r cx ty sb s r' t.
+        _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
+  >- (`!j p. res <> PlaceR (MemoryPlace j p)` by metis_tac[] >>
+      qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `!j p. res <> _` mp_tac >>
+      qpat_x_assum `!r cx ty sb s r' t.
+        _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]))
+QED
+Resume intcall_args_defaults_scope_mutual_from_actions[place_rest]:
+  markerLib.RESUME_TAC >> rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
+  gvs[] >>
+  TRY (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+    simp[Once well_typed_expr_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `!tenv. well_typed_expr _ _ ==> _`
+    (drule_all_then (qspec_then `cx` ACCEPT_TAC)) >> NO_TAC) >>
+  gvs[cj 8 well_typed_expr_def] >>
+  qpat_x_assum `!tenv. _ \/ _ ==> _` (qspec_then `tenv` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspec_then `cx` strip_assume_tac) >>
+  conj_tac
+  >- (pure_rewrite_tac[cj 36 evaluate_def] >>
+      irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[cj 36 evaluate_def, bind_def, AllCaseEqs()] >>
+  `!j p. res <> PlaceR (MemoryPlace j p)` by metis_tac[] >>
+  qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `!j p. res <> _` mp_tac >>
+  qpat_x_assum `!r cx ty sb s r' t.
+    _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
+QED
+Finalise intcall_args_defaults_scope_mutual_from_actions
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
