@@ -31,7 +31,7 @@ Proof
        vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
        vfmTypesTheory.sum_CASE_rator] >>
   IF_CASES_TAC
-  >- (Cases_on `take_call_outcome addr data NONE st` >>
+  >- (Cases_on `take_call_outcome gas_cap addr data NONE st` >>
       rename1 `take_call_outcome _ _ _ _ = (answer,st1)` >>
       `machine_frame st st1` by
         (irule take_call_outcome_transport >> conj_tac
@@ -72,7 +72,7 @@ QED
 Theorem machine_frame_static_oracle:
   state_rel_frame machine_frame
     (do
-      (rq,outcome) <- take_call_outcome target data NONE;
+      (rq,outcome) <- take_call_outcome gas_cap target data NONE;
       (if call_outcome_success outcome then return ()
        else raise $ Error $ RevertData $ call_outcome_return_data outcome);
       adopt_call_outcome rq outcome;
@@ -80,7 +80,7 @@ Theorem machine_frame_static_oracle:
     od)
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
-  Cases_on `take_call_outcome target data NONE st` >>
+  Cases_on `take_call_outcome gas_cap target data NONE st` >>
   rename1 `take_call_outcome _ _ _ _ = (answer,st1)` >>
   `machine_frame st st1` by
     (irule take_call_outcome_transport >>
