@@ -38,3 +38,4 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketTableSplice
   dftPacketTerminalPhi
+  dftPacketSuccessorObservation
