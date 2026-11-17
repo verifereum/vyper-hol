@@ -1,7 +1,7 @@
 (* Robust reconstruction of a memory array after appending one word. *)
 Theory bodyFullAppendResolved
 Ancestors
-  stateRelProj
+  stateRelProj stmtSimDefs vyperScopePreservation
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyInvNoDalloca
   bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath
@@ -14,6 +14,18 @@ Ancestors
   abiDecodeStaticProps appendStorageStageTransportPtr bodyMemoryDefs
   dynCopyExec loweringShapeDefs ptrDiscipline stateFrame valueEncodingProofs
   valueEncodingTyping vyperLookup
+
+Theorem type_stmt_append_name[local]:
+  type_stmt env ret_ty (Append (NameTarget id) e) =
+    (case type_place_target env (NameTarget id) of
+     | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
+         if target_mutable env (NameTarget id) /\ well_typed_expr env e /\
+            type_widens_to env.type_defs (expr_type e) elem_ty /\
+            assignable_type env.type_defs elem_ty then SOME env else NONE
+     | _ => NONE)
+Proof
+  simp[Once vyperTypeSystemTheory.type_stmt_def]
+QED
 
 Theorem append_local_word_ghost_inputs[local]:
   expr_sim_pre ce cx env (Name (ArrayT elem (Dynamic cap)) id) es /\
@@ -586,7 +598,6 @@ Resume body_append_local_word_full[append_full]:
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
-(* TEMPORARILY CHEATED - the statement's normal post now carries alloca_frame and the older allocations' taint clause; this step and the steps it suspends (robust_array, scope_old_vars, scope_memory_frame, scope_low_frame) close the post by position from facts that don't include them. Original proof:
 Resume body_append_local_word_full[append_success]:
   qpat_assum `!len. _ /\ _ ==> ?u. _` (qspec_then `LENGTH vs` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -622,7 +633,7 @@ Resume body_append_local_word_full[append_success]:
         vyperTypeInvariantsTheory.env_context_consistent_def] >> gvs[]) >>
   `entry'.assignable` by
     (`FLOOKUP env.var_assignable id = SOME T` by
-        fs[vyperTypeSystemTheory.type_stmt_def, vyperTypeSystemTheory.target_mutable_def] >>
+        fs[type_stmt_append_name, vyperTypeSystemTheory.target_mutable_def] >>
       fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
       qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> ?en. lookup_scopes id mid.scopes = SOME en /\ en.assignable`
@@ -734,7 +745,7 @@ Resume body_append_local_word_full[append_success]:
       `local_region cenv mid.scopes t id (w2n bp) sz` by
         (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
       `local_ptrs_rel func cenv mid.scopes t` by
-        fs[expr_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+        metis_tac[expr_post_def, stmt_state_rel_local_ptrs_alloca] >>
       `lo <= u.vs_alloca_next /\ allocas_from lo u` by
         (qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _` mp_tac >>
          qpat_assum `u.vs_alloca_next = _` mp_tac >> qpat_assum `u.vs_allocas = _` mp_tac >>
@@ -760,15 +771,22 @@ Resume body_append_local_word_full[append_success]:
       conj_tac >- suspend "scope_low_frame" >>
       qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _` mp_tac >>
       rpt (pop_assum kall_tac) >> simp[ghost_inv_at_def] >> metis_tac[]) >>
-  all_tac >-
-    (`not_fresh_at sm x` by
-       (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-     `lookup_var x t = SOME w'` by (fs[expr_post_def] >> metis_tac[]) >>
-     simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
-  all_tac >- (fs[expr_post_def] >> metis_tac[]) >>
-  `not_fresh_at sm x` by
-    (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  fs[ghost_kept_at_def] >> metis_tac[]
+  all_tac >~ [`lookup_var x _ = SOME w'`]
+  >- (`not_fresh_at sm x` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      `lookup_var x t = SOME w'` by (fs[expr_post_def] >> metis_tac[]) >>
+      simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
+  all_tac >~ [`FLOOKUP _ aid = SOME _`] >- (fs[expr_post_def] >> metis_tac[]) >>
+  all_tac >~ [`FLOOKUP Gf x = _`]
+  >- (`not_fresh_at sm x` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      fs[ghost_kept_at_def] >> metis_tac[]) >>
+  all_tac >~ [`op_taint tnf (Var x) = _`]
+  >- (`not_fresh_at sm x` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      fs[ghost_kept_at_def] >> metis_tac[]) >>
+  all_tac >~ [`alloca_frame _ _ _ _ _ _ _`] >- suspend "success_alloca_frame" >>
+  suspend "success_alloca_taint"
 QED
 
 Resume body_append_local_word_full[scope_old_vars]:
@@ -872,9 +890,35 @@ Resume body_append_local_word_full[robust_array]:
   strip_tac >> rpt strip_tac >> simp[] >>
   dep_rewrite.DEP_REWRITE_TAC [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >> decide_tac
 QED
-*)
-Resume body_append_local_word_full[append_success]:
-  cheat
+Resume body_append_local_word_full[success_alloca_frame]:
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM ff.scopes = MAP FDOM mid.scopes` by
+    (qpat_assum `!tail. write_place _ _ _ _ = _`
+       (qspec_then `[]` (mp_tac o MATCH_MP vyperScopePreservationTheory.write_place_scopes_dom)) >>
+     simp[]) >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+     simp[] >> fs[expr_post_def]) >>
+  `local_region cenv mid.scopes t id (w2n bp) sz` by
+    (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
+  `32*(1+cap) <= sz` by
+    (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     fs[loweringStateRelDefsTheory.local_ptrs_rel_def] >>
+     `type_memory_size entry'.type <= sz` by metis_tac[] >>
+     gvs[type_memory_size_def] >> decide_tac) >>
+  irule alloca_frame_local_store >>
+  goal_assum (drule_at Any) >> simp[] >>
+  FAIL_TAC "store args"
 QED
+
+Resume body_append_local_word_full[success_alloca_taint]:
+  fs[ghost_kept_at_def, SUBSET_DEF] >> metis_tac[]
+QED
+
 
 Finalise body_append_local_word_full
