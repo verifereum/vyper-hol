@@ -10,7 +10,6 @@
 
  *
  * TOP-LEVEL:
- *   ifexp_vv_full_root -- the ternary's vv judgment from its parts
  *   ifexp_expr_full_ok -- bodyFullCases' IfExp case (body_ifexp_case_full)
  *)
 Theory bodyFullIfExp
@@ -26,64 +25,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem ifexp_vv_full_root:
-  expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
-  (!e. (e = a \/ e = b) ==>
-       (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
-       (post_value_type cenv e = t /\
-        (is_word_type t \/
-         same_memory_layout cenv (lowered_value_type cenv e) t /\
-         (?rtp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rtp) \/
-         ~same_memory_layout cenv (lowered_value_type cenv e) t /\
-         is_bytestring_type t /\ is_bytestring_type (lowered_value_type cenv e) /\
-         arg_type_fits (lowered_value_type cenv e) t) \/
-        ~is_word_type t /\ ~same_memory_layout cenv (lowered_value_type cenv e) t /\
-        post_value_type cenv e = lowered_value_type cenv e /\
-        type_widens_to (get_tenv cx) (lowered_value_type cenv e) t /\
-        (?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv))) /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\
-  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-  (!name fields.
-     FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-     ALL_DISTINCT (MAP FST fields) /\
-     EVERY (\(fname,fty,sz). !tv.
-       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv)
-       fields) /\
-  (!ty' tvt. evaluate_type (get_tenv cx) ty' = SOME tvt ==>
-     type_memory_bytes cenv ty' = type_memory_size tvt) /\
-  (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
-     type_memory_size tvt < 2 ** 64) /\
-  evaluate_type (get_tenv cx) t = SOME rty /\
-  expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx (BaseT BoolT) c es /\
-  (!gs v es1.
-     bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) =
-       (INL v,es1) ==>
-     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty a es1 /\
-     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty b es1 /\
-     !e gs' v' es2.
-       (e = a \/ e = b) /\
-       bind (eval_expr cx e) (read_result cx) (es1 with gas_obs := gs') =
-         (INL v',es2) ==>
-       value_has_type rty v' /\
-       !ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
-             value_has_type ptv v') ==>
-  expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty (IfExp t c a b) es
-Proof
-  strip_tac >> irule ifexp_vv_full_root_uniform >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists `rty` >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  irule ifexp_selected_arm_step_full >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexistsl [`e`,`rty`,`sm`,`ty`,`av`] >>
-  simp[] >>
-  qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `e` mp_tac) >>
-  simp[] >> gvs[] >> metis_tac[]
-QED
-
 Theorem ifexp_expr_full_ok_from_root[local]:
-  (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty.
+  (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!e. (e = a \/ e = b) ==>
       (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
@@ -113,6 +56,9 @@ Theorem ifexp_expr_full_ok_from_root[local]:
       bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) = (INL v,es1) ==>
       expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty a es1 /\
       expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty b es1 /\
+      (!e gs' raw ee. (e = a \/ e = b) /\
+        eval_expr cx e (es1 with gas_obs := gs') = (INL raw,ee) ==>
+        eval_result_typed (env,cx,ee) raw (Type (expr_type e))) /\
       !e gs' v' es2.
         (e = a \/ e = b) /\
         bind (eval_expr cx e) (read_result cx) (es1 with gas_obs := gs') = (INL v',es2) ==>
@@ -136,7 +82,7 @@ Proof
        (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
      simp[expr_type_def, optionTheory.IS_SOME_EXISTS]) >>
   reverse conj_asm2_tac
-  >- (qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty. _` irule >>
+  >- (qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` irule >>
       simp[] >>
       conj_tac >- (rpt gen_tac >> strip_tac >>
         `expr_body_pre cenv cx env e es` by metis_tac[] >>
@@ -152,7 +98,7 @@ Proof
       conj_tac >- suspend "arms" >>
       conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
       fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
-  qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty. _` kall_tac >>
+  qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` kall_tac >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >>
   simp[post_value_type_def, expr_type_def] >>
   conj_tac
@@ -171,6 +117,7 @@ Proof
 QED
 
 Resume ifexp_expr_full_ok_from_root[arms]:
+  qexists `env` >>
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` by simp[] >>
   `expr_sim_inv cenv cx env es1` by
@@ -183,6 +130,12 @@ Resume ifexp_expr_full_ok_from_root[arms]:
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
   conj_tac >- (fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
   conj_tac >- (fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env e (es1 with gas_obs := gs')` by
+        metis_tac[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+      drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
+      strip_tac >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e (es1 with gas_obs := gs')` by metis_tac[exprSimSourceTheory.expr_body_pre_gas_obs] >>
   (conj_tac
@@ -214,12 +167,12 @@ Proof
   match_mp_tac ifexp_expr_full_ok_from_root >>
   rpt gen_tac >> strip_tac >> irule ifexp_vv_full_root_uniform >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists `rty` >>
+  qexistsl [`env`,`rty`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   irule ifexp_selected_arm_step_full >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexistsl [`e`,`rty`,`sm`,`ty`,`av`] >>
+  qexistsl [`e`,`env`,`rty`,`sm`,`ty`,`av`] >>
   simp[] >>
   qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `e` mp_tac) >>
   simp[] >> gvs[] >> metis_tac[]

@@ -1642,7 +1642,19 @@ Proof
   (impl_tac >- (simp[] >>
     qpat_assum `!name p k. local_region cenv ee.scopes t' name p k ==> _` mp_tac >>
     simp[NoAsms, arithmeticTheory.ADD_COMM])) >> strip_tac >>
-  simp[contextTheory.base_ptr_def, contextTheory.vv_location_def]
+  simp[contextTheory.base_ptr_def, contextTheory.vv_location_def] >>
+  simp[vv_own_def, post_value_type_def, expr_type_def,
+    contextTheory.base_ptr_def, read_result_def, return_def,
+    venomStateTheory.eval_operand_def] >>
+  rpt strip_tac >> gvs[] >>
+  disj1_tac >>
+  qexistsl_tac [`sa.cs_next_id`, `w2n w`, `type_memory_size_list tvs`] >>
+  simp[] >> conj_tac
+  >- simp[val_footprint_def,
+          valueEncodingTheory.type_memory_size_def, struct_layout_size_zip] >>
+  rpt strip_tac >>
+  qpat_x_assum `!name p k. local_region cenv ee.scopes t' name p k ==> _`
+    (drule_then mp_tac) >> decide_tac
 
 QED
 
