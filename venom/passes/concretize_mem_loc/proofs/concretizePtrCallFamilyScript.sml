@@ -391,16 +391,18 @@ Proof
    (!x. x <> out ==> lookup_var x u = lookup_var x a.po_state) /\
    u.vs_return_pc_token = a.po_state.vs_return_pc_token` by
     (qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `a.po_state.vs_outcomes = []` >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+     rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
   `v.vs_current_bb = at.po_state.vs_current_bb /\
    v.vs_prev_bb = at.po_state.vs_prev_bb /\
    v.vs_params = at.po_state.vs_params /\
    (!x. x <> out ==> lookup_var x v = lookup_var x at.po_state) /\
    v.vs_return_pc_token = at.po_state.vs_return_pc_token` by
     (qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `at.po_state.vs_outcomes = []` >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+     rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
   gvs[Excl "MEM"] >>
   simp[mem_write_ops_def, source_memory_write_ranges_def,
        fixed_source_write_range_def, memory_range_of_operands_def,
