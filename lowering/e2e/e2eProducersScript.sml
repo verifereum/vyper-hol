@@ -182,7 +182,10 @@ Theorem o1_pipeline_context_obligations_lowered_abort:
           codegen_reachability_package Inv out.po_unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule_all o1_pipeline_memory_obligations_lowered_abort >> strip_tac >>
+  rename1 `generate_context_plan _ = SOME plan` >>
+  mp_tac (Q.SPECL [`out`, `plan`, `vs`]
+    o1_pipeline_memory_obligations_lowered_abort) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
   goal_assum $ drule_at Any >>
   irule o1_pipeline_codegen_obligations_abort >> simp[] >>
   goal_assum $ drule_at Any >> simp[]
