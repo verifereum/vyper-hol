@@ -177,8 +177,117 @@ Resume focus_initial_singleton_cut[execution]:
   disch_then (qspecl_then [`z`,`gs`] mp_tac) >>
   simp[GSYM EVERY_CONJ, Abbr `E`] >> disch_tac >>
   first_assum (qspec_then `tail` strip_assume_tac) >>
-  simp[] >> conj_tac >- suspend "successful" >>
+  conj_tac >- suspend "successful" >>
   suspend "stopped"
+QED
+
+Resume focus_initial_singleton_cut[successful]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >>
+  strip_tac >> conj_tac
+  >- (gen_tac >> conj_tac
+      >- (qpat_x_assum `!tail. (?extra. _) /\ _` (qspec_then `tail'` mp_tac) >>
+          strip_tac >>
+          qpat_x_assum `!tail'. FOLDR _ _ _ _ = _`
+            (qspec_then `tail'` assume_tac) >>
+          qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >>
+          simp[NoAsms]) >>
+      first_x_assum irule) >>
+  suspend "trace"
+QED
+
+Resume focus_initial_singleton_cut[trace]:
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`!tail. (?extra. _) /\ _`, `!rs. rooted_eval _ _ _ _ = _`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) z` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  qspecl_then [`q`,`be with vs_gas_readings := gs ++ tail`,`u`] mp_tac
+    (Q.INST [`bb` |-> `bb`, `fuel` |-> `fuel-1`, `C` |-> `C`,
+      `p` |-> `[]`, `d` |-> `1`, `fn` |-> `sf`] native_trace_block_prefix_split) >>
+  simp[Abbr `be`, Abbr `z`, DROP_APPEND] >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  `get_instruction bb u.vs_inst_idx = SOME (EL q xs)` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (qspecl_then [`[]`,`fuel-1`,`sf`,`1`,`C`] strip_assume_tac) >>
+  qexists_tac `dftGasFromListTraceDefs$trace_block [] 1 (fuel-1) C sf cut
+    (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` >>
+  `dftGasFromListTraceDefs$trace_gas
+    (dftGasFromListTraceDefs$trace_block [] 1 (fuel-1) C sf cut
+      (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)) =
+    ZIP (keys,gs)` by suspend "trace_keys" >>
+  suspend "trace_embed"
+QED
+
+Resume focus_initial_singleton_cut[trace_keys]:
+  qspecl_then [`TAKE q xs`,`sp with vs_inst_idx := LENGTH ps`,`cut`,`u`,
+    `gs`,`tail`,`fuel-1`,`C`,`sf`,`[]`,`1`] mp_tac
+    noninvoke_prefix_trace_keys >>
+  simp[Abbr `cut`, Abbr `keys`, DROP_APPEND] >>
+  (impl_tac >- (gvs[EVERY_MEM] >> metis_tac[])) >> simp[]
+QED
+
+Resume focus_initial_singleton_cut[trace_embed]:
+  `fuel = SUC (fuel-1)` by decide_tac >>
+  `lookup_block (entry with vs_gas_readings := gs ++ tail).vs_current_bb
+    sf.fn_blocks = SOME bb` by simp[] >>
+  pop_assum (mp_then Any mp_tac dftGasFromListTraceDefsTheory.trace_blocks_enter) >>
+  disch_then (qspecl_then [`sp with vs_gas_readings := gs ++ tail`,
+    `[]`,`fuel-1`,`0`,`C`] mp_tac) >>
+  simp[NoAsms] >>
+  (impl_tac >- simp[]) >>
+  qpat_x_assum `fuel = SUC _` (fn th => rewrite_tac[GSYM th]) >>
+  strip_tac >>
+  simp[Abbr `cut`, TAKE_APPEND, APPEND_ASSOC] >>
+  simp[TAKE_LENGTH_TOO_LONG] >>
+  qmatch_goalsub_abbrev_tac `pref ++ [visit] ++ suffix = _` >>
+  qexists_tac `suffix` >> simp[]
+QED
+
+Resume focus_initial_singleton_cut[stopped]:
+  rpt gen_tac >> strip_tac >>
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`!tail. (?extra. _) /\ _`, `!u. FOLDR _ _ _ _ = OK u ==> _`,
+     `!rs. rooted_eval _ _ _ _ = _`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) z` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  qspecl_then [`z`,`be with vs_gas_readings := gs ++ tail`,`LENGTH ps`]
+    mp_tac native_prefix_cut >>
+  simp[Abbr `be`] >>
+  disch_then (qspecl_then [`fuel-1`,`C`,`sf`,`[]`,`1`,`DROP q xs`,
+    `bb`,`mk_inst 0 STOP [] []`] strip_assume_tac) >>
+  `LENGTH ps - (q + LENGTH ps) = 0` by decide_tac >>
+  qabbrev_tac `whole = bb with bb_instructions :=
+    REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z ++ DROP q xs` >>
+  `exec_block (fuel-1) C bb
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   exec_block (fuel-1) C whole
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule exec_block_same_suffix >> simp[Abbr `whole`, Abbr `z`, DROP_APPEND] >> simp[]) >>
+  `gas_events_block (fuel-1) C sf.fn_name bb
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   gas_events_block (fuel-1) C sf.fn_name whole
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule gas_events_block_suffix_cong >> qexists_tac `xs` >>
+     simp[Abbr `whole`, Abbr `z`, DROP_APPEND] >> simp[]) >>
+  `gas_events_block (fuel-1) C sf.fn_name
+     (bb with bb_instructions := REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z)
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   gas_events_block (fuel-1) C sf.fn_name
+     <|bb_label := sp.vs_current_bb;
+       bb_instructions := REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z|>
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule gas_events_block_suffix_cong >> qexists_tac `z` >> simp[DROP_APPEND]) >>
+  Cases_on `FOLDR (dft_exec_cons (fuel-1) C) OK z
+    (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` >>
+  gvs[] >> suspend "stopped_lift"
+
+QED
+
+Resume focus_initial_singleton_cut[stopped_lift]:
+  markerLib.RESUME_TAC >>
+  Cases_on `fuel` >> gvs[] >>
+  simp[Once run_blocks_def, Once gas_events_blocks_def] >> gvs[]
 QED
 
 Finalise focus_initial_singleton_cut
