@@ -141,7 +141,6 @@ Definition initial_venom_state_rel_def:
     value_transfer_ok tx am.accounts /\
     vs.vs_accounts = accounts_after_transfer tx am.accounts /\
     vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
-    am.pending_deletions = [] /\
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\

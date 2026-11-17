@@ -163,7 +163,6 @@ Definition deploy_state_rel_def:
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       es.rollback.toDelete = am.pending_deletions /\
-      am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
