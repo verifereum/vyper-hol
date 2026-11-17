@@ -32,7 +32,7 @@ Ancestors
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
   placeMemoryFieldRebuild assignTuplePtrStoreWord stmtSimDeclStore targetPlaceSim sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
   stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
-  vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
+  vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs haltExitProj
   exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline placeStore valueEncodingProps venomMemProofs
   bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
