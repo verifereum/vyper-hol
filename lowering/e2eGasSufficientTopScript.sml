@@ -36,7 +36,7 @@ Theorem vyper_call_gas_sufficient_asm_opt:
           (MAP SND (call_trace (add_frame_gas g' es))) gs /\
         call_outcomes_storage_ok am tx
           (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops
+      (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
@@ -102,7 +102,7 @@ Theorem vyper_call_gas_sufficient:
              (MAP SND (call_trace (add_frame_gas g' es))) gs /\
            call_outcomes_storage_ok am tx
              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-         (!obs. ~gas_source_exempt tops
+         (!obs. ~gas_source_exempt tops tx
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
          frame_raises (add_frame_gas g' es) OutOfGas ==>
@@ -116,7 +116,7 @@ Proof
          (MAP SND (call_trace (add_frame_gas g' es))) gs /\
        call_outcomes_storage_ok am tx
          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-     (!obs. ~gas_source_exempt tops
+     (!obs. ~gas_source_exempt tops tx
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
            obs am tx))
      ==>
