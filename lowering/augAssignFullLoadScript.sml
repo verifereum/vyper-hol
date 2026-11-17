@@ -126,7 +126,7 @@ Resume augassign_load_joint[memory]:
   drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     augassign_memory_load_queries >>
   disch_then (drule_at (Pat `supported_target_info _ _ _ = _`)) >>
-  simp[] >> strip_tac >>
+  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
   `?addr. eval_operand (FST r) s = SOME addr /\ FST (SND r) = SOME LocMemory` by
     (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [target_post_def, place_ptr_rel_def] >> metis_tac[]) >>
@@ -154,11 +154,61 @@ Resume augassign_load_joint[memory]:
     drule >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
     drule >> strip_tac >>
-  drule_all augassign_load_rhs_frame >> simp[] >> strip_tac >> simp[]
+  `MLOAD <> ALLOCA` by simp[] >>
+  drule_all augassign_load_rhs_frame >> strip_tac >> simp[]
 QED
 
 Resume augassign_load_joint[storage]:
-  FAIL_TAC "storage"
+  rename1 `StoragePlace tr slot tv` >>
+  `eval_operand (FST r) s = SOME slot /\
+   FST (SND r) = SOME (if tr then LocTransient else LocStorage)` by
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [target_post_def, place_ptr_rel_def] >>
+     simp[slot_loc_def] >> metis_tac[]) >>
+  qpat_x_assum `_ \/ ?loc old sc. _` strip_assume_tac >> gvs[] >>
+  qabbrev_tac `opc = if tr then TLOAD else SLOAD` >>
+  `emit_op opc [FST r] sb = (old,sc)` by
+    (Cases_on `tr` >> gvs[Abbr `opc`]) >>
+  qabbrev_tac `x = STRING #"%" (toString sb.cs_next_var)` >>
+  qabbrev_tac `i = mk_inst sb.cs_next_id opc [FST r] [x]` >>
+  qabbrev_tac `w = if tr then tload slot s else sload slot s` >>
+  qabbrev_tac `raw = update_var x w s` >>
+  qabbrev_tac `u = raw with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `G1 = step_prov PG G i raw` >>
+  qabbrev_tac `tn1 = step_taint i s raw tn` >>
+  `!H. valid_horizon cx st0 H st.storage_trace ==>
+      (?cur. read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
+        place_type_value cx (StoragePlace tr slot tv) st = (INL tv,st) /\
+        evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
+        w = typed_val_to_w256 tv cur /\
+        eval_operand old u = SOME (typed_val_to_w256 tv cur)) /\
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK u,G1,tn1) /\
+      eval_operand (FST r) u = SOME slot /\
+      op_taint tn1 old = {} /\ op_prov G1 old = NONE /\
+      ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+      tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
+      tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+      (!q. not_fresh_at sb q ==> lookup_var q u = lookup_var q s /\
+        FLOOKUP G1 q = FLOOKUP G q /\ op_taint tn1 (Var q) = op_taint tn (Var q))` by
+    (match_mp_tac augassign_storage_load_joint >>
+     goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
+     simp[Abbr `x`, Abbr `i`, Abbr `w`, Abbr `raw`, Abbr `u`,
+          Abbr `G1`, Abbr `tn1`, Abbr `opc`] >> metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> (?cur. _) /\ _`
+    (qspec_then `H0` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`if tr then LocTransient else LocStorage`, `old`, `sc`,
+                `slot`, `cur`, `tv`, `u`, `G1`, `tn1`] >>
+  qx_gen_tac `H` >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> (?cur. _) /\ _`
+    (qspec_then `H` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
+  `opc <> ALLOCA` by (Cases_on `tr` >> simp[Abbr `opc`]) >>
+  drule_all augassign_load_rhs_frame >> strip_tac >>
+  Cases_on `tr` >> gvs[Abbr `opc`]
 QED
 
 Finalise augassign_load_joint
