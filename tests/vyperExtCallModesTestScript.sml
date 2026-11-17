@@ -34,13 +34,11 @@ Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED
 
-Theorem activated_exhaustion_records_request:
+Theorem activated_exhaustion_errors:
   eval_expr empty_evaluation_context counter_expr
     (empty_state with outcomes := SOME []) =
-    (INR (Error (RevertData [])),
-     empty_state with <|outcomes := SOME []; requests := [counter_request];
-       storage_trace := [StorageOutcome counter_request
-         (failed_outcome counter_request)]|>)
+    (INR (Error (RuntimeError "take_call_outcome")),
+     empty_state with outcomes := SOME [])
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED
@@ -337,7 +335,7 @@ QED
    encoding. *)
 Definition extcall_argument_state_def:
   extcall_argument_state = empty_state with
-    <|outcomes := SOME [];
+    <|outcomes := SOME [counter_outcome];
       scopes := [FEMPTY |+ ("d",
         <|assignable := T;
           type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
