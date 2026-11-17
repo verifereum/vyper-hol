@@ -5,6 +5,7 @@ Ancestors
   externalBodySupport vyperTypeInvariants vyperTypeStmtSoundness
   vyperTypeEvalSoundness vyperTypeExprSoundness
   vyperInterpreter vyperState vyperContext evalNoHalt
+  vyperTypeEvalProofs
 
 val _ = Parse.hide "body";
 
