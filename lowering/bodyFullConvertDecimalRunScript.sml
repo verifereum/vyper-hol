@@ -28,10 +28,18 @@ Proof
   strip_tac >> gvs[]
   >- (Cases_on `dst` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `b` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def]
-      >- suspend "uint" >> suspend "int") >>
+      >~ [`mk_convert_op _ (BaseT (UintT _))`] >- suspend "uint"
+      >~ [`mk_convert_op _ (BaseT (IntT _))`] >- suspend "int"
+      >~ [`mk_convert_op _ (BaseT BoolT)`] >- suspend "decimal_bool" >>
+      Cases_on `b'` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
+      suspend "decimal_bytes") >>
   Cases_on `dst` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
   Cases_on `b` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def]
-  >- suspend "bool_uint" >> suspend "bool_int"
+  >~ [`mk_convert_op _ (BaseT (UintT _))`] >- suspend "bool_uint"
+  >~ [`mk_convert_op _ (BaseT (IntT _))`] >- suspend "bool_int"
+  >~ [`mk_convert_op _ (BaseT DecimalT)`] >- suspend "bool_decimal" >>
+  Cases_on `b'` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
+  suspend "bool_bytes"
 QED
 Resume scalar_decimal_bool_source_run[uint]:
   Cases_on `v` >> gvs[value_has_type_def] >>
@@ -143,5 +151,37 @@ Resume scalar_decimal_bool_source_run[uint256]:
   disch_then (qspecl_then [`i`,`s`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def] >> metis_tac[]
+QED
+Resume scalar_decimal_bool_source_run[decimal_bool]:
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  gvs[mk_convert_op_def, is_bytestring_type_def] >>
+  drule_all scalar_decimal_bool_run >> strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def,
+       typed_val_to_w256_def, val_to_w256_def] >>
+  Cases_on `i = 0` >> gvs[bool_to_word_def] >> metis_tac[]
+QED
+Resume scalar_decimal_bool_source_run[bool_decimal]:
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  gvs[mk_convert_op_def, is_bytestring_type_def] >>
+  drule_all scalar_bool_decimal_run >> strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def,
+       typed_val_to_w256_def, val_to_w256_def] >> metis_tac[]
+QED
+Resume scalar_decimal_bool_source_run[decimal_bytes]:
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  gvs[mk_convert_op_def, is_bytestring_type_def,
+      typed_val_to_w256_def, val_to_w256_def] >>
+  drule_all scalar_int_bytes_run >> strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes,
+       evaluate_convert_def, scalar_word_to_fixed] >> metis_tac[]
+QED
+Resume scalar_decimal_bool_source_run[bool_bytes]:
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  gvs[mk_convert_op_def, is_bytestring_type_def] >>
+  `8 <= 8 * n` by decide_tac >>
+  drule_all scalar_int_bytes_run >> strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes,
+       evaluate_convert_def, scalar_word_to_fixed] >>
+  gvs[typed_val_to_w256_def, val_to_w256_def] >> metis_tac[]
 QED
 Finalise scalar_decimal_bool_source_run
