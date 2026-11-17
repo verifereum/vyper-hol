@@ -633,8 +633,10 @@ Proof
   simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
   irule (SRULE [] (Q.INST
     [`f` |-> `LENGTH pending - (idx + 1)`, `dfg` |-> `dfg_build_function fn`]
-    (SPEC_ALL control_reorder_place_read_only_kind_replay_expr))) >>
-  FAIL_TAC "place premise"
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:operand``]
+      control_reorder_place_read_only_kind_replay_expr)))) >>
+  simp[] >> qexistsl [`idx`, `op`, `pending`, `ps1`] >>
+  simp[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
 QED
 
 Theorem reorder_steps_read_only_kind_replay:
@@ -698,12 +700,13 @@ Proof
 QED
 
 Theorem sym_kinds_ok_kind_transport:
+  !cp fn ret srest ps ss qs.
   sym_kinds_ok cp fn ret srest ps ss /\
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     ps.ps_stack qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
   sym_kinds_ok cp fn ret srest qs ss
 Proof
-  simp[sym_kinds_ok_def] >> strip_tac >>
+  rpt gen_tac >> simp[sym_kinds_ok_def] >> strip_tac >>
   qexists `top` >> simp[] >> irule list_rel_op_kind_transport >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -794,5 +797,7 @@ Proof
   disch_then (qspecl_then [`ret`, `fmp`, `lo`] strip_assume_tac) >>
   drule_all sym_spill_free_prefix_frame_sim_mode_conditional >> strip_tac >>
   qexistsl [`cs'`, `ss'`] >> simp[] >>
+  conj_tac
+  >- (conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
   irule sym_kinds_ok_kind_transport >> goal_assum (drule_at Any) >> simp[]
 QED
