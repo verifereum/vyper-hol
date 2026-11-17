@@ -14,7 +14,7 @@ Theorem ctor_source_start_world_fields:
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
   es0.tStorage = am.tStorage /\ es0.logs = [] /\
-  es0.requests = [] /\ es0.pending_deletions = [] /\
+  es0.requests = [] /\ es0.pending_deletions = am.pending_deletions /\
   es0.immutables = am_c.immutables /\ es0.outcomes = NONE /\
   es0.accounts = accounts_after_transfer tx am.accounts
 Proof
@@ -40,7 +40,7 @@ Theorem ctor_source_landing_world:
   actual.vs_transient = am.tStorage /\
   actual.vs_call_ctx.cc_address = tx.target /\
   actual.vs_logs = [] /\ actual.vs_requests = [] /\
-  actual.vs_pending_deletions = [] ==>
+  actual.vs_pending_deletions = am.pending_deletions ==>
   storage_rel H tx.target
     (es0 with outcomes := SOME os) actual /\
   transient_rel H tx.target
@@ -68,7 +68,13 @@ Theorem ctor_source_entry_context:
 Proof
   simp[deploy_state_rel_def, deploy_entry_state_def, entry_venom_state_def,
        call_ctx_rel_def, tx_block_fields_rel_def] >>
-  rpt strip_tac >> gvs[tx_env_ok_def]
+  rpt strip_tac >> gvs[tx_env_ok_def] >>
+  Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
+  `tx.block_number - (n + 1) < 256` by decide_tac >>
+  simp[listTheory.EL_TAKE, listTheory.LENGTH_TAKE_EQ] >>
+  rw[] >> gvs[] >>
+  Cases_on `256 <= LENGTH es.txParams.prevHashes` >>
+  gvs[listTheory.LENGTH_TAKE_EQ] >> decide_tac
 QED
 
 Theorem ctor_source_candidate_context:
@@ -96,7 +102,7 @@ Theorem ctor_source_entry_world_projections:
   vs.vs_transient = am.tStorage /\
   vs.vs_call_ctx.cc_address = tx.target /\
   vs.vs_logs = [] /\ vs.vs_requests = [] /\
-  vs.vs_pending_deletions = []
+  vs.vs_pending_deletions = am.pending_deletions
 Proof
   strip_tac >>
   `((deploy_entry_state prog cplan tops es).vs_accounts =
@@ -105,7 +111,7 @@ Proof
     (deploy_entry_state prog cplan tops es).vs_call_ctx.cc_address = tx.target /\
     (deploy_entry_state prog cplan tops es).vs_logs = [] /\
     (deploy_entry_state prog cplan tops es).vs_requests = [] /\
-    (deploy_entry_state prog cplan tops es).vs_pending_deletions = []` by
+    (deploy_entry_state prog cplan tops es).vs_pending_deletions = am.pending_deletions` by
     (gvs[deploy_state_rel_def, deploy_entry_state_def, entry_venom_state_def,
          init_venom_state_def]) >>
   qpat_x_assum `gas_variant _ _` mp_tac >>
