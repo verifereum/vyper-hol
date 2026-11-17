@@ -32,9 +32,9 @@ Proof
 QED
 
 Theorem expr_post_reserved_destination_source:
-  !ctx func cenv cx e es sa sb s0 es' v op s sty stv
+  !H ctx func cenv cx e es sa sb s0 es' v op s sty stv
    did b cap dst dlen p dw.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     post_value_type cenv e = sty /\ sty <> expr_type e /\
     type_widens_to (get_tenv cx) sty (expr_type e) /\
     evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
@@ -64,7 +64,7 @@ Proof
   `w2n w + type_memory_size stv < dimword (:256) /\
    (w2n w + type_memory_size stv <= dst \/ dst + dlen <= w2n w)` by
     (irule aggregate_allocated_source_bounds >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [`b'`, `aid`, `b`, `did`, `cap`, `sz`] >> simp[]) >>
   `b + cap <= s.vs_alloca_next` by
     (irule alloca_site_registered_below >>

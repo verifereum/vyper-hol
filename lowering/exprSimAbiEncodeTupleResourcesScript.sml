@@ -16,7 +16,7 @@ Ancestors
 Theorem abi_encode_args_tuple_allocation_resources:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs initial /\
+  abi_args_post H ctx func ce cx es sa st s0 es' args ops vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce st ==>
   let n = abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) in
@@ -40,7 +40,7 @@ Proof
     (drule abi_encode_endpoint_staging_size >>
      impl_tac >- simp[] >> simp[dimword_def]) >>
   drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es' initial` by fs[abi_args_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' initial` by fs[abi_args_post_def] >>
   drule_at (Pat `MEM _ (fn_insts _)`) abi_encode_allocate_resources >>
   simp_tac (srw_ss()) [mk_inst_def] >>
   disch_then drule >> simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -72,7 +72,7 @@ Proof
     metis_tac[local_ptrs_reserved_fresh, arithmeticTheory.LESS_EQ_REFL] >>
   `alloca_inv initial /\ local_ptrs_rel func ce es'.scopes initial` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_args_footprint_site_disjoint >>
+  drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_args_footprint_site_disjoint >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp_tac (srw_ss()) [mk_inst_def] >>
   disch_then (qspecl_then [`w`, `tv`] mp_tac) >>
@@ -112,7 +112,7 @@ QED
 Theorem abi_encode_args_registered_phase_rows:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
@@ -144,7 +144,7 @@ Theorem abi_encode_args_registered_phase_rows:
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_at (Pat `expr_body_pre _ _ _ _ _`) abi_encode_args_tuple_allocation_resources >>
-  disch_then (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   impl_tac >- simp[] >>
   simp_tac bool_ss [LET_THM] >>
@@ -279,7 +279,7 @@ Theorem abi_encode_args_phase_resources:
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
@@ -322,7 +322,7 @@ Theorem abi_encode_args_phase_resources:
       venomMemDefs$regions_disjoint (p+32,m) (b,sz))
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
-  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)
     abi_encode_args_registered_phase_rows >>
   disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_store_abi_tuple _ _ _ _ _ = _`)) >>

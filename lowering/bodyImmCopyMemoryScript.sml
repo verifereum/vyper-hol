@@ -29,7 +29,7 @@ Theorem immutable_iter_copy_mem_ok:
   compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
   bytes = type_memory_size tv /\ 0 < bytes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx ty (Value v) a es s /\
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
@@ -56,7 +56,7 @@ Theorem immutable_iter_copy_mem_run:
   compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
   bytes = type_memory_size tv /\ 0 < bytes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx ty (Value v) a es s /\
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\

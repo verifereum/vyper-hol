@@ -30,7 +30,7 @@ QED
 Theorem clean_buffer_pointer_posts:
   ~is_word_type (post_value_type cenv e) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v (Var root) z /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v (Var root) z /\
   eval_operand (Var root) z = SOME w /\ ptr_covers G tn root z nb /\
   val_wf ty v /\ type_memory_size ty <= nb /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\

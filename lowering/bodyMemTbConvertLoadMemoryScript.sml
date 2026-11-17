@@ -1,6 +1,7 @@
 (* Memory footprint of the bytestring conversion read preamble. *)
 Theory bodyMemTbConvertLoadMemory
 Ancestors
+  bodyMemAssignTopCopyIndex
   bodyMemTbConvertSourceMemory fragExecMem instMemFrontier bodyMemAssignTopCopyFacts
   fragGasSeqMem fragExec
   venomExecSemantics exprLowering emitHelperProps emitHelper compileEnv

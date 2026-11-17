@@ -20,9 +20,9 @@ QED
 
 Theorem abi_encode_staged_observation_clean_initial:
   local_ptrs_reserved ce st ==>
-  (abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av
+  (abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st out mid outsz p at av
      (drop_fresh st initial) actual <=>
-   abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av
+   abi_encode_staged_observation H ctx func ce cx vs st out mid outsz p at av
      initial actual)
 Proof
   strip_tac >>
@@ -84,7 +84,7 @@ Theorem abi_encode_staged_observer_no_fresh:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\
@@ -96,7 +96,7 @@ Theorem abi_encode_staged_observer_no_fresh:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs initial actual /\
-    abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st (FST ops) method_id
       outsz p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -115,7 +115,7 @@ Proof
     ~u.vs_halted /\ u.vs_current_bb = final.cs_current_bb /\
     u.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs (drop_fresh st initial) u /\
-    abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id
+    abi_encode_staged_observation H ctx func ce cx vs st (FST ops) method_id
       outsz p at av (drop_fresh st initial) u /\
     abi_encoder_extend_sim (ctx with ctx_functions := [obs]) obs (drop_fresh st initial) u` by
     (irule abi_encode_staged_observer_extend >>
@@ -126,10 +126,10 @@ Proof
      simp_tac (srw_ss()) [drop_fresh_def, abi_encode_observer_allocate_vars,
                          abi_encode_observer_alloca_vars] >>
      rewrite_tac[GSYM drop_fresh_def] >>
-     asm_rewrite_tac [] >> drule stmt_state_rel_drop_fresh >>
-     disch_then (qspecl_then [`func`, `cx`, `vs`, `initial`, `ctx`] mp_tac) >>
+     asm_rewrite_tac [] >> drule (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_drop_fresh) >>
+     disch_then (qspecl_then [`H`, `func`, `cx`, `vs`, `initial`, `ctx`] mp_tac) >>
      asm_rewrite_tac []) >>
-  `abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id
+  `abi_encode_staged_observation H ctx func ce cx vs st (FST ops) method_id
       outsz p at av initial u` by
     (drule abi_encode_staged_observation_clean_initial >>
      disch_then (fn th => once_rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>

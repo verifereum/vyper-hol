@@ -250,6 +250,9 @@ Proof
       `decode_static_frame s t` by
         fs[decode_static_frame_def, venom_state_component_equality] >>
       `t.vs_fmp = s.vs_fmp` by fs[venom_state_component_equality] >>
+      `t.vs_initial_fmp = s.vs_initial_fmp /\
+       LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+        metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
       `decode_site_resources ctx func t` by
         (irule decode_site_resources_fields >> qexists `s` >> simp[]) >>
       `decode_memory_frame {a | d <= a /\ a < d+32} s t` by

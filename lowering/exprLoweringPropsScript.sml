@@ -54,9 +54,11 @@
 
 Theory exprLoweringProps
 Ancestors
+  ptrDiscipline
   exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
+  ctxLookupAgreeHelpers execMemoryLengthBase
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
@@ -264,14 +266,14 @@ End
    The upper margin covers bounded create scratch on non-aborting paths. *)
 Definition fmp_room_def:
   fmp_room ctx func (ss:venom_state) <=>
-    (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) \/
-     (?g f. TC (fn_directly_calls ctx) func.fn_name g /\
-       MEM f ctx.ctx_functions /\ f.fn_name = g /\
-       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+    (ctx_has_dalloca ctx \/
+     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
     ss.vs_alloca_next + pending_alloca_size func ss +
     CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
-      unit_alloca_frame ctx <= w2n ss.vs_fmp /\
-    w2n ss.vs_fmp + 2 ** 65 < dimword (:256)
+      unit_alloca_frame ctx <= w2n ss.vs_initial_fmp /\
+    w2n ss.vs_initial_fmp <= w2n ss.vs_fmp /\
+    w2n ss.vs_initial_fmp < 2 ** 254 /\
+    w2n ss.vs_fmp <= MAX (w2n ss.vs_initial_fmp) (LENGTH ss.vs_memory + 31)
 End
 
 (* Constructor immutable capacity regions lie below the bump frontier and
@@ -457,8 +459,8 @@ QED
      so the ADD of the base in a constructor immutable access is the offset
      itself, and the runtime label remains available for its epilogue. *)
 Definition stmt_state_rel_def:
-  stmt_state_rel ctx func cenv cx vs ss ⇔
-    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
+  stmt_state_rel H ctx func cenv cx vs ss ⇔
+    state_rel H func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
     fmp_room ctx func ss ∧
     immutable_alloca_sep func cenv cx vs ss ∧ immutable_base_zero cenv ss ∧
     ∀inst n base sz.
@@ -467,6 +469,46 @@ Definition stmt_state_rel_def:
       FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz) ⇒
       sz = w2n n
 End
+
+(* H enters the statement relation only through the storage, transient,
+   accounts and request relations, which read just these Venom fields. A
+   memory-only step that keeps them moves the relation at every horizon. *)
+Theorem stmt_state_rel_fields_transport:
+  stmt_state_rel H0 ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
+  stmt_state_rel H ctx func cenv cx es u
+Proof
+  rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  strip_tac >> fs[] >>
+  gvs[loweringStateRelDefsTheory.storage_rel_def,
+      loweringStateRelDefsTheory.transient_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def,
+      venomStateTheory.contract_storage_def,
+      venomStateTheory.contract_transient_def] >>
+  metis_tac[]
+QED
+
+Theorem stmt_state_rel_storage_trace[simp]:
+  !H.
+  stmt_state_rel H ctx func cenv cx (es with storage_trace := observations) s <=>
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  gen_tac >>
+  simp[stmt_state_rel_def, accountsRelPropsTheory.state_rel_storage_trace,
+       immutable_alloca_sep_def]
+QED
+
+Theorem stmt_state_rel_erasure:
+  !H.
+  erase_storage_trace es1 = erase_storage_trace es2 ==>
+  (stmt_state_rel H ctx func cenv cx es1 s <=>
+   stmt_state_rel H ctx func cenv cx es2 s)
+Proof
+  gen_tac >>
+  metis_tac[stmt_state_rel_storage_trace, erase_storage_trace_def]
+QED
 
 Theorem alloca_room_fields:
   !func ss ss' ctx.
@@ -481,35 +523,75 @@ Theorem fmp_room_fields:
   !func ss ss' ctx.
     fmp_room ctx func ss /\
     ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next /\
-    ss'.vs_fmp = ss.vs_fmp ==>
+    ss'.vs_fmp = ss.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      ss'.vs_initial_fmp = ss.vs_initial_fmp /\
+      LENGTH ss.vs_memory <= LENGTH ss'.vs_memory) ==>
     fmp_room ctx func ss'
 Proof
-  rw[fmp_room_def, pending_alloca_size_def] >> gvs[]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >>
+  res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem fmp_room_mstore:
+  fmp_room ctx func s ==> fmp_room ctx func (mstore off value s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- (disch_tac >> conj_tac >- simp[mstore_def] >>
+      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem fmp_room_write_memory:
+  fmp_room ctx func s ==>
+  fmp_room ctx func (write_memory_with_expansion off bytes s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- (disch_tac >> conj_tac >- simp[write_memory_with_expansion_def] >>
+      simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem fmp_room_fields_cong:
   !ctx func s s'.
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp ==>
+    s'.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s'.vs_memory = LENGTH s.vs_memory) ==>
     (fmp_room ctx func s' <=> fmp_room ctx func s)
 Proof
-  metis_tac[fmp_room_fields]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >> metis_tac[]
 QED
 
 (* state_rel re-established by a step that keeps the allocations gives
    stmt_state_rel back. *)
 Theorem stmt_state_rel_allocas_frame:
+  !H.
   !func cenv cx es s es' s' ctx.
-    stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' ==>
-    stmt_state_rel ctx func cenv cx es' s'
+    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH s'.vs_memory) ==>
+    stmt_state_rel H ctx func cenv cx es' s'
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
-  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[]) >>
+  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
   gvs[] >> res_tac
 QED
 
@@ -587,9 +669,13 @@ Theorem fmp_room_static_charge:
     fmp_room ctx func s /\
     t.vs_alloca_next + pending_alloca_size func t <=
       s.vs_alloca_next + pending_alloca_size func s /\
-    t.vs_fmp = s.vs_fmp ==> fmp_room ctx func t
+    t.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==> fmp_room ctx func t
 Proof
-  rw[fmp_room_def] >> res_tac >> gvs[]
+  rw[fmp_room_def] >> res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
 Theorem fmp_room_exec_alloca:
@@ -809,10 +895,12 @@ QED
 (* update_var keeps state_rel unless it overwrites a live local's pointer:
    the other conjuncts do not read vs_vars. *)
 Theorem state_rel_update_var_local:
+  !H.
   ∀ func cenv cx es ss name w.
-    state_rel func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
-    state_rel func cenv cx es (update_var name w ss)
+    state_rel H func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
+    state_rel H func cenv cx es (update_var name w ss)
 Proof
+  gen_tac >>
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
     (irule local_ptrs_rel_update_var >> fs[state_rel_def] >>
@@ -824,9 +912,11 @@ Proof
 QED
 
 Theorem state_rel_jump_to:
+  !H.
   !func cenv cx es s lbl.
-    state_rel func cenv cx es (jump_to lbl s) <=> state_rel func cenv cx es s
+    state_rel H func cenv cx es (jump_to lbl s) <=> state_rel H func cenv cx es s
 Proof
+  gen_tac >>
   simp[state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
        logs_rel_def, call_ctx_rel_def, contract_storage_def,
@@ -834,20 +924,24 @@ Proof
 QED
 
 Theorem state_rel_push_scope:
+  !H.
   !func cenv cx es s.
-    state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    state_rel func cenv cx es s
+    state_rel H func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    state_rel H func cenv cx es s
 Proof
+  gen_tac >>
   simp[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
        logs_rel_def, local_ptrs_rel_push_scope]
 QED
 
 Theorem state_rel_pop_scope:
+  !H.
   !func cenv cx es s sc rest.
-    state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
+    state_rel H func cenv cx es s /\ es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    state_rel func cenv cx (es with scopes := rest) s
+    state_rel H func cenv cx (es with scopes := rest) s
 Proof
+  gen_tac >>
   rpt strip_tac >>
   `local_ptrs_rel func cenv rest s` by
     (irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >>
@@ -859,8 +953,9 @@ QED
 (* Frame the local and immutable memory relations separately: constructor
    immutables share vs_memory with locals, unlike runtime data-section reads. *)
 Theorem state_rel_frame:
+  !H.
   !func cenv cx es es' s s'.
-    state_rel func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
+    state_rel H func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' /\
     es' = es with scopes := es'.scopes /\
     s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
@@ -871,8 +966,9 @@ Theorem state_rel_frame:
     s'.vs_immutables = s.vs_immutables /\
     s'.vs_data_section = s.vs_data_section /\
     s'.vs_code = s.vs_code ==>
-    state_rel func cenv cx es' s'
+    state_rel H func cenv cx es' s'
 Proof
+  gen_tac >>
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
@@ -882,10 +978,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_jump_to:
+  !H.
   !func cenv cx es s lbl ctx.
-    stmt_state_rel ctx func cenv cx es (jump_to lbl s) <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx es (jump_to lbl s) <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   rpt gen_tac >>
   `fmp_room ctx func (jump_to lbl s) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[jump_to_def]) >>
@@ -896,10 +994,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_inst_idx:
+  !H.
   !func cenv cx es s n ctx.
-    stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := n) <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx es (s with vs_inst_idx := n) <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   rpt gen_tac >>
   `fmp_room ctx func (s with vs_inst_idx := n) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -913,10 +1013,12 @@ Proof
 QED
 
 Theorem msg_gas_state_frame:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
+  !H.
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs)
     (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
 Proof
+  gen_tac >>
   strip_tac >>
   gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
@@ -929,10 +1031,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_push_scope:
+  !H.
   !func cenv cx es s ctx.
-    stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_scopes_def]
 QED
@@ -950,11 +1054,13 @@ Proof
 QED
 
 Theorem stmt_state_rel_pop_scope:
+  !H.
   !func cenv cx es s sc rest ctx.
-    stmt_state_rel ctx func cenv cx es s /\ es.scopes = sc :: rest /\
+    stmt_state_rel H ctx func cenv cx es s /\ es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel ctx func cenv cx (es with scopes := rest) s
+    stmt_state_rel H ctx func cenv cx (es with scopes := rest) s
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule state_rel_pop_scope >> metis_tac[])
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
@@ -976,8 +1082,9 @@ QED
 (* state_rel reads cenv through the locals in scope and its other
    (storage, transient, immutable) bindings. *)
 Theorem state_rel_cenv_cong:
+  !H.
   !func cenv cenv' cx vs ss.
-    state_rel func cenv' cx vs ss /\
+    state_rel H func cenv' cx vs ss /\
     (!n e. lookup_scopes n vs.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
@@ -985,8 +1092,9 @@ Theorem state_rel_cenv_cong:
     (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv.ce_module_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
-    state_rel func cenv cx vs ss
+    state_rel H func cenv cx vs ss
 Proof
+  gen_tac >>
   rw[state_rel_def]
   >- metis_tac[local_ptrs_rel_cenv_cong]
   >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
@@ -1020,8 +1128,9 @@ QED
 (* stmt_state_rel reads the compile environment through the locals in
    scope and its other bindings. *)
 Theorem stmt_state_rel_cenv_cong:
+  !H.
   !func cenv cenv' cx es ss ctx.
-    stmt_state_rel ctx func cenv' cx es ss /\
+    stmt_state_rel H ctx func cenv' cx es ss /\
     (!n e. lookup_scopes n es.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
@@ -1031,8 +1140,9 @@ Theorem stmt_state_rel_cenv_cong:
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
     cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_imm_alloca = cenv.ce_imm_alloca ==>
-    stmt_state_rel ctx func cenv cx es ss
+    stmt_state_rel H ctx func cenv cx es ss
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
   >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >>
@@ -1043,10 +1153,12 @@ QED
 
 (* Assigning a variable that is no live local's pointer. *)
 Theorem stmt_state_rel_update_var:
+  !H.
   !func cenv cx es s x w ctx.
-    stmt_state_rel ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
-    stmt_state_rel ctx func cenv cx es (update_var x w s)
+    stmt_state_rel H ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
+    stmt_state_rel H ctx func cenv cx es (update_var x w s)
 Proof
+  gen_tac >>
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
@@ -1134,8 +1246,9 @@ QED
 (* --- Literal --- *)
 (* Covers word-type literals only. Bytestring/string literals allocate buffers. *)
 Theorem compile_literal_vv_correct:
+  !H.
   ∀ func cenv cx ty l es ss st vv st'.
-    state_rel func cenv cx es ss ∧
+    state_rel H func cenv cx es ss ∧
     compile_literal_vv ty l st = (vv, st') ∧
     (* Word literals only — dynamic bytes/strings allocate buffers *)
     (* Word literals only — exclude bytestring/string types that allocate buffers *)
@@ -1145,6 +1258,7 @@ Theorem compile_literal_vv_correct:
     emitted_insts st st' = [] ∧
     same_blocks st st'
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   Cases_on `l`
   >- (Cases_on `b` >>
@@ -1197,8 +1311,9 @@ QED
 (* A well-typed word value rules out NoneV and type/value mismatches.
    A word annotation selects MLOAD; aggregate annotations return the pointer. *)
 Theorem compile_name_correct:
+  !H.
   ∀ func cenv cx ty ann id es ss st op st' v es' p sz entry.
-    state_rel func cenv cx es ss ∧
+    state_rel H func cenv cx es ss ∧
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
@@ -1215,6 +1330,7 @@ Theorem compile_name_correct:
       es' = es ∧
       same_blocks st st'
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   `es' = es` by
     (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
@@ -1227,7 +1343,7 @@ Proof
   rpt strip_tac >> gvs[] >>
   `∃w. lookup_var p ss = SOME w ∧
        memory_value_rel (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
-    (qpat_x_assum `state_rel _ _ _ _ _`
+    (qpat_x_assum `state_rel H _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [state_rel_def]) >>
      simp[local_ptrs_rel_def] >> strip_tac >>
      qpat_x_assum `!name ent ptr size. P name ent ptr size ==> ?w. Q name ent ptr size w`
@@ -3910,10 +4026,11 @@ Proof
 QED
 
 Theorem ci_mono_compile_create_blueprint_check:
-  ∀target offset sa.
-    ci_mono sa (SND (compile_create_blueprint_check target offset sa))
+  ∀is_lit target offset sa.
+    ci_mono sa (SND (compile_create_blueprint_check is_lit target offset sa))
 Proof
-  rpt gen_tac >> simp[compile_create_blueprint_check_def] >> ci_mono_create_tac []
+  rpt gen_tac >> Cases_on `is_lit` >>
+  simp[compile_create_blueprint_check_def] >> ci_mono_create_tac []
 QED
 
 Theorem ci_mono_compile_create_blueprint_append[local]:
@@ -4813,6 +4930,26 @@ QED
 
 (* ===== Structural Properties ===== *)
 
+Theorem run_inst_seq_initial_fmp:
+  run_inst_seq is s = OK t ==> t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_initial_fmp`
+    run_inst_seq_preserves_field)) >>
+  qexists_tac `is` >> simp[] >>
+  metis_tac[step_inst_base_initial_fmp]
+QED
+
+Theorem run_inst_seq_memory_length:
+  !is s t. run_inst_seq is s = OK t ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  drule_all step_base_memory_length >> strip_tac >>
+  first_x_assum drule_all >> decide_tac
+QED
+
 Theorem step_inst_base_ok_jmp_ctxs[local]:
   !inst s s'.
     inst.inst_opcode = JMP /\ step_inst_base inst s = OK s' ==>
@@ -4996,3 +5133,12 @@ Proof
   rename1 `BytesT bound` >>
   Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
 QED
+
+Theorem stmt_state_rel_start_gas_obs:
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
+       immutable_alloca_sep_def]
+QED
+

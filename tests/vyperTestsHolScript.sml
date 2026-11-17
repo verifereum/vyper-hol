@@ -47,6 +47,8 @@ Ancestors
   vyperSendModesTest
   vyperStorageOutcomeTest
   vyperStoragePopTest
+  vyperStringBoolConvertTest
+  vyperStorageTraceTest
   vyperStringScopeTest
   vyperSystemHaltTest
   vyperTestEmit

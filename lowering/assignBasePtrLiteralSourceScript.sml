@@ -56,7 +56,7 @@ QED
 Theorem assign_base_ptr_alloc_buffer_sequence:
   !ctx func cenv cx es sa sm buf sz s PG G tn D.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     ~ctx_has_dalloca ctx /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -64,7 +64,7 @@ Theorem assign_base_ptr_alloc_buffer_sequence:
     ?t w G' tn'.
       run_inst_seq (emitted_insts sa sm) s = OK t /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sm) s G' tn' /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\
@@ -227,14 +227,14 @@ QED
 Theorem assign_base_ptr_alloc_buffer_counted_path:
   !ctx func cenv cx es sa sm buf sz s PG G tn D.
     compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w G' tn'.
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\

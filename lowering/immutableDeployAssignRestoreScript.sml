@@ -7,7 +7,7 @@ Ancestors
   venomState finite_map
 
 Theorem immutable_store_stmt_state_rel:
-  stmt_state_rel ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\
   FLOOKUP env.bare_globals (src,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
@@ -23,11 +23,12 @@ Theorem immutable_store_stmt_state_rel:
   LENGTH s.vs_memory <= LENGTH q.vs_memory /\
   (!a k. regions_disjoint a k off (type_memory_size tv) ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) ==>
-  stmt_state_rel ctx func ce cx es' q
+  stmt_state_rel H ctx func ce cx es' q
 Proof
   strip_tac >> gvs[] >>
   `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
-   q.vs_fmp = s.vs_fmp /\ q.vs_labels = s.vs_labels /\
+   q.vs_fmp = s.vs_fmp /\ q.vs_initial_fmp = s.vs_initial_fmp /\
+   q.vs_labels = s.vs_labels /\
    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
    q.vs_call_ctx = s.vs_call_ctx /\ q.vs_tx_ctx = s.vs_tx_ctx /\
    q.vs_block_ctx = s.vs_block_ctx /\ q.vs_logs = s.vs_logs /\

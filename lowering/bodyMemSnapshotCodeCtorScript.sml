@@ -18,7 +18,7 @@ Theorem snapshot_ctor_copy_typed_mem:
   alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx ty (Value v) a es s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   regions_disjoint (w2n a) (type_memory_size tv)

@@ -219,7 +219,7 @@ Proof
  gvs[constSubstTheory.subst_consts_fn_empty] >> gvs[] >>
  `supported_program tops /\ supported_program_deploy tops /\ ?art.
    check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-   fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+   fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
  drule_all deploy_ctor_checked_argument_inputs >> strip_tac >>
  `ut = T /\ key = global_nonreentrant_slot` by
    fs[set_constructor_package_target_def, package_constructor_def] >>

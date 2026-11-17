@@ -33,15 +33,15 @@ Theorem checked_compile_log_empty_execution:
     EVERY (\e. compiler_id_flow (lower_value compile_expr cenv (expr_type e) e)) exprs /\
     LIST_REL (\e tv. evaluate_type (type_env tops) (lowered_value_type cenv e) = SOME tv /\
       type_memory_size tv < dimword(:256)) exprs layout_tvs /\
-    EVERY (log_argument_lowering tops env ctx func cenv cx ids reserved requests cs' charge) exprs /\
+    EVERY (log_argument_lowering H tops env ctx func cenv cx ids reserved requests cs' charge) exprs /\
     log_argument_charges charge cx exprs es values es' total_charge /\ total_charge <= credit /\
-    log_prefix_ready env cx cenv func ids reserved requests cs' exprs cs es before credit [] [] [] /\
+    log_prefix_ready H env cx cenv func ids reserved requests cs' exprs cs es before credit [] [] [] /\
     LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\ ~before.vs_halted ==>
     ?out ev.
       eval_stmt cx (Log event_id exprs) es = (INL (),es' with logs := es'.logs ++ [ev]) /\
       fragment_path ctx func before out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
-      state_rel_simple cenv cx (es' with logs := es'.logs ++ [ev]) out /\
+      state_rel_simple H cenv cx (es' with logs := es'.logs ++ [ev]) out /\
       local_ptrs_rel func cenv es'.scopes out
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>

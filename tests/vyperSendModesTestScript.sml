@@ -10,7 +10,8 @@ Libs cv_transLib wordsLib
 
 val send_monad_simps = [vyperStateTheory.bind_def,
   vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
-  vyperStateTheory.raise_def, vyperStateTheory.type_check_def,
+  vyperStateTheory.raise_def, vyperStateTheory.record_storage_backend_def,
+  vyperStateTheory.record_storage_event_def, vyperStateTheory.type_check_def,
   vyperStateTheory.check_def, vyperStateTheory.assert_def,
   vyperStateTheory.lift_option_type_def, vyperStateTheory.read_result_def,
   dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
@@ -39,6 +40,7 @@ Definition send_concrete_backend_def:
     check success "send failed";
     update_accounts (K accounts');
     update_transient (K tStorage');
+    record_storage_backend;
     append_logs emitted_logs;
     update_pending_deletions (APPEND deletions);
     return (Value NoneV)
@@ -102,7 +104,9 @@ Theorem send_zero_initial_state_not_inert:
   let st = initial_state initial_machine_state [FEMPTY] with outcomes := SOME [] in
     eval_expr empty_evaluation_context (send_call 0w 0) st =
       (INR (Error (RuntimeError "send failed")),
-       st with requests := [call_outcome_request 0w [] (SOME 0) st]) /\
+       st with <|requests := [call_outcome_request 0w [] (SOME 0) st];
+         storage_trace := [StorageOutcome (call_outcome_request 0w [] (SOME 0) st)
+           (failed_outcome (call_outcome_request 0w [] (SOME 0) st))]|>) /\
     eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
 Proof
   simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, initial_state_def,
@@ -117,7 +121,10 @@ Theorem send_bigstep_failure_whole_state:
     (INR (Error (RuntimeError "send failed")),
      send_state with <|outcomes := SOME [cpscv_tail];
        requests := send_state.requests ++
-         [call_outcome_request 9w [] (SOME 7) send_state]|>)
+         [call_outcome_request 9w [] (SOME 7) send_state];
+       storage_trace := send_state.storage_trace ++
+         [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state)
+           (send_outcome F [] (2 ** 256))]|>)
 Proof
   simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def, take_request_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
@@ -141,7 +148,12 @@ Theorem send_bigstep_success_whole_state:
         pending_deletions := (send_outcome T [99w] 17).co_toDelete;
         outcomes := SOME [cpscv_tail];
         requests := send_state.requests ++
-          [call_outcome_request 9w [] (SOME 7) send_state]|>)
+          [call_outcome_request 9w [] (SOME 7) send_state];
+        storage_trace := send_state.storage_trace ++
+          [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state)
+             (send_outcome T [99w] 17);
+           StorageBackend (send_outcome T [99w] 17).co_accounts
+             (send_outcome T [99w] 17).co_tStorage]|>)
 Proof
   simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def, take_request_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,

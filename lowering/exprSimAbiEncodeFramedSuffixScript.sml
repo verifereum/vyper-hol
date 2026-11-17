@@ -425,7 +425,8 @@ Theorem abi_encode_framed_semantic_fields:
   actual.vs_block_ctx = initial.vs_block_ctx /\
   actual.vs_outcomes = initial.vs_outcomes /\
   actual.vs_immutables = initial.vs_immutables /\
-  actual.vs_code = initial.vs_code
+  actual.vs_code = initial.vs_code /\
+  actual.vs_initial_fmp = initial.vs_initial_fmp
 Proof
   strip_tac >> drule abi_encode_exec_frame_semantic >>
   simp[abi_encode_semantic_obs_fields]

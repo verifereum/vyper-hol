@@ -16,14 +16,14 @@ Theorem immutable_assign_rhs_read:
   expr_body_pre ce cx env e es /\
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. read_result cx tv ee = (INL v,ee) /\
     gas_marked_path F ctx func r 0 (OK u) /\
-    expr_post ctx func ce cx e ee
+    expr_post H ctx func ce cx e ee
       (sa with cs_next_var := sm.cs_next_var) su r ee v op u /\
     ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts
@@ -38,7 +38,7 @@ QED
 Theorem immutable_assign_normalization_ready:
   expr_body_pre ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e ers si sa s0 ee v op s /\
+  expr_post H ctx func ce cx e ers si sa s0 ee v op s /\
   type_widens_to env.type_defs (expr_type e) dty /\
   supported_value_type tops dty /\
   lowered_value_type ce e <> dty /\
@@ -65,7 +65,7 @@ Proof
     metis_tac[immutable_rhs_post_physical_classify] >>
   `0 < type_memory_size stv /\ 0 < type_memory_size dtv` by
     metis_tac[immutable_supported_normalization_positive] >>
-  `stmt_state_rel ctx func ce cx ee s /\
+  `stmt_state_rel H ctx func ce cx ee s /\
    expr_val_at ce cx (lowered_value_type ce e) si sa ee v op s /\
    expr_val_rel cx (lowered_value_type ce e) v op s` by fs[expr_post_def] >>
   `?sw. eval_operand op s = SOME sw /\

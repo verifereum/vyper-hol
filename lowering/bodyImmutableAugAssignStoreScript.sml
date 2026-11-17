@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem immutable_augassign_local_frame:
-  stmt_state_rel ctx func cenv cx es ss /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es ss /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_size tv = 32 ==>
@@ -159,14 +159,14 @@ QED
 
 Theorem immutable_augassign_store:
   body_inv tops ctx cenv cx /\ cx.in_deploy /\
-  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es ss /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es ss /\
   FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
   value_has_type tv v /\
   write_place cx (ImmutablePlace cenv.ce_module id []) v es = (INL (),es') ==>
-  stmt_state_rel ctx func cenv cx es'
+  stmt_state_rel H ctx func cenv cx es'
     (mstore off (typed_val_to_w256 tv v) ss)
 Proof
   strip_tac >>
@@ -193,6 +193,8 @@ Proof
      (mstore off (typed_val_to_w256 tv v) ss)` by
     (irule immutable_augassign_alloca_sep_update >>
      metis_tac[stmt_state_rel_def]) >>
+  `fmp_room ctx func (mstore off (typed_val_to_w256 tv v) ss)` by
+    (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_state_rel_def, state_rel_def, venomStateTheory.mstore_def,
        storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
@@ -202,5 +204,5 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def,
        alloca_room_def, fmp_room_def,
        pending_alloca_size_def, immutable_base_zero_def] >>
-  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+  rpt conj_tac >> fs[]
 QED

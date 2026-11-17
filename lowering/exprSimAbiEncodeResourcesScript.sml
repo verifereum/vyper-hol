@@ -78,9 +78,13 @@ QED
 
 Theorem abi_encode_fmp_room_fields:
   fmp_room ctx func s /\ t.vs_allocas = s.vs_allocas /\
-  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp ==>
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+  ((ptrDiscipline$ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   fmp_room ctx func t
 Proof
-  strip_tac >> irule fmp_room_static_charge >> qexists_tac `s`
-  >> simp[pending_alloca_size_def]
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> simp[] >>
+  first_assum ACCEPT_TAC
 QED

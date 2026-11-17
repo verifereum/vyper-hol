@@ -36,6 +36,69 @@ Libs
 
 val _ = Parse.hide "body";
 
+Theorem collect_locals_subst_consts_stmts:
+  !E ss. collect_locals (subst_consts_stmts E ss) = collect_locals ss
+Proof
+  gen_tac >> recInduct collect_locals_ind >>
+  rw[subst_consts_stmt_def, collect_locals_def] >>
+  qmatch_goalsub_abbrev_tac `subst_consts_stmt E st` >>
+  Cases_on `st` >> gvs[subst_consts_stmt_def, collect_locals_def]
+QED
+
+Theorem build_compile_env_subst_consts_stmts:
+  build_compile_env tops vis mut name args ret
+    (subst_consts_stmts E ss) use_trans =
+  build_compile_env tops vis mut name args ret ss use_trans
+Proof
+  simp[build_compile_env_def, collect_locals_subst_consts_stmts]
+QED
+
+Theorem external_package_subst_consts:
+  (set_external_package_target target
+     (package_external_fn tops use_trans keys
+       (mut,nr,rr,name,args,defaults,ret,fbody)) =
+   (lbl,ce,pos_args,min_cds,pay,nr',key,tr,view,fbody,rt)) <=>
+  (set_external_package_target target
+     (package_external_fn tops use_trans keys
+       (subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody))) =
+   (lbl,ce,pos_args,min_cds,pay,nr',key,tr,view,
+    subst_consts_stmts E fbody,rt))
+Proof
+  `LENGTH (subst_consts_exprs E defaults) = LENGTH defaults` by
+    (Induct_on `defaults` >> simp[subst_consts_expr_def]) >>
+  simp[subst_consts_fn_def, package_external_fn_def,
+       build_compile_env_subst_consts_stmts, set_external_package_target_def]
+QED
+
+Theorem external_name_keys_flat_source:
+  !tops src.
+    FLAT (MAP (external_name_keys_toplevel src) tops) =
+    MAP (\name. (src,name))
+      (FLAT (MAP (\top. MAP SND (external_name_keys_toplevel () top)) tops))
+Proof
+  Induct_on `tops` >> simp[] >> Cases_on `h` >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >~ [`FunctionDecl vis`] >- (
+    Cases_on `vis` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`VariableDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`HashMapDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+QED
+
+Theorem external_names_distinct_numeric_namespace:
+  !tops src.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops)) ==>
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
+Proof
+  rpt gen_tac >> simp_tac std_ss [external_name_keys_flat_source] >> strip_tac >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  drule ALL_DISTINCT_MAP >> simp[]
+QED
+
 (* ===== The 4-byte selector ===== *)
 
 Theorem function_selector_length:
@@ -702,7 +765,7 @@ Proof
        venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
-Theorem fallback_check_run_frame[local]:
+Theorem fallback_check_run_frame:
   emit_op CALLVALUE [] st0 = (cv, st1) /\
   emit_op ISZERO [cv] st1 = (nv, st2) /\
   emit_void ASSERT [nv] st2 = ((), st3) /\

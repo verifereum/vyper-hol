@@ -32,8 +32,8 @@ Ancestors
   venomExecSemantics venomInst venomState
 
 Theorem stmt_state_rel_declare_memory:
-  !func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !H func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -42,6 +42,10 @@ Theorem stmt_state_rel_declare_memory:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_fmp = s.vs_fmp /\
+    ((ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
@@ -57,7 +61,7 @@ Theorem stmt_state_rel_declare_memory:
          mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
     memory_value_rel tyv v (w2n w) t.vs_memory ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
 Proof
@@ -93,7 +97,7 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> gvs[]) >>
-  `state_rel func cenv cx (es with scopes := scs') t` by
+  `state_rel H func cenv cx (es with scopes := scs') t` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexists_tac `es` >> qexists_tac `s` >>
      simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -102,7 +106,8 @@ Proof
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func t` by
-    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def] >>
+     first_assum ACCEPT_TAC) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
      drule immutable_alloca_sep_frame >> disch_then irule >>
@@ -129,8 +134,8 @@ QED
    the stored word (the zero length word of an empty bytestring or dynamic
    array), as long as it fits the region. *)
 Theorem stmt_state_rel_declare_store:
-  !func cenv cx es s id p sz w inst v tyv sc rest a x ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !H func cenv cx es s id p sz w inst v tyv sc rest a x ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -140,7 +145,7 @@ Theorem stmt_state_rel_declare_store:
     32 <= sz /\ type_memory_size tyv <= sz /\
     memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) x s)
@@ -163,6 +168,10 @@ Proof
      reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
      qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
+  `(mstore (w2n w) x s).vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH (mstore (w2n w) x s).vs_memory` by
+    (conj_tac >- simp[mstore_def] >>
+     simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >>
   fs[mstore_def, LET_THM, lookup_var_def] >> gs[] >> first_assum ACCEPT_TAC

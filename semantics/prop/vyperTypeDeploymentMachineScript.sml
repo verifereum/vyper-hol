@@ -582,7 +582,7 @@ Proof
   Cases_on `slot_opt` >> simp[raise_def] >>
   rw[acquire_nonreentrant_lock_def, check_not_static_def, check_def,
      assert_def, ignore_bind_def, bind_def, get_transient_storage_def,
-     update_transient_def, return_def, raise_def] >> gvs[AllCaseEqs()]
+     update_transient_def, record_storage_event_def, return_def, raise_def] >> gvs[AllCaseEqs()]
 QED
 
 Theorem checked_constructor_call_halt_preserves_machine_well_typed:
@@ -635,10 +635,14 @@ Proof
   simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
   qspec_tac (`constants_order mods`, `mods`) >> Induct
-  >- rw[evaluate_module_constants_def] >>
-  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
-  gvs[AllCaseEqs()] >> first_x_assum drule >>
-  simp[merge_constants_def]
+  >- rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `result` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`merge_constants addr h0 x am`, `am_c`] mp_tac) >>
+  simp[evaluate_module_constants_def, merge_constants_def]
 QED
 
 Theorem deployment_initial_machine_well_typed:

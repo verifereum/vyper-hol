@@ -11,13 +11,13 @@ Theorem unwrap_runtime_code_execution:
   compile_alloc_buffer nb sm = (buf,mid) /\
   compile_imm_copy_to_memory F imm src buf.buf_operand n 0 mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\ 32*n <= nb /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\ 32*n <= nb /\
   sm.cs_next_var <= mid.cs_next_var /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} ==>
-  ?root u a Gm tm H tf z d.
+  ?root u a Gm tm HG tf z d.
     buf.buf_operand = Var root /\
     step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
     a = u with vs_inst_idx := SUC s.vs_inst_idx /\
@@ -26,13 +26,13 @@ Theorem unwrap_runtime_code_execution:
     (d:bytes32) = n2w (buffer_allocation_base s sm.cs_next_id) /\
     w2n d+nb < dimword (:256) /\
     copy_runtime_frame mid a sb z /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tf
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tf
       (OK (z with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     z.vs_current_bb = sb.cs_current_bb /\ ~z.vs_halted /\
-    ptr_covers H tf root z nb /\ lookup_var root a = SOME d /\
+    ptr_covers HG tf root z nb /\ lookup_var root a = SOME d /\
     tf.t_mem = tm.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32*n} /\
     tf.t_stor = tm.t_stor /\ tf.t_trans = tm.t_trans /\ tf.t_imm = tm.t_imm /\
-    (!x. not_fresh_at mid x ==> FLOOKUP H x = FLOOKUP Gm x /\
+    (!x. not_fresh_at mid x ==> FLOOKUP HG x = FLOOKUP Gm x /\
       op_taint tf (Var x) = op_taint tm (Var x)) /\
     (!off len. off+len <= w2n d \/ w2n d+32*n <= off ==>
       mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory)
@@ -54,8 +54,10 @@ Proof
   `lookup_var root a = SOME d` by
     (qpat_x_assum `eval_operand buf.buf_operand a = _` mp_tac >>
      simp[eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[unwrap_alloc_below_fmp] >>
   `allocas_from 0 a /\ (ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
-    simp[allocas_from_def] >>
+    (gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_assum `buf.buf_operand = Var root` (fn th =>
     qpat_x_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _`
       (assume_tac o REWRITE_RULE [th])) >>

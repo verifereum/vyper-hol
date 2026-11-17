@@ -10,9 +10,9 @@ Theorem stop_frag_ptr:
   !cx ctx PG st st' id P Q R.
     st'.cs_current_bb = st.cs_current_bb /\
     st'.cs_current_insts = st.cs_current_insts ++ [mk_inst id STOP [] []] /\
-    (!G tn s. P G tn s ==> stor_taint_ok cx tn s /\
+    (!G tn s. P G tn s ==> stor_taint_ok H cx tn s /\
        R (G,tn) (Halt (halt_state (s with vs_returndata := [])))) ==>
-    frag_exec_ptr cx ctx PG st st' P Q R
+    frag_exec_ptr H cx ctx PG st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >> simp[frag_exec_ptr_def] >> rpt strip_tac >>
   disj2_tac >> drule_all fn_has_code_same_block >> strip_tac >>
@@ -37,9 +37,9 @@ Theorem compile_return_none_external_frag_ptr:
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) /\
-    (!G tn s. P G tn s ==> stor_taint_ok cx tn s /\
+    (!G tn s. P G tn s ==> stor_taint_ok H cx tn s /\
        R (G,tn) (Halt (halt_state (s with vs_returndata := [])))) ==>
-    frag_exec_ptr cx ctx PG st st' P Q R
+    frag_exec_ptr H cx ctx PG st st' P Q R
 Proof
   rpt strip_tac >>
   `st'.cs_current_bb = st.cs_current_bb /\
@@ -59,7 +59,7 @@ Theorem compile_external_return_word_frag_ptr:
     (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
     (!G tn s. P G tn s ==>
        eval_operand op s = SOME w /\ op_taint tn op = {} /\
-       stor_taint_ok cx tn s /\
+       stor_taint_ok H cx tn s /\
        ?b. FLOOKUP (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas
              st.cs_next_id = SOME (b,32) /\ b < dimword (:256)) /\
     (!G tn s ss gt. P G tn s /\
@@ -67,7 +67,7 @@ Theorem compile_external_return_word_frag_ptr:
        ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
        ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
        R gt (Halt ss)) ==>
-    frag_exec_ptr cx ctx PG st st' P Q R
+    frag_exec_ptr H cx ctx PG st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_external_return_word_parts >> strip_tac >>
@@ -104,7 +104,7 @@ Theorem ptr_safe_run_return_copy:
       SOME (mk_inst (id+1) MCOPY [Var buf; Var src; Lit (n2w m)] []) /\
     get_instruction bb (s.vs_inst_idx + 2) =
       SOME (mk_inst (id+2) RETURN [Var buf; Lit (n2w m)] []) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx ty sa sb es v (Var src) s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
     eval_operand (Var src) s = SOME w /\ src <> buf /\
@@ -113,8 +113,8 @@ Theorem ptr_safe_run_return_copy:
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s = OK s1 /\
     ptr_covers G tn src s m /\
     (!j. w2n w <= j /\ j < w2n w + m ==> j NOTIN tn.t_mem) /\
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx func PG G tn s
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `i = mk_inst id ALLOCA [Lit (n2w n)] [buf]` >>
@@ -127,7 +127,7 @@ Proof
   `ptr_covers G' tn' src s1 m` by
     (simp[Abbr `G'`, Abbr `tn'`, Abbr `i`] >>
      irule alloca_step_old_ptr_covers >> metis_tac[]) >>
-  `stor_taint_ok cx tn' s1` by
+  `stor_taint_ok H cx tn' s1` by
     (simp[Abbr `tn'`, Abbr `i`] >>
      irule alloca_step_stor_taint_ok >> metis_tac[]) >>
   `eval_operand (Var src) s1 = SOME w` by
@@ -142,7 +142,7 @@ Proof
     (qspecl_then [`id`, `n2w n`, `buf`, `s`] strip_assume_tac step_alloca_frame >>
      gvs[Abbr `i`]) >>
   `m < dimword (:256)` by decide_tac >>
-  `ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G' tn' s'` by
+  `ptr_safe_run (cx_dead H cx) 0 fuel ctx func PG G' tn' s'` by
     (irule ptr_safe_run_copy_return >> simp[Abbr `s'`] >>
      (conj_tac >- gvs[stor_taint_ok_def]) >>
      qexistsl_tac [`buf`, `id+1`, `n2w m`, `src`] >>
@@ -150,7 +150,7 @@ Proof
      metis_tac[arithmeticTheory.LESS_EQ_LESS_EQ_MONO, arithmeticTheory.LESS_EQ_TRANS]) >>
   `step_inst fuel ctx i s = OK s1` by
     simp[step_inst_non_invoke, Abbr `i`] >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx func G tn i s` by
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx func G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
   qunabbrev_tac `i` >> gvs[mk_inst_def] >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
@@ -167,26 +167,26 @@ Theorem compile_external_return_copy_frag_ptr:
     n < dimword (:256) /\ m <= n /\ m <= type_memory_size tv /\
     m <= val_footprint tv v /\
     (!fn G tn s. fn_has_code st st' fn /\ P G tn s ==>
-       stmt_state_rel ctx fn cenv cx es s /\
+       stmt_state_rel H ctx fn cenv cx es s /\
        expr_val_at cenv cx ty sa sb es v (Var src) s /\
        ptr_val_ok cx ty v (Var src) G tn s /\ ptr_covers G tn src s m /\
-       stor_taint_ok cx tn s) /\
+       stor_taint_ok H cx tn s) /\
     (!G tn s ss gt. P G tn s /\
        ss.vs_returndata = mem_bytes_at
          (w2n (THE (lookup_var src s))) m s.vs_memory /\
        ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
        ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
        R gt (Halt ss)) ==>
-    frag_exec_ptr cx ctx PG st st' P Q R
+    frag_exec_ptr H cx ctx PG st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_external_return_copy_parts >> strip_tac >>
   simp[frag_exec_ptr_def] >> rpt strip_tac >> disj2_tac >>
   `src <> buf` by metis_tac[] >>
-  `stmt_state_rel ctx fn cenv cx es s /\
+  `stmt_state_rel H ctx fn cenv cx es s /\
    expr_val_at cenv cx ty sa sb es v (Var src) s /\
    ptr_val_ok cx ty v (Var src) G tn s /\ ptr_covers G tn src s m /\
-   stor_taint_ok cx tn s` by metis_tac[] >>
+   stor_taint_ok H cx tn s` by metis_tac[] >>
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb s.vs_inst_idx =
      SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) /\
@@ -232,7 +232,7 @@ QED
 
 Theorem ptr_safe_run_return_copy_zero:
   !cx ctx fn PG G tn s bb id buf op w n cenv es fuel.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [buf]) (fn_insts fn) /\
     n < dimword (:256) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -243,9 +243,9 @@ Theorem ptr_safe_run_return_copy_zero:
     get_instruction bb (s.vs_inst_idx + 2) =
       SOME (mk_inst (id+2) RETURN [Var buf; Lit 0w] []) /\
     eval_operand op s = SOME w /\ op <> Var buf /\
-    op_taint tn op = {} /\ stor_taint_ok cx tn s /\
+    op_taint tn op = {} /\ stor_taint_ok H cx tn s /\
     ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
   qspecl_then [`id`, `n2w n`, `buf`, `s`] strip_assume_tac step_alloca_frame >>
@@ -255,7 +255,7 @@ Proof
   qabbrev_tac `s' = s1 with vs_inst_idx := s.vs_inst_idx + 1` >>
   `eval_operand op s1 = SOME w` by
     (Cases_on `op` >> gvs[eval_operand_def]) >>
-  `stor_taint_ok cx tn' s1` by
+  `stor_taint_ok H cx tn' s1` by
     (simp[Abbr `tn'`, Abbr `i`] >>
      irule alloca_step_stor_taint_ok >> metis_tac[]) >>
   `op_taint tn' op = {} /\ op_taint tn' (Var buf) = {}` by
@@ -263,14 +263,14 @@ Proof
      gvs[Abbr `tn'`, Abbr `i`, step_taint_def, set_var_taint_def,
          out_taint_def, mk_inst_def, op_taint_def, eval_operand_def,
          finite_mapTheory.FLOOKUP_UPDATE]) >>
-  `ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G' tn' s'` by
+  `ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G' tn' s'` by
     (irule ptr_safe_run_copy_return_zero >> simp[Abbr `s'`] >>
      (reverse conj_tac >- gvs[stor_taint_ok_def]) >>
      qexistsl_tac [`a`, `w`, `Var buf`, `id+1`, `op`] >>
      simp[eval_operand_def]) >>
   `step_inst fuel ctx i s = OK s1` by
     simp[step_inst_non_invoke, Abbr `i`] >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn i s` by
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
   qunabbrev_tac `i` >> gvs[mk_inst_def] >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
@@ -285,23 +285,23 @@ Theorem compile_external_return_copy_zero_frag_ptr:
     (!y. op = Var y ==> not_fresh_at st y) /\
     n < dimword (:256) /\
     (!fn G tn s. fn_has_code st st' fn /\ P G tn s ==>
-       stmt_state_rel ctx fn cenv cx es s /\
+       stmt_state_rel H ctx fn cenv cx es s /\
        (?w. eval_operand op s = SOME w) /\ op_taint tn op = {} /\
-       stor_taint_ok cx tn s) /\
+       stor_taint_ok H cx tn s) /\
     (!G tn s ss gt. P G tn s /\ ss.vs_returndata = [] /\
        ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
        ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
        R gt (Halt ss)) ==>
-    frag_exec_ptr cx ctx PG st st' P Q R
+    frag_exec_ptr H cx ctx PG st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_external_return_copy_parts >> strip_tac >>
   simp[frag_exec_ptr_def] >> rpt strip_tac >> disj2_tac >>
   `op <> Var buf` by
     metis_tac[] >>
-  `stmt_state_rel ctx fn cenv cx es s /\
+  `stmt_state_rel H ctx fn cenv cx es s /\
    (?w. eval_operand op s = SOME w) /\ op_taint tn op = {} /\
-   stor_taint_ok cx tn s` by metis_tac[] >>
+   stor_taint_ok H cx tn s` by metis_tac[] >>
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb s.vs_inst_idx =
      SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) /\

@@ -4,7 +4,7 @@ Ancestors bodyPtrIfExpAllocCompiler bodyPtrIfExpAllocGhost allocationPtr
   venomState venomInst finite_map words loweringHalt exprLoweringProps
 
 Theorem ifexp_alloca_old_site_separate:
-  stmt_state_rel ctx fn ce cx es s /\
+  stmt_state_rel H ctx fn ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   n < dimword(:256) /\ aid <> id /\
   FLOOKUP s.vs_allocas aid = SOME (off,sz) ==>
@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem ifexp_alloca_local_separate:
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr ce es.scopes out /\ n < dimword(:256) /\
   local_region ce es.scopes s name p sz ==>
@@ -45,7 +45,7 @@ Proof
 QED
 
 Theorem ifexp_alloca_original_site_separate:
-  vv_post ctx fn ce cx e es sa sb s0 es' tv vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 es' tv vv s /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   sa.cs_next_id <= sb.cs_next_id /\ n < dimword(:256) /\
   FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
@@ -53,14 +53,14 @@ Theorem ifexp_alloca_original_site_separate:
   buffer_allocation_base s sb.cs_next_id+n <= off
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx es' s /\
+  `stmt_state_rel H ctx fn ce cx es' s /\
    FLOOKUP s.vs_allocas aid = SOME (off,sz)` by gvs[vv_post_def] >>
   `aid <> sb.cs_next_id` by decide_tac >>
   drule_all ifexp_alloca_old_site_separate >> simp[]
 QED
 
 Theorem ifexp_alloca_original_local_separate:
-  vv_post ctx fn ce cx e es sa sb s0 es' tv vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 es' tv vv s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
@@ -73,7 +73,7 @@ Proof
   `local_region ce es'.scopes s name p sz` by
     (irule exprSimPropsTheory.local_region_frame_fwd >>
      simp[] >> qexistsl_tac [`s0`, `sa`, `es.scopes`] >> gvs[vv_post_def]) >>
-  `stmt_state_rel ctx fn ce cx es' s` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx es' s` by gvs[vv_post_def] >>
   drule_all ifexp_alloca_local_separate >> simp[]
 QED
 
@@ -90,7 +90,7 @@ Proof
 QED
 
 Theorem ifexp_alloca_base_bound:
-  stmt_state_rel ctx fn ce cx es s /\
+  stmt_state_rel H ctx fn ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   n < dimword(:256) ==>
   buffer_allocation_base s id+n < dimword(:256)
@@ -103,7 +103,7 @@ QED
 
 
 Theorem ifexp_alloca_step_site:
-  stmt_state_rel ctx fn ce cx es s /\
+  stmt_state_rel H ctx fn ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>

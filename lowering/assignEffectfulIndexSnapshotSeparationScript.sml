@@ -4,7 +4,7 @@ Ancestors
   venomState venomInst
 
 Theorem snapshot_origin_allocations_disjoint:
-  stmt_state_rel ctx func ce cx es s /\ origin.cs_next_id <= aid /\
+  stmt_state_rel H ctx func ce cx es s /\ origin.cs_next_id <= aid /\
   FLOOKUP s.vs_allocas aid = SOME (b,N) ==>
   !id off n. id < origin.cs_next_id /\
     FLOOKUP s.vs_allocas id = SOME (off,n) ==>
@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem snapshot_constructor_allocations_disjoint:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,N) ==>
   (ce.ce_is_ctor ==> !name itv iv off.

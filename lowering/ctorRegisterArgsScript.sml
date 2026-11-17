@@ -674,7 +674,7 @@ Proof
   simp[abi_decode_sim_def] >> metis_tac[]
 QED
 
-Theorem ctor_alloc_buffer_state_props[local]:
+Theorem ctor_alloc_buffer_state_props:
   compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
   n < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\
   local_ptrs_rel func ce scopes initial /\ fresh_vars_wrt st initial /\
@@ -1033,7 +1033,7 @@ Proof
   metis_tac[APPEND, APPEND_ASSOC]
 QED
 
-Theorem ctor_canonical_member_source[local]:
+Theorem ctor_canonical_member_source:
   i < LENGTH atys /\ LENGTH avs = LENGTH atys /\ has_types atys avs /\
   encoded = enc (Tuple atys) (ListV avs) /\
   mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
@@ -1188,7 +1188,7 @@ Proof
   qexistsl [`src`, `middle`, `prepared`] >> simp[]
 QED
 
-Theorem ctor_word_type_static[local]:
+Theorem ctor_word_type_static:
   is_word_type ty ==> ~is_abi_dynamic sf ty
 Proof
   Cases_on `ty` >> simp[is_word_type_def, is_abi_dynamic_def] >>
@@ -1196,7 +1196,7 @@ Proof
   rename1 `BytesT b` >> Cases_on `b` >> simp[is_word_type_def, is_abi_dynamic_def]
 QED
 
-Theorem ctor_eval_operand_not_fresh[local]:
+Theorem ctor_eval_operand_not_fresh:
   eval_operand op s = SOME w /\ fresh_vars_wrt st s ==>
   !x. op = Var x ==> not_fresh_at st x
 Proof

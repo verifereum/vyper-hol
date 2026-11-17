@@ -54,7 +54,7 @@ Theorem aggregate_store_nested_path:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce dty = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -65,7 +65,7 @@ Theorem aggregate_store_nested_path:
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -74,7 +74,7 @@ Theorem aggregate_store_nested_path:
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
     (!aid off sz a len.
@@ -88,7 +88,9 @@ Theorem aggregate_store_nested_path:
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
       FLOOKUP q.vs_allocas aid = SOME a) /\
     (!a len. a + len <= w2n w \/ w2n w + type_memory_size tv <= a ==>
-      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `well_typed_expr env e /\ expr_sim_inv ce cx env es` by
@@ -115,7 +117,7 @@ Proof
     (assume_tac o SRULE [ASSUME ``lowered_value_type ce e = post_value_type ce e``]) >>
   `lookup_var x s = SOME w` by metis_tac[expr_post_rebased_lookup] >>
   `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >>
-  `stmt_state_rel ctx func ce cx es' s /\
+  `stmt_state_rel H ctx func ce cx es' s /\
    FLOOKUP s.vs_allocas did = SOME (b,k)` by fs[expr_post_def] >>
   `!name a len. local_region ce es'.scopes s name a len ==>
     a+len <= w2n w \/ w2n w + type_memory_size tv <= a` by
@@ -144,7 +146,7 @@ Resume aggregate_store_nested_path[typed]:
      irule aggregate_physical_source_slot_bounds >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `type_widens_to _ _ dty`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ s`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (b,k)`)) >>
      simp[arithmeticTheory.ADD_COMM] >>
      first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])) >>
@@ -181,7 +183,7 @@ Resume aggregate_store_nested_path[typed]:
       arithmeticTheory.ADD_COMM] >>
   qpat_x_assum `t with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
     vs_current_bb := _; vs_inst_idx := _|> = s`
-    (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[] >>
+    (mp_tac o Q.AP_TERM `\z. (z.vs_allocas,z.vs_accounts,z.vs_transient,z.vs_requests,z.vs_call_ctx)`) >> simp[] >>
   strip_tac >> simp[] >> rpt conj_tac >>
   first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
@@ -225,6 +227,10 @@ Resume aggregate_store_nested_path[same_layout]:
   disch_then (qspecl_then [`v`, `func`, `w`, `ctx`] mp_tac) >>
   (impl_tac >- simp[venomStateTheory.eval_operand_def]) >>
   strip_tac >> qexists_tac `t` >> simp[] >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `t with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = s`
+       (fn th => once_rewrite_tac [GSYM th]) >> simp[]) >>
   drule aggregate_store_rebased_control_frame >>
   disch_then (qspecl_then [`t`, `type_memory_size tv`, `w2n w`] mp_tac) >>
   (impl_tac >- (simp[] >> conj_tac

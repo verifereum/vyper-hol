@@ -26,6 +26,7 @@ Proof
       simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
   rpt strip_tac >> gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
   mp_tac compile_pow_mod256_typed_frag_mem >> simp[] >> disch_then irule >> simp[] >>
+  conj_tac >- (qexists_tac `H` >> simp[]) >>
   qexists_tac `[x;x']` >> simp[]
 QED
 
@@ -58,9 +59,11 @@ Resume compile_modular_typed_sim_mem[suffix]:
   markerLib.RESUME_TAC >~ [`compile_addmod _ _ _ _ = _`]
   >- (mp_tac (SRULE [] (Q.SPEC `F` compile_modular_typed_frag_mem)) >>
       simp[] >> disch_then irule >> simp[] >>
+      conj_tac >- (qexists_tac `H` >> simp[]) >>
       qexists_tac `[x;x';x'']` >> simp[]) >>
   mp_tac (SRULE [] (Q.SPEC `T` compile_modular_typed_frag_mem)) >>
   simp[] >> disch_then irule >> simp[] >>
+  conj_tac >- (qexists_tac `H` >> simp[]) >>
   qexists_tac `[x;x';x'']` >> simp[]
 QED
 Finalise compile_modular_typed_sim_mem
@@ -84,6 +87,7 @@ Proof
   rpt strip_tac >> gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   mp_tac compile_floor_word_frag_mem >> simp[] >> disch_then irule >> simp[] >>
+  conj_tac >- (qexists_tac `H` >> simp[]) >>
   qexists_tac `[x]` >> simp[]
 QED
 
@@ -108,6 +112,7 @@ Proof
   drule_all uint_value_word_rep >> strip_tac >> gvs[] >>
   qpat_assum `v = IntV _` (fn th => once_rewrite_tac[th]) >>
   mp_tac compile_as_wei_value_word_frag_mem >> simp[] >> disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   qexists_tac `[x]` >> simp[] >> metis_tac[]
 QED

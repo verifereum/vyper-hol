@@ -1,5 +1,5 @@
 (* The revert encoder's run from a string reason compiled to a memory
-   pointer (reason_vv_ok): the encoder reads the message where vv_post puts
+   pointer (reason_vv_ok): the encoder reads the message where vv_post H puts
    it, in one of the reason's own allocas or a local's region, so apart
    from the encoder's sites.  The message's rounded footprint below the
    frontier is a premise. *)
@@ -23,11 +23,11 @@ Proof
   rw[] >> simp[comp_return_def]
 QED
 
-(* Where vv_post puts a string reason's message. *)
+(* Where vv_post H puts a string reason's message. *)
 Theorem reason_vv_message_at:
   reason_vv vv = SOME op /\
   expr_type se = BaseT (StringT n) /\ n < 2 ** 64 /\
-  vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+  vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
   read_result cx tv ee = (INL (StringV str), ee) ==>
   ?w. eval_operand op t = SOME w /\
       mem_word_at (w2n w) t.vs_memory = n2w (LENGTH str) /\
@@ -64,7 +64,7 @@ Theorem reason_mem_revert_path_mem:
       (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+    vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
     read_result cx tv ee = (INL (StringV str), ee) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -119,7 +119,7 @@ Proof
   disch_then (qx_choose_then `bb` strip_assume_tac) >>
   `64 + Z < dimword (:256) /\ Z < dimword (:256)` by
     (qpat_x_assum `Z < 2 ** 64` mp_tac >> simp[dimword_def]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
   `alloca_room ctx func t /\ alloca_next_valid t /\
    allocas_non_overlapping t` by fs[stmt_state_rel_def, alloca_inv_def] >>
   `MEM (mk_inst id0 ALLOCA [Lit (n2w (64 + Z))] ["%" ++ toString v0])
@@ -140,7 +140,7 @@ Proof
        w2n w + 32 <= FST x \/ FST x + 32 <= w2n w` by
     (gen_tac >> strip_tac >> PairCases_on `x` >>
      `x1 = 64 + Z` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`, `64 + Z`,
+       (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`, `64 + Z`,
                      `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
         impl_tac >- simp[] >> disch_then drule >> simp[]) >>
      fs[]
@@ -186,22 +186,22 @@ Proof
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- (gen_tac >> strip_tac >> conj_tac
-          >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
+          >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
                 `64 + Z`, `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
               impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           metis_tac[])
-      >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+      >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
             `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
           impl_tac >- simp[] >> simp[])
       >- (gen_tac >> strip_tac >>
           `SND x = 32` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
+            (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
                `32`, `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           simp[] >> gen_tac >> strip_tac >>
           `SND y = Z` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+            (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
                           `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>

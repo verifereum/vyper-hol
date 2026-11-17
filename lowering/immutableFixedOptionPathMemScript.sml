@@ -17,7 +17,7 @@ Proof
   strip_tac >> drule immutable_fixed_words_code_option >> strip_tac >>
   `emitted_insts sa sb = is` by
     simp[emitted_insts_def, DROP_APPEND] >>
-  simp_tac bool_ss [gas_marked_path_def] >> irule body_decl_zero_gas_path >>
+  simp_tac bool_ss [gas_marked_path_def] >> irule bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >>
   simp[] >> qexists_tac `sa` >> simp[] >>
   fs[EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!i. MEM i is ==> _` drule >>

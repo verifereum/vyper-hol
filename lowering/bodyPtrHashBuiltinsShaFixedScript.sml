@@ -63,6 +63,8 @@ Theorem hash_alloc_store_counted:
     mk_inst sid MSTORE [Var p;value] []] (DROP s.vs_inst_idx bb.bb_instructions) ==>
   run_inst_seq [mk_inst aid ALLOCA [Lit 32w] [p];
     mk_inst sid MSTORE [Var p;value] []] s = OK (mstore (w2n a) w t) /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst aid ALLOCA [Lit 32w] [p]; mk_inst sid MSTORE [Var p;value] []] s G2 tn2 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2
     (OK ((mstore (w2n a) w t) with vs_inst_idx := s.vs_inst_idx+2))
 Proof
@@ -89,7 +91,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     [mk_inst aid ALLOCA [Lit 32w] [p]; mk_inst sid MSTORE [Var p;value] []]` by
     simp[mk_inst_def, is_terminator_def] >>
-  drule_all run_inst_seq_gas_path_ptr >> simp[]
+  drule_all run_inst_seq_gas_path_ptr >> gvs[]
 QED
 
 Theorem hash_alloca_control_fields:
@@ -113,8 +115,8 @@ Theorem hash_fixed_prepare_endpoint:
   emit_void MSTORE [ib.buf_operand;value] sl = ((),sm) /\ m <= 32 /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
   eval_operand value s = SOME v /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -125,8 +127,9 @@ Theorem hash_fixed_prepare_endpoint:
   ?t a p w G2 tn2.
   a = t with vs_inst_idx := s.vs_inst_idx+2 /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G2 tn2 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK a) /\
-  stmt_state_rel ctx fn cenv cx es a /\ ghost_inv d cenv cx es G2 tn2 a /\
+  stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv H d cenv cx es G2 tn2 a /\
   ghost_kept cenv es sa G tn s G2 tn2 /\ ib.buf_operand = Var p /\
   eval_operand (Var p) a = SOME w /\ ptr_covers G2 tn2 p a m /\
   (!i. w2n w <= i /\ i < w2n w+m ==> i NOTIN tn2.t_mem) /\

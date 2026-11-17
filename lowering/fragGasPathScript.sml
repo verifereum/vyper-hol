@@ -204,3 +204,19 @@ Proof
   >> rpt strip_tac >> gvs[exit_result_def]
 
 QED
+
+Theorem gas_path_jump:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ [mk_inst id JMP [Label hdr] []] /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted ==>
+  gas_path ctx fn s 0 (OK (jump_to hdr s))
+Proof
+  strip_tac >>
+  `gas_path_edge ctx fn s 0 (OK (jump_to hdr s))` by
+    (simp[gas_path_edge_def] >> qexistsl [`0`, `mk_inst id JMP [Label hdr] []`] >>
+     simp[venomInstTheory.get_instruction_def, EL_APPEND_EQN, step_inst_def,
+          venomInstTheory.mk_inst_def, step_jmp_behavior, gas_count_step_def,
+          venomInstTheory.is_terminator_def] >> metis_tac[]) >>
+  `~(jump_to hdr s).vs_halted` by simp[jump_to_def] >>
+  metis_tac[gas_path_rules, ADD_0]
+QED

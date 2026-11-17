@@ -5,7 +5,7 @@
 Theory externalBodySupport
 Ancestors
   list pair finite_map
-  e2eDefs supportedProgram supportedDecls entryStateRel
+  e2eDefs supportedProgram supportedDecls
   vyperTypeSystem vyperTypeInvariants vyperTypeContract vyperTypeContractFunction
   vyperTypeContractContext vyperTypeContractSoundness vyperTypeContractGetter
   vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness

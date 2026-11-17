@@ -59,7 +59,7 @@ QED
    written over the buffer, which copies from u itself. *)
 Theorem storage_copy_words_hold[local]:
   !ctx func cenv cx es u t v a tr tv b s z.
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     storage_holds cx tr t (Value v) a es u /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     contract_storage s = contract_storage u /\
@@ -319,7 +319,7 @@ Theorem reason_storage_revert_path_mem:
       (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+    vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
     read_result cx tv ee = (INL (StringV str), ee) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -338,12 +338,12 @@ Proof
                   `LocatedValue ty p`, `sm`] mp_tac
        (CONJUNCT1 compiler_compile_var) >>
      simp[vv_operand_def]) >>
-  `vv_post ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
+  `vv_post H ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
      (LocatedValue ty p) t` by metis_tac[vv_post_read_result] >>
   `post_value_type cenv se = BaseT (StringT n)` by
     simp[post_value_type_bytestring, is_bytestring_type_def] >>
   `ty = BaseT (StringT n)` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
      simp[vv_post_def, vv_holds_def] >> rpt strip_tac >> gvs[]) >>
   qpat_x_assum `ty = _` SUBST_ALL_TAC >>
   qabbrev_tac `tr = (p.ptr_location = LocTransient)` >>
@@ -351,11 +351,11 @@ Proof
     (qunabbrev_tac `tr` >> Cases_on `p.ptr_location` >> fs[]) >>
   `?a. eval_operand p.ptr_operand t = SOME a /\
        storage_holds cx tr (BaseT (StringT n)) (Value (StringV str)) a ee t` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
      simp[vv_post_def, vv_holds_def] >> strip_tac >>
      qexists_tac `w` >> qunabbrev_tac `tr` >>
      Cases_on `p.ptr_location` >> fs[]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
   qabbrev_tac `k = (n + 31) DIV 32` >>
   qabbrev_tac `Z = 32 + k * 32` >>
   `type_memory_bytes cenv (BaseT (StringT n)) = Z` by
@@ -447,10 +447,10 @@ Proof
     reason_head_run_mem >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
+      >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
             `64 + Z`, `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
           simp[]) >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+      qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
         `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
       simp[]) >>
   disch_then (qx_choosel_then [`B`, `TP`] strip_assume_tac) >>
@@ -466,7 +466,7 @@ Proof
       rpt gen_tac >> strip_tac >>
       `FLOOKUP t.vs_allocas (id0 + 4) = SOME (b, m)` by metis_tac[] >>
       `m = Z` by
-        (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4`,
+        (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4`,
            `Z`, `[out]`] mp_tac state_rel_site_size >>
          impl_tac >- fs[Abbr `allocI`] >>
          disch_then drule >> simp[]) >>
@@ -654,7 +654,7 @@ Proof
     (rpt gen_tac >> strip_tac >>
      `FLOOKUP t.vs_allocas (j + 6) = SOME (z', m)` by metis_tac[] >>
      `m = 32` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
+       (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
           `["%" ++ toString (u0 + 5)]`] mp_tac state_rel_site_size >>
         impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
         disch_then drule >> simp[]) >>
@@ -664,7 +664,7 @@ Proof
         >- (`t.vs_alloca_next <= TP` by metis_tac[] >> decide_tac) >>
         `TP = FST x` by metis_tac[] >> PairCases_on `x` >>
         `x1 = Z` by
-          (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+          (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
              `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
            impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
            disch_then drule >> simp[]) >>

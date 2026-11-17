@@ -23,7 +23,7 @@ Theorem deploy_typing_context_well_typed[local]:
   deploy_typing_ok tops am tx ==>
   context_well_typed (deploy_evaluation_context tops am tx)
 Proof
-  rw[deploy_typing_ok_def] >>
+  rw[deploy_typing_ok_constants_ready] >>
   gvs[call_tx_well_typed_def, context_well_typed_def,
       deploy_evaluation_context_def, initial_evaluation_context_def]
 QED
@@ -60,7 +60,7 @@ Proof
   drule deploy_typing_context_well_typed >> strip_tac >>
   drule_all deploy_ctor_full_run >>
   PURE_REWRITE_TAC [lock_if_nr_def, is_view_mut_def] >> strip_tac >>
-  fs[deploy_typing_ok_def] >>
+  fs[deploy_typing_ok_constants_ready] >>
   `no_type_error_eval (res, ee)` by
     (qpat_x_assum `ignore_bind _ (ignore_bind _ _) _ = _` (SUBST1_TAC o SYM) >>
      irule (PURE_REWRITE_RULE [GSYM deploy_evaluation_context_def]

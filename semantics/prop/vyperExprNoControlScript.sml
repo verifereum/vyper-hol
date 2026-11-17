@@ -113,6 +113,8 @@ QED
 
 Theorem no_control_prims:
   (return v s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (record_storage_event observation s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (record_storage_backend s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (raise (Error e) s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (raise HaltException s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (update_pending_deletions d s = (INR exc,s') ⇒ no_control_exc exc) ∧
@@ -140,7 +142,9 @@ Proof
      update_accounts_def, get_transient_storage_def, update_transient_def,
      get_storage_backend_def, set_storage_backend_def,
      set_address_immutables_def, push_function_def, pop_function_def,
-     release_nonreentrant_lock_def, bind_def, adopt_call_outcome_def, UNCURRY,
+     release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     record_storage_event_def, record_storage_backend_def,
+     adopt_call_outcome_def, UNCURRY,
      update_pending_deletions_def,
      no_control_exc_def] >>
   imp_res_tac take_call_outcome_error >>

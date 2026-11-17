@@ -4,7 +4,7 @@
 Theory tupleAssignImmutableDeployAggregateNormalize
 Ancestors
   immutableAssignStore immutableAssignNormalizeFrame immutableAssignStoreLength
-  tuplePlaceSnapshot
+  tuplePlaceSnapshot exprSimAbiEncodeArgsCountedLabels
 
 Theorem tuple_immutable_normalized_aggregate_store:
   compile_assign_value cenv dst LocCode src F NONE dty sty L sa = ((),sb) /\
@@ -23,7 +23,7 @@ Theorem tuple_immutable_normalized_aggregate_store:
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H0 ctx func cenv cx es s /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w off) /\
   val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -44,7 +44,9 @@ Theorem tuple_immutable_normalized_aggregate_store:
     compile_alloc_buffer L sa = (buf,mid) /\
     compile_store_memory_typed cenv buf.buf_operand dty src sty mid = ((),sm) /\
     gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx es r /\
+    stmt_state_rel H0 ctx func cenv cx es r /\
+    r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+    r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx /\
     eval_operand buf.buf_operand r = SOME pw /\
     val_in_memory dtv v (w2n pw) r.vs_memory /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n pw,L) /\
@@ -93,7 +95,7 @@ Proof
     metis_tac[fragExecTheory.fn_has_code_split,
       compileEnvTheory.cs_extends_trans] >>
   `compile_alloc_buffer (type_memory_size dtv) sa = (buf,mid)` by metis_tac[] >>
-  drule_all immutable_assign_normalize_prefix >> strip_tac >>
+  drule_all immutable_assign_normalize_prefix_frame >> strip_tac >>
   `regions_disjoint (w2n pw) L off L` by suspend "geometry" >>
   `(!x. dst = Var x ==> not_fresh_at sm x) /\
    (!region x. cenv.ce_imm_alloca = SOME region /\ region = Var x ==>
@@ -115,7 +117,7 @@ QED
 
 Resume tuple_immutable_normalized_aggregate_store[geometry]:
   markerLib.RESUME_TAC >>
-  qpat_assum `stmt_state_rel _ _ _ _ _ r`
+  qpat_assum `stmt_state_rel _ _ _ _ _ _ r`
     (strip_assume_tac o REWRITE_RULE[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[exprLoweringPropsTheory.immutable_alloca_sep_def]) >>
@@ -140,7 +142,7 @@ QED
 Resume tuple_immutable_normalized_aggregate_store[operands]:
   markerLib.RESUME_TAC >>
   `r.vs_labels = s.vs_labels` by
-    (drule stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_labels >> simp[]) >>
+    (drule exprSimAbiEncodeArgsCountedLabelsTheory.abi_args_marked_path_labels >> simp[]) >>
   conj_tac
   >- (Cases_on `dst` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   rpt strip_tac >> Cases_on `region` >>
@@ -164,8 +166,8 @@ Resume tuple_immutable_normalized_aggregate_store[post]:
       exprLoweringPropsTheory.same_blocks_def,
       venomStateTheory.lookup_var_def] >> (
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ r` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ r` kall_tac >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by

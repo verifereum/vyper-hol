@@ -6,6 +6,7 @@ Ancestors
   stmtLowering emitHelper emitHelperProps exprLoweringProps
   stmtSimAssignStorage compileEnv fragExec loweringSlice freshWrites
   tupleMemoryFrame valueEncoding valueEncodingDefs valueEncodingProps
+  vyperStorageFootprint localPtrsProps venomMemDefs
   list rich_list finite_map tupleAssignParts vyperTyping tupleLocalStoreRun
   venomState venomInst vyperInterpreter vyperState vyperValue vyperLookup
 
@@ -53,9 +54,11 @@ Theorem tuple_source_list_outcome:
     (!i. i < LENGTH gs ==>
       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) ==>
-    ?res es'. !tail.
+    ?res es'. (!tail.
       assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
-        (res,es' with gas_obs := tail)
+        (res,es' with gas_obs := tail)) /\
+      (res = INL () \/
+       res = INR (Error (RuntimeError "write in static context")))
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
@@ -100,20 +103,19 @@ Theorem tuple_target_static_head_exit:
     (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
     eval_operand op s = SOME (typed_val_to_w256 tv v) /\
     local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_has_code st sf func /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code st sf func /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ cx.txn.is_static ==>
     ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+      !H. stmt_exit (RetQ H) ee (INR (Error (RuntimeError "write in static context"))) r
 Proof
   rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
-  >- (drule_all compile_get_target_ptr_toplevel >>
+  >- (drule_all stmtSimAssignStorageFactsTheory.compile_get_target_ptr_toplevel >>
       disch_then (qspec_then `st` assume_tac) >> gvs[] >>
       drule_all tuple_store_word_step >> strip_tac >>
       qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
       gvs[compile_tuple_store_all_def, comp_return_def] >>
-      `s.vs_call_ctx.cc_static` by
-        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `s.vs_call_ctx.cc_static` by metis_tac[] >>
       `emit_void (if tr then TSTORE else SSTORE) [Lit (n2w k); op] st = ((),sf)` by
         (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
       `eval_operand (Lit (n2w k)) s = SOME (n2w k)` by simp[eval_operand_def] >>
@@ -132,12 +134,12 @@ Proof
      metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND]) >>
   `fn_has_code st sp func /\ fn_has_code sp sf func` by
     metis_tac[fn_has_code_split] >>
-  drule_all tuple_field_add_frame_path >> strip_tac >>
-  rename1 `stmt_state_rel ctx func cenv cx es mid` >>
+  drule_all tuple_field_add_frame_path >>
+  disch_then (qspec_then `ctx`
+    (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS))) >>
   `eval_operand op mid = SOME (typed_val_to_w256 tv v)` by
     (Cases_on `op` >> gvs[eval_operand_def]) >>
-  `mid.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `mid.vs_call_ctx.cc_static` by metis_tac[] >>
   `emit_void (if tr then TSTORE else SSTORE) [dst; op] sp = ((),sf)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
   drule_all storage_emit_static_path >> strip_tac >>
@@ -175,10 +177,12 @@ Theorem tuple_store_targets_abort_path:
        tuple_in_memory vs tvs addr s.vs_memory) /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\
     assign_tuple_target_list cx gs vs es = (INR err,es') ==>
     ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      !tail. stmt_exit RetQ (es' with gas_obs := tail) (INR err) r
+      !H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) (INR err) r
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[] >> fs[Once evaluate_def, return_def]) >>
@@ -220,8 +224,10 @@ Resume tuple_store_targets_abort_path[abort]:
   `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
     (qpat_x_assum `!i. i < LENGTH (_::gs) ==> ?w. _`
       (qspec_then `0` mp_tac) >> simp[]) >>
-  drule_all tuple_target_static_head_exit >>
-  disch_then (qspecl_then [`RetQ`, `head_es`] strip_assume_tac) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es`, `s`,
+    `BaseTarget bt`, `ty`, `tv`, `v`, `op`, `st`, `sm`, `RetQ`, `head_es`]
+    tuple_target_static_head_exit) >>
+  impl_tac >- simp[] >> strip_tac >>
   `assign_tuple_targets cx (BaseTarget bt) v es =
     (INR (Error (RuntimeError "write in static context")),
      head_es with gas_obs := es.gas_obs)` by
@@ -243,7 +249,8 @@ Resume tuple_store_targets_abort_path[prefix]:
      type_memory_size tv + 64 < dimword(:256)` by
     suspend "head_operand" >>
   drule_all tuple_target_store_head_path >>
-  disch_then (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qspec_then `ctx`
+    (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS))) >>
   asm_x "ih" drule >>
   disch_then (qspecl_then [`m`, `tvs1`, `vs1`, `addr + type_memory_size tv`, `b`,
     `sz`, `ctx`, `func`, `cx`, `head_es with gas_obs := es.gas_obs`, `s1`,
@@ -352,24 +359,33 @@ Theorem tuple_store_targets_outcome:
        tuple_in_memory vs tvs addr s.vs_memory) /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s ==>
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    stmt_state_rel H0 ctx func cenv cx es s ==>
     ?res es' r.
       (!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
         (res,es' with gas_obs := tail)) /\
       gas_marked_path F ctx func s 0 r /\
       ((res = INL () /\ ?t. r = OK t /\
         (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-        stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+        (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+          stmt_state_rel H ctx func cenv cx es s /\
+          storage_well_formed_on cx es (FST H) ==>
+          stmt_state_rel H ctx func cenv cx es' t /\
+          storage_well_formed_on cx es' (FST H)) /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
         (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
            alloca_frame c0 e0 sa0 s0 cenv es' t)) \/
-       (exit_result r /\ !tail. stmt_exit RetQ (es' with gas_obs := tail) res r))
+       (exit_result r /\ !H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) res r))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+   s.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   drule_all tuple_source_list_outcome >>
-  disch_then (qx_choosel_then [`res`, `ee`] assume_tac) >>
+  disch_then (qx_choosel_then [`res`, `ee`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `assign_tuple_target_list cx gs vs es =
     (res,ee with gas_obs := es.gas_obs)` by
     (qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = _`
@@ -378,11 +394,12 @@ Proof
   Cases_on `res`
   >- (rename1 `assign_tuple_target_list cx gs vs es = (INL u,_)` >>
       Cases_on `u` >>
-      drule_all tuple_store_targets_path >> strip_tac >>
+      drule_all tuple_store_targets_path >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
       qexistsl [`INL ()`, `ee with gas_obs := es.gas_obs`, `OK t`] >>
-      gvs[]) >>
+      gvs[] >> disj1_tac >> first_assum ACCEPT_TAC) >>
   drule_all tuple_store_targets_abort_path >>
-  disch_then (qspec_then `RetQ` strip_assume_tac) >>
+  disch_then (qspecl_then [`ctx`, `RetQ`] strip_assume_tac) >>
   qexistsl [`INR y`, `ee with gas_obs := es.gas_obs`, `r`] >>
   simp[]
 QED

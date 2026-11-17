@@ -18,14 +18,14 @@ Theorem checked_compile_log_arguments_from_code:
     EVERY (\e. compiler_id_flow (lower_value compile_expr cenv (expr_type e) e)) es_list /\
     LIST_REL (\e tv. evaluate_type (type_env tops) (lowered_value_type cenv e) = SOME tv /\
       type_memory_size tv < dimword(:256)) es_list layout_tvs /\
-    EVERY (log_argument_lowering tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
+    EVERY (log_argument_lowering H tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
     compile_log_eval_all cenv es_list cs = (args,cut) /\ cs_extends cut final_cut /\ fn_has_code cs final_cut func /\
     log_argument_charges charge cx es_list es values es' total_charge /\ total_charge <= credit /\
-    log_prefix_ready env cx cenv func ids reserved requests final_cut es_list cs es before credit [] [] [] ==>
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut es_list cs es before credit [] [] [] ==>
     ?out tvs. fragment_path ctx func before out /\ out.vs_halted = before.vs_halted /\
       LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args tvs /\
       log_args_rel args tvs values out /\
-      log_prefix_ready env cx cenv func ids reserved requests final_cut [] cut es' out
+      log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cut es' out
         (credit - total_charge) args tvs values
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>

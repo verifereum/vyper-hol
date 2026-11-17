@@ -99,7 +99,8 @@ Theorem bop_scalar_certificate_result_path:
   ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
     op_prov G' v = NONE /\ op_taint tn' v = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\

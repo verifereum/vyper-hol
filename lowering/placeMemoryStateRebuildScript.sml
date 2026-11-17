@@ -109,8 +109,8 @@ QED
 Finalise memory_place_write_local_ptrs
 
 Theorem memory_place_write_stmt_state:
-  stmt_state_rel ctx func cenv cx ee s /\
-  stmt_state_rel ctx func cenv cx ee r /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee r /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
@@ -119,6 +119,7 @@ Theorem memory_place_write_stmt_state:
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
   val_in_memory dtv v (w2n w) t.vs_memory /\
+  LENGTH r.vs_memory <= LENGTH t.vs_memory /\
   (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
     vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
     vs_inst_idx := r.vs_inst_idx|>) = r /\
@@ -134,7 +135,7 @@ Theorem memory_place_write_stmt_state:
       | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
     mem_bytes_at off (type_memory_size tv) t.vs_memory =
     mem_bytes_at off (type_memory_size tv) r.vs_memory) ==>
-  stmt_state_rel ctx func cenv cx ff t
+  stmt_state_rel H ctx func cenv cx ff t
 Proof
   strip_tac >>
   Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
@@ -215,27 +216,19 @@ Resume memory_place_write_stmt_state[state]:
   `immutable_base_zero cenv t` by suspend "base" >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee t` by
     suspend "immutables" >>
-  `state_rel func cenv cx ff t` by suspend "state_frame" >>
+  `state_rel H func cenv cx ff t` by suspend "state_frame" >>
   `immutable_alloca_sep func cenv cx ff t` by
     (irule immutable_alloca_sep_fields >>
      qexistsl_tac [`r`, `ee`] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      simp[] >> conj_tac
      >- (qpat_assum `ff = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-     qpat_x_assum `stmt_state_rel _ _ _ _ ee r` mp_tac >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
      simp[stmt_state_rel_def]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ ee r` mp_tac >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl_tac [`ee`, `r`] >> simp[] >>
   qpat_x_assum `_ = r` mp_tac >>
-  qpat_x_assum `state_rel _ _ _ ff t` mp_tac >>
-  qpat_x_assum `immutable_alloca_sep _ _ _ ff t` mp_tac >>
-  qpat_x_assum `immutable_base_zero cenv t` mp_tac >>
-  rpt (first_x_assum kall_tac) >>
-  simp[stmt_state_rel_def, venom_state_component_equality] >>
-  rpt strip_tac >>
-  gvs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.allocas_non_overlapping_def,
-      venomMemDefsTheory.alloca_next_valid_def,
-      alloca_room_def, pending_alloca_size_def, fmp_room_def] >>
-  metis_tac[]
+  simp[venom_state_component_equality]
 QED
 Resume memory_place_write_stmt_state[base]:
   `immutable_base_zero cenv s /\ immutable_base_zero cenv r` by
@@ -263,27 +256,21 @@ Resume memory_place_write_stmt_state[regions]:
   qexists_tac `e0` >> simp[] >> metis_tac[]
 QED
 Resume memory_place_write_stmt_state[immutables]:
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee r` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
-  `t.vs_data_section = r.vs_data_section` by
-    (qpat_x_assum `_ = r` mp_tac >>
-     rpt (first_x_assum kall_tac) >> simp[venom_state_component_equality]) >>
-  Cases_on `cenv.ce_is_ctor`
-  >- (fs[immutables_rel_def] >> rpt gen_tac >> strip_tac >>
-      qpat_x_assum `!name tv v byte_offset. _ ==> _ /\ _` drule_all >> strip_tac >>
-      `mem_bytes_at byte_offset (type_memory_size tv) t.vs_memory =
-       mem_bytes_at byte_offset (type_memory_size tv) r.vs_memory` by metis_tac[] >>
-      simp[] >> irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
-      conj_tac >- metis_tac[immutable_admissible_val_wf] >>
-      qexistsl_tac [`type_memory_size tv`, `r.vs_memory`] >> simp[]) >>
-  fs[immutables_rel_def] >> metis_tac[]
+  irule immutables_rel_mem_agree >> qexists_tac `r` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `_ = r` mp_tac >>
+      rpt (first_x_assum kall_tac) >> simp[venom_state_component_equality]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
+  simp[stmt_state_rel_def, state_rel_def]
 QED
 Resume memory_place_write_stmt_state[state_frame]:
   irule state_rel_frame >>
   goal_assum (drule_at (Pat `local_ptrs_rel _ _ ff.scopes t`)) >>
   goal_assum (drule_at (Pat `immutables_rel _ _ _ _ ee t`)) >>
   simp[] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ ee r` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
   qpat_x_assum `_ = r` mp_tac >>
   rpt (first_x_assum kall_tac) >>
   simp[stmt_state_rel_def, venom_state_component_equality] >> metis_tac[]

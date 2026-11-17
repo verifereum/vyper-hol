@@ -1,20 +1,20 @@
 (* deploy_dead is well formed, and deploy_venom_result_rel is preserved by the
  * O1 pipeline's result relation with deploy_dead's dead bytes.
- * TOP-LEVEL: deploy_dead_wf, deploy_venom_result_rel_dead (pieces of
+ * TOP-LEVEL: deploy_dead_wf, deploy_dead_lo_ok, deploy_venom_result_rel_dead (pieces of
  * e2e_deploy_correctness).
  * Helpers: ctorDeployDeadSection* (the immutables section's dead bytes),
  * ctorDeployDeadLoad/ImmTypes (load_contract's sources and immutable types).
  *)
 Theory ctorDeployDead
 Ancestors
-  ctorDeployDefs ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
+  ctorDeployDefs bodyPtrDefs gasContext ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
   ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv loweringStateRelDefs
-  vyperInterpreter list rich_list
+  vyperInterpreter e2eDeployDefs vyperContext sourceUnitExecution list rich_list
 
 Theorem deploy_dead_wf:
-  !tops runtime_bc am tx.
+  !H tops runtime_bc am tx.
     deploy_source_ok tops am tx ==>
-    dead_wf (deploy_dead tops runtime_bc am tx)
+    dead_wf (deploy_dead H tops runtime_bc am tx)
 Proof
   rpt strip_tac >> drule deploy_source_ok_struct_args_unique >> strip_tac >>
   simp[dead_wf_def, deploy_dead_def] >> rpt conj_tac
@@ -30,6 +30,24 @@ Proof
   irule imm_section_dead_frame >> simp[] >> rpt strip_tac >>
   first_x_assum (qspec_then `j + LENGTH runtime_bc` mp_tac) >>
   simp[EL_DROP]
+QED
+
+(* The constructor's pointer checks run under deploy_dead H and the
+   immutables fixed region's bound: dead_lo_ok at the constructor's context. *)
+Theorem deploy_dead_lo_ok:
+  !H tops runtime_bc am tx cenv.
+    cenv.ce_is_ctor ==>
+    dead_lo_ok H (deploy_dead H tops runtime_bc am tx) (imm_len tops) cenv
+      (deploy_evaluation_context tops am tx)
+Proof
+  rpt strip_tac >>
+  `cx_tops (deploy_evaluation_context tops am tx) = tops` by
+    (irule cx_tops_module >>
+     simp[deploy_evaluation_context_def, initial_evaluation_context_def,
+          get_module_code_def]) >>
+  `(deploy_evaluation_context tops am tx).txn.target = tx.target` by
+    simp[deploy_evaluation_context_def, initial_evaluation_context_def] >>
+  simp[dead_lo_ok_def, cx_dead_def, deploy_dead_def, dead_sub_def]
 QED
 
 (* A list that agrees with pre ++ sec1 outside the dead bytes of sec1 is
@@ -51,14 +69,14 @@ Proof
 QED
 
 Theorem deploy_venom_result_rel_dead:
-  !tops runtime_bc am tx gobs src res res'.
+  !H tops runtime_bc am tx gobs src res res'.
     deploy_source_ok tops am tx /\
     src = load_contract NONE gobs am tx [(NONE, tops)] [] /\
-    deploy_venom_result_rel tops runtime_bc tx src res /\
+    deploy_venom_result_rel H tops runtime_bc tx src res /\
     ~deploy_source_exempt tops src /\
-    dead_result_rel (deploy_dead tops runtime_bc am tx) res res'
+    dead_result_rel (deploy_dead H tops runtime_bc am tx) res res'
     ==>
-    deploy_venom_result_rel tops runtime_bc tx src res'
+    deploy_venom_result_rel H tops runtime_bc tx src res'
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `src = _` (assume_tac o SYM) >>
@@ -74,12 +92,12 @@ Proof
           `(initial_evaluation_context am'.sources am'.layouts tx NONE).txn = tx`
             by simp[initial_evaluation_context_def] >>
           qabbrev_tac `cx = initial_evaluation_context am'.sources am'.layouts tx NONE` >>
-          `deploy_dead tops runtime_bc am tx =
+          `deploy_dead H tops runtime_bc am tx =
            <| d_stor := (\a st. if a = tx.target
-                                then {(k,b) | storage_dead cx F st (w2n k) b}
+                                then {(k,b) | storage_dead H F st (w2n k) b}
                                 else {});
               d_trans := (\a st. if a = tx.target
-                                 then {(k,b) | storage_dead cx T st (w2n k) b}
+                                 then {(k,b) | storage_dead H T st (w2n k) b}
                                  else {});
               d_imm := K UNIV;
               d_ret := (\r. {i | LENGTH runtime_bc <= i /\
@@ -105,7 +123,7 @@ Proof
              simp[vfmStateTheory.account_state_component_equality]) >>
           `s.vs_accounts tx.target with storage :=
              (s'.vs_accounts tx.target).storage = s'.vs_accounts tx.target /\
-           storage_agree (storage_dead cx F (s.vs_accounts tx.target).storage)
+           storage_agree (storage_dead H F (s.vs_accounts tx.target).storage)
              (s.vs_accounts tx.target).storage
              (s'.vs_accounts tx.target).storage` by
             (qpat_x_assum `accounts_agree_except _ _ _` mp_tac >>
@@ -124,13 +142,58 @@ Proof
               impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
                            simp[]) >>
               simp[])
-          >- gvs[vfmStateTheory.lookup_account_def]
-          >- (fs[vfmStateTheory.lookup_account_def,
-                 vfmStateTheory.account_state_component_equality])
-          >- (fs[vfmStateTheory.lookup_account_def] >>
-              irule storage_agree_dead_trans >>
-              qexists_tac `(s.vs_accounts tx.target).storage` >> simp[])
-          >- (qpat_x_assum `transient_agree _ _ _` mp_tac >>
+          >- (qmatch_asmsub_abbrev_tac
+                `accounts_agree_except D s.vs_accounts s'.vs_accounts` >>
+              `accounts_agree_except D
+                 (update_account tx.target
+                    (lookup_account tx.target s.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s.vs_accounts)
+                 (update_account tx.target
+                    (lookup_account tx.target s'.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s'.vs_accounts)` by
+                (rewrite_tac[accounts_agree_except_def] >> qx_gen_tac `a` >>
+                 qpat_x_assum `accounts_agree_except D _ _`
+                   (mp_tac o REWRITE_RULE [accounts_agree_except_def]) >>
+                 disch_then (qspec_then `a` mp_tac) >>
+                 Cases_on `a = tx.target` >>
+                 simp[Abbr`D`, vfmStateTheory.update_account_def,
+                      vfmStateTheory.lookup_account_def,
+                      combinTheory.APPLY_UPDATE_THM,
+                      vfmStateTheory.account_state_component_equality]) >>
+              qspecl_then [`D`, `s'.vs_pending_deletions`,
+                 `update_account tx.target
+                    (lookup_account tx.target s.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s.vs_accounts`,
+                 `update_account tx.target
+                    (lookup_account tx.target s'.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s'.vs_accounts`] mp_tac
+                e2eCompositionTheory.accounts_agree_except_process_deletions >>
+              impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+              irule accounts_agree_storage_dead_trans >>
+              qexists_tac `process_deletions s'.vs_pending_deletions
+                 (update_account tx.target
+                    (lookup_account tx.target s.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s.vs_accounts)` >>
+              qpat_x_assum `accounts_agree_except D (process_deletions _ _)
+                 (process_deletions _ _)` mp_tac >>
+              simp[accounts_agree_except_def, Abbr`D`] >>
+              qpat_x_assum `cx.txn = tx`
+                (fn th => simp_tac (srw_ss()) [th]) >>
+              rpt (pop_assum kall_tac) >> strip_tac >>
+              rpt conj_tac
+              >- (qx_gen_tac `addr` >> disch_tac >>
+                  qpat_x_assum `!a. (_ with storage := _) = _ /\ _`
+                    (qspec_then `addr` mp_tac) >>
+                  asm_simp_tac (srw_ss()) [storage_agree_except_empty]) >>
+              qpat_x_assum `!a. (_ with storage := _) = _ /\ _`
+                (qspec_then `tx.target` mp_tac) >>
+              simp[storage_agree_except_storage_dead])
+          >- (qpat_x_assum `transient_agree _ _ _ _` mp_tac >>
               qpat_x_assum `transient_agree_except _ _ _` mp_tac >>
               simp[transient_agree_def, transient_agree_except_def] >>
               rpt strip_tac
@@ -142,7 +205,25 @@ Proof
               simp[storage_agree_except_storage_dead] >> strip_tac >>
               irule storage_agree_dead_trans >>
               qexists_tac `s.vs_transient tx.target` >> simp[]) >>
-          gvs[]) >>
+          gvs[] >>
+          fs[LIST_REL_EL_EQN] >>
+          qx_gen_tac `i` >> strip_tac >>
+          `request_agree H cx (EL i rqs) (EL i s.vs_requests)` by
+            (qpat_x_assum `!n. _ ==> request_agree _ _ _ _`
+               (qspec_then `i` mp_tac) >> simp[]) >>
+          `request_agree_except
+             (external_call_dead H cx.txn
+                ((INL NoneV : value + exception), am', rqs))
+             (EL i s.vs_requests) (EL i s'.vs_requests)` by
+            (qpat_x_assum `!n. _ ==> request_agree_except _ _ _`
+               (qspec_then `i` mp_tac) >>
+             impl_tac >- fs[] >>
+             simp[request_agree_except_def, accounts_agree_except_def,
+                  transient_agree_except_def,
+                  vyperLoweringCorrectTheory.external_call_dead_def]) >>
+          `cx = initial_evaluation_context am'.sources am'.layouts cx.txn NONE` by
+            simp[Abbr`cx`, initial_evaluation_context_def] >>
+          drule_all request_agree_dead_trans >> simp[]) >>
       rename1 `INR exc` >> Cases_on `exc` >>
       gvs[deploy_venom_result_rel_def, deploy_source_exempt_def]) >>
   Cases_on `src`

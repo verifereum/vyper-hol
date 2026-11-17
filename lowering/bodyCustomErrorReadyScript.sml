@@ -61,7 +61,7 @@ QED
 
 Theorem custom_error_buffer_immutable_frame:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,cap) /\
   off + type_memory_size_list tvs <= cap ==>
   (ce.ce_is_ctor ==> !name itv iv io.

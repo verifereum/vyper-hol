@@ -4,12 +4,14 @@ Ancestors
   tuplePlaceStep stmtLowering
 
 Theorem tuple_place_compiler_head_step:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s) /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -34,27 +36,34 @@ Theorem tuple_place_compiler_head_step:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
     alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel ctx func cenv cx ee s /\
-   (?dw. eval_operand (FST r) s = SOME dw /\
+  qpat_assum `?H. valid_horizon _ _ H _` strip_assume_tac >>
+  `target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s` by
+    res_tac >>
+  `(?dw. eval_operand (FST r) s = SOME dw /\
      place_ptr_rel cenv cx s (PlaceR p) dw (FST (SND r)) (Type (EL i tys))) /\
    SND (SND r) = SOME (ValPT (EL i tys)) /\
    (!x. FST r = Var x ==> not_fresh_at sa x)` by
-    fs[loweringPostsTheory.target_post_def, exprLoweringTheory.value_type_place_def] >>
+    (qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[loweringPostsTheory.target_post_def,
+                 exprLoweringTheory.value_type_place_def] >>
+     metis_tac[]) >>
   `?loc. FST (SND r) = SOME loc /\
     (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)` by
     (Cases_on `p` >> fs[loweringPostsTheory.place_ptr_rel_def] >>
      Cases_on `b` >> fs[loweringPostsTheory.slot_loc_def]) >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> strip_tac >>
   irule tuple_place_head_step >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `valid_horizon _ _ H _` (irule_at Any) >>
   qpat_assum `eval_operand _ _ = SOME _` (irule_at Any) >>
   qpat_assum `target_pre _ _ _ _ _` (irule_at Any) >>
   simp[] >> qexistsl [`tops`, `NONE`, `loc`] >>

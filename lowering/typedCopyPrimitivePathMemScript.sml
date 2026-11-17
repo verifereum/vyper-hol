@@ -1,6 +1,7 @@
 (* Primitive typed stores: semantics and a counted path on the same witness. *)
 Theory typedCopyPrimitivePathMem
 Ancestors
+  bodyDeclZeroGasPath
   typedNormalizeFrame externalReturnNormalizeMem bodyDeclMemoryCounted
   typedCopyAgreement exprSimBufferStore exprSimAggregateChildren allocaFootprint
   exprLoweringProps exprSimProps exprSimDefs loweringPosts valueEncoding

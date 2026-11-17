@@ -1,6 +1,6 @@
 (* Selected-frame resources, derived rather than assumed at return sites. *)
 Theory externalReturnSelectedResources
-Ancestors externalReturnPackage e2eDefs externalReturnPlan externalReturnConsumerProbe externalReturnBufferlessAlloc
+Ancestors externalReturnPackage e2eDefs externalReturnPlan externalReturnConsumerProbe
   typedCopyProducer externalReturnCopyRecursive exprSimHypsDefs bodySim compileVyper compileEnv words
 
 Theorem return_selected_consumer_resources:

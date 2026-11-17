@@ -7,13 +7,16 @@ Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapCode exprPtrUnwrapCodeEdges exprSimCopy exprSimUnwrapProps exprSimUnwrap
   exprLoweringProps exprSimAlloc bodyPtrDefs loweringPosts compileEnv loweringStateRelDefs context words arithmetic finite_map
   gasSummaryComposePtr gasSummary vyperState venomState exprSimMemorySource
+  ptrSafetyTransport
 
 Theorem unwrap_code_ensure_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   compile_ensure_in_memory p.ptr_operand LocCode nb n F imm sm = (op,sb) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+  (!H. P H ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+     ghost_inv H ret cenv cx ee G tn s) /\ P H0 /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -26,31 +29,38 @@ Theorem unwrap_code_ensure_marked_read_ptr:
   nb = type_memory_size ty /\ 32*((nb+31) DIV 32) = nb /\ nb < dimword (:256) /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
   ptr_vv_ok cx (post_value_type cenv e) (Value v) (LocatedValue t p) ee G tn s /\
-  ghost_inv ret cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?H tf z.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx (Value v))
-      (ee,s,G,tn) [] (INL v) ee H tf (OK z) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+  ?HG tf z.
+    (!D. gas_marked_exec_ptr D (ctx,func) PG (read_result cx (Value v))
+           (ee,s,G,tn) [] (INL v) ee HG tf (OK z)) /\
+    (!H. P H ==>
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+       ghost_inv H ret cenv cx ee HG tf z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx ee H tf z /\
-    ptr_val_ok cx (post_value_type cenv e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
-    ghost_kept cenv es sa Gi ti s0 H tf
+    ptr_val_ok cx (post_value_type cenv e) v op HG tf z /\ ptr_buf_ok cenv e op HG z /\
+    ghost_kept cenv es sa Gi ti s0 HG tf
 Proof
-  strip_tac >> drule_all vv_post_code_source >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
+  strip_tac >>
+  `vv_post H0 ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+   ghost_inv H0 ret cenv cx ee G tn s` by metis_tac[] >>
+  drule_all vv_post_code_source >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by
+    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[vv_post_def]) >>
   `op_taint tn p.ptr_operand = {}` by fs[ptr_vv_ok_def] >>
   drule_all ensure_runtime_code_layout >> strip_tac >>
   `32*((nb+31) DIV 32) <= nb` by simp[] >>
   drule_all unwrap_runtime_code_execution >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `<| d_stor := K (K {});
+    d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`] strip_assume_tac) >>
   rename1 `copy_runtime_frame mid alloc sb z` >>
-  `expr_post ctx func cenv cx e es sa sb s0 ee v op z` by
+  `expr_post H0 ctx func cenv cx e es sa sb s0 ee v op z` by
     (irule unwrap_code_copy_endpoint_post >>
      ntac 4 (conj_tac >- simp[]) >>
      goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
      qexistsl [`SUC s.vs_inst_idx`, `root`] >> simp[]) >>
   drule_all unwrap_alloc_site_bound >> disch_tac >>
@@ -69,42 +79,65 @@ Proof
   disch_then (qspec_then `tn` strip_assume_tac) >>
   `tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm` by
     metis_tac[] >>
-  `ptr_val_ok cx (post_value_type cenv e) v op H tf z /\ ptr_buf_ok cenv e op H z` by
+  `ptr_val_ok cx (post_value_type cenv e) v op HG tf z /\ ptr_buf_ok cenv e op HG z` by
     suspend "pointer" >>
-  qexistsl [`H`, `tf`, `z with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  `!H. P H ==>
+     expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+     ghost_inv H ret cenv cx ee HG tf z` by suspend "horizons" >>
+  qexistsl [`HG`, `tf`, `z with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   rpt conj_tac
-  >- (simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
-      metis_tac[read_result_gas_obs, read_result_def, return_def])
-  >- suspend "semantic"
+  >- (gen_tac >> simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
+      conj_tac >- metis_tac[read_result_gas_obs, read_result_def, return_def] >>
+      irule gas_path_ptr_from_no_dead >> first_assum ACCEPT_TAC)
+  >- suspend "family"
   >- simp[]
   >- simp[]
-  >- suspend "ghost"
   >- suspend "value"
   >- suspend "buffer"
   >> suspend "retained"
 QED
 
-Resume unwrap_code_ensure_marked_read_ptr[semantic]:
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-    expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def, locals_kept_def] >>
-  tautLib.TAUT_TAC
+Resume unwrap_code_ensure_marked_read_ptr[horizons]:
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. P H ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ghost_inv H0 _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[vv_post_def]) >>
+  conj_tac
+  >- (irule unwrap_code_copy_endpoint_post >>
+      ntac 4 (conj_tac >- simp[]) >>
+      goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+      qexistsl [`SUC s.vs_inst_idx`, `root`] >> simp[]) >>
+  irule unwrap_code_ghost_inv >>
+  goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  goal_assum (drule_at (Pat `_ = step_prov _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `_ = step_taint _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `alloc = _`)) >>
+  qexistsl [`d`, `((nb+31) DIV 32)`, `sa`] >>
+  asm_rewrite_tac[]
 QED
 
-Resume unwrap_code_ensure_marked_read_ptr[ghost]:
-  `ghost_inv ret cenv cx ee H tf z` by
-    (irule unwrap_code_ghost_inv >>
-     goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     goal_assum (drule_at (Pat `_ = step_prov _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `_ = step_taint _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `alloc = _`)) >>
-     qexistsl [`d`, `((nb+31) DIV 32)`, `sa`] >>
-     asm_rewrite_tac[]) >>
-  qpat_x_assum `ghost_inv ret cenv cx ee H tf z` mp_tac >>
+Resume unwrap_code_ensure_marked_read_ptr[family]:
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. P H ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  conj_tac
+  >- (qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
+        expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def,
+        locals_kept_def] >>
+      tautLib.TAUT_TAC) >>
+  qpat_x_assum `ghost_inv H ret cenv cx ee HG tf z` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
     lookup_var_def] >> Cases_on `ret`
@@ -120,12 +153,12 @@ Resume unwrap_code_ensure_marked_read_ptr[pointer]:
   `!i. w2n d <= i /\ i < w2n d+nb ==> i NOTIN tf.t_mem` by
     (qpat_x_assum `tf.t_mem = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `op = Var root` by metis_tac[] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[] >> disch_tac >> asm_rewrite_tac[] >>
   irule clean_buffer_pointer_posts >>
   (conj_tac >- metis_tac[]) >>
   (reverse conj_tac >-
-    (goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)))) >>
+    (goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)))) >>
   qexistsl [`nb`, `ty`, `d`] >> simp[] >> metis_tac[]
 QED
 
@@ -144,7 +177,7 @@ QED
 Resume unwrap_code_ensure_marked_read_ptr[retained]:
   irule unwrap_code_retained_post >>
   (conj_tac >- simp[]) >>
-  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
   goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>

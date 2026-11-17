@@ -40,7 +40,8 @@ QED
 Theorem activated_ExtCall_consumes_counterexample:
   eval_expr empty_evaluation_context counter_expr counter_state =
     (INR (Error (RevertData [])),
-     counter_state with <|outcomes := SOME []; requests := [counter_request]|>) /\
+     counter_state with <|outcomes := SOME []; requests := [counter_request];
+       storage_trace := [StorageOutcome counter_request counter_outcome]|>) /\
   (SND (eval_expr empty_evaluation_context counter_expr counter_state)).outcomes <>
     counter_state.outcomes /\
   (SND (eval_expr empty_evaluation_context counter_expr counter_state)).requests =

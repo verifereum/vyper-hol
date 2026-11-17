@@ -1,8 +1,9 @@
 Theory assignPlacePhysicalBytes
 Ancestors
   immutableDeployPhysicalSource assignPlaceBytesStore exprSimTypedAlloc
-  valueCopyBytes loweringPosts exprSimHyps placeRelayoutBounds
-Libs monadsyntax
+  valueCopyBytes loweringPosts exprSimHyps placeRelayoutBounds vyperStorageFootprint
+  vyperStoragePlaceObserved
+Libs monadsyntax horizonTypeLib
 
 (* Original source evaluation supplies physical typing; the current rebased
    post supplies representation and provenance after the pure target walk. *)
@@ -16,25 +17,33 @@ Theorem assign_place_physical_bytes_storage:
   expr_body_pre cenv cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,er) /\
   type_widens_to env.type_defs (expr_type e) dty /\
-  expr_post ctx func cenv cx e ers si sa s0 ee v src s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e ers si sa s0 ee v src s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   eval_operand dst s = SOME k /\
   place_ptr_rel cenv cx s (PlaceR p) k (SOME loc) (Type dty) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
   expr_sim_inv cenv cx env' ee /\ local_ptrs_reserved cenv sa /\
-  storage_place_region cx p /\ stmt_state_rel ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
     alloca_frame cenv ee sa s cenv ff t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e ers si sa s0 ee v src s` by metis_tac[] >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by fs[expr_post_def] >>
   drule_all immutable_rhs_physical_typed >> strip_tac >>
   `type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty` by
     metis_tac[immutable_rhs_physical_widens] >>
@@ -54,7 +63,7 @@ Proof
   `val_footprint stv v = val_footprint ptv v` by
     metis_tac[bytestring_val_footprint_eq] >>
   `w2n sw + val_footprint ptv v < dimword (:256)` by
-    (irule expr_val_at_bound >>
+    (irule (at_horizon_named "H" expr_val_at_bound) >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      simp[is_bytestring_word_type] >> goal_assum (drule_at Any) >> simp[]) >>
   `type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e)` by
@@ -66,6 +75,8 @@ Proof
        mp_tac expr_body_pre_relayout_source_bound >> simp[] >> metis_tac[]) >>
   fs[] >> irule assign_place_bytes_storage_run >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[]
+  (conj_tac >- (qexists_tac `env'` >> simp[])) >>
+  qexistsl_tac [`dst`, `dty`, `k`, `loc`, `p`, `src`, `src_loc`, `stv`,
+    `lowered_value_type cenv e`, `sw`, `v`] >>
+  simp[] >> metis_tac[expr_post_def]
 QED

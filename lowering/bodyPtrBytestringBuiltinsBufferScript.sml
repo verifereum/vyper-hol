@@ -9,7 +9,7 @@ Ancestors
 
 Theorem compile_alloc_buffer_counted_edge_covers:
   compile_alloc_buffer n sa = (buf,sb) /\ buf.buf_operand = Var out /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -45,7 +45,7 @@ QED
 (* The resource interface supplies successful execution; the counted edge
    retains its ghost endpoint rather than erasing the allocation step. *)
 Theorem compile_alloc_buffer_expr_counted:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
   fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\
   compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
@@ -67,12 +67,12 @@ Theorem compile_alloc_buffer_expr_counted:
     (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn1 p u k) /\
     (!m. mem_agree_outside tn1.t_mem u.vs_memory m ==>
       val_in_memory tv v (w2n w) m) /\
-    (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 u)
+    (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn1 u)
 Proof
   strip_tac >>
   drule_all compile_alloc_buffer_expr_resources >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[expr_post_def] >>
   qpat_x_assum `i = _` SUBST_ALL_TAC >>
   drule_all compile_alloc_buffer_counted_edge_covers >> strip_tac >>
   qexistsl_tac [`out`, `s1`, `G1`, `tn1`] >> gvs[]
@@ -133,7 +133,7 @@ QED
    before operand evaluation, as required by adhoc slice allocation. *)
 Theorem compile_alloc_buffer_counted:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -146,7 +146,7 @@ Theorem compile_alloc_buffer_counted:
     gas_path_ptr_edge D 0 ctx func PG G tn s 0 G1 tn1
       (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
     ptr_covers G1 tn1 out (u with vs_inst_idx := SUC s.vs_inst_idx) n /\
-    stmt_state_rel ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (?a. FLOOKUP u.vs_allocas sa.cs_next_id = SOME (a,n) /\
       a+n < dimword (:256) /\ lookup_var out u = SOME (n2w a) /\
@@ -233,7 +233,7 @@ QED
 
 Theorem compile_slice_out_buf_counted:
   compile_slice_out_buf n sa = ((root,data),sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   32 <= n /\ n < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -263,7 +263,7 @@ Theorem compile_slice_out_buf_counted:
       op_taint tn2 (Var x) = op_taint tn (Var x)) /\
     (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
       ptr_covers G2 tn2 x t k) /\
-    stmt_state_rel ctx func cenv cx es t /\ t.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es t /\ t.vs_memory = s.vs_memory /\
     (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
       eval_operand op t = eval_operand op s /\
       op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op) /\
@@ -351,7 +351,7 @@ Resume compile_slice_out_buf_counted[frame]:
     (rpt strip_tac >> simp[ptr_covers_def] >> fs[ptr_covers_def]) >>
   `not_local_ptr cenv es.scopes p` by
     (fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_assum `t = _` SUBST1_TAC >> simp[stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_update_var >> simp[]) >>
   `t.vs_memory = s.vs_memory` by simp[Abbr `t`, Abbr `uh`, update_var_def] >>

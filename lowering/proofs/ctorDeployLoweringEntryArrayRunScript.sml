@@ -297,7 +297,7 @@ Proof
   drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
   simp[w2n_n2w] >> disch_tac >>
   drule_all deploy_ctor_array_observation_backedge >>
-  disch_then (qspec_then `hdr` assume_tac) >>
+  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   qexists `jump_to hdr (mstore slot (n2w (SUC j))
     (update_var (STRING #"%" (toString nv)) (n2w (SUC j)) s))` >>
   conj_tac >- (fs[] >> NO_TAC) >>
@@ -863,7 +863,7 @@ Proof
     eval_operand_def, Excl "enc_def"]
 QED
 
-Theorem deploy_ctor_array_scratch_enlarge[local]:
+Theorem deploy_ctor_array_scratch_enlarge:
  small SUBSET ids /\ ctor_actual_scratch func small D N final /\
  abi_encoder_registered_effect (ctor_actual_sites func small) regions initial final /\
  ctor_actual_scratch func ids D N initial ==>

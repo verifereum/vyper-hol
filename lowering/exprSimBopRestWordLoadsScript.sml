@@ -64,7 +64,7 @@ Proof
 QED
 
 Theorem rest_word_vv_memory_bound:
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
   post_value_type cenv e = ArrayT et bd /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
@@ -74,14 +74,14 @@ Theorem rest_word_vv_memory_bound:
    w2n w + type_memory_size tv <= s.vs_alloca_next)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   `s.vs_alloca_next < dimword (:256)` by
     (fs[stmt_state_rel_def, alloca_room_def] >> decide_tac) >>
   `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
   `local_ptrs_rel func cenv es'.scopes s` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
   Cases_on `vv` >>
@@ -203,7 +203,7 @@ Proof
 QED
 
 Theorem rest_word_array_immutable_load:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\
@@ -223,7 +223,7 @@ Proof
 QED
 
 Theorem rest_word_vv_memory_offset:
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
   post_value_type cenv e = ArrayT ty bd /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et bd) /\
@@ -280,7 +280,7 @@ Proof
 QED
 
 Theorem rest_word_array_immutable_load_path:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\
@@ -336,7 +336,7 @@ QED
 
 
 Theorem rest_word_array_immutable_header:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty (Dynamic cap)) (Value (ArrayV av)) w es s /\
   evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) ==>
@@ -386,7 +386,7 @@ Proof
 QED
 
 Theorem rest_word_array_immutable_header_path:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty (Dynamic cap)) (Value (ArrayV av)) w es s /\
   evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\

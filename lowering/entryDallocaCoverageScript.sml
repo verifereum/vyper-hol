@@ -8,7 +8,9 @@ Theorem context_without_dalloca_fmp_room:
     ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)) /\
   MEM func ctx.ctx_functions ==> fmp_room ctx func s
 Proof
-  strip_tac >> simp[fmp_room_def] >> metis_tac[]
+  rw[fmp_room_def, ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
+  fs[EVERY_MEM] >>
+  metis_tac[]
 QED
 
 (* DALLOCA coverage ledger (diagnostic, not a compiler exclusion theorem).

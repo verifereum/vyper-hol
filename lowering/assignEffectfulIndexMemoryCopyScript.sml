@@ -14,7 +14,7 @@ Theorem assign_effectful_memory_copy_path:
   type_memory_size tv < dimword (:256) /\ type_memory_size tv <= N /\
   FLOOKUP s.vs_allocas aid = SOME (w2n d,N) /\
   origin.cs_next_id <= aid /\ aid < sa.cs_next_id /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     b+sz <= w2n d \/ w2n d+N <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -30,7 +30,7 @@ Theorem assign_effectful_memory_copy_path:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     val_in_memory tv v (w2n d) t.vs_memory /\
-    stmt_state_rel ctx func ce cx es t /\
+    stmt_state_rel H ctx func ce cx es t /\
     eval_operand dst t = SOME d /\
     FLOOKUP t.vs_allocas aid = SOME (w2n d,N) /\
     (!name b sz. local_region ce es.scopes t name b sz ==>
@@ -39,7 +39,9 @@ Theorem assign_effectful_memory_copy_path:
     t.vs_allocas = s.vs_allocas /\
     alloca_frame ce es origin s ce es t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `compile_copy_memory dst src (type_memory_size tv) sa = ((),sb)` by
@@ -49,7 +51,7 @@ Proof
   `val_in_memory tv v (w2n d) t.vs_memory` by
     (irule valueEncodingPropsTheory.val_in_memory_relocate >>
      simp[] >> qexistsl_tac [`s.vs_memory`, `type_memory_size tv`, `w2n w`] >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es t` by
+  `stmt_state_rel H ctx func ce cx es t` by
     (irule aggregate_store_control_frame >>
      qexistsl_tac [`w2n d`, `N`, `s`, `sa`] >> gvs[] >>
      rpt conj_tac
@@ -69,5 +71,5 @@ Proof
   `eval_operand dst t = SOME d` by
     (Cases_on `dst` >> gvs[eval_operand_def] >>
      gvs[venom_state_component_equality]) >>
-  qexists_tac `t` >> gvs[] >> metis_tac[]
+  qexists_tac `t` >> gvs[venom_state_component_equality] >> metis_tac[]
 QED

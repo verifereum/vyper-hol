@@ -22,7 +22,7 @@ QED
 
 Theorem abi_encode_fresh_zero_input_supplier[local]:
   expr_val_rel cx ty v op s /\ expr_val_at ce cx ty sa st es v op s /\
-  stmt_state_rel ctx func ce cx es s /\ s.vs_alloca_next <= lo /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\ s.vs_alloca_next <= lo /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   vyper_to_abi (get_tenv cx) ty v = SOME av /\
   abi_enc_plan (get_tenv cx) ty (type_to_abi_enc_info sf ce ty) /\
@@ -54,7 +54,7 @@ QED
 
 Theorem abi_encode_args_zero_input_representatives:
   !args vs ops cavs.
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live next) ops /\ s.vs_alloca_next <= lo /\
   LIST_REL (\(e,v) av. ?tv.
     evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
@@ -84,7 +84,7 @@ Proof
     metis_tac[abi_args_post_lengths] >>
   Cases_on `vs` >> Cases_on `ops` >> Cases_on `cavs` >> gvs[] >>
   gvs[abi_args_post_cons] >>
-  `stmt_state_rel ctx func ce cx es' s` by gvs[abi_args_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' s` by gvs[abi_args_post_def] >>
   `type_memory_bytes ce (lowered_value_type ce h) < dimword (:256)` by simp[] >>
   drule_all abi_encode_fresh_zero_input_supplier >>
   disch_then (qspec_then `hi` strip_assume_tac) >>
@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem abi_encode_args_zero_input_supplier:
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live next) ops /\ s.vs_alloca_next <= lo /\
   LIST_REL (\(e,v) av. ?tv.
     evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\

@@ -7,7 +7,7 @@ Theorem convert_alloc_header_counted_probe:
   compile_alloc_buffer n sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
   fn_has_code sa sb func /\ ~block_is_terminated sa /\
-  stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+  stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
   32 <= n /\ n < dimword (:256) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

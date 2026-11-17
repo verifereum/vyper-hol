@@ -23,8 +23,8 @@ Theorem compile_bytes_ifexp_post_frag:
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
   frag_exec ctx sa sb
-    (\s. vv_post ctx func ce cx e es origin sa s0 ee tvv vv s)
-    (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+    (\s. vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s)
+    (\q. expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q) R
 Proof
   strip_tac >>
@@ -65,7 +65,7 @@ Resume compile_bytes_ifexp_post_frag[allocation]:
   markerLib.RESUME_TAC >>
   drule_all buffer_alloc_provenance >> strip_tac >>
   irule frag_exec_pointwise >> qx_gen_tac `s` >> simp[] >> strip_tac >>
-  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   drule_all (alloc_buffer_source_frag_labels |> SPEC_ALL |>
     Q.INST [`src` |-> `Lit 0w`, `a` |-> `0w`] |> SIMP_RULE (srw_ss()) [eval_operand_def]) >>
@@ -89,25 +89,25 @@ Resume compile_bytes_ifexp_post_frag[allocation]:
          qexistsl [`sa`, `ee.scopes`, `u`] >> simp[] >> metis_tac[]) >>
      strip_tac >> irule local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
-  `vv_post ctx func ce cx e es origin sm s0 ee tvv vv u` by
+  `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl [`s`, `sa`] >> simp[] >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
      Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
   `val_wf tvt v` by metis_tac[cj 1 value_has_type_val_wf] >>
   irule frag_exec_seq >>
-  qexistsl [`\r. expr_post ctx func ce cx e ee
+  qexistsl [`\r. expr_post H ctx func ce cx e ee
     (origin with cs_next_var := sm.cs_next_var) sn u ee v src r`, `sn`] >> simp[] >>
   conj_tac
   >- (irule unwrap_value_rebased_sim >> simp[] >> metis_tac[]) >>
   irule frag_exec_pointwise >> qx_gen_tac `r` >> simp[] >> strip_tac >>
-  `expr_post ctx func ce cx e es origin sn s0 ee v src r` by
+  `expr_post H ctx func ce cx e es origin sn s0 ee v src r` by
     (irule vv_post_reattach_expr_post >> simp[] >>
      qexistsl [`sm`, `tvv`, `u`, `vv`] >> simp[] >> decide_tac) >>
   `lookup_var x u = SOME w` by gvs[eval_operand_def] >>
   `lookup_var x r = SOME w` by metis_tac[expr_post_rebased_lookup] >>
   `!aid entry. FLOOKUP u.vs_allocas aid = SOME entry ==>
     FLOOKUP r.vs_allocas aid = SOME entry` by fs[expr_post_def] >>
-  `stmt_state_rel ctx func ce cx ee r` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee r` by fs[expr_post_def] >>
   `!n b k. local_region ce ee.scopes r n b k ==>
     local_region ce ee.scopes u n b k` by
     (rpt strip_tac >> irule local_region_frame >>
@@ -121,7 +121,7 @@ Resume compile_bytes_ifexp_post_frag[allocation]:
   gvs[] >>
   irule bytestring_store_allocated_frag_frame >>
   goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
   qexistsl [`type_memory_size tvt`, `sa.cs_next_id`, `w`, `v`, `sw`] >> simp[eval_operand_def] >>
   conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[not_fresh_at_mono]) >>
@@ -144,7 +144,7 @@ Resume compile_bytes_ifexp_post_frag[post]:
   markerLib.RESUME_TAC >> qx_gen_tac `q` >> strip_tac >>
   `q.vs_allocas = r.vs_allocas` by fs[venom_state_component_equality] >>
   drule_all buffer_alloc_code >> strip_tac >>
-  qpat_assum `expr_post _ _ _ _ _ es origin sn s0 _ _ _ r`
+  qpat_assum `expr_post H _ _ _ _ _ es origin sn s0 _ _ _ r`
     (mp_then Any mp_tac allocated_result_expr_post_frame) >>
   disch_then irule >> simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
   conj_tac
@@ -154,7 +154,7 @@ Resume compile_bytes_ifexp_post_frag[post]:
   conj_tac
   >- (rpt strip_tac >> irule local_region_frame_fwd >>
       qexistsl [`s0`, `origin`, `es.scopes`] >>
-      qpat_assum `expr_post _ _ _ _ _ es origin sn s0 _ _ _ r`
+      qpat_assum `expr_post H _ _ _ _ _ es origin sn s0 _ _ _ r`
         (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   `eval_operand (Var p) q = SOME w` by

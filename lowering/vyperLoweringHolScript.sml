@@ -1,20 +1,27 @@
 (* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
+  e2eCodeFrame
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
   bodyMemStorageCopyStage
+  createCtorTupleExecution dallocaBlueprintArgs
+  dallocaCreateCopy dallocaCreateGeometry
+  loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
+  loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
+  bodyPtrMakeArrayMemoryFrame
+  fragGasOrigin fragGasOriginPtrSafeUpto
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain bodySimMain ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimMain bodySimMain bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -30,7 +37,7 @@ Ancestors
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
-  e2eDeployFrame
+  e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs
@@ -58,4 +65,11 @@ Ancestors
   asmOptOwnPruneUnused
   asmOptFinalizerOwn
   asmOptOwnPruneJumps
+  (* reached here instead of as holproject.toml roots *)
+  targetPtrFacts bodyFullTarget
+  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
+  extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
+  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* providers awaiting their consumers *)
+  sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa

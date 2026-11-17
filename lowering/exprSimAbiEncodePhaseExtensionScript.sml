@@ -22,10 +22,10 @@ QED
    establish it relative to their original state, not just the cleaned input. *)
 Theorem abi_encode_lift_clean_observation:
   abi_encoder_extend_sim ctx obs (drop_fresh st s) u /\
-  abi_encode_staged_observation c f ce cx vs origin out mid outsz p at av initial u /\
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) c f ce cx vs origin out mid outsz p at av initial u /\
   abi_encode_exec_frame obs initial u ==>
   ?v. abi_decode_sim ctx obs s v /\ abi_decoder_vars_extend s.vs_vars u v /\
-    abi_encode_staged_observation c f ce cx vs origin out mid outsz p at av initial v /\
+    abi_encode_staged_observation H c f ce cx vs origin out mid outsz p at av initial v /\
     abi_encode_exec_frame obs initial v
 Proof
   strip_tac >> drule abi_encode_extend_clean_input >> strip_tac >>

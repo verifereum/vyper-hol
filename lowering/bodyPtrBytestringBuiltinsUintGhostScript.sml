@@ -24,7 +24,7 @@ QED
 
 Theorem clean_mstore_ghost_inv:
   !d cenv cx es G tn s id dst value a w func inst q b asz.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     local_ptrs_rel func cenv es.scopes s /\
     alloca_inv s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
@@ -33,7 +33,7 @@ Theorem clean_mstore_ghost_inv:
     b <= w2n a /\ w2n a+32 <= b+asz /\
     lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
     op_taint tn value = {} ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id MSTORE [Var dst;value] []) (mstore (w2n a) w s))
       (step_taint (mk_inst id MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn)
       (mstore (w2n a) w s)

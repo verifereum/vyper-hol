@@ -8,14 +8,14 @@ Ancestors
 (* The condition reads its snapshot length from a register; neither instruction
    accesses memory.  The explicit successor also exposes the register frame. *)
 Theorem dynarray_condition_boundary_mem:
-  !ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond_lbl st
+  !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl st
    k es cc n lv dv j1 j2 exit_lbl stmts_lbl.
   lookup_block cond_lbl func.fn_blocks =
     SOME <| bb_label := cond_lbl;
             bb_instructions :=
               [mk_inst j1 EQ [Var idx; Var lv] [dv];
                mk_inst j2 JNZ [Var dv; Label exit_lbl; Label stmts_lbl] []] |> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst cond_lbl st k es cc /\
   n = LENGTH vs /\ n < dimword (:256) /\
   lookup_var lv cc = SOME (n2w n) /\
@@ -24,7 +24,7 @@ Theorem dynarray_condition_boundary_mem:
   fn_inst_ids_distinct func /\ alloca_history func cc ==>
   let next = jump_to (if k = n then exit_lbl else stmts_lbl)
                (update_var dv (bool_to_word (k = n)) cc) in
-    array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
       ainst (if k = n then exit_lbl else stmts_lbl) st k es next /\
     gas_path_mem ctx func cc 0 (OK next) /\
     (!x. x <> dv ==> lookup_var x next = lookup_var x cc) /\
@@ -43,9 +43,10 @@ QED
 Resume dynarray_condition_boundary_mem[invariant]:
   fs[array_loop_inv_def] >>
   rename1 `eval_operand saved_base cc = SOME array_base` >>
-  `stmt_state_rel ctx func cenv cx es
-     (update_var dv (bool_to_word (k = n)) cc)` by
-    (irule stmt_state_rel_update_var >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es
+       (update_var dv (bool_to_word (k = n)) cc)` by
+    (rpt strip_tac >> irule stmt_state_rel_update_var >> simp[]) >>
   `eval_operand saved_base (update_var dv (bool_to_word (k = n)) cc) = SOME array_base` by
     (irule eval_operand_update_other_local >> simp[]) >>
   simp[array_loop_inv_def, stmt_state_rel_jump_to, ret_pc_ok_jump_to] >>

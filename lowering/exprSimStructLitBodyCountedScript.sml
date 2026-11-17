@@ -7,29 +7,38 @@ Ancestors
   exprLoweringProps exprLowering compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   gasOutcome gasSummary gasContext fragGasMode fragGasPath fragGasSeq fragExec
   vyperInterpreter vyperState vyperAST
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 (* Keep the constructor allocation available to enclosing projections. *)
 Theorem compile_struct_lit_body_value_owned:
-  !ctx func cenv cx ann nsid fields env ty es sa vv sb s0.
+  !ctx func cenv cx ann nsid fields env ty es sa vv sb s0 st0.
     exprs_case F ctx func cenv cx (MAP SND fields) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_body_pre cenv cx env (StructLit ann nsid fields) es /\ compile_expr cenv ty (StructLit ann nsid fields) sa = (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_expr cx (StructLit ann nsid fields)) expr_vv_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (StructLit ann nsid fields)) (es,s0)
-      (\res ee s. ?rv. res = INL rv /\
-        vv_post ctx func cenv cx (StructLit ann nsid fields) es sa sb s0 ee rv vv s /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx (StructLit ann nsid fields)) (es,s0)
+      (\H res ee s. ?rv. res = INL rv /\
+        vv_post H ctx func cenv cx (StructLit ann nsid fields) es sa sb s0 ee rv vv s /\
         (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[storage_trace_domain_def]) >>
   drule compile_struct_literal_inv >> strip_tac >>
   drule_all struct_literal_evaluated_layout >> strip_tac >>
   drule_all struct_literal_lookup_types >> strip_tac >>
@@ -48,7 +57,13 @@ Proof
           type_memory_bytes_def, wordsTheory.dimword_def] >> decide_tac) >>
   qpat_x_assum `type_memory_size_list tvs < _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule_all buffer_alloc_counted >> strip_tac >>
+  drule buffer_alloc_counted_horizons >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+  disch_then (qspecl_then [`s0`, `func`, `ctx`, `ce`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es t` by simp[] >>
+  `local_ptrs_rel func ce es.scopes t` by
+    metis_tac[stmt_state_rel_def, state_rel_def] >>
   `!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
       expr_body_pre ce cx env e st` by metis_tac[expr_body_pre_struct_field] >>
   `ce.ce_is_ctor ==> !name itv iv io.
@@ -63,13 +78,13 @@ Proof
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = _`)) >>
-  disch_then (qspecl_then [`env`, `es`, `func`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`env`, `es`, `func`, `ctx`, `st0`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   suspend "outcome"
 QED
 
 Resume compile_struct_lit_body_value_owned[immutable]:
-  qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+  qpat_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
   pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   fs[immutable_alloca_sep_def] >> rpt strip_tac >>
@@ -94,20 +109,20 @@ Resume compile_struct_lit_body_value_owned[outcome]:
   dxrule counted_outcome_normal_facts >>
   disch_then (mp_tac o SIMP_RULE (std_ss ++ boolSimps.CONJ_ss) [GSYM LEFT_EXISTS_AND_THM, GSYM CONJ_ASSOC]) >>
   strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ Q _` >>
-  `(\res ee r. ?vs. res = INL vs /\ Q (INL vs) ee r) = Q` by
+  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ Q _` >>
+  `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q` by
     simp[FUN_EQ_THM, Abbr `Q`] >>
-  qpat_assum `(_ : (value list + exception) -> evaluation_state -> venom_state -> bool) = Q`
+  qpat_assum `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q`
     (fn eqth => qspecl_then
-      [`\vs ee r. Q (INL vs) ee r`,
-       `\res ee r. expr_exit res r`,
+      [`\H vs ee r. Q H (INL vs) ee r`,
+       `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`,
        `\vs. Value (StructV (ZIP (MAP FST fields,vs)))`]
       (drule o REWRITE_RULE [GSYM AND_IMP_INTRO, eqth] o BETA_RULE)
       (Q.GENL [`P`, `R`, `f`] counted_outcome_map_values)) >>
   impl_tac >- simp[Abbr `Q`] >>
   disch_then (qspec_then `fields` assume_tac) >>
-  qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
-  drule_at (Pat `gas_outcome _ _ _ _ _ _ _`) counted_outcome_conseq >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
+  drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`) counted_outcome_conseq >>
   disch_then irule >>
   simp[Abbr `Q`] >> rpt gen_tac >> strip_tac >>
   qexists_tac `Value (StructV (ZIP (MAP FST fields,vs)))` >>
@@ -202,8 +217,7 @@ Resume compile_struct_lit_body_value_owned[owned]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom >> simp[]) >>
   rpt strip_tac >>
   `local_region ce es.scopes t n lb lsz` by
-    (`local_ptrs_rel func ce es.scopes t` by fs[stmt_state_rel_def, state_rel_def] >>
-     drule exprSimPropsTheory.local_region_frame >>
+    (drule exprSimPropsTheory.local_region_frame >>
      disch_then (qspec_then `sm` mp_tac) >>
      simp[] >> metis_tac[]) >>
   `local_region ce es.scopes s0 n lb lsz` by metis_tac[] >>

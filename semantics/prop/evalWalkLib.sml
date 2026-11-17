@@ -40,6 +40,30 @@ fun HEAD_CASE_TAC (g as (old,_)) =
     in simp_tac bool_ss (map ASSUME fresh) (asl,w) end
   in (BasicProvers.PURE_TOP_CASE_TAC >> simplify) g end;
 
+(* Consume execution guards before matching a frame conclusion.  The caller
+   supplies its domain-specific normalization; successful bind facts fix state
+   variables which need not occur in the conclusion. *)
+fun FORWARD_IH_TAC {normalise = norm} (asl,w) =
+  let
+    fun canonical th = PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] (norm th)
+    val facts = List.concat (map (CONJUNCTS o canonical o ASSUME)
+      (List.filter (not o is_forall) asl))
+    val intact = List.concat (map (CONJUNCTS o canonical o ASSUME) asl)
+    fun consume raw g =
+      let val th = SPEC_ALL (canonical raw)
+      in
+        if not (is_imp (concl th)) then MATCH_ACCEPT_TAC th g
+        else
+          let val guard = fst (dest_imp (concl th))
+              val refs = if is_eq guard then
+                [REFL (rhs guard), REFL (lhs guard)] else []
+              val next = List.mapPartial (total (MATCH_MP th)) (facts @ refs)
+              val exact = List.filter (aconv guard o concl) intact
+          in FIRST (map (fn fact => consume (MP th fact)) exact @
+                    map consume next) g end
+      end
+  in FIRST (map (consume o ASSUME) (List.filter is_forall asl)) (asl,w) end;
+
 (* Close the goal with an induction hypothesis, discharging its guards from
    the bind results in the assumptions.  An implication for which stop holds
    is the property itself, not a guard; normalise is applied to the

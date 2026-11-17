@@ -69,14 +69,18 @@ Theorem oracle_initial_state_inert_modes:
         (Call NoneT (Send F)
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
-        (INL (Value NoneV), st)) /\
+        (INL (Value NoneV), st with storage_trace := st.storage_trace ++
+          [StorageBackend st.accounts st.tStorage])) /\
   (let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
     eval_expr empty_evaluation_context
       (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) st =
       (INR (Error (TypeError "ExtCall operands")), st))
 Proof
   simp[LET_THM] >> conj_tac
-  >- (strip_tac >> irule oracle_zero_send_inert >>
+  >- (strip_tac >> gvs[] >>
+      mp_tac (Q.INST [`st` |->
+        `initial_state initial_machine_state scs with
+          <|outcomes := NONE; requests := rqs|>`] oracle_zero_send_inert) >>
       simp[initial_state_def, initial_machine_state_def]) >>
   simp[oracle_empty_extcall_inert]
 QED

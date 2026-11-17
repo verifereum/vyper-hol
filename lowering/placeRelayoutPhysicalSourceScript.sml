@@ -5,7 +5,7 @@ Ancestors
   exprLowering context compileEnv vyperInterpreter vyperState
 
 Theorem strict_widened_vv_physical_source:
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value v) vv s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) vv s /\
   compile_expr cenv ty e si = (vv,sj) /\
   post_value_type cenv e <> expr_type e /\
   ~is_word_type (post_value_type cenv e) /\

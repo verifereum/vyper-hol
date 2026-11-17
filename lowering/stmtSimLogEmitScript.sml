@@ -22,8 +22,8 @@ Proof
 QED
 
 Theorem log_append_stmt_state_rel:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with logs := es.logs ++ [ev])
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx (es with logs := es.logs ++ [ev])
     (s with vs_logs := s.vs_logs ++ [ev])
 Proof
   simp[stmt_state_rel_def, state_rel_def, logs_rel_eq,
@@ -45,9 +45,9 @@ Theorem compile_log_emit_run:
   LENGTH topic_ops < dimword (:256) /\
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel ctx func cenv cx es s /\ ~cx.txn.is_static ==>
+  stmt_state_rel H ctx func cenv cx es s /\ ~cx.txn.is_static ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := topics;
            data := mem_bytes_at (w2n off) (w2n sz) s.vs_memory |>]) t /\
@@ -84,7 +84,7 @@ Theorem compile_log_emit_static_run:
       ((),sb) /\
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel ctx func cenv cx es s /\ cx.txn.is_static ==>
+  stmt_state_rel H ctx func cenv cx es s /\ cx.txn.is_static ==>
   run_inst_seq (emitted_insts sa sb) s =
     Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof

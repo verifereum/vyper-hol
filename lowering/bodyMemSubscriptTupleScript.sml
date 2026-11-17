@@ -7,14 +7,14 @@ Ancestors
   exprLowering exprLoweringProps compileEnv context vyperAST vyperInterpreter
   vyperState vyperTypeExprSoundness fragExec exprSimProps valueTypingMemoryProps
   valueEncoding valueEncodingDefs valueEncodingProofs exprSimAttributeProps exprSimAttributeFields exprSimAttribute
-  vyperTyping words list rich_list
+  vyperTyping words list rich_list emitHelperProps venomState
 
 Theorem tuple_select_mem_source[local]:
   expr_body_pre cenv cx env
     (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
   expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
   post_value_type cenv obj = TupleT tys /\ k < LENGTH tys /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
   eval_operand (vv_operand bvv) t = SOME w /\
   eval_expr cx obj (es with gas_obs := gs) = (INL tv, ee) ==>
   ?tvs vs tv'.
@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem tuple_selected_store_bound_mem[local]:
-  vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sb s0 ee tv'
+  vv_post H ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sb s0 ee tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u /\
   vv_store_bound cx (TupleT tys) lt ee tv bvv t /\
   expr_sim_inv cenv cx env es /\
@@ -106,8 +106,9 @@ Theorem tuple_step_mem[local]:
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand bvv; Lit (n2w (tuple_offset cenv tys (vv_loc bvv) k))]
     sm = (dst, sb) /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
   vv_store_bound cx (TupleT tys) (lowered_value_type cenv obj) ee tv bvv t /\
+  eval_operand (vv_operand bvv) t = SOME w /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func t /\
   s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
@@ -116,7 +117,10 @@ Theorem tuple_step_mem[local]:
     (!tail. select_result cx (TupleT tys) tv (ValueSubscript (IntV (&k)))
       (ee with gas_obs := tail) = (INL tv', ee with gas_obs := tail)) /\
     gas_path_mem ctx func t 0 (OK u) /\
-    vv_post ctx func cenv cx (Subscript (EL k tys) obj (Literal ity (IntL (&k))))
+    u = (update_var (STRING #"%" (toString sm.cs_next_var))
+          (w + n2w (tuple_offset cenv tys (vv_loc bvv) k))) t
+          with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    vv_post H ctx func cenv cx (Subscript (EL k tys) obj (Literal ity (IntL (&k))))
       es sa sb s0 ee tv' (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u /\
     vv_store_bound cx (EL k tys) (EL k tys) ee tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u /\
@@ -125,24 +129,38 @@ Theorem tuple_step_mem[local]:
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
-  `?w. eval_operand (vv_operand bvv) t = SOME w` by
-    (gvs[vv_post_def] >> Cases_on `bvv` >>
-     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
   drule_all tuple_select_mem_source >> strip_tac >>
-  drule_all attr_add_counted_post >> strip_tac >>
-  rename1 `gas_path_mem ctx func t 0 (OK u)` >>
+  drule_all buffer_emit_add_run >> strip_tac >>
+  drule_all attr_add_run_post >> strip_tac >>
+  `alloca_inv t` by fs[vv_post_def, stmt_state_rel_def] >>
+  drule_all attr_add_history >> strip_tac >>
+  drule_all attr_add_gas_path >> strip_tac >>
+  `q.vs_current_bb = sb.cs_current_bb` by
+    (drule emit_op_extends >> strip_tac >>
+     gvs[same_blocks_def, update_var_def]) >>
+  qabbrev_tac `u = q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `vv_post H ctx func cenv cx obj es sa sb s0 ee tv bvv u /\
+   eval_operand (vv_operand bvv) u = SOME w /\
+   eval_operand dst u = SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
+   u.vs_alloca_next = t.vs_alloca_next` by
+    simp[Abbr `u`, eval_operand_def, lookup_var_def] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `vv_post ctx func cenv cx
+  `vv_post H ctx func cenv cx
     (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0 ee tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u` by
     (qpat_assum `!tail. select_result _ _ _ _ _ = _`
       (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
      irule tuple_vv_post >> simp[] >>
      conj_tac >- metis_tac[] >> qexistsl_tac [`tv`, `vs`] >> simp[]) >>
-  qexistsl_tac [`tv'`, `u`] >> simp[] >>
-  irule tuple_selected_store_bound_mem >> simp[] >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
+  `vv_store_bound cx (EL k tys) (EL k tys) ee tv'
+     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) u` by
+    (irule tuple_selected_store_bound_mem >> simp[] >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  qexistsl_tac [`tv'`, `u`] >>
+  simp[Abbr `u`, eval_operand_def, lookup_var_def] >>
+  drule_all buffer_emit_add_run >> strip_tac >> gvs[]
 QED
 
 Theorem compile_subscript_tuple_vv_sim_mem:
@@ -168,11 +186,12 @@ Proof
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ obj _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `bvv`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   simp[tuple_source] >> irule forced_vv_then_outcome >> simp[] >>
-  qexists_tac `\tv ee t.
-    vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_select] >>
+  qexists_tac `\H tv ee t.
+    vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
     vv_store_bound cx (TupleT tys) (lowered_value_type cenv obj) ee tv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -181,9 +200,23 @@ Proof
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  drule_all tuple_step_mem >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
+  `vv_post H0 ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+   vv_store_bound cx (TupleT tys) (lowered_value_type cenv obj) ee tv bvv t /\
+   t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> simp[]) >>
+  `?w. eval_operand (vv_operand bvv) t = SOME w` by
+    (gvs[vv_post_def] >> Cases_on `bvv` >>
+     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+  drule_all (Q.INST [`H` |-> `H0`] tuple_step_mem) >> strip_tac >>
   qexistsl_tac [`INL tv'`, `ee`, `OK u`] >>
-  fs[gas_marked_path_def, expr_type_def, lowered_value_type_def]
+  simp[gas_marked_path_def] >> disj1_tac >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> simp[] >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `H`] tuple_step_mem) >> strip_tac >>
+  gvs[expr_type_def, lowered_value_type_def] >>
+  metis_tac[]
 QED
 
 Theorem body_subscript_tuple_vv_mem:
