@@ -474,24 +474,6 @@ QED
 
 (* ===== Additional bound helpers for well_typed_binop_success_type ===== *)
 
-(* Int division upper bound: x / d < n implies x < n * d *)
-Theorem int_div_lt_imp[local]:
-  !x d (n:int). 0 ≤ x ∧ 0 < d ∧ x / d < n ==> x < n * d
-Proof
-  rpt strip_tac >>
-  `?xn. x = &xn` by (qexists_tac `Num x` >> fs[integerTheory.INT_OF_NUM]) >>
-  `?dn. d = &dn ∧ 0 < dn`
-    by (qexists_tac `Num d` >> fs[integerTheory.INT_OF_NUM,
-          integerTheory.INT_LT] >> intLib.ARITH_TAC) >>
-  `&dn ≠ (0:int)` by intLib.ARITH_TAC >>
-  fs[integerTheory.INT_DIV] >>
-  `0 ≤ (n:int)` by (spose_not_then assume_tac >>
-    fs[integerTheory.INT_NOT_LE] >> intLib.ARITH_TAC) >>
-  `?nn. n = &nn` by (qexists_tac `Num n` >> fs[integerTheory.INT_OF_NUM]) >>
-  fs[integerTheory.INT_LT, integerTheory.INT_MUL] >>
-  fs[arithmeticTheory.DIV_LT_X]
-QED
-
 (* TASK015: preserve the former absolute-quotient bridge and its proof text.
    The replacement below uses the signed-result test, including -2 ** 167.
 Theorem decimal_mul_word_bound[local]:
@@ -542,44 +524,6 @@ Proof
 QED
 
 *)
-
-(* Decimal Mul: the signed-result check also bounds the equivalent word quotient. *)
-Theorem decimal_mul_word_bound[local]:
-  !p. within_int_bound (Signed 168) (SGN p * (ABS p / 10000000000)) ==>
-      within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
-Proof
-  rpt strip_tac >>
-  `0 ≤ ABS p / 10000000000` by
-    (simp[integerTheory.int_div, integerTheory.INT_ABS] >>
-     Cases_on `0 ≤ p` >> simp[] >> intLib.ARITH_TAC) >>
-  `ABS p / 10000000000 < 2 ** 167 + 1` by
-    (qpat_x_assum `within_int_bound _ _` mp_tac >>
-     simp[within_int_bound_def, SGN_def] >>
-     Cases_on `p < 0` >> Cases_on `p = 0` >> simp[] >> intLib.ARITH_TAC) >>
-  `ABS p < (2 ** 167 + 1) * 10000000000` by
-    (irule int_div_lt_imp >> simp[integerTheory.INT_ABS_POS]) >>
-  `ABS p < 2 ** 255` by
-    (`(2:int) ** 167 * 10000000000 + 10000000000 < 2 ** 255` by EVAL_TAC >>
-     intLib.ARITH_TAC) >>
-  `within_int_bound (Signed 256) p` by
-    (simp[within_int_bound_def] >>
-     Cases_on `p < 0` >> fs[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
-  `w2i (i2w p : bytes32) = p` by
-    (qspecl_then [`p`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
-  `(0x2540BE400w : bytes32) ≠ 0w` by EVAL_TAC >>
-  `w2i (0x2540BE400w : bytes32) = 10000000000` by EVAL_TAC >>
-  `(i2w p : bytes32) / 0x2540BE400w = i2w (p quot 10000000000)` by
-    (drule integer_wordTheory.word_quot >>
-     disch_then (qspec_then `i2w p` mp_tac) >> simp[]) >>
-  `within_int_bound (Signed 168) (p quot 10000000000)` by
-    gvs[GSYM decimal_truncate_eq_quot] >>
-  `within_int_bound (Signed 256) (p quot 10000000000)` by
-    (qpat_x_assum `within_int_bound (Signed 168) _` mp_tac >>
-     simp[within_int_bound_def] >> intLib.ARITH_TAC) >>
-  `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000` by
-    (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
-  simp[]
-QED
 
 (* --- int_shift_right bounds machinery --- *)
 
@@ -853,8 +797,21 @@ Proof
   PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
                    vyperValueTheory.value_case_def] >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
-  gvs[CaseEq "bool", CaseEq "sum", CaseEq "option"] >>
+  TRY (qpat_x_assum `bounded_int_op _ _ = INL _`
+         (strip_assume_tac o MATCH_MP bounded_int_op_INL) >>
+       gvs[value_has_type_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `bounded_decimal_op _ = INL _`
+         (strip_assume_tac o MATCH_MP bounded_decimal_op_INL) >>
+       gvs[value_has_type_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `MAP2 ff xs ys` >>
+       qexists_tac `MAP2 ff xs ys` >>
+       simp_tac pure_ss [vyperValueTheory.value_11, LENGTH_MAP2,
+                         REFL_CLAUSE, AND_CLAUSES] >>
+       simp_tac pure_ss [arithmeticTheory.MIN_DEF] >>
+       decide_tac >> NO_TAC) >>
+  gvs[CaseEq "bool"] >> gvs[CaseEq "sum"] >> gvs[CaseEq "option"] >>
   gvs[value_has_type_def, Excl "within_int_bound_def"] >>
+  TRY (gvs[byteTheory.word_to_bytes_be_def] >> NO_TAC) >>
   (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
   TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
   (* Bounded int ops: INL gives within_int_bound *)

@@ -1,5 +1,6 @@
 Theory codegenStaticAbortEntrySim
 Ancestors
+  codegenEntryFacts
   fnStaticAbortBody fnStaticAbortSpec fnStaticAbortBoundary
   fnEntryStep fnEntryPlan fnEntryParams fnBlockStepHelpers
   codegenEntrySim codegenEntryRel codegenLabelDisciplined contextStaticAbortRel
