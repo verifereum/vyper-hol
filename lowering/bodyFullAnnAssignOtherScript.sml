@@ -320,7 +320,7 @@ Resume annassign_other_typed_full_execution[prefix]:
 QED
 
 Resume annassign_other_typed_full_execution[compose]:
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  (qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_zero_prefix >>
   qexistsl_tac [`Ga`,`entry`,`tna`] >> (conj_tac >- simp[]) >>
   drule eval_annassign_action >>
@@ -336,18 +336,36 @@ Resume annassign_other_typed_full_execution[compose]:
       qexistsl_tac [`mid`,`t`,`v`] >> simp[])
   >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  qexists_tac `childQ` >> reverse conj_tac
+  qexists_tac `childQ` >> conj_tac
   >- suspend "continuation" >>
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> rpt strip_tac >> Cases_on `res`
   >- fs[Abbr `childR`, exprSimDefsTheory.expr_exit_def] >>
   fs[Abbr `childR`, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
-  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+  gvs[stmtSimPropsTheory.expr_exit_INR_type])
 QED
 
 Resume annassign_other_typed_full_execution[continuation]:
-  FAIL_TAC "continuation"
+  (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+      mid.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+   (impl_tac >- first_assum ACCEPT_TAC) >>
+   simp[Abbr `childQ`, NoAsms] >> strip_tac >>
+   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+   disj1_tac >> qexists_tac `v` >> simp[] >>
+   suspend "success")
+QED
+
+Resume annassign_other_typed_full_execution[success]:
+  (qpat_assum `!tail. bind _ _ _ = _`
+     (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+   drule_all annassign_continuation_success >>
+   disch_then (qx_choosel_then [`sc`,`rest`] strip_assume_tac) >>
+   qmatch_asmsub_abbrev_tac `new_variable id dtv v _ = (INL (),out)` >>
+   FAIL_TAC "success resources")
 QED
 
 Finalise annassign_other_typed_full_execution
