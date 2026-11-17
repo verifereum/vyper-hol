@@ -49,6 +49,7 @@ Ancestors
   dftPacketRootedCompose
   dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketRootedPlainStop
+  dftPacketRootedSegmentStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
