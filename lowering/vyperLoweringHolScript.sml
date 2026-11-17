@@ -73,3 +73,10 @@ Ancestors
   (* providers awaiting their consumers *)
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
+  assignBasePtrStoragePath assignTuplePtrBytesCopy
+  bodyPtrBytestringBuiltinsConcatArmSemantics
+  bodyPtrBytestringBuiltinsConcatOperand
+  bodyPtrPrecompileBuiltinsArithmeticSource
+  bodyPtrPrecompileBuiltinsArithmeticValue bodyPtrSignedConvertSourceFixed
+  forPtrAllocationFrame internalReturnImmutableTypes logBytesCodePtr
+  logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
