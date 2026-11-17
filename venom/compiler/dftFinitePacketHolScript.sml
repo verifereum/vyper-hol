@@ -39,7 +39,7 @@ Ancestors
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
   dftPacketPseudoHistory
-  dftPacketPseudoPrefixFrame
+  dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketReturnLocal
@@ -52,7 +52,7 @@ Ancestors
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
