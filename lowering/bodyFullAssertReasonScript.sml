@@ -12,9 +12,9 @@ Theory bodyFullAssertReason
 Ancestors
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullShared
   bodyFullRaiseReason
-  bodyInvNoDalloca contextRawReachable unitMemInv ptrDiscipline
-  decoderNavigationPtr gasOutcomeFullCompose gasOutcomeFullStmts fragGasEmitCtrl gasExemptCert
-  stmtSimReason stmtSimProps stmtSimIfProps exprSimDefs bodyMemoryDefs bodyPtrDefs bodyExprPreFacts exprSimSource
+  bodyInvNoDalloca contextRawReachable unitMemInv unitTransformDefs ptrDiscipline
+  decoderNavigationPtr gasOutcomeFull gasOutcomeFullCompose gasOutcomeFullStmts fragGasEmitCtrl gasExemptCert
+  stmtSimReason stmtSimDefs stmtSimProps stmtSimIfProps exprSimDefs bodyMemoryDefs bodyPtrDefs bodyExprPreFacts exprSimSource
   valueEncoding allocaHistory vyperStorageTrace vyperStorageFootprint
   venomExecSemantics venomState
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
@@ -196,7 +196,8 @@ Resume compile_assert_reason_frag_full_from_raise[true]:
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_frame_same_state >> qexists_tac `t` >>
          simp[jump_to_def] >> first_assum ACCEPT_TAC,
-         gvs[ptrDisciplineTheory.allocas_below_fmp_def, jump_to_def]]
+         gvs[ptrDisciplineTheory.allocas_below_fmp_def, jump_to_def] >>
+         strip_tac >> fs[]]
 QED
 
 Resume compile_assert_reason_frag_full_from_raise[false]:
