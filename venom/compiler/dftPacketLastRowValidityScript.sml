@@ -75,7 +75,29 @@ Proof
      `r <= LENGTH rows` by decide_tac >>
      `TAKE r (rows ++ [(bb,e,z1)]) = TAKE r rows /\
       TAKE r (rows ++ [(bb,e,z0)]) = TAKE r rows` by simp[TAKE_APPEND1] >>
-     Cases_on `r < LENGTH rows` >> gvs[EL_APPEND_EQN] >> metis_tac[]) >>
+     Cases_on `r < LENGTH rows`
+     >- (gvs[EL_APPEND_EQN] >>
+         qpat_x_assum `!r b n z es s. _` (qspecl_then [`r`,`bb'`,`e'`,`z`,`es`,`s`] mp_tac) >>
+         simp[EL_APPEND_EQN,TAKE_APPEND1]) >>
+     `r = LENGTH rows` by decide_tac >> gvs[EL_APPEND_EQN] >>
+     qpat_x_assum `!r b n z es s. _` (qspecl_then [`LENGTH rows`,`bb`,`e`,`z0`,`es`,`s`] mp_tac) >>
+     simp[EL_APPEND_EQN,TAKE_APPEND1]) >>
   qpat_x_assum `plan_ok = _` kall_tac >>
-  gvs[] >> FAIL_TAC "levels"
+  gvs[] >> conj_tac
+  >- (Cases_on `pre` >> simp[]) >>
+  map_every qx_gen_tac [`i`,`sfi`,`plan`,`call`] >> strip_tac >>
+  `i <= LENGTH pre` by decide_tac >>
+  `TAKE i (pre ++ [(sf,rows ++ [(bb,e,z1)],NONE)]) = TAKE i pre /\
+   TAKE i (pre ++ [(sf,rows ++ [(bb,e,z0)],NONE)]) = TAKE i pre` by simp[TAKE_APPEND1] >>
+  `!k. k <= LENGTH pre ==>
+    FST (EL k (pre ++ [(sf,rows ++ [(bb,e,z1)],NONE)])) =
+    FST (EL k (pre ++ [(sf,rows ++ [(bb,e,z0)],NONE)]))` by
+    (rpt strip_tac >> Cases_on `k < LENGTH pre` >> simp[EL_APPEND_EQN] >>
+     `k = LENGTH pre` by decide_tac >> simp[]) >>
+  Cases_on `i < LENGTH pre`
+  >- (qpat_x_assum `!i sf plan call. _` (qspecl_then [`i`,`sfi`,`plan`,`call`] mp_tac) >>
+      gvs[EL_APPEND_EQN,TAKE_APPEND1]) >>
+  `i = LENGTH pre` by decide_tac >> gvs[EL_APPEND_EQN] >>
+  qpat_x_assum `!i sf plan call. _` (qspecl_then [`LENGTH pre`,`sf`,`rows ++ [(bb,e,z0)]`,`NONE`] mp_tac) >>
+  simp[EL_APPEND_EQN,TAKE_APPEND1]
 QED
