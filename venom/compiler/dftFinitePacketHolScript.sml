@@ -50,6 +50,7 @@ Ancestors
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
+  dftPacketSuccessfulPrefixTrace
   dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
