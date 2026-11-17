@@ -1,0 +1,216 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5236
+Status: merged (1fb7dfe2ebf9e5adc4b05a55cdf8ce2142fbf9c3)
+Scope: the legacy and Venom codegen changes; the tests are not ported.
+
+diff --git a/vyper/codegen/core.py b/vyper/codegen/core.py
+index d8d1e93f..b8e83b88 100644
+--- a/vyper/codegen/core.py
++++ b/vyper/codegen/core.py
+@@ -1224,6 +1224,33 @@ def _complex_make_setter(left, right, hi=None):
+         return b1.resolve(b2.resolve(IRnode.from_list(ret)))
+ 
+ 
++def punnable(src_typ, dst_typ):
++    """
++    Return True if memory laid out as `src_typ` can be read (punned) as `dst_typ`.
++
++    Compatible types can differ in element or member layout, e.g.
++    DynArray[Bytes[10], 5] vs DynArray[Bytes[512], 5] (element stride 64
++    vs 544). A wider bytestring bound or DynArray capacity at the top level
++    does not change the layout of the data that is present.
++    """
++    if isinstance(dst_typ, (DArrayT, SArrayT)):
++        assert isinstance(src_typ, (DArrayT, SArrayT))
++        pairs = [(src_typ.value_type, dst_typ.value_type)]
++    elif isinstance(dst_typ, TupleT):
++        assert isinstance(src_typ, TupleT)
++        n = len(dst_typ.member_types)
++        assert len(src_typ.member_types) == n
++        pairs = [(src_typ.member_types[i], dst_typ.member_types[i]) for i in range(n)]
++    else:
++        # primitive words, bytestrings ([length][data]) and (nominal) structs
++        return True
++
++    # nested values also need equal sizes: they determine strides and offsets
++    return all(
++        s.memory_bytes_required == d.memory_bytes_required and punnable(s, d) for s, d in pairs
++    )
++
++
+ def ensure_in_memory(ir_var, context):
+     """
+     Ensure a variable is in memory. This is useful for functions
+@@ -1235,8 +1262,9 @@ def ensure_in_memory(ir_var, context):
+     return create_memory_copy(ir_var, context)
+ 
+ 
+-def create_memory_copy(ir_var, context):
+-    typ = ir_var.typ
++def create_memory_copy(ir_var, context, typ=None):
++    if typ is None:
++        typ = ir_var.typ
+     buf = context.new_internal_variable(typ)
+     do_copy = make_setter(buf, ir_var)
+     return IRnode.from_list(["seq", do_copy, buf], typ=typ, location=MEMORY)
+diff --git a/vyper/codegen/expr.py b/vyper/codegen/expr.py
+index 21d1981e..df825d1b 100644
+--- a/vyper/codegen/expr.py
++++ b/vyper/codegen/expr.py
+@@ -8,6 +8,7 @@ from vyper.codegen.core import (
+     append_dyn_array,
+     check_assign,
+     clamp,
++    create_memory_copy,
+     data_location_to_address_space,
+     dummy_node_for_type,
+     ensure_in_memory,
+@@ -21,6 +22,7 @@ from vyper.codegen.core import (
+     make_setter,
+     pop_dyn_array,
+     potential_overlap,
++    punnable,
+     read_write_overlap,
+     sar,
+     shl,
+@@ -783,8 +785,19 @@ class Expr:
+         test = Expr.parse_value_expr(self.expr.test, self.context)
+         assert test.typ == BoolT()  # sanity check
+ 
+-        body = Expr(self.expr.body, self.context).ir_node
+-        orelse = Expr(self.expr.orelse, self.context).ir_node
++        typ = self.expr._metadata["type"]
++
++        def parse_arm(node):
++            arm = Expr(node, self.context).ir_node
++            # an arm can be narrower than the result type (e.g. DynArray[Bytes[10], 5]
++            # for a DynArray[Bytes[512], 5] result). the result is read with the
++            # result type's layout, so convert such arms element by element.
++            if punnable(arm.typ, typ):
++                return arm
++            return create_memory_copy(arm, self.context, typ=typ)
++
++        body = parse_arm(self.expr.body)
++        orelse = parse_arm(self.expr.orelse)
+ 
+         # if they are in the same location, we can skip copying
+         # into memory. also for the case where either body or orelse are
+@@ -798,7 +811,6 @@ class Expr:
+         # check this once compare_type has no side effects:
+         # assert body.typ.compare_type(orelse.typ)
+ 
+-        typ = self.expr._metadata["type"]
+         location = body.location
+         return IRnode.from_list(["if", test, body, orelse], typ=typ, location=location)
+ 
+diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
+index 542a819b..2de5a884 100644
+--- a/vyper/codegen_venom/context.py
++++ b/vyper/codegen_venom/context.py
+@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
+ from enum import Enum
+ from typing import Optional, Sequence
+ 
++from vyper.codegen.core import punnable
+ from vyper.codegen_venom.buffer import Buffer, Ptr
+ from vyper.codegen_venom.value import VyperValue
+ from vyper.evm.opcodes import version_check
+@@ -280,7 +281,10 @@ class VenomCodegenContext:
+         assert self.is_dynamic_tuple_frame_type(typ)
+ 
+         if self.is_dynamic_tuple_frame_type(vv.typ):
+-            return vv
++            assert isinstance(vv.typ, TupleT)
++            if self._frame_members_punnable(vv.typ, typ):
++                return vv
++            return self._dynamic_tuple_frame_from_frame(vv, typ, annotation=annotation)
+ 
+         if not isinstance(vv.typ, TupleT):  # pragma: nocover
+             raise CompilerPanic(f"expected tuple default value, got {vv.typ}")
+@@ -315,6 +319,47 @@ class VenomCodegenContext:
+ 
+         return self.dynamic_tuple_frame_value(frame, typ, annotation=annotation)
+ 
++    @staticmethod
++    def _frame_members_punnable(src_typ: TupleT, dst_typ: TupleT) -> bool:
++        # frame cells hold a word or a pointer, so member sizes do not matter
++        # for the frame itself, only each member's own layout
++        n = len(dst_typ.member_types)
++        assert len(src_typ.member_types) == n
++        return all(punnable(src_typ.member_types[i], dst_typ.member_types[i]) for i in range(n))
++
++    def _dynamic_tuple_frame_from_frame(
++        self, vv: VyperValue, typ: TupleT, annotation: Optional[str] = None
++    ) -> VyperValue:
++        """Rebuild a frame of a narrower tuple type in the layout of `typ`.
++
++        A member can be narrower than the corresponding member of `typ`
++        (e.g. DynArray[Bytes[10], 5] vs DynArray[Bytes[512], 5]) and its
++        data is read with the wider layout, so such members are copied.
++        """
++        assert isinstance(vv.typ, TupleT)
++        assert isinstance(vv.operand, IRVariable)
++        members = self.dynamic_tuple_frame_values(vv.operand, vv.typ, annotation=annotation)
++        frame = self.allocate_scratch(IRLiteral(self.dynamic_tuple_frame_size(typ)))
++
++        for i, dst_member_t in enumerate(typ.member_types):
++            cell = self.builder.add(frame, IRLiteral(i * 32))
++            member_vv = members[i]
++            if dst_member_t._is_prim_word:
++                value = member_vv.operand
++            else:
++                # unbounded members only have ABI-static elements, so they
++                # never need a copy
++                assert not is_unbounded_sequence_type(dst_member_t) or punnable(
++                    member_vv.typ, dst_member_t
++                )
++                member_vv = self.ensure_memory_layout(
++                    member_vv, dst_member_t, annotation=annotation
++                )
++                value = self.unwrap(member_vv)
++            self.builder.mstore(cell, value)
++
++        return self.dynamic_tuple_frame_value(frame, typ, annotation=annotation)
++
+     def load_pointer_cell_value(self, var: LocalVariable) -> VyperValue:
+         """Load the current dynamic memory pointer from a pointer-cell local."""
+         ptr = self.ptr_load(var.value.ptr())
+@@ -566,6 +611,20 @@ class VenomCodegenContext:
+         self.store_vyper_value(vv, ret.operand, typ)
+         return ret
+ 
++    def ensure_memory_layout(
++        self, vv: VyperValue, typ: VyperType, annotation: Optional[str] = None
++    ) -> VyperValue:
++        """Return `vv` laid out as `typ`, copying only when the layouts differ."""
++        if punnable(vv.typ, typ):
++            return vv
++
++        ret = self.new_temporary_value(typ, annotation=annotation)
++        assert isinstance(ret.operand, IRVariable)
++        # not store_vyper_value: its `src_typ != typ` check is always False for
++        # tuples (TupleT.__eq__ compares the empty `members` dict).
++        self._store_memory_typed(ret.operand, typ, self.unwrap(vv), vv.typ)
++        return ret
++
+     def snapshot_value_for_delayed_use(
+         self,
+         vv: VyperValue,
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+index b1acaf8d..b64228e3 100644
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -926,7 +926,13 @@ class Expr:
+                     arm_vv, result_typ, annotation="ternary"
+                 )
+                 return frame_vv.operand
+-            return Expr(expr_node, self.ctx).lower_value()
++            # arms may be narrower than the result type (e.g. DynArray[Bytes[10], 5]
++            # for a DynArray[Bytes[512], 5] result), and the result pointer is read
++            # with the result type's layout
++            arm_vv = self.ctx.ensure_memory_layout(
++                Expr(expr_node, self.ctx).lower(), result_typ, annotation="ternary"
++            )
++            return self.ctx.unwrap(arm_vv)
+ 
+         # Process then branch
+         self.builder.append_block(then_block)

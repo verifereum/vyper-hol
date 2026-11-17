@@ -2,7 +2,7 @@
 Theory bodyDynArraySource
 Ancestors
   bodySimDeclCases exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
-  list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
+  list finite_map bodySim allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
   supportedStmts supportedStmtTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness

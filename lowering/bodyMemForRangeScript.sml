@@ -7,7 +7,7 @@ Theory bodyMemForRange
 Ancestors
   allocLimitsProps supportedExprTraverse bodyMemoryPreds bodySeqMemory stmtForRangeMemory exprSimMemDefs bodySimDeclCases
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
-  vyperTypeStoragePreservation list finite_map bodySim bodySimStmtCases
+  vyperTypeStoragePreservation list finite_map bodySim
   allocLimits exprSimHyps exprLoweringProps stmtLowering stmtLoweringMono
   stmtSimForParts stmtSimForRange vyperTyping fragExec compileEnv
   supportedStmts supportedStmtTraverse supportedExprs vyperAST

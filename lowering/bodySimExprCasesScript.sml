@@ -1,25 +1,18 @@
 (*
  * The body simulation of S1: expression cases (#636, #638)
  *
- * One lemma for each expression case of evaluate_ind that bodySimMain's
- * body_sim_mutual does not close in a line or two.  An expression with
- * no internal call simulates by compile_expr_sim (body_expr_ok_intro);
- * each case's GAP is the expression with one, and the internal call
- * itself is the call step (#638, body_intcall_case).
+ * Lemmas for the expression cases of evaluate_ind, each from its
+ * operands' body_expr_ok.
  *
  * A case proved here instantiates the shared case lemma of exprSim*
- * (exprSimHyps' expr_sim_case and expr_vv_case) that compile_expr_sim
- * uses too, at nocalls = F, from the operands' body_expr_ok
- * (body_expr_ok_case).
+ * (exprSimHyps' expr_sim_case and expr_vv_case) at nocalls = F, from the
+ * operands' body_expr_ok (body_expr_ok_case).
  *
  * TOP-LEVEL:
- *   body_expr_ok_intro — an expression with no internal call simulates by
- *                        compile_expr_sim
  *   body_expr_ok_case, body_expr_ok_of_case — body_expr_ok is the shared
  *                        judgments at nocalls = F in every frame
  *   body_exprs_ok_case — body_exprs_ok is exprs_case at nocalls = F
- *   body_*_case        — one case of the induction each; the call cases
- *                        are in bodySimCallCases
+ *   body_*_case        — one case each
  *)
 
 Theory bodySimExprCases
@@ -30,7 +23,7 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* An expression naming a mapping is a top-level name or a subscript
@@ -52,36 +45,6 @@ Theorem body_inv_acyclic[local]:
     body_inv tops ctx cenv cx ==> acyclic_struct_metadata cenv.ce_struct_fields
 Proof
   rw[body_inv_def]
-QED
-
-(* With no internal call in it, an expression simulates by
-   compile_expr_sim; what is left is the case with one. *)
-Theorem body_expr_ok_intro:
-  !cx e.
-    (!a t n elems.
-       e = Builtin a (MakeArray t n) elems /\
-       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-       body_exprs_ok cx elems) /\
-    (!ty e1 e2. e <> Subscript ty e1 e2) /\
-    (!ann obj field. e = Attribute ann obj field ==> body_expr_ok cx obj) /\
-    (!ann nsid fields. e = StructLit ann nsid fields ==>
-       body_exprs_ok cx (MAP SND fields)) /\
-    (!tops ctx func cenv env ty es.
-       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
-       int_calls_expr e <> [] ==>
-       expr_sim ctx func cenv cx ty e es /\
-       expr_vv_sim ctx func cenv cx ty e es) ==>
-    body_expr_ok cx e
-Proof
-  (* rw splits the simulation clause into its expr_sim and expr_vv_sim
-     goals, so the mapping goal is picked by its conclusion *)
-  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[body_expr_ok_def] >> rw[]
-  >~ [`expr_map_sim _ _ _ _ _ _ _`]
-  >- (drule body_expr_ok_map_other >>
-      simp[expr_map_case_def] >> metis_tac[]) >>
-  Cases_on `int_calls_expr e = []` >> gvs[] >>
-  metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body,
-            body_inv_acyclic]
 QED
 
 Theorem body_expr_ok_case:
@@ -323,68 +286,6 @@ Proof
   gvs[compile_ecadd_call_case, compile_ecmul_call_case])
 QED
 
-(* The builtins other than the binary operators: exprSimMain's
-   compile_builtin_case, from the operands' body_expr_ok (a len's one
-   operand's; for slice(x.code, start, length), start's and length's,
-   then x's), but for body_make_array_case's and
-   body_builtin_residual_case's. *)
-Theorem body_builtin_rest_case:
-  !cx ty bt es.
-    (!bop. bt <> Bop bop) /\
-    (!s'' x t v code_ty addr s3 tail_vs t'.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
-       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
-       body_exprs_ok cx [addr]) /\
-    (!s'' x t v code_ty addr.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
-       body_exprs_ok cx (TL es)) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = NONE ==>
-       body_exprs_ok cx es) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt = Len ==>
-       body_expr_ok cx (HD es)) ==>
-    body_expr_ok cx (Builtin ty bt es)
-Proof
-  rpt strip_tac >> Cases_on `?t n. bt = MakeArray t n`
-  >- (gvs[] >> irule body_make_array_case >> strip_tac >>
-      first_x_assum irule >> gvs[type_check_def, assert_def]) >>
-  Cases_on `bt = ECAdd \/ bt = ECMul`
-  >- (pop_assum strip_assume_tac >> gvs[] >>
-      (irule body_builtin_residual_case >> simp[] >> strip_tac >>
-       first_x_assum irule >> gvs[type_check_def, assert_def])) >>
-  match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
-  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
-      gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
-      drule well_typed_builtin_app_length >> simp[]) >>
-  `code_slice_source bt es = NONE ==> exprs_case F ctx func cenv cx es` by
-    (strip_tac >> Cases_on `bt = Len`
-     >- (gvs[builtin_args_length_ok_def, listTheory.LENGTH_EQ_NUM_compute] >>
-         `body_expr_ok cx h` by
-           (first_x_assum irule >> simp[type_check_def, assert_def]) >>
-         simp[exprs_case_def] >> metis_tac[body_expr_ok_case]) >>
-     `body_exprs_ok cx es` by
-       (Cases_on `bt = Env MsgGas`
-        >- gvs[builtin_args_length_ok_def, body_exprs_ok_def] >>
-        first_x_assum irule >> simp[type_check_def, assert_def]) >>
-     metis_tac[body_exprs_ok_case]) >>
-  `!m. bt = Slice m ==> slice_extcode_case F ctx func cenv cx es` by
-    (rw[exprSimSliceSelfCodeTheory.slice_extcode_case_def] >>
-     gvs[type_check_def, assert_def, builtin_args_length_ok_def]
-     >- metis_tac[body_exprs_ok_case] >>
-     first_x_assum drule >> rw[body_exprs_ok_def] >>
-     metis_tac[body_expr_ok_case]) >>
-  irule compile_builtin_case >> gvs[]
-QED
-
 (* In and not in on an array literal: of words by bodySimBopInLiteralWord,
    from the elements' judgments (bodySim's body_make_array_children_ok);
    of non-words held for #742 (bodySimBopHeld). *)
@@ -399,45 +300,6 @@ Proof
   >- (rw[body_exprs_ok_def] >> irule body_bop_in_literal_word_case >>
       rw[] >> irule body_make_array_children_ok >> metis_tac[]) >>
   MATCH_MP_TAC body_bop_in_literal_nonword_case >> first_assum ACCEPT_TAC
-QED
-
-Theorem body_builtin_case:
-  !cx ty bt es.
-    (!s'' x t v code_ty addr s3 tail_vs t'.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
-       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
-       body_exprs_ok cx [addr]) /\
-    (!s'' x t v code_ty addr.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
-       body_exprs_ok cx (TL es)) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
-       code_slice_source bt es = NONE ==>
-       body_exprs_ok cx es) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt = Len ==>
-       body_expr_ok cx (HD es)) ==>
-    body_expr_ok cx (Builtin ty bt es)
-Proof
-  rpt strip_tac >> reverse (Cases_on `?bop. bt = Bop bop`)
-  >- (irule body_builtin_rest_case >> gvs[] >> metis_tac[]) >>
-  gvs[] >> Cases_on `?e1 e2. es = [e1; e2]`
-  >- (gvs[] >>
-      `body_exprs_ok cx [e1; e2]` by
-        (first_x_assum irule >>
-         simp[type_check_def, assert_def, builtin_args_length_ok_def]) >>
-      Cases_on `(bop = In \/ bop = NotIn) /\
-                ?a t n elems. e2 = Builtin a (MakeArray t n) elems`
-      >- (gvs[] >> irule body_bop_in_literal_case >> simp[]) >>
-      irule body_bop_case >> gvs[]) >>
-  match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
-  irule compile_bop_args_case >> gvs[]
 QED
 
 (* pop on a nested target: exprSimPopNested's pop_nested_sim, by the
@@ -455,46 +317,6 @@ Proof
      irule pop_nested_sim >> qexists_tac `env` >> simp[] >>
      strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
   simp[expr_sim_case_of_vv]
-QED
-
-(* pop on a local: exprSimPlaces' compile_pop_name_case; on a module
-   variable or immutable, which makes no internal call, compile_expr_sim;
-   the rest by body_pop_nested_case. *)
-Theorem body_pop_case:
-  !cx v10 bt. body_base_target_ok cx bt ==> body_expr_ok cx (Pop v10 bt)
-Proof
-  rpt strip_tac >> Cases_on `?id. bt = NameTarget id`
-  >- (gvs[] >> irule body_expr_ok_of_case >> simp[compile_pop_name_case]) >>
-  Cases_on `?nid. bt = TopLevelNameTarget nid`
-  >- (gvs[] >> match_mp_tac body_expr_ok_intro >> conj_tac >- simp[] >> conj_tac
-      >~ [`_ <> Subscript _ _ _`] >- simp[] >>
-      simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
-  irule body_pop_nested_case >> gvs[]
-QED
-
-(* The type builtins: exprSimMain's compile_type_builtin_case. *)
-Theorem body_type_builtin_case:
-  !cx v11 tb typ es.
-    (!s'' x t.
-       type_check (type_builtin_args_length_ok tb (LENGTH es))
-         "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_ok cx es) ==>
-    body_expr_ok cx (TypeBuiltin v11 tb typ es)
-Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `type_builtin_args_length_ok tb (LENGTH es)`)
-  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
-      gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
-      drule vyperTypeBuiltinsTheory.well_typed_type_builtin_args_length >>
-      simp[]) >>
-  `body_exprs_ok cx es` by
-    (first_x_assum irule >> simp[type_check_def, assert_def]) >>
-  Cases_on `tb = Convert /\
-            ?e1 a f cargs d. es = [e1] /\ e1 = Call a (IntCall f) cargs d /\
-                             lowered_value_type cenv e1 <> expr_type e1`
-  >- (gvs[] >> rw[expr_sim_case_def, expr_vv_case_def] >>
-      metis_tac[body_convert_widened_call_arg]) >>
-  irule compile_type_builtin_case >> metis_tac[body_exprs_ok_case]
 QED
 
 (* exprSimSend's compile_send_case; the operands' body_exprs_ok holds when

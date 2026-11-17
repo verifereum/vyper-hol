@@ -59,7 +59,8 @@ Proof
        Once exprLoweringTheory.compile_expr_def,
        exprLoweringTheory.compile_type_builtin_dispatch_body_def] >>
   `!e aty. MEM e [src;off] ==>
-     lower_value (expr_child_callback (expr_size off + (expr_size src + 2)) compile_expr)
+     lower_value (expr_child_callback
+       (expr_size off + (expr_size src + 2) + cenv_defaults_size cenv) compile_expr)
        cenv aty e = lower_value compile_expr cenv aty e` by
     (rpt strip_tac >> irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[] >> gvs[] >> simp[]) >>
@@ -73,7 +74,8 @@ Proof
   Cases_on `compile_extract32_load ld0 ld1 off_op s3` >>
   rename1 `_ = (raw,s4)` >>
   Cases_on `compile_clamp_basetype raw ret s4` >>
-  simp[as_stack_val_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+  simp[exprLoweringTheory.as_stack_val_def] >> rpt strip_tac >>
+  gvs[exprLoweringTheory.as_stack_val_def] >> metis_tac[]
 QED
 
 Theorem extract32_compile_cuts:

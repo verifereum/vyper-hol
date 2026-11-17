@@ -234,9 +234,6 @@ Proof
            fs[stmt_state_rel_def,state_rel_def] >>
          `stor_taint_ok_at (DF H) tn1 t` by fs[ghost_inv_at_def] >>
          `stor_taint_ok_at (DF H) tm z` by fs[stor_taint_ok_at_def] >>
-         `!i. i < lo /\ i IN tm.t_mem ==> i IN tn1.t_mem` by
-           (qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t HG tm`
-             (ACCEPT_TAC o last o CONJUNCTS o REWRITE_RULE[ghost_kept_at_def])) >>
          (fn (asl,w) =>
            let val actualD = hd (snd (strip_comb w))
                val provider = ghost_inv_at_local_window_transport
@@ -416,7 +413,8 @@ Proof
            mp_tac ghost_kept_at_wb_trans >>
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
          disch_then ACCEPT_TAC) >>
-      fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,vv_location_def]) >>
+      fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,
+         vv_location_def,is_bytestring_type_def]) >>
   `alloca_inv t /\ t.vs_call_ctx.cc_calldata = cx.txn.calldata` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by

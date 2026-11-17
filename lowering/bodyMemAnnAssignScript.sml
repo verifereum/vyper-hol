@@ -7,6 +7,7 @@
    or from any other expression (bodyMemAnnAssignWidened, HELD). *)
 Theory bodyMemAnnAssign
 Ancestors
+  bodySimStmtFacts
   supportedExprTraverse allocLimitsProps
   bodyMemoryPreds bodyDeclWordMemory bodyDeclCopyMemory bodyDeclEmptyMemory
   bodyDeclBytesMemory bodyMemAnnAssignWidened bodySimDeclCases

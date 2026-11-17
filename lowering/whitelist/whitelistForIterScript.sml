@@ -59,7 +59,7 @@ Ancestors
   vyperTypeContract
   bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map pair
-  bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
+  bodySim allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
   supportedStmts supportedStmtTraverse supportedExprTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
