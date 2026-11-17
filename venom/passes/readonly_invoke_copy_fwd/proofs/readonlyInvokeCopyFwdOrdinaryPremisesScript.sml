@@ -36,19 +36,6 @@ Proof
   metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ricf_reachable_concrete_accounts:
-  ptr_discipline lo C vs /\
-  frame_reachable vs C stk PG G tn fn inst s /\
-  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
-  tn0.t_stor = {} /\ tn0.t_trans = {}
-Proof
-  strip_tac >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  drule ricf_cert_raw_memory_taint >> strip_tac >>
-  gvs[taint_ok_def]
-QED
-
 Theorem ricf_reachable_no_dalloca:
   frame_reachable vs C stk PG G tn fn inst s /\
   active_inst fn inst s /\ ~ctx_has_dalloca C ==>
@@ -138,9 +125,10 @@ QED
       SHA3/LOG/CREATE/CREATE2.  CALL-family clean slices need their own
       taint_ok opcode analysis; they are not covered by that theorem.
 
-   C. External concrete accounts: ricf_reachable_concrete_accounts proves
-      the raw-index stor/trans emptiness from discipline exactly for
-      DELEGATECALL/CREATE/CREATE2.  No global emptiness assumption is needed.
+   C. External concrete accounts: discipline gives raw-index stor/trans
+      emptiness for CREATE/CREATE2; DELEGATECALL, like CALL, takes the
+      dead-mask bound from taint_within.  No global emptiness assumption
+      is needed.
       Clean operand evaluation uses taint_ok plus the Values interfaces;
       an active pointer operand still requires address classification (B).
 
