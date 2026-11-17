@@ -9,6 +9,7 @@ Ancestors
   symEmitNamedOwn symEmitOwn symEmitSourceOwn symEmitStoreOwn
   symFrameBoundaryEntryPackaging symFrameBoundaryNumeric symFrameBoundaryOwn
   symFrameBoundaryPairing symFrameBoundaryPhiPackaging symFrameInvokeSupport
+  symFrameInvokePrefixOwn symFrameInvokeEntryAssembly
   symInstAssertOwn symInstAssignOwn symInstLogOwn symInstNamedOwn symInstPhiOwn
   symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
   symInvokeEntryFacts symInvokeEntryOwn
