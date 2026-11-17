@@ -24,8 +24,7 @@ Theorem raw_call_allocated_oracle_mem:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  (!g. gas_cap = SOME g ==> g = w2n gas) /\
-  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\
@@ -128,7 +127,7 @@ Resume raw_call_allocated_oracle_mem[oracle_pre]:
    eval_operand op a = SOME (if cap=0 then w else w+32w) /\
    eval_operand ov a = SOME w` by
     (simp[Abbr `a`, eval_op_inst_idx] >> metis_tac[]) >>
-  `take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) a) value_opt es =
+  `take_call_outcome target (read_memory (w2n ao) (w2n az) a) value_opt es =
     (INL (rq,outcome),es1)` by
     (simp[Abbr `a`, read_memory_def] >> fs[read_memory_def]) >>
   Q.SUBGOAL_THEN
@@ -185,7 +184,7 @@ Resume raw_call_allocated_oracle_mem[call]:
   qpat_assum `emit_op _ _ sm = _`
     (mp_then Any mp_tac raw_call_oracle_run_mem) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ es a`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ initial_es es initial s0 a`)) >>
   disch_then (qspecl_then [`val_word`,`if cap=0 then w else w+32w`,`gas`,`aw`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
