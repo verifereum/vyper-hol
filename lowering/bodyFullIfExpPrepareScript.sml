@@ -1559,7 +1559,14 @@ Proof
        (mid with gas_obs := gs) = (INL v,ee) ==>
        value_has_type rty v /\
        !ptv. evaluate_type (get_tenv cx) (post_value_type cenv (if sel then a else b)) = SOME ptv ==>
-         value_has_type ptv v)` by (Cases_on `sel` >> simp[] >> metis_tac[]) >>
+         value_has_type ptv v)` by
+    (qpat_assum `!gs v es1. bind (eval_expr cx c) (read_result cx)
+       (es with gas_obs := gs) = (INL v,es1) ==> _ /\ _`
+       (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,`BoolV sel`,`mid`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2) >>
+     disch_then (qspec_then `if sel then a else b` mp_tac) >>
+     Cases_on `sel` >> simp[]) >>
   `gas_admissible (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
       expr_vv_res_ok mid` by
     (drule_all exprSimIfExpTheory.ifexp_root_branch_admissible >>

@@ -89,7 +89,7 @@ Proof
    t.vs_fmp = a.vs_fmp /\ t.vs_gas_readings = a.vs_gas_readings` by
     (`t.vs_inst_idx <= LENGTH pre + LENGTH assigns` by decide_tac >>
      drule_all scfg_assign_interval_alloca >> simp[]) >>
-  simp[mem_corr_def, call_corr_def, dalloca_no_wrap_def, inst_mem_ranges_def,
+  simp[mem_corr_def, call_corr_def, unitTransformDefsTheory.dalloca_no_wrap_def, inst_mem_ranges_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
