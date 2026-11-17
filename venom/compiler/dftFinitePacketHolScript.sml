@@ -22,7 +22,7 @@ Ancestors
   dftPacketFillingBoundary
   dftPacketFreshCut dftPacketFreshRootSuccessSplit
   dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
+  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
   dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
