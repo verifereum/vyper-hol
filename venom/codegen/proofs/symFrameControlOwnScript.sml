@@ -192,3 +192,69 @@ Proof
       (SPEC_ALL sym_spill_free_prefix_frame_sim_mode_conditional))) >>
   strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
+
+Theorem sym_do_swap_shallow_frame_sim_own:
+  !allow_own lo own cp d ps ops ps' initial_fmp p env fn ret srest ss ctx labs0 cs r.
+  code_labels_agree p lo /\
+  do_swap d ps = (ops,ps') /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps lo (build_offset_to_pc p) p (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps_mode allow_own p env own (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_own_def] >>
+  `!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel_own lo p env own cs' ss'` by
+    metis_tac[asm_sym_steps_mode_sim] >>
+  drule (SRULE [asm_sym_rel_core_own]
+    (Q.INST [`code_ok` |-> `\code. asm_data_env_lo_ok lo p env own /\ code = own`]
+      (SPEC_ALL sym_do_swap_shallow_frame_sim_mode_conditional))) >>
+  disch_then drule_all >> strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
+QED
+
+Theorem sym_do_swap_pair_frame_sim_own:
+  !allow_own lo own d f ps ops1 ps1 ops2 ps2 r cplan fn ret srest labs0 ctx cs ss initial_fmp p env.
+  code_labels_agree p lo /\
+  do_swap d ps = (ops1,ps1) /\ do_swap f ps1 = (ops2,ps2) /\
+  d < LENGTH ps.ps_stack /\ f < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (ops1 ++ ops2) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (ops1 ++ ops2)) ==>
+  ?cs' ss'.
+    asm_steps lo (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) cs = AsmOK cs' /\
+    sym_steps_mode allow_own p env own
+      (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) ss = SymOK ss' /\
+    sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 ps2 cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (ops1 ++ ops2))
+Proof
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_own_def] >>
+  `!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel_own lo p env own cs' ss'` by
+    metis_tac[asm_sym_steps_mode_sim] >>
+  mp_tac (SRULE [asm_sym_rel_core_own]
+    (Q.INST [`code_ok` |-> `\code. asm_data_env_lo_ok lo p env own /\ code = own`]
+      (SPEC_ALL sym_do_swap_pair_frame_sim_mode_conditional))) >>
+  (impl_tac >- (conj_tac
+    >- (rpt gen_tac >> strip_tac >>
+        drule_at (Pat `asm_block_at _ _ _`)
+          (SRULE [sym_frame_inv_own_def] sym_do_swap_shallow_frame_sim_own) >>
+        disch_then drule_all >>
+        disch_then (qspec_then `allow_own` strip_assume_tac) >> simp[]) >>
+    simp[] >> metis_tac[])) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
+QED
