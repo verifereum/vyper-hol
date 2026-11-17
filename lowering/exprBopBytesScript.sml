@@ -3,7 +3,8 @@ Theory exprBopBytes
 Ancestors
   exprBopBitwise exprBopShift exprBopStraight exprBopSimDefs exprBopSimProps
   exprSimProps exprSimBinopFrag exprSimHypsDefs loweringPosts exprLowering compileEnv
-  vyperValueOperation vyperContext vyperValue vyperTyping
+  vyperValueOperation vyperContext vyperValue vyperTyping vyperTypeSystem
+  loweringSlice
   valueEncoding valueEncodingProofs valueEncodingBitwise
   fragGasFresh varsExt freshWrites
   venomState venomExecSemantics list rich_list words byte integer integer_word

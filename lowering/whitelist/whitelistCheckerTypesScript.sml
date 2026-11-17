@@ -308,9 +308,9 @@ Theorem well_typed_binop_bitwise_supported:
   supported_binop op t1 t2 lb ne \/ is_flag_type t1
 Proof
   rw[] >> gvs[well_typed_binop_def, supported_binop_def] >>
-  Cases_on `?m. t1 = BaseT (BytesT (Fixed m))`
-  >- gvs[well_formed_type_def, evaluate_type_def, IS_SOME_COND] >>
-  metis_tac[well_formed_integer_type, is_bool_type_def]
+  imp_res_tac well_formed_integer_type >> gvs[is_bool_type_def] >>
+  qpat_x_assum `?m. t1 = BaseT (BytesT (Fixed m))` strip_assume_tac >>
+  gvs[well_formed_type_def, evaluate_type_def, IS_SOME_COND]
 QED
 
 (* Rows 34 and 35 (narrow): integer << requires a 256-bit LHS;
