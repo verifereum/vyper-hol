@@ -130,9 +130,11 @@ Proof
     (irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
   `eval_operand b s = NONE <=> eval_operand b t = NONE` by
     (irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
+  `i.inst_opcode = ADD \/ i.inst_opcode = SUB` by metis_tac[] >>
+  pop_assum strip_assume_tac >>
   qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
   simp[Once step_inst_non_invoke, SimpLHS] >>
-  simp[Once step_inst_base_def, SimpLHS] >>
+  simp[step_inst_base_opcode_eqs, SimpLHS] >>
   simp[exec_pure2_def, SimpLHS] >>
   Cases_on `eval_operand a t` >> Cases_on `eval_operand b t` >> simp[] >>
   strip_tac >> Cases_on `eval_operand a s` >> Cases_on `eval_operand b s` >> gvs[] >>
