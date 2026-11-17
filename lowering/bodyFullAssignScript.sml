@@ -63,6 +63,7 @@ Ancestors
   typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps
   assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer
   representationCleanPtr bodyFullTargetDefs targetPlaceSimCasesBase
+  exprSimAggregateEncoding bodyDynArraySource
 Libs
   monadsyntax
 
@@ -3337,6 +3338,73 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_sensitivity_dynamic:
+  (!v a mem dirty.
+    well_formed_type_value tv /\
+    (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+    (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+    !j. j < type_memory_size tv /\ a+j IN dirty ==>
+      mem_dead_bytes mem a tv (a+j)) ==>
+  !n v a mem dirty.
+    well_formed_type_value (ArrayTV tv (Dynamic n)) /\
+    (value_has_type (ArrayTV tv (Dynamic n)) v \/
+      v = default_value (ArrayTV tv (Dynamic n))) /\
+    val_wf (ArrayTV tv (Dynamic n)) v /\
+    (!m. mem_agree_outside dirty mem m ==>
+      val_in_memory (ArrayTV tv (Dynamic n)) v a m) ==>
+    !j. j < type_memory_size (ArrayTV tv (Dynamic n)) /\ a+j IN dirty ==>
+      mem_dead_bytes mem a (ArrayTV tv (Dynamic n)) (a+j)
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+  `value_has_type (ArrayTV tv (Dynamic n)) v` by
+    metis_tac[default_value_well_typed] >>
+  fs[] >>
+  `?vs. v = ArrayV (DynArrayV vs)` by
+    (Cases_on `v` >> gvs[default_value_def, value_has_type_def] >>
+     rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]) >>
+  gvs[] >>
+  `well_formed_type_value tv /\ n < dimword(:256) /\ LENGTH vs <= n` by
+    gvs[well_formed_type_value_def, val_wf_def] >>
+  `!m. mem_agree_outside dirty mem m ==> mem_word_at a m = n2w (LENGTH vs)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[val_in_memory_def]) >>
+  drule robust_mem_word_at_clean >> strip_tac >>
+  `mem_word_at a mem = n2w (LENGTH vs)` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `LENGTH vs < dimword(:256)` by decide_tac >>
+  `w2n (mem_word_at a mem) = LENGTH vs` by simp[] >>
+  gen_tac >> strip_tac >>
+  `32 <= j` by
+    (Cases_on `j < 32` >> simp[] >>
+     first_x_assum (qspec_then `a+j` mp_tac) >> simp[]) >>
+  Cases_on `type_memory_size tv = 0`
+  >- gvs[type_memory_size_def] >>
+  Cases_on `n = 0` >- gvs[type_memory_size_def] >>
+  `0 < type_memory_size tv` by decide_tac >>
+  qabbrev_tac `k = (j-32) DIV type_memory_size tv` >>
+  qabbrev_tac `r = (j-32) MOD type_memory_size tv` >>
+  `j-32 = k * type_memory_size tv + r /\ r < type_memory_size tv` by
+    metis_tac[DIVISION] >>
+  `k < n` by
+    (simp[Abbr `k`, DIV_LT_X] >> gvs[type_memory_size_def]) >>
+  `j = 32 + k * type_memory_size tv + r` by decide_tac >>
+  simp[Once mem_dead_bytes_def] >> qexists_tac `k` >> simp[] >>
+  Cases_on `k < LENGTH vs`
+  >- (simp[] >>
+      `value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)` by
+        metis_tac[dynarray_elements_typed] >>
+      `!m. mem_agree_outside dirty mem m ==>
+        val_in_memory tv (EL k vs) (a+32+k*type_memory_size tv) m` by
+        (rpt strip_tac >> irule elems_in_memory_EL >> simp[] >>
+         qpat_x_assum `!m. _ ==> val_in_memory _ (ArrayV _) _ _` drule >>
+         simp[val_in_memory_def]) >>
+      qpat_x_assum `!v a mem dirty. _` (qspecl_then
+        [`EL k vs`, `a+32+k*type_memory_size tv`, `mem`, `dirty`] mp_tac) >>
+      (impl_tac >- simp[]) >>
+      disch_then (qspec_then `r` mp_tac) >>
+      gvs[AC ADD_ASSOC ADD_COMM]) >>
+  simp[RIGHT_ADD_DISTRIB] >> decide_tac
 QED
 
 Theorem body_assign_immutable_sensitivity_base:
