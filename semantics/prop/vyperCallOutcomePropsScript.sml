@@ -9,6 +9,12 @@ Ancestors
 
 (* ===== Exact equations ===== *)
 
+Theorem computed_precompile_gas[simp]:
+  computed_precompile (rq with cr_gas := gas_cap) = computed_precompile rq
+Proof
+  simp[computed_precompile_def]
+QED
+
 Theorem take_request_outcome_NONE:
   st.outcomes = NONE ==>
   take_request_outcome rq st =
@@ -220,7 +226,7 @@ Theorem take_call_outcome_suffix:
        st'.requests = st.requests)
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
-  MATCH_ACCEPT_TAC take_request_outcome_suffix
+  rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
 QED
 
 (* A successful non-static take is well typed; a failed one is adopted only
@@ -268,7 +274,7 @@ Theorem take_delegate_outcome_suffix:
        st'.requests = st.requests)
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
-  MATCH_ACCEPT_TAC take_request_outcome_suffix
+  rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
 QED
 
 Theorem take_delegate_outcome_error:
