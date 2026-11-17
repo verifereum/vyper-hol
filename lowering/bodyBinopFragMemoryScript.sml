@@ -88,6 +88,21 @@ Proof
   simp[expr_val_rel_def, typed_val_to_w256_word_value]
 QED
 
+Theorem binop_frag_mem_word:
+  binop_frag_mem_post (expr_val_rel cx ann)
+    ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es /\
+  is_word_type ann /\ IS_SOME (evaluate_type (get_tenv cx) ann) /\
+  (!v. bop_result cx ann bop tys v1 v2 es = INL v ==> word_value v) ==>
+  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  pure_rewrite_tac[binop_frag_mem_def, binop_frag_mem_post_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!st0 sa sb x y op s0. _`
+    (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `r` >> simp[] >> metis_tac[expr_val_rel_word]
+QED
+
 (* A slice of non-ALLOCA instructions, passed over with the allocations
    unchanged, keeps the allocation history. *)
 Theorem alloca_history_no_alloca_slice:
