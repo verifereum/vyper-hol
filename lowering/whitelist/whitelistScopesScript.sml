@@ -38,7 +38,7 @@
      bodyExprPreFacts ce_locals_declared_declare_local and
        ce_locals_declared_stmt (an If or For leaves cenv and env as they
        were, so an arm's names are unbound again after it);
-     body_annassign_case and body_for_case use only these.
+     body_annassign_case uses only these.
    So no lemma needs ALL_DISTINCT of locals.
 
    Proved here, from the checker's facts instead of supported_function_body:
