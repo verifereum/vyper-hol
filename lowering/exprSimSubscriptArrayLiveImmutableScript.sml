@@ -50,6 +50,9 @@ Proof
   qpat_assum `!H. P H ==> _` (qspec_then `Hw` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `~cx_const_name cx (src,id)` by
+    (irule eval_expr_immutable_root_nonconstant >>
+     goal_assum (drule_at Any) >> fs[expr_body_pre_def]) >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
   `value_has_type tvt iv` by metis_tac[] >>
@@ -74,7 +77,8 @@ Proof
 QED
 
 Resume live_immutable_array_suffix_summary_family[current_array]:
-  drule_all live_immutable_captured_array_view >> strip_tac >>
+  mp_tac (live_immutable_captured_array_view |> Q.INST [`H` |-> `Hw`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   `?av. v = ArrayV av` by
     (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   qpat_x_assum `v = ArrayV av` SUBST_ALL_TAC >>
@@ -134,7 +138,8 @@ Resume live_immutable_array_suffix_summary_family[readonly_endpoint]:
         qexistsl_tac [`sc`,`s`] >> simp[] >>
         rpt strip_tac >> qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
         simp[not_fresh_at_def]) >>
-     drule_all live_immutable_captured_array_view >> strip_tac >>
+     mp_tac (live_immutable_captured_array_view |> Q.INST [`s` |-> `q`]) >>
+     (impl_tac >- simp[]) >> strip_tac >>
      irule live_immutable_base_endpoint >> simp[] >>
      conj_tac
      >- (simp[vv_holds_def] >> gvs[]) >>
