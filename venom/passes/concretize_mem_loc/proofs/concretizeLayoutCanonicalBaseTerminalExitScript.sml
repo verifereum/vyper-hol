@@ -81,7 +81,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn i s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `o1_fn_shape C fn /\ fn_ptr_ok P fn` by
     (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM i (fn_insts fn)` by
