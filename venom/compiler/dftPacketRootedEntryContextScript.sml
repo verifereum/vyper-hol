@@ -252,8 +252,57 @@ Resume dft_packet_rooted_entry_context[compose]:
      qpat_assum `rooted_eval F' C pre0 entry = _` mp_tac >>
      qpat_assum `rooted_eval = _` (fn th => pure_rewrite_tac[th]) >>
      simp[NoAsms] >> strip_tac >> asm_rewrite_tac[] >> simp[NoAsms]) >>
+  `pre0 ++ [(parent,pp,NONE)] =
+     pre0 ++ [(parent,rs ++ [(bb,e,z)],NONE)]` by
+    (qpat_assum `pp = _` (fn th => pure_rewrite_tac[th]) >> simp[NoAsms]) >>
   drule_all dft_packet_rooted_success_operational >> strip_tac >>
-  FAIL_TAC "contexts"
+  `?args. eval_operands ops caller = SOME args /\
+     setup_callee sf args caller = SOME ent` by
+    (qpat_x_assum `call_setup C c caller = _` mp_tac >>
+     qpat_assum `call_setup = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
+     qpat_assum `decode_invoke c = _` (fn th => pure_rewrite_tac[th]) >> simp[NoAsms] >>
+     qpat_assum `lookup_function nm _ = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms] >>
+     Cases_on `eval_operands ops caller` >> simp[NoAsms] >>
+     rename1 `eval_operands ops caller = SOME args` >>
+     Cases_on `setup_callee sf args caller` >> simp[NoAsms] >>
+     strip_tac >> qexists_tac `args` >> asm_rewrite_tac[]) >>
+  `get_instruction bb caller.vs_inst_idx = SOME c` by suspend "call_instruction" >>
+  drule_all dft_packet_invoke_context >>
+  disch_then (qspecl_then [`F'-e`,`parent.fn_name`] strip_assume_tac) >>
+  qexists_tac `\r. (FST (K'' r) ++ FST (K' (SND (K'' r))), SND (K' (SND (K'' r))))` >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`row_eval = _`,`plan_eval = _`,`call_setup = _`,`rooted_eval = _`,
+     `plan_ok = _`,`levels_ok = _`] >>
+  simp[APPEND_ASSOC]
+QED
+
+Resume dft_packet_rooted_entry_context[call_instruction]:
+  `TAKE (LENGTH pre0) levels = pre0` by
+    (qpat_assum `levels = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `pre = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms,TAKE_APPEND]) >>
+  `plan_ok F' C parent (EL (LENGTH pre0) incoming) pp ent'` by
+    (qpat_assum `levels_ok _ _ levels _ _ _ _ _ _` mp_tac >>
+     qpat_assum `levels_ok = _` (fn th => pure_rewrite_tac[th]) >>
+     BETA_TAC >> strip_tac >>
+     qpat_assum `!i sf plan call. _`
+       (qspecl_then [`LENGTH pre0`,`parent`,`pp`,`call`] mp_tac) >>
+     (impl_tac >- simp[EL_APPEND1,EL_APPEND2]) >> strip_tac >>
+     qpat_assum `!prior ent. rooted_eval _ _ _ _ = _ ==> _` irule >>
+     qexists_tac `prior` >>
+     simp[TAKE_APPEND,arithmeticTheory.ADD1]) >>
+  `LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` by
+    (qpat_x_assum `plan_ok _ _ _ _ _ _` mp_tac >>
+     qpat_assum `plan_ok = _` (fn th => pure_rewrite_tac[th]) >>
+     BETA_TAC >> strip_tac >>
+     qpat_assum `!r bb e z. _ ==> e <= _ /\ _`
+       (qspecl_then [`LENGTH rs`,`bb`,`e`,`z`] mp_tac) >>
+     (impl_tac >- simp[EL_APPEND2]) >>
+     simp[NoAsms] >>
+     qpat_assum `pp = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms]) >>
+  FAIL_TAC "instruction"
 QED
 
 Finalise dft_packet_rooted_entry_context
