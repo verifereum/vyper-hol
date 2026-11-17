@@ -98,7 +98,7 @@ Theorem deploy_raw_fmp_exists:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan es.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) ==>
-    ?fmp.
+    ?fmp:bytes32.
       w2n (opt_deploy_entry_state prog prog' cplan tops es).vs_initial_fmp <=
         w2n fmp /\
       w2n fmp < 2 ** 254 /\
