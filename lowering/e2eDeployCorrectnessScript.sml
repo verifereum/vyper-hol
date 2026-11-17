@@ -266,17 +266,20 @@ Proof
   `~frame_resource_starved es r es'` by
     (fs[frameOutcomeTheory.creation_resource_starved_def,
         frameOutcomeTheory.frame_resource_starved_def] >> metis_tac[]) >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
-               `dout`, `prog`, `cplan`, `am`, `tx`, `es`, `r`, `es'`] mp_tac
-    deploy_pipeline_gas_link >>
-  impl_tac
-  >- (fs[] >> rpt strip_tac >>
-      drule_all deploy_unit_execution_correct_joint >> simp[]) >>
-  strip_tac >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `es`,
-               `r`, `es'`, `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
-    e2e_deploy_correct_from_gas_link >>
-  impl_tac >- fs[] >> simp[]
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >> gvs[] >>
+  `K SOME rpolicy prog = SOME prog` by simp[] >>
+  `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
+    by metis_tac[deploy_txp_identity] >>
+  `!gobs. deploy_source_calls_within (2 ** 64) tops am tx
+      (MAP SND (call_trace es)) gobs` by
+    (irule deploy_source_calls_within_call_free >>
+     fs[deploy_state_rel_def]) >>
+  drule deploy_raw_fmp_exists >>
+  disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
+  drule_all deploy_unit_execution_correct_raw_fmp >>
+  disch_then (qspec_then `fmp` strip_assume_tac) >>
+  drule_all deploy_pipeline_gas_link >> strip_tac >>
+  drule_all e2e_deploy_correct_from_gas_link >> simp[]
 QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
