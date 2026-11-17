@@ -495,6 +495,13 @@ Proof
   Cases_on `t` >> NC_DEF [eval_send_def, frame_call_value_def]
 QED
 
+Theorem eval_create_operands_no_control:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (INR exc, st') ==> no_control_exc exc
+Proof
+  Cases_on `kind` >> NC_DEF [eval_create_operands_def]
+QED
+
 Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
