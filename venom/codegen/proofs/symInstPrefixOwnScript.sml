@@ -210,13 +210,13 @@ Proof
     metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
       deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
   `ssa_form fn` by metis_tac[stackPlanGenTheory.codegen_ready_fn_def] >>
-  drule_at (Pat `emit_input_plan _ _ _ _ = _`) sym_selected_prefix_paired_mode_conditional >>
+  drule (CONV_RULE (REWR_CONV (GSYM AND_IMP_INTRO))
+    (SPEC_ALL sym_selected_prefix_paired_mode_conditional)) >>
+  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
   disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
-  disch_then (fn th => qpat_assum `!n cs ss ss'. _`
-    (resolve_then Any mp_tac th)) >>
   simp[] >> disch_then (qspecl_then [`sb`, `r`, `ctx`] mp_tac) >>
   simp[genFrameSimTheory.operand_val_memory_update] >>
   (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
