@@ -97,7 +97,7 @@ Proof
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[])
   >~ [`storage_trace_frame (bind _ _)`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_bind,
-       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_read_result] >>
   qexists_tac `\H res ee G tn t. childQ H res ee G tn t /\
     ~t.vs_halted /\ ee.gas_obs = []` >> conj_tac
@@ -105,10 +105,8 @@ Proof
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> Cases_on `res` >> simp[Abbr `childR`] >>
-  Cases_on `y` >> Cases_on `r` >>
-  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt] >>
-  rename1 `Error err` >> Cases_on `err` >>
-  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
+  POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_INR_type]
 QED
 
 Resume convert_scalar_vv_sim_full[continuation]:
@@ -168,7 +166,7 @@ Resume convert_scalar_vv_sim_full[continuation]:
          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
          drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
          simp[vyperStorageTraceTheory.storage_trace_frame_bind,
-           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
       `storage_well_formed_on cx es (FST H)` by
         (qpat_assum `!H. valid_horizon _ _ _ es.storage_trace ==> _`
