@@ -29,7 +29,7 @@ Theorem dense_single_inst_seq_ptr:
 Proof
   strip_tac >> rpt gen_tac >>
   `ptr_inst_ok D 0 0 ctx func G tn (mk_inst id MLOAD [Var root] [tmp]) s` by
-    (irule ptr_inst_ok_mload >> simp[]) >>
+    (irule ptr_inst_ok_mload_lo >> simp[allocas_from_def]) >>
   `eval_operand dst (update_var tmp (mload (w2n a) s) s) = SOME k` by
     (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def, update_var_def,
       FLOOKUP_UPDATE]) >>
@@ -43,7 +43,12 @@ Proof
        (update_var tmp (mload (w2n a) s) s) tn)
      (mk_inst (id+1) (if tr then TSTORE else SSTORE) [dst;Var tmp] [])
      (update_var tmp (mload (w2n a) s) s with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (irule assign_base_ptr_inst_ok_storage_word >> simp[] >> Cases_on `tr` >> simp[]) >>
+    (irule fragGasSeqPtrContextTheory.ptr_inst_ok_restore_ctx >>
+     conj_tac >- (Cases_on `tr` >> simp[mk_inst_def]) >>
+     conj_tac >- (simp[allocas_below_fmp_def, update_var_def] >>
+       gvs[allocas_below_fmp_def]) >>
+     irule assign_base_ptr_inst_ok_storage_word >>
+     Cases_on `tr` >> simp[ctx_has_dalloca_def]) >>
   Cases_on `tr` >>
   gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, exec_write2_def, eval_operand_def, update_var_def,
