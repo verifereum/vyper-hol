@@ -9,6 +9,8 @@ HOL-supported-subset corpus (6 of them not parity-checked; see [`pending-5127-po
   theories.
 - `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
   bytecode and its provenance record.
+- `python-o1-asm-opt/` contains the same fixtures compiled with Python's final
+  assembly optimizer on (O1), the oracle for `asm_opt_finalizer`.
 - `python_o1_bytecode_oracle.py` generates the oracle.
 - `python-o1-bytecode-fixtures` reproduces it.
 
@@ -168,8 +170,9 @@ holbuild executable bytecode_parity_native
 
 CI's `native-parity` job runs it on every suite.
 
-The 101 retained fixtures in `python-o1-no-asm-opt/` and the witnessed fixtures
-of each feature suite are covered, except those listed in
+The 101 retained fixtures in `python-o1-no-asm-opt/`, the same fixtures in
+`python-o1-asm-opt/` (compiled with `asm_opt_finalizer`), and the witnessed
+fixtures of each feature suite are covered, except those listed in
 [`pending-5127-port.md`](pending-5127-port.md); together they check the deployment and
 runtime byte lists of each. The runner is trusted rather than kernel-checked
 (see its Trust section). The independent oracle appears only in parity claims.
