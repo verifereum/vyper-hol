@@ -31,6 +31,11 @@ Ancestors
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
   sum venomState vyperFiniteStoragePreservation
+  vyperTypeSoundness vyperTypeExtCallCore vyperTypeExprSoundness
+  accountsRelProps vyperStoragePlaceObserved words vyperState
+  vyperContext context entryStateRel bodyAugPlaceTarget targetPlaceSim
+  vyperPlaceMutationSoundness exprSimPopNestedBase exprReasonOperand
+  exprSimSubscriptArrayOrigin bodyMemSnapshotSourceLocation vyperPlaceResultTyping
 
 val _ = Parse.hide "body";
 
@@ -1256,6 +1261,386 @@ Proof
 QED
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
+(* Saved-RHS liveness boundaries, folded from the independently checked workers. *)
+Theorem body_assign_observed_storage_read_live[local]:
+  !env cx es e H es1 tr slot leaf raw.
+    runtime_consistent env cx es /\ well_typed_expr env e /\
+    functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    valid_horizon cx es H es1.storage_trace /\
+    eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot leaf)),es1) ==>
+    storage_read_live H tr raw slot leaf
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_slot_size leaf = 0`
+  >- simp[storage_read_live_def, wordsTheory.w2n_lt, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  drule_all eval_expr_observed_region >> strip_tac >>
+  `MEM (tr,n2w offset,tv) (FST H)` by
+    (irule storage_observations_ok_root >>
+     fs[valid_horizon_def] >> metis_tac[]) >>
+  irule storage_place_observed_read_live >>
+  simp[storage_place_observed_def] >>
+  qexistsl [`n2w offset`, `tv`, `path`, `delta`] >> simp[]
+QED
+
+Theorem body_assign_representation_storage_live[local]:
+  env.type_defs = get_tenv cx /\
+  eval_result_typed (env,cx,es1) pv (Type ty) /\
+  vv_place_ptr cenv cx es1 s pv vv /\
+  (!t p. vv = LocatedValue t p /\
+     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+     t = ty /\ (!v. pv <> Value v)) /\
+  (!tr slot leaf. pv = PlaceR (StoragePlace tr slot leaf) ==>
+     storage_read_live H tr (get_storage cx es1 tr) slot leaf) ==>
+  vv_storage_live H cx vv es1 s
+Proof
+  Cases_on `vv` >- simp[] >>
+  rpt strip_tac >>
+  rename1 `vv_place_ptr cenv cx es1 s pv (LocatedValue t p)` >>
+  Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+  >- (first_x_assum (qspecl_then [`t`, `p`] mp_tac) >>
+      simp[] >> strip_tac >>
+      Cases_on `pv` >> gvs[eval_result_typed_def] >>
+      Cases_on `p'` >>
+      gvs[vv_place_ptr_def, runtime_place_typed_def, place_type_value_def,
+          slot_loc_def, vyperStateTheory.return_def] >>
+      Cases_on `b` >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem body_assign_attribute_storage_origin[local]:
+  compile_attribute f cenv rt ty obj fld sa = (LocatedValue t p,sb) /\
+  p.ptr_location <> LocMemory ==>
+  t = rt /\
+  vv_location (FST (f cenv ty obj sa)) = SOME p.ptr_location
+Proof
+  Cases_on `f cenv ty obj sa` >> Cases_on `vv_location q` >>
+  simp[compile_attribute_def, comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[mk_ptr_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem body_assign_subscript_storage_origin[local]:
+  compile_subscript f cenv rt ty obj idx sa = (LocatedValue t p,sb) /\
+  p.ptr_location <> LocMemory ==>
+  t = rt /\ ~copies_subscript_base cenv obj idx /\
+  vv_location (FST (f cenv ty obj sa)) = SOME p.ptr_location
+Proof
+  Cases_on `f cenv ty obj sa` >>
+  simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `copies_subscript_base cenv obj idx` >> gvs[comp_return_def]
+  >- (`vv_with_type (vv_type q) q = q` by
+        (Cases_on `q` >> simp[vv_with_type_def, vv_type_def]) >>
+      qpat_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
+      qpat_assum `vv_with_type _ _ = _`
+        (fn th => once_rewrite_tac [GSYM th]) >>
+      disch_then (mp_tac o MATCH_MP snapshot_saved_representation) >>
+      strip_tac >> Cases_on `is_word_type (vv_type q)` >> gvs[] >>
+      Cases_on `place_type cenv obj` >>
+      rpt BasicProvers.TOP_CASE_TAC >>
+      simp[comp_bind_def, comp_return_def, LET_THM] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[mk_ptr_def, AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[mk_ptr_def]) >>
+  rename1 `f cenv ty obj sa = (bv,bs)` >>
+  Cases_on `vv_location bv` >> Cases_on `place_type cenv obj` >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  simp[comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[mk_ptr_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[mk_ptr_def]
+QED
+
+Theorem body_assign_module_storage_decl[local]:
+  body_inv tops ctx cenv cx /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME ml /\
+  ((?slot. ml = StorageLoc slot) \/ (?slot. ml = TransientLoc slot)) ==>
+  src = NONE /\ find_var_decl_by_name id tops <> NONE
+Proof
+  strip_tac >>
+  `cenv_module_pins tops cenv /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))`
+    by fs[body_inv_def] >>
+  gvs[cenv_module_pins_def] >>
+  drule add_immutable_locations_FLOOKUP >> simp[] >> strip_tac >>
+  drule add_module_var_locations_cases >> simp[] >> strip_tac >> gvs[]
+  >>~- ([`MEM (VariableDecl _ _ _ _ _) _`],
+         drule bodyStorageMetadataTheory.find_var_decl_storage_some >> simp[]) >>
+  drule_all find_var_decl_by_name_SOME_hashmap >> simp[]
+QED
+
+Theorem body_assign_storage_target_root[local]:
+  !bt f cenv sa op loc pt sb tops ctx cx.
+    body_inv tops ctx cenv cx /\
+    compile_get_target_ptr f cenv bt sa = ((op,SOME loc,pt),sb) /\
+    (loc = LocStorage \/ loc = LocTransient) ==>
+    ~immutable_root cx bt
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt`
+  >- simp[immutable_root_def, target_root_def]
+  >- (PairCases_on `p` >> rpt gen_tac >>
+      simp[compile_get_target_ptr_def, LET_THM] >>
+      rpt BasicProvers.TOP_CASE_TAC >> simp[comp_return_def] >>
+      rpt strip_tac >> gvs[] >>
+      `p0 = NONE /\ find_var_decl_by_name p1 tops <> NONE` by
+        (irule body_assign_module_storage_decl >> metis_tac[]) >>
+      gvs[immutable_root_def, target_root_def] >>
+      `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >> gvs[]) >>
+  simp[compile_get_target_ptr_def, comp_bind_def, comp_return_def, LET_THM] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  gvs[comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  PairCases_on `result` >> gvs[] >>
+  first_x_assum (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
+  metis_tac[immutable_root_def, target_root_def]
+QED
+
+Theorem body_assign_storage_target_not_immutable[local]:
+  body_inv tops ctx cenv cx /\
+  compile_get_target_ptr f cenv bt sa = ((op,SOME loc,pt),sb) /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_target_place cx bt es = (INL p,es1) ==>
+  !src id path. p <> ImmutablePlace src id path
+Proof
+  strip_tac >>
+  `~immutable_root cx bt` by (irule body_assign_storage_target_root >> metis_tac[]) >>
+  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  metis_tac[aug_place_base_immutable_origin]
+QED
+
+Theorem body_assign_pop_nonvalue[local]:
+  (!src id path. p <> ImmutablePlace src id path) /\
+  pop_place cx p es = (INL pv,es1) ==> !v. pv <> Value v
+Proof
+  Cases_on `p` >> simp[] >> strip_tac
+  >~ [`pop_place _ (MemoryPlace _ _) _ = _`]
+  >- (drule vyperPlaceMutationSoundnessTheory.pop_memory_place_success >>
+      strip_tac >> gvs[]) >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  Cases_on `t` >> simp[pop_place_def, raise_def] >>
+  rename1 `ArrayTV _ bd` >> Cases_on `bd` >>
+  simp[pop_place_def, raise_def, bind_def, ignore_bind_def,
+       return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem body_assign_storage_base_result[local]:
+  body_inv tops ctx cenv cx /\
+  (case e of TopLevelName _ _ => T | Pop _ _ => T | _ => F) /\
+  compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  eval_expr cx e es = (INL pv,es1) ==>
+  t = expr_type e /\ (!v. pv <> Value v)
+Proof
+  Cases_on `e` >> simp[]
+  >- (PairCases_on `p'` >> strip_tac >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once compile_expr_def] >>
+      Cases_on `FLOOKUP cenv.ce_module_vars (p'0,p'1)` >>
+      gvs[] >> rpt BasicProvers.TOP_CASE_TAC >>
+      rpt (pairarg_tac >> gvs[]) >> disch_tac >> gvs[mk_ptr_def] >>
+      `p'0 = NONE /\ find_var_decl_by_name p'1 tops <> NONE` by
+        (irule body_assign_module_storage_decl >> metis_tac[]) >>
+      `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, lookup_global_def] >>
+      Cases_on `find_var_decl_by_name p'1 tops` >> gvs[] >>
+      PairCases_on `x` >> Cases_on `x0` >>
+      simp[bind_def, ignore_bind_def, lift_option_type_def,
+           return_def, raise_def, record_storage_event_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >- (strip_tac >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      rewrite_tac[nested_pop_compile_eq] >> simp[LET_THM] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `loc_opt` >> simp[mk_ptr_def] >> strip_tac >> gvs[] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      `!src id path. p <> ImmutablePlace src id path` by
+        (irule body_assign_storage_target_not_immutable >> metis_tac[]) >>
+      simp[expr_type_def] >> irule body_assign_pop_nonvalue >> metis_tac[])
+QED
+
+Theorem body_assign_storage_expr_cases[local]:
+  body_inv tops ctx cenv cx /\
+  compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+  (case e of TopLevelName _ _ => T | Pop _ _ => T |
+     Attribute _ _ _ => T | Subscript _ _ _ => T | _ => F)
+Proof
+  disch_then (CONJUNCTS_THEN2 kall_tac
+    (CONJUNCTS_THEN2 mp_tac assume_tac)) >>
+  Cases_on `e` >> simp[] >>
+  pure_once_rewrite_tac [CONJUNCT1 compile_expr_raw_def]
+  >~ [`Literal ann lit`] >-
+    (simp[compile_expr_body_def, expr_type_def] >>
+     disch_then (mp_tac o MATCH_MP reason_compile_literal) >>
+     gvs[reason_result_shape_def])
+  >~ [`IfExp ann cond th el`] >-
+    (disch_then (mp_tac o MATCH_MP reason_compile_ifexp) >>
+     gvs[reason_result_shape_def])
+  >~ [`StructLit ann nm fields`] >-
+    (disch_then (mp_tac o MATCH_MP reason_compile_structlit) >>
+     gvs[reason_result_shape_def])
+  >~ [`Call ann dest args dflt`] >-
+    (simp[compile_expr_body_def, expr_type_def] >>
+     disch_then (mp_tac o MATCH_MP reason_compile_call) >>
+     gvs[reason_result_shape_def])
+  >~ [`Builtin ann bi args`] >- suspend "builtin"
+  >~ [`TypeBuiltin ann tb rt args`] >- suspend "typebuiltin" >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_ptr_def, AllCaseEqs()] >>
+  rename1 `FLOOKUP cenv.ce_vars nm` >>
+  Cases_on `FLOOKUP cenv.ce_vars nm`
+  >- (gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[])) >>
+  rename1 `FLOOKUP _ _ = SOME binding` >> Cases_on `binding` >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[]
+QED
+
+Resume body_assign_storage_expr_cases[builtin]:
+  disch_then (mp_tac o MATCH_MP reason_compile_expr_builtin_shape_classify) >>
+  gvs[reason_result_shape_def] >>
+  (simp[exprCallBoundsTheory.builtin_child_callback_def] >>
+   pure_once_rewrite_tac [CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)] >>
+   Cases_on `bi` >> strip_tac
+   >~ [`Acc item`] >- suspend "acc"
+   >~ [`AsWeiValue denom`] >- suspend "wei"
+   >~ [`Len`] >- (drule reason_builtin_len >> gvs[reason_result_shape_def])
+   >~ [`Bop bop`] >- (drule reason_builtin_bop >> gvs[reason_result_shape_def])
+   >~ [`MakeArray et bd`] >- (drule reason_builtin_makearray >> gvs[reason_result_shape_def])
+   >~ [`MethodId`] >- (drule reason_builtin_method_id >> gvs[reason_result_shape_def])
+   >~ [`Keccak256`] >- (drule_at Any reason_builtin_hash >> simp[reason_result_shape_def])
+   >~ [`Sha256`] >- (drule_at Any reason_builtin_hash >> simp[reason_result_shape_def])
+   >~ [`CalldataSlice n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`ECAdd`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`ECMul`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`Concat n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`Slice n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def]) >>
+   drule_at Any reason_builtin_scalar >> simp[reason_result_shape_def])
+QED
+
+Resume body_assign_storage_expr_cases[typebuiltin]:
+  simp[compile_expr_body_def, expr_type_def] >>
+  simp[exprCallBoundsTheory.type_child_callback_def] >>
+  pure_once_rewrite_tac [CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)] >>
+  strip_tac >> Cases_on `tb` >> gvs[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
+      mk_ptr_def, base_ptr_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), mk_ptr_def, base_ptr_def]
+QED
+
+Resume body_assign_storage_expr_cases[acc]:
+  simp[markerTheory.resconj_def, markerTheory.suspendimp_def] >>
+  rpt strip_tac >>
+  gvs[compile_builtin_dispatch_body_def, oneline as_stack_val_def, AllCaseEqs()]
+QED
+
+Resume body_assign_storage_expr_cases[wei]:
+  simp[markerTheory.resconj_def, markerTheory.suspendimp_def] >>
+  rpt strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), oneline as_stack_val_def]
+QED
+
+Finalise body_assign_storage_expr_cases
+
+Theorem body_assign_select_nonvalue[local]:
+  (!v. raw <> Value v) /\
+  select_result cx ty raw sub st = (INL out,st') ==>
+  !v. out <> Value v
+Proof
+  Cases_on `raw` >> simp[select_result_def] >> rpt strip_tac >>
+  drule extend_place_result_shape >> strip_tac >> gvs[]
+QED
+
+Theorem body_assign_storage_result_shape_from_cases[local]:
+  body_inv tops ctx cenv cx /\
+  (!e ty sa t p sb.
+    compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+    (case e of TopLevelName _ _ => T | Pop _ _ => T |
+       Attribute _ _ _ => T | Subscript _ _ _ => T | _ => F)) /\
+  (!e ty sa t p sb es pv es1.
+    (case e of TopLevelName _ _ => T | Pop _ _ => T | _ => F) /\
+    compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+    eval_expr cx e es = (INL pv,es1) ==>
+    t = expr_type e /\ (!v. pv <> Value v)) ==>
+  !e ty sa t p sb es pv es1.
+    compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+    eval_expr cx e es = (INL pv,es1) ==>
+    t = expr_type e /\ (!v. pv <> Value v)
+Proof
+  strip_tac >> measureInduct_on `expr_size e` >>
+  rpt gen_tac >> disch_tac >>
+  `case e of TopLevelName _ _ => T | Pop _ _ => T |
+     Attribute _ _ _ => T | Subscript _ _ _ => T | _ => F` by metis_tac[] >>
+  Cases_on `case e of TopLevelName _ _ => T | Pop _ _ => T | _ => F`
+  >- (qpat_x_assum `!e ty sa t p sb es pv es1. _` irule >>
+      metis_tac[]) >>
+  qpat_x_assum `!e ty sa t p sb es pv es1. _` kall_tac >>
+  qpat_x_assum `!e ty sa t p sb. _` kall_tac >>
+  Cases_on `e` >> gnvs[] >>
+  qpat_x_assum `_ /\ _` (map_every assume_tac o CONJUNCTS)
+  >- (qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once compile_expr_def] >> strip_tac >>
+      `p.ptr_location <> LocMemory` by
+        (Cases_on `p.ptr_location` >> gvs[]) >>
+      drule_all body_assign_subscript_storage_origin >>
+      simp[] >> strip_tac >>
+      `~subscript_reads_base cx e' e0` by
+        metis_tac[body_inv_copies_subscript_base] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      Cases_on `compile_expr cenv ty e' sa` >> Cases_on `q` >>
+      gvs[vv_location_def] >>
+      qpat_x_assum `!y. expr_size y < _ ==> _`
+        (qspec_then `e'` mp_tac) >>
+      (impl_tac >- simp[]) >> disch_then drule >>
+      disch_then assume_tac >>
+      `!v. res <> Value v` by metis_tac[] >>
+      metis_tac[body_assign_select_nonvalue])
+  >- (qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once compile_expr_def] >> strip_tac >>
+      `p.ptr_location <> LocMemory` by
+        (Cases_on `p.ptr_location` >> gvs[]) >>
+      drule_all body_assign_attribute_storage_origin >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      Cases_on `compile_expr cenv ty e' sa` >> Cases_on `q` >>
+      gvs[vv_location_def] >>
+      qpat_x_assum `!y. expr_size y < _ ==> _`
+        (qspec_then `e'` mp_tac) >>
+      (impl_tac >- simp[]) >> disch_then drule >>
+      disch_then assume_tac >>
+      `!v. res <> Value v` by metis_tac[] >>
+      metis_tac[body_assign_select_nonvalue])
+QED
+
+Theorem body_assign_storage_result_shape[local]:
+  body_inv tops ctx cenv cx /\
+  compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  eval_expr cx e es = (INL pv,es1) ==>
+  t = expr_type e /\ (!v. pv <> Value v)
+Proof
+  strip_tac >> mp_tac body_assign_storage_result_shape_from_cases >>
+  (impl_tac >-
+    (rpt conj_tac >>
+     metis_tac[body_assign_storage_expr_cases, body_assign_storage_base_result])) >>
+  disch_then drule >> metis_tac[]
+QED
+
 (* A storage-backed compiled result retains a source storage place.
    The actual source evaluation records its finite observed region even
    when the RHS has effects. *)
@@ -1271,7 +1656,20 @@ Theorem body_assign_rhs_storage_live[local]:
     vv_post H ctx func cenv cx e es sa sb s0 es1 pv vv s ==>
     vv_storage_live H cx vv es1 s
 Proof
-  FAIL_TAC "Pending saved-RHS storage-liveness proof"
+  rpt gen_tac >> strip_tac >>
+  `eval_result_typed (env,cx,es1) pv (Type (expr_type e))` by
+    (irule (cj 2 typed_expr_success_preserves_type) >>
+     fs[runtime_consistent_def] >> metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    metis_tac[runtime_consistent_get_tenv] >>
+  `vv_place_ptr cenv cx es1 s pv vv` by fs[vv_post_def] >>
+  irule body_assign_representation_storage_live >>
+  qexistsl [`cenv`, `env`, `pv`, `expr_type e`] >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      irule body_assign_observed_storage_read_live >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  irule body_assign_storage_result_shape >> metis_tac[]
 QED
 
 Theorem body_assign_other_full:
