@@ -659,6 +659,10 @@ Theorem ifexp_widened_call_arm_step_full:
        ghost_inv_at (DF H) lo d cenv cx ee Gz tf z') /\
     (~is_word_type t ==>
      vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr op LocMemory)) z') /\
+    (~is_word_type (post_value_type cenv e) /\
+     ~is_bytestring_type (post_value_type cenv e) ==>
+     vv_own cenv cx t sm sb ee (Value v)
+       (LocatedValue t (mk_ptr op LocMemory)) z') /\
     expr_store_bound cx t v op z' /\
     z'.vs_current_bb = sb.cs_current_bb /\
     z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -1360,16 +1364,60 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> ghost_inv_at _ _ _ _ _ _ Gf tnf t' /\ _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   simp[] >> strip_tac >>
-  qexistsl_tac [`t'`, `Gf`, `tnf`] >> simp[] >>
-  conj_tac >-
-    (gen_tac >> disch_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
+  `local_ptrs_reserved cenv sl` by
+    (irule local_ptrs_reserved_next_var >> qexists `sk` >> fs[ci_mono_def]) >>
+  `not_fresh_at sl p` by
+    (qpat_assum `compile_alloc_buffer _ sm = (buf,sk)` mp_tac >>
+     qpat_assum `buf.buf_operand = Var p` mp_tac >>
+     qpat_assum `ci_mono sk sl` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_alloc_buffer_def, fresh_var_def, emit_inst_def, emit_op_def,
+          comp_bind_def, comp_return_def, comp_ignore_bind_def,
+          fresh_id_def, emit_def, ci_mono_def, not_fresh_at_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
   `t'.vs_allocas = z'.vs_allocas /\ t'.vs_alloca_next = z'.vs_alloca_next` by
-    (qpat_x_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_state_frame_def] >>
-     strip_tac >>
-     qpat_x_assum `_ = z'` (SUBST1_TAC o SYM) >> simp[]) >>
+     strip_tac >> qpat_x_assum `_ = z'` (SUBST1_TAC o SYM) >> simp[]) >>
+  `lookup_var p t' = SOME w` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+     qpat_assum `not_fresh_at sl p` mp_tac >>
+     qpat_assum `lookup_var p z' = SOME w` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def] >> metis_tac[]) >>
+  `!n lb len. local_region cenv ee.scopes t' n lb len <=>
+              local_region cenv ee.scopes z' n lb len` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+     qpat_assum `local_ptrs_reserved cenv sl` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def] >> rpt strip_tac >>
+     irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists `sl` >> simp[]) >>
+  `sm.cs_next_id < sb.cs_next_id` by
+    (qpat_assum `sm.cs_next_id < sk.cs_next_id` mp_tac >>
+     qpat_assum `ci_mono sk sl` mp_tac >>
+     qpat_assum `ci_mono sl sb` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ci_mono_def] >> decide_tac) >>
+  `val_footprint rty v <= type_memory_size rty` by
+    (irule exprSimPropsTheory.val_footprint_le >> first_assum ACCEPT_TAC) >>
+  `vv_own cenv cx t sm sb ee (Value v)
+     (LocatedValue t (mk_ptr (Var p) LocMemory)) t'` by
+    (qpat_assum `evaluate_type (get_tenv cx) t = SOME rty` mp_tac >>
+     qpat_assum `lookup_var p t' = SOME w` mp_tac >>
+     qpat_assum `t'.vs_allocas = z'.vs_allocas` mp_tac >>
+     qpat_assum `FLOOKUP z'.vs_allocas sm.cs_next_id = SOME _` mp_tac >>
+     qpat_assum `sm.cs_next_id < sb.cs_next_id` mp_tac >>
+     qpat_assum `val_footprint rty v <= type_memory_size rty` mp_tac >>
+     qpat_assum `!n lb len. local_region cenv ee.scopes z' n lb len ==> _` mp_tac >>
+     qpat_assum `!n lb len. local_region cenv ee.scopes t' n lb len <=> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vv_own_def, mk_ptr_def, read_result_def, return_def] >>
+     rpt strip_tac >> gvs[] >>
+     qexists `w` >> simp[eval_operand_def] >> disj1_tac >>
+     qexistsl [`sm.cs_next_id`,`w2n w`,`type_memory_size rty`] >>
+     simp[] >> metis_tac[]) >>
+  qpat_assum `p = STRING _ _` SUBST_ALL_TAC >>
+  qexistsl_tac [`t'`, `Gf`, `tnf`] >> simp[] >>
   `!ctx fn s n t. gas_path ctx fn s n (OK t) /\
       fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s ==>
       alloca_history fn t /\ alloca_inv t` by
