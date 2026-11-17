@@ -62,6 +62,8 @@ Theorem ld_joint_create_abort:
   ?t1. step_inst fuel C' inst t = Abort reason t1
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==>
       (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
     (rpt strip_tac >> drule ld_joint_operand_defined >> disch_then irule >>
@@ -135,6 +137,8 @@ Proof
 QED
 
 Resume ld_joint_static_abort[call]:
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
   simp[step_inst_non_invoke] >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>

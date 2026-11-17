@@ -310,7 +310,8 @@ Theorem ld_exec_ext_call_frame:
   ss.vs_params = s.vs_params /\ ss.vs_fmp = s.vs_fmp
 Proof
   strip_tac >>
-  gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def, FLOOKUP_UPDATE]
+  gvs[exec_ext_call_def, AllCaseEqs(), consume_call_outcome_eq,
+      update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem ld_oracle_call_taint:
