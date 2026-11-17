@@ -5,8 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftPacketBlockCutAggregate dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketBlockAppendShape dftGasPrefixProvider
-  dftPacketBlockAppendTraceBoundary
-  dftNativePlanPrefix
+  dftPacketBlockAppendTraceBoundary dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
@@ -21,21 +20,21 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
-  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop dftPacketFreshSingletonStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop
+  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketFreshSingletonNative dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
-  dftPacketNativeContinuation dftPacketPseudoNativeNext
-  dftPacketNativePrefixBoundary
+  dftPacketNativeContinuation
+  dftPacketPseudoNativeNext dftPacketNativePrefixBoundary
   dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
+  dftPacketInvokePrefixStop dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
   dftPacketPreterminalNativeAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry dftPacketPseudoAdvance
@@ -44,14 +43,13 @@ Ancestors
   dftPacketRetainedOracle
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnOrder dftPacketReturnLocal
+  dftPacketReturnRowNormalize
   dftPacketReturnNative
-  dftPacketTraceCallProvenance dftPacketReturnRecordFrame
-  dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketTraceCallProvenance dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
-  dftPacketBlockAppendStopBoundary
-  dftPacketRootedSegmentStop dftPacketRowAlignment
+  dftPacketBlockAppendStopBoundary dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
   dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
