@@ -389,6 +389,8 @@ Theorem ricf_view_ext_call_ok[local]:
        v = ricf_retpc_view fn u)
 Proof
   strip_tac >>
+  `(ricf_retpc_view fn s).vs_outcomes = s.vs_outcomes` by
+    simp[ricf_retpc_view_def, frame_view_def] >>
   `venom_call_request (ricf_retpc_view fn s) addr value ao az staticflag =
     venom_call_request s addr value ao az staticflag` by
     simp[venom_call_request_def, read_memory_def,
@@ -410,6 +412,8 @@ Theorem ricf_view_create_ok[local]:
        v = ricf_retpc_view fn u)
 Proof
   strip_tac >>
+  `(ricf_retpc_view fn s).vs_outcomes = s.vs_outcomes` by
+    simp[ricf_retpc_view_def, frame_view_def] >>
   `venom_create_request (ricf_retpc_view fn s) value off sz salt =
     venom_create_request s value off sz salt` by
     simp[venom_create_request_def, read_memory_def,
@@ -429,6 +433,8 @@ Theorem ricf_view_delegatecall_ok[local]:
        v = ricf_retpc_view fn u)
 Proof
   strip_tac >>
+  `(ricf_retpc_view fn s).vs_outcomes = s.vs_outcomes` by
+    simp[ricf_retpc_view_def, frame_view_def] >>
   `venom_call_request (ricf_retpc_view fn s) addr 0w ao az F =
     venom_call_request s addr 0w ao az F` by
     simp[venom_call_request_def, read_memory_def,
