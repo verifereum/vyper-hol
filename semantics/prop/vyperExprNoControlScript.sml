@@ -135,7 +135,7 @@ Theorem no_control_prims:
   (take_call_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (take_delegate_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (eval_create cx k hs rof tys vs bs s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (check_create_blueprint hs vs s = (INR exc,s') ⇒ no_control_exc exc)
+  (check_create_blueprint hs literal_offset vs s = (INR exc,s') ⇒ no_control_exc exc)
 Proof
   Cases_on `tr` >>
   rw[return_def, raise_def, get_scopes_def, set_scopes_def, get_accounts_def,

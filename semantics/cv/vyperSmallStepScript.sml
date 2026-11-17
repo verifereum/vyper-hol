@@ -69,7 +69,7 @@ Datatype:
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
   | CreateK (type list) create_kind bool bool (num option) eval_continuation
-  | BlueprintPrefixK (type list) create_kind bool bool (expr list) eval_continuation
+  | BlueprintPrefixK (type list) create_kind bool bool bool (expr list) eval_continuation
   | BlueprintSuffixK (value list) eval_continuation
   | RawCreatePrefixK (type list) bool bool (expr list) eval_continuation
   | RawCreateArgsK (value list) (expr list) eval_continuation
@@ -212,6 +212,7 @@ Definition eval_expr_cps_def:
        CreateFromBlueprint raw_args =>
          eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st
            (BlueprintPrefixK (MAP expr_type es) kind has_salt rof
+             (blueprint_literal_offset cx10 has_salt es)
              (DROP (if has_salt then 4 else 3) es) k)
      | RawCreate =>
          eval_exprs_cps cx10 (TAKE 2 es) st
@@ -474,7 +475,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CreateK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BlueprintPrefixK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BlueprintPrefixK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BlueprintSuffixK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCreatePrefixK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCreateArgsK _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -821,8 +822,8 @@ Definition apply_vals_def:
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx prefix st
-      (BlueprintPrefixK arg_tys kind has_salt rof suffix k) =
-    (case check_create_blueprint has_salt prefix st of
+      (BlueprintPrefixK arg_tys kind has_salt rof literal_offset suffix k) =
+    (case check_create_blueprint has_salt literal_offset prefix st of
        (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL code_size, st) =>
          eval_expr_results_cps cx suffix st
@@ -939,26 +940,6 @@ val () = cv_auto_trans stepk_def;
 Definition cont_def:
   cont ak = OWHILE (λak. nextk ak ≠ DoneK) stepk ak
 End
-
-
-Triviality eval_expr_cps_owhile_result:
-  ∀cx e st q r k.
-  eval_expr cx e st = (q,r) ⇒
-  OWHILE (λak. nextk ak ≠ DoneK) stepk (eval_expr_cps cx e st k) =
-  OWHILE (λak. nextk ak ≠ DoneK) stepk
-    ((case eval_expr cx e st of
-        (INL tv,st1) => AK cx (ApplyTv tv) st1
-      | (INR ex,st1) => AK cx (ApplyExc ex) st1) k) ⇒
-  OWHILE (λak. nextk ak ≠ DoneK) stepk (eval_expr_cps cx e st k) =
-  OWHILE (λak. nextk ak ≠ DoneK) stepk
-    ((case q of
-        INL tv => AK cx (ApplyTv tv) r
-      | INR ex => AK cx (ApplyExc ex) r) k)
-Proof
-  rw[]
-QED
-
-
 
 
 Triviality apply_exc_owhile_eq:
@@ -1082,15 +1063,6 @@ Proof
   qspec_then `AK cx (ApplyVals (vs ++ ws)) st (ExprsK1 h k)`
     mp_tac cont_step >>
   simp[stepk_def, apply_vals_def, cont_apply_vals]
-QED
-
-Theorem cont_exprsk1_exc[local]:
-  cont (AK cx (ApplyExc ex) st (FOLDL (\k v. ExprsK1 v k) k vs)) =
-  cont (AK cx (ApplyExc ex) st k)
-Proof
-  qid_spec_tac `k` >> Induct_on `vs` >> simp[] >> rpt gen_tac >>
-  qspec_then `AK cx (ApplyExc ex) st (ExprsK1 h k)` mp_tac cont_step >>
-  simp[stepk_def, apply_exc_def]
 QED
 
 Theorem cont_codeslicek_vals[local]:

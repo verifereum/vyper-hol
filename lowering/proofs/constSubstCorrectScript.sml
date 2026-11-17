@@ -7,7 +7,7 @@ Ancestors
   vyperMisc vyperTyping vyperTypeValues targetOverlapAccess
   vyperPlaceFrames vyperStatePreservation
   vyperImmutablesPreservation vyperScopePreservation vyperCallOutcomeFrame
-  vyperCreateFrame vyperCallFrame vyperMachineFrame vyperEvalOutcomeSuffix
+  vyperCreate vyperCreateFrame vyperCallFrame vyperMachineFrame vyperEvalOutcomeSuffix
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeSystem finite_map alist list
 
 Definition const_local_refs_def:
@@ -2336,7 +2336,7 @@ Proof
 QED
 
 Theorem protected_cell_frame_blueprint[local]:
-  state_rel_frame (protected_cell_frame addr src id) (check_create_blueprint has_salt vs)
+  state_rel_frame (protected_cell_frame addr src id) (check_create_blueprint has_salt literal_offset vs)
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   drule check_create_blueprint_result_state >> strip_tac >> simp[]
@@ -4735,10 +4735,10 @@ Theorem const_computations_related_create_blueprint:
   (!s ps t. const_cells_agree roots s /\ actuals s = (INL ps,t) ==>
     const_cells_agree roots t) ==>
   const_computations_related (const_results_related roots cx ty)
-    (bind prefix (\pre. bind (check_create_blueprint salt pre) (\sz.
+    (bind prefix (\pre. bind (check_create_blueprint salt literal_offset pre) (\sz.
       bind (bind actuals (read_results cx)) (\vs.
         eval_create cx (CreateFromBlueprint raw_args) salt rof ats (pre ++ vs) (SOME sz)))))
-    (bind prefix' (\pre. bind (check_create_blueprint salt pre) (\sz.
+    (bind prefix' (\pre. bind (check_create_blueprint salt literal_offset pre) (\sz.
       bind (bind actuals' (read_results cx)) (\vs.
         eval_create cx (CreateFromBlueprint raw_args) salt rof ats (pre ++ vs) (SOME sz))))) st
 Proof
@@ -4849,6 +4849,8 @@ Definition const_subst_context_def:
     (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
       checked_frame_context cx mods art src id env) /\
     (!id r. ALOOKUP E id = SOME r ==>
+      (?tops. get_module_code cx NONE = SOME tops /\
+        ALOOKUP (module_consts_env tops []) id = SOME r) /\
       constant_expr mods r /\ const_local_refs r = [] /\
       FLOOKUP env.bare_globals (NONE,id) = SOME (expr_type r) /\
       FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type (expr_type r)) /\
@@ -4858,6 +4860,73 @@ Definition const_subst_context_def:
         (PlaceR (ImmutablePlace NONE id [])) pv /\
         (!st. const_cells_agree roots st ==> eval_expr cx r st = (INL pv,st)))
 End
+
+Theorem subst_consts_exprs_map:
+  subst_consts_exprs E es = MAP (subst_consts_expr E) es
+Proof
+  Induct_on `es` >> simp[subst_consts_expr_def]
+QED
+
+Theorem const_closed_subst:
+  (!e. constant_expr mods e /\ const_local_refs e = [] ==>
+    subst_consts_expr E e = e) /\
+  (!es. EVERY (constant_expr mods) es /\ const_local_exprs es = [] ==>
+    subst_consts_exprs E es = es) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ const_local_fields fs = [] ==>
+    subst_consts_fields E fs = fs)
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
+  rpt strip_tac >> gvs[SF ETA_ss] >>
+  PairCases_on `ns` >> Cases_on `ns0` >>
+  gvs[constant_expr_def, const_local_refs_def, subst_consts_expr_def]
+QED
+
+Theorem subst_consts_absorb:
+  (!id r. ALOOKUP E id = SOME r ==>
+    ALOOKUP full id = SOME r /\ subst_consts_expr full r = r) ==>
+  (!e. subst_consts_expr full (subst_consts_expr E e) = subst_consts_expr full e) /\
+  (!bt. subst_consts_btarget full (subst_consts_btarget E bt) =
+    subst_consts_btarget full bt) /\
+  (!es. subst_consts_exprs full (subst_consts_exprs E es) = subst_consts_exprs full es) /\
+  (!d. subst_consts_opt full (subst_consts_opt E d) = subst_consts_opt full d) /\
+  (!fs. subst_consts_fields full (subst_consts_fields E fs) = subst_consts_fields full fs)
+Proof
+  strip_tac >> ho_match_mp_tac fold_const_expr_ind >>
+  simp[subst_consts_expr_def] >> rpt strip_tac >>
+  PairCases_on `ns` >> Cases_on `ns0` >> simp[subst_consts_expr_def] >>
+  Cases_on `ALOOKUP E ns1` >> simp[subst_consts_expr_def] >>
+  first_x_assum drule >> strip_tac >> simp[]
+QED
+
+Theorem const_subst_normalized_expr:
+  const_subst_context roots cx env E mods art ==>
+  subst_consts_expr (case get_module_code cx NONE of
+    SOME tops => module_consts_env tops [] | NONE => [])
+    (subst_consts_expr E e) =
+  subst_consts_expr (case get_module_code cx NONE of
+    SOME tops => module_consts_env tops [] | NONE => []) e
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `subst_consts_expr full` >>
+  `!id r. ALOOKUP E id = SOME r ==>
+    ALOOKUP full id = SOME r /\ subst_consts_expr full r = r` by
+    (rpt strip_tac >> gvs[const_subst_context_def] >>
+     first_x_assum drule >> strip_tac >>
+     simp[Abbr`full`] >> metis_tac[const_closed_subst]) >>
+  drule subst_consts_absorb >> metis_tac[]
+QED
+
+Theorem const_subst_blueprint_literal_offset:
+  const_subst_context roots cx env E mods art ==>
+  blueprint_literal_offset cx has_salt (subst_consts_exprs E es) =
+  blueprint_literal_offset cx has_salt es
+Proof
+  strip_tac >>
+  simp[blueprint_literal_offset_def, subst_consts_exprs_map,
+       GSYM MAP_DROP] >>
+  Cases_on `DROP (if has_salt then 3 else 2) es` >>
+  simp[] >> metis_tac[const_subst_normalized_expr]
+QED
 
 Theorem const_subst_typed_annotation:
   const_subst_context roots cx env E mods art /\
@@ -4872,12 +4941,6 @@ Proof
   gvs[const_subst_context_def] >>
   first_x_assum drule >> strip_tac >>
   gvs[well_typed_expr_def, vtype_annotation_ok_def]
-QED
-
-Theorem subst_consts_exprs_map:
-  subst_consts_exprs E es = MAP (subst_consts_expr E) es
-Proof
-  Induct_on `es` >> simp[subst_consts_expr_def]
 QED
 
 Theorem subst_consts_fields_maps:
@@ -6371,6 +6434,9 @@ Resume const_subst_structural[create]:
     metis_tac[const_subst_context_results_frame] >>
   `MAP expr_type (subst_consts_exprs env' es) = MAP expr_type es` by
     metis_tac[const_subst_typed_annotations] >>
+  `!salt. blueprint_literal_offset cx salt (subst_consts_exprs env' es) =
+     blueprint_literal_offset cx salt es` by
+    metis_tac[const_subst_blueprint_literal_offset] >>
   simp_tac bool_ss [subst_consts_expr_def, Once evaluate_def] >>
   simp_tac bool_ss [Once evaluate_def] >>
   gvs[subst_consts_exprs_map] >>
@@ -6552,7 +6618,7 @@ Proof
   drule_all checked_module_consts_lookup_footprint >>
   disch_then (qspec_then `sc` strip_assume_tac) >>
   qexists `roots ++ roots'` >>
-  simp[const_cells_agree_append, const_subst_context_def] >>
+  simp[const_cells_agree_append, const_subst_context_def, get_module_code_def] >>
   conj_tac
   >- (drule get_tenv_sources >> simp[artifact_env_def]) >>
   conj_tac
