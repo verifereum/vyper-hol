@@ -137,7 +137,8 @@ Theorem ld_delegate_execution:
     read_memory (w2n (at:bytes32)) (w2n az) t /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) at az (rt:bytes32) (rz:bytes32) = OK ts ==>
   ?rq out w u.
-    rq = venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall /\
+    rq = venom_call_request s addr 0w ao az F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|> /\
     consume_call_outcome rq (w2n rt) (w2n rz) t = (w,u) /\
     inst.inst_outputs = [out] /\ ts = update_var out w u
 Proof
