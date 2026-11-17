@@ -70,7 +70,9 @@ Proof
     (Cases_on `bop = And \/ bop = Or \/ bop = XOr`
      >- (drule_all compile_bitwise_run >> gvs[]) >>
      `bop = ShL \/ bop = ShR` by gvs[] >>
-     drule_all compile_shift_run >> gvs[is_signed_type_def]) >>
+     qspecl_then [`bop`, `x`, `y`, `BaseT (BytesT (Fixed m))`, `bl`, `el`,
+       `sa`, `sb`, `op`, `drop_fresh sa s`, `w1`, `w2`] mp_tac
+       compile_shift_run >> simp[is_signed_type_def]) >>
   `straight_fresh (compile_binop bop x y (BaseT (BytesT (Fixed m))) bl el)` by
     (Cases_on `bop = And \/ bop = Or \/ bop = XOr`
      >- metis_tac[straight_fresh_compile_bitwise] >>

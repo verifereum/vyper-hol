@@ -310,6 +310,7 @@ Proof
   Cases_on `is_bool_type t1`
   >- (Cases_on `t1` >> gvs[is_bool_type_def] >>
       rename1 `BaseT bt` >> Cases_on `bt` >>
+      rw[] >>
       gvs[is_bool_type_def, well_typed_binop_def, supported_binop_def]) >>
   rw[] >> gvs[well_typed_binop_def, supported_binop_def] >>
   imp_res_tac well_formed_integer_type >> gvs[] >>
