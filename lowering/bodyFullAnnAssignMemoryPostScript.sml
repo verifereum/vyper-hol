@@ -10,6 +10,7 @@ Ancestors
   bodyFullMemoryFrames bodySimFull bodyMemoryDefs
   exprSimStorageCopy bodyBinopFragMemory
   loweringPosts vyperState vyperValue finite_map
+  bodyFullAllocaFresh stmtSimDecl stmtSimProps loweringHalt
 
 Theorem annassign_memory_full_assign_path:
   !H0 ctx func ce cx mid s sa sf xs p sw dw src_loc dty sty stv dtv v
@@ -451,3 +452,163 @@ Resume annassign_memory_full_installation_post[storage]:
 QED
 
 Finalise annassign_memory_full_installation_post
+
+(* Capacity-generic allocation, before the RHS or empty-value execution. *)
+Theorem annassign_full_alloc_entry:
+  !DF lo d PG explicit ctx func old ce cx es id typ st0 sa r a p sz s0 G0 tn0.
+    declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
+    FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
+    sz = type_memory_bytes old typ /\ sz < dimword (:256) /\
+    compile_alloc_buffer sz sa =
+      (<|buf_operand := Var p; buf_size := sz|>,a) /\
+    fn_has_code sa a func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved old sa /\ cs_extends sa a /\
+    ret_pc_ok old sa s0 /\
+    (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
+      not_fresh_at sa x) /\
+    return_buf_frame d old sa s0 /\ alloca_history func s0 /\
+    ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 es.storage_trace /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func old cx es s0 /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d old cx es G0 tn0 s0) /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?w entry Ga tna.
+      FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+      (!name. name <> id ==> FLOOKUP ce.ce_vars name = FLOOKUP old.ce_vars name) /\
+      ce with <|ce_vars := old.ce_vars; ce_var_type := old.ce_var_type;
+        ce_dynarray_capacity := old.ce_dynarray_capacity|> = old /\
+      ce.ce_return_buf = old.ce_return_buf /\
+      ce.ce_return_pc = old.ce_return_pc /\ ce.ce_imm_alloca = old.ce_imm_alloca /\
+      MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+      not_fresh_at a p /\ local_ptrs_reserved ce a /\
+      (!x. not_fresh_at sa x ==> not_fresh_at a x) /\
+      (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) /\
+      (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) /\
+      ret_pc_ok ce a entry /\ return_buf_frame d ce a entry /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
+      ~entry.vs_halted /\ entry.vs_current_bb = a.cs_current_bb /\
+      entry.vs_inst_idx = LENGTH a.cs_current_insts /\
+      entry with <|vs_vars := s0.vs_vars; vs_allocas := s0.vs_allocas;
+        vs_alloca_next := s0.vs_alloca_next; vs_inst_idx := s0.vs_inst_idx|> = s0 /\
+      alloca_history func entry /\ s0.vs_alloca_next <= entry.vs_alloca_next /\
+      lookup_var p entry = SOME w /\ ptr_covers Ga tna p entry sz /\
+      FLOOKUP entry.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      FLOOKUP Ga p = SOME (w2n w,sz) /\
+      w2n w+sz < dimword (:256) /\ w2n w+sz <= entry.vs_alloca_next /\
+      (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
+        FLOOKUP entry.vs_allocas aid = SOME ent) /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x entry = lookup_var x s0 /\ FLOOKUP Ga x = FLOOKUP G0 x /\
+        op_taint tna (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame old es sa s0 ce es entry /\
+      ghost_kept_at lo old es sa G0 tn0 s0 Ga tna /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func ce cx es entry /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d ce cx es Ga tna entry)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func old cx es s0 /\
+   ghost_inv_at (DF (storage_trace_horizon es.storage_trace)) lo d old cx es G0 tn0 s0` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
+    fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    alloc_buffer_origin_ptr_path_exact) >>
+  disch_then (qspecl_then [`tn0`,`explicit`,`PG`,`G0`] strip_assume_tac) >> gvs[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv_at (DF H) lo d old cx es G' tn' t` by
+    (rpt strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] alloc_buffer_ghost_inv_at) >>
+     rpt (first_assum (irule_at Any)) >>
+     qexistsl_tac [`w2n w + type_memory_bytes old typ`,`G0`] >>
+     simp[] >> metis_tac[ret_pc_ok_def]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func old cx es t` by
+    (rpt strip_tac >> first_x_assum irule >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  suspend "declare"
+QED
+
+Resume annassign_full_alloc_entry[declare]:
+  drule_all declare_local_ptr >> strip_tac >>
+  drule compile_alloc_buffer_parts >> simp[] >> strip_tac >> gvs[] >>
+  `ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
+   ce.ce_imm_alloca = old.ce_imm_alloca` by
+    (qpat_assum `ce with <|ce_vars := _; ce_dynarray_capacity := _;
+      ce_var_type := _|> = old` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es t /\
+    ghost_inv_at (DF H) lo d ce cx es G' tn' t` by
+    (gen_tac >> disch_tac >> conj_tac
+     >- (irule stmt_state_rel_declare_local_entry >>
+         goal_assum (drule_at (Pat `declare_local _ _ _ _ = _`)) >>
+         simp[] >> metis_tac[]) >>
+     `ghost_inv_at (DF H) lo d old cx es G' tn' t` by metis_tac[] >>
+     fs[bodyPtrDefsTheory.ghost_inv_at_def] >> conj_tac
+     >- (rpt gen_tac >> strip_tac >> Cases_on `name = id` >> gvs[] >>
+         qpat_x_assum `!name entry p sz. _`
+           (qspecl_then [`name`,`entry`,`p`,`sz`] mp_tac) >> simp[]) >>
+     simp[] >> Cases_on `d` >> gvs[bodyPtrDefsTheory.return_buf_ptr_def] >>
+     PairCases_on `x` >> gvs[bodyPtrDefsTheory.return_buf_ptr_def]) >>
+  `~t.vs_halted /\ t.vs_memory = s0.vs_memory` by
+    (qpat_assum `t with <|vs_vars := _; vs_inst_idx := _;
+       vs_allocas := _; vs_alloca_next := _|> = s0` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  suspend "frame"
+QED
+
+Resume annassign_full_alloc_entry[frame]:
+  `alloca_frame old es sa s0 old es t` by
+    (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       alloca_frame_of_mem_frame) >> asm_rewrite_tac[] >> simp[] >>
+     qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`func`] >> simp[]) >>
+  `alloca_frame old es sa s0 ce es t` by
+    (qpat_x_assum `alloca_frame old es sa s0 old es t`
+       (assume_tac o REWRITE_RULE [alloca_frame_def]) >>
+     pure_rewrite_tac[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!aid off sz. _` (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+     (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+     conj_tac >- simp[] >> rpt strip_tac >>
+     qpat_x_assum `!n b sz'. local_region old es.scopes t n b sz' ==> _` irule >>
+     qexists_tac `n` >> fs[loweringStateRelDefsTheory.local_region_def] >>
+     `n <> id` by (strip_tac >> gvs[]) >> metis_tac[]) >>
+  `!aid off cap. FLOOKUP s0.vs_allocas aid = SOME (off,cap) ==>
+    off+cap <= s0.vs_alloca_next` by
+    (qpat_assum `stmt_state_rel _ _ _ old _ _ s0`
+       (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
+     simp[alloca_inv_def,alloca_next_valid_def] >>
+     strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!aid base sz. _` drule >> simp[arithmeticTheory.ADD_COMM]) >>
+  `!name off cap. local_region old es.scopes s0 name off cap ==>
+    off+cap <= s0.vs_alloca_next` by metis_tac[body_local_region_frontier] >>
+  `ghost_kept_at lo old es sa G0 tn0 s0 G' tn'` by
+    (irule alloc_buffer_ghost_kept_at >>
+     qexistsl_tac [`G0`,`w2n w + type_memory_bytes old typ`,`s0`,`tn0`] >>
+     simp[bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]) >>
+  suspend "finish"
+QED
+
+Resume annassign_full_alloc_entry[finish]:
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes old typ))]
+     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    metis_tac[exprSimAllocTheory.buffer_alloc_code] >>
+  `local_ptrs_reserved ce a` by
+    (drule_all declare_local_reserved >>
+     disch_then (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+       local_ptrs_reserved_next_var)) >> simp[]) >>
+  `ret_pc_ok ce a t` by
+    (irule ret_pc_ok_frame >>
+     goal_assum (drule_at (Pat `ret_pc_ok _ _ _`)) >> simp[] >> metis_tac[]) >>
+  `return_buf_frame d ce a t` by
+    (irule return_buf_frame_frame >>
+     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`w`,`t`,`G'`,`tn'`] >> simp[] >> metis_tac[ret_pc_ok_def]
+QED
+
+Finalise annassign_full_alloc_entry
