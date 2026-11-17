@@ -12,7 +12,8 @@ Ancestors
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
-  bodyFullMemoryCopy context
+  bodyFullMemoryCopy bodyFullMemoryFrames context loweringPosts loweringStateRelDefs
+  venomState
 
 val _ = Parse.hide "body";
 
@@ -149,6 +150,77 @@ Proof
   qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
   simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+(* Allocation retains robust source contents at its own joint endpoint. *)
+Theorem body_assign_tuple_alloc_snapshot:
+  stmt_state_rel H ctx func cenv cx es s /\
+  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
+  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
+  n < dimword (:256) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+  expr_val_at cenv cx (TupleT tys) start sa es (ArrayV (TupleV vs)) (Var xs) s /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u root b G1 tn1.
+    buf.buf_operand = Var root /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,G1,tn1)) /\
+    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+      stmt_state_rel H' ctx func cenv cx es u) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es G1 tn1 u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,n) /\
+    lo <= b /\ b+n < dimword (:256) /\ lookup_var root u = SOME (n2w b) /\
+    ptr_covers G1 tn1 root u n /\
+    (!name a len. local_region cenv es.scopes u name a len ==> regions_disjoint b n a len) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==> regions_disjoint b n a len) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x u = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
+      op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers G1 tn1 x u cap) /\
+    not_fresh_at sb root /\
+    (!x. not_fresh_at sa x ==> not_fresh_at sb x) /\
+    allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_call_ctx = s.vs_call_ctx /\
+    u.vs_transient = s.vs_transient /\ u.vs_immutables = s.vs_immutables /\
+    (!i. ~(b <= i /\ i < b+n) ==> (i IN tn1.t_mem <=> i IN tn.t_mem)) /\
+    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+    (!mem. mem_agree_outside tn1.t_mem u.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem)
+Proof
+  strip_tac >>
+  drule_all body_full_alloc_buffer_path >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`root`,`b`,`G1`,`tn1`] >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `!name a len. local_region cenv es.scopes u name a len <=>
+    local_region cenv es.scopes s name a len` by
+    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
+  `val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+   (!i. w2n sw <= i /\
+        i < w2n sw + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) ==>
+        ~(b <= i /\ i < b+n))` by
+    (qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_val_at_def] >>
+     disch_then (qspec_then `TupleTV tvs` mp_tac) >>
+     simp[is_word_type_def,eval_operand_def] >> strip_tac >>
+     gvs[regions_disjoint_def] >> res_tac >> decide_tac) >>
+  drule_at (Pos (el 5)) robust_val_in_memory_exterior_frame >>
+  disch_then (qspecl_then [`tn1.t_mem`, `s.vs_memory`,
+    `{i | b <= i /\ i < b+n}`] mp_tac) >> simp[]
 QED
 
 (* A source that is a widened aggregate call. *)
