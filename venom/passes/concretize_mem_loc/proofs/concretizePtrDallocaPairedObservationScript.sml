@@ -22,7 +22,7 @@ Ancestors
 Theorem ptr_dalloca_delegate_request_growth[local]:
   inst_wf inst /\ inst.inst_opcode = DELEGATECALL /\
   ptr_mixed_vars (births : (num # num) |-> (num # num)) positions TG tn f g s t /\
-  s.vs_labels = t.vs_labels /\
+  s.vs_labels = t.vs_labels /\ s.vs_outcomes = t.vs_outcomes /\
   step_inst fuel CT inst t = OK post ==>
   ?srcpost. step_inst 0 CS inst s = OK srcpost /\
     LENGTH s.vs_requests < LENGTH srcpost.vs_requests
@@ -35,6 +35,8 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, Excl "consume_call_outcome_eq"]) >>
   `?gas addr ao az ro rz.
     eval_operands inst.inst_operands s = SOME [gas;addr;ao;az;ro;rz]` by
     (simp[eval_operands_def, AllCaseEqs()] >>
@@ -239,7 +241,12 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
           (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[] >>
             simp[Abbr`zt`, ptr_observe_def])) >> simp[]) >>
       Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
-      >- (mp_tac (Q.INST [`inst` |-> `a.po_inst`, `s` |-> `a.po_state`,
+      >- (`a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
+            (qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state` mp_tac >>
+             simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+                  ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+             strip_tac >> first_assum ACCEPT_TAC) >>
+          mp_tac (Q.INST [`inst` |-> `a.po_inst`, `s` |-> `a.po_state`,
             `t` |-> `at.po_state`, `CS` |-> `C`, `CT` |-> `C'`,
             `fuel` |-> `fuelt`, `post` |-> `post`, `f` |-> `a.po_fn`,
             `g` |-> `at.po_fn`, `births` |-> `births`, `positions` |-> `positions`,
