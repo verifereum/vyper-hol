@@ -2527,3 +2527,27 @@ Proof
      qpat_assum `a + _ + _ = a+j` (fn th => rewrite_tac[th]) >> simp[]) >>
   simp[mem_dead_bytes_def] >> metis_tac[MULT_COMM]
 QED
+
+Theorem body_assign_immutable_bytes_selected_dead:
+  ((?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
+   (?cap. dtv = BaseTV (StringT cap))) /\
+  len < dimword(:256) /\
+  mem_word_at off sec2 = n2w len /\
+  32 + len <= 32*n /\
+  (!i. a <= i /\ i < a + 32 + len ==> i NOTIN M1) /\
+  (!k. k < 32*n /\ off+k IN M2 ==> a+k IN M1) ==>
+  !j. off <= j /\ j < off + type_memory_size dtv /\ j IN M2 ==>
+      mem_dead_bytes sec2 off dtv j
+Proof
+  rpt strip_tac >>
+  `off + 32 + len <= j` by
+    (CCONTR_TAC >>
+     `j - off < 32*n /\ off + (j-off) = j` by decide_tac >>
+     `a + (j-off) IN M1` by
+       (qpat_x_assum `!k. _ ==> a+k IN M1`
+          (qspec_then `j-off` mp_tac) >> simp[]) >>
+     qpat_x_assum `!i. _ ==> i NOTIN M1`
+       (qspec_then `a+(j-off)` mp_tac) >>
+     simp[] >> decide_tac) >>
+  gvs[immSectionDeadTheory.mem_dead_bytes_def, w2n_n2w]
+QED
