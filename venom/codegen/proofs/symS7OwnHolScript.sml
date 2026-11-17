@@ -12,5 +12,5 @@ Ancestors
   symFrameInvokePrefixOwn symFrameInvokeEntryAssembly symInstAssertOwn symInstAssertPrepareOwn symInstAssertSuffixOwn symInstAssignOwn symInstLogOwn symInstNamedOwn symInstPhiOwn
   symInstEmissionOwn symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
   symInvokeEntryFacts symInvokeEntryOwn
-  symGeneratedZeroOwn
+  symGeneratedAssignOwn symGeneratedZeroOwn
   symFrameControlFacts
