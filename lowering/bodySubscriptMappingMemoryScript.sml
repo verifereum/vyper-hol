@@ -142,7 +142,7 @@ Proof
       [StorageRoot tr
         (w2n (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv))) tvt]`]
     mapping_leaf_vv_holds)) >> strip_tac >>
-  simp[vv_post_def, vyperASTTheory.expr_type_def, vv_at_def] >>
+  simp[vv_post_def, vyperASTTheory.expr_type_def, vv_at_def, vv_place_ptr_def] >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>
