@@ -413,7 +413,8 @@ Proof
            mp_tac ghost_kept_at_wb_trans >>
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
          disch_then ACCEPT_TAC) >>
-      fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,vv_location_def]) >>
+      fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,
+         vv_location_def,is_bytestring_type_def]) >>
   `alloca_inv t /\ t.vs_call_ctx.cc_calldata = cx.txn.calldata` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
