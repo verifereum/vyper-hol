@@ -7,6 +7,7 @@ Ancestors
   preparedPrefixSim genFrameSim frameViewFacts frameViewMemory
   venomState regularMemorySim venomWf venomEffects asmIR allocMono
   list stackOpSim planExec emitSim blockSimHelpers venomMemProps memoryReadRel
+  opcodeClass
 
 (* A transient spill is covered by the output high-water mark even though
    the live spill map is empty again after restoration. *)
@@ -204,7 +205,7 @@ Theorem abort_operands_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode
     [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
-     SSTORE; TSTORE; SELFDESTRUCT; CALL] ==>
+     SSTORE; TSTORE; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL] ==>
   eval_operands inst.inst_operands (frame_view fn ra vs with vs_memory := m) =
   eval_operands inst.inst_operands vs
 Proof
@@ -767,7 +768,7 @@ Theorem abort_frame_arranged_stack:
   inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ 
   MEM inst.inst_opcode
     [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
-     SSTORE; TSTORE; SELFDESTRUCT; CALL] /\
+     SSTORE; TSTORE; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL] /\
   (!op. MEM op (compute_operands inst) ==>
     eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
   EVERY (\op. op <> dead_stack_marker /\
@@ -799,7 +800,7 @@ QED
 Theorem gen_inst_ext_fault_frame_sim:
   !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
     lv cfg halting term label prog fuel a vs' o2pc.
-  MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   MEM r cplan.cp_regions /\
   r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
@@ -831,7 +832,7 @@ Theorem gen_inst_ext_fault_frame_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. venom_to_evm_name inst.inst_opcode = SOME name` by
-    (gvs[venom_to_evm_name_def]) >>
+    (gvs[MEM, venom_to_evm_name_def]) >>
   `inst.inst_opcode <> INVOKE /\ ~is_commutative inst.inst_opcode /\
    LENGTH inst.inst_outputs <= 1` by gvs[inst_wf_def, is_commutative_def] >>
   `generate_regular_inst_plan lv dfg cfg fn inst nl halting term label ps = (ops,final)` by
@@ -844,11 +845,36 @@ Proof
   `?out. a = ExHalt_abort /\
     asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
     venom_asm_terminal_rel vs' out` by
-    (Cases_on `inst.inst_opcode = CREATE` >- suspend "create" >>
+    (Cases_on `vs.vs_outcomes = [] /\
+       MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+     >- suspend "exhausted_call" >>
+     Cases_on `inst.inst_opcode = CREATE` >- suspend "create" >>
      Cases_on `inst.inst_opcode = CREATE2` >- suspend "create2" >>
+     `inst.inst_opcode = RETURNDATACOPY` by
+       (drule step_inst_abort_opcodes >> gvs[MEM]) >>
      suspend "returndatacopy") >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1`, `out`] >>
   simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume gen_inst_ext_fault_frame_sim[exhausted_call]:
+  qpat_x_assum `vs.vs_outcomes = [] /\ _` strip_assume_tac >>
+  drule_all step_inst_exhausted_call_abort >> strip_tac >> gvs[] >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> simp[] >> conj_tac
+     >- (qexists `dfg` >> gvs[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     gvs[MEM] >> metis_tac[]) >>
+  `LENGTH vals = LENGTH inst.inst_operands` by
+    metis_tac[logEmitSimTheory.eval_operands_length] >>
+  `MEM (name,LENGTH vals)
+    [("CALL",7); ("STATICCALL",6); ("DELEGATECALL",6);
+     ("CREATE",3); ("CREATE2",4)]` by
+    gvs[MEM, venom_to_evm_name_def, inst_wf_def] >>
+  `mid.as_outcomes = []` by fs[venom_asm_rel_def, frame_view_def] >>
+  irule terminal_exhausted_call_fault_step >> simp[] >>
+  qexistsl_tac [`vals`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`] >>
+  gvs[APPEND_ASSOC]
 QED
 
 Resume gen_inst_ext_fault_frame_sim[create]:

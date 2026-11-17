@@ -4483,21 +4483,6 @@ QED
 
 val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
-(* Abort: both sides run same non-promoted instruction *)
-Theorem step_inst_base_abort_input_equiv:
-  !inst s1 s2 a s1'.
-    step_inst_base inst s1 = Abort a s1' /\
-    ~is_terminator inst.inst_opcode /\
-    (!x. MEM (Var x) inst.inst_operands ==>
-         lookup_var x s1 = lookup_var x s2) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
-    ?s2'. step_inst_base inst s2 = Abort a s2'
-Proof
-  ACCEPT_TAC passSharedFrameTheory.step_inst_base_abort_input_equiv
-QED
-
 (* Characterize abort state form for non-terminal step_inst_base *)
 Theorem step_inst_base_abort_form:
   !inst s a s'.
@@ -4510,7 +4495,9 @@ Proof
   gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >>
-  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs(), exec_create_abort_iff]
+  ASM_REWRITE_TAC[] >> rw[] >>
+  gvs[AllCaseEqs(), exec_create_abort_iff, exec_ext_call_abort_iff,
+      exec_delegatecall_abort_iff]
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -4828,7 +4815,7 @@ Resume m2v_nonterminal_abort_sim[body]:
     strip_assume_tac
   >- (drule m2v_inv_noix_call_ctx >> strip_tac >>
       mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
-        step_inst_base_abort_input_equiv) >>
+        passSharedFrameTheory.step_inst_base_abort_input_equiv) >>
       simp[] >> gvs[m2v_inv_noix_def])
   >>
   (* Characterize abort state forms, conclude via abort_state *)
