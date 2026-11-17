@@ -65,11 +65,13 @@ Proof
   `?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs` by
     metis_tac[optionTheory.IS_SOME_EXISTS] >>
   irule (immutable_augassign_rhs_mem_typed |> SPEC_ALL |>
-    Q.INST [`dst` |-> `Lit (n2w off)`, `w` |-> `n2w off`] |> GEN_ALL) >>
+    Q.INST [`dst` |-> `Lit (n2w off)`, `w` |-> `n2w off`,
+      `wc` |-> `typed_val_to_w256 tv cur`] |> GEN_ALL) >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_assum `lower_value _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_binop _ _ _ _ _ _ _ = _` (irule_at Any) >>
-  qexists `off` >> simp[] >>
+  qexistsl_tac [`tv`,`off`] >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (rpt strip_tac >> drule_all immutable_augassign_rhs_source_typed >> simp[]) >>
   (conj_tac >- (
@@ -102,7 +104,8 @@ Proof
   `value_has_type tv v` by metis_tac[] >>
   `store_lays_out tv tv v` by metis_tac[store_lays_out_typed] >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
-    metis_tac[exprBopSimPropsTheory.expr_val_rel_typed] >>
+    (irule exprBopSimPropsTheory.expr_val_rel_typed >>
+     qexistsl_tac [`cx`,`ty`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `(!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
    (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
