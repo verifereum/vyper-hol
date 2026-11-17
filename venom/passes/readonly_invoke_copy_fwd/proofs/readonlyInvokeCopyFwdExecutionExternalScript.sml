@@ -370,6 +370,7 @@ Theorem ricf_execution_ext_call_next:
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\
   step_inst fuel C inst s = exec_ext_call inst s gas addr value ao az ro rs static /\
   step_inst fuel Ct inst t = exec_ext_call inst t gas addr value ao' az ro' rs static /\
   rq1 = venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas) /\
@@ -403,6 +404,13 @@ Theorem ricf_execution_ext_call_next:
       ledger E sites maps targets (step_taint inst s (update_var out w r) tn)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+        ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `step_inst fuel C inst s = OK (update_var out w r)` by
     (qpat_assum `step_inst fuel C inst s = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
