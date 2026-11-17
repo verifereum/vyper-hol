@@ -1,6 +1,6 @@
 Theory bodyFullConvertDynamicJoint
 Ancestors
-  typeBuiltinPrereqs bodyInvNoDalloca
+  haltExitProj typeBuiltinPrereqs bodyInvNoDalloca
   bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
@@ -187,7 +187,8 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> Cases_on `res` >> simp[Abbr `childR`] >>
   Cases_on `y` >> Cases_on `r` >> simp[exprSimDefsTheory.expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
+  rename1 `Error err` >> Cases_on `err` >>
+  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
 QED
 
 Resume convert_dynamic_vv_sim_full[continuation]:
