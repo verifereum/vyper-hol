@@ -47,7 +47,7 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
-  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperCallFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState
@@ -150,14 +150,7 @@ Theorem eval_send_value:
   !cx has_gas vs st tv st'.
     eval_send cx has_gas vs st = (INL tv, st') ==> ?v. tv = Value v
 Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       lift_option_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >> drule eval_send_success_value >> simp[]
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
