@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsElements
 Ancestors
-  bodyFullStoreSlotsTaintFold
+  bodyFullStoreSlotsTaintFold bodyFullStoreSlotsFrame
   placeStoreSlots typedCopyOriginPtrBase typedMemoryCopy fragGasOriginPtrLoop
   emitHelperProps emitHelper compileEnv ptrDiscipline venomState
   venomExecSemantics venomInst codegenRel contextCodegenRel memSafeRun
@@ -472,6 +472,8 @@ Proof
      pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
   `(!x. sp = Var x \/ dp = Var x ==> not_fresh_at child_start x)` by
     (gvs[] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   asm_x "child" (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `encode_value _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand sp _ = _`)) >>
@@ -598,6 +600,9 @@ Resume store_slots_elements_round_conditional[header]:
   `allocas_from lo u` by (fs[allocas_from_def] >> metis_tac[]) >>
   `u.vs_current_bb = h.cs_current_bb /\
    u.vs_inst_idx = LENGTH h.cs_current_insts /\ i <= N` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (drule store_slots_normalize_allocas_below_fmp >>
+     simp[store_slots_fold_allocas_below_fmp]) >>
   drule_all store_slots_header_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `store_slots_prefix sa etv el tr sw dw s i ks t` by
@@ -639,6 +644,8 @@ Resume store_slots_elements_round_conditional[child_entry]:
     ?x. src = Var x /\ ptr_covers Gf tf x t (N*type_memory_size etv)` by metis_tac[] >>
   qpat_assum `!j. j < N ==> _` (qspec_then `i` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   `allocas_from lo t` by
     (fs[allocas_from_def] >> metis_tac[]) >>
   Cases_on `encode_value etv (el i)` >- fs[] >>
@@ -692,6 +699,12 @@ Resume store_slots_elements_round_conditional[child_exit]:
     (qpat_assum `allocas_from lo t` mp_tac >>
      pure_rewrite_tac[allocas_from_def] >>
      qpat_assum `b.vs_allocas = t.vs_allocas` (fn th => rewrite_tac[th]) >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp b)` by
+    (qpat_assum `store_copy_normalize t b = _`
+       (mp_tac o MATCH_MP store_slots_normalize_allocas_below_fmp) >>
+     simp_tac bool_ss [store_slots_fold_allocas_below_fmp] >>
+     disch_then (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all store_slots_backedge_uniform >> strip_tac >>
   suspend "backedge_exit")
 QED
@@ -839,6 +852,9 @@ Resume compile_copy_elements_to_slots_origin_ptr_path_conditional[invariant_exit
     (fs[allocas_from_def] >> rpt strip_tac >>
      first_x_assum irule >> metis_tac[]) >>
   `N <= N` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (drule store_slots_normalize_allocas_below_fmp >>
+     simp[store_slots_fold_allocas_below_fmp]) >>
   drule_all store_slots_header_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`t'`,`ks`,`Gf'`,`tf'`] >>
