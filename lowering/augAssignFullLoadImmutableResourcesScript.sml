@@ -4,8 +4,8 @@ Ancestors
   bodyImmutableAugAssignFacts bodyFullToplevelCtorSourceLayout
   bodyFullToplevelCtorSourceFrame bodyPtrDefs stateRelProj
   assignTuplePtrLoadStep exprSimHypsDefs stmtSimAugAssignPlace
-  exprLoweringProps loweringPosts valueEncodingProps memoryValueEncoding
-  ptrSafeRun ptrDiscipline contextCodegenRel codegenRel
+  exprLoweringProps loweringPosts valueEncodingProps memoryValueEncoding exprSimProps
+  ptrSafeRun ptrDiscipline contextCodegenRel codegenRel memLocDefs
   venomExecSemantics venomInstProofs venomInst venomState
   supportedDecls supportedTypes supportedExprTraverse
   vyperTypeEnv vyperTypeSystem vyperTypeCallGraph allocLimits
@@ -20,6 +20,7 @@ val load_steps = LIST_CONJ (List.filter (fn th =>
 Theorem augassign_immutable_load_resources:
   body_inv tops ctx cenv cx /\ cx.in_deploy /\
   expr_sim_inv cenv cx env es /\
+  call_evaluation_safe cx [] /\
   supported_immutable_type tops (src,id) = SOME ity /\
   type_stmt env ret_ty
     (AugAssign ty (TopLevelNameTarget (src,id)) bop e) = SOME env' /\
@@ -59,7 +60,10 @@ Proof
     suspend "pre" >>
   drule_all immutable_augassign_source_prefix >> strip_tac >>
   drule_all toplevel_ctor_source_layout >> strip_tac >>
-  drule_all toplevel_ctor_source_frame >> strip_tac >>
+  qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory tv v off mem` by
+    metis_tac[toplevel_ctor_source_frame] >>
   `type_memory_size tv = 32` by metis_tac[word_tv_memory_size] >>
   drule_all robust_typed_word_clean >> strip_tac >>
   qexistsl_tac [`off`, `tv`, `v`] >>
@@ -67,11 +71,43 @@ Proof
 QED
 
 Resume augassign_immutable_load_resources[pre]:
-  FAIL_TAC "synthetic expression precondition"
+  `~cx_const_name cx (src,id)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     strip_tac >> gvs[]) >>
+  simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+       alloc_limits_expr_def, int_calls_expr_def, expr_has_evm_run_thm,
+       supported_expr_exists_def, call_operands_effect_root_def,
+       const_name_root_def, supportedProgramTheory.expr_abi_decode_target_root_def] >>
+  gvs[type_alloc_ok_def] >>
+  reverse conj_tac
+  >- (`cx_tops cx = tops` by
+        (irule gasContextTheory.cx_tops_module >>
+         gvs[bodySimTheory.body_inv_def]) >>
+      gvs[bodySimTheory.body_inv_def]) >>
+  metis_tac[stmtSimAugAssignTheory.well_formed_type_bits]
 QED
 
 Resume augassign_immutable_load_resources[finish]:
-  FAIL_TAC "resources finish"
+  `off + 32 < dimword (:256)` by metis_tac[] >>
+  `off < dimword (:256)` by decide_tac >>
+  `mload off s = typed_val_to_w256 tv v` by
+    (qpat_x_assum `!m. _ ==> mem_word_at _ _ = _`
+       (qspec_then `s.vs_memory` mp_tac) >>
+     simp[mem_agree_outside_def, mem_word_at_eq_mload]) >>
+  `lo <= s.vs_alloca_next /\ allocas_from lo s` by
+    fs[ghost_inv_at_def] >>
+  `off + 32 <= lo /\ off + 32 <= s.vs_alloca_next` by decide_tac >>
+  qpat_x_assum `off = compute_immutables_len _ _` kall_tac >>
+  qpat_x_assum `tops = _ ++ _` kall_tac >>
+  simp[eval_operand_def, op_taint_def, w2n_n2w] >> rpt gen_tac >>
+  simp[ptr_inst_ok_def, mk_inst_def] >>
+  conj_tac
+  >- (simp[access_ok_def, mk_inst_def, source_memory_read_ranges_def,
+           source_memory_write_ranges_def, eval_operand_def, w2n_n2w,
+           mem_read_ops_def, op_prov_def] >> decide_tac) >>
+  conj_tac >- simp[taint_ok_def, mk_inst_def, op_taint_def] >>
+  simp[step_inst_non_invoke, load_steps, mk_inst_def, exec_read1_def,
+       eval_operand_def, update_var_def, AllCaseEqs()]
 QED
 
 Finalise augassign_immutable_load_resources
