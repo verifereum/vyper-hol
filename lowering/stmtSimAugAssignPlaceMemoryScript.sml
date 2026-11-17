@@ -110,10 +110,10 @@ Proof
   drule aug_place_typing >> strip_tac >>
   `is_word_type ty` by metis_tac[aug_place_typing_word] >>
   drule_all aug_place_memory_read_typed >> strip_tac >>
-  drule_all aug_place_memory_load >> strip_tac >> gvs[] >>
   `type_bits ty MOD 8 = 0` by
     (irule well_formed_type_bits >> qexists_tac `get_tenv cx` >>
      simp[well_formed_type_def] >> metis_tac[]) >>
+  drule_all aug_place_memory_load >> strip_tac >> gvs[] >>
   metis_tac[read_place_state, place_type_value_state]
 QED
 
@@ -847,12 +847,18 @@ Theorem aug_place_rhs_suffix_ready:
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
        value_has_type dtv v)
 Proof
-  strip_tac >> drule aug_place_typing >> strip_tac >>
+  strip_tac >>
+  `well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    metis_tac[aug_place_typing] >>
   `expr_sim_inv cenv cx env st` by fs[expr_body_pre_def] >>
   drule_all aug_place_typing_word >> strip_tac >>
   drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_type_result) >>
-  strip_tac >> gvs[] >>
-  goal_assum (drule_at Any) >>
+  strip_tac >>
+  qpat_x_assum `!v. INL rhs = INL v ==> _`
+    (qspec_then `rhs` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME rhs_tv` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `rhs_tv` >> simp[] >>
   conj_tac
   >- (irule aug_place_binop_ready >> simp[] >> metis_tac[]) >>
   gen_tac >>
@@ -1317,7 +1323,9 @@ Proof
   `?info. supported_target_info tops bindings bt = SOME info` by
     (drule_all aug_place_supported_stmt_target_info >> simp[]) >>
   qpat_x_assum `(?b fld. bt = AttributeTarget b fld) \/ _` kall_tac >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `is_word_type ty /\ is_word_type (expr_type e)` by
     metis_tac[aug_place_typing_word, expr_body_pre_def] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
