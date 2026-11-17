@@ -5,7 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftPacketBlockCutAggregate dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketBlockAppendShape dftGasPrefixProvider
-  dftNativePlanPrefix
+  dftPacketBlockAppendTraceBoundary dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
@@ -20,14 +20,14 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
-  dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop
+  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
   dftPacketNativeContinuation
-  dftPacketNativePrefixBoundary
+  dftPacketPseudoNativeNext dftPacketNativePrefixBoundary
   dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
@@ -44,11 +44,11 @@ Ancestors
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnOrder dftPacketReturnLocal
   dftPacketReturnNative
-  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketTraceCallProvenance dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
-  dftPacketRootedSegmentStop dftPacketRowAlignment
+  dftPacketBlockAppendStopBoundary dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
   dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
@@ -57,4 +57,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess dftPacketFreshRootGeometry
