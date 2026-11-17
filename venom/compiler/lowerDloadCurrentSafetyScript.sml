@@ -30,7 +30,7 @@ Theorem ld_sync_dalloca_no_wrap[local]:
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ mem_inv raw_mem_ok C vs0 ==>
   dalloca_no_wrap inst t
 Proof
-  strip_tac >> simp[dalloca_no_wrap_def] >> strip_tac >>
+  strip_tac >> simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
   `fn_shape_ok fn` by
     (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
   `MEM inst (fn_insts fn)` by
@@ -53,7 +53,7 @@ Proof
   `s.vs_fmp = t.vs_fmp` by fs[ld_nonghost_def] >>
   rpt strip_tac >>
   `eval_operand sz_op s = SOME sz` by gvs[eval_operands_def, AllCaseEqs()] >>
-  fs[raw_mem_ok_def, dalloca_no_wrap_def] >> metis_tac[]
+  fs[raw_mem_ok_def, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]
 QED
 
 Theorem ld_sync_ordinary_raw:
@@ -187,7 +187,7 @@ Proof
   `w2n t0.vs_initial_fmp <= w2n t0.vs_fmp` by metis_tac[ld_sync_target_fmp] >>
   Cases_on `h=0` >-
     (gvs[ld_prefix_zero] >> simp[raw_mem_ok_def, inst_mem_ok_in_fn_def,
-       dalloca_no_wrap_def, inst_mem_below_frontiers_def, source_memory_read_ranges_def,
+       unitTransformDefsTheory.dalloca_no_wrap_def, inst_mem_below_frontiers_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def]) >>
   `h=1` by decide_tac >> gvs[] >>
   drule_at (Pat `ld_prefix _ _ _ _ _ _ _`) ld_dloadbytes_prefix_observations >>
@@ -204,7 +204,7 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t0.vs_alloca_next` by
     (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
-  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >> disj1_tac >>
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, unitTransformDefsTheory.dalloca_no_wrap_def] >> disj1_tac >>
   simp[inst_mem_below_frontiers_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
        AllCaseEqs()] >>

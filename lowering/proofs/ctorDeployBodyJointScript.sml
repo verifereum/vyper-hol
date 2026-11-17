@@ -691,7 +691,7 @@ Proof
       >- (rpt strip_tac >>
           drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
           fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-             unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[])
+             unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])
       >> gen_tac >> disch_tac >>
       qpat_x_assum `!st0 H. valid_horizon _ st0 H _ ==> _`
         (qspecl_then [`initial_state am []`, `H`] mp_tac) >>
