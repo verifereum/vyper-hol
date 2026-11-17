@@ -30,9 +30,9 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  targetPlaceSim
-  sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
-  stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
+  placeMemoryFieldRebuild assignTuplePtrStoreWord stmtSimDeclStore
+  targetPlaceSim sum venomState stateRelProj stateRelProjStorage
+  memoryPlaceStorePost stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
   vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
   exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline placeStore valueEncodingProps venomMemProofs
@@ -2058,6 +2058,53 @@ Resume body_assign_snapshot_memory_copy_joint[frame]:
 QED
 
 Finalise body_assign_snapshot_memory_copy_joint
+
+Theorem body_assign_field_robust_update:
+  !fs vals fld off ftv v dirty s b.
+  value_has_type (StructTV fs) (StructV vals) /\
+  mem_field_offset fs fld = SOME (off,ftv) /\
+  store_lays_out ftv ftv v /\
+  (!mem. mem_agree_outside dirty s.vs_memory mem ==>
+    val_in_memory (StructTV fs) (StructV vals) b mem)
+  ==>
+  !mem. mem_agree_outside
+    (dirty DIFF {i | b+off <= i /\ i < b+off+32})
+    (mstore (b+off) (typed_val_to_w256 ftv v) s).vs_memory mem ==>
+    val_in_memory (StructTV fs)
+      (StructV (AFUPDKEY fld (K v) vals)) b mem
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  qabbrev_tac `h = (write_memory_with_expansion (b+off)
+    (mem_bytes_at (b+off) 32 s.vs_memory)
+    (s with vs_memory := mem)).vs_memory` >>
+  `mem_bytes_at (b+off) 32 h = mem_bytes_at (b+off) 32 s.vs_memory` by
+    (qspecl_then [`b+off`, `mem_bytes_at (b+off) 32 s.vs_memory`,
+       `s with vs_memory := mem`] mp_tac write_memory_mem_bytes_at_same >>
+     simp[LENGTH_mem_bytes_at_proof, Abbr `h`]) >>
+  `!a n. a+n <= b+off \/ b+off+32 <= a ==>
+    mem_bytes_at a n h = mem_bytes_at a n mem` by
+    (rpt strip_tac >>
+     simp[Abbr `h`, write_memory_mem_bytes_at_disjoint,
+          LENGTH_mem_bytes_at_proof]) >>
+  `mem_agree_outside dirty s.vs_memory h` by
+    (simp[mem_agree_outside_def] >> rpt strip_tac >>
+     Cases_on `b+off <= i /\ i < b+off+32`
+     >- metis_tac[mem_bytes_at_eq_byte] >>
+     `i+1 <= b+off \/ b+off+32 <= i` by decide_tac >>
+     `mem_bytes_at i 1 h = mem_bytes_at i 1 mem` by metis_tac[] >>
+     `mem_bytes_at i 1 (mstore (b+off) (typed_val_to_w256 ftv v) s).vs_memory =
+      mem_bytes_at i 1 s.vs_memory` by
+       (irule mstore_mem_bytes_at_disjoint_proof >> simp[]) >>
+     fs[mem_agree_outside_def] >> metis_tac[]) >>
+  `val_in_memory (StructTV fs) (StructV vals) b h` by metis_tac[] >>
+  `val_in_memory ftv v (b+off) mem` by
+    (drule store_lays_out_robust_ptr >> disch_then irule >>
+     goal_assum (drule_at Any)) >>
+  `type_memory_size ftv = 32` by fs[store_lays_out_def] >>
+  irule struct_update_bounded_frame >>
+  simp[] >> qexists `h` >>
+  simp[] >> rpt strip_tac >> metis_tac[ADD_ASSOC]
+QED
 
 Theorem body_assign_widened_layout_ready:
   !cx id ty e tops bindings ctx cenv env env' ret_ty es.
