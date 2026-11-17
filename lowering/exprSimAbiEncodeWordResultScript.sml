@@ -44,7 +44,7 @@ Proof
      qpat_assum `stmt_state_rel H ctx func ce cx es' actual` (irule_at Any) >>
      metis_tac[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
-  irule abi_encode_bytes_vv_post >> goal_assum (drule_at Any) >>
+  irule (Q.INST [`result` |-> `Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv))`] abi_encode_bytes_vv_post) >> goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl [`staged.cs_next_id`, `p`, `32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))`] >>
   `p < dimword (:256)` by decide_tac >>

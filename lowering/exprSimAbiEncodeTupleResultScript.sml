@@ -86,7 +86,7 @@ Proof
      match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `staged`, `s0`, `s`, `actual`]
                      exprSimPropsTheory.pure_frame_trans) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  irule abi_encode_bytes_vv_post >> goal_assum (drule_at Any) >>
+  irule (Q.INST [`result` |-> `Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv))`] abi_encode_bytes_vv_post) >> goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl [`staged.cs_next_id`, `p`,
     `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
