@@ -4879,7 +4879,7 @@ Resume raw_call_tail_outcome[exhausted]:
      conj_tac
      >- (irule frag_path_conseq >>
          goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >> simp[]) >>
-     irule frag_path_pointwise >> simp[Abbr `Alloc`] >> rpt strip_tac >>
+     irule frag_path_pointwise >> simp[NoAsms, Abbr `Alloc`] >> rpt strip_tac >>
      rename1 `stmt_state_rel H ctx func cenv cx esK u` >>
      `u.vs_outcomes = []` by
        (qpat_x_assum `stmt_state_rel H _ _ _ _ _ u` mp_tac >>
@@ -4895,12 +4895,15 @@ Resume raw_call_tail_outcome[exhausted]:
      irule raw_call_finish_exhausted >> simp[] >>
      goal_assum (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
      rpt (goal_assum (drule_at Any)) >> simp[wordsTheory.n2w_11]) >>
-  ho_match_mp_tac (GEN_ALL raw_call_tail_path_outcome) >>
+  VALID (irule (GEN_ALL raw_call_tail_path_outcome)) >>
   qexistsl_tac [`s6`, `INR (Error (RuntimeError "take_call_outcome"))`, `esK`] >>
-  simp[type_check_def, assert_def, ignore_bind_def, bind_def,
-    lift_option_type_def, return_def, dest_BytesV_def] >>
+  qpat_assum `!gs. eval_raw_call _ _ _ _ _ _ (esK with gas_obs := gs) = _`
+    (fn th => simp[NoAsms, th, type_check_def, assert_def, ignore_bind_def,
+      bind_def, lift_option_type_def, return_def, dest_BytesV_def]) >>
+  reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
+  rpt (pop_assum kall_tac) >>
   rpt strip_tac >> gvs[expr_exit_def, halt_exit_def]
 QED
 
