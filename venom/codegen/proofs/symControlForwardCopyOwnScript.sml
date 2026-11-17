@@ -224,3 +224,85 @@ Proof
   gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
   metis_tac[listTheory.CONS_11, listTheory.APPEND]
 QED
+
+val control_bridge_core_tm = let
+  val (params, body) = strip_forall (concl asm_sym_rel_core_pc)
+  val core = fst (dest_imp body)
+  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars core) of
+      [v] => v | _ => raise Fail ("missing bridge parameter " ^ n)
+in list_mk_abs (params @ [named "cs", named "ss"], core) end;
+val _ = Parse.temp_overload_on ("bridge_core", control_bridge_core_tm);
+
+Theorem sym_rf_copy_prepared_success_mode_core:
+  !cp.
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_own_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  plan_stack_rel lo current (tail ++ [zop;sop;dop]) stk /\
+  operand_val current lo dop = SOME dst /\
+  operand_val current lo sop = SOME src /\
+  operand_val current lo zop = SOME sz /\
+  cs.as_stack = stk ++ rest /\ bridge_core lo code_ok cs ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at prog cs.as_pc [AsmOp "RETURNDATACOPY"] /\
+  asm_step lo (build_offset_to_pc prog) (AsmOp "RETURNDATACOPY") cs = AsmOK cs' ==>
+  ?ss' top'.
+    sym_steps_mode allow_own prog env own 1 ss = SymOK ss' /\
+    bridge_core lo code_ok cs' ss' /\ ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE tail) top' /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b) /\
+    ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  gen_tac >> disch_then assume_tac >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  `dop <> dead_stack_marker /\ sop <> dead_stack_marker /\ zop <> dead_stack_marker` by
+    (rpt strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
+  `?d s z residual. stk = d :: s :: z :: residual /\
+    operand_val current lo dop = SOME d /\
+    operand_val current lo sop = SOME s /\
+    operand_val current lo zop = SOME z` by
+    (irule asm_stack_top3_from_plan >> simp[] >> qexists `tail` >> simp[]) >>
+  `cs.as_stack = dst :: src :: sz :: (residual ++ rest)` by
+    metis_tac[optionTheory.SOME_11, listTheory.APPEND] >>
+  drule_all sym_rf_copy_success_stack_core >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    (qpat_x_assum `?m. ss.sym_base = _ /\ _` strip_assume_tac >> simp[]) >>
+  `asm_block_at prog ss.sym_base.as_pc [AsmOp "RETURNDATACOPY"]` by simp[] >>
+  drule sym_returndatacopy_mode_single >>
+  disch_then (qspecl_then [`own`, `env`, `allow_own`] assume_tac) >>
+  metis_tac[]
+QED
+
+Theorem sym_rf_copy_fault_stack_mode_core:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_own_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  bridge_core lo code_ok cs ss /\
+  cs.as_stack = dst :: src :: sz :: rest /\ ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top /\
+  asm_block_at prog cs.as_pc [AsmOp "RETURNDATACOPY"] /\
+  asm_step lo (build_offset_to_pc prog) (AsmOp "RETURNDATACOPY") cs = AsmFault cs' ==>
+  sym_terminal (sym_steps_mode allow_own prog env own 1 ss)
+Proof
+  rpt gen_tac >> disch_then assume_tac >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  drule_all sym_rf_copy_prepared_stack_core >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    (qpat_x_assum `?m. ss.sym_base = _ /\ _` strip_assume_tac >> simp[]) >>
+  `asm_block_at prog ss.sym_base.as_pc [AsmOp "RETURNDATACOPY"]` by simp[] >>
+  drule sym_returndatacopy_mode_single >>
+  disch_then (qspecl_then [`own`, `env`, `allow_own`] assume_tac) >>
+  `ss.sym_stack = Val dst :: Val src :: Val sz :: suffix` by simp[] >>
+  `!e. sym_step_concrete "RETURNDATACOPY" ss <> SymBad e` by
+    (rewrite_tac[GSYM sym_returndatacopy_concrete] >>
+     irule sym_returndatacopy_not_bad >> simp[]) >>
+  drule_all sym_step_returndatacopy_sim_core >>
+  disch_then (qspec_then `build_offset_to_pc prog` mp_tac) >>
+  Cases_on `sym_step_concrete "RETURNDATACOPY" ss` >>
+  gvs[asm_step_def, sym_returndatacopy_concrete, sym_terminal_def]
+QED
