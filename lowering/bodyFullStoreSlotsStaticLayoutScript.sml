@@ -2,6 +2,7 @@
 Theory bodyFullStoreSlotsStaticLayout
 Ancestors
   aggregateCodeTrace aggregateTypedCopyRawShape bodyFullStoreSlotsStaticCode
+  bodyFullStoreSlotsStaticControl pred_set
   exprSimAbiEncodeObliviousCode exprSimAbiGasBridge context compileEnv
   fragExec exprLoweringProps emitHelper list rich_list sorting venomExecSemantics
   venomInst venomWf
@@ -145,4 +146,34 @@ Proof
   irule code_trace_start_oblivious >>
   mp_tac (cj 1 store_slots_trace_family) >>
   simp[code_trace_certified_def, code_trace_parametric_def] >> metis_tac[]
+QED
+
+Theorem store_slots_fragment_control_layout:
+  compile_store_slots cenv src dst ty tr sa = ((),sb) ==>
+  EVERY (\i.
+    (i.inst_opcode = JMP ==>
+      ?l. i.inst_operands = [Label l] /\
+        l IN {l | (?bb. MEM bb (FRONT (emitted_blocks sa sb)) /\ l = bb.bb_label) \/
+                   l = sb.cs_current_bb}) /\
+    (i.inst_opcode = JNZ ==>
+      ?v l r. i.inst_operands = [v; Label l; Label r] /\
+        l IN {l | (?bb. MEM bb (FRONT (emitted_blocks sa sb)) /\ l = bb.bb_label) \/
+                   l = sb.cs_current_bb} /\
+        r IN {l | (?bb. MEM bb (FRONT (emitted_blocks sa sb)) /\ l = bb.bb_label) \/
+                   l = sb.cs_current_bb})) (frag_code sa sb) /\
+  ~MEM sb.cs_current_bb
+    (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
+  (!bb. MEM bb (FRONT (emitted_blocks sa sb)) ==>
+    phi_prefix_length bb.bb_instructions = 0)
+Proof
+  strip_tac >> conj_tac
+  >- (mp_tac (Q.ISPEC `compile_store_slots cenv src dst ty tr`
+        (GEN_ALL (BETA_RULE frag_start_oblivious_target_closure))) >>
+      (impl_tac
+       >- (conj_tac >- simp[store_slots_start_oblivious] >>
+           mp_tac (Q.SPEC `{}:string set`
+             (BETA_RULE (cj 1 store_slots_weak_control_family))) >>
+           simp[] >> metis_tac[])) >>
+      disch_then drule >> simp[]) >>
+  drule store_slots_fragment_syntax_shape >> simp[]
 QED
