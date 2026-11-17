@@ -114,7 +114,31 @@ Resume dft_packet_fresh_singleton_observation[observation]:
     simp[Once trace_defs,get_instruction_def,LENGTH_TAKE] >>
   drule_at (Pat `trace_gas _ = _`) trace_agrees_lookup_fill >>
   disch_then (qspec_then `[]` mp_tac) >>
-  FAIL_TAC "oracle"
+  disch_then (qspec_then `trace_block b (SUC d) 0 C8 ctf
+    (cbt with bb_instructions := TAKE (LENGTH cps) cbt.bb_instructions) be` mp_tac) >>
+  simp[trace_gas_def,EVERY_MEM] >> strip_tac >>
+  `cxs = TAKE q cxs ++ ci::DROP (SUC q) cxs` by
+    metis_tac[TAKE_DROP_SUC,APPEND,APPEND_ASSOC] >>
+  `cys = ci::TL cys` by (Cases_on `cys` >> gvs[]) >>
+  irule (Q.INST [`pre` |-> `TAKE q cxs`, `scheduled` |-> `[]`,
+    `target_fuel` |-> `0`, `ps` |-> `cps`]
+    (SPEC_ALL dft_packet_native_observation_success)) >>
+  conj_tac >- metis_tac[] >>
+  simp[] >>
+  goal_assum (drule_at (Pat `FOLDR _ _ _ _ = OK u`)) >>
+  goal_assum (drule_at (Pat `MEM _ _.fn_blocks`)) >>
+  goal_assum (drule_at (Pat `dft_fn_rel _ _`)) >>
+  goal_assum (drule_at (Pat `lookup_block _ _ = SOME cb`)) >>
+  goal_assum (drule_at (Pat `lookup_block _ _ = SOME cbt`)) >>
+  goal_assum (drule_at (Pat `LIST_REL dft_fn_rel _ _`)) >>
+  qexists_tac `cps` >>
+  simp[LENGTH_TAKE] >>
+  goal_assum (drule_at (Pat `trace_agrees _ _`)) >>
+  qexistsl_tac [`TL cys`, `DROP (SUC q) cxs`, `ci`] >>
+  qpat_x_assum `ci = HD cys` SUBST_ALL_TAC >>
+  qpat_assum `cxs = TAKE q cxs ++ _` (fn th => rewrite_tac[GSYM th]) >>
+  gvs[EVERY_TAKE,EVERY_DROP,EVERY_MEM,trace_agrees_def,trace_gas_def] >>
+  metis_tac[MEM_EL]
 QED
 
 Finalise dft_packet_fresh_singleton_observation
