@@ -611,6 +611,7 @@ End
 
 Definition asm_consume_call_outcome_def:
   asm_consume_call_outcome rq ro rs stk s =
+    if s.as_outcomes = [] then AsmFault (s with as_returndata := []) else
     let (outcome, rest) = take_outcome rq s.as_outcomes;
         (accounts, ts, logs) = adopt_outcome rq outcome
           (s.as_accounts, s.as_transient, s.as_logs);
@@ -694,6 +695,7 @@ End
 
 Definition asm_consume_create_outcome_def:
   asm_consume_create_outcome rq stk s =
+    if s.as_outcomes = [] then AsmFault (s with as_returndata := []) else
     let (outcome, rest) = take_outcome rq s.as_outcomes;
         (accounts, ts, logs) = adopt_outcome rq outcome
           (s.as_accounts, s.as_transient, s.as_logs);

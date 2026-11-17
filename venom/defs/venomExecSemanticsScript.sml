@@ -515,7 +515,10 @@ Definition exec_ext_call_def:
                cr_gas := SOME (w2n gas);
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
+         [out] =>
+           if s.vs_outcomes = [] then
+             Abort ExHalt_abort (halt_state (set_returndata [] s))
+           else OK (update_var out output s')
        | _ => Error "ext_call requires single output"
 End
 
@@ -530,7 +533,10 @@ Definition exec_delegatecall_def:
                <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>;
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
+         [out] =>
+           if s.vs_outcomes = [] then
+             Abort ExHalt_abort (halt_state (set_returndata [] s))
+           else OK (update_var out output s')
        | _ => Error "delegatecall requires single output"
 End
 
@@ -540,6 +546,8 @@ Definition exec_create_def:
     case inst.inst_outputs of
       [out] =>
         if w2n sz > 2 * max_code_size then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else if s.vs_outcomes = [] then
           Abort ExHalt_abort (halt_state (set_returndata [] s))
         else let rq = venom_create_request s value offset sz salt_opt;
                  (output, s') = consume_create_outcome rq s
