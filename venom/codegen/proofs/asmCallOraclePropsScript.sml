@@ -8,6 +8,7 @@ Ancestors
 (* This single normalization fact transports every untouched record field,
  * including future fields, without a selector-by-selector frame API. *)
 Theorem asm_consume_call_outcome_eq:
+  s.as_outcomes <> [] ==>
   asm_consume_call_outcome rq ro rs stk s =
     let outcome = FST (take_outcome rq s.as_outcomes);
         adopted = adopt_outcome rq outcome
@@ -28,6 +29,22 @@ Theorem asm_consume_call_outcome_eq:
 Proof
   simp[asm_consume_call_outcome_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[]
+QED
+
+Theorem asm_consume_call_outcome_exhausted:
+  s.as_outcomes = [] ==>
+  asm_consume_call_outcome rq ro rs stk s =
+    AsmFault (s with as_returndata := [])
+Proof
+  simp[asm_consume_call_outcome_def]
+QED
+
+Theorem asm_consume_create_outcome_exhausted:
+  s.as_outcomes = [] ==>
+  asm_consume_create_outcome rq stk s =
+    AsmFault (s with as_returndata := [])
+Proof
+  simp[asm_consume_create_outcome_def]
 QED
 
 (* Generic byte-list splice contract: no lost/shifting suffix. Applicable
