@@ -236,10 +236,11 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
         first_assum ACCEPT_TAC,
         first_assum ACCEPT_TAC,
         first_assum ACCEPT_TAC,
-        simp[vv_place_ptr_def, contextTheory.mk_ptr_def, slot_loc_def,
-             eval_operand_def],
+        simp_tac (srw_ss())
+          [vv_place_ptr_def, contextTheory.mk_ptr_def, slot_loc_def,
+           eval_operand_def] >> first_assum ACCEPT_TAC,
         first_assum ACCEPT_TAC,
-        qexists_tac `elem` >> simp[]])
+        qexists_tac `elem` >> conj_tac >> first_assum ACCEPT_TAC])
   >- (irule vv_store_bound_nonmem >> Cases_on `tr` >> simp[contextTheory.mk_ptr_def])
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
