@@ -152,7 +152,7 @@ Theorem slots_sites_compose[local]:
 Proof
   rpt strip_tac >>
   drule_all exprSimAbiDecodeSuffixWritesTheory.abi_decode_frag_code_split >>
-  disch_then (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  strip_tac >>
   metis_tac[cs_extends_trans]
 QED
 
@@ -183,16 +183,16 @@ Theorem slots_sites_emit[local]:
         cs_extends w (SND (emit_void (if tr then TSTORE else SSTORE) [dst;v] a))
 Proof
   rpt gen_tac >> conj_asm1_tac
-  >- (irule code_step_extends >>
-      qexists_tac `(\opc. T)` >>
-      mp_tac code_action_emit_void >> simp[code_action_def]) >>
+  >- (mp_tac code_action_emit_void >> simp[code_action_def] >>
+      strip_tac >> irule code_step_extends >> qexists_tac `(\opc. T)` >>
+      first_x_assum irule >>
+      qexistsl_tac [`if tr then TSTORE else SSTORE`, `[dst;v]`] >>
+      simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
   simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
        frag_code_def, emitted_blocks_def, emitted_insts_def, DROP_APPEND] >>
   rpt strip_tac >> gvs[] >>
-  qexistsl_tac [`a`, `SND (emit_void (if tr then TSTORE else SSTORE) [dst;v] a)`] >>
-  simp[mk_inst_def, cs_extends_refl] >>
-  qexistsl_tac [`dst`,`v`] >>
-  simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def]
+  qexists_tac `a` >>
+  gvs[cs_extends_refl, emit_void_def, comp_bind_def, fresh_id_def, emit_def]
 QED
 
 Theorem store_slots_store_site_family[local]:
@@ -227,16 +227,59 @@ Theorem store_slots_store_site_family[local]:
         cs_extends a u /\ cs_extends u w /\
         cs_extends w (SND (compile_copy_elements_to_slots cenv src dst elem cnt tr a)))
 Proof
-  irule slots_relation_family >> rpt conj_tac
-  >- (rpt strip_tac
+  ho_match_mp_tac slots_relation_family >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[cs_extends_trans] >>
-      irule slots_sites_compose >> metis_tac[])
+      ho_match_mp_tac slots_sites_compose >> metis_tac[])
   >- simp[cs_extends_refl, frag_code_def, emitted_blocks_def, emitted_insts_def]
-  >- (rpt strip_tac >> irule slots_sites_readonly >> simp[code_action_emit_inst])
-  >- (rpt strip_tac >> irule slots_sites_readonly >> simp[code_action_emit_op])
-  >- (rpt strip_tac >> irule slots_sites_readonly >> simp[code_action_emit_void])
+  >- (rpt gen_tac >> strip_tac >> qid_spec_tac `a` >>
+      ho_match_mp_tac slots_sites_readonly >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule code_action_emit_inst >> simp[])
+  >- (rpt gen_tac >> strip_tac >> qid_spec_tac `a` >>
+      ho_match_mp_tac slots_sites_readonly >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule code_action_emit_op >> simp[])
+  >- (rpt gen_tac >> strip_tac >> qid_spec_tac `a` >>
+      ho_match_mp_tac slots_sites_readonly >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule code_action_emit_void >> simp[])
   >- ACCEPT_TAC slots_sites_emit
-  >- (rpt gen_tac >> irule slots_sites_readonly >> simp[code_action_fresh_var])
-  >- (rpt gen_tac >> irule slots_sites_readonly >> simp[code_action_fresh_label]) >>
-  rpt gen_tac >> irule slots_sites_readonly >> simp[code_action_new_block]
+  >- (rpt gen_tac >> qid_spec_tac `a` >> ho_match_mp_tac slots_sites_readonly >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[code_action_fresh_var])
+  >- (rpt gen_tac >> qid_spec_tac `a` >> ho_match_mp_tac slots_sites_readonly >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[code_action_fresh_label]) >>
+  rpt gen_tac >> qid_spec_tac `a` >> ho_match_mp_tac slots_sites_readonly >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[code_action_new_block]
+QED
+
+Theorem store_slots_fragment_store_site:
+  compile_store_slots cenv src dst ty tr sa = ((),sb) /\
+  MEM i (frag_code sa sb) /\
+  (i.inst_opcode = SSTORE \/ i.inst_opcode = TSTORE) ==>
+  i.inst_opcode = (if tr then TSTORE else SSTORE) /\
+  ?a v u w. i.inst_operands = [a;v] /\ i.inst_outputs = [] /\
+    emit_void (if tr then TSTORE else SSTORE) [a;v] u = ((),w) /\
+    i = mk_inst u.cs_next_id (if tr then TSTORE else SSTORE) [a;v] [] /\
+    cs_extends sa u /\ cs_extends u w /\ cs_extends w sb
+Proof
+  strip_tac >>
+  qspecl_then [`cenv`,`src`,`dst`,`ty`,`tr`,`sa`] mp_tac
+    (cj 1 store_slots_store_site_family) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem store_slots_fragment_store_site_code:
+  compile_store_slots cenv src dst ty tr sa = ((),sb) /\
+  MEM i (frag_code sa sb) /\
+  (i.inst_opcode = SSTORE \/ i.inst_opcode = TSTORE) /\
+  fn_has_code sa sb func ==>
+  i.inst_opcode = (if tr then TSTORE else SSTORE) /\
+  ?a v u w. i.inst_operands = [a;v] /\ i.inst_outputs = [] /\
+    emit_void (if tr then TSTORE else SSTORE) [a;v] u = ((),w) /\
+    i = mk_inst u.cs_next_id (if tr then TSTORE else SSTORE) [a;v] [] /\
+    cs_extends sa u /\ cs_extends u w /\ cs_extends w sb /\
+    fn_has_code u w func
+Proof
+  strip_tac >> drule store_slots_fragment_store_site >>
+  disch_then (qspec_then `i` mp_tac) >> simp[] >>
+  strip_tac >> qexistsl_tac [`a`,`v`,`u`,`w`] >> simp[] >>
+  metis_tac[cs_extends_trans, fn_has_code_split]
 QED
