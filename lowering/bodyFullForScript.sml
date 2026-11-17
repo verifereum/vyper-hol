@@ -9,6 +9,7 @@
  *)
 Theory bodyFullFor
 Ancestors
+  bodyFullForControl
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
