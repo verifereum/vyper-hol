@@ -31,7 +31,6 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ==>
     ?g. !g'.
       g <= g' /\
-      (FST (HD (add_frame_gas g' es).contexts)).msgParams.gasLimit < 2 ** 64 /\
       (!gs. call_storage_ok am tx
          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~gas_source_exempt tops tx
@@ -93,8 +92,7 @@ Theorem vyper_call_gas_sufficient:
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?g. !g'.
-      g <= g' /\
-      (FST (HD (add_frame_gas g' es).contexts)).msgParams.gasLimit < 2 ** 64 ==>
+      g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         ((!gs. call_storage_ok am tx
@@ -109,7 +107,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
-     (FST (HD (add_frame_gas g' es).contexts)).msgParams.gasLimit < 2 ** 64 /\
      (!gs. call_storage_ok am tx
         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~gas_source_exempt tops tx
