@@ -13,6 +13,10 @@
       "sha256": "492183e866961daed3a7df71f3e459770375e29493722c9195a3b89ad84c3690"
     },
     {
+      "path": "bytecode/patches/5274-base-ptr-all-uses.patch",
+      "sha256": "b6e17c04e28f0f44a4f50021450ebfd286c7c234adecd4fc16d2a910d94d485e"
+    },
+    {
       "path": "bytecode/patches/5280-target-subscript-overlap.patch",
       "sha256": "d651564fb4f4c80622200381c597798cbbd40a0d53f75f90cd6482e64d6d3a8c"
     },

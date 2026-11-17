@@ -103,7 +103,7 @@ Theorem assign_place_capture_mem:
   ~s.vs_halted /\ s.vs_current_bb = sr.cs_current_bb /\
   s.vs_inst_idx = LENGTH sr.cs_current_insts ==>
   ?z. gas_marked_path T ctx func s 0 (OK z) /\
-    vv_post H ctx func ce cx e es sa ss s0 ee raw saved z /\
+    vv_post H ctx func ce cx e es sa ss s0 ee (Value v) saved z /\
     stmt_state_rel H ctx func ce cx ee z /\
     type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e) /\
     vv_type saved = lowered_value_type ce e /\
@@ -123,7 +123,7 @@ Theorem assign_place_capture_mem:
          (type_memory_size ltv = 0 \/
           w2n w + type_memory_size ltv <= z.vs_alloca_next)) /\
     (!J. vv_post J ctx func ce cx e es sa sr s0 ee raw vv0 s ==>
-      vv_post J ctx func ce cx e es sa ss s0 ee raw saved z)
+      vv_post J ctx func ce cx e es sa ss s0 ee (Value v) saved z)
 Proof
   strip_tac >>
   `expr_sim_inv ce cx env es /\ well_typed_expr env e` by
@@ -138,15 +138,15 @@ Proof
   `!x. vv_operand vv0 = Var x ==> not_fresh_at sr x` by
     metis_tac[cj 1 compiler_compile_var] >>
   `?z. gas_marked_path T ctx func s 0 (OK z) /\
-    vv_post H ctx func ce cx e es sa ss s0 ee raw saved z /\
-    vv_own ce cx (post_value_type ce e) sr ss ee raw saved z /\
+    vv_post H ctx func ce cx e es sa ss s0 ee (Value v) saved z /\
+    vv_own ce cx (post_value_type ce e) sr ss ee (Value v) saved z /\
     vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e)
-      ee raw saved z /\
+      ee (Value v) saved z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = ss.cs_current_bb /\
     z.vs_inst_idx = LENGTH ss.cs_current_insts /\
     (!J. vv_post J ctx func ce cx e es sa sr s0 ee raw vv0 s ==>
-      vv_post J ctx func ce cx e es sa ss s0 ee raw saved z)` by
+      vv_post J ctx func ce cx e es sa ss s0 ee (Value v) saved z)` by
     (Cases_on `lowered_value_type ce e = expr_type e \/
        is_bytestring_type (expr_type e) /\
        is_bytestring_type (lowered_value_type ce e) /\
@@ -229,7 +229,7 @@ Resume assign_place_capture_mem[result]:
        `t'` |-> `lowered_value_type ce e`, `op` |-> `buf.buf_operand`]
        vv_own_memory_transport) >> simp[read_result_def, return_def]) >>
   `type_memory_size ltv = 0 \/ w2n w + type_memory_size ltv <= z.vs_alloca_next` by
-    (fs[vv_store_bound_def, mk_ptr_def, vv_operand_def] >>
+    (fs[vv_store_bound_def, mk_ptr_def, vv_operand_def, read_result_def, return_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexists_tac `z` >> simp[] >>
   gvs[vv_operand_def, mk_ptr_def, vv_post_def] >>
@@ -243,7 +243,7 @@ Resume assign_place_capture_mem[word]:
   `expr_val_rel cx (lowered_value_type ce e) v (vv_operand saved) z` by
     (drule_all snapshot_saved_representation >> strip_tac >>
      Cases_on `saved` >> gvs[vv_type_def, vv_location_def, vv_post_def,
-       vv_holds_def, vv_operand_def] >> metis_tac[]) >>
+       vv_holds_def, vv_operand_def, read_result_def, return_def] >> metis_tac[]) >>
   `!id t. FLOOKUP env.var_types id = SOME t ==>
     well_formed_type env.type_defs t` by
     metis_tac[expr_body_pre_var_types_well_formed] >>
@@ -262,7 +262,7 @@ Resume assign_place_capture_mem[word]:
 QED
 
 Resume assign_place_capture_mem[retag]:
-  `vv_holds ce cx (post_value_type ce e) raw
+  `vv_holds ce cx (post_value_type ce e) (Value v)
     (LocatedValue (lowered_value_type ce e) (mk_ptr buf.buf_operand LocMemory)) ee z` by
     fs[vv_post_def] >>
   Cases_on `post_value_type ce e = lowered_value_type ce e`
@@ -270,8 +270,8 @@ Resume assign_place_capture_mem[retag]:
       mp_tac (Q.INST [`sty` |-> `lowered_value_type ce e`,
         `lty` |-> `lowered_value_type ce e`, `stv` |-> `ltv`,
         `sa` |-> `sr`, `sb` |-> `ss`, `es` |-> `ee`, `s` |-> `z`,
-        `op` |-> `buf.buf_operand`] snapshot_captured_memory_retag) >>
-      simp[vv_operand_def, mk_ptr_def] >> metis_tac[]) >>
+        `op` |-> `buf.buf_operand`, `raw` |-> `Value v`] snapshot_captured_memory_retag) >>
+      simp[vv_operand_def, mk_ptr_def, read_result_def, return_def] >> metis_tac[]) >>
   `post_value_type ce e = expr_type e /\
    is_bytestring_type (expr_type e) /\
    is_bytestring_type (lowered_value_type ce e)` by
@@ -285,8 +285,8 @@ Resume assign_place_capture_mem[retag]:
   mp_tac (Q.INST [`sty` |-> `expr_type e`,
     `lty` |-> `lowered_value_type ce e`, `stv` |-> `etv`,
     `sa` |-> `sr`, `sb` |-> `ss`, `es` |-> `ee`, `s` |-> `z`,
-    `op` |-> `buf.buf_operand`] snapshot_captured_memory_retag) >>
-  simp[vv_operand_def, mk_ptr_def] >> metis_tac[]
+    `op` |-> `buf.buf_operand`, `raw` |-> `Value v`] snapshot_captured_memory_retag) >>
+  simp[vv_operand_def, mk_ptr_def, read_result_def, return_def] >> metis_tac[]
 QED
 
 Finalise assign_place_capture_mem
