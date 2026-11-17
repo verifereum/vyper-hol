@@ -371,9 +371,7 @@ Theorem sym_restore_offsets_cons_result:
       result.sym_mem_labels = ss.sym_mem_labels /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_compose >>
-  gvs[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
-  qexists_tac `sv' :: vals` >> simp[]
+  MATCH_ACCEPT_TAC symFrameBoundaryNumericTheory.sym_restore_offsets_cons_result
 QED
 
 Theorem sym_restore_offsets_cons_step:
