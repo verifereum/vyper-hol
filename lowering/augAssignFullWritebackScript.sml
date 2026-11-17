@@ -14,6 +14,9 @@ Ancestors
   memoryValueEncoding compileEnv venomState venomInst
   loweringPosts exprSimProps stmtSimDeclStore
   finite_map pred_set list words
+  stmtSimAugAssignPlaceStorage tupleTargetStoreProps placeStore
+  exprSimUnwrap haltExitProj augAssignFullStore augAssignFullStoreGhost
+  vyperState fragExec
 
 Theorem augassign_memory_write_machine_resources[local]:
   expr_sim_inv cenv cx env es /\
@@ -477,3 +480,190 @@ Resume augassign_immutable_writeback_full[immutable_allocation]:
 QED
 
 Finalise augassign_immutable_writeback_full
+
+Theorem augassign_storage_writeback_full:
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  MEM (StorageRoot tr offset tv0) es.storage_trace /\
+  storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\
+  write_place cx (StoragePlace tr slot tv) v es = (res,es') /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;op] sa = ((),sb) /\
+  fn_has_code sa sb func /\
+  eval_operand dst s = SOME slot /\
+  eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+  op_taint tn dst = {} /\ op_taint tn op = {} /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  u = ((if tr then tstore slot (typed_val_to_w256 tv v) s
+        else sstore slot (typed_val_to_w256 tv v) s)
+        with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  un = (if tr then tn with t_trans := key_update tn.t_trans slot {}
+        else tn with t_stor := key_update tn.t_stor slot {}) /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G tn s /\
+    return_buf_frame d cenv sa s /\ alloca_history func s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\
+    (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+      FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!x. not_fresh_at sa0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
+      op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame c0 es0 sa0 s0 cenv es s /\
+    (!aid off sz i.
+      FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+      (!n b sz'. local_region c0 es0.scopes s0 n b sz' ==>
+        off + sz <= b \/ b + sz' <= off) /\
+      off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem)) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (write_place cx (StoragePlace tr slot tv) v) (es,s,G,tn)
+    (\H r ee G' tn' t.
+      stmt_lands lctx sb r t /\ ~t.vs_halted /\
+      (r = INL () ==> ~block_is_terminated sb) /\
+      cenv_top_ext cenv cenv ee.scopes /\
+      stmt_state_rel H ctx func cenv cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv sb t /\ alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G' tn' t /\
+      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa0 x ==> FLOOKUP G' x = FLOOKUP G0 x /\
+        op_taint tn' (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame c0 es0 sa0 s0 cenv ee t /\
+      (!aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+        (!n b sz'. local_region c0 es0.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn0.t_mem))
+    (\H r ee gt result.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) r gt result) /\
+      halt_exit H cx ee r result /\
+      (ctx_has_dalloca ctx ==>
+       !t. (result = Halt t \/ ?ir. result = IntRet ir t) ==> allocas_below_fmp t))
+Proof
+  strip_tac >> Cases_on `cx.txn.is_static`
+  >- suspend "storage_static"
+  >> `res = INL () /\ es'.scopes = es.scopes` by
+       (drule_all tuple_target_storage_write_safe >> metis_tac[pairTheory.PAIR_EQ]) >>
+  `es'.storage_trace = es.storage_trace` by metis_tac[write_place_storage_trace] >>
+  `well_formed_type_value tv` by metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `type_slot_size tv = 1` by metis_tac[word_type_slot_size] >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[NoAsms] >>
+  conj_tac >- metis_tac[aug_place_storage_write_gas_obs] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
+  suspend "storage_normal"
+QED
+
+Resume augassign_storage_writeback_full[storage_static]:
+  `res = INR (Error (RuntimeError "write in static context")) /\ es' = es` by
+    (qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
+     simp[write_place_def, write_storage_slot_def, check_not_static_def,
+          check_def, assert_def, ignore_bind_def, bind_def, raise_def]) >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G`, `es`, `Abort ExHalt_abort (halt_state (set_returndata [] s))`, `res`, `tn`] >>
+  simp[IgnAsm `u = _`, IgnAsm `un = _`, exit_result_def] >>
+  conj_tac >- metis_tac[aug_place_storage_write_gas_obs] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H es'.storage_trace` by simp[] >>
+  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
+  `s.vs_call_ctx.cc_static` by
+    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
+     simp[call_ctx_rel_def]) >>
+  `allocas_from lo s` by fs[ghost_inv_at_def] >>
+  conj_tac
+  >- (irule storage_emit_static_origin_ptr >> simp[] >>
+      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[]) >>
+  simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
+QED
+
+Resume augassign_storage_writeback_full[storage_normal]:
+  `s.vs_call_ctx.cc_static = cx.txn.is_static /\
+   s.vs_call_ctx.cc_address = cx.txn.target` by
+    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
+     simp[call_ctx_rel_def]) >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `storage_place_observed H (StoragePlace tr slot tv)` by
+    (irule aug_place_storage_rooted_observed >> metis_tac[]) >>
+  `!k b. storage_dead H tr
+      (update_storage slot (typed_val_to_w256 tv v)
+        (if tr then contract_transient s else contract_storage s)) k b =
+      storage_dead H tr (if tr then contract_transient s else contract_storage s) k b` by
+    (drule_all aug_place_region_storage_dead_stable >> simp[]) >>
+  `ghost_inv_at (DF H) lo d cenv cx es' G un u` by
+    (qpat_assum `u = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `un = _` (fn th => rewrite_tac[th]) >>
+     irule (INST_TYPE [alpha |-> ``:256``] ghost_inv_at_storage_word_store) >> simp[] >>
+     conj_tac >- (qexists_tac `H` >> metis_tac[]) >>
+     qexists_tac `es` >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `u = _` (fn th => rewrite_tac[th]) >>
+      qpat_assum `un = _` (fn th => rewrite_tac[th]) >>
+      irule storage_word_store_origin_ptr >> simp[] >>
+      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[]) >>
+  suspend "storage_post"
+QED
+
+Resume augassign_storage_writeback_full[storage_post]:
+  `stmt_state_rel H ctx func cenv cx es' u` by
+    (simp[stmt_state_rel_inst_idx] >>
+     irule place_store_word_backend_state >> metis_tac[]) >>
+  `storage_well_formed_on cx es' (FST H)` by
+    (irule aug_place_storage_store_wf >> metis_tac[]) >>
+  `storage_well_formed_on cx (es' with gas_obs := []) (FST H)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       boolTheory.FORALL_BOOL, vyperStorageBackendTheory.get_storage_def] >>
+  `ghost_inv_at (DF H) lo d cenv cx (es' with gas_obs := []) G un u` by
+    (qpat_x_assum `ghost_inv_at _ _ _ _ _ es' _ _ _` mp_tac >>
+     simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[]) >>
+  `~block_is_terminated sb` by
+    (Cases_on `tr` >> gvs[] >> drule emit_void_terminated >>
+     simp[is_terminator_def]) >>
+  `sa.cs_next_var = sb.cs_next_var /\ sa.cs_current_bb = sb.cs_current_bb` by
+    (gvs[emit_void_eq]) >>
+  `return_buf_frame d cenv sb u` by
+    (irule return_buf_frame_frame >>
+     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
+     Cases_on `tr` >> simp[lookup_var_def, sstore_def, tstore_def]) >>
+  `alloca_history func u` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`alloca_history func s`, `fn_has_code sa sb func`,
+        `emit_void _ _ _ = _`, `u = _`,
+        `s.vs_current_bb = _`, `s.vs_inst_idx = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[emit_void_eq] >>
+     qpat_assum `s.vs_inst_idx = _` (fn th => once_rewrite_tac[GSYM th]) >>
+     irule (SRULE [] (Q.INST
+       [`insts` |-> `[mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] []]`]
+       (SPEC_ALL alloca_history_no_alloca_slice))) >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def] >>
+     qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+     simp[fragExecTheory.fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     strip_tac >> goal_assum (drule_at Any) >>
+     simp[DROP_APPEND, mk_inst_def] >> qexists_tac `sa` >>
+     `TSTORE <> ALLOCA /\ SSTORE <> ALLOCA` by simp[] >>
+     metis_tac[boolTheory.COND_CLAUSES]) >>
+  suspend "storage_allocation"
+QED
+
+Resume augassign_storage_writeback_full[storage_allocation]:
+  `alloca_frame c0 es0 sa0 s0 cenv es' u` by
+    (qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+     Cases_on `tr` >>
+     simp[alloca_frame_def, local_region_def, lookup_var_def,
+          sstore_def, tstore_def]) >>
+  Cases_on `tr` >>
+  fs[stmt_lands_def, stmtSimPropsTheory.cenv_top_ext_refl,
+     lookup_var_def, sstore_def, tstore_def, op_taint_def,
+     allocas_below_fmp_def] >> metis_tac[]
+QED
+
+Finalise augassign_storage_writeback_full
