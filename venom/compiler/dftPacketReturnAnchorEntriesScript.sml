@@ -193,9 +193,12 @@ Proof
      `?ks. FLOOKUP ks_tab (a,f) = SOME ks` by metis_tac[FLOOKUP_DEF,optionTheory.NOT_NONE_SOME] >>
      qpat_assum `!a e sf tf inc entry order res nrest bb bt ps xs ys rho hin h0 be hbe count r8 u0 ms ess ks. _ ==> _`
        (fn th => qpat_assum `FLOOKUP blocks (a,f) = _`
-         (mp_then Any (drule_all_then (qspec_then `fuel` mp_tac)) th)) >>
-     simp[] >> strip_tac >>
-     qexistsl [`x0`,`x1`,`sp`] >> simp[]) >>
+         (mp_then Any mp_tac th)) >>
+     disch_tac >> qexistsl [`x0`,`x1`,`sp`] >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!sf tf inc entry order res nrest ms ess ks F' gs tail. _ ==> residual_result _ _ _`
+       (irule o SRULE []) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `!r. r <= LENGTH ds ==>
     EL r (ds ++ [e]) = inc + SUC r /\ MEM (inc + SUC r) order` by
     (rpt strip_tac >>
@@ -234,8 +237,9 @@ Proof
   `SUC r <= LENGTH ds` by simp[] >>
   `MEM (inc + SUC (SUC r)) order` by metis_tac[] >>
   qpat_x_assum `!f. MEM f order ==> _` drule >> strip_tac >>
-  qpat_assum `!f bf btf psf xsf ysf rhof inf hf bef cf rf closedf restf. _ ==> _`
-    (drule_then mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!f bf btf psf xsf ysf rhof inf hf bef cf rf closedf restf. _ ==> _`
+    (fn th => qpat_assum `FLOOKUP blocks (a,inc + SUC (SUC r)) = _`
+      (mp_then Any mp_tac th)) >> simp[] >> strip_tac >>
   `inc + SUC (SUC r) - 1 = inc + SUC r` by simp[] >>
   qpat_x_assum `FLOOKUP blocks (a,_ - 1) = _` mp_tac >> simp[] >> strip_tac >>
   qpat_assum `!f bf btf psf xsf ysf rhof inf hf bentry cf post rest. _ ==> _`
