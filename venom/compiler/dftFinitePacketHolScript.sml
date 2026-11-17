@@ -20,10 +20,10 @@ Ancestors
   dftPacketCutExtension
   dftPacketEntryReplay
   dftPacketFillingBoundary
-  dftPacketFreshCut dftPacketFreshRootSuccessSplit
-  dftPacketFreshChildStop
-  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
-  dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
+  dftPacketFreshCut
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop dftPacketFreshSingletonStop
+  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshSingletonNormalize dftPacketFreshSingletonNative dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -44,9 +44,9 @@ Ancestors
   dftPacketRetainedOracle
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative dftPacketTraceCallProvenance
-  dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts
-  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketReturnNative
+  dftPacketTraceCallProvenance dftPacketReturnRecordFrame
+  dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
