@@ -1,7 +1,7 @@
 (* Counted storage-copy instructions. Loaded words may carry dead-byte taint. *)
 Theory assignBasePtrStoragePath
 Ancestors
-  bodyPtrSignedConvertLoad wordLoadStorePtr assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
+  bodyPtrSignedConvertLoad storageCopyControlPtr wordLoadStorePtr assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
   typedCopyLoopHeaderPtr fragGasPathPtr fragGasSeqPtr fragExecPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
   stateFrame finite_map pred_set words combin decoderGhostFramePtr arithmetic list
@@ -790,47 +790,6 @@ QED
 
 (* compile_word_copy_loop uses EQ/JNZ, not the LT/ISZERO header used by
    other copy loops. Keep this boundary tied to that actual emitted shape. *)
-Theorem assign_base_storage_eq_counted:
-  !s fn bb id ctr done i n tn G ctx D PG.
-    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) /\
-    lookup_var ctr s = SOME (n2w i) /\ i <= n /\ n < dimword (:256) /\
-    op_taint tn (Var ctr) = {} /\ ~ctx_has_dalloca ctx ==>
-    gas_path_ptr D 0 ctx fn PG G tn s 0 (DRESTRICT G (COMPL {done}))
-      (tn with t_var := tn.t_var |+ (done,{}))
-      (OK ((update_var done (bool_to_word (i=n)) s) with vs_inst_idx := SUC s.vs_inst_idx))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `step_inst_base (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) s =
-     OK (update_var done (bool_to_word (i=n)) s)` by
-    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
-                      K_THM, opcode_case_def] >>
-     simp[exec_pure2_def, eval_operand_def, n2w_11, LESS_MOD]) >>
-  `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) s` by
-    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-          mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
-          contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
-     gvs[op_taint_def] >> Cases >> gvs[]) >>
-  `step_prov PG G (mk_inst id EQ [Var ctr;Lit (n2w n)] [done])
-      (update_var done (bool_to_word (i=n)) s) = DRESTRICT G (COMPL {done}) /\
-   step_taint (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) s
-      (update_var done (bool_to_word (i=n)) s) tn =
-      (tn with t_var := tn.t_var |+ (done,{}))` by
-    (simp[step_prov_def, set_prov_def, out_prov_def, op_prov_def,
-          step_taint_def, set_var_taint_def, out_taint_def, mk_inst_def,
-          mem_taint_def, step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
-          written_taint_def, range_bytes_def, store_taint_def, adopt_reset_def,
-          imm_taint_def, new_site_bytes_def, execution_frame_def, update_var_def, op_taint_def,
-          eval_operand_def, EXTENSION, taint_component_equality] >>
-     simp[FLOOKUP_DEF, SF CONJ_ss]) >>
-  irule (SRULE [mk_inst_def, is_terminator_def]
-    (Q.INST [`n` |-> `0`, `lo` |-> `0`,
-      `i` |-> `mk_inst id EQ [Var ctr;Lit (n2w n)] [done]`] gas_path_ptr_step)) >>
-  simp[GSYM mk_inst_def] >> goal_assum (drule_at Any) >> simp[] >>
-  irule (cj 1 gas_path_ptr_rules) >> simp[update_var_def]
-QED
-
 Theorem assign_base_storage_copy_header:
   !s fn bb id ctr done i n bodylbl exit tn G ctx D PG.
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -856,7 +815,7 @@ Proof
   qabbrev_tac `t1 = tn with t_var := tn.t_var |+ (done,{})` >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 t1 (OK s1)` by
     (simp[Abbr `s1`, Abbr `g1`, Abbr `t1`] >>
-     irule assign_base_storage_eq_counted >> simp[] >>
+     irule copy_loop_eq_path_ptr >> simp[] >>
      qexistsl_tac [`ctr`, `id`] >> simp[]) >>
   `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\ ~s1.vs_halted /\
    get_instruction bb s1.vs_inst_idx =
