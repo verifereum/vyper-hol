@@ -10,7 +10,7 @@
  *)
 Theory symFrameInvoke
 Ancestors
-  symInvokeEntryFacts
+  symInvokeEntryFacts symInvokeEntryOwn asmSymOwnStep
   symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
@@ -153,9 +153,17 @@ Theorem sym_invoke_prefix_pair:
   sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
 Proof
   rpt strip_tac >>
-  `asm_sym_rel p env cs' ss'` by
-    (gvs[sym_frame_inv_def] >> drule_all asm_sym_steps_lockstep >> simp[]) >>
-  drule_all sym_frame_inv_region_transfer >> simp[]
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
+  `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
+     ctx cplan fn ret srest labs0 ps cs ss` by
+    simp[sym_invoke_frame_own_canonical] >>
+  `sym_steps_mode F p env cs.as_code n ss = SymOK ss'` by
+    simp[sym_steps_mode_def] >>
+  drule_all sym_invoke_prefix_pair_own >>
+  simp[sym_invoke_frame_own_canonical]
 QED
 
 Theorem sym_invoke_selected_frame_prefix:
@@ -186,21 +194,15 @@ Theorem sym_invoke_selected_frame_prefix:
           SymOK sms /\
         sym_frame_inv p env ctx cp fn ret srest labs0 arranged mid sms
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
   rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
-  rename1 `generated_plan_state_wf_marked spillbase ps` >>
-  `sym_kinds_ok cplan fn ret srest ps ss /\
-   asm_block_at p ss.sym_base.as_pc
-     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
-    gvs[sym_frame_inv_def, asm_sym_rel_def] >>
-  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-   plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps` by
-    metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
-              deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
-  drule_all sym_invoke_selected_prefix_sim_marked >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  goal_assum (drule_at Any) >>
-  drule_all sym_invoke_prefix_pair >> simp[]
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
+  `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
+     ctx cplan fn ret srest labs0 ps cs ss` by
+    simp[sym_invoke_frame_own_canonical] >>
+  drule_all sym_invoke_selected_frame_prefix_own >>
+  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical] >> metis_tac[]
 QED
 
 Theorem sval_conc_words:
@@ -270,16 +272,13 @@ Theorem sym_invoke_call_entry_pair:
     scas.sym_stack = Lab ret_lbl 0 :: sms.sym_stack /\
     scas.sym_mem_labels = sms.sym_mem_labels
 Proof
-  rpt strip_tac >>
-  `?pc. INDEX_OF (AsmLabel nm) p = SOME pc` by
-    (Cases_on `INDEX_OF (AsmLabel nm) p` >> gvs[INDEX_OF_eq_NONE]) >>
-  `asm_block_at p sms.sym_base.as_pc
-     [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"]` by
-    (gvs[asm_sym_rel_def] >> simp[]) >>
-  drule_all sym_invoke_call_packet >>
-  disch_then (qspec_then `env` assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  gvs[]
+  rpt strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`mid.as_code`, `env`] assume_tac) >>
+  `asm_sym_rel_own (SND (compute_label_offsets p)) p env mid.as_code mid sms` by
+    simp[asm_sym_rel_own_canonical] >>
+  drule_all sym_invoke_call_entry_pair_own >>
+  simp[sym_steps_mode_def, asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
 Theorem sym_invoke_return_code_label:
@@ -315,15 +314,17 @@ Theorem sym_invoke_entry_symbolic_boundary:
     (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cp b) /\
     MEM (AsmLabel ret_lbl) p
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
   rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 arranged mid sms` >>
-  `asm_sym_rel p env mid sms /\ sym_kinds_ok cplan fn ret srest arranged sms` by
-    gvs[sym_frame_inv_def] >>
-  drule_all sym_invoke_arranged_stack >> strip_tac >>
-  drule_all fnFrameBoundaryInvokeTheory.invoke_packet_block >> strip_tac >>
-  drule_all sym_invoke_call_entry_pair >> strip_tac >>
-  drule_all sym_invoke_return_code_label >> strip_tac >>
-  gvs[sym_kinds_ok_def, sym_steps_add]
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`mid.as_code`, `env`] assume_tac) >>
+  `sym_frame_inv_own (SND (compute_label_offsets p)) p env mid.as_code
+     ctx cplan fn ret srest labs0 arranged mid sms` by
+    simp[sym_invoke_frame_own_canonical] >>
+  `sym_steps_mode F p env mid.as_code n ss = SymOK sms` by
+    simp[sym_steps_mode_def] >>
+  drule_all (REWRITE_RULE [boolTheory.COND_CLAUSES] (Q.SPEC `F` sym_invoke_entry_symbolic_boundary_own)) >>
+  simp[sym_steps_mode_def, asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
 Theorem sym_invoke_return_output_kinds:
@@ -1949,17 +1950,16 @@ Theorem sym_invoke_selected_entry_pair:
     (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cp b) /\
     MEM (AsmLabel ret_lbl) p
 Proof
-  rpt gen_tac >> strip_tac >>
-  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base` by
-    metis_tac[allocMonoTheory.emit_input_plan_spill_base,
-              allocMonoTheory.reorder_plan_spill_base] >>
-  drule_all sym_invoke_selected_frame_prefix >> strip_tac >>
-  `EVERY (\op. op <> dead_stack_marker) arg_ops` by
-    (gvs[EVERY_MEM] >> metis_tac[]) >>
-  `LENGTH (REVERSE args) = LENGTH arg_ops` by simp[] >>
-  drule_all sym_invoke_entry_symbolic_boundary >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[blockSimHelpersTheory.asm_steps_compose_ok]
+  rpt strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
+  `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
+     ctx cplan fn ret srest labs0 ps cs ss` by
+    simp[sym_invoke_frame_own_canonical] >>
+  drule_all (REWRITE_RULE [boolTheory.COND_CLAUSES] (Q.SPEC `F` sym_invoke_selected_entry_pair_own)) >>
+  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical,
+       asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
 Theorem sym_invoke_selected_entry_facts:
