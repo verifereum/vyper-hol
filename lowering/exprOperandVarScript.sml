@@ -1983,6 +1983,22 @@ Proof
   simp[]
 QED
 
+Theorem compiler_create_ctor_args_reserved_cong:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) ==>
+  !es sa. local_ptrs_reserved ce sa ==>
+    compile_create_ctor_args f ce es sa = compile_create_ctor_args g ce es sa
+Proof
+  strip_tac >> Induct >> simp[compile_create_ctor_args_def] >> rpt strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_snapshot_vv] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_ctor_args] >>
+  qexists `ce` >> simp[]
+QED
+
 Theorem compiler_create_ctor_tuple_reserved_cong[local]:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1991,29 +2007,24 @@ Theorem compiler_create_ctor_tuple_reserved_cong[local]:
 Proof
   strip_tac >> simp[compile_create_ctor_tuple_def] >>
   irule compiler_reserved_bind_cong >> simp[] >>
-  conj_tac >- metis_tac[ci_mono_compile_multi_vvs] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_ctor_args] >>
   qexists `ce` >> simp[] >>
-  rpt strip_tac >> irule compiler_multi_vvs_reserved_cong >> simp[]
+  rpt strip_tac >> irule compiler_create_ctor_args_reserved_cong >> simp[]
 QED
 
 Theorem compiler_create_blueprint_args_reserved_cong[local]:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
   local_ptrs_reserved ce sa ==>
-  compile_create_blueprint_args f ce raw args sa =
-  compile_create_blueprint_args g ce raw args sa
+  compile_create_blueprint_args f ce raw later_es args sa =
+  compile_create_blueprint_args g ce raw later_es args sa
 Proof
   strip_tac >> Cases_on `raw`
   >- (Cases_on `args` >- simp[compile_create_blueprint_args_def] >>
       rename1 `e::es` >> Cases_on `es` >>
       simp[compile_create_blueprint_args_def] >>
-      irule compiler_reserved_bind_cong >> simp[] >>
-      conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
-      qexists `ce` >> simp[] >>
-      rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+      irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[]) >>
   Cases_on `args = []` >> simp[compile_create_blueprint_args_def] >>
-  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_alloc_buffer] >>
-  qexists `ce` >> simp[] >> rpt strip_tac >>
   irule compiler_reserved_bind_cong >> simp[] >>
   conj_tac >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
   qexists `ce` >> simp[] >>
@@ -2023,9 +2034,9 @@ QED
 Theorem compiler_raw_ctor_sequence_mono[local]:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) ==>
   ci_mono sa (SND ((if args = [] then comp_return (data,len) else
-    do buf <- compile_alloc_buffer n;
+    do src <- compile_create_ctor_tuple f ce args;
+       buf <- compile_alloc_buffer n;
        compile_copy_memory_dynamic buf.buf_operand data len;
-       src <- compile_create_ctor_tuple f ce args;
        dst <- emit_op ADD [buf.buf_operand;len];
        args_len <- compile_abi_encode_to_buf dst src enc_info;
        total <- emit_op ADD [len;args_len];
@@ -2033,12 +2044,13 @@ Theorem compiler_raw_ctor_sequence_mono[local]:
     od) sa))
 Proof
   strip_tac >> Cases_on `args = []` >> simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
+  rpt gen_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- simp[ci_mono_compile_copy_memory_dynamic] >>
-  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
-  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- simp[cj 2 ci_mono_compile_abi_encode] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>
@@ -2050,18 +2062,18 @@ Theorem compiler_raw_ctor_sequence_reserved_cong[local]:
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
   local_ptrs_reserved ce sa ==>
   (if args = [] then comp_return (data,len) else
-    do buf <- compile_alloc_buffer n;
+    do src <- compile_create_ctor_tuple f ce args;
+       buf <- compile_alloc_buffer n;
        compile_copy_memory_dynamic buf.buf_operand data len;
-       src <- compile_create_ctor_tuple f ce args;
        dst <- emit_op ADD [buf.buf_operand;len];
        args_len <- compile_abi_encode_to_buf dst src enc_info;
        total <- emit_op ADD [len;args_len];
        comp_return (buf.buf_operand,total)
     od) sa =
   (if args = [] then comp_return (data,len) else
-    do buf <- compile_alloc_buffer n;
+    do src <- compile_create_ctor_tuple g ce args;
+       buf <- compile_alloc_buffer n;
        compile_copy_memory_dynamic buf.buf_operand data len;
-       src <- compile_create_ctor_tuple g ce args;
        dst <- emit_op ADD [buf.buf_operand;len];
        args_len <- compile_abi_encode_to_buf dst src enc_info;
        total <- emit_op ADD [len;args_len];
@@ -2069,11 +2081,6 @@ Theorem compiler_raw_ctor_sequence_reserved_cong[local]:
     od) sa
 Proof
   strip_tac >> Cases_on `args = []` >> simp[] >>
-  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_alloc_buffer] >>
-  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
-  irule compiler_reserved_ignore_bind_cong >>
-  simp[ci_mono_compile_copy_memory_dynamic] >>
-  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >> simp[] >>
   conj_tac >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
   qexists `ce` >> simp[] >> rpt strip_tac >>
@@ -2092,11 +2099,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_snapshot] >>
   qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
-  irule compiler_reserved_bind_cong >> simp[] >>
-  conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
-  qexists `ce` >> simp[] >> reverse conj_tac
-  >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
   qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
@@ -2105,6 +2107,11 @@ Proof
   conj_tac >- metis_tac[compiler_raw_ctor_sequence_mono] >>
   qexists `ce` >> simp[] >> conj_tac
   >- (rpt gen_tac >> strip_tac >> PairCases_on `v` >> simp[] >>
+      irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+      qexists `ce` >> simp[] >> reverse conj_tac
+      >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+      rpt gen_tac >> strip_tac >>
       irule compiler_reserved_bind_cong >> simp[] >>
       conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
       qexists `ce` >> simp[] >> rpt strip_tac >>
@@ -2131,30 +2138,14 @@ Proof
    conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
    qexists `ce` >> simp[] >> reverse conj_tac
    >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
-   rpt gen_tac >> strip_tac >>
-   irule compiler_reserved_bind_cong >> simp[] >>
+   rpt gen_tac >> strip_tac)
+  >~ [`compile_create_blueprint_args _ _ _ _ _`]
+  >- suspend "blueprint" >>
+  (irule compiler_reserved_bind_cong >> simp[] >>
    conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
    qexists `ce` >> simp[] >> reverse conj_tac
    >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
    rpt gen_tac >> strip_tac)
-  >- (irule compiler_reserved_bind_cong >> simp[] >>
-      conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
-      qexists `ce` >> simp[] >> reverse conj_tac
-      >- (rpt strip_tac >> irule compiler_create_salt_reserved_cong >> simp[]) >>
-      rpt gen_tac >> strip_tac >>
-      irule compiler_reserved_bind_cong >> simp[] >>
-      conj_tac
-      >- (rpt CASE_TAC >> simp[ci_mono_comp_return, ci_mono_lower_value_cfn]) >>
-      qexists `ce` >> simp[] >> reverse conj_tac
-      >- (rpt strip_tac >> rpt CASE_TAC >> simp[] >>
-          irule compiler_lower_value_reserved_cong >> simp[]) >>
-      rpt gen_tac >> strip_tac >>
-      irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_blueprint_check] >>
-      qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
-      irule compiler_reserved_bind_cong >> simp[] >>
-      conj_tac >- metis_tac[ci_mono_compile_create_blueprint_args] >>
-      qexists `ce` >> simp[] >> rpt strip_tac >>
-      irule compiler_create_blueprint_args_reserved_cong >> simp[])
   >- (irule compiler_reserved_bind_cong >> simp[] >>
       conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
       qexists `ce` >> simp[] >> rpt strip_tac >>
@@ -2166,6 +2157,29 @@ Proof
   qexists `ce` >> simp[] >> rpt strip_tac >>
   irule compiler_create_salt_reserved_cong >> simp[]
 QED
+
+Resume compiler_create_call_reserved_cong[blueprint]:
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_blueprint_args] >>
+  qexists `ce` >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> irule compiler_create_blueprint_args_reserved_cong >> simp[]) >>
+  rpt gen_tac >> strip_tac >> simp[pairTheory.ELIM_UNCURRY] >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+  qexists `ce` >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
+  qexists `ce` >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> irule compiler_create_salt_reserved_cong >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >> conj_tac
+  >- (rpt CASE_TAC >> simp[ci_mono_comp_return, ci_mono_lower_value_cfn]) >>
+  qexists `ce` >> simp[] >> rpt strip_tac >> rpt CASE_TAC >> simp[] >>
+  irule compiler_lower_value_reserved_cong >> simp[]
+QED
+Finalise compiler_create_call_reserved_cong
 
 Theorem compiler_call_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\

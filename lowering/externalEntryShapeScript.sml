@@ -3078,6 +3078,21 @@ Proof
   simp[lower_value_labels, comp_return_labels]
 QED
 
+Theorem compile_create_ctor_args_labels:
+  !cfn cenv args s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_create_ctor_args cfn cenv args s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_create_ctor_args cfn cenv args s)))
+Proof
+  Induct_on `args` >> rpt gen_tac >>
+  simp[compile_create_ctor_args_def, comp_return_labels] >> disch_tac >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, compile_snapshot_vv_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem compile_create_ctor_tuple_labels:
   !cfn cenv args s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3087,7 +3102,7 @@ Theorem compile_create_ctor_tuple_labels:
 Proof
   rpt gen_tac >> disch_tac >>
   rewrite_tac[compile_create_ctor_tuple_def] >> simp[LET_THM] >>
-  irule comp_bind_labels >> simp[compile_multi_vvs_labels] >>
+  irule comp_bind_labels >> simp[compile_create_ctor_args_labels] >>
   rpt gen_tac >> BETA_TAC >>
   irule comp_bind_labels >> simp[compile_alloc_buffer_labels] >>
   rpt gen_tac >> BETA_TAC >>
@@ -3096,11 +3111,11 @@ Proof
 QED
 
 Theorem compile_create_blueprint_args_labels:
-  !cfn cenv raw args s.
+  !cfn cenv raw later_es args s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
       EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
-    cs_extends s (SND (compile_create_blueprint_args cfn cenv raw args s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_create_blueprint_args cfn cenv raw args s)))
+    cs_extends s (SND (compile_create_blueprint_args cfn cenv raw later_es args s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_create_blueprint_args cfn cenv raw later_es args s)))
 Proof
   rpt gen_tac >> disch_tac >> Cases_on `raw`
   >- (Cases_on `args`
@@ -3111,7 +3126,8 @@ Proof
       rpt (FIRST [irule comp_bind_labels >> conj_tac,
                   irule comp_ignore_bind_labels >> conj_tac] >>
            rpt gen_tac >> BETA_TAC >>
-           simp[lower_value_labels, emit_op_labels, emit_inst_labels, comp_return_labels])) >>
+           simp[compile_snapshot_vv_labels, unwrap_value_labels,
+                emit_op_labels, emit_inst_labels, comp_return_labels])) >>
   Cases_on `args = []` >> simp[compile_create_blueprint_args_def, LET_THM, comp_return_labels] >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
@@ -3153,6 +3169,8 @@ Proof
             compile_create_ctor_tuple_labels, cj 2 compile_abi_encode_labels,
             comp_return_labels, compile_create_salt_labels, compile_create_dispatch_labels]) >>
   PairCases_on `x` >> simp[] >>
+  irule comp_bind_labels >> simp[lower_value_labels] >>
+  rpt gen_tac >> BETA_TAC >>
   irule comp_bind_labels >>
   simp[compile_create_salt_labels, compile_create_dispatch_labels]
 QED
@@ -3174,16 +3192,15 @@ Proof
   simp[compile_create_call_def, LET_THM] >>
   TRY (IF_CASES_TAC >> simp[]) >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac] >>
+              irule comp_ignore_bind_labels >> conj_tac,
+              CHANGED_TAC (simp[pairTheory.ELIM_UNCURRY]), CASE_TAC] >>
        rpt gen_tac >> BETA_TAC >>
        simp[comp_return_labels, emit_inst_labels, lower_value_labels,
             compile_raw_create_labels, compile_create_proxy_buf_labels,
             compile_create_dispatch_labels, compile_create_copy_labels,
             compile_create_salt_labels, compile_create_blueprint_check_labels,
             compile_create_blueprint_args_labels, compile_create_blueprint_append_labels]) >>
-  rpt CASE_TAC >>
-  simp[pairTheory.ELIM_UNCURRY, compile_create_blueprint_append_labels,
-       compile_raw_create_labels, lower_value_labels, comp_return_labels]
+  simp[compile_raw_create_labels]
 QED
 
 Theorem compile_raw_revert_labels:
