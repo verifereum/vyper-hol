@@ -289,9 +289,11 @@ Proof
     (drule attr_pre_base >> strip_tac >>
      `expr_body_pre cenv cx env obj (es with gas_obs := gs)` by simp[] >>
      drule_all exprSimSourceTheory.expr_body_pre_eval_result >> gvs[]) >>
+  `ee with gas_obs := ee.gas_obs = ee` by (Cases_on `ee` >> simp[]) >>
   `select_result cx (StructT sid) tv (AttrSubscript fld) ee = (INL tv',ee)` by
-    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
-       (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+    (qpat_x_assum `ee with gas_obs := ee.gas_obs = ee` (fn eq =>
+       qpat_assum `!tail. select_result _ _ _ _ _ = _`
+         (qspec_then `ee.gas_obs` (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
        (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
@@ -311,7 +313,7 @@ Proof
      `vv_place_ptr cenv cx ee u tv bvv` by fs[vv_post_def] >>
      `vv_place_ptr cenv cx ee u tv'
         (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
-       (irule attr_place_ptr >>
+       (match_mp_tac attr_place_ptr >>
         qexistsl_tac [`env`, `ee`, `tv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
         simp[]) >>
      qpat_assum `!tail. select_result _ _ _ _ _ = _`
