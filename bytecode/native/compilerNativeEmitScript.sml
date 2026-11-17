@@ -491,6 +491,13 @@ val code_rewrites = [
                 (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem
             | _ => F)``,
     BasicProvers.every_case_tac >> gvs[]),
+  (* supported_stmt's word Append to a non-top-level target *)
+  prove (``(?dn. supported_target_info tops bindings target =
+                   SOME (ValPT (ArrayT ty (Dynamic dn)))) <=>
+           (case supported_target_info tops bindings target of
+              SOME (ValPT (ArrayT ty' (Dynamic dn))) => ty' = ty
+            | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
   prove (``(?t c l r. x = IfExp t c l r) <=> (case x of IfExp _ _ _ _ => T | _ => F)``,
     Cases_on `x` >> rw[]),
   prove (``(!tgt nid. p = SOME tgt ==> FST (place_access tgt []) <> TopLevelNameTarget nid) <=>
