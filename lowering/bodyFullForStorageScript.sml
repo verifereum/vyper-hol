@@ -88,8 +88,8 @@ Proof
   qexistsl [`t`, `Gf`, `tnf`] >> simp[] >>
   rpt gen_tac >>
   qpat_x_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
-    (qspecl_then [`D`, `explicit`] mp_tac) >> disch_tac >>
-  drule gas_origin_ptr_path_append >>
-  disch_then (qspecl_then [`t`, `Gf`, `tnf`, `[]`] mp_tac) >>
+    (qspecl_then [`D`, `explicit`]
+      (mp_then Any mp_tac gas_origin_ptr_path_append)) >>
+  disch_then (qspecl_then [`h`, `G1`, `tn1`, `[]`] mp_tac) >>
   simp[] >> disch_then irule >> simp[]
 QED
