@@ -213,7 +213,7 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
      tv bop v0 v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
