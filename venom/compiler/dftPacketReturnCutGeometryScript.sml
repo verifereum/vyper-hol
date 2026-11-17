@@ -189,9 +189,75 @@ Theorem dft_packet_return_cut_lengths:
   LENGTH Mq = LENGTH Eq /\ LENGTH Mq = LENGTH Kq
 Proof
   rpt gen_tac >> strip_tac >>
-  `!xs ys. LIST_REL (\x y. LENGTH x = LENGTH y) xs ys ==>
-    !q. LENGTH (FLAT (TAKE q xs)) = LENGTH (FLAT (TAKE q ys))` by
-    (Induct_on `xs` >- simp[] >> gen_tac >> Cases_on `ys` >> simp[] >>
-     strip_tac >> qx_gen_tac `n` >> Cases_on `n` >> simp[]) >>
-  gvs[] >> metis_tac[]
+  `MAP LENGTH ms = MAP LENGTH ess` by
+    (simp[MAP_EQ_EVERY2] >> metis_tac[LIST_REL_LENGTH]) >>
+  `MAP LENGTH ms = MAP LENGTH ks` by
+    (simp[MAP_EQ_EVERY2] >> metis_tac[LIST_REL_LENGTH]) >>
+  gvs[LENGTH_FLAT,MAP_TAKE] >> decide_tac
+QED
+
+Theorem dft_packet_return_cut_validity:
+  !F. plan_ok = (\F C sf a plan entry.
+    plan <> [] /\
+    MAP (\(bb,e,z). e) plan =
+      GENLIST (\r. a + SUC r) (LENGTH plan) /\
+    (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
+      e <= F /\ MEM bb sf.fn_blocks /\
+      (if SUC r < LENGTH plan then
+        bb.bb_instructions <> [] /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
+        is_terminator (LAST bb.bb_instructions).inst_opcode /\
+        ~MEM (LAST bb.bb_instructions).inst_opcode [RET;RETFMP;DRET] /\
+        z = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions
+       else
+        LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions)
+          bb.bb_instructions) /\
+        z = TAKE (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+          bb.bb_instructions) /\
+        EVERY (\i. ~is_terminator i.inst_opcode) z)) /\
+    (!r bb e z es s.
+      r < LENGTH plan /\ EL r plan = (bb,e,z) /\
+      plan_eval F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
+      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+      (0 < r ==> ~s.vs_halted))) /\
+  levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
+    levels <> [] /\ LENGTH paths = LENGTH levels /\
+    LENGTH incoming = LENGTH levels /\
+    HD paths = root_path /\ HD incoming = root_depth /\
+    FST (HD levels) = root_fn /\
+    (!i sf plan call.
+      i < LENGTH levels /\ EL i levels = (sf,plan,call) ==>
+      plan <> [] /\
+      (!prior ent.
+        rooted_eval F C (TAKE i levels) root_entry = (prior,OK ent) ==>
+        plan_ok F C sf (EL i incoming) plan ent) /\
+      (if SUC i < LENGTH levels then
+        ?c nm ops bb e z.
+          call = SOME c /\ LAST plan = (bb,e,z) /\
+          c = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+            bb.bb_instructions) /\
+          c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
+          lookup_function nm C.ctx_functions = SOME (FST (EL (SUC i) levels)) /\
+          EL (SUC i) incoming = e /\
+          EL (SUC i) paths = (e,c.inst_id)::EL i paths
+       else call = NONE))) /\
+  levels_ok F C (pre ++ [(sf,rows ++ [(bb,e,z0)],NONE)])
+    paths incoming root_fn entry root_path root_depth /\
+  bb.bb_instructions = ps ++ xs /\
+  EVERY (\i. is_pseudo i.inst_opcode) ps /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) xs /\
+  q < LENGTH xs /\ EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  z0 = DROP (phi_prefix_length bb.bb_instructions) ps ==>
+  levels_ok F C (pre ++ [(sf,rows ++ [(bb,e,z0 ++ TAKE q xs)],NONE)])
+    paths incoming root_fn entry root_path root_depth
+Proof
+  gen_tac >> strip_tac >>
+  `LENGTH (z0 ++ TAKE q xs) < LENGTH (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+   z0 ++ TAKE q xs = TAKE (LENGTH (z0 ++ TAKE q xs)) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (z0 ++ TAKE q xs)` by
+    (qpat_x_assum `plan_ok = _` kall_tac >>
+     qpat_x_assum `levels_ok = _` kall_tac >>
+     qpat_x_assum `levels_ok _ _ _ _ _ _ _ _ _` kall_tac >>
+     metis_tac[dft_packet_return_cut_row_shape]) >>
+  drule_all dft_packet_levels_last_row_replace >> simp[]
 QED
