@@ -232,7 +232,7 @@ Theorem raw_return_is_unwrapped:
   tx_return_bytes
     [FunctionDecl External Pure F T "raw" [] []
        (BaseT (BytesT (Dynamic 8))) []]
-    (BaseT (BytesT (Dynamic 8))) (tx with function_name := "raw")
+    (tx with function_name := "raw")
     (vyperValue$BytesV [1w; 2w]) out <=>
   out = [1w; 2w]
 Proof
@@ -342,9 +342,9 @@ Theorem success_requires_requests_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   H = storage_trace_horizon
     (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     ?out. frame_outcome es r es' NONE out am'.logs /\
-      tx_return_bytes tops ret tx v out /\
+      tx_return_bytes tops tx v out /\
       accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree H cx.txn.target am'.tStorage es'.rollback.tStorage /\
@@ -361,7 +361,7 @@ Theorem halt_requires_empty_success_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   H = storage_trace_horizon
     (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     frame_outcome es r es' NONE [] am'.logs /\
       accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
@@ -375,7 +375,7 @@ QED
 Theorem assert_result_does_not_compare_requests:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       ((exc = Reverted /\ frame_raises es Reverted) \/
        s = "UNREACHABLE"))
@@ -385,7 +385,7 @@ QED
 
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
@@ -395,13 +395,13 @@ QED
 Theorem escaped_control_is_not_related:
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es')
+     ~call_result_rel_at [] tops am tx es r es')
 Proof
   simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED
