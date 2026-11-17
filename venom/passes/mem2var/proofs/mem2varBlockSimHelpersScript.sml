@@ -2624,9 +2624,11 @@ Proof
     fs[m2v_inv_noix_def, venom_call_request_def] >>
   `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
   `m2v_inv_noix fn
-    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st)
+    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st with
+        cr_gas := SOME (w2n gas))
       (w2n ro) (w2n rs) s1))
-    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st)
+    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st with
+        cr_gas := SOME (w2n gas))
       (w2n ro) (w2n rs) s2))` by
     (irule consume_call_outcome_m2v_inv >> simp[]) >>
   gvs[exec_ext_call_def, AllCaseEqs()] >>
@@ -2672,8 +2674,9 @@ Proof
    read_memory (w2n ao) (w2n as_) s2` by
     metis_tac[read_memory_m2v_inv] >>
   qabbrev_tac `rq = venom_call_request s2 addr 0w ao as_ F with
-                      cr_kind := DelegateMessageCall` >>
-  `venom_call_request s1 addr 0w ao as_ F with cr_kind := DelegateMessageCall = rq`
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
+  `venom_call_request s1 addr 0w ao as_ F with
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|> = rq`
     by fs[Abbr`rq`, m2v_inv_noix_def, venom_call_request_def] >>
   `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
   `m2v_inv_noix fn
