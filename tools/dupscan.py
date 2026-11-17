@@ -82,13 +82,18 @@ def bound(s: str) -> set[str]:
     return {v for b in re.findall(BINDER, s) for v in b.split()}
 
 
+def drop_types(s: str) -> str:
+    """`s` with simple type annotations and the parentheses they leave dropped."""
+    s = re.sub(r':\s*[A-Za-z0-9_\' ]+?(?=[)\s])', '', s)
+    return re.sub(r'\(\s*([A-Za-z0-9_\']+)\s*\)', r'\1', s)
+
+
 def alpha(s: str, free: set[str] = frozenset()) -> str:
     """`s` with type annotations dropped, an outer `!` binder removed and its
     variables renamed V0, V1, ... in order of first occurrence.  Variables are
     the names `s` binds and the names in `free`, other than record fields,
     antiquotations and qualified names."""
-    s = re.sub(r':\s*[A-Za-z0-9_\' ]+?(?=[)\s])', '', s)
-    s = re.sub(r'\(\s*([A-Za-z0-9_\']+)\s*\)', r'\1', s)
+    s = drop_types(s)
     variables = bound(s) | free
     s = re.sub(r'^\s*[!∀][^.]*\.', '', s)
     names = {}
@@ -107,7 +112,15 @@ def alpha(s: str, free: set[str] = frozenset()) -> str:
 
 
 def toks(s: str) -> set[str]:
-    s = re.sub(r'V\d+', 'V', alpha(s))
+    """FUZZY's tokens: `s` with type annotations dropped and the names a
+    `!`/`?` binder binds written V.  Unlike `alpha`, they keep the outer binder
+    and free names, so the Jaccard threshold keeps its meaning."""
+    s = drop_types(s)
+    names = {v for b in re.findall(r"[!?∀∃]\s*([A-Za-z0-9_' ]+?)\s*\.", s)
+             for v in b.split()}
+    s = re.sub(r"(?<![A-Za-z0-9_'])" + ID,
+               lambda m: 'V' if m.group() in names else m.group(), s)
+    s = re.sub(r'V\d+', 'V', re.sub(r'\s+', '', s))
     return set(re.findall(r"[A-Za-z_][A-Za-z0-9_']*|\d+|[^\sA-Za-z0-9_]{1,3}", s))
 
 
