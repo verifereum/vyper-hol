@@ -297,8 +297,10 @@ Resume annassign_other_typed_full_execution[layout]:
      first_assum ACCEPT_TAC) >>
   drule_all declare_local_memory_types_mem >> strip_tac >>
   `lowered_value_type cenv' e = expr_type e /\
-   type_memory_bytes cenv' typ < 2 ** 64` by simp[] >>
-  drule_all annassign_other_typed_layout >> strip_tac >>
+   type_memory_bytes cenv' typ < 2 ** 64` by fs[] >>
+  drule annassign_other_typed_layout >>
+  disch_then (qspecl_then [`typ`,`stv`,`dtv`] mp_tac) >>
+  (impl_tac >- fs[]) >> strip_tac >>
   suspend "prefix"
 QED
 
@@ -309,14 +311,43 @@ Resume annassign_other_typed_full_execution[prefix]:
   `type_memory_bytes cenv typ < dimword (:256)` by
     (fs[wordsTheory.dimword_def] >> decide_tac) >>
   `~(has_length_word typ /\ is_empty_value_expr e)` by metis_tac[] >>
-  gvs[Excl "NOT_AND"] >>
+  gnvs[Excl "NOT_AND"] >>
+  qpat_x_assum `unwrap_value cenv' vv sv = _ /\ _` strip_assume_tac >>
+  `type_memory_size dtv = type_memory_bytes cenv typ` by simp[] >>
   drule_all annassign_full_alloc_rhs_prefix >>
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "compose"
 QED
 
 Resume annassign_other_typed_full_execution[compose]:
-  FAIL_TAC "compose"
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  irule gas_outcome_full_zero_prefix >>
+  qexistsl_tac [`Ga`,`entry`,`tna`] >> (conj_tac >- simp[]) >>
+  drule eval_annassign_action >>
+  disch_then (qspecl_then [`id`,`e`] SUBST1_TAC) >>
+  irule gas_outcome_full_bind_all >> rpt conj_tac
+  >~ [`!v. storage_trace_frame (new_variable _ _ v)`]
+  >- simp[storage_trace_frame_new_variable]
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+      qexistsl_tac [`mid`,`t`,`v`] >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
+  qexists_tac `childQ` >> reverse conj_tac
+  >- suspend "continuation" >>
+  irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> rpt strip_tac >> Cases_on `res`
+  >- fs[Abbr `childR`, exprSimDefsTheory.expr_exit_def] >>
+  fs[Abbr `childR`, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+QED
+
+Resume annassign_other_typed_full_execution[continuation]:
+  FAIL_TAC "continuation"
 QED
 
 Finalise annassign_other_typed_full_execution
