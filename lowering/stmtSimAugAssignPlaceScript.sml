@@ -79,7 +79,7 @@ Proof
   rpt gen_tac >> simp[type_stmt_def, well_typed_target_def] >>
   strip_tac >> gvs[] >>
   imp_res_tac stmtSimAugAssignTheory.augassign_operand_ok_operands >>
-  metis_tac[well_typed_binop_augassign_word]
+  drule_all well_typed_binop_augassign_word >> simp[] >> metis_tac[]
 QED
 
 Theorem aug_place_typing_word:
@@ -226,7 +226,8 @@ Proof
   `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
     (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
      Cases_on `expr_int_literal e` >> gvs[]) >>
-  irule augassign_binop_frag_typed >> simp[] >> metis_tac[]
+  irule augassign_binop_frag_typed >> simp[] >>
+  (conj_tac >- gvs[] >> qexists_tac `expr_type e` >> gvs[])
 QED
 
 Theorem aug_place_bop_res_ok:
