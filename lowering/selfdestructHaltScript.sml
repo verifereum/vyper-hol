@@ -253,7 +253,7 @@ Proof
    (lookup_account cx.txn.target ss.vs_accounts).balance` by
     metis_tac[accounts_agree_lookup] >>
   pop_assum SUBST_ALL_TAC >>
-  `accounts_agree H cx
+  `accounts_agree H cx.txn.target
      (vfmExecution$transfer_value cx.txn.target a
         (lookup_account cx.txn.target ss.vs_accounts).balance vs.accounts)
      (vfmExecution$transfer_value cx.txn.target a
