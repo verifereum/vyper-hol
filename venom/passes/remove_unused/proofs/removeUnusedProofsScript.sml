@@ -192,7 +192,7 @@ Proof
   simp[is_terminator_def]
 QED
 
-val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
 val step_base_result_tac =
   rw[step_inst_base_def] >>

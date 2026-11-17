@@ -26,7 +26,9 @@ val call_clauses =
    has no alternate dispatch. This equation is also used by focused probes. *)
 Theorem probe_call_dispatch:
   step_inst_base (probe_call target) s =
-    OK (update_var "result"
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var "result"
       (FST (consume_call_outcome (venom_call_request s target 0w 0w 1w
          s.vs_call_ctx.cc_static with cr_gas := SOME 7) 1 3 s))
       (SND (consume_call_outcome (venom_call_request s target 0w 0w 1w
@@ -83,13 +85,8 @@ Proof
 QED
 
 Theorem activated_exhausted:
-  ?t. step_inst_base (probe_call 8w) call_probe_state = OK t /\
-    lookup_var "result" t = SOME 0w /\ t.vs_outcomes = [] /\
-    t.vs_requests = [call_probe_request] /\ t.vs_returndata = [] /\
-    t.vs_memory = call_probe_state.vs_memory /\
-    t.vs_accounts = call_probe_state.vs_accounts /\
-    t.vs_transient = call_probe_state.vs_transient /\
-    t.vs_logs = call_probe_state.vs_logs
+  step_inst_base (probe_call 8w) call_probe_state =
+    Abort ExHalt_abort (halt_state (set_returndata [] call_probe_state))
 Proof
   simp[probe_call_dispatch] >> EVAL_TAC
 QED
@@ -132,7 +129,10 @@ End
 Theorem probe_computed_dispatch[local]:
   ~s.vs_call_ctx.cc_static /\
   consume_call_outcome (venom_call_request s target 0w 0w sz F with cr_gas := SOME 7) 1 0 s = (v,t) ==>
-  step_inst_base (probe_computed target sz) s = OK (update_var "result" v t)
+  step_inst_base (probe_computed target sz) s =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var "result" v t)
 Proof
   strip_tac >>
   simp[Excl "consume_call_outcome_eq", probe_computed_def, mk_inst_def,
@@ -197,7 +197,7 @@ Theorem activated_computed_empty_ec:
 Proof
   mp_tac consume_computed_empty_ec >>
   simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
-  simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
+  imp_res_tac probe_computed_dispatch >> gvs[]
 QED
 
 Theorem consume_invalid_ec_zero_output:
@@ -228,12 +228,12 @@ Theorem activated_computed_invalid_ec:
        OK (update_var "result" 0w
          (s with <|vs_returndata := []; vs_outcomes := []|>))
 Proof
-  mp_tac consume_computed_invalid_ec >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
-  conj_tac >> irule probe_computed_dispatch >>
-  simp[Excl "consume_call_outcome_eq"] >>
-  irule consume_call_outcome_empty_output_size >> simp[Excl "consume_call_outcome_eq"] >>
-  qexists_tac `3` >> simp[Excl "consume_call_outcome_eq", venom_state_fupdcanon]
+  mp_tac (Q.INST [`s` |-> `call_probe_state with <|
+    vs_memory := REPLICATE 63 0w ++ [1w];
+    vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |>`]
+    consume_invalid_ec_zero_output) >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
+  imp_res_tac probe_computed_dispatch >> gvs[]
 QED
 
 Theorem activated_nonzero_precompile_ordinary:
@@ -264,6 +264,7 @@ Proof
 QED
 
 Theorem activated_gas_value_recorded:
+  s.vs_outcomes <> [] ==>
   ?t7 t999.
     step_inst_base (probe_call 8w) s = OK t7 /\
     step_inst_base ((probe_call 8w) with inst_operands :=
@@ -274,6 +275,7 @@ Theorem activated_gas_value_recorded:
       [venom_call_request s 8w 0w 0w 1w s.vs_call_ctx.cc_static with cr_gas := SOME 999] /\
     t7 with vs_requests := s.vs_requests = t999 with vs_requests := s.vs_requests
 Proof
+  strip_tac >>
   simp ([probe_call_def, mk_inst_def, eval_operand_def, exec_ext_call_def,
          Excl "consume_call_outcome_eq"] @ call_clauses) >>
   simp[consume_call_outcome_eq, update_var_def] >>

@@ -310,6 +310,7 @@ QED
 
 val ext_call_rw =
   [LET_THM, read_mem_idx, extract_venom_result_idx,
+   halt_state_idx, set_returndata_idx,
    option_case_OPTION_MAP, update_var_idx];
 
 val ext_call_idx_ss = idx_case_ss ++ rewrites
