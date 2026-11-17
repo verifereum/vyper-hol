@@ -847,3 +847,37 @@ Proof
   impl_tac >- simp[] >> simp[] >> disch_then kall_tac >>
   Cases_on `r` >> gvs[exit_result_def, terminates_def]
 QED
+
+(* ADMISSION: statement only.  Waits for its proof by the evaluator's mutual induction. *)
+Theorem eval_stmts_missing_gas_reading_empty:
+  !cx body st st'.
+    eval_stmts cx body st =
+      (INR (Error (RuntimeError "msg.gas: no gas reading")), st') ==>
+    st'.gas_obs = []
+Proof
+  cheat
+QED
+
+(* ADMISSION: statement only.  Waits for its proof from eval_stmts_missing_gas_reading_empty at a nonempty tail. *)
+Theorem gas_marked_eval_stmts_readings_available:
+  !memory ctx func cx body st vs marks res st' rv.
+    gas_marked_exec memory (ctx,func) (eval_stmts cx body)
+      (st,vs) marks res st' rv ==>
+    res <> INR (Error (RuntimeError "msg.gas: no gas reading"))
+Proof
+  cheat
+QED
+
+(* ADMISSION: statement only.  Waits for its proof (trace-only adapter). *)
+Theorem call_external_marked_readings_available:
+  !os prefix am tx src.
+    (!tail. call_external (SOME os) (prefix ++ tail) am tx = src) /\
+    (?tail.
+      FST (call_external (SOME os) (prefix ++ tail) am tx) <>
+      INR (Error (RuntimeError "msg.gas: no gas reading"))) ==>
+    !tail.
+      FST (call_external (SOME os) (prefix ++ tail) am tx) <>
+      INR (Error (RuntimeError "msg.gas: no gas reading"))
+Proof
+  cheat
+QED
