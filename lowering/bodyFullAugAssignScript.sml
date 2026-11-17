@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAugAssign
 Ancestors
+  stateRelProj
   augAssignStorageFieldSource
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
