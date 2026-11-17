@@ -1,6 +1,7 @@
 (* Task-owned dynamic-array operational boundaries. *)
 Theory externalReturnCopyDynamic
 Ancestors
+  typedMemoryCopy
   externalReturnCopyArrayLoop externalReturnCopyFrame venomState compileEnv loweringStateRelDefs
   arithmetic fragExec emitHelper emitHelperProps context venomExecSemantics
   venomInst words finite_map externalReturnCopyTransport exprLoweringProps
@@ -16,15 +17,15 @@ Theorem return_copy_dynamic_header_frag:
     frag_exec ctx a c (\u. u = s)
       (\t. eval_operand done t = SOME (if k < N then 0w else 1w) /\
            t.vs_memory = s.vs_memory /\
-           return_copy_frame a off len s t) (\r. F)
+           typed_copy_state_frame a off len s t) (\r. F)
 Proof
   rpt strip_tac >>
   `k < dimword (:256)` by decide_tac >>
   `frag_exec ctx a b (\u. u = s)
      (\t. eval_operand lt t = SOME (bool_to_word (k < N)) /\
           t.vs_memory = s.vs_memory /\
-          return_copy_frame a off len s t) (\r. F)` by
-    (irule return_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
+          typed_copy_state_frame a off len s t) (\r. F)` by
+    (irule typed_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
      goal_assum (drule_at Any) >>
      simp[venomInstTheory.is_terminator_def, step_inst_base_def, mk_inst_def,
           exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD]) >>
@@ -34,15 +35,15 @@ Proof
       `frag_exec ctx b c (\u. u = t)
          (\u. eval_operand done u = SOME (bool_to_word (bool_to_word (k < N) = 0w)) /\
               u.vs_memory = t.vs_memory /\
-              return_copy_frame b off len t u) (\r. F)` by
-        (irule return_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
+              typed_copy_state_frame b off len t u) (\r. F)` by
+        (irule typed_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
          goal_assum (drule_at Any) >>
          simp[venomInstTheory.is_terminator_def, step_inst_base_def, mk_inst_def, exec_pure1_def]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >>
       simp[] >> rpt strip_tac >>
       fs[bool_to_word_def] >> Cases_on `k < N` >> gvs[] >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> goal_assum (drule_at Any) >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> goal_assum (drule_at Any) >>
       metis_tac[return_copy_emit_op_mono]) >>
   metis_tac[return_copy_emit_op_mono, ci_mono_def]
 QED
@@ -52,29 +53,11 @@ Theorem return_copy_dynamic_load_frag:
   eval_operand src s = SOME sw /\ mload (w2n sw) s = n2w N ==>
   frag_exec ctx a b (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
-         t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)
+         t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)
 Proof
-  strip_tac >> irule return_copy_emit_op_frag >>
+  strip_tac >> irule typed_copy_emit_op_frag >>
   simp[venomInstTheory.is_terminator_def] >> goal_assum (drule_at Any) >>
   simp[venomInstTheory.is_terminator_def, step_inst_base_def, mk_inst_def, exec_read1_def]
-QED
-
-Theorem return_copy_dynamic_assert_frag:
-  emit_void ASSERT [ok] a = ((),b) /\ eval_operand ok s = SOME 1w ==>
-  frag_exec ctx a b (\u. u = s)
-    (\t. t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)
-Proof
-  strip_tac >>
-  qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
-  simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >> strip_tac >>
-  gvs[] >> irule frag_exec_run_inst_seq >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       mk_inst_def, venomInstTheory.is_terminator_def,
-       run_inst_seq_def, step_inst_base_def] >>
-  rpt strip_tac >> gvs[] >>
-  simp[return_copy_frame_def, return_copy_memory_frame_def,
-       venom_state_component_equality, lookup_var_def] >>
-  simp[mstore_def]
 QED
 
 Theorem return_copy_dynamic_capacity_frag:
@@ -84,14 +67,14 @@ Theorem return_copy_dynamic_capacity_frag:
   N <= capacity /\ capacity < dimword (:256) ==>
   frag_exec ctx a c (\u. u = s)
     (\t. eval_operand ok t = SOME 1w /\ t.vs_memory = s.vs_memory /\
-         return_copy_frame a off len s t) (\r. F)
+         typed_copy_state_frame a off len s t) (\r. F)
 Proof
   rpt strip_tac >>
   `N < dimword (:256)` by decide_tac >>
   `frag_exec ctx a b (\u. u = s)
     (\t. eval_operand too_long t = SOME 0w /\ t.vs_memory = s.vs_memory /\
-         return_copy_frame a off len s t) (\r. F)` by
-    (irule return_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
+         typed_copy_state_frame a off len s t) (\r. F)` by
+    (irule typed_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
      goal_assum (drule_at Any) >>
      simp[venomInstTheory.is_terminator_def, step_inst_base_def, mk_inst_def,
           exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD, bool_to_word_def]) >>
@@ -100,24 +83,24 @@ Proof
   >- (rpt strip_tac >>
       `frag_exec ctx b c (\u. u = t)
         (\u. eval_operand ok u = SOME 1w /\ u.vs_memory = t.vs_memory /\
-             return_copy_frame b off len t u) (\r. F)` by
-        (irule return_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
+             typed_copy_state_frame b off len t u) (\r. F)` by
+        (irule typed_copy_emit_op_frag >> simp[venomInstTheory.is_terminator_def] >>
          goal_assum (drule_at Any) >>
          simp[venomInstTheory.is_terminator_def, step_inst_base_def, mk_inst_def,
               exec_pure1_def, bool_to_word_def]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >> rpt strip_tac >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> goal_assum (drule_at Any) >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> goal_assum (drule_at Any) >>
       metis_tac[return_copy_emit_op_mono]) >>
   metis_tac[return_copy_emit_op_mono, ci_mono_def]
 QED
 
 Theorem return_copy_dynamic_mstore_frame:
-  return_copy_frame sa off 32 s (mstore off w s)
+  typed_copy_state_frame sa off 32 s (mstore off w s)
 Proof
-  simp[return_copy_frame_def] >> conj_tac
+  simp[typed_copy_state_frame_def] >> conj_tac
   >- simp[mstore_def, venom_state_component_equality] >>
-  rewrite_tac[return_copy_memory_frame_def] >> conj_tac
+  rewrite_tac[typed_copy_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
   simp[mstore_def, byteTheory.LENGTH_word_to_bytes] >>
   Cases_on `off + 32 > LENGTH s.vs_memory` >> simp[LENGTH_TAKE, LENGTH_DROP] >>
@@ -129,7 +112,7 @@ Theorem return_copy_dynamic_store_frag:
   eval_operand dst s = SOME dw /\ eval_operand length s = SOME (n2w N) ==>
   frag_exec ctx a b (\u. u = s)
     (\t. mem_word_at (w2n dw) t.vs_memory = n2w N /\
-         return_copy_frame a (w2n dw) 32 s t) (\r. F)
+         typed_copy_state_frame a (w2n dw) 32 s t) (\r. F)
 Proof
   strip_tac >>
   qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
@@ -140,8 +123,8 @@ Proof
   simp[step_inst_base_opcode_eqs, exec_write2_def]) >>
   rpt strip_tac >> gvs[] >>
   simp[mstore_mem_word_at_same] >>
-  irule return_copy_frame_trans >> qexists_tac `mstore (w2n dw) (n2w N) s` >>
-  simp[return_copy_dynamic_mstore_frame, return_copy_frame_def,
+  irule typed_copy_state_frame_trans >> qexists_tac `mstore (w2n dw) (n2w N) s` >>
+  simp[return_copy_dynamic_mstore_frame, typed_copy_state_frame_def,
        venom_state_component_equality, lookup_var_def] >>
   simp[mstore_def]
 QED
@@ -154,41 +137,41 @@ Theorem return_copy_dynamic_index_header_frag:
   (!x. dst = Var x ==> not_fresh_at a x) /\
   (!x. length = Var x ==> not_fresh_at a x) /\ N < dimword (:256) ==>
   frag_exec ctx a c
-    (\s. return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
+    (\s. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
          eval_operand length s = SOME (n2w N))
-    (\t. return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+    (\t. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
          eval_operand length t = SOME (n2w N) /\
          eval_operand done t = SOME (if k < N then 0w else 1w)) (\r. F)
 Proof
   rpt strip_tac >> irule frag_exec_pointwise >> qx_gen_tac `s` >> strip_tac >>
   gvs[] >>
   `k <= N /\ lookup_var counter s = SOME (n2w k)` by
-    gvs[return_copy_index_inv_def] >>
+    gvs[typed_copy_index_inv_def] >>
   drule_all return_copy_dynamic_header_frag >>
   disch_then (qspecl_then [`ctx`, `w2n dw`, `N * type_memory_size dtv`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
   rpt strip_tac
-  >- (irule return_copy_index_inv_preserve >>
+  >- (irule typed_copy_index_inv_preserve >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  metis_tac[return_copy_frame_operand]
+  metis_tac[typed_copy_state_frame_operand]
 QED
 
 Theorem return_copy_dynamic_header_frame:
-  return_copy_frame sa dst len s t /\
+  typed_copy_state_frame sa dst len s t /\
   (hdr + 32 <= dst \/ dst + len <= hdr) ==>
   mem_word_at hdr t.vs_memory = mem_word_at hdr s.vs_memory
 Proof
-  rw[return_copy_frame_def, return_copy_memory_frame_def, mem_word_at_def] >>
+  rw[typed_copy_state_frame_def, typed_copy_frame_def, mem_word_at_def] >>
   first_x_assum (qspecl_then [`hdr`, `32`] mp_tac) >> simp[] >>
   simp[mem_bytes_at_def]
 QED
 
 Theorem return_copy_dynamic_index_length:
-  return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+  typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
   (!x. length = Var x ==> not_fresh_at sa x) ==>
   eval_operand length t = eval_operand length s0
 Proof
-  rw[return_copy_index_inv_def] >> metis_tac[return_copy_frame_operand]
+  rw[typed_copy_index_inv_def] >> metis_tac[typed_copy_state_frame_operand]
 QED
 
 Theorem return_copy_dynamic_loop_header_frag:
@@ -200,17 +183,17 @@ Theorem return_copy_dynamic_loop_header_frag:
   (!x. length = Var x ==> not_fresh_at sa x) /\
   eval_operand length s0 = SOME (n2w N) /\ N < dimword (:256) ==>
   frag_exec ctx a c
-    (return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k)
-    (\t. return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+    (typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k)
+    (\t. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
          eval_operand done t = SOME (if k < N then 0w else 1w)) (\r. F)
 Proof
   rpt strip_tac >>
   `!x. length = Var x ==> not_fresh_at a x` by
     metis_tac[return_copy_operand_fresh_mono] >>
   `frag_exec ctx a c
-    (\s. return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
+    (\s. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
          eval_operand length s = SOME (n2w N))
-    (\t. return_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+    (\t. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
          eval_operand length t = SOME (n2w N) /\
          eval_operand done t = SOME (if k < N then 0w else 1w)) (\r. F)` by
     (irule return_copy_dynamic_index_header_frag >> simp[] >>
@@ -244,12 +227,12 @@ Theorem return_copy_dynamic_check_frag:
   eval_operand length s = SOME (n2w N) /\
   N <= capacity /\ capacity < dimword (:256) ==>
   frag_exec ctx a d (\u. u = s)
-    (\t. t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)
+    (\t. t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)
 Proof
   rpt strip_tac >>
   `frag_exec ctx a c (\u. u = s)
     (\t. eval_operand ok t = SOME 1w /\ t.vs_memory = s.vs_memory /\
-         return_copy_frame a off len s t) (\r. F)` by
+         typed_copy_state_frame a off len s t) (\r. F)` by
     (irule return_copy_dynamic_capacity_frag >>
      qexistsl_tac [`N`, `b`, `capacity`, `length`, `too_long`] >> simp[]) >>
   `ci_mono a c` by
@@ -258,11 +241,11 @@ Proof
   drule frag_exec_then >> disch_then irule >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       `frag_exec ctx c d (\u. u = t)
-        (\u. u.vs_memory = t.vs_memory /\ return_copy_frame c off len t u) (\r. F)` by
-        (irule return_copy_dynamic_assert_frag >> qexists_tac `ok` >> simp[]) >>
+        (\u. u.vs_memory = t.vs_memory /\ typed_copy_state_frame c off len t u) (\r. F)` by
+        (irule typed_copy_assert_frag >> qexists_tac `ok` >> simp[]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >> rpt strip_tac >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> qexists_tac `c` >> simp[]) >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> qexists_tac `c` >> simp[]) >>
   `ci_mono c d` by metis_tac[ci_mono_emit_void, SND] >>
   gvs[ci_mono_def]
 QED
@@ -276,12 +259,12 @@ Theorem return_copy_dynamic_load_check_frag:
   N <= capacity /\ capacity < dimword (:256) ==>
   frag_exec ctx a e (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
-         t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)
+         t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)
 Proof
   rpt strip_tac >>
   `frag_exec ctx a b (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
-         t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)` by
+         t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)` by
     (irule return_copy_dynamic_load_frag >> qexistsl_tac [`src`, `sw`] >> simp[]) >>
   `ci_mono a b` by metis_tac[return_copy_emit_op_mono] >>
   `!x. length = Var x ==> not_fresh_at b x` by
@@ -289,13 +272,13 @@ Proof
   drule frag_exec_then >> disch_then irule >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       `frag_exec ctx b e (\u. u = t)
-        (\u. u.vs_memory = t.vs_memory /\ return_copy_frame b off len t u) (\r. F)` by
+        (\u. u.vs_memory = t.vs_memory /\ typed_copy_state_frame b off len t u) (\r. F)` by
         (irule return_copy_dynamic_check_frag >>
          qexistsl_tac [`N`, `c`, `d`, `capacity`, `length`, `ok`, `too_long`] >> simp[]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >> rpt strip_tac
-      >- metis_tac[return_copy_frame_operand] >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> qexists_tac `b` >> simp[]) >>
+      >- metis_tac[typed_copy_state_frame_operand] >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> qexists_tac `b` >> simp[]) >>
   `ci_mono b c /\ ci_mono c d /\ ci_mono d e` by
     metis_tac[return_copy_emit_op_mono, ci_mono_emit_void, SND] >>
   gvs[ci_mono_def] >> metis_tac[cs_extends_trans]
@@ -313,7 +296,7 @@ Theorem return_copy_dynamic_prefix_frag:
   frag_exec ctx a z (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
          mem_word_at (w2n dw) t.vs_memory = n2w N /\
-         return_copy_frame a (w2n dw) 32 s t) (\r. F)
+         typed_copy_state_frame a (w2n dw) 32 s t) (\r. F)
 Proof
   rpt strip_tac >>
   `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\ ci_mono e z` by
@@ -326,20 +309,20 @@ Proof
     metis_tac[return_copy_operand_fresh_mono] >>
   `frag_exec ctx a e (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
-         t.vs_memory = s.vs_memory /\ return_copy_frame a (w2n dw) 32 s t) (\r. F)` by
+         t.vs_memory = s.vs_memory /\ typed_copy_state_frame a (w2n dw) 32 s t) (\r. F)` by
     (irule return_copy_dynamic_load_check_frag >>
      qexistsl_tac [`b`, `c`, `capacity`, `d`, `ok`, `src`, `sw`, `too_long`] >> simp[]) >>
   drule frag_exec_then >> disch_then irule >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
-      `eval_operand dst t = SOME dw` by metis_tac[return_copy_frame_operand] >>
+      `eval_operand dst t = SOME dw` by metis_tac[typed_copy_state_frame_operand] >>
       `frag_exec ctx e z (\u. u = t)
         (\u. mem_word_at (w2n dw) u.vs_memory = n2w N /\
-             return_copy_frame e (w2n dw) 32 t u) (\r. F)` by
+             typed_copy_state_frame e (w2n dw) 32 t u) (\r. F)` by
         (irule return_copy_dynamic_store_frag >> qexistsl_tac [`dst`, `length`] >> simp[]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >> rpt strip_tac
-      >- metis_tac[return_copy_frame_operand] >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> qexists_tac `e` >> simp[]) >>
+      >- metis_tac[typed_copy_state_frame_operand] >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> qexists_tac `e` >> simp[]) >>
   gvs[ci_mono_def]
 QED
 
@@ -351,9 +334,9 @@ Theorem return_copy_dynamic_data_frag:
   frag_exec ctx a c (\u. u = s)
     (\t. eval_operand sp t = SOME (sw + 32w) /\
          eval_operand dp t = SOME (dw + 32w) /\
-         t.vs_memory = s.vs_memory /\ return_copy_frame a off len s t) (\r. F)
+         t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)
 Proof
-  rpt strip_tac >> irule return_copy_index_adds_frag >>
+  rpt strip_tac >> irule typed_copy_index_adds_frag >>
   qexistsl_tac [`b`, `Lit 32w`, `dst`, `Lit 32w`, `src`] >>
   simp[eval_operand_def]
 QED
@@ -375,7 +358,7 @@ Theorem return_copy_dynamic_setup_frag:
          eval_operand sp t = SOME (sw + 32w) /\
          eval_operand dp t = SOME (dw + 32w) /\
          mem_word_at (w2n dw) t.vs_memory = n2w N /\
-         return_copy_frame a (w2n dw) 32 s t) (\r. F)
+         typed_copy_state_frame a (w2n dw) 32 s t) (\r. F)
 Proof
   rpt strip_tac >>
   `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\
@@ -392,23 +375,23 @@ Proof
   `frag_exec ctx a z (\u. u = s)
     (\t. eval_operand length t = SOME (n2w N) /\
          mem_word_at (w2n dw) t.vs_memory = n2w N /\
-         return_copy_frame a (w2n dw) 32 s t) (\r. F)` by
+         typed_copy_state_frame a (w2n dw) 32 s t) (\r. F)` by
     (irule return_copy_dynamic_prefix_frag >>
      qexistsl_tac [`b`, `c`, `capacity`, `d`, `dst`, `e`, `ok`, `src`, `sw`, `too_long`] >> simp[]) >>
   drule frag_exec_then >> disch_then irule >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw` by
-        metis_tac[return_copy_frame_operand] >>
+        metis_tac[typed_copy_state_frame_operand] >>
       `frag_exec ctx z q (\u. u = t)
         (\u. eval_operand sp u = SOME (sw + 32w) /\
              eval_operand dp u = SOME (dw + 32w) /\
-             u.vs_memory = t.vs_memory /\ return_copy_frame z (w2n dw) 32 t u) (\r. F)` by
+             u.vs_memory = t.vs_memory /\ typed_copy_state_frame z (w2n dw) 32 t u) (\r. F)` by
         (irule return_copy_dynamic_data_frag >>
          qexistsl_tac [`p`, `dst`, `src`] >> simp[]) >>
       pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >> rpt strip_tac
-      >- metis_tac[return_copy_frame_operand] >>
-      irule return_copy_frame_trans >> qexists_tac `t` >> simp[] >>
-      irule return_copy_frame_mono >> qexists_tac `z` >> simp[]) >>
+      >- metis_tac[typed_copy_state_frame_operand] >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> qexists_tac `z` >> simp[]) >>
   gvs[ci_mono_def] >> metis_tac[cs_extends_trans]
 QED
 
@@ -486,20 +469,20 @@ Theorem return_copy_dynamic_index_init_frag:
   (!i. i < N ==> val_in_memory stv (f i)
      (w2n sw + i * type_memory_size stv) s.vs_memory) ==>
   frag_exec ctx sa st0 (\u. u = s)
-    (return_copy_index_inv sa counter src dst sw dw f stv dtv N s 0) (\r. F)
+    (typed_copy_index_inv sa counter src dst sw dw f stv dtv N s 0) (\r. F)
 Proof
   rpt strip_tac >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   `frag_exec ctx init st0 (\u. u = s)
-     (return_copy_index_inv sa counter src dst sw dw f stv dtv N s 0) (\r. F)` by
+     (typed_copy_index_inv sa counter src dst sw dw f stv dtv N s 0) (\r. F)` by
     (drule_all return_copy_assign_frag >> disch_then (qspec_then `ctx` mp_tac) >>
      disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
      rpt strip_tac >> rename1 `lookup_var counter t = SOME 0w` >>
-     `return_copy_frame sa (w2n dw) (N * type_memory_size dtv) s t` by
-       (simp[return_copy_frame_def] >> metis_tac[]) >>
+     `typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t` by
+       (simp[typed_copy_state_frame_def] >> metis_tac[]) >>
      `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw` by
-       metis_tac[return_copy_frame_operand] >>
-     simp[return_copy_index_inv_def, return_copy_index_prefix_def]) >>
+       metis_tac[typed_copy_state_frame_operand] >>
+     simp[typed_copy_index_inv_def, typed_copy_index_prefix_def]) >>
   qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
   simp[frag_exec_def, fn_has_code_def, emitted_blocks_def]
 QED
@@ -551,11 +534,11 @@ Theorem return_copy_dynamic_loop_frag:
        w2n dw + type_memory_size dtv <= w2n sw)) ==>
     frag_exec ctx a b (\u. u = s)
       (\t. val_in_memory dtv (f i) (w2n dw) t.vs_memory /\
-        return_copy_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
+        typed_copy_state_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
   frag_exec ctx sa stx (\u. u = s)
     (\t. (!i. i < N ==> val_in_memory dtv (f i)
        (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
-         return_copy_frame sa (w2n dw) (N * type_memory_size dtv) s t) (\r. F)
+         typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t) (\r. F)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all return_copy_dynamic_slow_layout >> strip_tac >>
@@ -563,7 +546,7 @@ Proof
    (!x. dst = Var x ==> not_fresh_at sth x)` by
     metis_tac[return_copy_operand_fresh_mono] >>
   qmatch_goalsub_abbrev_tac `frag_exec ctx sa stx P Q R` >>
-  qabbrev_tac `Inv = return_copy_index_inv sa counter src dst sw dw f stv dtv N s` >>
+  qabbrev_tac `Inv = typed_copy_index_inv sa counter src dst sw dw f stv dtv N s` >>
   qabbrev_tac `J = \k t. Inv k t /\ eval_operand done t = SOME (if k < N then 0w else 1w)` >>
   `frag_exec ctx sa st0 P (Inv 0) R` by
     (simp[Abbr `P`, Abbr `Inv`, Abbr `R`] >>
@@ -571,9 +554,9 @@ Proof
      goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ init = _`)) >> simp[]) >>
   `frag_exec ctx st0 stx (Inv 0) (J N) R` by
     (irule frag_exec_loop >> conj_tac
-     >- simp[Abbr `Inv`, return_copy_index_inv_jump] >>
+     >- simp[Abbr `Inv`, typed_copy_index_inv_jump] >>
      conj_tac
-     >- simp[Abbr `J`, Abbr `Inv`, return_copy_index_inv_jump] >>
+     >- simp[Abbr `J`, Abbr `Inv`, typed_copy_index_inv_jump] >>
      qexistsl_tac [`blabel`, `done`, `exit`, `hdr`] >>
      goal_assum (drule_at (Pat `new_block exit _ = _`)) >>
      goal_assum (drule_at (Pat `emit_inst JMP _ _ ste = _`)) >>
@@ -598,14 +581,14 @@ Proof
   `cs_extends sa st0 /\ cs_extends st0 stx` by metis_tac[ci_mono_def] >>
   drule_all frag_exec_seq >>
   disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
-  simp[Abbr `J`, Abbr `Inv`, Abbr `Q`, return_copy_index_inv_def,
-       return_copy_index_prefix_def]
+  simp[Abbr `J`, Abbr `Inv`, Abbr `Q`, typed_copy_index_inv_def,
+       typed_copy_index_prefix_def]
 QED
 
 Resume return_copy_dynamic_loop_frag[body]:
   rpt strip_tac >> simp[Abbr `Inv`, Abbr `J`, Abbr `R`] >>
   irule frag_exec_pointwise >> rpt strip_tac >> gvs[] >>
-  rename1 `return_copy_index_inv sa counter src dst sw dw f stv dtv N s k t` >>
+  rename1 `typed_copy_index_inv sa counter src dst sw dw f stv dtv N s k t` >>
   `ci_mono b3 b4 /\ ci_mono b4 b5` by
     metis_tac[return_copy_emit_op_mono, cj 1 ci_mono_typed_memory_family, SND] >>
   `!x. dp = Var x ==> not_fresh_at b4 x` by
@@ -617,7 +600,7 @@ Resume return_copy_dynamic_loop_frag[body]:
        val_in_memory stv (f k) (w2n (sw + n2w (k * type_memory_size stv))) u.vs_memory ==>
        frag_exec ctx b4 b5 (\q. q = u)
          (\t. val_in_memory dtv (f k) (w2n dw + k * type_memory_size dtv) t.vs_memory /\
-           return_copy_frame b4 (w2n dw + k * type_memory_size dtv)
+           typed_copy_state_frame b4 (w2n dw + k * type_memory_size dtv)
              (type_memory_size dtv) u t) (\r. F)` by
     (rpt strip_tac >> irule return_copy_index_child_contract >> simp[] >>
      qexistsl_tac [`N`, `cenv`, `dp`, `dty`, `sp`, `stv`, `sty`, `sw`] >>
@@ -636,7 +619,7 @@ QED
 Finalise return_copy_dynamic_loop_frag
 
 Theorem return_copy_dynamic_source_after_setup:
-  return_copy_frame sa (w2n (dw:bytes32)) 32 s t /\ val_wf tv v /\
+  typed_copy_state_frame sa (w2n (dw:bytes32)) 32 s t /\ val_wf tv v /\
   val_in_memory tv v (w2n (sw:bytes32) + 32 + i * type_memory_size tv) s.vs_memory /\
   (0 < val_footprint tv v ==>
     w2n (sw:bytes32) + 32 + i * type_memory_size tv + val_footprint tv v < dimword (:256) /\
@@ -713,12 +696,12 @@ Theorem return_copy_dynarray_slow_frag:
        w2n dw + type_memory_size dtv <= w2n sw)) ==>
     frag_exec ctx a b (\u. u = s)
       (\t. val_in_memory dtv (f i) (w2n dw) t.vs_memory /\
-        return_copy_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
+        typed_copy_state_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. mem_word_at (w2n dw) t.vs_memory = n2w N /\
          (!i. i < N ==> val_in_memory dtv (f i)
            (w2n dw + 32 + i * type_memory_size dtv) t.vs_memory) /\
-         return_copy_frame sa (w2n dw) (32 + capacity * type_memory_size dtv) s t) (\r. F)
+         typed_copy_state_frame sa (w2n dw) (32 + capacity * type_memory_size dtv) s t) (\r. F)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qpat_x_assum `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
@@ -748,7 +731,7 @@ Proof
          eval_operand src_data t = SOME (sw + 32w) /\
          eval_operand dst_data t = SOME (dw + 32w) /\
          mem_word_at (w2n dw) t.vs_memory = n2w N /\
-         return_copy_frame sa (w2n dw) 32 s t) (\r. F)` by
+         typed_copy_state_frame sa (w2n dw) 32 s t) (\r. F)` by
     (irule return_copy_dynamic_setup_frag >> simp[] >>
      goal_assum (drule_at (Pat `emit_op MLOAD _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op GT _ _ = _`)) >>
@@ -783,7 +766,7 @@ Resume return_copy_dynarray_slow_frag[continuation]:
   `frag_exec ctx start stx (\u. u = t)
     (\u. (!i. i < N ==> val_in_memory dtv (f i)
       (w2n (dw + 32w) + i * type_memory_size dtv) u.vs_memory) /\
-      return_copy_frame start (w2n (dw + 32w)) (N * type_memory_size dtv) t u) (\r. F)` by
+      typed_copy_state_frame start (w2n (dw + 32w)) (N * type_memory_size dtv) t u) (\r. F)` by
     (irule return_copy_dynamic_loop_frag >> simp[] >>
      goal_assum (drule_at (Pat `emit_op LT _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_op ISZERO [lt_op] _ = _`)) >>
@@ -802,19 +785,19 @@ Resume return_copy_dynarray_slow_frag[continuation]:
      qpat_x_assum `!i. i < N /\ 0 < _ ==> _`
        (qspec_then `i` mp_tac) >> simp[]) >>
   pop_assum (mp_then Any irule frag_exec_conseq) >> simp[] >>
-  rpt strip_tac >> rename1 `return_copy_frame start _ _ t u` >>
+  rpt strip_tac >> rename1 `typed_copy_state_frame start _ _ t u` >>
   `mem_word_at (w2n dw) u.vs_memory = mem_word_at (w2n dw) t.vs_memory` by
     (irule return_copy_dynamic_header_frame >>
      goal_assum (drule_at Any) >> simp[]) >>
   simp[] >>
   `N * type_memory_size dtv <= capacity * type_memory_size dtv` by
     simp[LE_MULT_RCANCEL] >>
-  irule return_copy_frame_trans >> qexists_tac `t` >> conj_tac
-  >- (irule return_copy_frame_subinterval >>
+  irule typed_copy_state_frame_trans >> qexists_tac `t` >> conj_tac
+  >- (irule typed_copy_state_frame_subinterval >>
       qexistsl_tac [`w2n dw`, `32`] >> simp[]) >>
-  irule return_copy_frame_subinterval >>
+  irule typed_copy_state_frame_subinterval >>
   qexistsl_tac [`w2n dw + 32`, `N * type_memory_size dtv`] >>
-  simp[] >> irule return_copy_frame_mono >>
+  simp[] >> irule typed_copy_state_frame_mono >>
   qexists_tac `start` >> simp[]
 QED
 Finalise return_copy_dynarray_slow_frag
