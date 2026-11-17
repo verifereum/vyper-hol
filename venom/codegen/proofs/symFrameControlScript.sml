@@ -5806,41 +5806,26 @@ Theorem sym_abort_conditional_terminal_exists:
     ?m. sym_terminal (sym_steps prog env m ss)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all sym_conditional_abort_inversion >> strip_tac >>
-  `ssa_form fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
-  `label_positions_ok inst` by
-    metis_tac[unitShapeDefsTheory.fn_shape_ok_def,
-              unitShapeDefsTheory.inst_shape_ok_def, listTheory.EVERY_MEM] >>
-  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
-    (qpat_x_assum `EVERY (\op. op <> dead_stack_marker /\ _) _` mp_tac >>
-     simp[listTheory.EVERY_CONJ]) >>
-  `compute_operands inst = [cond]` by
-    (Cases_on `inst.inst_opcode = ASSERT` >>
-     gvs[compute_operands_def, python_stack_operands_def,
-         ir_specific_operand_order_def]) >>
-  drule_all sym_conditional_abort_frame_prefix_deep >> strip_tac >>
-  `arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ compute_operands inst` by gvs[] >>
-  drule_all sym_conditional_abort_zero_stack >> strip_tac >>
-  `ss_mid.sym_base.as_pc = mid.as_pc` by
-    (qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ arranged _ _` mp_tac >>
-     simp[sym_frame_inv_def] >> strip_tac >>
-     drule asm_sym_rel_pc >> simp[]) >>
-  (reverse (Cases_on `inst.inst_opcode = ASSERT`)
-  >- (`sym_terminal (sym_steps prog env 3 ss_mid)` by
-        (irule sym_assert_unreachable_suffix_terminal >>
-         gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
-      qexists_tac `LENGTH (execute_plan cp'.cp_initial_fmp pre) + 3` >>
-      asm_rewrite_tac[sym_steps_add] >> simp[]) >>
-  `?off pc. FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
-     FLOOKUP o2pc off = SOME pc /\
-     asm_block_at prog pc (execute_plan cp'.cp_initial_fmp revert_postamble)` by metis_tac[] >>
-  `sym_jump_dest prog (Lab "revert" 0) = SOME pc` by
-    (irule sym_code_label_dest >> metis_tac[]) >>
-  `sym_terminal (sym_steps prog env 7 ss_mid)` by
-    (irule sym_assert_suffix_terminal >>
-     gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
-  qexists_tac `LENGTH (execute_plan cp'.cp_initial_fmp pre) + 7` >>
-  asm_rewrite_tac[sym_steps_add] >> simp[])
+  gnvs[] >>
+  irule (SRULE [asm_sym_rel_core_canonical, GSYM sym_frame_inv_def,
+                 sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+             `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`]
+      (SPEC_ALL symControlAbortConditionalOwnTheory.sym_abort_conditional_terminal_exists_mode_kernel))) >>
+  asm_rewrite_tac[] >> conj_tac >- (metis_tac[sym_code_label_dest]) >>
+  conj_tac >- metis_tac[asm_sym_steps_lockstep] >>
+  conj_tac
+  >- (qpat_assum `asm_static_wf prog`
+        (fn th => POP_ASSUM_LIST (K (assume_tac th))) >>
+      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      gnvs[] >>
+      drule_all (GEN_ALL (SRULE []
+        (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+                 `o2pc` |-> `build_offset_to_pc prog`,
+                 `dfg` |-> `dfg_build_function fn`]
+          (SPEC_ALL sym_conditional_abort_frame_prefix_deep)))) >>
+      simp[]) >>
+  rpt (goal_assum (drule_at Any) >> simp[]) >> first_assum (irule_at Any)
 QED
 
 Theorem sym_abort_terminal_counts_join:
