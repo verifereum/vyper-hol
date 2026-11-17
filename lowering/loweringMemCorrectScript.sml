@@ -19,7 +19,7 @@ Theory loweringMemCorrect
 Ancestors
   vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
-  venomInst unitMemInv
+  venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "tops";
@@ -34,13 +34,16 @@ val _ = Parse.hide "tops";
    distinct labels, an acyclic reachable call graph, the allocation budget
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
-   global region.  No DALLOCA is the O1 source shape's
-   (o1_source_unit_ok_no_dalloca), which S4 has. *)
+   global region.  No DALLOCA is a premise: the bridge covers only
+   static allocation. The lowering's pointer check excludes the other raw
+   FMP operations, so the free-memory pointer never moves. The entry floor
+   gives the bridge's two pointer facts. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
@@ -79,6 +82,29 @@ Proof
   `!f inst s. alloca_frontier_inv unit.cu_context f inst s ==>
               s.vs_alloca_next < dimword (:256)` by
     (rpt strip_tac >> drule alloca_frontier_inv_bound >> simp[]) >>
+  `EVERY no_raw_fmp_ops unit.cu_context.ctx_functions` by
+    (drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
+     simp[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >> rpt strip_tac >>
+     rename1 `MEM i (fn_insts f)` >>
+     `fn_ptr_ok P f` by fs[listTheory.EVERY_MEM] >>
+     `i.inst_opcode <> DRET /\ i.inst_opcode <> GETFMP /\
+      i.inst_opcode <> SETFMP /\ i.inst_opcode <> RETFMP` by
+       (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+     `i.inst_opcode <> DALLOCA` by
+       (fs[ctx_has_dalloca_def, listTheory.EVERY_MEM,
+           listTheory.EXISTS_MEM] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode` >> fs[is_raw_fmp_opcode_def]) >>
+  `!f inst s. raw_reachable vs unit.cu_context f inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (rpt strip_tac >> drule raw_reachable_no_raw_fmp_fixed >>
+     simp[] >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+     `~is_raw_fmp_opcode inst.inst_opcode` by
+       (fs[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >>
+        imp_res_tac active_inst_mem_fn_insts >> metis_tac[]) >>
+     `inst.inst_opcode <> DALLOCA` by
+       (strip_tac >> gvs[is_raw_fmp_opcode_def]) >>
+     simp[dalloca_no_wrap_def]) >>
   drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
   drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>

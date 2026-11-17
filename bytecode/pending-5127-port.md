@@ -85,11 +85,6 @@ P2 is ported. These still differ from the oracle with it:
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
 
-## Internal function order (#546), not #5127
-
-- `load_timing/call_storage_read`: matches once its internal functions are
-  emitted in Python's order; the function bodies already match.
-
 ## Pop receiver copy (vyperlang/vyper#5280), not #5127
 
 - `load_timing/nested_retained_pop`: the pinned compiler's

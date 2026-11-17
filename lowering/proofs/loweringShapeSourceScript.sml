@@ -456,6 +456,23 @@ Proof
   simp[]
 QED
 
+(* The checked runtime unit has no DALLOCA. *)
+Theorem lower_vyper_runtime_unit_no_dalloca_checked:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_no_dalloca >>
+  impl_tac
+  >- metis_tac[check_contract_runtime_bodies_shape_ok,
+               check_contract_internal_names_distinct] >>
+  simp[]
+QED
+
 (* ===== supported_program excludes the raw shape roots ===== *)
 
 Theorem supported_assignment_exists_mono[local]:
@@ -505,13 +522,19 @@ Proof
   `~supported_stmts_expr_exists expr_shape_root stmts` by
     (drule_all supported_program_function >> strip_tac >>
      drule supported_function_body_shape >> simp[]) >>
-  reverse conj_tac
-  >- (drule_all supported_program_declaration >>
-      simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
-      metis_tac[]) >>
-  strip_tac >>
-  qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
-  simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
+    (drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
+      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+      first_x_assum (irule_at Any) >>
+      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
+  irule (CONJUNCT1 supported_expr_exists_mono) >>
   first_x_assum (irule_at Any) >>
   simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED
