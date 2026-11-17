@@ -108,6 +108,7 @@ Definition body_inv_def:
     cenv.ce_func_info =
       build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_func_return_type = build_func_return_type tops /\
+    cenv.ce_func_defaults = build_func_defaults tops /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\
@@ -123,8 +124,19 @@ Definition body_inv_def:
     (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
     (!vis mut nr rr fn args dflts ret body.
        MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
-       function_mutability_ok [(NONE, tops)] vis mut nr dflts body)
+       function_mutability_ok [(NONE, tops)] vis mut nr dflts body) /\
+    (!vis mut rr name args dflts ret ss.
+       MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+       cx.nonreentrant_slot = SOME global_nonreentrant_slot)
 End
+
+Theorem body_inv_nonreentrant_slot:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot
+Proof
+  rw[body_inv_def] >> res_tac
+QED
 
 (* The type checker gives every function of the main module its declared
    mutability (function_mutability_ok), as body_inv has it. *)
