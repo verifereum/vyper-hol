@@ -50,7 +50,8 @@ val IMMS_IH_TAC =
     [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY,
      lock_if_nr_def, unlock_if_nr_def]};
 fun IMMS_STEP_WITH extra = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
-  unfolds = [switch_BoolV_def, ignore_bind_def],
+  unfolds = [switch_BoolV_def, ignore_bind_def,
+    vyperCreateTheory.eval_create_operands_def],
   intros = extra @ [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
@@ -124,11 +125,7 @@ Theorem runtime_writes_frame_mutual:
   (!cx gs vs. ~cx.in_deploy /\ runtime_write_roots_resolve cx R /\
      runtime_callable_writes_ok (get_module_code cx) R /\
      EVERY (atarget_writes_ok (runtime_write_root R)) gs ==>
-     !st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> st'.immutables = st.immutables) /\
-  (!cx es. ~cx.in_deploy /\ runtime_write_roots_resolve cx R /\
-     runtime_callable_writes_ok (get_module_code cx) R /\
-     EVERY (expr_writes_ok (runtime_write_root R)) es ==>
-     !st res st'. eval_expr_results cx es st = (res,st') ==> st'.immutables = st.immutables)
+     !st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> st'.immutables = st.immutables)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`eval_base_place cx (TopLevelNameTarget _)`]
@@ -225,8 +222,6 @@ Proof
   >~ [`eval_expr cx (StructLit _ _ _)`] >- (IMMS_CASE >> metis_tac[])
   >~ [`eval_exprs cx []`] >- IMMS_CASE
   >~ [`eval_exprs cx (_::_)`] >- IMMS_CASE
-  >~ [`eval_expr_results cx []`] >- IMMS_CASE
-  >~ [`eval_expr_results cx (_::_)`] >- IMMS_CASE
   >~ [`eval_for cx _ _ _ []`] >- IMMS_CASE
   >~ [`eval_for cx _ _ _ (_::_)`] >- IMMS_CASE
   >~ [`eval_stmt cx (For _ _ _ _ _)`] >- IMMS_CASE
@@ -295,7 +290,13 @@ Proof
       >>~- ([`state_rel_frame _ (eval_create _ _ _ _ _ _ _)`],
         simp[imms_frame_result] >>
           metis_tac[eval_create_preserves_scopes_immutables]) >>
-      metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP])
+      first_x_assum irule >> simp[] >>
+      Cases_on `es` >- simp[vyperCreateTheory.create_operand_order_def] >>
+      rename1 `EVERY _ (operand::operands)` >>
+      Cases_on `operands` >> Cases_on `kind` >>
+      gvs[vyperCreateTheory.create_operand_order_def, EVERY_MEM, MEM_APPEND] >>
+      rw[] >> gvs[] >>
+      metis_tac[rich_listTheory.MEM_TAKE, rich_listTheory.MEM_DROP_IMP])
   >~ [`eval_expr cx (Call _ (IntCall _) _ _)`]
   >- (simp_tac bool_ss [Once evaluate_def] >>
       ntac 25 IMMS_INT_STEP >> rpt gen_tac >> strip_tac >>
