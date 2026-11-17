@@ -251,7 +251,7 @@ Proof
   irule (checked_call_outcome_transport |> INST_TYPE [alpha |-> ``:eval_result``]) >>
   simp[] >>
   conj_tac >- metis_tac[] >>
-  qexistsl_tac [`[]`,`\bs. vyperState$return (Value NoneV)`,
+  qexistsl_tac [`[]`,`gas_cap`,`\bs. vyperState$return (Value NoneV)`,
     `"send failed"`,`res`,`target`,`SOME amount`] >> simp[return_def]
 QED
 
@@ -304,7 +304,7 @@ Proof
   drule take_call_outcome_success >> strip_tac >>
   drule_all take_call_outcome_suffix >> strip_tac >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
-  gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def, computed_precompile_def] >>
   qexistsl_tac [`rest`,`prefix`] >>
   gvs[evaluation_state_component_equality]
 QED
