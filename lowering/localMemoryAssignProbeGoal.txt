@@ -1,0 +1,137 @@
+Unproved goal of body_assign_local_array_element_probe.
+
+The root proof has derived assignability, the post-value type, and positive
+memory size from the original typing assumptions. It stops at an explicit
+FAIL_TAC before the RHS/target/store gas_outcome_full composition. This is
+an unfinished proof, not a counterexample or evidence that a definition
+must change.
+
+The successful memory-source store is proved separately by
+local_array_memory_assignment_joint and memory_assignment_joint_effect.
+The full remaining HOL goal (all hypotheses and the conclusion) follows.
+
+0.  t = SubscriptTarget (NameTarget id) idx
+ 1.  FLOOKUP env.var_types id = SOME (ArrayT ety (Fixed n))
+ 2.  ¬is_word_type ety
+ 3.  expr_type e = ety
+ 4.  lowered_value_type cenv e = ety
+ 5.  ¬expr_has_effect e
+ 6.  ¬expr_can_mutate cenv (target_to_expr t)
+ 7.  ∀s'' pv t' s'³' v t''.
+       eval_expr cx e s'' = (INL pv,t') ∧
+       read_result cx pv s'³' = (INL v,t'') ⇒
+       body_base_target_full_ok cx t
+ 8.  body_expr_full_ok cx e
+ 9.  body_inv tops ctx cenv cx
+10.  supported_stmt tops bindings (Assign (BaseTarget t) e)
+11.  ∀target.
+       supported_stmt_expr_exists (expr_abi_decode_target_root target)
+         (Assign (BaseTarget t) e) ⇒
+       occurs_abi_decode_target target tops
+12.  expr_sim_inv cenv cx env es
+13.  ce_locals_declared cenv env
+14.  locals_alloc_ok cenv env
+15.  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env'
+16.  stmt_exprs_ok cenv (Assign (BaseTarget t) e)
+17.  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e))
+18.  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ
+       cenv ret_ty
+19.  ¬∃id ty.
+       t = NameTarget id ∧ FLOOKUP env.var_types id = SOME ty ∧
+       is_word_type ty
+20.  ¬∃id ty.
+       t = NameTarget id ∧ FLOOKUP env.var_types id = SOME ty ∧
+       ¬is_word_type ty ∧
+       (expr_type e = ty ∨ lowered_value_type cenv e = ty ∨
+        is_bytestring_type ty ∨
+        has_length_word (expr_type e) ∧ is_empty_value_expr e)
+21.  ¬∃nsid. t = TopLevelNameTarget nsid ∧ supported_scalar_target tops nsid
+22.  ¬∃nsid mut ty slot.
+       t = TopLevelNameTarget nsid ∧
+       supported_variable_decl tops nsid = SOME (Private,mut,ty,SOME slot) ∧
+       (mut = Storage ∨ mut = Transient) ∧ ¬is_word_type ty ∧
+       (∀elem n. ty ≠ ArrayT elem (Dynamic n)) ∧
+       0 < type_memory_bytes cenv ty ∧ expr_type e = ty
+23.  ¬∃id fld sid fty.
+       t = AttributeTarget (NameTarget id) fld ∧
+       FLOOKUP env.var_types id = SOME (StructT sid) ∧
+       attribute_type env.type_defs (StructT sid) fld = SOME fty ∧
+       is_word_type fty
+24.  ¬∃nsid fld fty.
+       t = AttributeTarget (TopLevelNameTarget nsid) fld ∧
+       supported_storage_field_write tops nsid fld ∧
+       type_place_target env t = SOME (Type fty) ∧ is_word_type fty
+25.  assignable_type env.type_defs ety
+26.  env.type_defs = get_tenv cx
+27.  post_value_type cenv e = ety
+28.  ∀tv. evaluate_type (get_tenv cx) ety = SOME tv ⇒ 0 < type_memory_size tv
+29.  stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e) sa = (cenv',sb)
+30.  stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
+       shadow_sa = (cenv',shadow_sb)
+31.  gas_shadow_state sa shadow_sa
+32.  gas_shadow_state sb shadow_sb
+33.  gas_shadow_context ctx shadow_ctx
+34.  ctx_inst_ids_distinct ctx
+35.  gas_shadow_function func shadow_func
+36.  MEM func ctx.ctx_functions
+37.  MEM shadow_func shadow_ctx.ctx_functions
+38.  fn_has_code sa sb func
+39.  fn_has_code shadow_sa shadow_sb shadow_func
+40.  ∀H. dead_lo_ok H (DF H) lo cenv cx
+41.  fn_inst_ids_distinct func
+42.  local_ptrs_reserved cenv sa
+43.  ret_pc_ok cenv sa s0
+44.  ∀x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ⇒ not_fresh_at sa x
+45.  ¬block_is_terminated sa
+46.  gas_admissible (eval_stmt cx (Assign (BaseTarget t) e))
+       (stmt_res_ok lctx) es
+47.  return_buf_frame d cenv sa s0
+48.  alloca_history func s0
+49.  ctx_has_dalloca ctx ⇒ allocas_below_fmp s0
+50.  ∀fn inst s.
+       frag_reachable ctx func s0 fn inst s ⇒ dalloca_no_wrap inst s
+51.  ∀H. valid_horizon cx st0 H es.storage_trace ⇒
+         stmt_state_rel H ctx func cenv cx es s0 ∧
+         storage_well_formed_on cx es (FST H) ∧
+         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0
+52.  ¬s0.vs_halted
+53.  s0.vs_current_bb = sa.cs_current_bb
+54.  s0.vs_inst_idx = LENGTH sa.cs_current_insts
+------------------------------------
+     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (cx_tops cx) cx st0 (eval_stmt cx (Assign (BaseTarget t) e))
+       (es,s0,G0,tn0)
+       (λH res ee G tn t.
+          ∃cenv''.
+            stmt_lands lctx sb res t ∧ ¬t.vs_halted ∧
+            (res = INL () ⇒ ¬block_is_terminated sb ∧ cenv'' = cenv') ∧
+            cenv_top_ext cenv cenv'' ee.scopes ∧
+            stmt_state_rel H ctx func cenv'' cx ee t ∧
+            storage_well_formed_on cx ee (FST H) ∧
+            return_buf_frame d cenv'' sb t ∧ alloca_history func t ∧
+            (ctx_has_dalloca ctx ⇒ allocas_below_fmp t) ∧
+            s0.vs_alloca_next ≤ t.vs_alloca_next ∧
+            ghost_inv_at (DF H) lo d cenv'' cx ee G tn t ∧
+            (∀x w.
+               not_fresh_at sa x ∧ lookup_var x s0 = SOME w ⇒
+               lookup_var x t = SOME w) ∧
+            (∀aid b.
+               FLOOKUP s0.vs_allocas aid = SOME b ⇒
+               FLOOKUP t.vs_allocas aid = SOME b) ∧
+            (∀x. not_fresh_at sa x ⇒
+                 FLOOKUP G x = FLOOKUP G0 x ∧
+                 op_taint tn (Var x) = op_taint tn0 (Var x)) ∧
+            alloca_frame cenv es sa s0 cenv'' ee t ∧
+            ∀aid off sz i.
+              FLOOKUP s0.vs_allocas aid = SOME (off,sz) ∧
+              aid < sa.cs_next_id ∧
+              (∀n b sz'.
+                 local_region cenv es.scopes s0 n b sz' ⇒
+                 off + sz ≤ b ∨ b + sz' ≤ off) ∧ off ≤ i ∧ i < off + sz ∧
+              i ∈ tn.t_mem ⇒
+              i ∈ tn0.t_mem)
+       (λH res ee gt r.
+          (∀tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) ∧
+          halt_exit H cx ee res r ∧
+          (ctx_has_dalloca ctx ⇒
+           ∀s. r = Halt s ∨ (∃ir. r = IntRet ir s) ⇒ allocas_below_fmp s))
