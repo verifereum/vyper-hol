@@ -98,7 +98,7 @@ Proof
   `vv_place_ptr cenv cx ee t btv bvv` by fs[vv_post_def] >>
   `vv_place_ptr cenv cx ee t tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
-    (irule attr_place_ptr >>
+    (match_mp_tac attr_place_ptr >>
      qexistsl_tac [`env`, `ee`, `btv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
      simp[]) >>
   qpat_assum `select_result _ _ _ _ _ = _`
