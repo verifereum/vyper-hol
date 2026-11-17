@@ -39,13 +39,9 @@ Ancestors
 
 (* ===== Definitions ===== *)
 
-Definition dalloca_no_wrap_def:
-  dalloca_no_wrap inst s <=>
-    inst.inst_opcode = DALLOCA ==>
-    !sz_op sz.
-      inst.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
-      w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
-End
+(* dalloca_no_wrap moved to unitTransformDefs, under raw_unit_memory_ok;
+   this name keeps its users' references. *)
+Theorem dalloca_no_wrap_def = unitTransformDefsTheory.dalloca_no_wrap_def;
 
 Definition inst_mem_ranges_def:
   inst_mem_ranges inst s =
