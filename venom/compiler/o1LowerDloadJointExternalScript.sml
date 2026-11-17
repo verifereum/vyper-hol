@@ -756,9 +756,7 @@ Theorem ld_call_outcome_effects[local]:
   ld_shared_agree D A tn s t /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-     rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-   request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   consume_call_outcome rq1 ro1 rs1 s = (w1,s1) /\
   consume_call_outcome rq2 ro2 rs2 t = (w2,t1) ==>
   w1 = w2 /\ s1.vs_returndata = t1.vs_returndata /\
@@ -768,19 +766,15 @@ Theorem ld_call_outcome_effects[local]:
     s1 t1 /\
   ld_shared_agree D A
     (tn with <|t_stor := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                   s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                 then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                   s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                 then {} else tn.t_trans|>) s1 t1
 Proof
-  strip_tac
-  >- (`s1.vs_requests = s.vs_requests` by
-        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
-         simp[consume_call_outcome_eq, record_request_def] >> strip_tac >>
-         gvs[Excl "consume_call_outcome_eq"]) >>
-      drule_all ld_consume_precompile_shared >> strip_tac >>
-      simp[Excl "consume_call_outcome_eq"]) >>
+  strip_tac >>
   `s.vs_outcomes = t.vs_outcomes /\
    LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
     fs[ld_shared_agree_def] >>
@@ -865,11 +859,8 @@ Proof
    `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
      fs[ld_joint_boundary_def] >>
    SUBGOAL_THEN
-     ``((computed_precompile rq1 /\ computed_precompile rq2 /\
-      rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-     request_agree_except D rq1 rq2)`` assume_tac
-   >- (Cases_on `computed_precompile rq1` >- metis_tac[] >>
-      disj2_tac >>
+     ``request_agree_except D rq1 rq2`` assume_tac
+   >- (
       `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
         (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
          simp[consume_call_outcome_eq] >> strip_tac >>
