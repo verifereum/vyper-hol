@@ -14,3 +14,4 @@ Ancestors
   symInvokeEntryFacts symInvokeEntryOwn
   symGeneratedAssignOwn symGeneratedZeroOwn
   symInstDispatchOwn symFrameControlFacts symControlForwardCopyOwn symControlForwardCopyExecutionOwn symFrameInstOwn symControlJumpOwn symControlRestoreScheduleOwn symControlScratchOwn symControlTerminalSafetyOwn
+  symControlTerminalPrepareOwn
