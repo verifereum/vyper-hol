@@ -9,7 +9,7 @@
  *)
 Theory bodyFullFor
 Ancestors
-  bodyFullForControl bodyFullForRounds stateRelProj
+  bodyFullForControl bodyFullForRounds stateRelProj haltExitProj
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
