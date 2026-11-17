@@ -690,7 +690,10 @@ Resume assign_place_pure_continuation[static_normalize]:
       (irule assignPlaceLayoutTheory.widening_source_memory_size_pos >> metis_tac[]) >>
     `val_footprint stv v = type_memory_size stv` by
       (irule annassignRelayoutSourceTheory.nonbytes_evaluated_val_footprint >> metis_tac[]) >>
-    simp[arithmeticTheory.ADD_COMM, exprSimHypsDefsTheory.expr_sim_inv_def] >>
+    qpat_assum `expr_sim_inv cenv cx env mid'`
+      (strip_assume_tac o PURE_REWRITE_RULE
+        [exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+    gvs[arithmeticTheory.ADD_COMM] >>
     metis_tac[])) >>
   disch_then (qx_choosel_then [`norm`, `nw`] strip_assume_tac) >>
   `stmt_state_rel H1 ctx func cenv cx (mid' with gas_obs := []) norm` by

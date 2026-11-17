@@ -2392,6 +2392,7 @@ Resume raw_call_prefix_sim[keyword_setup]:
      qpat_assum `expr_post H' _ _ _ _ d _ _ _ _ _ _ _ _`
        (mp_then (Pos hd) mp_tac raw_call_addr_data_post) >>
      disch_then drule_all >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts s2 s4) tD = OK _` mp_tac >>
      simp[Abbr `tm`, stmt_state_rel_inst_idx]) >>
   irule raw_call_typed_args_suffix >>
   qpat_assum `typed_args_ready _ _ _ _ _ _ _` (irule_at Any) >>
