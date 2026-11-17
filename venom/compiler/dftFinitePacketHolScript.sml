@@ -40,6 +40,7 @@ Ancestors
   dftPacketSlotRefine
   dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
+  dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
