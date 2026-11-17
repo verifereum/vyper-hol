@@ -291,6 +291,18 @@ Proof
   rpt gen_tac >> BETA_TAC >> irule entry_code_tuple_unpack >> metis_tac[]
 QED
 
+Theorem entry_code_target_info_indices[local]:
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults /\
+  supported_target_info tops bindings target = SOME pt ==>
+  !ix et. MEM ix (target_indices target) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_expr ce et ix)
+Proof
+  rpt strip_tac >>
+  `supported_expr tops ix` by metis_tac[supported_target_info_index] >>
+  metis_tac[entry_code_supported_expr]
+QED
+
 Theorem entry_code_supported_statements[local]:
   (!tops bindings s. supported_stmt tops bindings s ==>
     !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
@@ -315,10 +327,15 @@ Proof
   >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- suspend "augassign"
   >~ [`compile_stmt _ _ _ (Append _ _)`] >- (
     simp[supported_stmt_def] >> rpt strip_tac >>
-    rename1 `compile_stmt _ _ _ (Append tgt _)` >> Cases_on `tgt` >> gvs[] >>
+    rename1 `compile_stmt _ _ _ (Append tgt _)` >>
+    Cases_on `?nid. tgt = TopLevelNameTarget nid`
+    >- (gvs[] >> irule entry_code_append_stmt >>
+        simp[targetPlaceLiveTheory.target_indices_def] >>
+        metis_tac[entry_code_supported_pure_expr]) >>
+    `?pt. supported_target_info tops bindings tgt = SOME pt` by
+      (Cases_on `tgt` >> gvs[]) >>
     irule entry_code_append_stmt >>
-    simp[targetPlaceLiveTheory.target_indices_def] >>
-    metis_tac[entry_code_supported_pure_expr])
+    metis_tac[entry_code_supported_pure_expr, entry_code_target_info_indices])
   >~ [`compile_stmt _ _ _ (If _ _ _)`] >- (
     simp[supported_stmt_def] >> metis_tac[entry_code_if_stmt, entry_code_supported_pure_expr])
   >~ [`compile_stmt _ _ _ (Assert _ _)`] >- suspend "assert"
