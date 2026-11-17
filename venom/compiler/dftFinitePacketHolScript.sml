@@ -5,6 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftPacketBlockCutAggregate dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketBlockAppendShape dftGasPrefixProvider
+  dftPacketBlockAppendTraceBoundary
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
