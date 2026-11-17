@@ -102,7 +102,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem outcomes_frame_read_results[local]:
+Theorem outcomes_frame_read_results:
   outcomes_frame (read_results cx results)
 Proof
   irule outcomes_frame_state_preserving >> metis_tac[read_results_state]
@@ -490,7 +490,7 @@ Proof
        return_def] >> rpt gen_tac >> rpt CASE_TAC >> simp[]
 QED
 
-Theorem outcomes_frame_places[local]:
+Theorem outcomes_frame_places:
   outcomes_frame (read_place cx p) /\
   outcomes_frame (place_type_value cx p) /\
   outcomes_frame (extend_place cx pv sb)
@@ -501,7 +501,7 @@ Proof
 QED
 
 
-Theorem outcomes_frame_write_place[local]:
+Theorem outcomes_frame_write_place:
   outcomes_frame (write_place cx p v)
 Proof
   simp[outcomes_frame_def] >> gen_tac >>
@@ -520,7 +520,7 @@ Proof
   irule outcomes_frame_state_preserving >> metis_tac[get_place_state]
 QED
 
-Theorem outcomes_frame_append_place[local]:
+Theorem outcomes_frame_append_place:
   outcomes_frame (append_place cx p v)
 Proof
   rewrite_tac[oneline append_place_def] >>
@@ -529,7 +529,7 @@ Proof
     ASSIGN_OUTCOMES_FRAME_STEP])
 QED
 
-Theorem outcomes_frame_pop_place[local]:
+Theorem outcomes_frame_pop_place:
   outcomes_frame (pop_place cx p)
 Proof
   simp_tac bool_ss [oneline pop_place_def, LET_THM] >>

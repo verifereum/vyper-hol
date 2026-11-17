@@ -78,10 +78,11 @@ Proof
 QED
 
 Theorem dload_supply_backward_boundary_fresh:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
-  (FLOOKUP t.vs_allocas (EL 0 xs).inst_id = NONE ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (FLOOKUP t.vs_allocas (EL 0 xs).inst_id = NONE ==>
+     t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl) /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   lower_dload_inst_supply supply i = (xs,next) /\
   (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\
@@ -93,7 +94,7 @@ Theorem dload_supply_backward_boundary_fresh:
   ?s1 r1. step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds /\
     (!v. v <> out ==> lookup_var v s1 = lookup_var v s) /\
@@ -112,17 +113,17 @@ Proof
 QED
 
 Resume dload_supply_backward_boundary_fresh[offset_equal]:
-  `dload_vars_match (r::rs) V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl (r::rs) V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `s.vs_labels = t.vs_labels` by
     (drule dload_boundary_environment >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
   `eval_operand off s = NONE <=> eval_operand off t = NONE` by
     (irule dload_matched_operand_defined >> simp[] >>
-     qexistsl [`G`,`H`,`V`,`r::rs`,`tn`,`un`] >> simp[]) >>
+     qexistsl [`G`,`H`,`V`,`fl`,`r::rs`,`tn`,`un`] >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   `eval_operand off s = eval_operand off t` by
     (irule scalar_operand_equal >> simp[] >>
-     qexistsl [`G`,`H`,`V`,`r::rs`,`tn`,`un`] >> simp[]) >>
+     qexistsl [`G`,`H`,`V`,`fl`,`r::rs`,`tn`,`un`] >> simp[]) >>
   `eval_operand off s = SOME x` by metis_tac[] >>
   suspend "replay_finish"
 QED
@@ -143,10 +144,10 @@ QED
 Finalise dload_supply_backward_boundary_fresh
 
 Theorem dload_supply_backward_boundary:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
-  t.vs_alloca_next + 32 < dimword (:256) /\
+  t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   lower_dload_inst_supply supply i = (xs,next) /\
   (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\
@@ -158,7 +159,7 @@ Theorem dload_supply_backward_boundary:
   ?s1 r1. step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds /\
     (!v. v <> out ==> lookup_var v s1 = lookup_var v s) /\

@@ -268,7 +268,9 @@ Proof
           EVERY (\(fname,fty,sz). !tv.
             evaluate_type (get_tenv cx) fty = SOME tv ==>
             sz = type_memory_size tv) fields)` by
-        (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+        (qpat_x_assum `expr_sim_inv cenv cx env ee` mp_tac >>
+         simp_tac bool_ss [exprSimHypsDefsTheory.expr_sim_inv_def] >>
+         strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
       `?r. gas_marked_path F ctx func t 0 r /\ exit_result r /\
            stmt_exit (RetQ H1) ee
              (INR (Error (RuntimeError "write in static context"))) r` by
@@ -285,7 +287,7 @@ Proof
         `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
         `r`] >>
       fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
-         write_storage_slot_eq, stmt_exit_def]) >>
+         write_storage_slot_eq, stmt_exit_def, halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule typed_storage_copy_write >>

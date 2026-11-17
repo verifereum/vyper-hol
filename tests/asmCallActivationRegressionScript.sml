@@ -232,7 +232,7 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem asm_invalid_ec_request[local]:
+Theorem asm_invalid_ec_request:
   s.as_memory = REPLICATE 63 0w ++ [1w] /\ (addr = 6w \/ addr = 7w) ==>
   take_outcome (asm_call_request s addr 0w 0 64 static) os =
     (failed_outcome (asm_call_request s addr 0w 0 64 static),DROP 1 os) /\

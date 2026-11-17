@@ -69,9 +69,10 @@ Proof
      `not_fresh_at sa x` by (gvs[not_fresh_at_def] >> decide_tac) >>
      simp[]) >>
   `wb_frame cenv es es sf s u` by
-    (irule (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sf`,
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sf`,
        `es`, `es`, `sf`, `s1`, `u`, `ctx`]
-       (Q.INST [`H` |-> `H`] exprSimWordArgsTheory.wb_frame_trans)) >> simp[]) >>
+       (Q.INST [`H` |-> `H`] exprSimWordArgsTheory.wb_frame_trans)) >>
+     impl_tac >- simp[] >> simp[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
   qpat_x_assum `wb_frame cenv es es sf s s1` kall_tac >>

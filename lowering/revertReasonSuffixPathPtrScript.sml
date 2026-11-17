@@ -6,7 +6,7 @@ Ancestors
   instSeqComposePtr ghostPcTransportPtr valueEncodingProps pred_set instIdxIndep
   revertReasonPrefixPtr revertAllocationPtr abiEncoderRounding
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline
-  mstoreOperandStep revertReasonLayout exprLoweringProps fragExec bodyPtrDefs revertReasonCopyPtr
+  revertReasonLayout exprLoweringProps fragExec bodyPtrDefs revertReasonCopyPtr
   venomMemProps venomState venomInst venomExecSemantics words arithmetic list
 
 Theorem alloca_store_literal_taint_bound:
@@ -57,7 +57,7 @@ Proof
   strip_tac >> (
   `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) sa =
      OK (mstore (w2n (n2w c : bytes32)) value sa)` by
-    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   `c MOD dimword(:256) = c` by (irule LESS_MOD >> simp[]) >>
   fs[w2n_n2w] >>
   `t = mstore c value sa` by
@@ -127,7 +127,7 @@ Proof
   `step_inst_base (mk_inst (id+6) MSTORE
       [Var (STRING #"%" (toString ((v:num)+4))); Lit 32w] []) sa =
       OK (mstore (w2n a) 32w sa)` by
-    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   `t = mstore (w2n a) 32w sa` by
     (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
      simp[NoAsms, revert_reason_suffix_def, run_inst_seq_def] >>

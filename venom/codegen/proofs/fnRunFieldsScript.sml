@@ -12,7 +12,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomInstProps
   opcodeClass venomInstProofs1 venomExecProofs
 
-Theorem step_inst_ok_fields[local]:
+Theorem step_inst_ok_fields:
   !fuel ctx inst s t.
     step_inst fuel ctx inst s = OK t ==>
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
@@ -33,7 +33,7 @@ Proof
             venomInstPropsTheory.step_preserves_prev_hashes]
 QED
 
-Theorem step_inst_intret_fields[local]:
+Theorem step_inst_intret_fields:
   !fuel ctx inst s ret t.
     step_inst fuel ctx inst s = IntRet ret t ==>
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\

@@ -158,7 +158,23 @@ Proof
   drop_horizon0_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> unlet_asms_tac >> gvs[] >>
+  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >>
+  disch_then (qspec_then `st0`
+    (qx_choosel_then [`cap1`, `bs1`, `p1`, `u1`] strip_assume_tac)) >>
+  unlet_asms_tac >>
+  `u1 = u0` by
+    (qpat_x_assum `run_inst_seq _ _ = OK u1` mp_tac >> simp[]) >>
+  qpat_x_assum `u1 = u0` SUBST_ALL_TAC >>
+  `p1 = p0` by
+    (qpat_x_assum `eval_operand src_op _ = SOME p1` mp_tac >> simp[]) >>
+  qpat_x_assum `p1 = p0` SUBST_ALL_TAC >>
+  qpat_x_assum `bt = _` mp_tac >> qpat_x_assum `bt = _` mp_tac >>
+  qpat_x_assum `v = _` mp_tac >> qpat_x_assum `v = _` mp_tac >>
+  simp_tac (srw_ss()) [] >> rpt strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  qpat_assum `t.vs_inst_idx = _`
+    (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th])) >>
+  simp[] >>
   capture_close_tac
 QED
 
@@ -321,7 +337,7 @@ Resume compile_slice_ordinary_case[dynamic]:
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
-     simp[]) >>
+     fs[exprSimDefsTheory.halt_exit_def]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>
@@ -611,7 +627,7 @@ Resume compile_slice_ordinary_case[fixed_source]:
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
-     simp[]) >>
+     fs[exprSimDefsTheory.halt_exit_def]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>

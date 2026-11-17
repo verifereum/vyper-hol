@@ -71,7 +71,7 @@ Theorem raw_log_topics_full:
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
       ghost_kept_at lo cenv es sa G0 tn0 s G tn /\
       expr_body_pre cenv cx env data ee /\ body_expr_full_ok cx data)
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by

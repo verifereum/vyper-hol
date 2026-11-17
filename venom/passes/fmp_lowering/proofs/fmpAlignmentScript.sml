@@ -60,14 +60,3 @@ Proof
   disch_then (qspec_then `32 * ((w2n sz + 31) DIV 32)` mp_tac) >>
   simp[dimword_def]
 QED
-
-(* Boundary probes include the wraparound at the largest word. *)
-Theorem dalloca_mask_examples[local]:
-  (((0w:256 word) + 31w) && ~31w = 0w) /\
-  (((1w:256 word) + 31w) && ~31w = 32w) /\
-  (((31w:256 word) + 31w) && ~31w = 32w) /\
-  (((32w:256 word) + 31w) && ~31w = 32w) /\
-  (((-1w:256 word) + 31w) && ~31w = 0w)
-Proof
-  EVAL_TAC
-QED

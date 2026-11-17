@@ -327,7 +327,7 @@ QED
 Theorem dynamic_string_scalar_partition:
   valid_conversion (BaseT (StringT n)) dst /\
   ~is_bytestring_type dst ==>
-  ?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m
+  dst = BaseT BoolT /\ n <= 32
 Proof
   Cases_on `dst` >> simp[valid_conversion_def, is_bytestring_type_def] >>
   rename1 `valid_conversion _ (BaseT bt)` >> Cases_on `bt` >>
@@ -347,8 +347,8 @@ Theorem dynamic_scalar_convert_ops:
     ConvBytestringToInt F b n /\
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) =
     ConvBytestringToBytesM m /\
-  mk_convert_op (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) =
-    ConvBytestringToBytesM m
+  mk_convert_op (BaseT (StringT n)) (BaseT BoolT) =
+    ConvBytestringToBool
 Proof
   simp[mk_convert_op_def, is_bytestring_type_def]
 QED
@@ -1062,10 +1062,32 @@ Proof
        dynamic_bool_encoding]
 QED
 
+Theorem dynamic_string_convert_bool_exact:
+  compile_type_convert v (mk_convert_op (BaseT (StringT n)) (BaseT BoolT))
+    sa = (r,sb) /\
+  eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
+  LENGTH str <= 32 /\ w2n (a + 32w) = w2n a + 32 /\
+  mem_word_at (w2n a) ss.vs_memory = n2w (LENGTH str) /\
+  mem_bytes_at (w2n a + 32) (LENGTH str) ss.vs_memory = MAP (n2w o ORD) str ==>
+  ?vout sf. convert_result cx (BaseT (StringT n)) (BaseT BoolT) (StringV str) =
+      INL vout /\
+    run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+    eval_operand r sf = SOME (typed_val_to_w256 (BaseTV BoolT) vout) /\
+    fresh_vars_wrt sb sf /\ sf.vs_memory = ss.vs_memory /\
+    sf.vs_allocas = ss.vs_allocas /\
+    (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
+Proof
+  strip_tac >> gvs[dynamic_scalar_convert_ops] >>
+  mp_tac (Q.INST [`bs` |-> `MAP (n2w o ORD) str`]
+            dynamic_convert_bool_raw_exact) >>
+  gvs[listTheory.LENGTH_MAP] >> strip_tac >>
+  qexistsl [`BoolV (EXISTS (\b:word8. b <> 0w) (MAP (n2w o ORD) str))`, `sf`] >>
+  gvs[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+      dynamic_bool_encoding, listTheory.LENGTH_MAP]
+QED
+
 Theorem dynamic_fixed_conversion_result:
-  ((src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs) \/
-   (?s. src = BaseT (StringT n) /\ vin = StringV s /\
-        bs = MAP (n2w o ORD) s)) /\ LENGTH bs <= m ==>
+  src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs /\ LENGTH bs <= m ==>
   convert_result cx src (BaseT (BytesT (Fixed m))) vin =
     INL (BytesV (PAD_RIGHT 0w m bs))
 Proof
@@ -1074,9 +1096,7 @@ Proof
 QED
 
 Theorem dynamic_convert_fixed_exact:
-  ((src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs) \/
-   (?s. src = BaseT (StringT n) /\ vin = StringV s /\
-        bs = MAP (n2w o ORD) s)) /\
+  src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs /\
   compile_type_convert v (mk_convert_op src (BaseT (BytesT (Fixed m))))
     sa = (r,sb) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
@@ -1717,15 +1737,11 @@ Resume dynamic_scalar_run_exact[string]:
   drule_all dynamic_string_scalar_partition >> strip_tac >> gvs[] >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   drule dynamic_string_value_typed >> strip_tac >> gvs[] >>
-  gvs[dynamic_string_memory_boundary, well_formed_type_def,
-      vyperValueTheory.evaluate_type_def] >>
-  rename1 `LENGTH str <= n` >>
-  `LENGTH str <= m` by decide_tac >>
-  drule_all (SRULE [] (Q.INST
-    [`src` |-> `BaseT (StringT n)`, `vin` |-> `StringV str`,
-     `bs` |-> `MAP (n2w o ORD) str`] dynamic_convert_fixed_exact)) >>
-  disch_then (qspec_then `cx` strip_assume_tac) >>
-  gvs[vyperValueTheory.evaluate_type_def]
+  gvs[dynamic_string_memory_boundary] >>
+  drule dynamic_string_convert_bool_exact >>
+  disch_then (qspecl_then [`str`,`ss`,`cx`,`a`] mp_tac) >>
+  (impl_tac >- (simp[] >> decide_tac)) >>
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def]
 QED
 
 Finalise dynamic_scalar_run_exact
@@ -2542,7 +2558,8 @@ Resume dynamic_empty_scalar_convert[string]:
   drule_all dynamic_string_scalar_partition >> strip_tac >> gvs[] >>
   gvs[vyperValueTheory.evaluate_type_def, vyperTypingTheory.value_has_type_def,
       convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
-      typed_val_to_w256_def, word_of_bytes_be_pad_right,
+      typed_val_to_w256_def, val_to_w256_def, bool_to_word_def,
+      word_of_bytes_be_pad_right,
       byteTheory.word_of_bytes_be_def, word_of_bytes_append_zero] >>
   gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
       listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,

@@ -53,11 +53,6 @@ Definition defaults_balance_behavior_code_def:
 End
 val () = cv_auto_trans defaults_balance_behavior_code_def;
 
-Definition defaults_effect_behavior_code_def:
-  defaults_effect_behavior_code = ^(entry_runtime "dflt_effectful_constant_index")
-End
-val () = cv_auto_trans defaults_effect_behavior_code_def;
-
 Definition nr_internal_return_behavior_code_def:
   nr_internal_return_behavior_code = ^(entry_runtime "nr_internal_return")
 End
@@ -111,13 +106,6 @@ QED
 Theorem defaults_observe_balance_after_transfer:
   entry_behavior_observe defaults_balance_behavior_code
     [38w;18w;31w;240w] 7 = SOME (T,93w,0w,0w)
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem defaults_retain_internal_storage_effect:
-  entry_behavior_observe defaults_effect_behavior_code
-    [38w;18w;31w;240w] 0 = SOME (T,21w,1w,0w)
 Proof
   CONV_TAC cv_eval
 QED

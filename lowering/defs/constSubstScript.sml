@@ -153,6 +153,115 @@ Proof
   Cases_on `h` >> simp[no_sha256_expr_def]
 QED
 
+(* No ** whose exponent is a negative integer literal, as checked after
+   constant substitution: power_operands_ok requires it, and inlining a
+   negative constant into an exponent would expose one. *)
+Definition no_neg_exp_expr_def:
+  no_neg_exp_expr (Name ty id) = T /\
+  no_neg_exp_expr (TopLevelName ty ns) = T /\
+  no_neg_exp_expr (FlagMember ty ns id) = T /\
+  no_neg_exp_expr (Literal ty l) = T /\
+  no_neg_exp_expr (IfExp ty a b c) =
+    (no_neg_exp_expr a /\ no_neg_exp_expr b /\ no_neg_exp_expr c) /\
+  no_neg_exp_expr (StructLit ty ns fs) = no_neg_exp_fields fs /\
+  no_neg_exp_expr (Subscript ty a b) = (no_neg_exp_expr a /\ no_neg_exp_expr b) /\
+  no_neg_exp_expr (Attribute ty a id) = no_neg_exp_expr a /\
+  no_neg_exp_expr (Builtin ty bi es) =
+    ((bi = Bop Exp ==>
+      case es of [b; Literal _ (IntL n)] => 0 <= n | _ => T) /\
+     no_neg_exp_exprs es) /\
+  no_neg_exp_expr (TypeBuiltin ty bi t es) = no_neg_exp_exprs es /\
+  no_neg_exp_expr (Pop ty tgt) = no_neg_exp_btarget tgt /\
+  no_neg_exp_expr (Call ty ct es d) = (no_neg_exp_exprs es /\ no_neg_exp_opt d) /\
+  no_neg_exp_btarget (NameTarget id) = T /\
+  no_neg_exp_btarget (TopLevelNameTarget ns) = T /\
+  no_neg_exp_btarget (SubscriptTarget tgt e) =
+    (no_neg_exp_btarget tgt /\ no_neg_exp_expr e) /\
+  no_neg_exp_btarget (AttributeTarget tgt id) = no_neg_exp_btarget tgt /\
+  no_neg_exp_exprs [] = T /\
+  no_neg_exp_exprs (e::es) = (no_neg_exp_expr e /\ no_neg_exp_exprs es) /\
+  no_neg_exp_opt NONE = T /\
+  no_neg_exp_opt (SOME e) = no_neg_exp_expr e /\
+  no_neg_exp_fields [] = T /\
+  no_neg_exp_fields ((id,e)::fs) = (no_neg_exp_expr e /\ no_neg_exp_fields fs)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+      expr option + (identifier # expr) list).
+    case x of
+      INL e => expr_size e
+    | INR (INL t) => base_assignment_target_size t
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR fs))) =>
+        list_size (pair_size (list_size char_size) expr_size) fs)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
+                    pairTheory.pair_case_def] >>
+  simp[expr_size_def, list_size_def, basicSizeTheory.pair_size_def,
+       basicSizeTheory.option_size_def, bnfPrelimsTheory.option_size_map,
+       bnfPrelimsTheory.pair_size_map, list_size_map, SF ETA_ss]
+End
+
+Theorem no_neg_exp_collections:
+  no_neg_exp_exprs es = EVERY no_neg_exp_expr es /\
+  no_neg_exp_opt d = (case d of NONE => T | SOME e => no_neg_exp_expr e) /\
+  no_neg_exp_fields fs = EVERY (no_neg_exp_expr o SND) fs
+Proof
+  rpt conj_tac
+  >- (Induct_on `es` >> simp[no_neg_exp_expr_def])
+  >- (Cases_on `d` >> simp[no_neg_exp_expr_def])
+  >> Induct_on `fs` >> simp[no_neg_exp_expr_def] >>
+  Cases_on `h` >> simp[no_neg_exp_expr_def]
+QED
+
+Definition no_neg_exp_target_def:
+  no_neg_exp_target (BaseTarget tgt) = no_neg_exp_btarget tgt /\
+  no_neg_exp_target (TupleTarget ts) = no_neg_exp_targets ts /\
+  no_neg_exp_targets [] = T /\
+  no_neg_exp_targets (t::ts) = (no_neg_exp_target t /\ no_neg_exp_targets ts)
+End
+
+Definition no_neg_exp_stmt_def:
+  no_neg_exp_stmt Pass = T /\
+  no_neg_exp_stmt Continue = T /\
+  no_neg_exp_stmt Break = T /\
+  no_neg_exp_stmt (Expr e) = no_neg_exp_expr e /\
+  no_neg_exp_stmt (For id ty it n body) =
+    ((case it of
+        Array e => no_neg_exp_expr e
+      | Range a b => (no_neg_exp_expr a /\ no_neg_exp_expr b)) /\
+     no_neg_exp_stmts body) /\
+  no_neg_exp_stmt (If e a b) =
+    (no_neg_exp_expr e /\ no_neg_exp_stmts a /\ no_neg_exp_stmts b) /\
+  no_neg_exp_stmt (Assert e r) =
+    (no_neg_exp_expr e /\
+     case r of
+       AssertReason e' => no_neg_exp_expr e'
+     | AssertCustomError (CustomError ns es fs) =>
+         (no_neg_exp_exprs es /\ no_neg_exp_fields fs)
+     | _ => T) /\
+  no_neg_exp_stmt (Log ns es) = no_neg_exp_exprs es /\
+  no_neg_exp_stmt (Raise r) =
+    (case r of
+       RaiseReason e => no_neg_exp_expr e
+     | RaiseCustomError (CustomError ns es fs) =>
+         (no_neg_exp_exprs es /\ no_neg_exp_fields fs)
+     | _ => T) /\
+  no_neg_exp_stmt (Return e) = no_neg_exp_opt e /\
+  no_neg_exp_stmt (Assign t e) = (no_neg_exp_target t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (AugAssign ty t bi e) =
+    (no_neg_exp_btarget t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (Append t e) = (no_neg_exp_btarget t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (AnnAssign id ty e) = no_neg_exp_expr e /\
+  no_neg_exp_stmts [] = T /\
+  no_neg_exp_stmts (s::ss) = (no_neg_exp_stmt s /\ no_neg_exp_stmts ss)
+End
+
+Definition no_neg_exp_fn_def:
+  no_neg_exp_fn (mut,nr,rr,id,args,dflts,ret,body) =
+    (no_neg_exp_exprs dflts /\ no_neg_exp_stmts body)
+End
+
 Definition subst_consts_expr_def:
   subst_consts_expr env (Name ty id) = Name ty id /\
   subst_consts_expr env (TopLevelName ty (ns,id)) =
@@ -283,6 +392,16 @@ Definition module_consts_env_def:
   module_consts_env (_::rest) acc = module_consts_env rest acc
 End
 
+Theorem module_consts_env_acc_prefix:
+  !ts acc. ?l. module_consts_env ts acc = acc ++ l
+Proof
+  Induct >> simp[module_consts_env_def] >> Cases >>
+  simp[module_consts_env_def] >>
+  rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
+  simp[module_consts_env_def] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
 Definition subst_consts_fn_def:
   subst_consts_fn env (mut,nr,rr,id,args,dflts,ret,body) =
     (mut,nr,rr,id,args,subst_consts_exprs env dflts,ret,subst_consts_stmts env body)
@@ -359,6 +478,10 @@ QED
 val () = cv_auto_trans fold_const_builtin_def;
 val () = cv_auto_trans fold_const_expr_def;
 val () = cv_auto_trans no_sha256_expr_def;
+val () = cv_auto_trans no_neg_exp_expr_def;
+val () = cv_auto_trans no_neg_exp_target_def;
+val () = cv_auto_trans no_neg_exp_stmt_def;
+val () = cv_auto_trans no_neg_exp_fn_def;
 val () = cv_auto_trans subst_consts_expr_def;
 val () = cv_auto_trans subst_consts_target_def;
 val () = cv_auto_trans subst_consts_iter_def;
@@ -371,7 +494,7 @@ val () = cv_auto_trans subst_consts_fn_def;
 
 (* Executable coverage regressions: declaration order, single-step replacement,
    qualified references, nested lvalue indices and expression-bearing reasons. *)
-Theorem module_consts_env_chain[local]:
+Theorem module_consts_env_chain:
   module_consts_env
     [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
        "A" (BaseT (UintT 256)) NONE;
@@ -383,7 +506,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_reference_boundaries[local]:
+Theorem subst_consts_reference_boundaries:
   subst_consts_expr
     [("A",TopLevelName NoneT (NONE,"B")); ("B",Literal NoneT (IntL 7))]
     (TopLevelName NoneT (NONE,"A")) = TopLevelName NoneT (NONE,"B") /\
@@ -395,7 +518,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_nested_targets[local]:
+Theorem subst_consts_nested_targets:
   subst_consts_target [("A",Literal NoneT (IntL 7))]
     (TupleTarget [BaseTarget
       (SubscriptTarget (AttributeTarget
@@ -410,7 +533,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_defaults_bodies_reasons[local]:
+Theorem subst_consts_defaults_bodies_reasons:
   subst_consts_fn [("A",Literal NoneT (IntL 7))]
     (View,F,F,"__default__",[],[TopLevelName NoneT (NONE,"A")],NoneT,
       [For "i" NoneT (Range (TopLevelName NoneT (NONE,"A"))
@@ -435,7 +558,7 @@ QED
 
 (* Symbolic regressions: exercise the fold interface without evaluating a
    concrete cryptographic hash inside the proof. *)
-Theorem fold_const_literal_sha256[local]:
+Theorem fold_const_literal_sha256:
   fold_const_expr (Builtin ty Sha256 [Literal aty (BytesL bs)]) =
     Literal ty (BytesL (word_to_bytes (SHA_256_bytes bs : bytes32) T)) /\
   fold_const_expr (Builtin ty Sha256 [Literal aty (StringL s)]) =
@@ -445,7 +568,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def]
 QED
 
-Theorem fold_const_nested_sha256[local]:
+Theorem fold_const_nested_sha256:
   fold_const_expr
     (Builtin ty Sha256 [Builtin aty Sha256 [Literal bty (BytesL bs)]]) =
   Literal ty (BytesL (word_to_bytes
@@ -454,7 +577,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def]
 QED
 
-Theorem fold_const_nonliteral_sha256[local]:
+Theorem fold_const_nonliteral_sha256:
   fold_const_expr (Builtin ty Sha256 [TopLevelName aty (NONE,id)]) =
     Builtin ty Sha256 [TopLevelName aty (NONE,id)] /\
   ~no_sha256_expr
@@ -463,7 +586,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def, no_sha256_expr_def]
 QED
 
-Theorem no_sha256_hidden_children[local]:
+Theorem no_sha256_hidden_children:
   ~no_sha256_expr (StructLit ty ns [(id,Builtin aty Sha256 [])]) /\
   ~no_sha256_expr (Builtin ty Len [Builtin aty Sha256 []]) /\
   ~no_sha256_expr (Call ty ct [] (SOME (Builtin aty Sha256 []))) /\
@@ -473,7 +596,7 @@ Proof
   simp[no_sha256_expr_def]
 QED
 
-Theorem subst_consts_runtime_sha256[local]:
+Theorem subst_consts_runtime_sha256:
   subst_consts_expr [] (Builtin ty Sha256 [Literal aty (BytesL bs)]) =
     Builtin ty Sha256 [Literal aty (BytesL bs)]
 Proof

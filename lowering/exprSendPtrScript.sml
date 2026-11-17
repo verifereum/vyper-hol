@@ -538,7 +538,8 @@ Theorem send_tail_none_post:
 Proof
   strip_tac >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_fmp = s.vs_fmp /\ t.vs_memory = s.vs_memory /\
+   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_memory = s.vs_memory /\
    t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
     (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `stmt_state_rel H ctx fn cenv cx es' (update_var out w t)` by
@@ -755,7 +756,7 @@ Theorem send_tail_summary_ptr:
       ghost_inv H d cenv cx ee G' tn' z /\
       ghost_kept cenv es sa G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee ghosts r. expr_exit res r)
+    (\H res ee ghosts r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
@@ -792,11 +793,21 @@ Proof
      conj_tac >- fs[vyperStorageFootprintTheory.valid_horizon_def] >>
      qexistsl_tac [`has_gas`, `r`, `es1`, `to_v :: amount_v :: gas_vs`] >>
      conj_tac >> first_assum ACCEPT_TAC) >>
+  `IS_SOME (eval_operand gas s)` by simp[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==> res <> INR HaltException` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+       stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     drule_all send_call_read_step >>
+     disch_then (qspecl_then [`""`, `sm.cs_next_id`] strip_assume_tac) >>
+     gvs[]) >>
   drule_all send_tail_path_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`res`,`ee`,`G'`,`tn'`,`r`] >>
-  simp[gasSummaryTheory.gas_explicit_def]
+  simp[gasSummaryTheory.gas_explicit_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[]
 QED
 
 Theorem send_read_action_ptr:
@@ -849,7 +860,8 @@ Proof
   >- (rpt gen_tac >> BETA_TAC >> rpt strip_tac >> gvs[])
   >~ [`exit_result`]
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >> Cases_on `res` >>
-      gvs[wb_args_exit_def, exprSimDefsTheory.expr_exit_def])
+      gvs[wb_args_exit_def, exprSimDefsTheory.expr_exit_def,
+          exprSimDefsTheory.halt_exit_def])
   >~ [`ignore_bind (eval_exprs _ _) _`]
   >- suspend "certificate_head"
   >~ [`gas_exempt_cert`]

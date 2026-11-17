@@ -78,7 +78,7 @@ Theorem sha_bytes_success_frame_at:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   fn_has_code sa sb fn /\ run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -117,7 +117,7 @@ Proof
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qabbrev_tac `a = t with vs_inst_idx := s.vs_inst_idx+2` >>
   `stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv_at D lo d cenv cx es G1 tn1 a` by
-    simp[Abbr `a`, stmt_state_rel_inst_idx, bytes_ghost_cursor] >>
+    simp[Abbr `a`, stmt_state_rel_inst_idx, ghost_inv_at_inst_idx] >>
   `a.vs_memory = s.vs_memory /\ a.vs_allocas = s.vs_allocas /\
    a.vs_outcomes = s.vs_outcomes /\ ~a.vs_halted /\
    lookup_block a.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -208,7 +208,7 @@ Resume sha_bytes_success_frame_at[compose]:
   >- (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK t`
         (mp_tac o MATCH_MP run_inst_seq_append) >>
       disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
-  fs[bytes_ghost_cursor, eval_operand_inst_idx]
+  fs[ghost_inv_at_inst_idx, eval_operand_inst_idx]
 QED
 
 Finalise sha_bytes_success_frame_at
@@ -234,7 +234,7 @@ Theorem sha_bytes_abort_ptr_at:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   fn_has_code sa sb fn /\ run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -267,7 +267,7 @@ Proof
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qabbrev_tac `a = t with vs_inst_idx := s.vs_inst_idx+2` >>
   `stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv_at D lo d cenv cx es G1 tn1 a` by
-    simp[Abbr `a`, stmt_state_rel_inst_idx, bytes_ghost_cursor] >>
+    simp[Abbr `a`, stmt_state_rel_inst_idx, ghost_inv_at_inst_idx] >>
   `a.vs_memory = s.vs_memory /\ a.vs_allocas = s.vs_allocas /\
    a.vs_outcomes = s.vs_outcomes /\ ~a.vs_halted /\
    lookup_block a.vs_current_bb fn.fn_blocks = SOME bb /\

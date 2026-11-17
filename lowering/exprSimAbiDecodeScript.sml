@@ -70,8 +70,8 @@ Proof
       simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[] >>
       rename1 `expr_exit (INR ex) r` >>
       qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
-      simp[]) >>
+      simp[] >> gvs[halt_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
-  irule abi_decode_suffix_outcome >> simp[] >>
+  irule abi_decode_suffix_full_exit_outcome >> simp[] >>
   metis_tac[]
 QED

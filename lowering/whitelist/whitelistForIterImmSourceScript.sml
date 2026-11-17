@@ -28,7 +28,8 @@ QED
 
 Theorem immutable_array_source_ready:
   expr_sim_inv cenv cx env es /\
-  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT typ bd) ==>
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT typ bd) /\
+  ~cx_const_name cx (src,name) ==>
   ?off ts imms atv av.
     src = cenv.ce_module /\
     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\

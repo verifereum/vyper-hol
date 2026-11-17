@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyFacts
 Ancestors
   supportedExprTraverse allocLimits allocLimitsProps
-  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtCases exprSimHyps
+  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtFacts exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
   bodySim bodyExprPreFacts exprSimHypsDefs stmtSimDefs bodyStorageMetadata
@@ -15,6 +15,9 @@ Ancestors
   exprSimMemDefs venomMemDefs vyperValue exprSimProps
 Libs
   monadsyntax
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 Theorem topcopy_rhs_pre:
   !tops ctx cenv cx e env es ret_ty nsid env'.
@@ -54,7 +57,7 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
     fs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>

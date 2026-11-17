@@ -1,7 +1,7 @@
 (* Successful block-entry alignment for the joint relation. *)
 Theory o1LowerDloadJointEntry
 Ancestors
-  o1SafeUpto
+  o1SafeUpto o1LowerDloadOccurrence
   o1LowerDloadJointRelation o1ContractLowerDload contextCodegenRel
   lowerDloadDefs venomExecSemantics venomExecProps irSupply list
   o1PassContract venomWf venomInst unitMemInv unitTransformDefs
@@ -110,8 +110,8 @@ Proof
   gvs[] >> simp[TAKE_LENGTH_TOO_LONG]
 QED
 
-Theorem ld_joint_entry:
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+Theorem ld_joint_entry_static:
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_safe_upto D lo ncut C vs /\ gas_cut ncut vs s1 /\
   C.ctx_entry = SOME name /\
   lookup_function name C.ctx_functions = SOME fn /\
@@ -136,10 +136,8 @@ Proof
   `occ_frame_reachable vs C [] [] FEMPTY entry_taint fn inst s1
       1 0 [] FEMPTY [] FEMPTY` by
     (irule o1LowerDloadOccurrenceTheory.occ_frame_reachable_entry >> metis_tac[]) >>
-  `vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
-        o1_safe_upto_def, o1_ptr_safe_upto_def] >>
-  drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >> strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `raw_reachable vs C fn inst s1` by
     (irule contextRawReachableTheory.raw_reachable_entry >> metis_tac[]) >>
   `s1.vs_alloca_next < dimword (:256)` by
@@ -153,15 +151,53 @@ Proof
      disch_then (fn th => once_rewrite_tac[th]) >> gvs[]) >>
   `lo <= s1.vs_alloca_next` by
     gvs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+  `lo <= dyn_floor C vs` by
+    (`dload_headroom_ok C fn inst s1` by
+       (qpat_x_assum `o1_safe_upto D lo ncut C vs` mp_tac >>
+        simp[o1_safe_upto_def, mem_inv_raw_reachable] >> strip_tac >>
+        qpat_x_assum `!fn inst s. _ ==> dload_headroom_ok _ _ _ _` drule >>
+        simp[]) >>
+     `s1.vs_initial_fmp = vs.vs_initial_fmp` by
+       (qpat_x_assum `enters_block fn _ s1`
+          (mp_tac o MATCH_MP ctxLookupAgreeHelpersTheory.enters_block_initial_fmp) >>
+        simp[]) >>
+     Cases_on `ctx_has_dalloca C` >>
+     fs[ptrDisciplineTheory.dyn_floor_def,
+        GSYM ptrDisciplineTheory.ctx_has_dalloca_def,
+        lowerDloadDefsTheory.dload_headroom_ok_def] >> decide_tac) >>
   `fn.fn_name = name` by
     (qpat_x_assum `lookup_function name C.ctx_functions = SOME fn` mp_tac >>
      simp[lookup_function_def] >> strip_tac >> drule FIND_P >> simp[]) >>
   simp[ld_joint_boundary_def, ld_joint_erasure_def, ld_joint_geometry_def,
-       ld_joint_saved_def, o1LowerDloadSharedTheory.ld_shared_agree_refl] >>
+       ld_joint_saved_def, o1LowerDloadSharedTheory.ld_shared_agree_refl,
+       ld_dyn_floor_ok_def,
+       ptrDisciplineTheory.ld_dyn_agree_def, occurrence_annotation_ok_def,
+       occurrence_allocas_ok_def, occurrence_env_ok_def, occurrence_saved_ok_def] >>
   reverse conj_tac
   >- simp[o1LowerDloadRelocationKernelTheory.ld_memory_agree_empty] >>
   qexists_tac `u` >>
   simp[ld_joint_frame_def, ld_joint_local_fields_def, ld_joint_allocas_def,
        o1LowerDloadEnvironmentTheory.ld_env_initial,
        o1LowerDloadEnvironmentTheory.ld_params_initial]
+QED
+
+Theorem ld_joint_entry:
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_safe_upto D lo ncut C vs /\ gas_cut ncut vs s1 /\
+  C.ctx_entry = SOME name /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  lookup_function name C'.ctx_functions = SOME fn' /\
+  ir_supply_covers_fn u fn /\
+  lower_dload_function_supply u fn = (fn',u') /\
+  enters_block fn
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s1 /\
+  active_inst fn inst s1 ==>
+  enters_block fn'
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s1 /\
+  ld_joint_boundary vs C C' lo D [] [] FEMPTY entry_taint fn inst s1 s1
+    1 0 [] FEMPTY [] FEMPTY FEMPTY FEMPTY []
+Proof
+  rpt gen_tac >> strip_tac >> irule ld_joint_entry_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

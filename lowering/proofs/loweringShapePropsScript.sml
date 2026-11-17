@@ -231,6 +231,8 @@ Definition cenv_shape_ok_def:
     (!b. cenv.ce_imm_alloca = SOME b ==> plain_operand st b) /\
     (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
          jump_label_ok l) /\
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      cenv.ce_func_defaults /\
     case cenv.ce_return_pc of
       NONE => T
     | SOME (PtrVar op sz) => retpc_operand st op
@@ -254,7 +256,9 @@ Definition cenv_static_ok_def:
     (!loc. cenv.ce_return_pc = SOME loc ==> ?off sz. loc = MemLoc off sz) /\
     cenv.ce_imm_alloca = NONE /\
     (!l. cenv.ce_return_pc = NONE /\ cenv.ce_ctor_exit_label = SOME l ==>
-         jump_label_ok l)
+         jump_label_ok l) /\
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      cenv.ce_func_defaults
 End
 
 Definition value_shape_ok_def:
@@ -343,6 +347,28 @@ Proof
   >- (res_tac >> Cases_on `loc` >> gvs[static_loc_def, loc_shape_ok_def])
   >- (res_tac >> gvs[loc_shape_ok_def])
   >> Cases_on `cenv.ce_return_pc` >> simp[] >> res_tac >> gvs[]
+QED
+
+(* An internal call compiles the callee's omitted defaults in the env
+   without the callee's defaults; both keep the env's shape. *)
+Theorem cenv_shape_ok_without_defaults:
+  !st cenv name. cenv_shape_ok st cenv ==>
+    cenv_shape_ok st (cenv_without_defaults cenv name)
+Proof
+  simp[cenv_shape_ok_def, cenv_without_defaults_def] >> rpt strip_tac >>
+  gvs[EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem cenv_shape_ok_omitted_defaults:
+  !st cenv name n. cenv_shape_ok st cenv ==>
+    ~supported_exprs_exists expr_shape_root (omitted_defaults cenv name n)
+Proof
+  rw[cenv_shape_ok_def, omitted_defaults_def] >>
+  Cases_on `ALOOKUP cenv.ce_func_defaults name` >>
+  gvs[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
+  rpt strip_tac >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  first_x_assum drule >> simp[] >>
+  metis_tac[rich_listTheory.MEM_DROP_IMP]
 QED
 
 (* ===== Expression and statement lowering ===== *)
@@ -3382,21 +3408,6 @@ Proof
        operand_case_not_label]
 QED
 
-Theorem compile_array_subscript_shape[local]:
-  !internal base_op idx_op is_dynamic static_count ws elem_size signed_idx loader.
-    (!op. shape_step internal compiler_label (\st. plain_operand st op)
-       (loader op) (\v st. plain_operand st v)) ==>
-    shape_step internal compiler_label
-      (\st. plain_operand st base_op /\ plain_operand st idx_op)
-      (compile_array_subscript base_op idx_op is_dynamic static_count
-         ws elem_size signed_idx loader)
-      (\op st. plain_operand st op)
-Proof
-  rpt strip_tac >>
-  irule shape_step_conseq >> irule_at Any compile_array_subscript_shape_under >>
-  qexists_tac `\st. T` >> simp[shape_stable_def]
-QED
-
 fun stmt_bind post name first_step =
   irule shape_step_bind >> qexists_tac post >>
   reverse conj_tac >- first_step >> qx_gen_tac name >> BETA_TAC;
@@ -3632,7 +3643,7 @@ Proof
   simp[]
 QED
 
-Theorem stmt_return_bind[local]:
+Theorem stmt_return_bind:
   comp_bind (comp_return x) f = f x
 Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
@@ -3737,7 +3748,7 @@ QED
 
 Theorem expr_child_callback_shape[local]:
   (!ce t e internal.
-     expr_size e < bound /\ ~supported_expr_exists expr_shape_root e ==>
+     expr_size e + cenv_defaults_size ce < bound /\ ~supported_expr_exists expr_shape_root e ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (f ce t e) (\v st. value_shape_ok st v)) ==>
   !ce t e internal.
@@ -3747,11 +3758,11 @@ Theorem expr_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `expr_child_callback bound f ce t e =
-     if expr_size e < bound then f ce t e
+     if expr_size e + cenv_defaults_size ce < bound then f ce t e
      else invalid_expr_call (expr_type e)` by
-    (Cases_on `expr_size e < bound` >>
+    (Cases_on `expr_size e + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def]) >>
-  pop_assum SUBST1_TAC >> Cases_on `expr_size e < bound` >> simp[] >>
+  pop_assum SUBST1_TAC >> Cases_on `expr_size e + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -3759,7 +3770,7 @@ QED
 
 Theorem builtin_child_callback_shape[local]:
   (!ce rt t bi args internal.
-     list_size expr_size args < bound /\
+     list_size expr_size args + cenv_defaults_size ce < bound /\
      builtin_arity bi <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -3773,12 +3784,12 @@ Theorem builtin_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `builtin_child_callback bound f ce rt t bi args =
-     if list_size expr_size args < bound then f ce rt t bi args
+     if list_size expr_size args + cenv_defaults_size ce < bound then f ce rt t bi args
      else invalid_expr_call rt` by
-    (Cases_on `list_size expr_size args < bound` >>
+    (Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.builtin_child_callback_def]) >>
   pop_assum SUBST1_TAC >>
-  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -3786,7 +3797,7 @@ QED
 
 Theorem type_child_callback_shape[local]:
   (!ce vt t tb rt args internal.
-     list_size expr_size args < bound /\
+     list_size expr_size args + cenv_defaults_size ce < bound /\
      type_builtin_arity tb <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -3800,12 +3811,12 @@ Theorem type_child_callback_shape[local]:
 Proof
   rpt strip_tac >>
   `type_child_callback bound f ce vt t tb rt args =
-     if list_size expr_size args < bound then f ce vt t tb rt args
+     if list_size expr_size args + cenv_defaults_size ce < bound then f ce vt t tb rt args
      else invalid_expr_call vt` by
-    (Cases_on `list_size expr_size args < bound` >>
+    (Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >>
      simp[FUN_EQ_THM, exprCallBoundsTheory.type_child_callback_def]) >>
   pop_assum SUBST1_TAC >>
-  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  Cases_on `list_size expr_size args + cenv_defaults_size ce < bound` >> simp[] >>
   match_mp_tac shape_step_conseq >>
   qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
   simp[invalid_expr_call_shape]
@@ -3875,28 +3886,6 @@ Proof
   shape_framed_tac compile_alloc_buffer_shape
 QED
 
-(* Any word loader with the plain-operand contract can be used under a
-   stable live-value frame; neither its implementation nor an opcode is needed. *)
-Theorem shape_step_loader_framed[local]:
-  shape_stable R /\
-  (!op. shape_step internal compiler_label (\st. plain_operand st op)
-     (loader op) (\v st. plain_operand st v)) ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st op)
-    (loader op) (\v st. R st /\ plain_operand st v)
-Proof
-  rpt strip_tac >> ho_match_mp_tac shape_step_frame >> simp[]
-QED
-
-Theorem compile_ptr_load_shape_framed[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st op)
-    (compile_ptr_load is_ctor imm loc op)
-    (\v st. R st /\ plain_operand st v)
-Proof
-  rpt strip_tac >> irule shape_step_loader_framed >>
-  simp[compile_ptr_load_shape]
-QED
-
 (* Consequence adaptation is shared by plain-operand primitive consumers. *)
 val shape_opcode_tac =
   simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
@@ -3917,15 +3906,6 @@ Theorem compile_store_bytestring_shape_framed[local]:
     (compile_store_bytestring val_op dst_op) (\u st. R st)
 Proof
   shape_framed_tac compile_store_bytestring_shape
-QED
-
-Theorem compile_ensure_in_memory_shape_framed[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st ptr_op)
-    (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm)
-    (\op st. R st /\ plain_operand st op)
-Proof
-  shape_framed_tac compile_ensure_in_memory_shape
 QED
 
 Theorem compile_copy_memory_shape_framed[local]:
@@ -4585,14 +4565,6 @@ Proof
          irule shape_step_frame_from >> irule_at Any clamp_and_return_shape >>
          qexists_tac `R` >> simp[] >> NO_TAC,
          shape_clamp_basetype_emit_tac]
-QED
-
-Theorem compile_builtin_len_shape[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st ptr_op)
-    (compile_builtin_len is_ctor imm ptr_op loc) (\v st. R st /\ plain_operand st v)
-Proof
-  simp[builtinSimpleTheory.compile_builtin_len_def, compile_ptr_load_shape_framed]
 QED
 
 Theorem compile_builtin_calldatasize_shape[local]:
@@ -5369,32 +5341,6 @@ Resume compile_abi_decode_shape_supported[decode_finish]:
 QED
 Finalise compile_abi_decode_shape_supported
 
-Theorem compile_abi_decode_shape_mload[local]:
-  (!dst src_op load_opc base_op hi_op info.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
-      (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info) (\u st. R st)) /\
-  (!dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
-      (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst)
-      (\u st. R st)) /\
-  (!dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op;i_ptr;cnt])
-      (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt)
-      (\u st. R st))
-Proof
-  conj_tac
-  >- (rpt strip_tac >> irule (cj 1 compile_abi_decode_shape_supported) >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >> irule (cj 2 compile_abi_decode_shape_supported) >> simp[]) >>
-  rpt strip_tac >> irule (cj 3 compile_abi_decode_shape_supported) >> simp[]
-QED
-
 Theorem lower_abi_decode_shape:
   shape_stable R ==>
   shape_step internal compiler_label (\st. R st /\ plain_operand st data_op)
@@ -5823,22 +5769,6 @@ Theorem compile_mapping_subscript_shape_framed[local]:
     (compile_mapping_subscript base_slot key_op) (\v st. R st /\ plain_operand st v)
 Proof
   shape_framed_tac compile_mapping_subscript_shape
-QED
-
-(* The source invariant excludes code pointers: runtime reads emit DLOAD.
-   Non-code loaders ignore imm, so it needs no plain-operand premise. *)
-Theorem compile_array_subscript_shape_framed[local]:
-  shape_stable R /\ (!st. R st ==> loc <> LocCode) ==>
-  shape_step internal compiler_label
-    (\st. R st /\ EVERY (plain_operand st) [base_op; idx_op])
-    (compile_array_subscript base_op idx_op dynamic_array static_count
-       scale elem_size is_signed_idx (compile_ptr_load is_ctor imm loc))
-    (\v st. R st /\ plain_operand st v)
-Proof
-  strip_tac >> Cases_on `loc = LocCode`
-  >- (gvs[shape_step_def] >> metis_tac[]) >>
-  shape_framed_tac compile_array_subscript_shape >>
-  simp[compile_ptr_load_shape]
 QED
 
 Theorem compile_array_subscript_cenv_shape_framed[local]:
@@ -6700,23 +6630,6 @@ Proof
   strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `g`, `rest`]
                   shape_step_emit_op_call_assert) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  simp[shape_step_def] >> metis_tac[]
-QED
-
-Theorem shape_step_emit_op_branch_guarded[local]:
-  shape_stable R /\ MEM opc [CALL; STATICCALL] /\
-  (!st id outs. R st /\ (gas_operand st g \/ plain_operand st g) /\
-                EVERY (plain_operand st) rest ==>
-     lowered_inst_ok internal (mk_inst id opc (g::rest) outs)) ==>
-  shape_step internal compiler_label
-    (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
-          EVERY (plain_operand st) rest)
-    (checked_extcall opc g rest) (\v st. R st /\ plain_operand st v)
-Proof
-  strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `g`, `rest`]
-                  shape_step_emit_op_call_branch) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[shape_step_def] >> metis_tac[]
 QED
@@ -7851,6 +7764,19 @@ Proof
   simp[shape_step_def] >> disch_then drule_all >> simp[]
 QED
 
+(* The callee's omitted defaults are staged after the supplied arguments,
+   in the env without the callee's own defaults; the operands in `live` stay
+   plain. They hold no shape root, since cenv_shape_ok covers every default. *)
+fun intcall_dflts_shape_tac live =
+  Cases_on `supported_exprs_exists expr_shape_root
+              (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args))`
+  >- (simp[shape_step_def] >> metis_tac[cenv_shape_ok_omitted_defaults]) >>
+  shape_under_tac compile_stage_intcall_args_shape live >>
+  simp[cenv_shape_ok_without_defaults] >>
+  TRY (mp_tac (Q.SPEC `rbuf.buf_operand::sup_ops` shape_stable_plain_operands) >>
+       simp[] >> NO_TAC) >>
+  mp_tac (Q.SPEC `sup_ops` shape_stable_plain_operands) >> simp[];
+
 Theorem compile_call_int_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -7881,11 +7807,21 @@ Resume compile_call_int_shape[stack_returns]:
       simp[cenv_shape_ok_stable]) >>
   qx_gen_tac `rbuf` >> simp[] >>
   irule shape_step_uncurry >>
-  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ cenv_shape_ok st cenv /\
+                       EVERY (plain_operand st) vs` >>
   reverse conj_tac
-  >- (shape_under_tac compile_stage_intcall_args_shape `\st. plain_operand st rbuf.buf_operand` >>
-      simp[] >> mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
-  qx_gen_tac `invoke_args` >> simp[] >>
+  >- (shape_under_tac compile_stage_intcall_args_shape
+        `\st. plain_operand st rbuf.buf_operand /\ cenv_shape_ok st cenv` >>
+      simp[] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
+      mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  qx_gen_tac `sup_ops` >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\
+                       EVERY (plain_operand st) (sup_ops ++ vs)` >>
+  reverse conj_tac
+  >- intcall_dflts_shape_tac `\st. EVERY (plain_operand st) (rbuf.buf_operand::sup_ops)` >>
+  qx_gen_tac `dflt_ops` >> BETA_TAC >>
+  qabbrev_tac `invoke_args = sup_ops ++ dflt_ops` >> simp[] >>
   irule shape_step_uncurry >>
   qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
   reverse conj_tac
@@ -7913,11 +7849,20 @@ Resume compile_call_int_shape[buffer_return]:
   >- (shape_under_tac compile_alloc_buffer_shape_framed `\st. cenv_shape_ok st cenv` >>
       simp[cenv_shape_ok_stable]) >>
   qx_gen_tac `rbuf` >> simp[] >> irule shape_step_uncurry >>
-  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ cenv_shape_ok st cenv /\
+                       EVERY (plain_operand st) vs` >>
   reverse conj_tac
-  >- (shape_under_tac compile_stage_intcall_args_shape `\st. plain_operand st rbuf.buf_operand` >>
+  >- (shape_under_tac compile_stage_intcall_args_shape
+        `\st. plain_operand st rbuf.buf_operand /\ cenv_shape_ok st cenv` >>
+      simp[] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
       mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
-  qx_gen_tac `invoke_args` >> simp[] >> irule shape_step_uncurry >>
+  qx_gen_tac `sup_ops` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\
+                       EVERY (plain_operand st) (sup_ops ++ vs)` >>
+  reverse conj_tac
+  >- intcall_dflts_shape_tac `\st. EVERY (plain_operand st) (rbuf.buf_operand::sup_ops)` >>
+  qx_gen_tac `dflt_ops` >> BETA_TAC >>
+  qabbrev_tac `invoke_args = sup_ops ++ dflt_ops` >> simp[] >> irule shape_step_uncurry >>
   qexists_tac `\u st. plain_operand st rbuf.buf_operand` >> conj_tac
   >- (gen_tac >> simp[shape_step_def, shape_extends_refl,
                      value_shape_ok_def, loc_shape_ok_def, base_ptr_def]) >>
@@ -7934,10 +7879,17 @@ Resume compile_call_int_shape[buffer_return]:
   simp[EVERY_MEM, label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
 QED
 Resume compile_call_int_shape[void_return]:
-  irule shape_step_uncurry >> qexists_tac `\vs st. EVERY (plain_operand st) vs` >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) vs` >>
   reverse conj_tac
-  >- (shape_under_tac compile_stage_intcall_args_shape `\st. T` >> simp[shape_stable_def]) >>
-  qx_gen_tac `invoke_args` >> simp[] >> irule shape_step_uncurry >>
+  >- (shape_under_tac compile_stage_intcall_args_shape `\st. cenv_shape_ok st cenv` >>
+      simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `sup_ops` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\vs st. EVERY (plain_operand st) (sup_ops ++ vs)` >>
+  reverse conj_tac
+  >- intcall_dflts_shape_tac `\st. EVERY (plain_operand st) sup_ops` >>
+  qx_gen_tac `dflt_ops` >> BETA_TAC >>
+  qabbrev_tac `invoke_args = sup_ops ++ dflt_ops` >> simp[] >> irule shape_step_uncurry >>
   qexists_tac `\u st. T` >> conj_tac
   >- (gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
                      plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
@@ -9523,9 +9475,9 @@ Theorem compile_expr_shape_pointwise[local]:
 Proof
   ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac
   >- (rpt gen_tac >> strip_tac >> mp_tac (Q.INST [
-        `cfn` |-> `expr_child_callback (expr_size e) compile_expr`,
-        `bfn` |-> `builtin_child_callback (expr_size e) compile_builtin_dispatch`,
-        `tfn` |-> `type_child_callback (expr_size e) compile_type_builtin_dispatch`,
+        `cfn` |-> `expr_child_callback (expr_size e + cenv_defaults_size ce) compile_expr`,
+        `bfn` |-> `builtin_child_callback (expr_size e + cenv_defaults_size ce) compile_builtin_dispatch`,
+        `tfn` |-> `type_child_callback (expr_size e + cenv_defaults_size ce) compile_type_builtin_dispatch`,
         `cenv` |-> `ce`] compile_expr_body_shape) >>
       impl_tac
       >- (rpt conj_tac
@@ -9537,7 +9489,7 @@ Proof
       qpat_x_assum `compile_expr ce ty e st = _` mp_tac >>
       simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[])
   >- (rpt gen_tac >> strip_tac >>
-      mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+      mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr`,
                      `cenv` |-> `ce`, `ret_ty` |-> `rt`] compile_builtin_dispatch_body_shape) >>
       impl_tac
       >- (conj_tac
@@ -9547,7 +9499,7 @@ Proof
       qpat_x_assum `compile_builtin_dispatch ce rt ty bi args st = _` mp_tac >>
       simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+  mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr`,
                  `cenv` |-> `ce`, `vv_ty` |-> `vt`, `ret_ty` |-> `rt`] compile_type_builtin_dispatch_body_shape) >>
   impl_tac
   >- (conj_tac
@@ -9594,28 +9546,6 @@ Proof
   qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
   conj_tac
   >- (gen_tac >> BETA_TAC >> irule unwrap_value_shape) >>
-  drule (cj 1 compile_expr_shape) >>
-  disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
-  drule shape_step_frame >>
-  disch_then (qspec_then `\st. cenv_shape_ok st cenv` mp_tac) >>
-  simp[cenv_shape_ok_stable]
-QED
-
-Theorem lower_value_with_loc_shape[local]:
-  !cenv ty e internal.
-    ~supported_expr_exists expr_shape_root e ==>
-    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
-      (lower_value_with_loc compile_expr cenv ty e)
-      (\r st. plain_operand st (FST r))
-Proof
-  rpt strip_tac >> simp[lower_value_with_loc_def] >>
-  irule shape_step_bind >>
-  qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
-  conj_tac
-  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op` >> conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
-      irule unwrap_value_shape) >>
   drule (cj 1 compile_expr_shape) >>
   disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
   drule shape_step_frame >>
@@ -14152,7 +14082,7 @@ Proof
   imp_res_tac supported_pure_shape >> res_tac >> fs[]
 QED
 
-Theorem supported_expr_shape[local]:
+Theorem supported_expr_shape:
   !tops e. supported_expr tops e ==>
     ~supported_expr_exists expr_shape_root e
 Proof
@@ -14213,7 +14143,9 @@ Theorem supported_append_target_shape[local]:
   ~supported_target_exists expr_shape_root target
 Proof
   Cases_on `target` >>
-  simp[supportedStmtsTheory.supported_append_target_def, supported_expr_exists_def]
+  simp[supportedStmtsTheory.supported_append_target_def,
+       supported_target_pure_def, supported_expr_exists_def] >>
+  metis_tac[supported_target_pure_expr_exclusion, supported_pure_shape]
 QED
 
 Theorem supported_string_reason_shape[local]:
@@ -14310,6 +14242,7 @@ Proof
 QED
 
 (* The runtime unit lowers every function but the constructor. *)
+(* Internal calls compile the defaults of every non-external function. *)
 Definition runtime_bodies_shape_ok_def:
   runtime_bodies_shape_ok tops <=>
     !mut nr rr name args dflts ret body.
@@ -14321,6 +14254,17 @@ Definition runtime_bodies_shape_ok_def:
       EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts
 End
 
+Theorem runtime_bodies_shape_ok_func_defaults:
+  !tops. runtime_bodies_shape_ok tops ==>
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (build_func_defaults tops)
+Proof
+  rw[compileVyperTheory.build_func_defaults_def, EVERY_MEM] >>
+  gvs[MEM_MAP] >> PairCases_on `y` >> gvs[] >>
+  fs[runtime_bodies_shape_ok_def] >>
+  simp[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF] >>
+  metis_tac[]
+QED
 
 Theorem add_module_var_locations_static:
   !tops vars.
@@ -14350,6 +14294,8 @@ QED
 
 Theorem build_compile_env_static:
   !tops vis mut fname args ret body use_trans.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (build_func_defaults tops) ==>
     cenv_static_ok
       (build_compile_env tops vis mut fname args ret body use_trans)
 Proof
@@ -14535,9 +14481,9 @@ Proof
      EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
     (rpt strip_tac
      >- metis_tac[supported_program_function, supported_function_body_shape] >>
-     drule_all supported_program_declaration >>
-     simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
-     metis_tac[]) >>
+     drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
   rw[runtime_bodies_shape_ok_def]
   >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
       metis_tac[public_getter_body_shape, function_visibility_distinct])
@@ -14571,6 +14517,8 @@ Proof
   rpt CASE_TAC >>
   fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
      cenv_static_ok_def, build_compile_env_external_no_return_pc] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -14588,6 +14536,8 @@ Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -14612,8 +14562,12 @@ Proof
        build_compile_env_external_no_return_pc] >>
   `cenv_static_ok
      (build_compile_env tops External src0 (src3:string) src4 src6 src7 use_trans)` by
-    (irule build_compile_env_static >> simp[]) >>
-  fs[cenv_static_ok_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
+    (irule build_compile_env_static >>
+      irule runtime_bodies_shape_ok_func_defaults >> first_assum ACCEPT_TAC) >>
+  Cases_on `src6 = NoneT` >>
+  gvs[update_cenv_ret_abi_def, cenv_static_ok_def,
+      build_compile_env_external_no_return_pc] >>
+  metis_tac[]
 QED
 
 Theorem EVERY_ZIP_snd[local]:
@@ -14716,23 +14670,6 @@ Proof
   gvs[EVERY_MEM] >>
   `MEM (LAST (i::is)) (i::is)` by simp[MEM_LAST] >>
   fs[] >> metis_tac[]
-QED
-
-Theorem internal_label_not_compiler[local]:
-  internal_label_ok l ==> ~compiler_label l
-Proof
-  metis_tac[jump_label_ok_names, jump_label_ok_def]
-QED
-
-Theorem internal_segments_noncompiler_heads[local]:
-  !descs segs.
-    LIST_REL internal_segment_ok descs segs /\
-    EVERY (\d. internal_label_ok (FST d)) descs ==>
-    EVERY (\seg. seg <> [] /\ ~compiler_label (HD seg).bb_label) segs
-Proof
-  Induct >> Cases_on `segs` >> simp[] >> rpt strip_tac >>
-  rename1 `internal_segment_ok d seg` >> PairCases_on `d` >>
-  gvs[internal_segment_ok_def] >> metis_tac[internal_label_not_compiler]
 QED
 
 
@@ -14990,7 +14927,30 @@ Proof
   simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
        mk_venom_context_def, internal_termination_ok_def,
        mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM] >>
+  rpt strip_tac >> res_tac >> fs[lowered_inst_ok_def]
+QED
+
+(* Shaped code has no DALLOCA, and packaging adds none. *)
+Theorem entry_unit_no_dalloca:
+  !entry_label entry descs segs.
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) entry /\
+    LIST_REL internal_segment_ok descs segs ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      (mk_raw_function entry_label entry ::
+       MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                       (SND (SND d))) descs segs)
+Proof
+  rpt strip_tac >> simp[] >> conj_tac
+  >- (gvs[EVERY_MEM, fn_insts_def, mk_raw_function_fields,
+          MEM_fn_insts_blocks_iff, PULL_EXISTS] >>
+      rpt strip_tac >> res_tac >> fs[lowered_inst_ok_def]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
+  rename1 `internal_segment_ok d seg` >> PairCases_on `d` >>
+  gvs[internal_segment_ok_def, EVERY_MEM, fn_insts_def,
+      mk_internal_function_metadata, MEM_fn_insts_blocks_iff] >>
+  res_tac >> fs[lowered_inst_ok_def]
 QED
 
 Theorem lowered_unit_source_ok:
@@ -15102,7 +15062,9 @@ Theorem run_lowering_source_unit_ok:
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   `lowering_policy_ok rpolicy`
@@ -15148,13 +15110,18 @@ Proof
     by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
         REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
         match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     (mk_raw_function "__entry" entry_blocks ::
+      MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                      (SND (SND d))) (internal_fn_descriptors internal_fns) segs)`
+    by (irule entry_unit_no_dalloca >> fs[]) >>
   qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
   conj_tac >-
    (irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[mk_venom_context_def]
+  fs[mk_venom_context_def]
 QED
 
 Theorem run_grouped_lowering_source_unit_ok:
@@ -15166,7 +15133,9 @@ Theorem run_grouped_lowering_source_unit_ok:
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   drule run_grouped_lowering_policy >> strip_tac >>
@@ -15207,13 +15176,18 @@ Proof
     by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
         REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
         match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     (mk_raw_function "__entry" entry_blocks ::
+      MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                      (SND (SND d))) (internal_fn_descriptors internal_fns) segs)`
+    by (irule entry_unit_no_dalloca >> fs[]) >>
   qpat_x_assum `run_grouped_lowering _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_grouped_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
   conj_tac >-
    (irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[mk_venom_context_def]
+  fs[mk_venom_context_def]
 QED
 
 (* ===== Source side: selectors and internal names ===== *)
@@ -15335,7 +15309,9 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params:
                     (FST (SND (classify_functions tops)))) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
@@ -15368,6 +15344,10 @@ Proof
         (package_fallback_fn tops T (K global_nonreentrant_slot) fb))`
     by (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
                      `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
+     (order_internals (runtime_internal_order tops ints) ints)))`
+    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
+                 PERM_order_runtime_internals] >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   qpat_x_assum `classify_functions tops = _` (fn th => REWRITE_TAC [th]) >>
@@ -15391,6 +15371,19 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
     ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                     (FST (SND (classify_functions tops)))) ==>
     o1_source_unit_ok unit
+Proof
+  metis_tac[lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params]
+QED
+
+(* The lowered runtime unit has no DALLOCA. *)
+Theorem lower_vyper_runtime_unit_no_dalloca:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    runtime_bodies_shape_ok tops /\
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                    (FST (SND (classify_functions tops)))) ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   metis_tac[lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params]
 QED

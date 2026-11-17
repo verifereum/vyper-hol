@@ -182,7 +182,10 @@ Proof
                    local_entry_type_kept) >>
          simp[]) >>
       first_x_assum drule_all >> strip_tac >> gvs[] >>
-      `state_well_typed ms` by fs[expr_sim_inv_def] >>
+      `state_well_typed ms` by
+        (qpat_assum `expr_sim_inv cenv cx env ms`
+           (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
+         first_assum ACCEPT_TAC) >>
       `s'.scopes = ms.scopes` by
         (qpat_x_assum `s' = _` (fn th => simp[Once th])) >>
       `lookup_scopes id ms.scopes = SOME entry` by gvs[] >>

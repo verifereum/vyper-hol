@@ -454,7 +454,7 @@ Theorem no_ctor_fmp_lower:
   SOME (fn with fn_fmp_signature := SOME
     <| fms_has_fmp_param := F; fms_publishes := F |>, s)
 Proof
-  strip_tac >> gvs[] >> EVAL_TAC
+  strip_tac >> gvs[] >> EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
 
 Theorem no_ctor_empty_label_map:

@@ -319,41 +319,6 @@ Proof
   drule_all fold_membership_and_safe_operand >> simp[]
 QED
 
-Theorem fresh_var_counter_mono[local]:
-  fresh_var sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
-Proof
-  strip_tac >> qspec_then `sa` mp_tac ci_mono_fresh_var >>
-  simp[ci_mono_def]
-QED
-
-Theorem fresh_label_counter_mono[local]:
-  fresh_label prefix sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
-Proof
-  strip_tac >> qspecl_then [`prefix`, `sa`] mp_tac ci_mono_fresh_label >>
-  simp[ci_mono_def]
-QED
-
-Theorem new_block_counter_mono[local]:
-  new_block label sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
-Proof
-  strip_tac >> qspecl_then [`label`, `sa`] mp_tac ci_mono_new_block >>
-  simp[ci_mono_def]
-QED
-
-Theorem emit_inst_counter_mono[local]:
-  emit_inst opc args outs sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
-Proof
-  strip_tac >> qspecl_then [`opc`, `args`, `outs`, `sa`] mp_tac ci_mono_emit_inst >>
-  simp[ci_mono_def]
-QED
-
-Theorem emit_op_counter_mono[local]:
-  emit_op opc args sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
-Proof
-  strip_tac >> qspecl_then [`opc`, `args`, `sa`] mp_tac ci_mono_emit_op >>
-  simp[ci_mono_def]
-QED
-
 Theorem compile_ptr_load_next_var:
   compile_ptr_load ctor imm loc p sa = (v,sb) ==>
   sa.cs_next_var <= sb.cs_next_var

@@ -116,3 +116,57 @@ Proof
       simp[])
   >- (disj2_tac >> gvs[])
 QED
+
+(* The decode continuation cannot produce HaltException; retain this fact
+   alongside its ordinary exit relation for finite-horizon consumers. *)
+Theorem abi_decode_suffix_full_exit_outcome:
+  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
+  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
+  lower_abi_decode data
+    (type_to_abi_dec_info ce.ce_struct_fields ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
+  fn_has_code start final func /\ fn_inst_ids_distinct func /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK s) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
+     s.vs_current_bb = start.cs_current_bb /\
+     s.vs_inst_idx = LENGTH start.cs_current_insts) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
+      (\w. return (Value w))) (ee with gas_obs := [],s)
+    (\H res es1 t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
+        es1 tv (LocatedValue ty (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\
+      t.vs_inst_idx = LENGTH final.cs_current_insts)
+    (\H res es1 r. expr_exit res r /\ halt_exit H cx es1 res r)
+Proof
+  strip_tac >> drule_all abi_decode_suffix_outcome >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks'`
+  >- metis_tac[]
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- (rewrite_tac[gas_summary_at_def] >>
+          qexistsl_tac [`res`, `es_end`, `r`] >> gvs[])
+      >> `res <> INR HaltException` by
+        (qpat_x_assum `gas_marked_exec _ _ (bind (lift_sum _) _) _ _ _ _ _`
+           (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+         strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+         Cases_on `evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]` >>
+         simp[bind_def, lift_sum_def, return_def, raise_def] >>
+         strip_tac >> gvs[]) >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> gvs[halt_exit_def] >>
+      disj2_tac >> first_assum ACCEPT_TAC) >>
+  metis_tac[]
+QED

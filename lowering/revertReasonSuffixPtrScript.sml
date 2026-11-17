@@ -2,7 +2,7 @@
    relation after scratch-memory writes. *)
 Theory revertReasonSuffixPtr
 Ancestors
-  wordLoadStorePtr mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
+  wordLoadStorePtr revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
   typedCopyPtr fragGasSeqPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr exprLoweringProps
   venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
   abiEncoderRounding revertReasonPrefixFramePtr list
@@ -45,7 +45,7 @@ Proof
   `lookup_var out s2 = SOME a` by fs[Abbr `s2`, lookup_var_def] >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s2 =
      OK (mstore (w2n a) value s2)` by
-    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   `ptr_covers
      (step_prov PG g1 (mk_inst (id+1) MSTORE [Var out; Lit value] [])
        (mstore (w2n a) value s2))
@@ -89,7 +89,7 @@ Proof
   disch_then (strip_assume_tac o SPEC_ALL) >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 =
     OK (mstore (w2n a) value s1)` by
-    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   `run_inst_seq [mk_inst id ALLOCA [Lit (n2w n)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit value] []] s =
        OK (mstore (w2n a) value s1)` by simp[run_inst_seq_def] >>
@@ -375,7 +375,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MSTORE [Var dst;value] []) s =
      OK (mstore (w2n a) w s)` by
-    (irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id MSTORE [Var dst;value] []) s` by
     (irule ptr_inst_ok_mstore >> simp[]) >>
@@ -559,7 +559,7 @@ Resume zero_pad_copy_checks[store]:
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (mstore (w2n (a+n2w R)) 0w s1)` by
-    (simp[Abbr `j`] >> irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (simp[Abbr `j`] >> irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
   `!x C. ptr_covers g1 t1 x s1 C ==> ptr_covers g2 t2 x s2 C` by
@@ -721,7 +721,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_mstore >> simp[]) >>
   `step_inst_base i s = OK (mstore (w2n a) w s)` by
-    (simp[Abbr `i`] >> irule step_mstore_operands >> simp[eval_operand_def]) >>
+    (simp[Abbr `i`] >> irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
   `ptr_covers g1 t1 cell s1 32` by

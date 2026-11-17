@@ -20,8 +20,10 @@ Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
     (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
-  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -54,11 +56,14 @@ Proof
          supportedDeclsTheory.supported_declaration_headers_def,
          supportedDeclsTheory.supported_headers_module_consts_env] >>
      gvs[constSubstTheory.subst_consts_fn_empty]) >>
-  `supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `T`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `T`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
   gvs[package_constructor_def, set_constructor_package_target_def,
     update_cenv_nonreentrant_def] >>
   simp[deploy_build_env_no_return_pc, cenv_static_ok_def] >>
@@ -99,11 +104,11 @@ Proof
 QED
 
 Theorem deploy_internal_package_certificates:
-  !tops target ut key is_ctor cap ifns.
+  !tops target ut key is_ctor cap srcs ifns.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) ==>
+      package_internal_fn tops ut key is_ctor cap) srcs ==>
     EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
@@ -115,18 +120,25 @@ Proof
   drule classified_internal_names_distinct >> strip_tac >>
   drule internal_descriptors_ok >>
   disch_then (qspec_then `is_ctor` strip_assume_tac) >>
+  drule sortingTheory.PERM_MEM_EQ >> strip_tac >>
+  `PERM
+    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor) srcs))
+    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
+      (FST (SND (classify_functions tops)))))` by
+    (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >> simp[]) >>
+  drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
-  simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+  fs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
   irule deploy_internal_package_shape >> simp[]
 QED
 
 Theorem deploy_internal_body_certificates:
-  !tops target ut key is_ctor cap ifns st_final post.
+  !tops target ut key is_ctor cap srcs ifns st_final post.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) /\
+      package_internal_fn tops ut key is_ctor cap) srcs /\
     shape_state st_final /\
     compile_internal_fn_bodies ifns st_final = ((),post) ==>
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
@@ -263,11 +275,13 @@ Theorem deploy_ctor_lowering_trace:
       st_epilogue = ((),st_final) /\
     compile_internal_fn_bodies
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       st_final = ((),post) /\
     extract_context_with_internals "__deploy"
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       post = SOME (ctx,data) /\
     lowering_context_ok (install_immutable_reservation (imm_len tops) ctx) /\
     dunit = <|cu_context := install_immutable_reservation (imm_len tops) ctx;
@@ -296,7 +310,7 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem ctor_code_cond_not[local]:
+Theorem ctor_code_cond_not:
   !p a b. (if ~p then a else b) = (if p then b else a)
 Proof
   Cases >> simp[]
@@ -353,7 +367,11 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
-      (FST (SND (classify_functions tops)))` by simp[Abbr `ifns`] >>
+      (order_internals (deploy_internal_order (SOME cf) ints) ints)` by
+    simp[Abbr `ifns`] >>
+  `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
+      (FST (SND (classify_functions tops)))` by
+    simp[PERM_order_deploy_internals] >>
   drule_all deploy_internal_package_certificates >> strip_tac >>
   drule_all deploy_ctor_packaged_entry >> strip_tac >>
   drule_all deploy_ctor_member_certificates >> strip_tac >>

@@ -64,3 +64,23 @@ Proof
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule ev_block_fuel_extend >> simp[]
 QED
+
+Theorem inv_ev_prefix_unique:
+  !n s u v.
+    inv_ev_prefix orc p d ctx bb n s u /\
+    inv_ev_prefix orc p d ctx bb n s v ==> u = v
+Proof
+  Induct >> simp[inv_ev_prefix_suc] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `ev_step _ _ _ _ _ _ _ = OK _` mp_tac >>
+  rename1 `ev_step orc p d f ctx inst s = OK a` >>
+  disch_tac >>
+  rename1 `ev_step orc p d g ctx inst s = OK b` >>
+  `ev_step orc p d (f + g) ctx inst s = OK a` by
+    (irule ev_step_fuel_extend >> simp[]) >>
+  `ev_step orc p d (g + f) ctx inst s = OK b` by
+    (irule ev_step_fuel_extend >> simp[]) >>
+  `a = b` by
+    (qpat_x_assum `ev_step _ _ _ (g + f) _ _ _ = _` mp_tac >>
+     simp[arithmeticTheory.ADD_COMM]) >>
+  gvs[] >> first_x_assum irule >> metis_tac[]
+QED

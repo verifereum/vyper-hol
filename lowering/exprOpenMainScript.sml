@@ -53,6 +53,9 @@ Proof
        env_context_consistent_def] >>
   `?t. FLOOKUP env.bare_globals (NONE, nsid1) = SOME t` by
     metis_tac[bare_globals_complete_def] >>
+  `~cx_const_name cx (NONE,nsid1)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
+     strip_tac >> gvs[]) >>
   fs[expr_sim_inv_def] >> metis_tac[]
 QED
 
@@ -120,7 +123,9 @@ Resume compile_expr_open_general[toplevel]:
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       `?off. FLOOKUP cenv.ce_module_vars (nsid0,nsid1) = SOME (ImmutableLoc off)` by
-        (fs[expr_sim_inv_def] >> metis_tac[]) >>
+        (fs[expr_body_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+         metis_tac[]) >>
       gvs[compile_expr_def]) >>
   rename1 `find_var_decl_by_name nsid1 ts = SOME di` >> PairCases_on `di` >>
   Cases_on `di0`
@@ -134,7 +139,7 @@ Resume compile_expr_open_general[builtin]:
   rename1 `compile_expr cenv aty (Builtin ann bi args) sa = (vv,sb)` >>
   `!arg rest. args = arg::rest /\ (!n. bi <> Slice n) ==>
      !cty v st. lower_value
-       (expr_child_callback (list_size expr_size args) compile_expr)
+       (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) compile_expr)
        cenv cty arg sa = (v,st) ==> ~block_is_terminated st` by
     (rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
      drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_child_open >>
@@ -236,7 +241,8 @@ Resume compile_expr_open_general[builtin_dispatch]:
           (strip_tac >> gvs[well_typed_builtin_app_def, well_typed_binop_def]) >>
         gvs[SF ETA_ss] >>
         qspecl_then
-          [`expr_child_callback (list_size expr_size [arg_e;arg2_e]) compile_expr`,
+          [`expr_child_callback (list_size expr_size [arg_e;arg2_e] + cenv_defaults_size cenv)
+             compile_expr`,
            `cenv`, `ann`, `aty`, `op`, `arg_e`, `arg2_e`, `sa`, `v`, `st`]
           mp_tac compile_dispatch_bop_open >>
         simp[expr_size_def, SF ETA_ss] >> disch_then irule >> strip_tac >>

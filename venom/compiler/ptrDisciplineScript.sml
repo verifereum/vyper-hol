@@ -449,9 +449,10 @@ End
    clearing their taint.  Whether it adopts depends only on the shared
    outcome, not on either run's own storage.  Any other call keeps them: a
    static call and a failed one change nothing, and a computed precompile,
-   which records no request, keeps the accounts it had.  DELEGATECALL and
-   CREATE run real code on each run's own storage, so taint_ok requires
-   none to be tainted there. *)
+   which records no request, keeps the accounts it had.  A DELEGATECALL
+   consumes the shared oracle like a CALL but keeps its taint: its request
+   snapshot is bounded by taint_within, like any call's.  taint_ok requires
+   no storage taint at CREATE. *)
 Definition adopt_reset_def:
   adopt_reset inst adopted (X:'a set) =
     if inst.inst_opcode = CALL /\ adopted
@@ -615,9 +616,8 @@ End
    only ASSIGNed, shifted by an untainted amount (shift_taint tracks where
    its bytes go), multiplied by an untainted zero/one selector, or stored
    as the value of a store with an untainted
-   address, and tainted memory is only loaded, copied or returned.  Code
-   that runs on this contract's storage (DELEGATECALL, CREATE) sees none
-   tainted. *)
+   address, and tainted memory is only loaded, copied or returned.  A
+   CREATE sees no storage tainted. *)
 Definition taint_ok_def:
   taint_ok fn tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
@@ -638,8 +638,7 @@ Definition taint_ok_def:
        off <= i /\ i < off + len /\ i IN tn.t_mem ==>
        inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
        inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN) /\
-    ((inst.inst_opcode = DELEGATECALL \/ inst.inst_opcode = CREATE \/
-      inst.inst_opcode = CREATE2) ==>
+    ((inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) ==>
      tn.t_stor = {} /\ tn.t_trans = {})
 End
 
@@ -665,6 +664,22 @@ Definition ctx_has_dalloca_def:
       ctx.ctx_functions
 End
 
+(* The floor of the dynamic region: DALLOCA allocates at or above the
+   initial free-memory pointer.  Without a DALLOCA it is 2^256, above
+   every site. *)
+Definition dyn_floor_def:
+  dyn_floor C (vs:venom_state) =
+    if ctx_has_dalloca C then w2n vs.vs_initial_fmp else dimword (:256)
+End
+
+(* The dynamic region [fl, 2^256) that DALLOCA allocates from holds the
+   same bytes on both sides: DALLOCA pointers are not relocated. *)
+Definition ld_dyn_agree_def:
+  ld_dyn_agree fl mask sm tm <=>
+    !i. fl <= i /\ i < dimword (:256) /\ i NOTIN mask ==>
+        read_byte i sm = read_byte i tm
+End
+
 (* ALLOCA sites lie below the initial free memory pointer, which the free
    memory pointer never drops below, so DALLOCA regions never overlap
    them.  Only asked of programs that use DALLOCA: the initial
@@ -676,6 +691,24 @@ Definition allocas_below_fmp_def:
     !aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
                b + sz <= w2n s.vs_initial_fmp
 End
+
+(* DALLOCA moves the free memory pointer up by the rounded size and leaves
+   the ALLOCA sites alone, so allocas_below_fmp holds after it as long as
+   the pointer doesn't wrap. *)
+Theorem allocas_below_fmp_dalloca:
+  inst.inst_opcode = DALLOCA /\ step_inst fuel ctx inst s = OK s' /\
+  allocas_below_fmp s /\
+  (!sz_op sz. inst.inst_operands = [sz_op] /\
+              eval_operand sz_op s = SOME sz ==>
+              w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)) ==>
+  allocas_below_fmp s'
+Proof
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  `ceil32 (w2n sz) < dimword (:256)` by decide_tac >>
+  gvs[allocas_below_fmp_def, update_var_def, word_add_def, w2n_n2w] >>
+  first_assum ACCEPT_TAC
+QED
 
 (* ALLOCA sites lie at or above lo: below it is the fixed region, which
    both runs address with the same constants. *)

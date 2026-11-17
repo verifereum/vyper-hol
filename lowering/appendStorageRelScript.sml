@@ -5,7 +5,8 @@ Ancestors
   accountsRelProps vyperStorageFrame compileEnv loweringStateRelDefs
   vyperValue vyperStorageBackend vyperStorage words vfmState venomState
    exprLoweringProps varsExt stateFrame finite_map storageCopyLive
-  vyperStorageFootprint
+  vyperStorageFootprint stmtSimAppendStorage freshWrites emitHelperProps
+  venomExecSemantics venomInst
 
 Theorem append_dead_bytes_word[local]:
   type_slot_size tv = 1 ==> ~dead_bytes st bs tv j b
@@ -487,3 +488,97 @@ Resume append_storage_agree_copy[outside]:
   qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[storage_agree_def]
 QED
 Finalise append_storage_agree_copy
+
+(* Static execution stops at the first element store, even when the caller
+   already has bindings for this fragment's temporary registers. *)
+Theorem append_storage_word_static_run_actual:
+  compile_dynarray_append cenv bop vop 1 1 dt st cap T
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
+  eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
+  (!x. (bop = Var x \/ vop = Var x) ==> not_fresh_at s0 x) /\
+  cap < dimword (:256) /\
+  w2n (if tr then tload slot ss else sload slot ss) < cap /\
+  ss.vs_call_ctx.cc_static ==>
+  ?u. state_frame u = state_frame ss /\
+    run_inst_seq (emitted_insts s0 s9) ss =
+      Abort ExHalt_abort (halt_state (set_returndata [] u))
+Proof
+  pure_rewrite_tac[compile_dynarray_append_word_parts] >> strip_tac >>
+  `eval_operand bop (drop_fresh s0 ss) = SOME slot /\
+   eval_operand vop (drop_fresh s0 ss) = SOME w` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt s0 (drop_fresh s0 ss)` by
+    simp[fresh_vars_wrt_drop_fresh] >>
+  `tload slot (drop_fresh s0 ss) = tload slot ss /\
+   sload slot (drop_fresh s0 ss) = sload slot ss` by
+    simp[drop_fresh_def, tload_def, sload_def, contract_transient_def,
+         contract_storage_def] >>
+  drule_all append_storage_guard_run >> strip_tac >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s0 s3) (drop_fresh s0 ss) = OK u3` >>
+  `eval_operand bop u3 = SOME slot /\ eval_operand vop u3 = SOME w` by
+    metis_tac[] >>
+  drule_all append_storage_address_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s3 s6) u3 = OK u6` >>
+  `eval_operand vop u6 = SOME w` by metis_tac[] >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends s0 s3 /\ inst_extends s3 s6 /\ inst_extends s0 s6` by
+    metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts s0 s6) (drop_fresh s0 ss) = OK u6` by
+    (irule run_inst_seq_compose_ok >> qexistsl_tac [`u3`, `s3`] >> simp[]) >>
+  suspend "transport"
+QED
+
+Resume append_storage_word_static_run_actual[transport]:
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+      ~is_ext_call_op i.inst_opcode) (emitted_insts s0 s6)` by
+    (`emitted_insts s0 s6 = emitted_insts s0 s3 ++ emitted_insts s3 s6 /\
+      emitted_insts s0 s3 = emitted_insts s0 s2 ++ emitted_insts s2 s3 /\
+      emitted_insts s0 s2 = emitted_insts s0 s1 ++ emitted_insts s1 s2 /\
+      emitted_insts s3 s6 = emitted_insts s3 s5 ++ emitted_insts s5 s6 /\
+      emitted_insts s3 s5 = emitted_insts s3 s4 ++ emitted_insts s4 s5` by
+       metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans] >>
+     asm_rewrite_tac[listTheory.EVERY_APPEND] >>
+     imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+     Cases_on `tr` >> gvs[mk_inst_def, is_terminator_def, is_ext_call_op_def]) >>
+  `vars_ext (drop_fresh s0 ss) ss` by simp[vars_ext_drop_fresh] >>
+  drule_all run_inst_seq_vars_ext >> simp[vars_ext_result_def] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s0 s6) ss = OK u` >>
+  `eval_operand pop u = SOME (slot+1w+(if tr then tload slot ss else sload slot ss)) /\
+   eval_operand vop u = SOME w` by
+    (qpat_assum `vars_ext u6 u` mp_tac >>
+     pure_rewrite_tac[vars_ext_def] >> strip_tac >>
+     qpat_x_assum `u = _` SUBST1_TAC >>
+     metis_tac[eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]) >>
+  `state_frame u = state_frame ss` by
+    (qpat_assum `vars_ext u6 u` mp_tac >> pure_rewrite_tac[vars_ext_def] >>
+     strip_tac >> qpat_x_assum `u = _` SUBST1_TAC >>
+     simp[] >>
+     `state_frame u6 = state_frame (drop_fresh s0 ss)` by metis_tac[] >>
+     pop_assum mp_tac >> simp[drop_fresh_def]) >>
+  `u.vs_call_ctx.cc_static` by gvs[state_frame_def] >>
+  suspend "abort"
+QED
+
+Resume append_storage_word_static_run_actual[abort]:
+  `run_inst_seq (emitted_insts s6 s7) u =
+     Abort ExHalt_abort (halt_state (set_returndata [] u))` by
+    (`emitted_insts s6 s7 =
+       [mk_inst s6.cs_next_id (if tr then TSTORE else SSTORE) [pop;vop] []]` by
+       (qpat_assum `emit_void _ [pop;vop] _ = _`
+          (mp_then Any mp_tac emitted_insts_emit_void) >> simp[]) >>
+     Cases_on `tr` >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+          eval_operands_def]) >>
+  `inst_extends s7 s9 /\ inst_extends s6 s9` by
+    metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts s6 s9) u =
+   run_inst_seq (emitted_insts s6 s7) u` by
+    (irule run_inst_seq_emit_extend_err >> simp[]) >>
+  qexists_tac `u` >> conj_tac >- gvs[] >>
+  `run_inst_seq (emitted_insts s0 s9) ss =
+   run_inst_seq (emitted_insts s6 s9) u` by
+    (irule run_inst_seq_emit_extend >> simp[]) >> simp[]
+QED
+
+Finalise append_storage_word_static_run_actual

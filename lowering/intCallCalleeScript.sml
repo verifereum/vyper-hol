@@ -1086,8 +1086,8 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem materialize_run_compact:
-  !caps cenv st cenv' st' func env s f0 mr.
+Theorem materialize_run_invariant:
+  !caps cenv st cenv' st' func env s f0 mr P.
     materialize_internal_params cenv caps st = (cenv',st') /\
     (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
          MEM i (fn_insts func)) /\
@@ -1098,11 +1098,54 @@ Theorem materialize_run_compact:
        regions_disjoint b1 sz1 b2 sz2) /\
     mat_inv func cenv env st s f0 mr /\
     s.vs_alloca_next + internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
-      < dimword (:256) ==>
+      < dimword (:256) /\ P cenv st caps s /\
+    (!ce cs us nm p tail off sz.
+       P ce cs ((nm,F,Var p)::tail) us /\
+       mat_inv func ce env cs us f0 mr /\
+       mat_pending ce env cs us f0 mr ((nm,F,Var p)::tail) /\
+       ALL_DISTINCT (MAP FST ((nm,F,Var p)::tail)) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) ==>
+       P (ce with ce_vars updated_by (\m. m |+ (nm,PtrVar (Var p) sz)))
+         cs tail us) /\
+    (!ce cs us mid ut nm p tail off sz.
+       P ce cs ((nm,T,Var p)::tail) us /\
+       mat_inv func ce env cs us f0 mr /\
+       mat_pending ce env cs us f0 mr ((nm,T,Var p)::tail) /\
+       ALL_DISTINCT (MAP FST ((nm,T,Var p)::tail)) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) /\
+       mid.cs_next_var = cs.cs_next_var + 1 /\
+       mid.cs_next_id = cs.cs_next_id + 2 /\
+       mid.cs_blocks = cs.cs_blocks /\ mid.cs_current_bb = cs.cs_current_bb /\
+       mid.cs_current_insts = cs.cs_current_insts ++
+         [mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+            [STRING #"%" (toString cs.cs_next_var)];
+          mk_inst (cs.cs_next_id + 1) MSTORE
+            [Var (STRING #"%" (toString cs.cs_next_var));Var p] []] /\
+       MEM (mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+              [STRING #"%" (toString cs.cs_next_var)]) (fn_insts func) /\
+       us.vs_alloca_next + sz < dimword (:256) /\
+       run_inst_seq
+         [mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+            [STRING #"%" (toString cs.cs_next_var)];
+          mk_inst (cs.cs_next_id + 1) MSTORE
+            [Var (STRING #"%" (toString cs.cs_next_var));Var p] []] us = OK ut /\
+       mat_inv func
+         (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         env mid ut f0 mr /\
+       mat_pending
+         (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         env mid ut f0 mr tail /\ mat_frame cs us ut /\
+       ut.vs_alloca_next = us.vs_alloca_next + sz ==>
+       P (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         mid tail ut) ==>
     ?t. run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
         mat_inv func cenv' env st' t f0 mr /\ mat_frame st s t /\
         t.vs_alloca_next = s.vs_alloca_next +
-          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps) /\
+        P cenv' st' [] t
 Proof
   Induct
   >- (simp[materialize_internal_params_def, comp_return_def,
@@ -1119,7 +1162,7 @@ Proof
   suspend "memory"
 QED
 
-Resume materialize_run_compact[memory]:
+Resume materialize_run_invariant[memory]:
   gvs[Once materialize_internal_params_def, internal_stack_size_def] >>
   qmatch_asmsub_abbrev_tac `materialize_internal_params ce caps st` >>
   `internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps) =
@@ -1127,14 +1170,21 @@ Resume materialize_run_compact[memory]:
     (simp[Abbr `ce`] >> irule mat_tail_stack_size >> simp[]) >>
   qpat_assum `internal_stack_size ce _ = _`
     (fn th => rewrite_tac[GSYM th]) >>
-  first_x_assum irule >> simp[] >> conj_tac
-  >- (first_assum ACCEPT_TAC) >> conj_tac
-  >- (simp[Abbr `ce`] >> irule mat_inv_memory_bind >>
-      simp[] >> first_assum ACCEPT_TAC) >>
-  simp[Abbr `ce`] >> irule mat_pending_bind >>
-  simp[] >> qexistsl_tac [`s`, `st`] >> simp[mat_frame_refl]
+  `P ce st caps s` by
+    (qpat_x_assum `!ce cs us nm p tail off sz. _`
+       (drule_all o SRULE []) >> simp[Abbr `ce`]) >>
+  `mat_inv func ce env st s f0 mr` by
+    (simp[Abbr `ce`] >> irule mat_inv_memory_bind >>
+     simp[] >> first_assum ACCEPT_TAC) >>
+  `mat_pending ce env st s f0 mr caps` by
+    (simp[Abbr `ce`] >> irule mat_pending_bind >>
+     simp[] >> qexistsl_tac [`s`, `st`] >> simp[mat_frame_refl]) >>
+  `s.vs_alloca_next + internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps)
+     < dimword (:256)` by gvs[] >>
+  qpat_x_assum `!cenv st cenv' st' func env s f0 mr P. _`
+    (drule_all o SRULE []) >> simp[]
 QED
-Resume materialize_run_compact[stack]:
+Resume materialize_run_invariant[stack]:
   gvs[] >>
   drule_all materialize_stack_split >> strip_tac >>
   qmatch_asmsub_abbrev_tac `materialize_internal_params ce caps mid` >>
@@ -1155,7 +1205,13 @@ Resume materialize_run_compact[stack]:
   `!i. MEM i (DROP (LENGTH mid.cs_current_insts) st'.cs_current_insts) ==>
        MEM i (fn_insts func)` by
     (rpt strip_tac >> qpat_x_assum `!i. MEM i _ ==> _` irule >> gvs[]) >>
-  qpat_x_assum `!cenv st cenv' st' func env s f0 mr. _` drule_all >> strip_tac >>
+  `P ce mid caps t` by
+    (qpat_x_assum `!ce cs us mid ut nm p tail off sz. _`
+       (qspecl_then [`cenv`, `st`, `s`, `mid`, `t`, `h0`, `p`,
+                      `caps`, `off`, `sz`] mp_tac) >>
+     impl_tac >- gvs[Abbr `ce`] >> simp[Abbr `ce`]) >>
+  qpat_x_assum `!cenv st cenv' st' func env s f0 mr P. _`
+    (drule_all o SRULE []) >> strip_tac >>
   qexists_tac `t'` >> conj_tac
   >- (qpat_x_assum `DROP _ _ = _` (fn th => rewrite_tac[th]) >>
       qpat_assum `run_inst_seq [_;_] s = OK t`
@@ -1164,7 +1220,31 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact[local]
+Finalise materialize_run_invariant
+
+Theorem materialize_run_compact[local]:
+  !caps cenv st cenv' st' func env s f0 mr.
+    materialize_internal_params cenv caps st = (cenv',st') /\
+    (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
+         MEM i (fn_insts func)) /\
+    fn_inst_ids_distinct func /\ ALL_DISTINCT (MAP FST caps) /\
+    mat_pending cenv env st s f0 mr caps /\
+    (!n1 n2 b1 sz1 b2 sz2.
+       n1 <> n2 /\ mr n1 = SOME (b1,sz1) /\ mr n2 = SOME (b2,sz2) ==>
+       regions_disjoint b1 sz1 b2 sz2) /\
+    mat_inv func cenv env st s f0 mr /\
+    s.vs_alloca_next + internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+      < dimword (:256) ==>
+    ?t. run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
+        mat_inv func cenv' env st' t f0 mr /\ mat_frame st s t /\
+        t.vs_alloca_next = s.vs_alloca_next +
+          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`caps`, `cenv`, `st`, `cenv'`, `st'`, `func`, `env`,
+    `s`, `f0`, `mr`, `(\ce cs todo u. T)`] materialize_run_invariant) >>
+  simp[] >> metis_tac[]
+QED
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
@@ -1413,6 +1493,112 @@ Proof
        lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_inj] >>
   fs[fresh_vars_wrt_def] >> rpt strip_tac >>
   first_x_assum irule >> decide_tac
+QED
+
+Theorem compile_internal_entry_prefix_run:
+  !cenv params has_rb st ce caps rpc st' s.
+    compile_internal_entry_prefix cenv params has_rb st =
+      ((ce,caps,rpc),st') /\
+    fresh_vars_wrt st s /\
+    (if has_rb then 1 else 0) + LENGTH params <= LENGTH s.vs_params /\
+    LENGTH s.vs_params < dimword (:256) ==>
+    ?t x.
+      run_inst_seq (emitted_insts st st') s = OK t /\
+      t = s with vs_vars := t.vs_vars /\ fresh_vars_wrt st' t /\
+      rpc = Var x /\ not_fresh_at st' x /\
+      lookup_var x t = SOME s.vs_return_pc_token /\
+      (!i. i < LENGTH params ==>
+        ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at st' p /\
+            lookup_var p t =
+              SOME (EL ((if has_rb then 1 else 0) + i) s.vs_params)) /\
+      (!p. not_fresh_at st p ==> lookup_var p t = lookup_var p s)
+Proof
+  rpt gen_tac >>
+  simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  PairCases_on `pr` >> gvs[] >>
+  `has_rb ==> s.vs_params <> []` by
+    (strip_tac >> Cases_on `s.vs_params` >> gvs[]) >>
+  drule_all capture_internal_return_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st stb) s = OK u` >>
+  `u.vs_params = s.vs_params /\
+   u.vs_return_pc_token = s.vs_return_pc_token` by
+    (qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
+  `(if has_rb then 1 else 0) + LENGTH params <= LENGTH u.vs_params /\
+   LENGTH u.vs_params < dimword (:256)` by fs[] >>
+  drule_all capture_internal_params_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts stb st') u = OK t` >>
+  `st.cs_next_var <= stb.cs_next_var` by
+    (qpat_x_assum `(if has_rb then _ else _) st = _` mp_tac >>
+     Cases_on `has_rb` >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >> gvs[]) >>
+  qexistsl_tac [`t`, `x`] >> conj_tac
+  >- (drule_all run_inst_seq_chain >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `t = _` SUBST1_TAC >>
+      qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
+  fs[] >> rpt conj_tac
+  >~ [`lookup_var _ _ = SOME _`]
+  >- metis_tac[]
+  >>
+  rpt strip_tac >>
+  `not_fresh_at stb p` by fs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem compile_internal_entry_prefix_capture_code:
+  !cenv params has_rb st ce caps rpc st'.
+    compile_internal_entry_prefix cenv params has_rb st =
+      ((ce,caps,rpc),st') ==>
+    EVERY (\inst.
+      MEM inst.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
+      ?idx out. inst.inst_operands = [Lit idx] /\
+                inst.inst_outputs = [out]) (emitted_insts st st')
+Proof
+  rpt gen_tac >> Cases_on `has_rb` >>
+  simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def,
+       emit_op_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule compile_internal_param_decls_shape >> strip_tac >>
+  gvs[emitted_insts_def, DROP_LENGTH_APPEND, EVERY_GENLIST, mk_inst_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[EVERY_GENLIST, mk_inst_def]
+QED
+
+Theorem compile_internal_entry_prefix_shape:
+  !cenv params has_rb st ce caps rpc st'.
+    compile_internal_entry_prefix cenv params has_rb st =
+      ((ce,caps,rpc),st') ==>
+    emitted_insts st st' =
+      GENLIST (\i. mk_inst (st.cs_next_id + i) PARAM [Lit (n2w i)]
+        [STRING #"%" (toString (st.cs_next_var + i))])
+        ((if has_rb then 1 else 0) + LENGTH params) ++
+      [mk_inst (st.cs_next_id + (if has_rb then 1 else 0) + LENGTH params)
+        RETPC_PARAM [Lit (n2w ((if has_rb then 1 else 0) + LENGTH params))]
+        [STRING #"%" (toString
+          (st.cs_next_var + (if has_rb then 1 else 0) + LENGTH params))]] /\
+    rpc = Var (STRING #"%" (toString
+      (st.cs_next_var + (if has_rb then 1 else 0) + LENGTH params))) /\
+    (!i. i < LENGTH params ==>
+      SND (SND (EL i caps)) = Var (STRING #"%" (toString
+        (st.cs_next_var + (if has_rb then 1 else 0) + i)))) /\
+    ce.ce_vars = cenv.ce_vars /\
+    ce.ce_return_pc = SOME (PtrVar rpc 0) /\
+    (has_rb ==> !off sz. cenv.ce_return_buf = SOME (MemLoc off sz) ==>
+      ce.ce_return_buf =
+        SOME (PtrVar (Var (STRING #"%" (toString st.cs_next_var))) sz))
+Proof
+  rpt gen_tac >> Cases_on `has_rb` >>
+  simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def,
+       emit_op_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule compile_internal_param_decls_shape >> strip_tac >>
+  gvs[emitted_insts_def, DROP_LENGTH_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[GSYM arithmeticTheory.ADD1, GENLIST_CONS, combinTheory.o_DEF,
+       GENLIST_FUN_EQ, arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_CLAUSES]
 QED
 
 (* ===== The callee's entry ===== *)

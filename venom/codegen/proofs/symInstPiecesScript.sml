@@ -815,9 +815,11 @@ Theorem sym_named_inst_symbolic_run:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) /\
     dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
     label_flow_ok ctx /\
-    (!op w. inst.inst_opcode = ADD /\
-            inst.inst_operands = [op; Label "code_end"] /\
-            eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) /\
+    (!dst x sz w off. inst.inst_opcode = CODECOPY /\
+      inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
+      eval_operand (Var x) vs = SOME w /\
+      FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+      w2n (w - n2w off) < dimword (:256) DIV 2) /\
     sym_data_label prog env "code_end" /\
     (MEM (Label "runtime_begin") inst.inst_operands ==>
      sym_data_label prog env "runtime_begin") /\ asm_static_wf prog /\

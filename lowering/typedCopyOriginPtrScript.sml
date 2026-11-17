@@ -111,7 +111,7 @@ Theorem compile_store_memory_typed_origin_ptr_path:
    w2n dw + type_memory_size dtv <= w2n sw) /\
   ptr_covers G tn xs s (type_memory_size stv) /\
   ptr_covers G tn xd s (type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

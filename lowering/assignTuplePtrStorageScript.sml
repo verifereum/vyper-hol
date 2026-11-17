@@ -144,8 +144,8 @@ Theorem storage_word_endpoint_inv_ptr:
 Proof
   strip_tac >>
   `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule tuple_target_storage_scope_frame >> strip_tac >>
   conj_tac >- simp[stmt_state_rel_inst_idx] >>
@@ -178,7 +178,11 @@ Theorem tuple_storage_store_head_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK t)
 Proof
   strip_tac >>
-  `~s.vs_call_ctx.cc_static` by gvs[stmt_state_rel_def, state_rel_def] >>
+  `~cx.txn.is_static` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all emit_storage_zero_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 G tn1 (OK t)` >>

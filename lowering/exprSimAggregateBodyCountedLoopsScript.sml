@@ -89,13 +89,14 @@ Theorem aggregate_struct_fields_body_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\H res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit H cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   `compile_make_tuple compile_expr ce (MAP SND fields) tys (Var x) off sa = (out,sb)` by
     metis_tac[compile_struct_lit_as_tuple] >>
   mp_tac (Q.INST [`args` |-> `MAP SND (fields : (string # expr) list)`]
-    (SPEC_ALL aggregate_body_make_tuple_fits_sim)) >>
+    (SPEC_ALL aggregate_body_make_tuple_fits_full_exit_sim)) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   strip_tac >> simp[] >>
   irule counted_outcome_conseq >> goal_assum (drule_at Any) >> simp[] >>

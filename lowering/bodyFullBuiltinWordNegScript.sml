@@ -501,7 +501,6 @@ Theorem word_neg_continuation_full:
   (!z. x = Var z ==> not_fresh_at s1 z) /\
   cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
   fn_has_code s1 sb func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -514,6 +513,7 @@ Theorem word_neg_continuation_full:
        expr_store_bound cx (expr_type e) v x t /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t /\
+       (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
        s0.vs_alloca_next <= t.vs_alloca_next /\
        ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
        ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
@@ -527,13 +527,16 @@ Theorem word_neg_continuation_full:
           expr_post H ctx func cenv cx (Builtin (expr_type e) Neg [e]) es sa sb s0 ee v op t /\
           expr_store_bound cx (expr_type (Builtin (expr_type e) Neg [e])) v op t /\
           t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           ptr_val_ok cx (expr_type (Builtin (expr_type e) Neg [e])) v op G tn t /\
           (~is_word_type (expr_type (Builtin (expr_type e) Neg [e])) ==>
              ptr_buf_ok cenv (Builtin (expr_type e) Neg [e]) op G t) /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -639,6 +642,11 @@ Proof
       >- (drule_all word_neg_runtime_frame >> strip_tac >>
           first_x_assum (qspecl_then [`func`, `bb`] mp_tac) >> simp[]) >>
       conj_tac
+      >- (qpat_assum `t' = t with vs_vars := _` SUBST_ALL_TAC >>
+          qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          simp[ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+      conj_tac
       >- (qpat_x_assum `ghost_inv_at _ _ _ _ _ mid _ _ (_ with vs_inst_idx := _)`
             mp_tac >>
           qpat_assum `t.vs_inst_idx = _` mp_tac >>
@@ -666,7 +674,8 @@ Proof
     `Abort Revert_abort (u with vs_inst_idx := SUC t.vs_inst_idx)`,
     `INR (Error (RuntimeError m))`, `tn'`] >>
   simp[exprSimUnopComposePropsTheory.unop_result_gas_obs,
-       fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
+       fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem word_neg_sim_full:
@@ -756,7 +765,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,
                            `x`, `s0`, `G0`, `tn0`] mp_tac) >>
-  simp[] >> disch_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> disch_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ NegChildPost _` >>
   simp[eval_expr_unop_action] >>
   irule gas_outcome_full_bind_all >>
@@ -786,6 +795,10 @@ Proof
   rpt conj_tac
   >- (qexists_tac `marks` >> asm_rewrite_tac[])
   >- gvs[]
-  >- (qexistsl_tac [`s1`, `x`] >> simp[] >> metis_tac[]) >>
+  >- (qexistsl_tac [`s1`, `x`] >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      simp[loweringPostsTheory.post_value_type_word] >> metis_tac[]) >>
   qexists_tac `env` >> asm_rewrite_tac[])
 QED

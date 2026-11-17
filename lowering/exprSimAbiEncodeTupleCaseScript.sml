@@ -202,12 +202,17 @@ Resume compile_abi_encode_tuple_vv_case[normal]:
     (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
   disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
     (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  `fres <> INR HaltException` by
+    (qpat_assum `gas_marked_exec _ _ (\ee. _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     BETA_TAC >> CASE_TAC >> rpt strip_tac >> gvs[]) >>
   rewrite_tac[gas_summary_at_def] >> BETA_TAC >> disch_tac >>
   qexistsl [`fres`, `fin`, `fr`] >>
   (conj_tac >- (irule gas_marked_exec_bind_normal >>
     goal_assum (drule_at (Pat `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`)) >>
     BETA_TAC >> first_assum ACCEPT_TAC)) >>
-  metis_tac[]
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 Resume compile_abi_encode_tuple_vv_case[exit]:
@@ -217,8 +222,8 @@ Resume compile_abi_encode_tuple_vv_case[exit]:
   qexists `marks` >> disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INR exc`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  Cases_on `exc` >> Cases_on `r` >> gvs[wb_args_exit_def, expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
+  Cases_on `exc` >> Cases_on `r` >> gvs[wb_args_exit_def, expr_exit_def, halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def, halt_exit_def]
 QED
 
 Resume compile_abi_encode_tuple_vv_case[success]:

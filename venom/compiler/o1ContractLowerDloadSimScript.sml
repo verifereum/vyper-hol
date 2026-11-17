@@ -256,7 +256,7 @@ QED
 
 Theorem lower_dload_stage_root_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_safe_upto D lo ncut C vs /\ 0 < ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\ enters_block fn ^ldS0 s1 ==>
@@ -285,7 +285,7 @@ Proof
        (strip_assume_tac o REWRITE_RULE [contextCodegenRelTheory.enters_block_def]) >>
      imp_res_tac gas_count_phis_ok >> gvs[gas_cut_def]) >>
   drule_all ld_wf_enters_block_fetch >> strip_tac >>
-  drule_all ld_joint_entry >> strip_tac >>
+  drule_all ld_joint_entry_static >> strip_tac >>
   qexistsl_tac [`fn'`, `inst`, `bb`] >> simp[]
 QED
 
@@ -330,7 +330,7 @@ QED
 (* The run of the entry function, cut after its first j events. *)
 Theorem ld_root_simulation_events_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs /\
   0 < j /\ j <= ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
@@ -386,7 +386,7 @@ QED
 
 Theorem ld_root_simulation:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs /\
   0 < j /\ j <= ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
@@ -414,7 +414,7 @@ QED
 Theorem lower_dload_stage_sim_events_fuel:
   !rpolicy D view C C' vs names fuel.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
     terminates (run_context fuel C vs) ==>
     ?name fn fn' lbl.
@@ -447,7 +447,7 @@ QED
 Theorem lower_dload_stage_sim_events:
   !rpolicy D view C C' vs names fuel.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
     terminates (run_context fuel C vs) ==>
     ?fuel' name fn fn' lbl.
@@ -469,7 +469,7 @@ QED
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim D C C' vs vs
 Proof
@@ -479,10 +479,10 @@ Proof
 QED
 
 (* Event matching also fixes the target interpreter budget. *)
-Theorem lower_dload_stage_sim_fuel:
+Theorem lower_dload_stage_sim_fuel_static:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim_fuel I D C C' vs vs
 Proof
@@ -490,11 +490,22 @@ Proof
   drule_all lower_dload_stage_sim_events_fuel >> strip_tac >> simp[]
 QED
 
+Theorem lower_dload_stage_sim_fuel:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    ctx_sim_fuel I D C C' vs vs
+Proof
+  rpt strip_tac >> irule lower_dload_stage_sim_fuel_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
 (* The first n events of a run inside the cut, with no termination. *)
 Theorem lower_dload_stage_events_upto:
   !rpolicy D view C C' vs names lo n fuel name fn lbl.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     callee_first names C.ctx_functions /\ o1_safe_upto D lo n C vs /\
     C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\

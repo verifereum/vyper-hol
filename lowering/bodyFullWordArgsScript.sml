@@ -47,7 +47,7 @@ Theorem lower_word_args_sim_full:
         ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
         EVERY (\x. op_taint tn x = {}) xs)
-      (\H rr mid gt r. wb_args_exit rr r)
+      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil] >> rpt strip_tac >>
@@ -104,11 +104,17 @@ Proof
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `s1'`, `x`,
     `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -127,7 +133,8 @@ Proof
       goal_assum (drule_at Any) >> conj_tac
       >- simp[] >>
       simp[Abbr `headR`, wb_args_exit_def] >>
-      Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+      Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def,
+        exprSimDefsTheory.halt_exit_def]) >>
   BETA_TAC >> rpt gen_tac >> strip_tac >>
   `?v. res = INL v` by
     (qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
@@ -185,7 +192,7 @@ Proof
         ghost_inv_at (DF H) lo d cenv cx fin G tn u /\
         ghost_kept_at lo cenv mid s1 G1 tn1 t G tn /\
         EVERY (\x. op_taint tn x = {}) ys)
-      (\H rr fin gt r. wb_args_exit rr r)` by
+      (\H rr fin gt r. wb_args_exit rr r /\ halt_exit H cx fin rr r)` by
     (first_x_assum irule >> simp[] >>
      rpt conj_tac
      >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
@@ -221,7 +228,7 @@ Proof
     (fn th => irule_at Any th) >>
   reverse conj_tac
   >- (simp[Abbr `Rtail`] >> rpt strip_tac >>
-      Cases_on `res'` >> gvs[wb_args_exit_def]) >>
+      Cases_on `res'` >> gvs[wb_args_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   simp[Abbr `Qtail`] >> rpt strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
     (`valid_horizon cx st0 H (mid with gas_obs := xs).storage_trace` suffices_by simp[] >>

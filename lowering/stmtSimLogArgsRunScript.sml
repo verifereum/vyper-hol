@@ -78,7 +78,7 @@ Definition log_args_res_ok_def:
     !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)
 End
 
-Theorem log_head_admissible[local]:
+Theorem log_head_admissible:
   gas_admissible (eval_exprs cx (e::args)) log_args_res_ok es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
 Proof
@@ -89,7 +89,7 @@ Proof
   first_x_assum drule >> simp[log_args_res_ok_def]
 QED
 
-Theorem log_tail_admissible[local]:
+Theorem log_tail_admissible:
   gas_admissible (eval_exprs cx (e::args)) log_args_res_ok es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
             (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)) ==>
@@ -139,7 +139,7 @@ Theorem compile_log_eval_all_gas:
                                value_has_type tv v) (MAP expr_type args) vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
@@ -294,7 +294,11 @@ Resume compile_log_eval_all_gas[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> rpt (pop_assum kall_tac) >>
+  simp[halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 Resume compile_log_eval_all_gas[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>

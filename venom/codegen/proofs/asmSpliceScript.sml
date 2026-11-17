@@ -627,7 +627,7 @@ Definition sym_state_labels_in_def:
     (∀i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l, d, j) ⇒ MEM l refs)
 End
 
-Theorem sym_set_stack_labels_in[local]:
+Theorem sym_set_stack_labels_in:
   sym_state_labels_in refs ss ∧ (∀l d. MEM (Lab l d) stk ⇒ MEM l refs) ∧
   sym_set_stack stk ss = SymOK ss' ⇒ sym_state_labels_in refs ss'
 Proof
@@ -643,7 +643,7 @@ Proof
   qpat_assum `_ = SymOK ss'` (irule_at Any) >> rw[] >> gvs[] >> metis_tac[]
 QED
 
-Theorem sym_lift_labels_in[local]:
+Theorem sym_lift_labels_in:
   sym_state_labels_in refs ss ∧
   (∀i l d j. FLOOKUP labs i = SOME (l, d, j) ⇒ MEM l refs) ∧
   sym_lift k labs ss r = SymOK ss' ⇒ sym_state_labels_in refs ss'
@@ -653,7 +653,7 @@ Proof
   metis_tac[rich_listTheory.MEM_DROP_IMP]
 QED
 
-Theorem mem_labels_clear_lookup[local]:
+Theorem mem_labels_clear_lookup:
   FLOOKUP (mem_labels_clear m P) i = SOME v ⇒ FLOOKUP m i = SOME v
 Proof
   rw[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
@@ -828,7 +828,7 @@ QED
 
 (* ===== Refinement ===== *)
 
-Theorem splice_fetch[local]:
+Theorem splice_fetch:
   pat <> [] /\ (i < LENGTH pfx \/ LENGTH pfx + LENGTH pat <= i) /\
   i < LENGTH (pfx ++ pat ++ sfx) ==>
   splice_pc (LENGTH pfx) (LENGTH pat) (LENGTH repl) i <
@@ -846,7 +846,7 @@ Proof
   gvs[listTheory.LENGTH_APPEND]
 QED
 
-Theorem splice_pc_next[local]:
+Theorem splice_pc_next:
   0 < m /\ (i < k \/ k + m <= i) ==>
   splice_pc k m n (i + 1) = splice_pc k m n i + 1 /\
   (i + 1 <= k \/ k + m <= i + 1)
@@ -911,7 +911,7 @@ Proof
       sym_result_rel_def, sym_obs_def]
 QED
 
-Theorem splice_headers[local]:
+Theorem splice_headers:
   asm_splice_ok pat repl ==>
   (!l. MEM (AsmDataHeader l) (pfx ++ pat ++ sfx) <=>
        MEM (AsmDataHeader l) (pfx ++ repl ++ sfx))
@@ -922,7 +922,7 @@ Proof
   simp[]
 QED
 
-Theorem splice_jump_ok[local]:
+Theorem splice_jump_ok:
   pat <> [] /\
   (!l. MEM (AsmLabel l) pat ==> ~MEM l (asm_label_refs (pfx ++ pat ++ sfx))) /\
   (!l. ~MEM (AsmLabel l) repl) /\
@@ -945,7 +945,7 @@ Proof
   gvs[sym_with_pc_def, sym_jump_dest_def] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
 QED
 
-Theorem splice_fallthrough_ok[local]:
+Theorem splice_fallthrough_ok:
   pat <> [] /\
   (ss.sym_base.as_pc < LENGTH pfx \/
     LENGTH pfx + LENGTH pat <= ss.sym_base.as_pc) /\
@@ -1020,7 +1020,7 @@ Proof
     ss.sym_base.as_pc` mp_tac) >> gvs[]
 QED
 
-Theorem sym_jumps_not_terminal[local]:
+Theorem sym_jumps_not_terminal:
   ~sym_terminal (sym_jump p ss) /\ ~sym_terminal (sym_jumpi p ss)
 Proof
   namedCases_on `ss.sym_stack` ["", "dest rest"] >>

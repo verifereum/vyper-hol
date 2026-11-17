@@ -12,7 +12,7 @@ Ancestors
   exprSimHypsDefs bodySimConvertWidenedFromBytes exprSimConvert exprSimStack
   staticTypeFitsPtr
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* A conversion whose operand is an internal call whose type widens its

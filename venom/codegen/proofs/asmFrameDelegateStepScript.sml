@@ -656,3 +656,56 @@ Resume asm_frame_delegate_step[entered]:
 QED
 
 Finalise asm_frame_delegate_step
+
+Theorem asm_frame_delegate_success_not_last:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  run_call s = SOME (r,final) /\ ~frame_resource_starved es0 r final /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 ==>
+  ~frame_last s
+Proof
+  strip_tac >>
+  `?c rb rest. s.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ?d. s.msdomain = Collect d` by fs[asm_frame_rel_def] >>
+  `next_opcode c = SOME DelegateCall` by
+    (drule_all asm_frame_delegate_decode >> simp[]) >>
+  Cases_on `asm_call_prepare DelegateCall s` >>
+  rename1 `asm_call_prepare DelegateCall s = (q,u)` >> Cases_on `q`
+  >- (PairCases_on `x` >> irule asm_call_prepared_not_last >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
+  Cases_on `6 <= LENGTH c.stack`
+  >- (rename1 `asm_call_prepare DelegateCall s = (INR e,u)` >>
+      `asm_call_prepare StaticCall s = (INR e,u)` by
+        fs[asm_call_prepare_delegate] >>
+      `e = SOME OutOfGas` by
+        (qpat_x_assum `asm_call_prepare DelegateCall _ = _` kall_tac >>
+         drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_failure_view >>
+         disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+         simp[call_has_value_def] >> metis_tac[]) >>
+      `u.contexts = (c with stack := DROP 6 c.stack,rb)::rest /\
+       u.txParams = s.txParams` by
+        (qpat_x_assum `asm_call_prepare DelegateCall _ = _` kall_tac >>
+         drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_failure_view >>
+         disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+         simp[call_has_value_def] >> metis_tac[]) >>
+      `step_call DelegateCall s = (INR (SOME OutOfGas),u)` by
+        simp[asm_step_call_factor, bind_def] >>
+      `step s = handle_step (SOME OutOfGas) u` by
+        (irule asm_call_step_terminal >> simp[] >> metis_tac[]) >>
+      `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)` by
+        (fs[asm_evm_rel_def] >> Cases_on `c.msgParams.outputTo` >> gvs[]) >>
+      `step_inst DelegateCall s = (INR (SOME OutOfGas),u)` by simp[step_inst_def] >>
+      mp_tac (Q.INST [`op` |-> `DelegateCall`, `n` |-> `6`, `t` |-> `u`]
+        asm_step_oog_starved) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >> disch_then strip_assume_tac >>
+      `frame_resource_starved es0 r s'` by
+        (fs[asm_frame_rel_def] >> drule_all frame_resource_starved_mid >> simp[]) >>
+      gvs[]) >>
+  `LENGTH a.as_stack < 6` by metis_tac[arithmeticTheory.NOT_LESS_EQUAL] >>
+  drule asm_delegate_underflow >>
+  disch_then (qspecl_then [`build_offset_to_pc prog`,
+    `SND (compute_label_offsets prog)`] assume_tac) >> gvs[]
+QED

@@ -528,7 +528,8 @@ Theorem immutable_compiled_loop_outcome:
        storage_well_formed_on cx ee (FST H) /\ array_caller_frame st s t /\
        alloca_frame cenv es st s cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
@@ -733,7 +734,8 @@ Proof
       storage_well_formed_on cx ee (FST H) /\
       array_caller_frame st1 u t /\ alloca_frame cenv es st1 u cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)` by
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)` by
     (irule (SRULE [DROP_0, array_loop_inv_next_id, ret_pc_ok_next_id]
        (Q.INST [`k` |-> `0`, `st` |-> `st with cs_next_id := st1.cs_next_id`]
          (SPEC_ALL immutable_for_loop_counted))) >>

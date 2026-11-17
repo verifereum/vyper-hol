@@ -77,7 +77,7 @@ Proof
 QED
 
 (* Outside the bytestrings, a value's store size is its type's. *)
-Theorem val_store_size_non_bytestring[local]:
+Theorem val_store_size_non_bytestring:
   ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
   val_store_size tv v = type_memory_size tv
 Proof
@@ -257,6 +257,9 @@ Proof
      disch_then drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
      simp[regions_disjoint_def] >> decide_tac) >>
+  `LENGTH s.vs_memory <= LENGTH (mcopy dst src sz s).vs_memory` by
+    (simp_tac bool_ss [mcopy_def, LET_THM] >>
+     irule venomMemPropsTheory.write_memory_with_expansion_nondecreasing) >>
   irule result_state_memory_frame >> reverse conj_tac
   >- (qexists_tac `s` >> simp[] >>
   rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>

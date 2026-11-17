@@ -241,7 +241,8 @@ Theorem sha256_expr_sim_mem_suffix:
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
@@ -308,7 +309,7 @@ Proof
           rewrite_tac[gas_summary_at_def] >>
           qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[])
       >> Cases_on `res`
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
             (drule_then mp_tac) >> simp[]) >>
       rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -316,7 +317,10 @@ Proof
       qexistsl_tac [`INR exc`, `es_end`, `r`] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       BETA_TAC >> disj2_tac >> simp[] >> rpt strip_tac >>
-      first_x_assum irule >> metis_tac[]) >>
+      qpat_x_assum `!H exc ee r. expr_exit _ _ /\ _ ==> _` irule >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+        (qspec_then `H` (drule_then strip_assume_tac)) >>
+      fs[halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = bind (eval_expr cx e) (read_result cx)` >>
   `ignore_bind (bind a k) (return ()) =
@@ -381,7 +385,7 @@ Proof
   first_assum (irule_at (Pat `expr_sim_mem _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> fs[halt_exit_def] >> metis_tac[expr_exit_INR_cast]) >>
   conj_tac >- simp[exprSimHashTheory.sha256_continuation_frame] >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -393,6 +397,11 @@ Proof
             | INL w => (do precompile_call_success Sha256;
                            return (Value w) od) ee` >>
   rename1 `_ = (res, es2)` >>
+  `res <> INR HaltException` by
+    (qpat_assum `_ = (res, es2)` mp_tac >>
+     simp[builtin_result_def, sha256_source_outcome_step,
+          ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
   `expr_vv_res_ok res` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      disch_then irule >> gvs[]) >>
@@ -411,7 +420,8 @@ Proof
   qexists `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl [`res`, `es2`, `r`] >>
-  simp[vyperASTTheory.expr_type_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  simp[vyperASTTheory.expr_type_def, halt_exit_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem compile_sha256_typed_vv_sim_mem:

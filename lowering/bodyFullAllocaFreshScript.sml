@@ -13,7 +13,7 @@
  *)
 Theory bodyFullAllocaFresh
 Ancestors
-  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr
+  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr exprPtrUnwrapAllocation
   bodyPtrIfExpAllocLocals bodyPtrStructLitMonotoneRepresentation
   ptrSafetyTransport fragExecPtr fragGasSeqPtr fragExecMem instMemFrontier
   decoderGhostFramePtr abiBuiltinAllocation emitHelperProps exprLoweringProps
@@ -77,7 +77,7 @@ Theorem alloc_buffer_origin_ptr_path_exact:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
@@ -145,7 +145,9 @@ Proof
          (step_prov PG G ins t) (step_taint ins s t tn)` by
     (gen_tac >> simp[inst_seq_ptr_def] >>
      irule ptr_inst_ok_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[Abbr `ins`, ptr_inst_ok_alloca]) >>
+     qexists_tac `0` >> simp[Abbr `ins`] >>
+     irule unwrap_alloc_ptr_check >> simp[allocas_from_def] >>
+     qexists_tac `t` >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
               ~is_terminator i.inst_opcode) [ins]` by
     simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
@@ -209,7 +211,7 @@ Theorem alloc_buffer_origin_ptr_path:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
@@ -250,9 +252,12 @@ QED
 
 (* TOP-LEVEL: ghost_inv_at across the buffer's ALLOCA, stated over
    alloc_buffer_origin_ptr_path's conclusion. *)
-Theorem alloc_buffer_ghost_inv_at_locals:
+Theorem alloc_buffer_ghost_inv_at_vars:
   ghost_inv_at D lo d cenv cx es G tn s /\
-  local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_rel func cenv es.scopes s /\
+  (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+     not_fresh_at sa p) /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -286,7 +291,7 @@ Proof
   qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_at_def] >> strip_tac >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      `not_fresh_at sa p` by metis_tac[] >>
       first_x_assum (drule_all_then strip_assume_tac) >>
       conj_tac >- metis_tac[] >>
       rpt strip_tac >>
@@ -315,10 +320,37 @@ Proof
   >- fs[stor_taint_ok_at_def]
   >- (rpt strip_tac >> `i IN tn.t_mem` by (first_x_assum irule >> simp[]) >>
       metis_tac[])
-  >- (rpt strip_tac >> `not_fresh_at sa x` by fs[local_ptrs_reserved_def] >>
+  >- (rpt strip_tac >> `not_fresh_at sa x` by metis_tac[] >>
       metis_tac[])
   >- simp[] >>
   decide_tac
+QED
+
+Theorem alloc_buffer_ghost_inv_at_locals:
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  t with <| vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+            vs_alloca_next := s.vs_alloca_next;
+            vs_inst_idx := s.vs_inst_idx |> = s /\
+  allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  tn'.t_imm = tn.t_imm /\
+  (!i. i IN tn'.t_mem <=>
+       i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < e)) ==>
+  ghost_inv_at D lo d cenv cx es G' tn' t
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`s` |-> `s`, `G` |-> `G`, `tn` |-> `tn`,
+    `sa` |-> `sa`, `e` |-> `e`, `func` |-> `func`]
+    alloc_buffer_ghost_inv_at_vars) >>
+  impl_tac >- (simp[] >> fs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]
 QED
 
 Theorem alloc_buffer_ghost_inv_at:
@@ -375,8 +407,5 @@ Proof
   >- (rpt strip_tac >>
       `b + sz <= s.vs_alloca_next` by metis_tac[] >>
       `i IN tn.t_mem` by (first_x_assum irule >> simp[]) >>
-      metis_tac[]) >>
-  rpt strip_tac >>
-  `i IN tn.t_mem` by (first_x_assum irule >> simp[]) >>
-  metis_tac[]
+      metis_tac[])
 QED

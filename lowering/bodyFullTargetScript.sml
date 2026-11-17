@@ -86,14 +86,22 @@ Proof
   drule_all body_target_sim_full >>
   disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
                            `shadow_func`] assume_tac) >>
-  simp[target_place_sim_full_def, eval_target_place_as_bind] >>
+  `eval_target_place cx bt = bind (eval_base_place cx bt) get_place` by
+    (simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
+  qpat_x_assum `eval_target_place _ _ = _`
+    (fn th => simp[target_place_sim_full_def, th]) >>
   rpt gen_tac >> strip_tac >>
-  drule get_place_base_admissible >> strip_tac >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (qpat_x_assum `gas_admissible (bind _ get_place) _ _` mp_tac >>
+     rewrite_tac[gas_admissible_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `gs` mp_tac) >>
+     Cases_on `res` >> simp[bind_def, target_res_ok_def] >>
+     simp[target_place_res_ok_def]) >>
   qpat_x_assum `target_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [target_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `shadow_sa`,
                            `shadow_sb`, `r`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
@@ -119,7 +127,10 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
-  metis_tac[expr_exit_INR_retype]
+  conj_tac
+  >- (qpat_x_assum `expr_exit (INR _) _`
+        (MATCH_ACCEPT_TAC o MATCH_MP expr_exit_INR_retype)) >>
+  fs[halt_exit_def]
 QED
 
 Resume body_target_place_sim_full[place]:

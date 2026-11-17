@@ -187,11 +187,10 @@ val duplicate_prefix = ``FunctionDecl External Nonpayable F F
 val () = both "omitted_prefix_selector_collision" false
   (subst [cps |-> duplicate_prefix] base_dom1);
 
-(* Typed defaults may observe the actual call state and retain effects. These
-   checks must not restore the obsolete runtime-constant admission restriction. *)
+(* Defaults must be runtime-constant, even when their types match. *)
 val state_default_f = ``FunctionDecl External Nonpayable F F "f"
   [("a",^uint256)] [TopLevelName ^uint256 (NONE,"x")] NoneT [Pass]``;
-val () = both "storage_read_default" true
+val () = both "storage_read_default" false
   (subst [external_f |-> state_default_f] base_dom1);
 val effectful_h = ``FunctionDecl Internal Nonpayable F F "h" [] [] ^uint256
   [Assign (BaseTarget (TopLevelNameTarget (NONE,"x"))) ^one;
@@ -199,7 +198,7 @@ val effectful_h = ``FunctionDecl Internal Nonpayable F F "h" [] [] ^uint256
 val effectful_f = ``FunctionDecl External Nonpayable F F "f"
   [("a",^uint256)]
   [Call ^uint256 (IntCall (NONE,"h")) [] NONE] NoneT [Pass]``;
-val () = both "effectful_internal_call_default" true
+val () = both "effectful_internal_call_default" false
   (subst [external_f |-> effectful_f, internal_h |-> effectful_h,
           external_k |-> ``FunctionDecl External Pure F F "k" [] [] NoneT [Pass]``]
     base_dom1);
@@ -211,7 +210,8 @@ val () = both "effectful_internal_call_default" true
 val () = List.app (fn name => List.app (fn in_deploy =>
   ignore (vyperCheckContractFrontendLib.check_contract_file
     {in_deploy = in_deploy, address = ``0w : address``,
-     path = "../bytecode/external-entries/ast/" ^ name ^ ".json"}))
+     path = "../bytecode/external-entries/ast/" ^ name ^ ".json"})
+    handle e => raise Fail (name ^ ": " ^ General.exnMessage e))
   [false,true])
   ["nr_ext_nonpayable", "nr_multi", "nr_internal", "nr_pragma",
    "dflt_one_lit", "dflt_multi", "dflt_bytes", "dflt_sender",
@@ -222,7 +222,40 @@ val () = List.app (fn name => List.app (fn in_deploy =>
    "dflt_only", "dflt_const", "dflt_payable", "dflt_internal_full",
    "c28_const_in_default_arg", "g37_pub_nonreentrancy_pragma", "rr_nr",
    "nr_fallback_early_return", "dflt_balance_after_transfer",
-   "dflt_effectful_constant_index"];
+   "dflt_folded_builtins", "dflt_runtime_constant_index"];
+
+(* Frozen annotated AST from the old pin: #5181 rejects this source before
+   producing an annotated AST. Check both checker modes too. *)
+val () = List.app (fn in_deploy => let
+  val path = "../bytecode/external-entries/typecheck-rejected/" ^
+    "dflt_effectful_constant_index.json"
+  val input = vyperCheckContractFrontendLib.prepare_check_input
+    {in_deploy = in_deploy, address = ``0w : address``,
+     annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
+     storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout path}
+  val checked = vyperCheckContractLib.check_contract_conv
+    (vyperCheckContractLib.mk_check_contract input)
+  val _ = if optionSyntax.is_none (rhs (concl checked)) then ()
+          else raise Fail "effectful constant index default accepted"
+in
+  ignore (save_thm ("effectful_constant_index_default_" ^
+    (if in_deploy then "deploy" else "runtime") ^ "_rejected", checked))
+end) [false,true];
+
+(* Vyper accepts the small AsWei default below and annotates its operand as
+   int8, but the unfurled frontend currently fails the separate Uint-only
+   builtin typing rule. Frontend folding owns that existing rejection.
+   The complete fixture above uses an unsigned literal; this witness checks
+   admission of the small expression class without a typing workaround. *)
+Theorem runtime_constant_mixed_folded_default:
+  runtime_constant_expr []
+    (Builtin (BaseT (UintT 256)) (Bop Add)
+      [Builtin (BaseT (UintT 256)) (Env ValueSent) [];
+       Builtin (BaseT (UintT 256)) (AsWeiValue Ether)
+         [Literal (BaseT (IntT 8)) (IntL 1)]])
+Proof
+  EVAL_TAC
+QED
 
 Theorem pragma_pure_header:
   effective_decorators T ["external";"pure"] = ["external";"pure"] /\

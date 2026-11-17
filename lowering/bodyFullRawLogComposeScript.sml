@@ -1,6 +1,6 @@
 Theory bodyFullRawLogCompose
 Ancestors
-  exprSimCallRawLog
+  exprSimCallRawLog bodyInvNoDalloca
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
   bodyFullExprGeneric bodyFullPreds vyperTypeArgFits exprWordOperand
@@ -115,6 +115,7 @@ Proof
                 push_log (encode_raw_event_values cx.txn.target vs bs);
                 return NoneV od))` by
     simp[Abbr `source`, raw_log_eval, compatible_bound_def, bind_assoc, SF ETA_ss] >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   mp_tac raw_log_topics_full >>
   (impl_tac >- MATCH_ACCEPT_TAC raw_log_full_data_reached_ready) >>
   disch_then drule_all >>
@@ -152,8 +153,8 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `topicR`] >> rpt strip_tac >>
-  Cases_on `res` >- fs[expr_exit_def] >>
-  simp[] >> metis_tac[expr_exit_INR_type])
+  Cases_on `res` >> gvs[expr_exit_def, halt_exit_def] >>
+  metis_tac[expr_exit_INR_type])
 QED
 
 Resume raw_log_expr_sim_full[continuation]:
@@ -200,7 +201,7 @@ Resume raw_log_expr_sim_full[continuation]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type data) data mid` by
     (qpat_assum `body_expr_full_ok cx data`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [Once body_expr_full_ok_def]) >>
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      disch_then drule_all >> metis_tac[]) >>
   FIRST [qpat_assum `expr_type data = BaseT (BytesT (Fixed 32))`
            (K all_tac) >> suspend "fixed_data",
@@ -215,17 +216,21 @@ Resume raw_log_expr_sim_full[fixed_data]:
   disch_then (fn th => qpat_assum `expr_type data = _` (fn eq =>
     qpat_assum `lower_value _ _ _ data sd = _`
       (mp_then (Pat `lower_value _ _ _ data _ = _`) mp_tac (REWRITE_RULE [eq] th)))) >>
-  disch_then (drule_at (Pat `lower_value _ _ _ (gas_shadow_expr data) _ = _`)) >>
+  disch_then (fn th => qpat_assum `lower_value _ _ _ (gas_shadow_expr data) _ = _`
+    (mp_then (Pat `lower_value _ _ _ (gas_shadow_expr data) _ = _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `emit_inst MSTORE _ _ sn = _`
     (mp_then (Pat `emit_inst MSTORE _ _ _ = _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `emit_inst LOG _ _ s1 = _`
     (mp_then (Pat `emit_inst LOG _ _ _ = _`) mp_tac (REWRITE_RULE [APPEND] th))) >>
-  disch_then (drule_at (Pat `expr_body_pre _ _ _ (Call _ RawLog _ _) _`)) >>
-  disch_then (drule_at (Pat `gas_shadow_function _ _`)) >>
+  disch_then (fn th => qpat_assum `expr_body_pre _ _ _ (Call _ RawLog _ _) _`
+    (mp_then (Pat `expr_body_pre _ _ _ (Call _ RawLog _ _) _`) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `gas_shadow_function _ _`
+    (mp_then (Pat `gas_shadow_function _ _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `expr_type data = _` (fn eq =>
     qpat_assum `expr_sim_full _ _ _ _ data mid`
       (mp_then (Pat `expr_sim_full _ _ _ _ _ _`) mp_tac th o REWRITE_RULE [eq]))) >>
-  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  disch_then (fn th => qpat_assum `expr_sim_inv _ _ _ _`
+    (mp_then (Pat `expr_sim_inv _ _ _ _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `gas_shadow_state sm shadow_sm`
     (mp_then (Pat `gas_shadow_state _ _`) mp_tac th)) >>
   disch_then (qspecl_then [`t`, `G1`, `tn1`, `st0`, `vs`] mp_tac) >>
@@ -305,7 +310,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
       (~is_word_type (post_value_type cenv rawlog) ==>
        ptr_buf_ok cenv rawlog (Lit 0w) G u) /\
       ghost_kept_at lo cenv mid sm G1 tn1 t G tn`,
-    `\H res ee gt r. expr_exit res r`] >>
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
   simp[Abbr `rawlog`] >> conj_tac >- suspend "dynamic_post" >>
   simp[expr_type_def] >>
   qpat_assum `LENGTH vs <= (4:num)` (fn bnd =>
@@ -356,7 +361,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
   >- (simp[] >> qpat_assum `LIST_REL _ ops vs` mp_tac >>
       qid_spec_tac `vs` >> qid_spec_tac `ops` >>
       Induct >> simp[venomStateTheory.eval_operands_def] >>
-      rpt strip_tac >> gvs[] >> first_x_assum drule >>
+      rpt strip_tac >> FIRST [gvs[]] >> first_x_assum drule >>
       disch_then (qspec_then `H` mp_tac) >> simp[]) >>
   simp[wordsTheory.dimword_def] >> decide_tac
 QED

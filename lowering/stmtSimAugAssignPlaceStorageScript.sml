@@ -22,7 +22,7 @@ Ancestors
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
-  vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
+  vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
@@ -1225,15 +1225,16 @@ Proof
   fs[gas_admissible_def] >> metis_tac[]
 QED
 
-(* The operator and the store at a storage place.  The relation excludes
-   a static call, so the write succeeds, and the store keeps the
-   relation at every horizon valid after it: such a horizon observes the
-   place, whose root the trace holds. *)
-Theorem aug_place_storage_binop_store_outcome[local]:
-  bop <> In /\ bop <> NotIn /\ word_value cur /\
+(* The operator and the store at a storage place.  A static write aborts;
+   a successful store keeps the relation at every horizon valid after it,
+   since such a horizon observes the place whose root the trace holds. *)
+Theorem aug_place_storage_binop_store_outcome_typed[local]:
+  bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void (if tr then TSTORE else SSTORE) [dst;op] s3 = ((),sf) /\
-  binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs ee /\
+  binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE el
+    [ty;expr_type e] cur rhs wcur wrhs ee /\
   gas_admissible
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
@@ -1253,8 +1254,8 @@ Theorem aug_place_storage_binop_store_outcome[local]:
        storage_well_formed_on cx ee (FST H)) /\
   alloca_frame cenv es0 sa s_entry cenv ee s /\
   sa.cs_next_id <= s2.cs_next_id /\
-  eval_operand x s = SOME (val_to_w256 cur) /\
-  eval_operand y s = SOME (val_to_w256 rhs) /\
+  eval_operand x s = SOME wcur /\
+  eval_operand y s = SOME wrhs /\
   eval_operand dst s = SOME slot /\
   (?offset tv0 path delta.
      MEM (StorageRoot tr offset tv0) ee.storage_trace /\
@@ -1274,7 +1275,8 @@ Theorem aug_place_storage_binop_store_outcome[local]:
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       tv bop cur rhs)) (write_place cx (StoragePlace tr slot tv))) (ee,s)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r. (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ k _ _ _` >>
@@ -1289,7 +1291,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
         tv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
+       (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      simp[] >>
      qpat_x_assum `k ee = _` mp_tac >>
      simp[Abbr `k`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -1298,16 +1300,15 @@ Proof
        tv bop cur rhs` >> simp[return_def, raise_def] >> metis_tac[]) >>
   `expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs ee)` by
     (irule aug_place_bop_write_result_ok >> metis_tac[]) >>
-  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_def,
-                          exprBopSimDefsTheory.binop_frag_words_def]) >>
+  qpat_x_assum `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >- suspend "normal" >> suspend "exit"
 QED
 
-Resume aug_place_storage_binop_store_outcome[normal]:
-  rename1 `eval_operand op t = SOME (val_to_w256 v)` >>
+Resume aug_place_storage_binop_store_outcome_typed[normal]:
+  rename1 `expr_val_rel cx ty v op t` >>
   qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
   `write_place cx (StoragePlace tr slot tv) v ee = (res,ff)` by
     (qpat_x_assum `bop_result _ _ _ _ _ _ _ = INL _` (fn th =>
@@ -1318,20 +1319,40 @@ Resume aug_place_storage_binop_store_outcome[normal]:
    stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
      ee t` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    (qpat_x_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ ee t`
-       mp_tac >>
-     rewrite_tac[stmt_state_rel_def, state_rel_def] >> strip_tac >> simp[]) >>
-  `value_has_type tv v` by metis_tac[] >>
-  `res = INL ()` by
-    (drule_all aug_place_storage_write_outcome >> metis_tac[]) >>
-  qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
   `eval_operand dst t = SOME slot` by
     (irule aug_place_saved_operand >>
      goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
      qexists_tac `s2` >> simp[]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
-    simp[typed_val_to_w256_word_value] >>
+    metis_tac[exprBopSimPropsTheory.expr_val_rel_typed] >>
+  `value_has_type tv v` by metis_tac[] >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `res = INR (Error (RuntimeError "write in static context")) /\ ff = ee` by
+        metis_tac[aug_place_storage_write_static, pairTheory.PAIR_EQ] >>
+      gvs[] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      `gas_marked_path F ctx func s 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+        metis_tac[fragGasModeTheory.gas_marked_path_then,
+                  arithmeticTheory.ADD_CLAUSES] >>
+      `!tail. k (ee with gas_obs := tail) =
+        (INR (Error (RuntimeError "write in static context")),
+         ee with gas_obs := tail)` by
+        (unabbrev_all_tac >> drule aug_place_storage_suffix_gas_obs >> simp[]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+      disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+                   `ee`, `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+      simp[stmt_exit_def, expr_exit_def, exit_result_def, halt_exit_def]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `res = INL ()` by
+    (drule_all aug_place_storage_write_outcome >> metis_tac[]) >>
+  qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`sa` |-> `s3`, `sb` |-> `sf`, `s` |-> `t`]
             aug_place_storage_store_run) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -1392,7 +1413,7 @@ Resume aug_place_storage_binop_store_outcome[normal]:
   qexistsl_tac [`INL ()`, `ff`, `OK t2`] >> simp[] >> metis_tac[]
 QED
 
-Resume aug_place_storage_binop_store_outcome[exit]:
+Resume aug_place_storage_binop_store_outcome_typed[exit]:
   `?ex. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INR ex` by
     (Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs ee` >>
      fs[expr_exit_def]) >>
@@ -1402,6 +1423,10 @@ Resume aug_place_storage_binop_store_outcome[exit]:
      simp[]) >>
   qpat_x_assum `res = _` SUBST_ALL_TAC >>
   qpat_x_assum `ff = _` SUBST_ALL_TAC >>
+  `ex <> HaltException` by
+    (qpat_x_assum `bop_result _ _ _ _ _ _ _ = INR ex`
+       (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.bop_result_def]) >>
+     simp[CaseEq "sum"] >> rpt strip_tac >> gvs[]) >>
   `!tail. k (ee with gas_obs := tail) = (INR ex,ee with gas_obs := tail)` by
     (unabbrev_all_tac >> drule aug_place_storage_suffix_gas_obs >> simp[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -1409,13 +1434,13 @@ Resume aug_place_storage_binop_store_outcome[exit]:
   qexistsl_tac [`INR ex`, `ee`, `r`] >>
   conj_tac >- simp[]
   >- (disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-      BETA_TAC >> gen_tac >> strip_tac >> simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
+      BETA_TAC >> gen_tac >> strip_tac >> simp[stmt_exit_def, halt_exit_def] >> gen_tac >> disj1_tac >>
       Cases_on `ex` >> Cases_on `r` >> gvs[expr_exit_def] >>
       rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >>
       gvs[expr_exit_def])
 QED
 
-Finalise aug_place_storage_binop_store_outcome
+Finalise aug_place_storage_binop_store_outcome_typed
 
 (* The whole statement, replayed from a reached rhs: the target, the
    load and the rhs leave the operator and the store. *)
@@ -1466,8 +1491,11 @@ Proof
   `?info. supported_target_info tops bindings bt = SOME info` by
     (drule_all aug_place_supported_stmt_target_info >> simp[]) >>
   qpat_x_assum `(?b fld. bt = AttributeTarget b fld) \/ _` kall_tac >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  drule_all aug_place_typing_word >> strip_tac >>
   drule_all aug_place_code_parts >>
   disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC
     (qx_choosel_then [`r`, `s0'`] (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
@@ -1501,7 +1529,9 @@ Proof
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) _` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+      simp[stmt_exit_def] >> (conj_tac
+      >- (gen_tac >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+      fs[halt_exit_def]))
   >- (rpt gen_tac >> strip_tac >> suspend "base_normal")
   >- simp[aug_place_rest_trace_frame]
 QED
@@ -1552,7 +1582,7 @@ Resume compile_augassign_place_storage_case[base_normal]:
     (qpat_x_assum `FST (SND r) = NONE /\ _ \/ _` mp_tac >>
      Cases_on `tr` >> asm_simp_tac (srw_ss()) [slot_loc_def] >> metis_tac[]) >>
   qpat_x_assum `FST (SND r) = NONE /\ _ \/ _` kall_tac >>
-  `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
+
   qspecl_then [`cx`, `st0`, `storage_trace_horizon raw.storage_trace`,
                `raw with gas_obs := []`, `ty`, `tv`, `bt`,
                `es with gas_obs := gas_explicit marks' s0.vs_gas_readings`,
@@ -1597,12 +1627,10 @@ Resume compile_augassign_place_storage_case[base_normal]:
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   `gas_marked_path F ctx func t 0 (OK u)` by
     simp[fragGasModeTheory.gas_marked_path_def] >>
-  `word_value old` by
-    (drule_all exprSimSourceTheory.word_value_type_typed >> simp[]) >>
-  `eval_operand ld u = SOME (val_to_w256 old)` by
-    (irule exprBopSimPropsTheory.expr_val_rel_word >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`cx`, `ty`] >> simp[]) >>
+  `((bop = Eq \/ bop = NotEq) ==> !bs. old <> BytesV bs)` by
+    metis_tac[stmtSimAugAssignTheory.augassign_compare_not_bytes] >>
+  `eval_operand ld u = SOME (typed_val_to_w256 tv old)` by
+    metis_tac[exprBopSimPropsTheory.expr_val_rel_typed] >>
   `!z. ld = Var z ==> not_fresh_at s1 z` by
     (drule exprSafeOperandTheory.emit_op_safe_operand >>
      simp[exprSafeOperandTheory.safe_operand_def]) >>
@@ -1655,7 +1683,9 @@ Resume compile_augassign_place_storage_case[base_normal]:
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) _` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+      simp[stmt_exit_def] >> (conj_tac
+      >- (gen_tac >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+      fs[halt_exit_def]))
   >- (rpt gen_tac >> strip_tac >> suspend "rhs_normal")
   >- simp[aug_place_store_trace_frame]
 QED
@@ -1745,13 +1775,14 @@ Resume compile_augassign_place_storage_case[rhs_normal]:
      simp[well_formed_type_def] >> metis_tac[]) >>
   drule_all aug_place_rhs_suffix_ready >>
   disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
+  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs` >>
   qpat_assum `expr_post (storage_trace_horizon raw'.storage_trace)
                 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `gas_marked_path F ctx func u (LENGTH marks'') (OK t')` by
     (qpat_assum `gas_marked_exec _ _ _ _ marks'' _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  `eval_operand ld t' = SOME (val_to_w256 old)` by
+  `eval_operand ld t' = SOME (typed_val_to_w256 tv old)` by
     (irule aug_place_saved_operand >>
      goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
      qexists_tac `s1` >> simp[]) >>
@@ -1801,21 +1832,10 @@ Resume compile_augassign_place_storage_case[rhs_normal]:
   `fn_has_code s2 s3 func /\ fn_has_code s3 sb func` by
     metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
   `~t'.vs_halted` by metis_tac[aug_place_marked_path_not_halted] >>
-  `word_value v'' /\ ?tyv.
-     evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-     value_has_type tyv v''` by
-    (qpat_assum `expr_body_pre _ _ _ _ (_ with gas_obs := gas_explicit _ _)` mp_tac >>
-     qpat_assum `word_value_type (expr_type e)` mp_tac >>
-     qpat_assum `_ = (INL v'',raw' with gas_obs := [])` mp_tac >>
-     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     metis_tac[expr_body_pre_word_result, ETA_THM]) >>
-  `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
   `post_value_type cenv e = expr_type e` by simp[] >>
   `expr_val_rel cx (expr_type e) v'' rhsop t'` by metis_tac[] >>
-  `eval_operand rhsop t' = SOME (val_to_w256 v'')` by
-    (irule exprBopSimPropsTheory.expr_val_rel_word >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`cx`, `expr_type e`] >> simp[]) >>
+  `eval_operand rhsop t' = SOME (typed_val_to_w256 tvrhs v'')` by
+    metis_tac[exprBopSimPropsTheory.expr_val_rel_typed] >>
   `~block_is_terminated sb` by
     (irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      goal_assum (drule_at Any) >>
@@ -1857,11 +1877,11 @@ Resume compile_augassign_place_storage_case[rhs_normal]:
   `storage_trace_domain cx st0 (raw' with gas_obs := []).storage_trace` by
     simp[] >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  irule aug_place_storage_binop_store_outcome >>
+  irule aug_place_storage_binop_store_outcome_typed >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
   metis_tac[]
 QED

@@ -312,7 +312,7 @@ Theorem constructor_exit_run_mem[local]:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+  (nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
           storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
           nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
@@ -335,7 +335,8 @@ Proof
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `nr ==> ~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule optional_unlock_frag_mem >>
   disch_then (qspecl_then [`ctx`, `\s0. s0 = s`, `\s2. s2 = s1`, `\r. F`]
                 mp_tac) >>
@@ -369,7 +370,7 @@ Theorem deploy_ctor_fallthrough_mem_safe:
        st_epilogue, st_final, func) /\
     cenv.ce_is_ctor /\ cenv_top_ext cenv cenv' ee.scopes /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+    (nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
           storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
           nkey < dimword (:256)) /\
     (imm_len tops <> 0 ==>

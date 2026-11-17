@@ -180,6 +180,9 @@ Theorem immutable_assign_empty_stmt_frag:
 Proof
   strip_tac >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  `~cx_const_name cx (src,id)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[]) >>
   drule_all immutable_assign_bare_global >> strip_tac >>
   drule_all immutable_assign_target_layout >>
   disch_then (qspec_then `compile_expr` strip_assume_tac) >> gvs[] >>

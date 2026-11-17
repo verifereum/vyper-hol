@@ -227,7 +227,7 @@ Proof
   simp[Once resolve_array_element_def, return_def, raise_def]
 QED
 
-Theorem places_nh[local]:
+Theorem places_nh:
   (read_place cx p s = (INR HaltException, s') ==> F) /\
   (place_type_value cx p s = (INR HaltException, s') ==> F) /\
   (write_place cx p v s = (INR HaltException, s') ==> F)
@@ -260,7 +260,7 @@ Proof
        nh_base)
 QED
 
-Theorem extend_place_nh[local]:
+Theorem extend_place_nh:
   extend_place cx pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def]
@@ -270,7 +270,7 @@ Proof
   CASE_TAC >> simp nh_base
 QED
 
-Theorem select_result_nh[local]:
+Theorem select_result_nh:
   select_result cx ty pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp([select_result_def, extend_place_nh] @ nh_base)
@@ -299,7 +299,7 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[return_def]
 QED
 
-Theorem pop_place_nh[local]:
+Theorem pop_place_nh:
   !cx p s s'. pop_place cx p s = (INR HaltException, s') ==> F
 Proof
   ho_match_mp_tac pop_place_ind >> rpt gen_tac >>
@@ -404,14 +404,6 @@ Proof
   simp[get_module_code_def]
 QED
 
-Theorem eval_exprs_nil_finally[local]:
-  finally (do set_scopes sc; eval_exprs cx [] od) (set_scopes prev) s =
-  (INL [], s with scopes := prev)
-Proof
-  simp[finally_def, ignore_bind_def, bind_def, set_scopes_def, return_def,
-       Once evaluate_def]
-QED
-
 Theorem order_custom_error_args_exprs[local]:
   order_custom_error_args params err = SOME es ==> es = custom_error_exprs err
 Proof
@@ -470,6 +462,15 @@ Proof
   drule finally_halt >> simp[state_ops_nh] >> strip_tac >>
   drule try_halt >> strip_tac >> imp_res_tac handle_function_halt >>
   gvs[ignore_bind_halt, return_def] >> metis_tac[]
+QED
+
+Theorem dflts_finally_halt[local]:
+  finally (ignore_bind (set_scopes sc) f) (set_scopes prev) s =
+    (INR HaltException, s') ==>
+  ?t t'. set_scopes sc s = (INL (), t) /\ f t = (INR HaltException, t')
+Proof
+  strip_tac >> drule finally_halt >> simp[state_ops_nh] >> strip_tac >>
+  gvs[ignore_bind_halt, state_ops_nh] >> metis_tac[oneTheory.one]
 QED
 
 Theorem eval_no_halt_every[local]:
@@ -649,7 +650,7 @@ Resume eval_no_halt_every[IntCall]:
            return_def, raise_def, ignore_bind_def, bind_def]) >>
   rename1 `_ = SOME tup` >> PairCases_on `tup` >>
   drule_all supported_callable_storage_syntax >> strip_tac >> gvs[] >>
-  Cases_on `LENGTH es = LENGTH tup2`
+  Cases_on `LENGTH es <= LENGTH tup2 /\ LENGTH tup2 <= LENGTH es + LENGTH tup3`
   >- suspend "IntCallLive" >>
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -658,14 +659,38 @@ Resume eval_no_halt_every[IntCall]:
 QED
 
 Resume eval_no_halt_every[IntCallLive]:
-  drule_all eval_expr_intcall_empty_defaults >>
-  disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _`
-    (mp_tac o REWRITE_RULE [th])) >>
-  gvs(syn_ss @ case_ss @ [eval_exprs_nil_finally, push_function_def,
-                          get_scopes_def]) >>
-  rpt strip_tac >> drule_at Any int_call_body_halt >>
-  impl_tac >- (rw[] >> rpt CASE_TAC >> simp case_ss) >>
-  strip_tac >> metis_tac[]
+  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3))` by
+    (irule int_calls_exprs_DROP_EVERY >> simp[]) >>
+  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE =
+                SOME tops) (int_calls_expr e))
+     (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3)` by
+    (irule EVERY_DROP >> simp[exprs_pre_every, get_module_code_stk_upd] >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  gvs(syn_ss @ case_ss @ [push_function_def, get_scopes_def]) >>
+  rpt strip_tac >> gvs[]
+  >~ [`finally_unless_halt _ _ _ = (INR HaltException,_)`]
+  >- (drule_at (Pos last) int_call_body_halt >>
+      impl_tac
+      >- (rpt gen_tac >> rpt (IF_CASES_TAC ORELSE CASE_TAC) >>
+          simp(raise_def :: nh_base)) >>
+      strip_tac >>
+      first_x_assum (fn th =>
+        if is_forall (concl th) andalso
+           can (find_term (same_const ``eval_stmts``)) (concl th)
+        then drule_all th else NO_TAC) >>
+      metis_tac[])
+  >~ [`finally _ _ _ = (INR HaltException,_)`]
+  >- (drule dflts_finally_halt >> strip_tac >> gvs[] >> metis_tac[])
+  >~ [`(if tup1 then _ else _) _ = (INR HaltException,_)`]
+  >- (qpat_x_assum `(if tup1 then _ else _) _ = (INR HaltException,_)` mp_tac >>
+      rpt (IF_CASES_TAC ORELSE CASE_TAC) >>
+      simp(raise_def :: nh_base)) >>
+  metis_tac[]
 QED
 
 Finalise eval_no_halt_every
@@ -727,18 +752,6 @@ Proof
       metis_tac[cj 6 eval_no_halt_every])
   >- metis_tac[cj 1 eval_no_halt_every] >>
   metis_tac[cj 2 eval_no_halt_every]
-QED
-
-Theorem lookup_external_MEM[local]:
-  !tops. lookup_function src name External tops =
-           SOME (mut,nr,args,dflts,ret,fbody) ==>
-  (?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops) \/
-  (?pnr m ty x. MEM (VariableDecl (Public pnr) m name ty x) tops) \/
-  (?pnr b kt vt x. MEM (HashMapDecl (Public pnr) b name kt vt x) tops)
-Proof
-  Induct >- rw[lookup_function_def] >>
-  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
-  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
 QED
 
 Theorem build_getter_no_evm_run[local]:

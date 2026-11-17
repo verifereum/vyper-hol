@@ -183,7 +183,7 @@ Theorem assign_local_store_rhs_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0) Q
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee t. Q H res ee t ==> ?v. res = INL v) /\
   (!marks v ee t.
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -199,7 +199,8 @@ Theorem assign_local_store_rhs_outcome:
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (\H. stmt_post H ctx func cx lctx old c sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!marks. gas_bad_storage_at cx st0
@@ -234,7 +235,7 @@ Proof
           impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[] >>
+          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[halt_exit_def] >>
           irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -257,7 +258,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -366,7 +367,7 @@ Proof
     (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\ t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_def] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   irule assign_local_store_rhs_outcome >>

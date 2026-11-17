@@ -260,7 +260,19 @@
               "lineno": 3,
               "node_id": 18,
               "src": "37:1:0",
-              "value": 1
+              "value": 1,
+              "type": {
+                "bits": 256,
+                "is_signed": false,
+                "name": "uint256",
+                "typeclass": "integer"
+              }
+            },
+            "type": {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
             }
           },
           "src": "31:8:0",

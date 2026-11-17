@@ -62,7 +62,7 @@ Theorem lower_typed_args_nil_sim_ptr:
        typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee [] [] vs G tn t /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\H rr ee ghosts r. wb_args_exit rr r)
+    (\H rr ee ghosts r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>

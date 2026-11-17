@@ -402,11 +402,11 @@ Proof
             mk_raw_function_def, lookup_block_def, eval_phis_def,
             phi_prefix_length_def, mk_inst_def, init_venom_state_def,
             FIND_thm, Once run_block_non_phis_def] >>
-      simp[get_instruction_def, step_inst_def, step_inst_base_def,
+      simp[get_instruction_def, step_inst_def, step_inst_base_opcode_eqs,
            exec_alloca_def, eval_operand_def, update_var_def,
            is_terminator_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def,
-           step_inst_def, step_inst_base_def, exec_alloca_def,
+           step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def,
            eval_operand_def, update_var_def, is_terminator_def,
            FLOOKUP_UPDATE] >>
       simp[Once run_block_non_phis_def, get_instruction_def,
@@ -418,28 +418,28 @@ Proof
       simp[Once run_blocks_def, lookup_block_def, FIND_thm,
            eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def,
-           step_inst_def, step_inst_base_def, mk_inst_def,
+           step_inst_def, step_inst_base_opcode_eqs, mk_inst_def,
            update_var_def, is_terminator_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def,
-           step_inst_def, step_inst_base_def, update_var_def,
+           step_inst_def, step_inst_base_opcode_eqs, update_var_def,
            is_terminator_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def,
-           step_inst_def, step_inst_base_def, eval_operand_def,
+           step_inst_def, step_inst_base_opcode_eqs, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE, is_terminator_def] >>
       simp[exec_write2_def, eval_operand_def, lookup_var_def,
            FLOOKUP_UPDATE, mstore_def] >>
       qmatch_goalsub_abbrev_tac `word_to_bytes _ T` >>
       simp[Once run_block_non_phis_def, get_instruction_def] >>
-      simp[step_inst_def, step_inst_base_def, eval_operands_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, eval_operands_def,
            eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
       simp[bind_outputs_def, merge_callee_state_def, is_terminator_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def] >>
-      simp[step_inst_def, step_inst_base_def, eval_operand_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE, eval_operands_def,
            write_memory_def, read_memory_def, is_terminator_def] >>
       simp[mcopy_def, write_memory_def, read_memory_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def] >>
-      simp[step_inst_def, step_inst_base_def, exec_pure1_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, exec_pure1_def,
            eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
            update_var_def, is_terminator_def] >>
       simp[exec_read1_def, write_memory_with_expansion_def,
@@ -447,11 +447,11 @@ Proof
            update_var_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def] >>
       qpat_abbrev_tac `value = mload _ _` >>
-      simp[step_inst_def, step_inst_base_def, exec_write2_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
            eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
       simp[empty_call_context_def, sstore_def, is_terminator_def] >>
       simp[Once run_block_non_phis_def, get_instruction_def] >>
-      simp[step_inst_def, step_inst_base_def, halt_state_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, halt_state_def,
            is_terminator_def]
 QED
 

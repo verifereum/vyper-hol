@@ -362,17 +362,6 @@ Proof
   AP_TERM_TAC >> AP_TERM_TAC >> simp[MIN_DEF] >> decide_tac
 QED
 
-Theorem mcopy_mload_prefix:
-  32 <= n ==> mload dst (mcopy dst src n s) = mload src s
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`dst`, `src`, `n`, `s`] mcopy_padded_read) >>
-  disch_then (mp_tac o AP_TERM ``TAKE 32 : byte list -> byte list``) >>
-  simp[TAKE_TAKE_MIN, take_padded_prefix, MIN_DEF, GSYM read_memory_def] >>
-  Cases_on `32 < n` >> simp[read_memory_def, mload_def] >>
-  `n = 32` by decide_tac >> gvs[]
-QED
-
 Theorem revert_reason_copy_mload:
   lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
   mload (w2n a) s = n2w L /\ L+63 < dimword(:256) /\
@@ -430,7 +419,7 @@ Proof
   simp[step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
   fs[lookup_var_def] >> simp[run_inst_seq_def] >>
-  disch_then (SUBST1_TAC o SYM) >> simp[mcopy_mload_prefix] >>
+  disch_then (SUBST1_TAC o SYM) >> simp[stmtReasonMemoryTheory.mload_mcopy_same] >>
   fs[mload_def]
 QED
 

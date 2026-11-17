@@ -12,8 +12,18 @@ Ancestors
   literalsCodesize
   removeUnused
   concretizeMemLoc
+  (* FmpLowering stage proof *)
+  ctxSealAgree
+  fmpStageReclaimSound
+  fmpStageOpSteps
+  fmpStageFmpSteps
+  fmpStageBlockSim
+  o1PreDftStaticMem
   (* lower dload/dloadbytes *)
   lowerDload
+  lowerDloadCoverageOrdinary
+  lowerDloadOracleCallCoverage
+  lowerDloadRetpcProducer
   (* branch optimization *)
   branchOpt
   (* single use expansion *)
@@ -29,7 +39,14 @@ Ancestors
   (* CFG structural passes *)
   tailMerge
   simplifyCfg
+  o1SimplifyCfgGasEvents
   cfgNorm
+  o1ContractCfgNormGas
+  o1ContractCfgNormCursorBlocks
+  o1ContractCfgNormCursorReturns
+  o1ContractCfgNormCursorProjection
+  o1ContractCfgNormJointCursors
+  o1ContractCfgNormJointTrace
   (* memory passes *)
   loadElim
   deadStoreElim
@@ -41,9 +58,25 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* configured pipeline runner structural guarantees *)
-  venomPipelineRunnerProps venomPipelineData
+  venomPipelineRunnerProps venomPipelineData o1PreDftStaticMem
   (* dead function traversal *)
   dftCorrectnessFinal
+  dftGasMaskRequests dftGasPrefixProvider
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
+  (* SSA insertion for variables absent from liveness *)
+  o1LabelFlowPhiPruning
+  o1LabelFlowOwnPreWalk
+  o1LabelFlowOwnFirstSsa
+  o1LabelFlowOwnLowerDload
+  o1LabelFlowOwnConcretize
+  o1LabelFlowOwnFmp
+  o1LabelFlowOwnWalk
+  o1LabelFlowOwnCompose
+  (* symbolic layout and label flow through the O1 pipeline *)
+  o1CodeEndOffset o1LabelFlowCompose o1SymStaticPipeline o1SymStaticData
+  o1LabelFlowOwnLate
+  (* symbolic assembly finalizers and their codegen correctness bridge *)
+  asmOptNonemptyFinalizer codegenAsmOpt
+  codegenAsmOptRevert

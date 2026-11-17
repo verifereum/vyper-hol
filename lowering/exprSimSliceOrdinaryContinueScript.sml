@@ -102,10 +102,10 @@ Theorem slice_read_outcome_bind:
     t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (tail v : evaluation_state -> eval_result evaluation_result)
-      (mid with gas_obs := [],t) Q (\H res ee r. expr_exit res r)) ==>
+      (mid with gas_obs := [],t) Q (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) tail) (es,s)
-    Q (\H res ee r. expr_exit res r)
+    Q (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> drule_all expr_sim_apply >> strip_tac >>
   irule slice_gas_outcome_bind_value >>
@@ -117,7 +117,8 @@ Proof
       simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[] >>
       rename1 `expr_exit (INR ex) r` >>
       qspec_then `Value` (qspec_then `INR ex` mp_tac)
-        exprSimDefsTheory.expr_exit_success_map >> simp[]) >>
+        exprSimDefsTheory.expr_exit_success_map >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -207,11 +208,11 @@ Theorem slice_two_read_outcome:
     ~r.vs_halted ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (finish_slice (IntV (&i):value) (IntV (&k):value) : evaluation_state -> eval_result evaluation_result)
-      (e2,r) Q (\H res ee rr. expr_exit res rr)) ==>
+      (e2,r) Q (\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
-        finish_slice sv lv od) (ec,u) Q (\H res ee rr. expr_exit res rr)
+        finish_slice sv lv od) (ec,u) Q (\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr)
 Proof
   strip_tac >>
   `storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
@@ -329,7 +330,7 @@ Theorem slice_bytes_continue:
       vv_post H ctx func cenv cx result ec sc sf u ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome >>
   simp[slice_terminal_source_frame] >>
@@ -389,7 +390,7 @@ Proof
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
-  qexists_tac `(\H res ee r. expr_exit res r)` >>
+  qexists_tac `(\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` >>
   simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_bytes_outcome >> simp[]) >>
   rpt strip_tac >>
@@ -451,7 +452,7 @@ Theorem slice_string_continue:
       vv_post H ctx func cenv cx result ec sc sf u ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome >>
   simp[slice_terminal_source_frame] >>
@@ -511,7 +512,7 @@ Proof
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
-  qexists_tac `(\H res ee r. expr_exit res r)` >>
+  qexists_tac `(\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` >>
   simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_string_outcome >> simp[]) >>
   rpt strip_tac >>
@@ -560,11 +561,11 @@ Theorem slice_two_read_outcome_seq:
     ~r.vs_halted ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (finish_slice (IntV (&i):value) (IntV (&k):value) : evaluation_state -> eval_result evaluation_result)
-      (e2,r) Q (\H res ee rr. expr_exit res rr)) ==>
+      (e2,r) Q (\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
-        finish_slice sv lv od) (ec,u) Q (\H res ee rr. expr_exit res rr)
+        finish_slice sv lv od) (ec,u) Q (\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr)
 Proof
   strip_tac >>
   `storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
@@ -689,7 +690,7 @@ Theorem slice_bytes_continue_seq:
       vv_post H ctx func cenv cx result ec sc sf u ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome_seq >>
   simp[slice_terminal_source_frame] >> conj_tac >- (first_x_assum ACCEPT_TAC) >>
@@ -749,7 +750,7 @@ Proof
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
-  qexists_tac `(\H res ee r. expr_exit res r)` >>
+  qexists_tac `(\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` >>
   simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_bytes_outcome >> simp[]) >>
   rpt strip_tac >>
@@ -814,7 +815,7 @@ Theorem slice_string_continue_seq:
       vv_post H ctx func cenv cx result ec sc sf u ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome_seq >>
   simp[slice_terminal_source_frame] >> conj_tac >- (first_x_assum ACCEPT_TAC) >>
@@ -874,7 +875,7 @@ Proof
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
-  qexists_tac `(\H res ee r. expr_exit res r)` >>
+  qexists_tac `(\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` >>
   simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_string_outcome >> simp[]) >>
   rpt strip_tac >>

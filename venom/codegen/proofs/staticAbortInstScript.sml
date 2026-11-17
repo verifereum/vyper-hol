@@ -18,15 +18,15 @@ Theorem static_abort_regular_net_io:
   ?a b. static_abort_emit_io inst a b /\ a <= m /\ h + a = m + b
 Proof
   Cases_on `inst.inst_opcode` >>
-  simp[inst_wf_def, inst_shape_ok_def, codegen_ready_inst_def,
+  FIRST [simp[inst_wf_def, inst_shape_ok_def, codegen_ready_inst_def,
        is_terminator_def, is_param_opcode_def, is_pre_codegen_opcode_def,
-       is_read0_opcode_def] >>
-  simp[compute_operands_def, python_stack_operands_def,
+       is_read0_opcode_def]] >>
+  FIRST [simp[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def, static_abort_emit_io_def,
-       venom_to_evm_name_def] >>
+       venom_to_evm_name_def]] >>
   pure_rewrite_tac[static_abort_straight_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV [``LENGTH``, ``REVERSE``,
-    ``label_positions_ok``]) >> rpt strip_tac >> gvs[] >> decide_tac
+  FIRST [CONV_TAC (computeLib.RESTR_EVAL_CONV [``LENGTH``, ``REVERSE``,
+    ``label_positions_ok``])] >> rpt strip_tac >> gvs[] >> decide_tac
 QED
 
 Theorem static_abort_generated_emit_labels:

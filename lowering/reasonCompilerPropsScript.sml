@@ -3,7 +3,7 @@ Theory reasonCompilerProps
 Ancestors
   revertReasonLayout exprLoweringProps stmtLowering exprLowering compileEnv
   context emitHelper emitHelperProps fragExec loweringPosts stmtSimDefs
-  localPtrsProps loweringSlice list rich_list arithmetic literalCapacityPtr exprSimUnwrap
+  localPtrsProps loweringSlice list rich_list arithmetic exprSimUnwrap
 
 Theorem compile_revert_reason_extends:
   compile_revert_with_reason cenv vv mt ms sa = ((),sb) ==> cs_extends sa sb

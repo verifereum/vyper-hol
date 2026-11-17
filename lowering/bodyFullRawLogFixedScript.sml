@@ -76,7 +76,7 @@ Theorem raw_log_fixed_data_full:
         (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
           ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) G t) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   mp_tac (INST_TYPE [``:'c`` |-> ``:'a``]
     raw_log_fixed_data_full_from_endpoints) >>

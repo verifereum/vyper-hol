@@ -142,7 +142,7 @@ Proof
   Induct_on `bbs` >- simp[fmpLowerDefsTheory.fmp_lower_blocks_def] >>
   simp[fmpLowerDefsTheory.fmp_lower_blocks_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
-  >- (drule_all fmpStepRewriteTheory.fmp_lower_indexed_origin >>
+  >- (drule_all fmpStepRewriteOriginTheory.fmp_lower_indexed_origin >>
       strip_tac >> metis_tac[]) >>
   first_x_assum drule >> simp[] >> strip_tac
   >- metis_tac[] >>
@@ -174,7 +174,7 @@ Theorem fmp_lower_blocks_retained_location:
   ((?bb. MEM bb out /\ bb.bb_label = lbl /\ MEM inst bb.bb_instructions) <=>
    (?bb. MEM bb bbs /\ bb.bb_label = lbl /\ MEM inst bb.bb_instructions))
 Proof
-  strip_tac >> drule_all fmpStepRewriteTheory.fmp_lower_blocks_retained_opcodes >>
+  strip_tac >> drule_all fmpStepRewriteOriginTheory.fmp_lower_blocks_retained_opcodes >>
   disch_then (mp_tac o AP_TERM
     ``\xs : (string # instruction list) list.
        ?is. MEM (lbl,is) xs /\ MEM inst is``) >>
@@ -501,12 +501,12 @@ Proof
   Induct_on `insts` >- simp[fmpLowerDefsTheory.fmp_lower_indexed_def] >>
   simp[fmpLowerIndexedPropsTheory.fmp_lower_indexed_cons] >>
   rpt gen_tac >> strip_tac >> strip_tac >>
-  drule_all fmpStepRewriteTheory.fmp_emit_restores_supply >> strip_tac >>
-  drule_all fmpStepRewriteTheory.fmp_lower_inst_supply >> strip_tac >>
+  drule_all fmpStepRewriteSupplyTheory.fmp_emit_restores_supply >> strip_tac >>
+  drule_all fmpStepRewriteSupplyTheory.fmp_lower_inst_supply >> strip_tac >>
   `MEM x s0.irs_used_vars /\ MEM x s1.irs_used_vars` by
     gvs[dretDesugarProofsTheory.dret_supply_extends_def] >>
   gvs[MEM_APPEND]
-  >- (drule_all fmpStepRewriteTheory.fmp_emit_restores_assign_origin >>
+  >- (drule_all fmpStepRewriteOriginTheory.fmp_emit_restores_assign_origin >>
       strip_tac >> gvs[mk_inst_def])
   >- (`MEM x h.inst_outputs ==> MEM h.inst_opcode [RETPC_PARAM; ASSIGN; PHI]` by
         (simp[] >> metis_tac[]) >>
@@ -529,7 +529,7 @@ Proof
   Induct_on `bbs` >- simp[fmpLowerDefsTheory.fmp_lower_blocks_def] >>
   simp[fmpLowerDefsTheory.fmp_lower_blocks_def, AllCaseEqs()] >>
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all fmpStepRewriteTheory.fmp_lower_indexed_supply >> strip_tac >>
+  drule_all fmpStepRewriteSupplyTheory.fmp_lower_indexed_supply >> strip_tac >>
   `MEM x s2.irs_used_vars` by
     gvs[dretDesugarProofsTheory.dret_supply_extends_def] >>
   gvs[]

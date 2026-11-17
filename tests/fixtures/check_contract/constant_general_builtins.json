@@ -575,7 +575,19 @@
                     "lineno": 13,
                     "node_id": 52,
                     "src": "250:2:0",
-                    "value": 78
+                    "value": 78,
+                    "type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
                   }
                 },
                 "src": "243:10:0",
@@ -779,7 +791,19 @@
               "lineno": 13,
               "node_id": 68,
               "src": "279:2:0",
-              "value": 78
+              "value": 78,
+              "type": {
+                "bits": 256,
+                "is_signed": false,
+                "name": "uint256",
+                "typeclass": "integer"
+              }
+            },
+            "type": {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
             }
           },
           "src": "272:10:0",
@@ -972,7 +996,19 @@
               "lineno": 18,
               "node_id": 84,
               "src": "340:2:0",
-              "value": 78
+              "value": 78,
+              "type": {
+                "bits": 256,
+                "is_signed": false,
+                "name": "uint256",
+                "typeclass": "integer"
+              }
+            },
+            "type": {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
             }
           },
           "src": "333:10:0",

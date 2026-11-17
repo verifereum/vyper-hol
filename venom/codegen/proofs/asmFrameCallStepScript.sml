@@ -7836,3 +7836,97 @@ Resume asm_frame_call_step[entered]:
 QED
 
 Finalise asm_frame_call_step
+
+Theorem asm_call_prepared_not_last:
+  wf_state s /\ s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  (op = Call \/ op = StaticCall \/ op = DelegateCall) /\
+  next_opcode c = SOME op /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  ~frame_last s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 6 disch_tac >>
+  Cases_on `(lookup_account sender accounts).balance < value \/
+            1024 < LENGTH s.contexts`
+  >- (`LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
+      drule_all asm_call_prepare_abort_state >>
+      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM]) >>
+      qmatch_asmsub_abbrev_tac `step_call op s = (INL (),v)` >>
+      `step s = (INL (),v)` by
+        (irule asm_call_step_success >> metis_tac[]) >>
+      simp[frame_last_def, Abbr `v`]) >>
+  `value <= (lookup_account sender accounts).balance /\
+   LENGTH s.contexts <= 1024` by gvs[] >>
+  Cases_on `asm_call_finish op
+    (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u` >>
+  rename1 `asm_call_finish op _ u = (result,v)` >>
+  Cases_on `result`
+  >- (Cases_on `x` >>
+      `step_call op s = (INL (),v)` by
+        simp[asm_step_call_factor, bind_def] >>
+      `step s = (INL (),v)` by
+        (irule asm_call_step_success >> metis_tac[]) >>
+      drule_all asm_call_prepared_enter_view >> disch_then strip_assume_tac >>
+      simp[frame_last_def]) >>
+  Cases_on `y`
+  >- (drule_all asm_call_prepared_terminal_success_view >> disch_then strip_assume_tac >>
+      simp[frame_last_def]) >>
+  drule_all asm_call_prepared_terminal_kind >>
+  disch_then (strip_assume_tac o REWRITE_RULE [optionTheory.SOME_11]) >>
+  drule_all asm_message_prepared_terminal_exception_view >> disch_then strip_assume_tac >>
+  simp[frame_last_def]
+QED
+
+Theorem asm_frame_call_success_not_last:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  run_call s = SOME (r,final) /\ ~frame_resource_starved es0 r final /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 ==>
+  ~frame_last s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 7 disch_tac >>
+  `?c rb rest. s.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ?d. s.msdomain = Collect d` by fs[asm_frame_rel_def] >>
+  qabbrev_tac `op = if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall` >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+  >- (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> simp[Abbr `op`]) >>
+  `next_opcode c = SOME op` by
+    (drule_all asm_frame_call_decode >> simp[Abbr `op`] >> metis_tac[]) >>
+  Cases_on `asm_call_prepare op s` >> rename1 `asm_call_prepare op s = (q,u)` >>
+  Cases_on `q`
+  >- (PairCases_on `x` >> irule asm_call_prepared_not_last >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
+  Cases_on `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack`
+  >- (Q.SUBGOAL_THEN `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)` assume_tac
+      >- (fs[asm_evm_rel_def] >> Cases_on `c.msgParams.outputTo` >> gvs[]) >>
+      rename1 `asm_call_prepare op s = (INR e,u)` >>
+      Cases_on `e = SOME OutOfGas`
+      >- (pop_assum SUBST_ALL_TAC >>
+          drule_all asm_frame_call_prepare_failure_starved >>
+          disch_then strip_assume_tac >> gvs[]) >>
+      `e = SOME WriteInStaticContext` by
+        (drule_all asm_call_prepare_failure_kind >> metis_tac[]) >>
+      qpat_x_assum `e = SOME WriteInStaticContext` SUBST_ALL_TAC >>
+      drule_all asm_call_prepare_static_outcome >> strip_tac >>
+      `EL a.as_pc prog = AsmOp "CALL"` by
+        (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[Abbr `op`]) >>
+      `7 <= LENGTH c.stack` by fs[call_has_value_def] >>
+      drule_all asm_frame_call_static_fault >>
+      disch_then (fn fault =>
+        qpat_x_assum `asm_step _ _ _ a = AsmOK a1`
+          (fn ok => mp_tac (TRANS (SYM ok) fault))) >> simp[]) >>
+  Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
+  gvs[Abbr `op`, call_has_value_def]
+  >- (`LENGTH a.as_stack < 7` by simp[] >>
+      drule asm_call_underflow >>
+      disch_then (qspecl_then [`build_offset_to_pc prog`,
+        `SND (compute_label_offsets prog)`] assume_tac) >> gvs[]) >>
+  `LENGTH a.as_stack < 6` by simp[] >>
+  drule asm_staticcall_underflow >>
+  disch_then (qspecl_then [`build_offset_to_pc prog`,
+    `SND (compute_label_offsets prog)`] assume_tac) >> gvs[]
+QED

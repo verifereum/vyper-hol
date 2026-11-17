@@ -326,6 +326,13 @@ Proof
        (irule canonical_dynamic_array_head_min >> simp[contractABITheory.is_dynamic_def]) >>
      `sb < dimword(:256)` by decide_tac >>
      fs[w2n_n2w,Excl "enc_def"] >> decide_tac) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid (Var slot_var) src DLOAD
+    (STRING #"%" (toString header_var)) (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2))) (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_loop_cfg_def,
+       abi_decode_position_header_zero] >>
+  `header_var+4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all prefix_complete_array_header_pair_mode >>
   disch_then (mp_tac o SPEC_ALL) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -684,7 +691,8 @@ Proof
     (drule prefix_complete_array_header_support >> simp[]) >>
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def,abi_decode_header_insts_def,
+    (fs[abi_decode_position_loop_cfg_def,abi_decode_position_header_zero,
+      abi_decode_loop_cfg_def,abi_decode_header_insts_def,
       phi_prefix_length_def,mk_inst_def]) >>
   `mem_bytes_at (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)
     (LENGTH (enc (vyper_to_abi_type env ty) (EL j avs))) prepared.vs_data_section =
@@ -750,7 +758,7 @@ Proof
     irule ctor_checked_array_child_section_at_index >>
     qpat_assum `abi_decoder_metadata _ _ (ArrayT _ _) _ _ _ _` (irule_at Any) >>
     asm_simp_tac (srw_ss()) [contractABITheory.enc_def,LET_THM] >>
-    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
+    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
     qexists_tac `sf` >> simp[Excl "enc_def"])) >>
   strip_tac >> suspend "compose"
 QED

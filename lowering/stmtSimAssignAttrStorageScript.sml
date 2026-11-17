@@ -433,7 +433,8 @@ Theorem assign_attr_storage_word_suffix[local]:
       !H. valid_horizon cx st0 H ee'.storage_trace ==>
           stmt_post H ctx func cx lctx cenv cenv sa sf es s0 res
             (ee' with gas_obs := []) t') \/
-     (exit_result r /\ expr_exit res r))
+     (exit_result r /\ expr_exit res r /\
+      !H. valid_horizon cx st0 H ee'.storage_trace ==> halt_exit H cx ee' res r))
 Proof
   strip_tac >>
   `eval_operand (Lit (n2w slot)) s = SOME (n2w slot)` by
@@ -457,6 +458,10 @@ Proof
     (gvs[eval_operand_def] >> metis_tac[]) >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `~u.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
   Cases_on `cx.txn.is_static`
   >- (`u.vs_call_ctx.cc_static` by
         fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -466,7 +471,7 @@ Proof
         fs[write_storage_slot_eq] >>
       qexistsl_tac [`res`, `ee'`,
         `Abort ExHalt_abort (halt_state (set_returndata [] u))`] >>
-      simp[expr_exit_def, exit_result_def] >>
+      simp[expr_exit_def, exit_result_def, halt_exit_def] >>
       qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >>
       metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
@@ -487,10 +492,6 @@ Proof
     simp[evaluation_state_component_equality] >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  `~u.vs_halted` by
-    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >>
-     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)

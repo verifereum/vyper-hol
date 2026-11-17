@@ -305,6 +305,7 @@ Theorem venom_asm_terminal_rel_intro:
     as1.as_transient = vs.vs_transient /\
     as1.as_returndata = vs.vs_returndata /\
     as1.as_logs = vs.vs_logs /\
+    as1.as_gas_readings = vs.vs_gas_readings /\
     as1.as_requests = vs.vs_requests /\
     as1.as_pending_deletions = vs.vs_pending_deletions ==>
     venom_asm_terminal_rel vs as1

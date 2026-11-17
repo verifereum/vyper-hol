@@ -231,7 +231,7 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
-  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
+  drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_full_exit_sim >>
   simp[] >> disch_then drule >> disch_then drule >>
   simp[] >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
@@ -252,7 +252,7 @@ Proof
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >>
   goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx (MAP SND fields) (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (StructLit ann nsid fields) (es with gas_obs := gs) =
@@ -375,7 +375,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_sim >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_full_exit_sim >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
@@ -393,7 +393,7 @@ Resume compile_make_array_vv_case[tuple]:
   simp[aggregate_tuple_action] >>
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
@@ -495,7 +495,7 @@ Resume compile_make_array_vv_case[array]:
   disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
-  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
+  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_full_exit_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -521,7 +521,7 @@ Resume compile_make_array_vv_case[array]:
   qpat_assum `eval_expr _ _ = bind _ _` (fn th => once_rewrite_tac[th]) >>
   drule aggregate_outcome_source_run >> strip_tac >>
   irule aggregate_outcome_map >> goal_assum (drule_at Any) >>
-  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP, halt_exit_def]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
   `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)

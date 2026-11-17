@@ -6,7 +6,8 @@ Ancestors
 
 Theorem immutable_assign_target_layout:
   expr_sim_inv cenv cx env es /\
-  FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  ~cx_const_name cx (src,id) ==>
   src = cenv.ce_module /\
   cenv.ce_module_var_type (src,id) = SOME ty /\
   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\

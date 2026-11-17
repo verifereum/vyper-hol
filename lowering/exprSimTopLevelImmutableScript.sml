@@ -35,7 +35,9 @@ Proof
    ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
          !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
               off + type_memory_size tv < dimword (:256)` by
-    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+    (fs[expr_sim_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+     metis_tac[]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   simp[gas_admissible_def] >>
   disch_then (qspec_then `es.gas_obs` mp_tac) >>
@@ -105,6 +107,10 @@ Proof
     (`(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `vv_place_ptr cenv cx es s0 (PlaceR (ImmutablePlace src id []))
+     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode))` by
+    gvs[vv_place_ptr_def, contextTheory.mk_ptr_def, eval_operand_def,
+        mem_path_offset_def] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def, locals_kept_mem,
        vyperASTTheory.expr_type_def] >>

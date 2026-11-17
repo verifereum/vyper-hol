@@ -177,7 +177,10 @@ Proof
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+    (`(ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s.vs_memory <= LENGTH t.vs_memory` by simp[] >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -397,6 +400,9 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
      `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+     `(ptrDiscipline$ctx_has_dalloca ctx \/
+       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+       LENGTH s.vs_memory <= LENGTH t.vs_memory` by simp[] >>
      drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
@@ -789,11 +795,12 @@ Theorem assign_local_memory_rhs_outcome:
     (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r) ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -823,7 +830,7 @@ Proof
           drule_all assign_local_memory_normal_continuation >> strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs] >>
+          qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs, halt_exit_def] >>
           irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -845,7 +852,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -1138,11 +1145,12 @@ Theorem assign_local_memory_widen_rhs_outcome:
     (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r) ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -1175,7 +1183,7 @@ Proof
           drule_all assign_local_memory_widen_normal_continuation >> strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs] >>
+          qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs, halt_exit_def] >>
           irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -1197,7 +1205,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -1338,6 +1346,8 @@ Proof
      qexistsl_tac [`H`, `ctx`, `func`, `32`] >>
      simp[immutableMemoryFrameTheory.immutable_mstore_capacity] >>
      first_assum ACCEPT_TAC) >>
+  `LENGTH s.vs_memory <= LENGTH (mstore (w2n w) wd s).vs_memory` by
+    simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   irule stmt_state_rel_write_local >>
   goal_assum (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   simp[] >> qexistsl_tac [`s`, `w`] >>

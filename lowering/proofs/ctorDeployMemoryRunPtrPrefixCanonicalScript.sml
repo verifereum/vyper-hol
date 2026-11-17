@@ -58,8 +58,8 @@ Proof
         (word_of_bytes T (0w:bytes32)
           (TAKE 32 (DROP sb initial.vs_data_section ++ REPLICATE 32 0w))) initial))` by
     (qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
-     gvs[run_inst_seq_def, exprSimUnwrapTheory.step_DLOAD, slotCopyExecutionTheory.slot_copy_step_store,
-      step_inst_base_def, mk_inst_def, exec_read1_def, exec_write2_def,
+     gvs[run_inst_seq_def, mk_inst_def] >>
+     gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def,
       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
       w2n_n2w]) >>
   gvs[]
@@ -186,8 +186,8 @@ Proof
      qpat_x_assum `ptr_safe_block _ _ _ _ _ _ _ _ _ _ ==> _` kall_tac >>
      qpat_x_assum `ghost_step fuel _ _ _ _ _ _ = _` kall_tac >>
      qpat_x_assum `!fuel. ghost_step _ _ _ _ _ _ _ = _` kall_tac >>
-     gvs[Abbr `l`, Abbr `t`, Abbr `w`, step_inst_base_def, mk_inst_def,
-      exec_read1_def, exec_write2_def, eval_operand_def, lookup_var_def,
+     gvs[Abbr `l`, Abbr `t`, Abbr `w`, mk_inst_def] >>
+     gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def, eval_operand_def, lookup_var_def,
       update_var_def, FLOOKUP_UPDATE]) >>
   gvs[] >>
   simp[ptr_safe_run_def] >> first_x_assum irule >>

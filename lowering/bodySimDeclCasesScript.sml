@@ -34,7 +34,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimExprCases bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
+  list finite_map bodySim bodySimExprCases bodySimStmtFacts allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
@@ -48,6 +48,9 @@ Ancestors
   vyperTypeCallStackSoundness compileVyper moduleLowering intCallCallee
 Libs
   monadsyntax
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* ===== Declared names ===== *)
 
@@ -149,7 +152,7 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
@@ -352,7 +355,7 @@ Proof
   `lookup_scopes id es.scopes = NONE` by
     (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
      gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
-     res_tac >> gvs[FLOOKUP_DEF]) >>
+     res_tac >> FIRST [gvs[FLOOKUP_DEF]]) >>
   `type_memory_bytes cenv typ = type_memory_size tyv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv typ < 2 ** 64` by
@@ -635,184 +638,6 @@ Proof
 QED
 
 (* ===== For ===== *)
-
-(* The scope of a loop's iteration: the loop variable, declared in the
-   compile env and added to the type environment. *)
-Theorem for_pushed_state_well_typed:
-  !st tyv v id.
-    state_well_typed st /\ value_has_type tyv v /\
-    well_formed_type_value tyv ==>
-    state_well_typed
-      (st with scopes updated_by
-         CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                popped := []|>)))
-Proof
-  rw[state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]
-QED
-
-Theorem for_pushed_popped_keys[local]:
-  !scs id tyv v.
-    popped_keys_indexed scs ==>
-    popped_keys_indexed
-      (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                        popped := []|>) :: scs)
-Proof
-  rw[popped_keys_indexed_def, FLOOKUP_UPDATE] >> gvs[]
-QED
-
-Theorem scopes_CONS_updated:
-  !es x. es with scopes := x :: es.scopes = es with scopes updated_by CONS x
-Proof
-  simp[evaluation_state_component_equality]
-QED
-
-Theorem expr_sim_inv_for_scope:
-  !cenv cx env es id fty tyv v st c st1.
-    expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
-    evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
-    declare_local cenv id fty st = (c, st1) /\ cenv.ce_alloca_locals ==>
-    expr_sim_inv c cx (extend_local env id fty F)
-      (es with scopes :=
-         (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                           popped := []|>)) :: es.scopes)
-Proof
-  rpt strip_tac >> REWRITE_TAC [scopes_CONS_updated] >>
-  `env_consistent (extend_local env id fty F) cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    (irule push_scope_with_var_env_consistent >> fs[expr_sim_inv_def]) >>
-  `well_formed_type_value tyv` by
-    metis_tac[evaluate_type_well_formed_type_value] >>
-  qpat_x_assum `expr_sim_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-  drule_all for_pushed_state_well_typed >>
-  disch_then (qspec_then `id` assume_tac) >>
-  `popped_keys_indexed
-     (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                       popped := []|>) :: es.scopes)` by
-    simp[for_pushed_popped_keys] >>
-  drule_all declare_local_ptr >> strip_tac >>
-  `c.ce_var_type = (id =+ SOME fty) cenv.ce_var_type` by
-    (qpat_x_assum `declare_local _ _ _ _ = _` mp_tac >>
-     simp[declare_local_def, fresh_var_def, comp_bind_def, comp_return_def,
-          LET_THM] >> strip_tac >> gvs[]) >>
-  `!n ty. FLOOKUP (extend_local env id fty F).var_types n = SOME ty ==>
-          ?p sz. FLOOKUP c.ce_vars n = SOME (PtrVar (Var p) sz)` by
-    (rpt gen_tac >> Cases_on `n = id` >>
-     simp[extend_local_def, FLOOKUP_UPDATE, combinTheory.C_THM] >>
-     metis_tac[]) >>
-  `!n ty. FLOOKUP (extend_local env id fty F).var_types n = SOME ty ==>
-          c.ce_var_type n = SOME ty` by
-    (rpt gen_tac >> Cases_on `n = id` >>
-     simp[extend_local_def, FLOOKUP_UPDATE, combinTheory.C_THM,
-          combinTheory.APPLY_UPDATE_THM]) >>
-  qpat_x_assum
-    `_ with <| ce_vars := _; ce_var_type := _;
-               ce_dynarray_capacity := _ |> = cenv`
-    (strip_assume_tac o
-     SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
-  `(place_map_tables_agree_on_defined c (extend_local env id fty F) <=>
-    place_map_tables_agree_on_defined cenv env) /\
-   (extend_local env id fty F).bare_globals = env.bare_globals` by
-    (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
-     simp[extend_local_def]) >>
-  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
-  conj_tac >- fs[extend_local_def] >>
-  irule storage_conjs_scopes >> simp[]
-QED
-
-(* After an iteration that goes on (a normal end or a continue), with the
-   loop variable's scope popped, expr_sim_inv holds again at the loop's
-   compile and type environments: the type soundness of the body, and
-   vyperTypeEvalSoundness's for_body_env_consistent_after_pop. *)
-Theorem expr_sim_inv_for_pop:
-  !cenv cx env es id fty tyv v ret_ty body env_b r2 es2 sc rest tops
-   bindings.
-    expr_sim_inv cenv cx env es /\ id NOTIN FDOM env.var_types /\
-    evaluate_type (get_tenv cx) fty = SOME tyv /\ value_has_type tyv v /\
-    type_stmts (extend_local env id fty F) ret_ty body = SOME env_b /\
-    call_evaluation_safe cx (int_calls_stmts body) /\
-    eval_stmts cx body
-      (es with scopes :=
-         (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                           popped := []|>)) :: es.scopes) = (r2, es2) /\
-    (r2 = INL () \/ r2 = INR ContinueException) /\
-    es2.scopes = sc :: rest /\
-    supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    supported_stmts tops bindings body ==>
-    expr_sim_inv cenv cx env (es2 with scopes := rest)
-Proof
-  rpt gen_tac >> disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
-  RULE_ASSUM_TAC (REWRITE_RULE [scopes_CONS_updated]) >>
-  `env_consistent (extend_local env id fty F) cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    (irule push_scope_with_var_env_consistent >> fs[expr_sim_inv_def]) >>
-  `well_formed_type_value tyv` by
-    metis_tac[evaluate_type_well_formed_type_value] >>
-  qpat_x_assum `expr_sim_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-  drule_all for_pushed_state_well_typed >>
-  disch_then (qspec_then `id` assume_tac) >>
-  `accounts_well_typed
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))).accounts` by simp[] >>
-  drule_all (cj 2 eval_scc_type_sound_mutual) >> strip_tac >>
-  `env_maps_wf env` by metis_tac[env_consistent_env_maps_wf] >>
-  `env_consistent env cx (es2 with scopes := TL es2.scopes)` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-     qpat_x_assum `sum_CASE _ _ _` mp_tac >> simp_tac (srw_ss()) [] >>
-     strip_tac
-     >- (irule for_body_env_consistent_after_pop >> metis_tac[]) >>
-     irule for_body_env_extends_consistent_after_pop >> metis_tac[]) >>
-  `state_well_typed (es2 with scopes := TL es2.scopes)` by
-    (irule scope_bracket_preserves_swt >> metis_tac[]) >>
-  `outcomes_accounts_typed es2.outcomes` by
-    (rw[outcomes_accounts_typed_def] >>
-     drule (cj 2 eval_outcome_suffix_mutual) >> strip_tac >>
-     drule_then irule outcome_suffix_EVERY >>
-     gvs[outcomes_accounts_typed_def]) >>
-  `popped_keys_indexed es2.scopes` by
-    (`runtime_consistent (extend_local env id fty F) cx
-        (es with scopes updated_by
-          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                 popped := []|>)))` by
-       simp[runtime_consistent_def] >>
-     `popped_keys_indexed
-        (es with scopes updated_by
-          CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                 popped := []|>))).scopes` by
-       simp[for_pushed_popped_keys] >>
-     drule_all (cj 2 eval_stmts_popped_keys_indexed) >> simp[]) >>
-  `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
-  `contract_storage_well_formed cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   oracle_storage_ok cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    (irule storage_conjs_scopes >> simp[]) >>
-  `runtime_storage_consistent (extend_local env id fty F) cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   IS_SOME (es with scopes updated_by
-              CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                     popped := []|>))).outcomes` by
-    simp[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 2 eval_stmts_storage_conjs) >> strip_tac >>
-  `contract_storage_well_formed cx (es2 with scopes := rest) /\
-   oracle_storage_ok cx (es2 with scopes := rest)` by
-    (irule storage_conjs_scopes >> simp[]) >>
-  qpat_x_assum `es2.scopes = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  RULE_ASSUM_TAC (REWRITE_RULE [TL]) >>
-  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
-QED
 
 Theorem compile_stmts_grows[local]:
   !c lc ty stmts sa sb.
@@ -1187,13 +1012,13 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule stmt_expr_body_pre_alloc >>
+    (irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
@@ -1650,7 +1475,7 @@ Proof
   simp[] >> rpt conj_tac
   >- metis_tac[compile_stmts_grows]
   >- (rpt strip_tac >> metis_tac[fixed_array_elements_typed])
-  >- (rpt strip_tac >> irule array_snapshot_memory >> metis_tac[])
+  >- (rpt strip_tac >> drule_all array_snapshot_memory >> disch_then ACCEPT_TAC)
   >- (rpt strip_tac >> irule array_body_fragment_callback >>
       metis_tac[fixed_array_elements_typed]) >>
   rpt gen_tac >> strip_tac >>

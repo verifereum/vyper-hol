@@ -55,8 +55,9 @@ Proof
      ld_site_entry E owner bs bt size ==>
      bt+size <= f \/ ?j. j NOTIN keys /\ FLOOKUP t0.vs_allocas j = SOME(bt,size)` by
     metis_tac[] >>
-  drule_all ld_bytes_certificate_backward >>
-  disch_then (qspec_then `fuel` (qx_choose_then `z` strip_assume_tac)) >>
+  mp_tac (SPEC_ALL ld_bytes_certificate_backward) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `z` strip_assume_tac) >>
   `z.vs_gas_readings = t.vs_gas_readings /\
    (!a. a <> z.vs_call_ctx.cc_address ==>
      (z.vs_accounts a).storage = (t.vs_accounts a).storage) /\
@@ -66,6 +67,9 @@ Proof
      qpat_assum `t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = t0`
        (SUBST1_TAC o SYM) >> simp[]) >>
   drule ld_normal_data_envelope >> disch_then assume_tac >>
+  `dyn_floor CS z = dyn_floor CS s` by
+    (qpat_assum `z with vs_memory := _ = s` (SUBST1_TAC o SYM) >>
+     simp[dyn_floor_def]) >>
   qexists_tac `z` >> asm_rewrite_tac[] >>
   irule ld_normal_data_assemble >> asm_rewrite_tac[] >>
   rpt conj_tac

@@ -2,6 +2,7 @@
 Theory augAssignFullStore
 Ancestors
   stmtAppendStorageRunPtr instSeqPtrLo fragGasSeqPtr fragGasOriginPtr
+  assignTuplePtrStorage ptrSafetyTransport fragGasEmitCtrl gasEvents gasCount
   fragExec emitHelper emitHelperProps compileEnv exprLoweringProps
   ptrDiscipline ptrSafeRun codegenRel contextCodegenRel
   unitTransformDefs instMemFrontier memSafeRun
@@ -9,7 +10,8 @@ Ancestors
 
 Theorem storage_word_store_origin_ptr:
   emit_void (if tr then TSTORE else SSTORE) [addr;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_call_ctx.cc_static /\
@@ -43,7 +45,7 @@ Proof
   `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
    u.vs_requests = s.vs_requests` by
     (Cases_on `tr` >> simp[Abbr `u`, sstore_def, tstore_def]) >>
-  drule_all emit_storage_store_ptr >>
+  drule_all emit_storage_store_ptr_fmp >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] assume_tac) >>
   qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
   `inst_seq_ptr D lo ctx func PG G tn [inst] s G un` by
@@ -71,4 +73,45 @@ Proof
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),G,un)` by
     metis_tac[gas_origin_ptr_path_rules, APPEND] >>
   gvs[Abbr `u`, Abbr `un`]
+QED
+
+Theorem storage_emit_static_origin_ptr:
+  emit_void (if tr then TSTORE else SSTORE) [dst;value] sa = ((),sb) /\
+  fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME addr /\ eval_operand value s = SOME w /\
+  op_taint tn dst = {} /\ op_taint tn value = {} ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (Abort ExHalt_abort (halt_state (set_returndata [] s)),G,tn)
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qabbrev_tac `i = mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE)
+    [dst;value] []` >>
+  `get_instruction bb s.vs_inst_idx = SOME i` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `i`]) >>
+  `ptr_inst_ok D lo 0 ctx func G tn i s` by
+    (Cases_on `tr` >>
+     simp[Abbr `i`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, fixed_source_write_range_def] >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
+       instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
+     rpt strip_tac >> gvs[]) >>
+  irule exit_inst_origin_ptr >>
+  simp[exit_result_def] >> qexists_tac `i` >> Cases_on `tr` >>
+  simp[Abbr `i`, mk_inst_def, step_inst_non_invoke, step_inst_base_def,
+       eval_operands_def, gas_events_step_def, gas_count_step_def,
+       mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+       inst_dload_in_section_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, exit_result_def] >>
+  fs[mk_inst_def]
 QED

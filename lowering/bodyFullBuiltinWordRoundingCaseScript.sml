@@ -47,7 +47,7 @@ Theorem rounding_continuation_full:
   (!z. x = Var z ==> not_fresh_at s1 z) /\
   cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
   fn_has_code s1 sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -60,6 +60,7 @@ Theorem rounding_continuation_full:
       t.vs_current_bb = s1.cs_current_bb /\
       t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t /\
       s0.vs_alloca_next <= t.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
       ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\ ~t.vs_halted) ==>
@@ -73,11 +74,14 @@ Theorem rounding_continuation_full:
             es sa sb s0 ee v op t /\
           expr_store_bound cx (BaseT (IntT 256)) v op t /\
           t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           ptr_val_ok cx (BaseT (IntT 256)) v op G tn t /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -196,6 +200,11 @@ Proof
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> strip_tac >> simp[]) >>
   `u.vs_current_bb = t.vs_current_bb /\ u.vs_alloca_next = t.vs_alloca_next` by
     (qpat_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp z)` by
+    (qpat_assum `z = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `u = t with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     strip_tac >> fs[ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `z = _` SUBST_ALL_TAC >>
   simp[is_word_type_def, exprSimMemDefsTheory.expr_store_bound_word,
     bodyPtrDefsTheory.ptr_val_ok_def] >>
@@ -331,7 +340,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,
                            `x`, `s0`, `G0`, `tn0`] mp_tac) >>
-  simp[] >> disch_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> disch_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ RoundingChildPost _` >>
   `bt <> Len /\ ~precompile_builtin bt /\ builtin_args_length_ok bt 1` by
     (Cases_on `bt = Ceil` >>
@@ -359,6 +368,13 @@ Proof
       Cases_on `res` >> simp[]) >>
   rpt gen_tac >> strip_tac >> disj1_tac >> BETA_TAC >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+        mid.storage_trace` by
+       gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     simp[Abbr `RoundingChildPost`] >> metis_tac[]) >>
   qpat_assum `expr_type e = BaseT DecimalT`
     (fn ty_eq => irule (SIMP_RULE (srw_ss())
        [ty_eq, vyperASTTheory.expr_type_def, is_word_type_def]
@@ -367,6 +383,9 @@ Proof
   asm_rewrite_tac[] >>
   rpt conj_tac
   >- (qexists_tac `marks` >> asm_rewrite_tac[])
-  >- (qexistsl_tac [`s1`, `x`] >> simp[] >> metis_tac[]) >>
+  >- (qexistsl_tac [`s1`, `x`] >> simp[] >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
+      simp[loweringPostsTheory.post_value_type_def, is_word_type_def] >>
+      metis_tac[]) >>
   qexists_tac `env` >> asm_rewrite_tac[])
 QED

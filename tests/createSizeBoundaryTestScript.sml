@@ -1,7 +1,7 @@
 Theory createSizeBoundaryTest
 Ancestors
   vyperCreate venomExecSemantics venomCallOracleDefs venomState
-  asmSem venomInst vfmConstants
+  asmSem venomInst vfmConstants createCtorTupleLayoutWitness
 Libs
   wordsLib
 

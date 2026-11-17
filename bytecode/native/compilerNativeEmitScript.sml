@@ -10,12 +10,15 @@ Theory compilerNativeEmit
 Ancestors compileVyper evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
   evalCompilerSubsetAbiExternalCalls evalCompilerSubsetAbiExternal evalCompilerSubsetAbiInternalCalls
   evalCompilerSubsetBuiltins evalCompilerSubsetControlDeploy evalCompilerSubsetScalars evalCompilerSubsetState
-  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram
+  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram asmOptimizer
 Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
 val () = computeLib.upd_compset (computeLib.add_thms [alistTheory.fmap_to_alist_FEMPTY]);
 val () = computeLib.upd_compset (computeLib.add_thms [integer_wordTheory.i2w_pos]);
+val () = computeLib.upd_compset (computeLib.add_thms
+  [vyperPinFoldTheory.pin_fold_expr_def,
+   vyperOriginFoldTheory.origin_fold_value_def]);
 
 (* Static annotations read by holbuild; no-ops when the script runs. *)
 fun holbuild_extra_outputs (_ : string list) = ();
@@ -30,6 +33,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -38,13 +42,15 @@ val () = holbuild_extra_deps
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle",
+   "../upstream-fixes/oracle",
    "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
 fun pr s = TextIO.print s;
 
-(* ---------- fixtures: the hand-written program each python-o1-no-asm-opt
-   oracle file is compiled from ---------- *)
+(* ---------- fixtures: the hand-written program each main-corpus oracle
+   file (python-o1-no-asm-opt/NAME.hex and python-o1-asm-opt/NAME.hex) is
+   compiled from ---------- *)
 val fixtures = [
   ("EMPTY", "empty.hex"),
   ("account_items_program", "account_items.hex"),
@@ -199,6 +205,9 @@ val suite_fixtures = [
     "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested", "d06_int_default_constant"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",
@@ -251,7 +260,9 @@ val suite_fixtures = [
     "ifexp_string", "ifexp_struct", "uint2str_arg"]),
   ("raw-calls", [
     "rc01_stmt_nooutsize", "rc02_outsize_ret", "rc03_value_gas", "rc04_static",
-    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
+    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc10_msgdata",
+    "rc11_msgdata_outsize", "rc12_msgdata_gas", "rc13_msgdata_value",
+    "rc14_msgdata_rof", "rc15_msgdata_static", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
   ("../tests/fixtures/load_timing", [
@@ -260,14 +271,25 @@ val suite_fixtures = [
     "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
-    "slice_storage_bytes", "slice_string_lit"])];
+    "slice_storage_bytes", "slice_string_lit"]),
+  ("upstream-fixes", [
+    "uf5236_ifexp_nested_narrow", "uf5256_tuple_widen_bytes",
+    "uf5298_int_to_decimal_bound", "uf5331_ifexp_narrow_string"])];
 
 
-(* Every fixture as (its .hex path under bytecode/, the program compiled). *)
+(* The compilation each oracle is compared with: Python's O1 without the final
+   assembly optimizer, and with it (python-o1-asm-opt). *)
+fun no_asm_opt p = ``compile_vyper (K SOME) (o1_policy all_capabilities) ^p``;
+fun asm_opt p = ``compile_vyper asm_opt_finalizer (o1_policy all_capabilities) ^p``;
+
+(* Every fixture as (its .hex path under bytecode/, the compilation of its
+   program).  The main corpus is also compared with the asm-opt oracles. *)
 val all_fixtures =
-  map (fn (p, h) => ("python-o1-no-asm-opt/" ^ h, program_term p)) fixtures @
+  map (fn (p, h) => ("python-o1-no-asm-opt/" ^ h, no_asm_opt (program_term p))) fixtures @
+  map (fn (p, h) => ("python-o1-asm-opt/" ^ h, asm_opt (program_term p))) fixtures @
   List.concat (map (fn (suite, names) => let val dir = suite ^ "/oracle" in
-      map (fn n => (dir ^ "/" ^ n ^ ".hex", memoryStoreWitnessLib.program ("../" ^ dir) n)) names end)
+      map (fn n => (dir ^ "/" ^ n ^ ".hex",
+                    no_asm_opt (memoryStoreWitnessLib.program ("../" ^ dir) n))) names end)
     suite_fixtures);
 val () = pr ("fixtures: " ^ Int.toString (length all_fixtures) ^ "\n");
 
@@ -338,14 +360,14 @@ val native_names = [
   ("words", ["n2w_itself", "w2n", "w2w_itself", "sw2sw_itself", "word_concat_itself",
              "word_extract_itself", "word_eq", "word_add", "word_sub", "word_mul",
              "word_2comp", "word_1comp", "word_and", "word_or", "word_xor", "word_lsl",
-             "word_lsr", "word_asr", "word_ror", "word_rol", "word_msb", "word_lsb",
+             "word_lsr", "word_ror", "word_rol", "word_msb", "word_lsb",
              "word_lo", "word_ls", "word_hi", "word_hs", "word_lt", "word_le", "word_gt",
-             "word_ge", "word_div", "word_mod", "word_sdiv", "word_bits", "word_slice",
+             "word_ge", "word_sdiv", "word_bits", "word_slice",
              "word_bit", "word_index", "dimword", "INT_MIN", "INT_MAX", "UINT_MAX",
              "concat_word_list", "word_log2", "w2i", "n2w", "w2w", "sw2sw"]),
   ("integer", ["int_of_num", "int_neg", "Num", "int_lt", "int_le", "int_gt", "int_ge",
                "int_add", "int_sub", "int_mul", "int_div", "int_mod", "int_quot",
-               "int_rem", "ABS", "int_exp"]),
+               "int_rem", "ABS"]),
   ("integer_word", ["i2w", "w2i"]),
   ("string", ["CHR", "ORD"]),
   ("finite_map", ["FEMPTY", "FUPDATE", "FLOOKUP", "FAPPLY", "FDOM", "FUNION", "DRESTRICT",
@@ -448,6 +470,8 @@ val code_rewrites = [
   (* alloc_limits_expr asks whether a builtin is a Slice *)
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
+  (* pin_fold_builtin asks whether an argument type is a BaseT *)
+  vyperPinFoldTheory.pin_base_type_case,
   (* supported_program's quantifiers: the storage dynamic-array tests of
      supported_stmt and supported_append_target, and supported_iterator's
      general iterable *)
@@ -465,6 +489,13 @@ val code_rewrites = [
            (case supported_variable_decl tops id of
               SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) =>
                 (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem
+            | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  (* supported_stmt's word Append to a non-top-level target *)
+  prove (``(?dn. supported_target_info tops bindings target =
+                   SOME (ValPT (ArrayT ty (Dynamic dn)))) <=>
+           (case supported_target_info tops bindings target of
+              SOME (ValPT (ArrayT ty' (Dynamic dn))) => ty' = ty
             | _ => F)``,
     BasicProvers.every_case_tac >> gvs[]),
   prove (``(?t c l r. x = IfExp t c l r) <=> (case x of IfExp _ _ _ _ => T | _ => F)``,
@@ -506,7 +537,19 @@ val code_rewrites = [
     val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
   in [th, TRANS (GSYM eta) abstracted] end)
     [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
-     wordsTheory.word_from_bin_list_def]);
+     wordsTheory.word_from_bin_list_def, wordsTheory.word_div_def,
+     wordsTheory.word_mod_def, wordsTheory.word_quot_def,
+     wordsTheory.word_rem_def, wordsTheory.word_asr_n2w,
+     prove (``(i : int) ** (n : num) =
+                if i < 0 /\ ODD n then ~&(Num i EXP n) else &(Num i EXP n)``,
+       Cases_on `i` >> simp[integerTheory.INT_EXP, integerTheory.NUM_OF_INT] >>
+       Cases_on `EVEN n` >>
+       full_simp_tac std_ss
+         [arithmeticTheory.ODD_EVEN, integerTheory.INT_EXP_NEG]),
+     prove (``word_exp (b : 'a word) e =
+                n2w (vfmExecution$modexp (w2n b) (w2n e) (dimword (:'a)) 1)``,
+       simp[wordsTheory.word_exp_def, vfmExecutionTheory.modexp_exp,
+            wordsTheory.ZERO_LT_dimword, wordsTheory.n2w_mod])]);
 fun rewrite_rhs eq = let val r = rhs eq
   in mk_eq (lhs eq, rhs (concl (QCONV (Ho_Rewrite.PURE_REWRITE_CONV code_rewrites) r))) end;
 fun def_rules k = map rewrite_rhs (case Lib.assoc1 k code_equations of
@@ -997,6 +1040,9 @@ val instance_natives = [
   ((("list", "ALL_DISTINCT"), numSyntax.num), "hn_ALL_DISTINCT_num"),
   ((("list", "nub"), string_ty), "hn_nub_str"), ((("list", "nub"), numSyntax.num), "hn_nub_num")];
 val instance_natives_used : string list ref = ref [];
+(* The constant behind each coerced use's raw text, so that the definition
+   order (def_deps) still sees the dependency. *)
+val coerced_consts : (string, key) Redblackmap.dict ref = ref (Redblackmap.mkDict String.compare);
 fun string_const c =
   if is_constructor c orelse is_case_const c then c else let
     val gty = type_of (generic (key c))
@@ -1013,7 +1059,9 @@ fun string_const c =
     val theta = match_type gty (type_of c)
   in case coercion theta false gty of
        NONE => c
-     | SOME f => raw (type_of c) ("(" ^ f ^ " " ^ ml_const_name c ^ ")")
+     | SOME f => let val text = "(" ^ f ^ " " ^ ml_const_name c ^ ")"
+       in coerced_consts := Redblackmap.insert (!coerced_consts, text, key c);
+          raw (type_of c) text end
   end handle HOL_ERR _ => c;
 fun is_string_cons c = is_const c andalso same_const c listSyntax.cons_tm andalso
   type_of c = (char_ty --> string_ty --> string_ty);
@@ -1104,10 +1152,10 @@ fun normalise eqs =
 val normal_defs = map (fn (k, eqs) => (eq_owner := show k; (k, normalise eqs))) (rev (!defs));
 (* A program translated from JSON can hold record literals, so it goes through
    the same normalisation as an equation's right-hand side. *)
-val fixture_terms = map (fn (h, p) =>
+val fixture_terms = map (fn (h, tm) =>
     (eq_owner := h;
      (h, lits EmitML.RIGHT (parens (guard_eq (rename_vars (strings (record_literals (eta_full
-       ``compile_vyper (K SOME) (o1_policy all_capabilities) ^p``)))))))))
+       tm)))))))))
   all_fixtures;
 val entry_terms = map (fn (name, tm) =>
     (name, lits EmitML.RIGHT (rename_vars (strings (eta_full tm))))) entries;
@@ -1252,11 +1300,29 @@ val () = EmitML.is_int_literal_hook := (fn _ => false);
 val def_index = List.foldl (fn ((i, (k, _)), d) => Redblackmap.insert (d, k, i))
   (Redblackmap.mkDict key_cmp) (Lib.enumerate 0 normal_defs);
 val def_vec = Vector.fromList normal_defs;
-fun def_deps i = List.mapPartial (fn c => Redblackmap.peek (def_index, key c))
-  (List.concat (map (find_terms is_const o rhs) (#2 (Vector.sub (def_vec, i)))));
+fun dep_keys tm =
+  map key (find_terms is_const tm) @
+  List.mapPartial (fn v => Redblackmap.peek (!coerced_consts,
+                             String.extract (fst (dest_var v), 1, NONE)))
+    (find_terms is_raw_var tm);
+fun def_deps i = List.mapPartial (fn k => Redblackmap.peek (def_index, k))
+  (List.concat (map (dep_keys o rhs) (#2 (Vector.sub (def_vec, i)))));
 fun pp_defn tm = PP.pp_to_string 100 (EmitML.pp_defn_as_ML []) tm;
 fun pp_term tm = PP.pp_to_string 100 (EmitML.pp_term_as_ML [] EmitML.RIGHT) tm;
 val failed = ref 0;
+(* A value whose HOL type is monomorphic gets that type written out.  Its ML
+   expression can have a type the value restriction leaves ungeneralised
+   (all_capabilities = K T), which only a later use fixes, and a use in a
+   later structure can't. *)
+fun annotate_val [i] text = let
+      val (k, eqs) = Vector.sub (def_vec, i)
+      val l = lhs (snd (strip_forall (hd eqs)))
+      val prefix = "val " ^ ml_name "c" k ^ " ="
+    in if is_const l andalso null (type_vars_in_term l) andalso String.isPrefix prefix text
+       then "val " ^ ml_name "c" k ^ " : " ^ ml_ty (type_of l) ^ " =" ^
+            String.extract (text, size prefix, NONE)
+       else text end
+  | annotate_val _ text = text;
 fun group_text group = let
   val t0 = Time.now ()
   val r = group_text0 group
@@ -1265,14 +1331,20 @@ in if dt > 0.5 then pr ("slow group " ^ Real.toString dt ^ "s: " ^
      String.concatWith " " (map (show o #1 o fn i => Vector.sub (def_vec, i)) group) ^ "\n") else ();
    r end
 and group_text0 group =
-  (pp_defn (list_mk_conj (List.concat (map (#2 o fn i => Vector.sub (def_vec, i)) group))) ^ "\n\n")
+  (annotate_val group (pp_defn (list_mk_conj (List.concat (map (#2 o fn i => Vector.sub (def_vec, i)) group)))) ^ "\n\n")
   handle e => (failed := !failed + 1;
                pr ("PRINT FAIL " ^ String.concatWith " " (map (show o #1 o fn i => Vector.sub (def_vec, i)) group) ^
                    ": " ^ General.exnMessage e ^ "\n"); "");
 val def_groups = sccs (Vector.length def_vec) def_deps;
 val () = pr ("def groups: " ^ Int.toString (length def_groups) ^ ", largest " ^
   Int.toString (List.foldl Int.max 0 (map length def_groups)) ^ "\n");
-val defs_text = String.concat (map group_text def_groups);
+(* Poly/ML 5.9.2 doesn't finish compiling a structure of more than about
+   2300 functions, so the definitions go in structures of chunk_size groups,
+   each opening the ones before it. *)
+val chunk_size = 500;
+fun chunks l = if length l <= chunk_size then [l]
+               else List.take (l, chunk_size) :: chunks (List.drop (l, chunk_size));
+val def_chunks = chunks (map group_text def_groups);
 val fixtures_text =
   "val fixtures = [\n" ^ String.concatWith ",\n" (map (fn (h, tm) =>
     "  (" ^ Lib.mlquote h ^ ", fn () => " ^ pp_term tm ^ ")") fixture_terms) ^ "]\n";
@@ -1288,9 +1360,15 @@ val output_dir =
 val generated_path = OS.Path.concat (output_dir, module_name ^ "ML.sml");
 val () = pr ("print failures: " ^ Int.toString (!failed) ^ "\n");
 val () = if !failed = 0 then () else raise Fail "EmitML could not print some equations";
+fun chunk_name n = module_name ^ "ML_" ^ Int.toString n;
+fun structure_text name n body =
+  "structure " ^ name ^ " = struct\nlocal open compilerNativeRuntime " ^
+  String.concatWith " " (List.tabulate (n, chunk_name)) ^ "\nin\n\n" ^ body ^ "end\nend;\n\n";
 val () = let val o' = TextIO.openOut generated_path in
   TextIO.output (o', "(* Generated by compilerNativeEmitScript.sml.  Do not edit. *)\n" ^
-    "structure " ^ module_name ^ "ML = struct\nopen compilerNativeRuntime\n\n" ^
-    datatype_text ^ lits_text ^ "\n" ^ String.concatWith "\n" (rev (!indexed_decls)) ^ "\n\n" ^
-    defs_text ^ fixtures_text ^ entries_text ^ "end\n");
+    String.concat (Lib.mapi (fn n => fn texts => structure_text (chunk_name n) n
+      ((if n = 0 then datatype_text ^ lits_text ^ "\n" ^
+                      String.concatWith "\n" (rev (!indexed_decls)) ^ "\n\n"
+        else "") ^ String.concat texts)) def_chunks) ^
+    structure_text (module_name ^ "ML") (length def_chunks) (fixtures_text ^ entries_text));
   TextIO.closeOut o' end;

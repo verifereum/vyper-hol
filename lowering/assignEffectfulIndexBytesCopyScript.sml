@@ -13,7 +13,7 @@ Theorem assign_effectful_bytes_copy_path:
   type_memory_size tv < dimword (:256) /\ type_memory_size tv <= N /\
   FLOOKUP s.vs_allocas aid = SOME (w2n d,N) /\
   origin.cs_next_id <= aid /\ aid < sa.cs_next_id /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     b+sz <= w2n d \/ w2n d+N <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -29,7 +29,7 @@ Theorem assign_effectful_bytes_copy_path:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     val_in_memory tv v (w2n d) t.vs_memory /\
-    stmt_state_rel ctx func ce cx es t /\
+    stmt_state_rel H ctx func ce cx es t /\
     eval_operand dst t = SOME d /\
     FLOOKUP t.vs_allocas aid = SOME (w2n d,N) /\
     (!name b sz. local_region ce es.scopes t name b sz ==>
@@ -38,7 +38,9 @@ Theorem assign_effectful_bytes_copy_path:
     t.vs_allocas = s.vs_allocas /\
     alloca_frame ce es origin s ce es t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `compile_store_bytestring src dst sa = ((),sb)` by
@@ -53,7 +55,9 @@ Proof
      >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
          metis_tac[regions_disjoint_def]) >>
      metis_tac[]) >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_labels = s.vs_labels` by
+  `t.vs_allocas = s.vs_allocas /\ t.vs_labels = s.vs_labels /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
        mp_tac >> simp[venom_state_component_equality]) >>
   `eval_operand dst t = SOME d` by

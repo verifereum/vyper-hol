@@ -60,14 +60,14 @@ Proof
   irule MAP_CONG >> simp[] >> Cases >> rw[rename_push_label_def]
 QED
 
-Theorem rename_filter_data[local]:
+Theorem rename_filter_data:
   FILTER is_data_inst (MAP (rename_push_label x y) p) = FILTER is_data_inst p
 Proof
   Induct_on `p` >> rw[rename_push_label_facts] >>
   Cases_on `h` >> gvs[is_data_inst_def, rename_push_label_def]
 QED
 
-Theorem mem_rename[local]:
+Theorem mem_rename:
   (MEM (AsmLabel l) (MAP (rename_push_label x y) p) ⇔ MEM (AsmLabel l) p) ∧
   (MEM (AsmDataHeader l) (MAP (rename_push_label x y) p) ⇔
    MEM (AsmDataHeader l) p) ∧
@@ -77,7 +77,7 @@ Proof
   simp[MEM_MAP, rename_push_label_facts]
 QED
 
-Theorem index_of_label_rename[local]:
+Theorem index_of_label_rename:
   INDEX_OF (AsmLabel l) (MAP (rename_push_label x y) p) =
   INDEX_OF (AsmLabel l) p
 Proof
@@ -112,7 +112,7 @@ Proof
   rpt strip_tac >> gvs[EL_MAP, rename_push_label_facts]
 QED
 
-Theorem rename_static_wf[local]:
+Theorem rename_static_wf:
   asm_static_wf p ∧ (MEM (AsmLabel y) p ∨ MEM y (asm_label_refs p)) ⇒
   asm_static_wf (MAP (rename_push_label x y) p)
 Proof
@@ -158,7 +158,6 @@ End
 Definition rn_rel_def:
   rn_rel x y ss ss' ⇔
     ss'.sym_base = ss.sym_base ∧ ss.sym_base.as_stack = [] ∧
-    ss'.sym_own_code = ss.sym_own_code ∧
     LIST_REL (sv_rel x y) ss.sym_stack ss'.sym_stack ∧
     ml_rel x y ss.sym_mem_labels ss'.sym_mem_labels ∧
     mem_blocks_ok ss.sym_mem_labels ∧ mem_blocks_ok ss'.sym_mem_labels
@@ -178,20 +177,20 @@ Definition res_rel_def:
   res_rel x y (SymBad e) r' = T
 End
 
-Theorem sv_rel_refl[local,simp]:
+Theorem sv_rel_refl[simp]:
   sv_rel x y v v
 Proof
   simp[sv_rel_def]
 QED
 
-Theorem sv_rel_val[local]:
+Theorem sv_rel_val:
   (sv_rel x y (Val w) v' ⇔ v' = Val w) ∧
   (sv_rel x y v (Val w) ⇔ v = Val w)
 Proof
   Cases_on `v` >> rw[sv_rel_def] >> metis_tac[]
 QED
 
-Theorem list_rel_sv_refl[local,simp]:
+Theorem list_rel_sv_refl[simp]:
   LIST_REL (sv_rel x y) l l
 Proof
   simp[LIST_REL_EL_EQN]
@@ -206,14 +205,14 @@ Proof
   first_x_assum (qspec_then `x'` mp_tac) >> rw[] >> gvs[]
 QED
 
-Theorem ml_rel_clear[local]:
+Theorem ml_rel_clear:
   ml_rel x y m m' ⇒
   ml_rel x y (mem_labels_clear m P) (mem_labels_clear m' P)
 Proof
   rw[ml_rel_def, mem_labels_clear_def, FLOOKUP_DRESTRICT] >> rw[]
 QED
 
-Theorem blocks_clear[local]:
+Theorem blocks_clear:
   mem_blocks_ok m ⇒ mem_blocks_ok (mem_labels_clear m P)
 Proof
   rw[mem_blocks_ok_def, mem_labels_clear_def, FLOOKUP_DRESTRICT] >>
@@ -310,21 +309,21 @@ QED
 
 (* ===== One step ===== *)
 
-Theorem set_stack_rel[local]:
+Theorem set_stack_rel:
   rn_rel x y ss ss' ∧ LIST_REL (sv_rel x y) stk stk' ⇒
   res_rel x y (sym_set_stack stk ss) (sym_set_stack stk' ss')
 Proof
   rw[sym_set_stack_def, res_rel_def, rn_rel_def, asm_next_def]
 QED
 
-Theorem push_lab_rel[local]:
+Theorem push_lab_rel:
   rn_rel x y ss ss' ∧ LIST_REL (sv_rel x y) stk stk' ⇒
   res_rel x y (sym_push_lab l d stk ss) (sym_push_lab l d stk' ss')
 Proof
   rw[sym_push_lab_def, res_rel_def] >> irule set_stack_rel >> simp[]
 QED
 
-Theorem lift_rel[local]:
+Theorem lift_rel:
   rn_rel x y ss ss' ∧ ml_rel x y labs labs' ∧
   mem_blocks_ok labs ∧ mem_blocks_ok labs' ⇒
   res_rel x y (sym_lift k labs ss r) (sym_lift k labs' ss' r)
@@ -341,7 +340,7 @@ Proof
   rw[] >> gvs[] >> metis_tac[]
 QED
 
-Theorem concrete_rel[local]:
+Theorem concrete_rel:
   rn_rel x y ss ss' ⇒
   res_rel x y (sym_step_concrete name ss) (sym_step_concrete name ss')
 Proof
@@ -362,7 +361,7 @@ Proof
   simp[ml_rel_clear, blocks_clear]
 QED
 
-Theorem add_rel[local]:
+Theorem add_rel:
   rn_rel x y ss ss' ∧ ¬sym_data_label p env x ⇒
   res_rel x y (sym_add p env ss) (sym_add p env ss')
 Proof
@@ -378,7 +377,7 @@ Proof
   rw[res_rel_def] >> gvs[push_lab_rel]
 QED
 
-Theorem mstore_rel[local]:
+Theorem mstore_rel:
   rn_rel x y ss ss' ⇒ res_rel x y (sym_mstore ss) (sym_mstore ss')
 Proof
   strip_tac >>
@@ -398,7 +397,7 @@ Proof
   fs[rn_rel_def, sv_rel_def]
 QED
 
-Theorem mload_rel[local]:
+Theorem mload_rel:
   rn_rel x y ss ss' ⇒ res_rel x y (sym_mload ss) (sym_mload ss')
 Proof
   strip_tac >>
@@ -435,13 +434,6 @@ Proof
       gvs[sv_rel_def] >> rw[res_rel_def] >> gvs[] >>
       irule lift_rel >> fs[rn_rel_def] >>
       simp[ml_rel_clear, blocks_clear]) >>
-  Cases_on `∃dst src sz stk.
-              ss.sym_stack = Val dst :: Val src :: Val sz :: stk`
-  >- (gvs[] >> gvs[LIST_REL_CONS1, sv_rel_val] >>
-      simp[sym_codecopy_def] >>
-      `ss'.sym_own_code = ss.sym_own_code` by fs[rn_rel_def] >>
-      simp[] >> irule lift_rel >> fs[rn_rel_def] >>
-      simp[ml_rel_clear, blocks_clear]) >>
   `∃e. sym_codecopy p env ss = SymError e ∨ sym_codecopy p env ss = SymBad e`
     by (simp[sym_codecopy_def] >>
         Cases_on `ss.sym_stack` >> simp[] >>
@@ -453,7 +445,7 @@ Proof
   gvs[res_rel_def]
 QED
 
-Theorem dup_swap_rel[local]:
+Theorem dup_swap_rel:
   rn_rel x y ss ss' ⇒
   res_rel x y (sym_dup n ss) (sym_dup n ss') ∧
   res_rel x y (sym_swap n ss) (sym_swap n ss')
@@ -479,9 +471,7 @@ Proof
   simp[sym_step_op_def] >>
   rw[add_rel, mstore_rel, mload_rel, codecopy_rel, res_rel_def]
   >- (Cases_on `ss.sym_stack` >> Cases_on `ss'.sym_stack` >>
-      gvs[res_rel_def] >> irule set_stack_rel >> simp[])
-  >- (`ss'.sym_own_code = ss.sym_own_code` by fs[rn_rel_def] >>
-      irule set_stack_rel >> simp[sv_rel_def]) >>
+      gvs[res_rel_def] >> irule set_stack_rel >> simp[]) >>
   rpt CASE_TAC >> gvs[dup_swap_rel, concrete_rel]
 QED
 
@@ -501,7 +491,7 @@ Proof
   irule lift_rel >> fs[rn_rel_def]
 QED
 
-Theorem sym_jump_dest_rename[local]:
+Theorem sym_jump_dest_rename:
   sym_jump_dest (MAP (rename_push_label x y) p) v = sym_jump_dest p v
 Proof
   Cases_on `v` >> rw[sym_jump_dest_def, index_of_label_rename]

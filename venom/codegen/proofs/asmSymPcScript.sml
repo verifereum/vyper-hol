@@ -351,13 +351,12 @@ QED
 
 Theorem sym_with_pc_fields[simp]:
   (sym_with_pc q ss).sym_stack = ss.sym_stack ∧
-  (sym_with_pc q ss).sym_mem_labels = ss.sym_mem_labels ∧
-  (sym_with_pc q ss).sym_own_code = ss.sym_own_code
+  (sym_with_pc q ss).sym_mem_labels = ss.sym_mem_labels
 Proof
   simp[sym_with_pc_def]
 QED
 
-Theorem sym_set_stack_pc_add[local]:
+Theorem sym_set_stack_pc_add:
   sym_set_stack stk (sym_with_pc (n + ss.sym_base.as_pc) ss) =
   sym_result_pc_add n (sym_set_stack stk ss)
 Proof
@@ -388,7 +387,7 @@ Proof
 QED
 
 (* A lifted concrete step f that commutes with moving the PC. *)
-Theorem sym_lift_step_pc_add[local]:
+Theorem sym_lift_step_pc_add:
   (∀s. f (s with as_pc := s.as_pc + n) = asm_result_pc_add n (f s)) ∧
   q = n + ss.sym_base.as_pc ⇒
   sym_lift k labs (sym_with_pc q ss)
@@ -442,8 +441,7 @@ Proof
   rename1 `ss.sym_stack = x1 :: t1` >>
   Cases_on `t1` >- simp[sym_result_pc_add_def] >>
   rename1 `ss.sym_stack = x1 :: x2 :: t2` >>
-  Cases_on `t2`
-  >- (Cases_on `x1` >> Cases_on `x2` >> simp[sym_result_pc_add_def]) >>
+  Cases_on `t2` >- (Cases_on `x2` >> simp[sym_result_pc_add_def]) >>
   rename1 `ss.sym_stack = x1 :: x2 :: x3 :: t3` >>
   Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
   rw[sym_result_pc_add_def] >>
@@ -480,7 +478,7 @@ Proof
   Cases_on `r` >> simp[sym_lift_def] >> strip_tac >> gvs[]
 QED
 
-Theorem sym_set_stack_pc_next[local]:
+Theorem sym_set_stack_pc_next:
   sym_set_stack stk ss = SymOK ss' ⇒
   ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
@@ -545,7 +543,7 @@ QED
 
 (* ===== sym_base.as_stack stays empty ===== *)
 
-Theorem sym_set_stack_base[local]:
+Theorem sym_set_stack_base:
   sym_set_stack stk ss = SymOK ss' ⇒ ss'.sym_base = asm_next ss.sym_base
 Proof
   simp[sym_set_stack_def] >> strip_tac >> gvs[]

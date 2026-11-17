@@ -37,9 +37,8 @@ Theorem deploy_ctor_entry_initial_fields[local]:
  ~vs.vs_halted /\ vs.vs_allocas = FEMPTY /\
  vs.vs_alloca_next = imm_len tops
 Proof
- simp[gas_variant_def] >>
- simp[deploy_entry_state_def, entry_venom_state_def] >>
- simp[init_venom_state_def, venom_state_component_equality] >>
+ simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+      init_venom_state_def, venom_state_component_equality] >>
  strip_tac >>
  simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def]
 QED
@@ -71,9 +70,7 @@ Proof
  simp[] >>
  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
  `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-   (gvs[o1_source_unit_ok_def, EVERY_MEM] >>
-    qpat_x_assum `!fn. MEM fn _ ==> !inst. _`
-      (drule_then assume_tac) >> simp[]) >>
+   (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
  gvs[] >>
  rename1 `fn_entry_label f = SOME "__deploy"` >>
  Cases_on `f.fn_blocks` >- gvs[fn_entry_label_def, entry_block_def] >>

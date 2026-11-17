@@ -18,7 +18,7 @@ Theorem uint2str_suffix_joint_full:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at sm r) /\
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at sm r) /\
-  X < dimword(:256) /\ 78 <= n /\ valid_horizon cx st0 H0 ee.storage_trace /\
+  X < dimword(:256) /\ LENGTH (num_to_dec_string X) <= n /\ valid_horizon cx st0 H0 ee.storage_trace /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     stmt_state_rel H ctx fn cenv cx es s0 /\
     expr_post H ctx fn cenv cx e es sa sm s0 ee (IntV (&X)) op s /\
@@ -49,6 +49,7 @@ Theorem uint2str_suffix_joint_full:
     s.vs_alloca_next <= t.vs_alloca_next
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   Cases_on `compile_uint2str op n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
   gvs[as_ptr_val_def] >>
   drule compile_uint2str_layout >>
@@ -64,6 +65,7 @@ Proof
   `stmt_state_rel H0 ctx fn cenv cx ee s` by metis_tac[] >>
   `type_memory_bytes cenv (BaseT (StringT n)) + n < dimword(:256)` by
     (irule (cj 6 u2s_builtin_result_requirements) >> simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`sa` |-> `sm`, `es` |-> `ee`] (INST_TYPE [``:'b`` |-> ``:256``] (SPEC_ALL alloc_buffer_origin_ptr_path_exact))) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
     (qx_choose_then `p` (qx_choose_then `w` (qx_choose_then `ready`
@@ -161,8 +163,6 @@ Resume uint2str_suffix_joint_full[numeric_exit]:
   drule (Q.INST [`sz` |-> `type_memory_bytes cenv (BaseT (StringT n))`, `X` |-> `X`]
     (SPEC_ALL u2s_builtin_result_requirements)) >> simp[] >> strip_tac >>
   first_x_assum (qspec_then `X` mp_tac) >> simp[] >> strip_tac >>
-  `LENGTH (num_to_dec_string X) <= n` by
-    (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >> fs[dimword_def] >> decide_tac) >>
   `t.vs_alloca_next = ready.vs_alloca_next /\ t.vs_allocas = ready.vs_allocas` by
     (fs[u2s_frame_def, venom_state_component_equality]) >>
   `s.vs_alloca_next <= t.vs_alloca_next` by decide_tac >>

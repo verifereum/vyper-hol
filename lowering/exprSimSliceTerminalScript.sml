@@ -157,7 +157,7 @@ Theorem slice_data_bytes_outcome:
        vv_post H ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
@@ -241,7 +241,7 @@ Resume slice_data_bytes_outcome[range]:
     `INR (Error (RuntimeError "evaluate_slice range"))`] >>
   simp[get_accounts_def, bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_bytes_nat, fragExecTheory.exit_result_def,
-       exprSimDefsTheory.expr_exit_def, raise_def]
+       exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def, raise_def]
 QED
 
 Finalise slice_data_bytes_outcome
@@ -276,7 +276,7 @@ Theorem slice_data_string_outcome:
        vv_post H ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
@@ -360,7 +360,7 @@ Resume slice_data_string_outcome[range]:
     `INR (Error (RuntimeError "evaluate_slice range"))`] >>
   simp[get_accounts_def, bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_string_nat, fragExecTheory.exit_result_def,
-       exprSimDefsTheory.expr_exit_def, raise_def]
+       exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def, raise_def]
 QED
 
 Finalise slice_data_string_outcome

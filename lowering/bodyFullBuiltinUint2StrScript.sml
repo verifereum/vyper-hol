@@ -3,7 +3,7 @@
    the old lo=0 pointer result does not certify this successful joint prefix. *)
 Theory bodyFullBuiltinUint2Str
 Ancestors
-  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh
+  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh bodyInvNoDalloca
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
   exprSimUint2Str bodyMemBiUint2StrBlocks bodyPtrBytestringBuiltinsUintArithmetic
@@ -31,6 +31,7 @@ Theorem uint2str_builtin_sim_full:
       cenv cx ty (Builtin ann (Uint2Str n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin ann (Uint2Str n) args) es` suffices_by
     (strip_tac >> simp[] >> irule expr_sim_full_of_vv >> simp[] >>
@@ -85,7 +86,7 @@ Proof
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ss`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- fs[]) >> disch_tac >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   suspend "compose"
 QED
 
@@ -115,7 +116,8 @@ Resume uint2str_builtin_sim_full[compose]:
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
       conj_tac >- simp[] >> simp[Abbr `childR`] >> rpt strip_tac >>
       Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def,
+          stmtSimPropsTheory.expr_exit_INR_type]) >>
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
@@ -136,12 +138,15 @@ Resume uint2str_builtin_sim_full[compose]:
      (impl_tac >- first_assum ACCEPT_TAC) >> BETA_TAC >> strip_tac >> gvs[]) >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  `?X. v = IntV (&X) /\ X < dimword(:256) /\
+  `?X. v = IntV (&X) /\ X < 2 ** k /\ X < dimword(:256) /\
        eval_operand op t = SOME (n2w X) /\ expr_sim_inv cenv cx env mid` by
     (irule (at_horizon_named "H" uint2str_operand_endpoint) >>
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl_tac [`s0.vs_gas_readings`, `marks`, `mid`] >> simp[]) >>
   qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    metis_tac[vyperTypeBuiltinsTheory.uint2str_width_bound,
+              arithmeticTheory.LESS_EQ_TRANS] >>
   suspend "suffix"
 QED
 
@@ -188,7 +193,9 @@ Resume uint2str_builtin_sim_full[suffix]:
   qexistsl_tac [`HG`, `mid`, `INL (Value (StringV (num_to_dec_string X)))`, `u`, `tm`] >>
   simp[uint2str_source_result] >>
   rpt strip_tac >> simp[expr_type_def, lowered_value_type_def, post_value_type_def] >>
-  Cases_on `vv` >> gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+      expr_type_def, is_bytestring_type_def] >>
   rpt conj_tac >> simp[] >> decide_tac
 QED
 

@@ -3,6 +3,13 @@
 This corpus contains the 23 witnesses from `.agent-files/TASK.md`: all four
 creation builtins, salted forms, constructor arguments, storage bytecode,
 the forwarder alias, nested creation, and the raw-argument domain boundary.
+Additional witnesses isolate runtime and folded-literal blueprint offsets
+without constructor arguments (`cb08` and `cb09`), a non-foldable flag
+conversion that preserves a literal IR operand (`cb10`), folded wei
+conversion (`cb11`), and runtime unsafe arithmetic on constants (`cb12`).
+Mixed Bytes/HexBytes selectors remain runtime through length and arithmetic
+(`cb13` and `cb14`); source-aware membership folding supplies a Boolean
+keyword argument (`cb15`).
 
 The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
 (`0.5.0b1+commit.577d2534`), Prague, experimental codegen, optimization
@@ -10,9 +17,12 @@ The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
 hashes.
 
 The compiler at the pin rejects `dom06_blueprint_rawargs_b32`, so its oracle
-files are kept from `0.5.0a4+commit.cd74ce4f`, it is out of
-`parity-fixtures.txt`, and `prepare` cannot reproduce this corpus as a whole. Keep that diagnostic and its oracle files when
-regenerating the accepted fixtures. The fixtures whose bytecode changed at
+files are kept from `0.5.0a4+commit.cd74ce4f` and it is out of
+`parity-fixtures.txt`. It is listed in `compiler-rejects.txt`: `prepare`
+checks that the pinned compiler still rejects it and skips it, and
+`python-o1-bytecode-fixtures --check` reproduces the rest of the corpus.
+Keep that diagnostic and its oracle files when regenerating the accepted
+fixtures. The fixtures whose bytecode changed at
 the pin through vyperlang/vyper#5127 are out of `parity-fixtures.txt` and
 listed in `../pending-5127-port.md`.
 

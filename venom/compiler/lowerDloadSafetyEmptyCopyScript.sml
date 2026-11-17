@@ -22,6 +22,7 @@ Theorem ld_mcopy_zero_effect:
   eval_operand r f.lf_tgt = SOME src' /\
   eval_operand n f.lf_src = SOME len /\
   eval_operand n f.lf_tgt = SOME len /\ w2n len = 0 /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -29,6 +30,8 @@ Theorem ld_mcopy_zero_effect:
       lf_tv := (step_taint inst f.lf_src ss tn).t_var |> ) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q)
       (ld_erase A o_f f.lf_H) inst ss = ld_erase A o_f f.lf_H /\
     ss.vs_allocas = f.lf_src.vs_allocas /\
@@ -68,6 +71,9 @@ Proof
   conj_tac >- (gvs[ld_memory_def, mcopy_def, GSYM read_memory_def,
                        read_memory_def, ld_empty_write_read_byte] >> metis_tac[]) >>
   conj_tac >- gvs[ld_nonghost_def, mcopy_def, write_memory_with_expansion_def] >>
+  conj_tac >- (gvs[ptrDisciplineTheory.ld_dyn_agree_def, mcopy_def,
+                   GSYM read_memory_def, read_memory_def,
+                   ld_empty_write_read_byte] >> metis_tac[]) >>
   simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mcopy_def,
        write_memory_with_expansion_def]
 QED

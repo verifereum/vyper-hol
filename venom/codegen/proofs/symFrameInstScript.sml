@@ -141,11 +141,12 @@ Theorem sym_inst_frame_sim_deep:
     MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
     (* Label values flow only where the symbolic machine allows them. *)
     label_flow_ok ctx /\
-    (* A code_end pointer's offset stays below 2^255. *)
-    (!op w. inst.inst_opcode = ADD /\
-            inst.inst_operands = [op; Label "code_end"] /\
-            eval_operand op vs = SOME w ==>
-            w2n w < dimword (:256) DIV 2) /\
+    (* Check code_end offsets only when CODECOPY reads them. *)
+    (!dst x sz w off. inst.inst_opcode = CODECOPY /\
+      inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
+      eval_operand (Var x) vs = SOME w /\
+      FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+      w2n (w - n2w off) < dimword (:256) DIV 2) /\
     (* code_end and runtime_begin are data labels of the program. *)
     sym_data_label prog env "code_end" /\
     (MEM (Label "runtime_begin") inst.inst_operands ==>

@@ -1,7 +1,7 @@
 (* ECRecover's joint value and stack judgments. *)
 Theory bodyFullBuiltinECRecover
 Ancestors
-  bodyFullExprGeneric bodyFullPreds bodySimFull
+  bodyFullExprGeneric bodyFullPreds bodySimFull bodyInvNoDalloca
   bodyFullBuiltinPrecompileRecoveryArgs bodyFullBuiltinPrecompileRecoveryBuffers
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinPrecompileSuffixAbort
   gasOutcomeFull gasOutcomeFullCompose gasShadowCompileStmtHelpers gasShadow gasShadowState
@@ -31,6 +31,7 @@ Theorem ecrecover_expr_sim_full:
       cenv cx ty (Builtin a ECRecover args) es
 Proof
   rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `a = BaseT AddressT /\ LENGTH args = 4 /\
    EVERY (\e. is_word_type (expr_type e)) args` by
     metis_tac[ecrecover_pre_types] >>
@@ -115,7 +116,7 @@ Proof
   >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
       conj_tac >- simp[] >>
       simp[Abbr `argsR`,wb_args_exit_def,expr_exit_def] >>
-      Cases_on `res` >> simp[]) >>
+      Cases_on `res` >> simp[exprSimDefsTheory.halt_exit_def]) >>
   BETA_TAC >> qx_genl_tac [`marks`,`rr`,`mid`,`G1`,`tn1`,`sarg`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
@@ -1161,7 +1162,7 @@ Proof
         gas_origin_ptr_path _ (sarg,G1,tn1) [F] (Abort Revert_abort tabort,Ga,tna)`
         (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
           (ACCEPT_TAC o MATCH_MP th))) >>
-  simp[NoAsms,exit_result_def,expr_exit_def]
+  simp[NoAsms,exit_result_def,expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem ecrecover_builtin_sim_full:

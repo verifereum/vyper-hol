@@ -156,8 +156,10 @@ Proof
   rpt gen_tac >> Cases_on `f` >> simp[package_fallback_fn_def,
     set_fallback_package_target_def, rb_fallback_ok_def] >> PairCases_on `x` >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
-       rb_fallback_ok_def, rb_build_compile_env] >>
-  simp[update_cenv_nonreentrant_def, rb_build_compile_env_ctor]
+       rb_fallback_ok_def, rb_env_updates] >>
+  Cases_on `x6 = NoneT` >> simp[rb_build_compile_env] >>
+  simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+       rb_build_compile_env_ctor]
 QED
 
 Theorem rb_build_selectors[local]:
@@ -173,7 +175,7 @@ Theorem rb_package_group[local]:
 Proof
   rpt gen_tac >> PairCases_on `f` >>
   `rb_external_package_ok (set_external_package_target target
-    (package_external_fn tops' trans keys (f0,f1,f2,f3,f4,f5,f6,f7)))` by
+    (package_external_fn tops trans keys (f0,f1,f2,f3,f4,f5,f6,f7)))` by
     simp[rb_package_external] >>
   simp_tac std_ss [package_external_group_def, LET_THM] >>
   IF_CASES_TAC

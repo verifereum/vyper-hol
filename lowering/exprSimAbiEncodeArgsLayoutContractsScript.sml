@@ -59,5 +59,6 @@ Theorem layout_body_pre_contract:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 Proof
   simp[expr_body_pre_def, layout_abi_def, layout_call_def,
-       int_calls_expr_def]
+       int_calls_expr_def, supportedExprTraverseTheory.supported_expr_exists_def,
+       const_name_root_def]
 QED

@@ -199,7 +199,8 @@ Proof
       Cases_on `emit_op MLOAD [src] sa` >> gvs[] >>
       `COUNT_LIST 1 = [0]` by EVAL_TAC >>
       fs[WORD_ADD_0, WORD_MULT_CLAUSES] >>
-      drule_all storage_copy_one_run_mem >> strip_tac >>
+      drule_all storage_copy_one_run_mem >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
       qexists_tac `t` >> simp[] >> metis_tac[]) >>
   simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
        comp_bind_def, comp_return_def, AllCaseEqs()] >> strip_tac >>
@@ -209,7 +210,8 @@ Proof
      (if tr then LocTransient else LocStorage) F sa = (u,sf)` by
     (Cases_on `tr` >> gvs[]) >>
   `w2n b + 32*n <= s.vs_alloca_next` by decide_tac >>
-  drule_all storage_copy_bulk_run_mem >> simp[]
+  drule_all storage_copy_bulk_run_mem >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
 
 Theorem storage_copy_success_run_mem:
@@ -268,12 +270,14 @@ Proof
   `w2n w + type_memory_size tv <= s1.vs_alloca_next` by
     (drule_all topcopy_source_bound >> simp[]) >>
   `alloca_inv s1` by fs[expr_post_def, stmt_state_rel_def] >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >> fs[write_storage_slot_eq]) >>
   `~s1.vs_call_ctx.cc_static` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [type_memory_size_slots]) >>
   `w2n w + 32 * type_slot_size tv <= s1.vs_alloca_next` by decide_tac >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
-    storage_copy_suffix_run_mem >>
+    (INST_TYPE [alpha |-> ``:256``] storage_copy_suffix_run_mem) >>
   disch_then (qspecl_then [`ctx`, `func`, `s1`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac[] >>

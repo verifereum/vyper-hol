@@ -1,32 +1,13 @@
 (*
- * Expression simulation: extcall and staticcall, as one case lemma
+ * Expression simulation: extcall and staticcall, the readiness relations and
+ * source facts the joint call stages use.
  *
  * extcall/staticcall in SOME oracle mode, including reverts and
  * default_return_value (#553).  The source evaluates the target, then the
  * positional arguments, each read as it is evaluated, then the keyword
- * operands; the hypotheses of
- * compile_extcall_case give the operands' judgments in that order, as the
- * body induction's hypotheses do (bodySimCallCases's body_extcall_case).
- * exprSimCallExtcall and bodySimCallExtcall derive the two piece theorems
- * from it.
- *
- * TOP-LEVEL:
- *   compile_extcall_case — extcall's expr_sim_case and expr_vv_case from
- *     its operands' judgments
- *
- * Why it holds: the call request agrees with the source's.  The selector is
- * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
- * declared ABI types; the calldata is the selector followed by the arguments
- * encoded at their own lowered types, at the encoded length (vyper#5127),
- * as build_ext_calldata sends; a storage, transient or immutable argument is
- * read at its own declared type (vyper#5239).  The extcodesize check and the
- * void result are keyed on return_type = NoneT on both sides, and typing
- * rules out default_return_value on a void call.  The call itself is an
- * oracle step (extCallOracleStep: venom_call_request_source,
- * exec_ext_call_oracle_step), as for send (exprSimSend).  A revert copies
- * the returndata and REVERTs; empty returndata with a default takes the
- * default after the code recheck; otherwise the returndata is decoded with
- * the bounded memory decoder.
+ * operands.  extcall_request_ready is the state at a built call request,
+ * extcall_returned the state after the call returned; eval_extcall_stages
+ * and eval_ext_call_request split the source's evaluation at those points.
  *)
 
 Theory exprSimExtCallCase
@@ -124,12 +105,15 @@ Definition extcall_request_ready_def:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
     accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
     local_ptrs_reserved cenv sp /\
     EVERY (safe_operand sp)
@@ -177,10 +161,15 @@ End
 Definition extcall_returned_def:
   extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap
       target has_default default_op default_ty default_opt returnData ee t <=>
+    (?(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee t) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
+    accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
     local_ptrs_reserved cenv sr /\
     EVERY (safe_operand sr) [addr_op; buf_op; default_op] /\
@@ -195,247 +184,6 @@ Definition extcall_returned_def:
     extcall_default_ready cx ret_type has_default default_op default_ty
       default_opt t
 End
-
-(* (1) Operands and request.  The lowering up to the extcodesize check, run
-   against the source up to the built calldata: whatever runs the rest of
-   eval_ext_call from a ready request, with the lowered call step at sp and
-   the return handling at sr, runs the whole call. *)
-Theorem extcall_request_setup:
-  !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
-   opts args dflt ty es st0 sa sb vv s0 Q.
-    exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
-    (!s target t.
-       eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
-       exprs_case nocalls ctx func cenv cx
-         (TAKE (LENGTH arg_types) (DROP 1 args))) /\
-    (!s target t s' vs t'.
-       eval_exprs cx (TAKE 1 args) s = (INL target, t) /\
-       eval_exprs cx (TAKE (LENGTH arg_types) (DROP 1 args)) s' =
-         (INL vs, t') ==>
-       exprs_case nocalls ctx func cenv cx
-         (DROP (1 + LENGTH arg_types) args)) /\
-    expr_body_pre cenv cx env
-      (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-         args dflt) es /\
-    (nocalls ==>
-     int_calls_expr
-       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-          args dflt) = []) /\
-    compile_expr cenv ty
-      (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-         args dflt) sa = (vv, sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    gas_admissible
-      (eval_expr cx
-         (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-            args dflt)) expr_vv_res_ok es /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx es s0 /\
-       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!sp sr u result_op addr_op value_op gas_op buf_op call_offset call_len
-      has_default default_op default_ty target_v rest target value_opt
-      calldata ee t.
-       (* the lowered call step, sp to sr *)
-       comp_ignore_bind
-         (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr_op
-          else comp_return ())
-         (comp_bind
-            (if is_static then
-               emit_op STATICCALL
-                 [gas_op; addr_op; call_offset; call_len; buf_op;
-                  Lit (n2w (abi_size_bound cenv.ce_struct_fields
-                     (if needs_external_call_wrap ret_type
-                      then TupleT [ret_type] else ret_type)))]
-             else
-               emit_op CALL
-                 [gas_op; addr_op; value_op; call_offset; call_len; buf_op;
-                  Lit (n2w (abi_size_bound cenv.ce_struct_fields
-                     (if needs_external_call_wrap ret_type
-                      then TupleT [ret_type] else ret_type)))])
-         (\success. comp_bind (fresh_label "extcall_fail") (\fail_lbl.
-          comp_bind (fresh_label "extcall_cont") (\cont_lbl.
-          comp_ignore_bind
-            (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
-          (comp_ignore_bind (new_block fail_lbl)
-          (comp_bind (emit_op RETURNDATASIZE []) (\rds.
-          comp_bind (compile_alloc_buffer 0) (\fail_buf.
-          comp_ignore_bind
-            (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
-          (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
-             (new_block cont_lbl)))))))))) sp = (u, sr) /\
-       (* the lowered return handling, sr to sb *)
-       (let wrapped = (if needs_external_call_wrap ret_type
-                       then TupleT [ret_type] else ret_type) in
-        let min_size = abi_static_size cenv.ce_struct_fields wrapped in
-        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped in
-        (if ret_type = NoneT then comp_return (Lit 0w)
-         else if has_default then
-           comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-             (\r. compile_default_return_path cenv ret_type default_ty
-                    buf_op r.buf_operand default_op addr_op skip min_size
-                    (abi_size_bound cenv.ce_struct_fields wrapped) dec_info)
-         else
-           comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-             (\r. comp_bind (compile_return_value_decode min_size
-                         (abi_size_bound cenv.ce_struct_fields wrapped))
-             (\hi_op. comp_ignore_bind
-                (compile_abi_decode_to_buf r.buf_operand (Lit 0w) MLOAD
-                   buf_op hi_op dec_info)
-                (comp_return r.buf_operand)))) sr = (result_op, sb)) /\
-       vv = (if ret_type = NoneT then StackValue ann result_op
-             else LocatedValue ann (mk_ptr result_op LocMemory)) /\
-       fn_has_code sp sr func /\ fn_has_code sr sb func /\
-       (* the source's request *)
-       LENGTH rest = LENGTH arg_types + LENGTH opts /\
-       ext_call_opts_ok is_static opts /\
-       dest_AddressV target_v = SOME target /\
-       value_opt =
-         (if is_static then NONE
-          else case ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest) of
-                 NONE => SOME 0
-               | SOME v => dest_NumV v) /\
-       build_ext_calldata (get_tenv cx) fname arg_types
-         (TAKE (LENGTH arg_types) rest) = SOME calldata /\
-       extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp is_static
-         addr_op value_op gas_op buf_op call_offset call_len
-         (abi_size_bound cenv.ce_struct_fields
-            (if needs_external_call_wrap ret_type
-             then TupleT [ret_type] else ret_type))
-         target value_opt calldata has_default default_op default_ty
-         (ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest)) ee t ==>
-       ?marks. gas_summary_at F (ctx,func) marks
-         (eval_ext_call cx is_static skip (fname,arg_types,ret_type) opts
-            (target_v :: rest)) (ee,t)
-         (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
-            Q H res ee t)
-         (\res ee r. expr_exit res r)) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) cx st0
-      (eval_expr cx
-         (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-            args dflt)) (es,s0) Q
-      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
-Proof
-  cheat
-QED
-
-(* (2) The call step.  From a ready request at sp: the extcodesize check
-   against the source's precheck, the CALL or STATICCALL as an oracle step
-   (extCallOracleStep), and a failed call's returndata copy and REVERT
-   against the source's RevertData; a successful call reaches sr with the
-   returndata in the buffer. *)
-Theorem extcall_call_step:
-  !ctx func cenv cx es st0 sa s0 sp sr u is_static skip ret_type
-   addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
-   calldata gas has_default default_op default_ty default_opt ee t k Q.
-    comp_ignore_bind
-      (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr_op
-       else comp_return ())
-      (comp_bind
-         (if is_static then
-            emit_op STATICCALL
-              [gas_op; addr_op; call_offset; call_len; buf_op; Lit (n2w cap)]
-          else
-            emit_op CALL
-              [gas_op; addr_op; value_op; call_offset; call_len; buf_op;
-               Lit (n2w cap)])
-      (\success. comp_bind (fresh_label "extcall_fail") (\fail_lbl.
-       comp_bind (fresh_label "extcall_cont") (\cont_lbl.
-       comp_ignore_bind
-         (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
-       (comp_ignore_bind (new_block fail_lbl)
-       (comp_bind (emit_op RETURNDATASIZE []) (\rds.
-       comp_bind (compile_alloc_buffer 0) (\fail_buf.
-       comp_ignore_bind
-         (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
-       (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
-          (new_block cont_lbl)))))))))) sp = (u, sr) /\
-    fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
-    extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp is_static
-      addr_op value_op gas_op buf_op call_offset call_len cap
-      target value_opt calldata has_default default_op default_ty default_opt
-      ee t /\
-    (!returnData ee' t'.
-       extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
-         has_default default_op default_ty default_opt returnData ee' t' ==>
-       ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t') Q
-                 (\res ee r. expr_exit res r)) ==>
-    ?marks. gas_summary_at F (ctx,func) marks
-      (do accounts <- get_accounts;
-          check (ext_call_precheck_ok skip ret_type target accounts)
-                "ExtCall target has no code";
-          value_opt' <- frame_call_value cx value_opt;
-          returnData <- eval_ext_call_effects cx target calldata value_opt'
-                          gas accounts;
-          k returnData
-       od) (ee,t) Q (\res ee r. expr_exit res r)
-Proof
-  cheat
-QED
-
-(* (3) Return handling.  From sr after a successful call: void, the
-   default on empty returndata (with the code recheck) and the bounded
-   memory decode, whose rejection of returndata the source's
-   evaluate_abi_decode_return rejects aborts. *)
-Theorem extcall_return_values:
-  !ctx func cenv cx env es ann is_static skip fname arg_types ret_type opts
-   args dflt st0 sa sb s0 sr result_op vv addr_op buf_op cap target
-   has_default default_op default_ty default_opt returnData ee t.
-    expr_body_pre cenv cx env
-      (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-         args dflt) es /\
-    cap = abi_size_bound cenv.ce_struct_fields
-            (if needs_external_call_wrap ret_type
-             then TupleT [ret_type] else ret_type) /\
-    (let wrapped = (if needs_external_call_wrap ret_type
-                    then TupleT [ret_type] else ret_type) in
-     let min_size = abi_static_size cenv.ce_struct_fields wrapped in
-     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped in
-     (if ret_type = NoneT then comp_return (Lit 0w)
-      else if has_default then
-        comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-          (\r. compile_default_return_path cenv ret_type default_ty
-                 buf_op r.buf_operand default_op addr_op skip min_size
-                 (abi_size_bound cenv.ce_struct_fields wrapped) dec_info)
-      else
-        comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-          (\r. comp_bind (compile_return_value_decode min_size
-                      (abi_size_bound cenv.ce_struct_fields wrapped))
-          (\hi_op. comp_ignore_bind
-             (compile_abi_decode_to_buf r.buf_operand (Lit 0w) MLOAD
-                buf_op hi_op dec_info)
-             (comp_return r.buf_operand)))) sr = (result_op, sb)) /\
-    vv = (if ret_type = NoneT then StackValue ann result_op
-          else LocatedValue ann (mk_ptr result_op LocMemory)) /\
-    fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
-    extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
-      has_default default_op default_ty default_opt returnData ee t ==>
-    ?marks. gas_summary_at F (ctx,func) marks
-      (case (if returnData = [] then default_opt else NONE) of
-         SOME default_v =>
-           do accounts' <- get_accounts;
-              check (skip \/ ext_call_has_code target accounts')
-                    "ExtCall target has no code";
-              return (Value default_v)
-           od
-       | NONE =>
-           do ret_val <- lift_sum_runtime
-                (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
-              return (Value ret_val)
-           od) (ee,t)
-      (\res ee' t'. !H. valid_horizon cx st0 H ee'.storage_trace ==>
-         ?tv. res = INL tv /\
-         vv_post H ctx func cenv cx
-           (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-              args dflt) es sa sb s0 ee' tv vv t' /\
-         t'.vs_current_bb = sb.cs_current_bb /\
-         t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
-Proof
-  cheat
-QED
 
 Theorem bind_return_left[local]:
   bind (return x) f = f x
@@ -500,51 +248,4 @@ Proof
   asm_simp_tac bool_ss [type_check_def, assert_true, ignore_bind_def,
                         lift_option_type_def, optionTheory.option_case_def,
                         bind_return_left]
-QED
-
-Theorem compile_extcall_case:
-  !nocalls ctx func cenv cx ann is_static skip sig opts args dflt.
-    exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
-    (!s target t.
-       eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
-       exprs_case nocalls ctx func cenv cx
-         (TAKE (LENGTH (FST (SND sig))) (DROP 1 args))) /\
-    (!s target t s' vs t'.
-       eval_exprs cx (TAKE 1 args) s = (INL target, t) /\
-       eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 args)) s' =
-         (INL vs, t') ==>
-       exprs_case nocalls ctx func cenv cx
-         (DROP (1 + LENGTH (FST (SND sig))) args)) ==>
-    expr_sim_case nocalls ctx func cenv cx
-      (Call ann (ExtCall is_static skip sig opts) args dflt) /\
-    expr_vv_case nocalls ctx func cenv cx
-      (Call ann (ExtCall is_static skip sig opts) args dflt)
-Proof
-  rpt gen_tac >> PairCases_on `sig` >>
-  PURE_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
-  rename1 `ExtCall stat skip (fname,arg_types,ret_type) opts` >>
-  `expr_vv_case nocalls ctx func cenv cx
-     (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts)
-        args dflt)` suffices_by simp[expr_sim_case_of_vv] >>
-  rewrite_tac[expr_vv_case_def, expr_vv_sim_def] >> rpt strip_tac >>
-  qspecl_then [`nocalls`, `ctx`, `func`, `cenv`, `cx`, `env`, `ann`, `stat`,
-                `skip`, `fname`, `arg_types`, `ret_type`, `opts`, `args`,
-                `dflt`, `ty`, `es`, `st0`, `sa`, `sb`, `vv`, `s0`]
-    MATCH_MP_TAC extcall_request_setup >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC] >>
-  rpt strip_tac >>
-  `stat <=> value_opt = NONE` by fs[extcall_request_ready_def] >>
-  drule_all eval_ext_call_request >>
-  disch_then (qspecl_then [`skip`, `ret_type`] SUBST1_TAC) >>
-  ho_match_mp_tac extcall_call_step >>
-  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `comp_ignore_bind _ _ _ = _` (irule_at Any) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  BETA_TAC >> irule extcall_return_values >>
-  qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
-  qexists_tac `result_op` >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC]
 QED

@@ -23,7 +23,7 @@ Theorem sha_fixed_abort_ptr_at:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -63,7 +63,7 @@ Proof
    isPREFIX (emitted_insts sm sb) (DROP a.vs_inst_idx bb.bb_instructions) /\
    MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString sm.cs_next_var)]) (fn_insts fn)` by
-    simp[Abbr `a`, bytes_ghost_cursor, stmt_state_rel_inst_idx,
+    simp[Abbr `a`, ghost_inv_at_inst_idx, stmt_state_rel_inst_idx,
       hash_eval_operand_inst_idx, ptr_covers_inst_idx] >>
   `eval_operand (Lit (n2w m)) a = SOME (n2w m) /\
    op_taint tn2 (Lit (n2w m)) = {} /\

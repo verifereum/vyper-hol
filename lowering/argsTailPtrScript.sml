@@ -60,7 +60,7 @@ Theorem lower_typed_args_cons_tail_ptr:
          args xs vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee ghosts r. wb_args_exit rr r) ==>
+    (\H rr ee ghosts r. wb_args_exit rr r /\ halt_exit H cx ee rr r) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0
     (do vs <- eval_exprs cx args; return (v::vs) od) (es1,t,G1,tn1)
     (\H rr ee G tn u. ?vs. rr = INL vs /\
@@ -68,7 +68,7 @@ Theorem lower_typed_args_cons_tail_ptr:
          (e::args) (x::xs) vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee ghosts r. wb_args_exit rr r)
+    (\H rr ee ghosts r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`
@@ -100,7 +100,8 @@ Proof
       strip_tac >> gvs[]
       >- (disj1_tac >> simp[] >>
           irule typed_args_post_ptr_cons >> metis_tac[]) >>
-      disj2_tac >> Cases_on `res` >> gvs[wb_args_exit_def]) >>
+      disj2_tac >> Cases_on `res` >>
+      gvs[wb_args_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
   disj2_tac >> disj2_tac >>
   gvs[ignore_bind_def, bind_assoc, bind_return] >> metis_tac[]

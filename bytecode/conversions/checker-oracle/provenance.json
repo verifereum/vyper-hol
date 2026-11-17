@@ -13,7 +13,7 @@
   },
   "inputs": {
     "lit_300_to_u8.json": "f126caf1f8caec82bdc34c097f1e4a6e7cb912cb3c84d8220348fe6c2c3d5fab",
-    "lit_bys_narrow.json": "8fc23fe9062f98d27fedd64bbb2b8bf4086ec19cb43deb0443ec209c6e496b26",
+    "lit_bys_narrow.json": "aa88fe23abe2b661e7ffbe5217a091177aaf1df812b580b558a022f693a5061e",
     "lit_neg_to_u256.json": "c1455a17970c771eb3bf73b1ff37cb0d869daf2630ddbbeb8e343c26ef1850f4"
   }
 }

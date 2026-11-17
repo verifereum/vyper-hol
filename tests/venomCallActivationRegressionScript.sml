@@ -200,7 +200,7 @@ Proof
   simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
 QED
 
-Theorem consume_invalid_ec_zero_output[local]:
+Theorem consume_invalid_ec_zero_output:
   s = call_probe_state with <|
         vs_memory := REPLICATE 63 0w ++ [1w];
         vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |> ==>

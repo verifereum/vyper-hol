@@ -344,7 +344,7 @@ Proof
   Cases_on `v` >> simp[val_footprint_def, type_memory_size_def]
 QED
 
-Theorem ec_uint256_encoding[local]:
+Theorem ec_uint256_encoding:
   value_has_type (BaseTV (UintT 256)) v ==>
   ?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** 256 /\
       typed_val_to_w256 (BaseTV (UintT 256)) v = n2w (Num i)
@@ -354,7 +354,7 @@ Proof
   strip_tac >> `~(i < 0)` by intLib.ARITH_TAC >> simp[]
 QED
 
-Theorem ec_point_index_memory[local]:
+Theorem ec_point_index_memory:
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (ArrayV av) /\
   val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
     (ArrayV av) off mem /\ j < 2 ==>
@@ -378,7 +378,7 @@ Proof
        val_to_w256_def, integer_wordTheory.i2w_def] >>
   `~(i < 0)` by intLib.ARITH_TAC >> simp[]
 QED
-Theorem ec_point_memory_words[local]:
+Theorem ec_point_memory_words:
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v /\
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v op s ==>
   ?w x y. eval_operand op s = SOME w /\
@@ -453,7 +453,7 @@ Proof
   disj2_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
-Theorem ec_precompile_words[local]:
+Theorem ec_precompile_words:
   (!x1 y1 x2 y2.
   precompile_result 6w
     (word_to_bytes (x1:bytes32) T ++ word_to_bytes (y1:bytes32) T ++
@@ -502,7 +502,7 @@ Proof
   PairCases_on `a` >> gvs[bn254Theory.validAffine_def]
 QED
 
-Theorem ec_result_memory[local]:
+Theorem ec_result_memory:
   mem_word_at off mem = n2w x /\ mem_word_at (off + 32) mem = n2w y ==>
   val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
     (mk_ec_result (x,y)) off mem
@@ -516,7 +516,7 @@ Proof
   rpt strip_tac >> `i = 0 \/ i = 1` by decide_tac >> gvs[]
 QED
 
-Theorem ec_precompile_success[local]:
+Theorem ec_precompile_success:
   (!x1 y1 x2 y2 x y.
   vfmExecution$ecadd (w2n x1,w2n y1) (w2n x2,w2n y2) = SOME (x,y) ==>
   precompile_result 6w
@@ -724,7 +724,7 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem ec_result_val_wf[local]:
+Theorem ec_result_val_wf:
   val_wf (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (mk_ec_result (x,y))
 Proof
   simp[mk_ec_result_def, make_array_value_def, enumerate_static_array_def,
@@ -733,7 +733,7 @@ Proof
   simp[val_wf_def, type_memory_size_def]
 QED
 
-Theorem ec_result_pointer_post[local]:
+Theorem ec_result_pointer_post:
   post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel H ctx func cenv cx es' t /\
@@ -1530,22 +1530,6 @@ Proof
   Cases_on `call_outcome_success h` >> simp[]
 QED
 
-Theorem ec_two_args_source[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
-  (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
-  (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) ==>
-  (!ex. r1 = INR ex ==> res = INR ex) /\
-  (!v ex. r1 = INL v /\ r2 = INR ex ==> res = INR ex) /\
-  (!v1 v2. r1 = INL v1 /\ r2 = INL v2 ==>
-    ec_source_tail cx ann bt [expr_type a;expr_type b] [v1;v2] es2 = (res,es'))
-Proof
-  strip_tac >> drule_at Any eval_expr_ec_cases >> simp[] >> strip_tac >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >> gvs[] >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >>
-  gvs[exprSimWordArgsTheory.eval_exprs_nil]
-QED
-
 Theorem ec_suffix_failure[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit 64w];
@@ -2150,8 +2134,9 @@ Theorem ec_outcome_then[local]:
   gas_outcome F tops (ctx,func) cx st0
     (m : evaluation_state -> value evaluation_result) (es,s0)
     (\H res ee t. ?v. res = INL v /\ P H v ee t)
-    (\H res ee r. expr_exit res r) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!marks v ee t.
@@ -2263,7 +2248,7 @@ Proof
   simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
-Theorem ec_source_tail_storage_frame[local]:
+Theorem ec_source_tail_storage_frame:
   storage_trace_frame (ec_source_tail cx ann bt tys vs)
 Proof
   `!v. storage_trace_frame
@@ -2278,14 +2263,6 @@ Proof
   first_x_assum (qspec_then `x` mp_tac) >>
   rewrite_tac[storage_trace_frame_def] >>
   disch_then (qspecl_then [`st`, `observations`] ACCEPT_TAC)
-QED
-
-Theorem ec_source_tail_scopes[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  ec_source_tail cx ann bt tys vs es = (r,es') ==>
-  es'.scopes = es.scopes
-Proof
-  rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()]
 QED
 
 (* Both operands as counted outcomes, then the point suffix as an actual
@@ -2445,7 +2422,7 @@ Theorem ec_binary_call_gas[local]:
        vv_post H ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -2495,7 +2472,8 @@ Proof
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
       qexists_tac `expr_type a` >> simp[])
-  >- metis_tac[ec_expr_exit_INR_cast]
+  >- (rpt strip_tac >> gvs[halt_exit_def] >>
+      metis_tac[ec_expr_exit_INR_cast])
   >- (gen_tac >> match_mp_tac storage_trace_frame_bind_all >>
       simp[ec_source_tail_storage_frame]) >>
   qx_genl_tac [`m1`, `v1`, `es1`, `t`] >> strip_tac >>
@@ -2566,7 +2544,8 @@ Proof
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
       qexists_tac `expr_type b` >> simp[])
-  >- metis_tac[ec_expr_exit_INR_cast]
+  >- (rpt strip_tac >> gvs[halt_exit_def] >>
+      metis_tac[ec_expr_exit_INR_cast])
   >- simp[ec_source_tail_storage_frame] >>
   qx_genl_tac [`m2`, `v2`, `es2`, `u`] >> strip_tac >>
   `es2 with gas_obs := [] = es2` by
@@ -2623,6 +2602,11 @@ Proof
                          freshWritesTheory.not_fresh_at_mono]) >>
   Cases_on `ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2] es2` >>
   rename1 `_ = (res, es')` >>
+  `res <> INR HaltException` by
+    (qpat_x_assum `bt = ECAdd \/ bt = ECMul` strip_assume_tac >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ es2 = _` mp_tac >>
+     simp[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `!(H:(bool # bytes32 # type_value) list # num list). valid_horizon cx st0 H es'.storage_trace ==>
        valid_horizon cx st0 H es.storage_trace` by
     (`?obs. es'.storage_trace = es2.storage_trace ++ obs` by
@@ -2673,7 +2657,7 @@ Proof
     (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
-  FIRST [disj2_tac >> simp[] >> NO_TAC,
+  FIRST [disj2_tac >> simp[halt_exit_def] >> NO_TAC,
          disj1_tac >> simp[] >> rpt strip_tac >>
          rename1 `valid_horizon cx st0 H' es'.storage_trace` >>
          `stmt_state_rel H' ctx func cenv cx es s0` by metis_tac[] >>

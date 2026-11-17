@@ -122,14 +122,19 @@ Proof
   qexistsl_tac [`z`, `rest`] >> simp[] >>
   `step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE) /\
    step_taint inst s post tn = tn with t_var := tn.t_var |+ (v,{})` by
-    (gvs[] >> metis_tac[reader_clean_ghosts]) >>
+    (gvs[] >>
+     irule (SIMP_RULE (srw_ss()) [] reader_clean_ghosts) >> simp[]) >>
   `step_taint inst t (update_var v z (t with vs_gas_readings := rest)) un =
-    un with t_var := un.t_var |+ (v,{})` by metis_tac[reader_clean_ghosts] >>
+    un with t_var := un.t_var |+ (v,{})` by
+    (irule (reader_clean_ghosts |> UNDISCH |> CONJUNCT2 |> DISCH_ALL) >> simp[]) >>
   simp[] >> (conj_tac
   >- (gvs[] >> simp[reader_clean_ghosts] >>
-      irule guarded_clean_write_restrict >> simp[] >>
+      irule (SIMP_RULE (srw_ss()) []
+        (Q.INST [`s` |-> `s with vs_gas_readings := rest`,
+                 `t` |-> `t with vs_gas_readings := rest`]
+          guarded_clean_write_restrict)) >> simp[] >>
       goal_assum (drule_at Any) >>
       irule local_rel_gas_readings >> goal_assum (drule_at Any))) >>
-  simp[reader_clean_ghosts] >>
+  gvs[] >>
   irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[]
 QED

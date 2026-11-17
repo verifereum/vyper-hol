@@ -2,6 +2,8 @@
 Theory bodyFullHashKeccakFixed
 Ancestors
   bodyPtrHashBuiltinsKeccakFixedRun bodyPtrHashBuiltinsKeccakFixedFrame
+  allocationPtr bodyPtrHashBuiltinsKeccakFixed instIdxIndep
+  ptrSafeRun codegenRel contextCodegenRel memLocDefs bodyPtrHashBuiltinsBoundary
   bodyFullAllocGeneric bodyFullGhostFrame instSeqPtrLo
   bodyFullHashAllocFrame bodyFullHashCleanFrame bodyPtrHashBuiltinsCursor
   bodyPtrHashBuiltinsKeccak builtinHashing fragExec
@@ -12,25 +14,119 @@ Ancestors
   bodyPtrPrecompileBuiltinsAllocationFrame
   exprLowering exprLoweringProps emitHelperProps compileEnv words list
 
+Theorem stmt_state_rel_allocas_below_fmp:
+  !H ctx func cenv cx es s.
+    stmt_state_rel H ctx func cenv cx es s ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s)
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+     venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
 Theorem fixed_sequence_checked_at[local]:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst aid ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
   step_inst_base (mk_inst aid ALLOCA [Lit 32w] [p]) s = OK t /\
   eval_operand value t = SOME v /\
   op_taint (step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn) value = {} /\
-  m <= 32 /\ ~ctx_has_dalloca ctx /\
+  m <= 32 /\ stmt_state_rel H ctx fn cenv cx es t /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   ?Gf tnf. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst aid ALLOCA [Lit 32w] [p];
      mk_inst sid MSTORE [Var p;value] [];
      mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]] s Gf tnf
 Proof
-  strip_tac >> drule_all hash_alloc_store_sha3_seq_ptr >>
-  disch_then (qspecl_then [`D`, `PG`, `G`, `sid`, `hid`, `out`] strip_assume_tac) >>
-  qexistsl_tac [`G'`, `tn'`] >>
-  irule inst_seq_ptr_zero_to_lo >>
-  simp[] >> qexists_tac `D` >> simp[]
+  strip_tac >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  `ptr_covers (step_prov PG G (mk_inst aid ALLOCA [Lit 32w] [p]) t)
+    (step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn) p t 32` by
+    (irule alloca_step_ptr_covers >> simp[] >> metis_tac[]) >>
+  `?a. lookup_var p t = SOME a` by gvs[ptr_covers_def] >>
+  qabbrev_tac `G1 = step_prov PG G (mk_inst aid ALLOCA [Lit 32w] [p]) t` >>
+  qabbrev_tac `tn1 = step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn` >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst aid ALLOCA [Lit 32w] [p]) s`
+    by suspend "alloca" >>
+  `step_inst_base (mk_inst sid MSTORE [Var p;value] []) t =
+     OK (mstore (w2n a) v t)` by
+    (simp[Once step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def]) >>
+  `allocas_from lo t` by
+    (irule (cj 1 step_inst_allocas_from) >>
+     qexistsl_tac [`ctx`, `0`, `mk_inst aid ALLOCA [Lit 32w] [p]`, `s`] >>
+     simp[step_inst_non_invoke, mk_inst_def]) >>
+  drule_all hash_store_covered_clean >>
+  disch_then (qspecl_then [`PG`, `sid`] strip_assume_tac) >>
+  `ptr_inst_ok D lo 0 ctx fn G1 tn1 (mk_inst sid MSTORE [Var p;value] [])
+     (t with vs_inst_idx := SUC s.vs_inst_idx)` by suspend "store" >>
+  simp[Once inst_seq_ptr_def] >>
+  simp[Once inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
+    mk_inst_def, is_terminator_def] >>
+  simp[Once inst_seq_ptr_def, GSYM mk_inst_def] >>
+  qmatch_goalsub_abbrev_tac `ptr_inst_ok D lo 0 ctx fn G2 tn2 _ t2` >>
+  `ptr_inst_ok D lo 0 ctx fn G2 tn2
+     (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2` by suspend "sha3" >>
+  simp[inst_seq_ptr_def] >>
+  Cases_on `step_inst_base (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2` >>
+  simp[inst_seq_ptr_def] >> metis_tac[]
 QED
+
+Resume fixed_sequence_checked_at[alloca]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
+    op_taint_def, step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  strip_tac >> gvs[update_var_def]
+QED
+
+Resume fixed_sequence_checked_at[store]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  gvs[ptr_covers_def] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+    allocas_below_fmp_def, mk_inst_def, source_memory_write_ranges_def,
+    source_memory_read_ranges_def, fixed_source_write_range_def, eval_operand_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[mem_write_ops_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+    eval_operand_def, AllCaseEqs(), mstore_def] >>
+  rpt strip_tac >> gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
+QED
+
+Resume fixed_sequence_checked_at[sha3]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `m < dimword (:256)` by decide_tac >>
+  `ptr_covers G2 tn2 p t2 32 /\ lookup_var p t2 = SOME a` by
+    gvs[Abbr `t2`, ptr_covers_def, lookup_var_def, mstore_def] >>
+  `!i. w2n a <= i /\ i < w2n a + m ==> i NOTIN tn2.t_mem` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!i. _ ==> i NOTIN tn2.t_mem` irule >> decide_tac) >>
+  `access_ok lo G2 fn (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2` by
+    (`access_ok 0 G2 fn (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2`
+       suffices_by (gvs[access_ok_def] >> metis_tac[]) >>
+     gvs[ptr_covers_def] >> irule hash_sha3_access >>
+     simp[eval_operand_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_MONO_ADD_EQ]) >>
+  `taint_ok fn tn2 (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2` by
+    (gvs[ptr_covers_def] >> irule hash_sha3_taint >>
+     simp[eval_operand_def, op_taint_def]) >>
+  `step_inst_base (mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]) t2 =
+    OK (update_var out (word_of_bytes T (0w:bytes32)
+      (Keccak_256_w64 (mem_bytes_at (w2n a) m t2.vs_memory))) t2)` by
+    (irule step_SHA3_bytes >> simp[eval_operand_def]) >>
+  simp[ptr_inst_ok_def, mk_inst_def, step_inst_non_invoke] >>
+  simp[Abbr `t2`, mstore_def, allocas_from_def, allocas_below_fmp_def] >>
+  rpt strip_tac >> gvs[update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+  metis_tac[]
+QED
+
+Finalise fixed_sequence_checked_at
 
 Theorem fixed_alloc_code[local]:
   compile_keccak256_bytesm value m sa = (op,sb) /\
@@ -61,7 +157,7 @@ Theorem hash_fixed_keccak_joint_run:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ fn_has_code sa sb fn /\

@@ -159,10 +159,9 @@ Resume ifexp_widened_call_copy_ghost_frame[kept]:
   conj_tac >- (rpt strip_tac >>
     `off+sz <= B \/ B+N <= off` by metis_tac[] >>
     `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >>
+  (rpt strip_tac >>
     `b+sz <= B \/ B+N <= b` by metis_tac[] >>
-    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
-  rpt strip_tac >> `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]
+    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[])
 QED
 
 Resume ifexp_widened_call_copy_ghost_frame[value]:
@@ -293,6 +292,16 @@ Proof
     (Cases_on `vv` >> fs[vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
     (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `?v. read_result cx tv ee = (INL v,ee)` by
+    (Cases_on `vv` >- gvs[vv_holds_def] >>
+     rename1 `LocatedValue result_ty result_ptr` >>
+     gvs[vv_holds_def] >>
+     Cases_on `result_ptr.ptr_location` >> gvs[storage_holds_def, immutable_holds_def] >>
+     metis_tac[]) >>
+  `vv_place_ptr cenv cx ee u tv vv` by
+    (irule vv_place_ptr_region_frame >> conj_tac
+     >- (qexists_tac `v` >> asm_rewrite_tac[]) >>
+     qexists_tac `s` >> asm_rewrite_tac[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -436,14 +445,13 @@ Theorem ifexp_widened_call_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
-    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
       ~is_word_type (post_value_type cenv e) ==>
@@ -484,6 +492,11 @@ Theorem ifexp_widened_call_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+      (~is_word_type (post_value_type cenv e) ==>
+       vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+       vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
       expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
@@ -503,7 +516,7 @@ Theorem ifexp_widened_call_arm_step_full:
       ghost_kept_at lo cenv ee sb G tn s G' tn') /\
   (* ifexp_alloca_origin_ptr_edge *)
   (!s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     lo <= s.vs_alloca_next /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
@@ -564,7 +577,8 @@ Theorem ifexp_widened_call_arm_step_full:
      w2n dw + type_memory_size dtv <= w2n sw) /\
     ptr_covers G tn xs s (type_memory_size stv) /\
     ptr_covers G tn xd s (type_memory_size dtv) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -585,7 +599,8 @@ Theorem ifexp_widened_call_arm_step_full:
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -644,6 +659,10 @@ Theorem ifexp_widened_call_arm_step_full:
        ghost_inv_at (DF H) lo d cenv cx ee Gz tf z') /\
     (~is_word_type t ==>
      vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr op LocMemory)) z') /\
+    (~is_word_type (post_value_type cenv e) /\
+     ~is_bytestring_type (post_value_type cenv e) ==>
+     vv_own cenv cx t sm sb ee (Value v)
+       (LocatedValue t (mk_ptr op LocMemory)) z') /\
     expr_store_bound cx t v op z' /\
     z'.vs_current_bb = sb.cs_current_bb /\
     z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -737,7 +756,8 @@ Proof
      asm "alloc_inv" mp_tac >> simp[Abbr `ai`] >>
      disch_then drule_all >> simp[]) >>
   `allocas_from lo z /\ lo <= z.vs_alloca_next` by
-    gvs[ghost_inv_at_def] >>
+    (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ z` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ghost_inv_at_def]) >>
   `ghost_kept_at lo cenv es1 sa G1 tn1 u
       (step_prov PG G ai za) (step_taint ai z za tn)` by
     (asm "alloc_kept" mp_tac >> simp[Abbr `ai`] >>
@@ -1166,6 +1186,17 @@ Proof
      qpat_x_assum `w2n sw + type_memory_size ptv <= z'.vs_alloca_next` mp_tac >>
      qpat_x_assum `0 < type_memory_size ptv` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[alloca_room_def] >> decide_tac) >>
+  `alloca_inv z' /\ fmp_room ctx func z'` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ z'` mp_tac >>
+     pure_rewrite_tac[expr_post_def, stmt_state_rel_def] >>
+     strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp z')` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv z'` mp_tac >>
+     qpat_x_assum `fmp_room ctx func z'` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   asm "copy" (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ xs _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ p _ _`)) >>
@@ -1178,7 +1209,7 @@ Proof
   disch_then (drule_at (Pat `value_has_type rty _`)) >>
   disch_then (drule_at (Pat `type_widens_to _ _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca _ ==> allocas_below_fmp z'`)) >>
   disch_then (qspecl_then [`lo`, `explicit`, `PG`] mp_tac) >>
   (impl_tac >- (simp[eval_operand_def] >> conj_tac >- asm_rewrite_tac[] >>
     qpat_x_assum `compile_alloc_buffer _ sm = (buf,sk)` mp_tac >>
@@ -1333,16 +1364,60 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> ghost_inv_at _ _ _ _ _ _ Gf tnf t' /\ _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   simp[] >> strip_tac >>
-  qexistsl_tac [`t'`, `Gf`, `tnf`] >> simp[] >>
-  conj_tac >-
-    (gen_tac >> disch_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
+  `local_ptrs_reserved cenv sl` by
+    (irule local_ptrs_reserved_next_var >> qexists `sk` >> fs[ci_mono_def]) >>
+  `not_fresh_at sl p` by
+    (qpat_assum `compile_alloc_buffer _ sm = (buf,sk)` mp_tac >>
+     qpat_assum `buf.buf_operand = Var p` mp_tac >>
+     qpat_assum `ci_mono sk sl` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_alloc_buffer_def, fresh_var_def, emit_inst_def, emit_op_def,
+          comp_bind_def, comp_return_def, comp_ignore_bind_def,
+          fresh_id_def, emit_def, ci_mono_def, not_fresh_at_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
   `t'.vs_allocas = z'.vs_allocas /\ t'.vs_alloca_next = z'.vs_alloca_next` by
-    (qpat_x_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_state_frame_def] >>
-     strip_tac >>
-     qpat_x_assum `_ = z'` (SUBST1_TAC o SYM) >> simp[]) >>
+     strip_tac >> qpat_x_assum `_ = z'` (SUBST1_TAC o SYM) >> simp[]) >>
+  `lookup_var p t' = SOME w` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+     qpat_assum `not_fresh_at sl p` mp_tac >>
+     qpat_assum `lookup_var p z' = SOME w` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def] >> metis_tac[]) >>
+  `!n lb len. local_region cenv ee.scopes t' n lb len <=>
+              local_region cenv ee.scopes z' n lb len` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z' t'` mp_tac >>
+     qpat_assum `local_ptrs_reserved cenv sl` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def] >> rpt strip_tac >>
+     irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists `sl` >> simp[]) >>
+  `sm.cs_next_id < sb.cs_next_id` by
+    (qpat_assum `sm.cs_next_id < sk.cs_next_id` mp_tac >>
+     qpat_assum `ci_mono sk sl` mp_tac >>
+     qpat_assum `ci_mono sl sb` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ci_mono_def] >> decide_tac) >>
+  `val_footprint rty v <= type_memory_size rty` by
+    (irule exprSimPropsTheory.val_footprint_le >> first_assum ACCEPT_TAC) >>
+  `vv_own cenv cx t sm sb ee (Value v)
+     (LocatedValue t (mk_ptr (Var p) LocMemory)) t'` by
+    (qpat_assum `evaluate_type (get_tenv cx) t = SOME rty` mp_tac >>
+     qpat_assum `lookup_var p t' = SOME w` mp_tac >>
+     qpat_assum `t'.vs_allocas = z'.vs_allocas` mp_tac >>
+     qpat_assum `FLOOKUP z'.vs_allocas sm.cs_next_id = SOME _` mp_tac >>
+     qpat_assum `sm.cs_next_id < sb.cs_next_id` mp_tac >>
+     qpat_assum `val_footprint rty v <= type_memory_size rty` mp_tac >>
+     qpat_assum `!n lb len. local_region cenv ee.scopes z' n lb len ==> _` mp_tac >>
+     qpat_assum `!n lb len. local_region cenv ee.scopes t' n lb len <=> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vv_own_def, mk_ptr_def, read_result_def, return_def] >>
+     rpt strip_tac >> gvs[] >>
+     qexists `w` >> simp[eval_operand_def] >> disj1_tac >>
+     qexistsl [`sm.cs_next_id`,`w2n w`,`type_memory_size rty`] >>
+     simp[] >> metis_tac[]) >>
+  qpat_assum `p = STRING _ _` SUBST_ALL_TAC >>
+  qexistsl_tac [`t'`, `Gf`, `tnf`] >> simp[] >>
   `!ctx fn s n t. gas_path ctx fn s n (OK t) /\
       fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s ==>
       alloca_history fn t /\ alloca_inv t` by

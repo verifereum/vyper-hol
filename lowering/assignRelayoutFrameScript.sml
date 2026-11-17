@@ -47,6 +47,8 @@ Proof
     (simp[local_region_def] >> metis_tac[]) >>
   drule typed_copy_effect_record >>
   simp[venom_state_component_equality] >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[typed_copy_effect_length] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>

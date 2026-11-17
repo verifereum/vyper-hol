@@ -487,10 +487,11 @@ Proof
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (qspecl_then [`cfn`, `ce`, `args`, `p1`,
-                  `TAKE (LENGTH args) (ce.ce_func_param_types (nsid_to_string fid))`]
-        mp_tac first_emission_stage_intcall_args >>
-      impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
+  >- (ho_match_mp_tac first_emission_stage_intcall_args >>
+      first_assum ACCEPT_TAC) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_stage_intcall_args >>
+      first_assum ACCEPT_TAC) >>
   gen_tac >> Cases_on `n > 0` >> simp[]
   >- (Cases_on `return_buf` >> simp_tac (srw_ss()) [LET_THM]
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
@@ -903,8 +904,6 @@ Resume first_emission_raw_calldata[raw_calldata_outbuf]:
   map_every qx_gen_tac [`p`, `s`] >> PairCases_on `p` >> simp_tac (srw_ss()) [] >>
   irule comp_bind_labels >> reverse conj_tac
   >- simp[compile_raw_call_finish_labels] >>
-  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> reverse conj_tac
-  >- simp[emit_void_labels] >>
   rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
   simp[cs_extends_refl, loweringShapeDefsTheory.added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
@@ -1019,11 +1018,11 @@ Proof
   >- (irule multi_vvs_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
   >- (rw[cs_appends_def] >>
-      qspecl_then [`type_memory_bytes ce (TupleT (MAP expr_type es))`, `st`]
+      qspecl_then [`type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) es))`, `st`]
         mp_tac (cj 1 compile_alloc_buffer_labels) >> simp[]) >>
   gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
   >- (rw[cs_appends_def] >>
-      qspecl_then [`ce`, `ZIP (a,MAP expr_type es)`, `a'.buf_operand`, `0`, `st`]
+      qspecl_then [`ce`, `ZIP (a,MAP (lowered_value_type ce) es)`, `a'.buf_operand`, `0`, `st`]
         mp_tac (cj 1 compile_extcall_store_values_labels) >> simp[]) >>
   simp[cs_appends_return]
 QED
@@ -1116,7 +1115,7 @@ Proof
   gen_tac >> BETA_TAC >> irule raw_create_suffix_extension_only >> first_assum ACCEPT_TAC
 QED
 
-Theorem create_call_extension_only[local]:
+Theorem create_call_extension_only:
   (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
   !ce ck salt rof es. cs_appends (compile_create_call cfn ce ck salt rof es)
 Proof
@@ -1149,7 +1148,8 @@ Proof
   irule cs_appends_bind >> reverse conj_tac
   >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
-  >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+  >- (rpt CASE_TAC >> simp[cs_appends_return] >>
+      irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
   >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_create_blueprint_check_labels, pairTheory.SND]) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
@@ -1275,30 +1275,6 @@ Proof
             compile_alloc_dynamic_labels, compile_check_create_result_labels])
 QED
 
-Theorem first_emission_create_blueprint_check[local]:
-  !target offset a x b. compile_create_blueprint_check target offset a = (x,b) ==>
-  cs_extends a b /\
-  (!fn. fn_has_code a b fn ==> ?bb i.
-    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
-Proof
-  rpt gen_tac >> rewrite_tac[builtinCreateTheory.compile_create_blueprint_check_def] >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt strip_tac >> drule_at Any
-       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
-  gen_tac >> map_every qx_gen_tac [`a`, `x`, `b`] >>
-  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
-  `!s. cs_extends s (SND (tail s)) /\
-       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
-    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
-  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac] >>
-       rpt gen_tac >> BETA_TAC >>
-       simp[comp_return_labels, emit_op_labels, emit_void_labels])
-QED
-
 Theorem first_emission_create_salt[local]:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -1391,10 +1367,11 @@ Resume first_emission_create_call[blueprint]:
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (drule first_emission_create_salt >> disch_then MATCH_ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  >- (rpt CASE_TAC >> simp[comp_return_def, cs_extends_refl] >>
+      ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[first_emission_create_blueprint_check] >>
+  >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   gen_tac >> BETA_TAC >> map_every qx_gen_tac [`a`, `res`, `last`] >>
   qmatch_goalsub_abbrev_tac `tail a = (res,last)` >>
   `cs_appends tail` by

@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.0"
+minimum_version = "0.14.59"
 
 [project]
 name = "vyper-hol"
@@ -20,19 +20,6 @@ roots = [
   "lowering/whitelist/whitelistForIterScript.sml",
   "lowering/whitelist/whitelistScopesScript.sml",
   "lowering/whitelist/whitelistLogWidenScript.sml",
-  # shared target source and joint target simulation
-  "lowering/targetPtrFactsScript.sml",
-  "lowering/bodyFullTargetScript.sml",
-  # joint-body decoder and encoder providers awaiting their call/return leaves
-  "lowering/extcallReturnCompletedCutScript.sml",
-  "lowering/extcallReturnCountedRejectScript.sml",
-  "lowering/extcallReturnDecodeSummaryScript.sml",
-  "lowering/extcallReturnDecoderOwnershipScript.sml",
-  "lowering/extcallReturnDefaultTypesScript.sml",
-  "lowering/extcallReturnFrameBridgeScript.sml",
-  "lowering/abiEncoderWindowJointPhasesScript.sml",
-  "lowering/externalReturnLiveWindowResourcesScript.sml",
-  "lowering/logTopicsRunPtrScript.sml",
   # hand-written tests of the semantics, frontend and test runner
   "tests/vyperTestsHolScript.sml",
   # concrete checks of the lowering and compiler
@@ -51,7 +38,7 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "09c122c01da3a4680aa8afdc5a68f2f99db5b0c3"
+rev = "19b3abddc7e90dbe44b66e51da8ac844ea452429"
 
 # Functor parameter signatures are not inferred by HOL's module scanner.
 [actions.JsonASTDecodeFn]

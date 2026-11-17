@@ -161,3 +161,21 @@ Definition entry_asm_state_def:
        as_pending_deletions := vs.vs_pending_deletions;
        as_gas_readings := vs.vs_gas_readings |>
 End
+
+(* Normalize only the real readings while retaining a suffix for replay. *)
+Definition initial_ctx_rel_tail_def:
+  initial_ctx_rel_tail tail cp prog ctx vs es <=>
+    initial_ctx_rel cp prog ctx
+      (vs with vs_gas_readings := gas_readings es) es /\
+    vs.vs_gas_readings = gas_readings es ++ tail
+End
+
+Theorem initial_ctx_rel_tail_nil:
+  initial_ctx_rel_tail [] cplan prog ctx vs es <=>
+  initial_ctx_rel cplan prog ctx vs es
+Proof
+  simp[initial_ctx_rel_tail_def] >> eq_tac >> strip_tac >>
+  `vs with vs_gas_readings := gas_readings es = vs` by
+    gvs[initial_ctx_rel_def, venom_state_component_equality] >>
+  gvs[initial_ctx_rel_def]
+QED

@@ -1,7 +1,7 @@
 (* Full allocation-backed resources for the dynamic-array initializer. *)
 Theory abiMalformedInitResource
 Ancestors
-  abiMalformedTraversal abiMalformedBulkIntegration abiMalformedContainmentProbe
+  abiMalformedTraversal abiMalformedBulkIntegration
   abiMalformedRecursiveInterface abiMalformedBulkArray
   abiDecoderArrayInitReentry abiDecoderArrayLoopInit abiDecoderIndexInit
   abiDecoderReentryAddress abiDecoderArrayHeader abiMalformedConstructorContract

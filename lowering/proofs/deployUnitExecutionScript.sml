@@ -1,7 +1,8 @@
 (* One selected deployment-unit execution fixes its gas marks and the
  * constructor run's trace before every finite storage horizon: the
  * deployment twin of sourceUnitExecution's source_unit_execution_correct.
- * TOP-LEVEL: deploy_unit_execution_correct_at, deploy_unit_execution_correct.
+ * TOP-LEVEL: deploy_unit_execution_correct_at, deploy_unit_execution_correct,
+ *   deploy_unit_execution_correct_with (the certificate at a fixed shadow).
  *)
 Theory deployUnitExecution
 Ancestors
@@ -65,6 +66,70 @@ Definition deploy_unit_execution_correct_at_def:
                  (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
                              vs_inst_idx := 0 |>)))))
 End
+
+(* The certificate at a fixed GAS shadow: the gas link fixes one shadow, so
+   one explicit-read mask, for every filling. *)
+Definition deploy_unit_execution_correct_with_def:
+  deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx unit vs <=>
+    ?func shadow_func.
+      unit.cu_context.ctx_entry = SOME "__deploy" /\
+      lookup_function "__deploy" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__deploy" /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      (((!tail. ~deploy_storage_ok tops am tx vs.vs_outcomes
+                   (gas_explicit marks vs.vs_gas_readings ++ tail)) /\
+        ?(H : (bool # bytes32 # type_value) list # num list)
+           leaf leaf_pg leaf_g leaf_tn finish.
+          gas_origin_ptr_focus
+            (deploy_dead H tops runtime_bc am tx,
+             imm_len tops, gas_explicit_sites unit.cu_context shadow_ctx,
+             unit.cu_context, func, [])
+            ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                         vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+            marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+       ?src obs.
+         (!tail. load_contract_trace (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
+            [(NONE, tops)] [] = (src, obs)) /\
+         ((deploy_source_exempt tops src /\
+           ?(H : (bool # bytes32 # type_value) list # num list)
+              leaf leaf_pg leaf_g leaf_tn finish.
+             gas_origin_ptr_focus
+               (deploy_dead H tops runtime_bc am tx,
+                imm_len tops, gas_explicit_sites unit.cu_context shadow_ctx,
+                unit.cu_context, func, [])
+               ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                            vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+               marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+          (?r. exit_result r /\
+             storage_trace_domain (deploy_evaluation_context tops am tx)
+               (initial_state am []) obs /\
+             gas_origin_path T
+               (gas_explicit_sites unit.cu_context shadow_ctx)
+               unit.cu_context func
+               (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                           vs_inst_idx := 0 |>) marks r /\
+             !H. valid_horizon (deploy_evaluation_context tops am tx)
+                   (initial_state am []) H obs ==>
+               deploy_venom_result_rel H tops runtime_bc tx src r /\
+               (!fuel. ptr_safe_blocks (deploy_dead H tops runtime_bc am tx)
+                 (imm_len tops) fuel unit.cu_context func [] FEMPTY entry_taint
+                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                             vs_inst_idx := 0 |>)))))
+End
+
+Theorem deploy_unit_execution_correct_at_with:
+  deploy_unit_execution_correct_at marks tops runtime_bc am tx unit vs <=>
+  ?shadow_ctx.
+    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
+      unit vs
+Proof
+  simp[deploy_unit_execution_correct_at_def,
+       deploy_unit_execution_correct_with_def]
+QED
 
 Definition deploy_unit_execution_correct_def:
   deploy_unit_execution_correct tops runtime_bc am tx unit vs <=>

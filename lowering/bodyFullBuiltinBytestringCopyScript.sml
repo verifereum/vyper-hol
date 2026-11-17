@@ -270,6 +270,7 @@ Theorem bytestring_external_output_full_resources:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory /\
       (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
     mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+    (!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     ghost_kept_at lo cenv es sa G tn s HG tm /\
     locals_kept cenv es es s t /\ pure_frame cenv func es sa s t /\
@@ -397,7 +398,7 @@ Proof
     (qpat_assum `tm.t_mem = _` mp_tac >>
      Cases_on `opc = CALLDATACOPY` >> gvs[] >>
      Cases_on `opc = CODECOPY` >>
-     gvs[source_memory_write_ranges_def,sized_source_write_range_def,
+     simp[source_memory_write_ranges_def,sized_source_write_range_def,
        range_bytes_def,mk_inst_def,eval_operand_def,w2n_n2w,EXTENSION]) >>
   `!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tm.t_mem` by
     (qpat_assum `tm.t_mem = (tn2.t_mem DIFF
@@ -431,6 +432,10 @@ Proof
        (qpat_assum `tm.t_mem SUBSET tn2.t_mem`
          (qspec_then `i` mp_tac o REWRITE_RULE[SUBSET_DEF]) >> simp[]) >>
      qpat_assum `!i. i IN tn2.t_mem <=> _` (qspec_then `i` mp_tac) >>
+     simp[] >> decide_tac) >>
+  `!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!i. i < s.vs_alloca_next /\ _ ==> _` irule >>
      simp[] >> decide_tac) >>
   `!name b len. local_region cenv es.scopes s name b len ==>
       local_region cenv es.scopes v name b len` by
@@ -569,7 +574,9 @@ Proof
             simp[mk_inst_def]) >> first_assum ACCEPT_TAC) >>
      irule alloca_history_frame >>
      qexists_tac `vc with vs_inst_idx := SUC vc.vs_inst_idx` >>
-     simp[] >> simp[NoAsms,mstore_def,write_memory_with_expansion_def,LET_THM] >>
+     simp[] >>
+     simp_tac pure_ss [mstore_def,write_memory_with_expansion_def,LET_THM,
+       venom_state_accfupds] >>
      simp[]) >>
   qexistsl_tac [`root`,`w`,`t`,`G2`,`tm`] >>
   asm_simp_tac bool_ss [] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)

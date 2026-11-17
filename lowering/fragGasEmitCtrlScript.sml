@@ -22,7 +22,7 @@ val ctrl_edge_tac =
 
 Theorem emit_jmp_origin_ptr:
   emit_inst JMP [Label lbl] [] sa = ((), sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
@@ -39,7 +39,7 @@ Proof
           mk_inst_def, source_memory_write_ranges_def,
           source_memory_read_ranges_def, op_taint_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
+     simp[mk_inst_def, step_jmp_behavior, jump_to_def, allocas_below_fmp_def]) >>
   qabbrev_tac `i = mk_inst sa.cs_next_id JMP [Label lbl] []` >>
   `!fuel. step_inst fuel ctx i s = OK (jump_to lbl s)` by
     simp[Abbr `i`, step_inst_non_invoke, mk_inst_def, step_jmp_behavior] >>
@@ -58,7 +58,7 @@ QED
 
 Theorem emit_jnz_origin_ptr:
   emit_inst JNZ [op; Label lt; Label lf] [] sa = ((), sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   eval_operand op s = SOME (if b then 1w else 0w) /\ op_taint tn op = {} /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
@@ -82,7 +82,7 @@ Proof
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           source_memory_write_ranges_def, source_memory_read_ranges_def,
           mk_inst_def] >>
-     simp[GSYM mk_inst_def, jump_to_def] >>
+     simp[GSYM mk_inst_def, jump_to_def, allocas_below_fmp_def] >>
      qx_gen_tac `x` >> Cases_on `x = op` >> gvs[op_taint_def] >>
      Cases_on `x` >> simp[]) >>
   qabbrev_tac `i = mk_inst sa.cs_next_id JNZ [op; Label lt; Label lf] []` >>
