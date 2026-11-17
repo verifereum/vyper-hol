@@ -1,6 +1,18 @@
 (* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
+  (* arbitrary-calldata entry and S1 suppliers *)
+  calldataArrayIterationProbe calldataArrayLiveMemory calldataArrayModularSetup
+  calldataBulkOperationalCertificate calldataCoherentOwnedEndpoint calldataExactBulkJoint
+  calldataExactBytesJoint calldataExactMemberValues calldataExactMembersJoint
+  calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
+  calldataNoneMetadata calldataRegistrationRawAddress calldataRegistrationSingletonProbe
+  calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
+  dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
+  dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
+  dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
+  loweringCalldataCorrect registrationGuardRejectOrigin runtimeEntryBodyFrame
+  dispatchedEntryValueRevert
   e2eCodeFrame
   (* definitions *)
   moduleLowering
