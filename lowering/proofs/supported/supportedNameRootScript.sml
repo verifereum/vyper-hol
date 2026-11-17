@@ -186,8 +186,10 @@ Proof
       qexistsl [`bindings`, `tops`] >> simp[])
   >~ [`supported_append_target tops target`]
   >- (Cases_on `target` >> gvs[supported_append_target_def,
+                                supported_target_pure_def,
                                 supported_expr_exists_def] >>
-      metis_tac[supported_pure_no_name_root])
+      metis_tac[supported_pure_no_name_root,
+                supported_target_pure_expr_exclusion])
   >~ [`supported_assert_exists p reason`]
   >- (Cases_on `reason` >>
       gvs[supported_assert_reason_def, supported_assert_exists_def] >>
