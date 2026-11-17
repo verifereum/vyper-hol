@@ -4,7 +4,7 @@ Ancestors exprSimArith exprSimBinopFrag exprBopSimDefs exprLowering
   freshWrites compileEnv valueEncoding vyperInterpreter loweringSlice
   vyperContext vyperValueOperation varsExt appendStorageStageTransportPtr
   fragGasFresh list arithmeticProps builtinProps exprBopBitwise exprSimCompare exprBopShift vyperAST
-  vyperTypeSystem
+  vyperTypeSystem exprSimHypsDefs
 
 Theorem bop_checked_fresh_run:
   MEM bop [Add; Sub; Mul] /\
@@ -830,8 +830,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule bop_bitwise_run >> simp[] >>
   `word_value v1` by
-    (drule_all word_value_type_value_cases >>
-     rpt strip_tac >> gvs[word_value_def]) >> simp[] >> reverse conj_tac
+    (qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
+     asm_rewrite_tac[] >> rpt strip_tac >> gvs[word_value_def]) >>
+  simp[] >> reverse conj_tac
   >- (goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> simp[]) >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
   qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac word_value_type_value_cases >>
