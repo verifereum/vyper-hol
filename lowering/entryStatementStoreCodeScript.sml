@@ -66,6 +66,19 @@ Proof
   irule entry_code_bind >> simp[entry_code_fresh_var, entry_code_return]
 QED
 
+Theorem declare_local_defaults:
+  !st. (FST (declare_local ce id ty st)).ce_func_defaults = ce.ce_func_defaults
+Proof
+  simp[declare_local_def, comp_bind_def, comp_return_def, fresh_var_def] >>
+  rw[] >> simp[comp_bind_def, comp_return_def, fresh_var_def]
+QED
+
+Theorem declare_stmt_local_defaults:
+  !st. (FST (declare_stmt_local ce s st)).ce_func_defaults = ce.ce_func_defaults
+Proof
+  Cases_on `s` >> simp[declare_stmt_local_def, comp_return_def, declare_local_defaults]
+QED
+
 Theorem entry_code_declare_stmt_local:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (declare_stmt_local ce s)
