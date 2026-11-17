@@ -516,8 +516,7 @@ val canonical_no_control_ind = evaluate_ind
               `\cx es. !s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc`,
-              `\cx g v. T`, `\cx gs vs. T`,
-              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`]
+              `\cx g v. T`, `\cx gs vs. T`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
@@ -525,12 +524,9 @@ Theorem canonical_eval_no_control_with_results:
   (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc)
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
 Proof
   ho_match_mp_tac canonical_no_control_ind >> rpt conj_tac
-  >- NC_EVAL_CASE
-  >- NC_EVAL_CASE
   >- NC_EVAL_CASE
   >- NC_EVAL_CASE
   >- NC_EVAL_CASE
@@ -568,12 +564,6 @@ Proof
   metis_tac[canonical_eval_no_control_with_results]
 QED
 
-Theorem eval_expr_results_no_control:
-  eval_expr_results cx es st = (INR exc,st') ==> no_control_exc exc
-Proof
-  metis_tac[canonical_eval_no_control_with_results]
-QED
-
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
     eval_expr cx e s = (INR exc, st') ⇒
@@ -602,8 +592,7 @@ val tuple_no_control_ind = evaluate_ind
               `\cx ty nm body vs. T`, `\cx e. T`, `\cx es. T`,
               `\cx t. T`, `\cx t. T`,
               `\cx g v. !st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx es. T`]
+              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 

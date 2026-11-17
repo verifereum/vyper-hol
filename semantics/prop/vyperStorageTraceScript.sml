@@ -1052,12 +1052,11 @@ Theorem evaluate_storage_trace_frame:
   (!cx t. storage_trace_frame (eval_base_place cx t)) /\
   (!cx t. storage_trace_frame (eval_target_place cx t)) /\
   (!cx t v. storage_trace_frame (assign_tuple_targets cx t v)) /\
-  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs)) /\
-  (!cx es. storage_trace_frame (eval_expr_results cx es))
+  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs))
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
-    (List.tabulate (62, fn n => n + 1)) >> suspend "c63"
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
 QED
 
 Resume evaluate_storage_trace_frame[c24]:
@@ -1251,12 +1250,6 @@ Resume evaluate_storage_trace_frame[c60]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 Resume evaluate_storage_trace_frame[c61]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c62]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c63]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 

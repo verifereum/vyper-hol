@@ -680,8 +680,7 @@ Theorem eval_outcomes_suffix_with_results:
   (!cx t. outcomes_suffix (eval_base_place cx t)) /\
   (!cx t. outcomes_suffix (eval_target_place cx t)) /\
   (!cx g v. outcomes_suffix (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. outcomes_suffix (eval_expr_results cx es))
+  (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs))
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
