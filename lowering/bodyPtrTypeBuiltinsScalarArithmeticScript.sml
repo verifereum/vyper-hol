@@ -371,13 +371,6 @@ Proof
   qexistsl_tac [`H`,`th`,`n`,`j`] >> simp[]
 QED
 
-Theorem convert_bytes_address_eq:
-  compile_type_convert x (ConvBytesToAddress m) =
-  compile_type_convert x (ConvBytesToInt m F 160)
-Proof
-  simp[compile_type_convert_def, compile_int_clamp_def]
-QED
-
 Theorem convert_bytes_decimal_decompose:
   compile_type_convert x (ConvBytesMToDecimal m divisor lo hi) sa = (out,sb) ==>
   ?mid.

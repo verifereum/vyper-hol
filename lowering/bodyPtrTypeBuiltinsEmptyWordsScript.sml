@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsEmptyWords
 Ancestors
   wordLoadStorePtr
-  bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsEmptyUniform bodyPtrTypeBuiltinsSeq abiEmptySequence
+  bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsEmptyUniform instSeqComposePtr abiEmptySequence
   builtinSimple emitHelper emitHelperProps compileEnv loweringStateRelDefs context exprLoweringProps
   venomInst venomState venomExecSemantics list rich_list words typedCopyPtr
   ptrDiscipline finite_map fragGasSeqPtr
@@ -145,7 +145,7 @@ Resume empty_zero_words_certificate[memory]:
   Cases_on `x IN tn.t_mem` >> simp[] >> decide_tac
 QED
 Resume empty_zero_words_certificate[sequence]:
-  asm_rewrite_tac[] >> irule inst_seq_ptr_append_run >>
+  asm_rewrite_tac[] >> irule instSeqComposePtrTheory.inst_seq_ptr_append >>
   drule_all empty_zero_words_nonterminators >> strip_tac >>
   conj_tac >- simp[] >> qexistsl_tac [`H`, `t`, `th`] >> simp[]
 QED

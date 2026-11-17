@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsScalarCompose
 Ancestors
   bodyPtrBopScalarSeq[qualified,ignore_grammar]
-  bodyPtrBopHashSuffix bodyPtrTypeBuiltinsSeq instSeqComposePtr fragGasSeqPtr exprLoweringProps
+  bodyPtrBopHashSuffix instSeqComposePtr fragGasSeqPtr exprLoweringProps
   instIdxIndep fragExec arithmetic venomExecSemantics venomState venomInst ptrDiscipline list
 
 Theorem scalar_seq_append_abort_iff:

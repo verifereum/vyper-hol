@@ -1,6 +1,7 @@
 (* Coverage audit for word-source conversion continuations. *)
 Theory bodyPtrTypeBuiltinsScalarSemantic
-Ancestors exprSimConvert exprLowering exprLoweringProps exprSimDefs
+Ancestors
+  convertScalarTyping exprSimConvert exprLowering exprLoweringProps exprSimDefs
   vyperTypeSystem vyperValue compileEnv vyperAST exprSimHyps
   vyperTyping vyperValueOperation valueEncoding integer_word venomExecSemantics
   bodyPtrTypeBuiltinsUintClampSemantics venomState fragExec words arithmetic
@@ -213,14 +214,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem scalar_flag_source_partition:
-  valid_conversion src (FlagT name) ==> src = BaseT (UintT 256)
-Proof
-  Cases_on `src` >> simp[valid_conversion_def] >>
-  Cases_on `b` >> simp[valid_conversion_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem scalar_flag_semantic_packet:
   FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) /\
   within_int_bound (Unsigned 256) i ==>
@@ -278,7 +271,7 @@ Proof
        (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
      simp[expr_type_def] >> drule expr_body_pre_convert >> metis_tac[]) >>
   drule expr_body_pre_convert >> strip_tac >>
-  drule_all scalar_flag_source_partition >> strip_tac >>
+  drule_all convertScalarTypingTheory.scalar_conversion_to_flag >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >>
   Cases_on `v1` >> gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
   fs[expr_body_pre_def, expr_sim_inv_def] >>

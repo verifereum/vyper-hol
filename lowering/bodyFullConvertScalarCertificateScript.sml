@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarCertificate
 Ancestors
+  convertScalarBytesRun
   bodyFullAllocGeneric
   bodyUnopFragMemory
   bodyPtrTypeBuiltinsScalarRawOutcome exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
@@ -34,7 +35,7 @@ Proof
   >- (irule convert_decimal_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule_all convert_bool_decimal_fixed_certificate >> metis_tac[])
   >- (drule convert_address_fixed_certificate >> simp[] >> metis_tac[])
-  >- (gvs[convert_bytes_address_eq] >>
+  >- (gvs[convertScalarBytesRunTheory.scalar_bytes_address_eq] >>
       drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_flag_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_bytes_decimal_fixed_certificate >> simp[] >> metis_tac[])
@@ -67,7 +68,7 @@ Proof
   >- (irule convert_decimal_abort_fixed_certificate >> simp[] >> metis_tac[])
   >- (metis_tac[convert_bool_decimal_no_abort])
   >- (drule convert_address_fixed_certificate >> simp[] >> metis_tac[])
-  >- (gvs[convert_bytes_address_eq] >>
+  >- (gvs[convertScalarBytesRunTheory.scalar_bytes_address_eq] >>
       drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_flag_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_bytes_decimal_fixed_certificate >> simp[] >> metis_tac[])

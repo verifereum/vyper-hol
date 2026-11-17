@@ -2,25 +2,9 @@
    is allowed; only address and counter operands must remain clean. *)
 Theory storageCopyBodyRaisePtr
 Ancestors
+  payloadLoadStorePtr
   storageCopyControlRaisePtr fragGasSeqPtr fragGasPathPtr ptrDiscipline ptrSafeRun codegenRel contextCodegenRel
   venomState venomInst finite_map pred_set words fragExecPtr memLocDefs
-
-Theorem storage_copy_load_taint:
-  eval_operand src s = SOME slot /\
-  s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
-  step_taint (mk_inst id (if tr then TLOAD else SLOAD) [src] [out]) s s' tn =
-    tn with t_var := tn.t_var |+
-      (out,key_taint (if tr then tn.t_trans else tn.t_stor) slot)
-Proof
-  strip_tac >>
-  `new_site_bytes s s' = {}` by
-    simp[new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
-  Cases_on `tr` >>
-  gvs[step_taint_def, set_var_taint_def, mk_inst_def, out_taint_def,
-      mem_taint_def, step_writes_def, source_memory_write_ranges_def,
-      written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
-      range_bytes_def, taint_component_equality, DRESTRICT_UNIV]
-QED
 
 (* Byte offsets are unchanged, not endian-reversed. key_taint already
    intersects source taint with the 32-byte word interval. *)
@@ -59,27 +43,6 @@ Proof
        op_taint_def, FLOOKUP_UPDATE, EXTENSION]
 QED
 
-Theorem storage_copy_mstore_check:
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id MSTORE [Var p; value] []) s
-Proof
-  strip_tac >> gvs[bodyPtrDefsTheory.ptr_covers_def] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def, fixed_source_write_range_def,
-       eval_operand_def] >>
-  conj_tac
-  >- (Cases_on `eval_operand value s` >> simp[] >>
-      rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  asm_simp_tac bool_ss [venomExecSemanticsTheory.step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
-  simp[venomExecSemanticsTheory.exec_write2_def, eval_operand_def,
-       AllCaseEqs(), mstore_def] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem storage_copy_load_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -110,7 +73,7 @@ Proof
                             out_prov_def, mk_inst_def]) >>
   `step_taint i s u tn = tn with t_var := tn.t_var |+
      (out,key_taint (if tr then tn.t_trans else tn.t_stor) slot)` by
-    (simp[Abbr `i`] >> irule storage_copy_load_taint >> simp[Abbr `u`, update_var_def]) >>
+    (simp[Abbr `i`] >> irule payloadLoadStorePtrTheory.storage_load_payload_taint >> simp[Abbr `u`, update_var_def]) >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+
@@ -138,7 +101,7 @@ Proof
      OK (mstore (w2n addr) w s)` by
     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_write2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var dst;value] []) s` by
-    (irule storage_copy_mstore_check >> simp[]) >>
+    (irule payloadLoadStorePtrTheory.ptr_inst_ok_mstore_payload >> simp[]) >>
   `step_prov PG G (mk_inst id MSTORE [Var dst;value] []) (mstore (w2n addr) w s) = G` by
     simp[step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV] >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G
