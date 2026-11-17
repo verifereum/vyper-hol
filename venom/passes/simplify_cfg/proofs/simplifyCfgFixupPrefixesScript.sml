@@ -21,7 +21,7 @@ QED
 Theorem scfg_assign_step_alloca[local]:
   i.inst_opcode = ASSIGN /\ step_inst n C i a = OK b ==>
   b.vs_alloca_next = a.vs_alloca_next /\ b.vs_allocas = a.vs_allocas /\
-  b.vs_initial_fmp = a.vs_initial_fmp /\ b.vs_gas_readings = a.vs_gas_readings
+  b.vs_initial_fmp = a.vs_initial_fmp /\ b.vs_fmp = a.vs_fmp /\ b.vs_gas_readings = a.vs_gas_readings
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), update_var_def]
@@ -34,7 +34,7 @@ Theorem scfg_assign_prefix_alloca[local]:
   LENGTH pre <= a.vs_inst_idx /\
   t.vs_inst_idx <= LENGTH pre + LENGTH assigns ==>
   t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
-  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_gas_readings = a.vs_gas_readings
+  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_fmp = a.vs_fmp /\ t.vs_gas_readings = a.vs_gas_readings
 Proof
   ho_match_mp_tac scfg_iprefix_strongind >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -54,7 +54,7 @@ Theorem scfg_assign_interval_alloca:
   a.vs_inst_idx = LENGTH pre /\ scfg_iprefix C bb a t /\
   t.vs_inst_idx <= LENGTH pre + LENGTH assigns ==>
   t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
-  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_gas_readings = a.vs_gas_readings
+  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_fmp = a.vs_fmp /\ t.vs_gas_readings = a.vs_gas_readings
 Proof
   metis_tac[scfg_assign_prefix_alloca, arithmeticTheory.LESS_EQ_REFL]
 QED
@@ -79,17 +79,17 @@ Theorem scfg_assign_interval_corr:
   get_instruction bb t.vs_inst_idx = SOME j /\
   u.vs_alloca_next = a.vs_alloca_next /\ u.vs_allocas = a.vs_allocas /\
   u.vs_initial_fmp = a.vs_initial_fmp /\
-  u.vs_gas_readings = a.vs_gas_readings ==>
+  u.vs_fmp = a.vs_fmp /\ u.vs_gas_readings = a.vs_gas_readings ==>
   mem_corr i u j t /\ call_corr i u j t
 Proof
   rpt strip_tac >>
   `j.inst_opcode = ASSIGN` by metis_tac[scfg_assign_interval_active] >>
   `t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
    t.vs_initial_fmp = a.vs_initial_fmp /\
-   t.vs_gas_readings = a.vs_gas_readings` by
+   t.vs_fmp = a.vs_fmp /\ t.vs_gas_readings = a.vs_gas_readings` by
     (`t.vs_inst_idx <= LENGTH pre + LENGTH assigns` by decide_tac >>
      drule_all scfg_assign_interval_alloca >> simp[]) >>
-  simp[mem_corr_def, call_corr_def, inst_mem_ranges_def,
+  simp[mem_corr_def, call_corr_def, dalloca_no_wrap_def, inst_mem_ranges_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
@@ -165,6 +165,9 @@ Proof
   Cases_on `t.vs_inst_idx < u.vs_inst_idx`
   >- (qexistsl_tac [`i`, `u`] >> simp[] >>
       `t.vs_inst_idx < LENGTH pre + LENGTH assigns` by decide_tac >>
+      `u.vs_fmp = a.vs_fmp` by
+        (`u.vs_inst_idx <= LENGTH pre + LENGTH assigns` by simp[] >>
+         drule_all scfg_assign_interval_alloca >> simp[]) >>
       drule_all scfg_assign_interval_corr >> simp[]) >>
   `scfg_iprefix C fb u t` by
     (irule scfg_iprefix_cut >> simp[] >> qexists_tac `a` >> simp[]) >>

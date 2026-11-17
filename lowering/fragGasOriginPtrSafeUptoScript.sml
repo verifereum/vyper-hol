@@ -18,7 +18,9 @@ Theory fragGasOriginPtrSafeUpto
 Ancestors
   fragGasOriginPtr fragGasFocus fragExec o1SafeUpto ptrSafeRun memSafeRun
   ptrDiscipline contextRawReachable contextCodegenRel
+  rawReachableFmp ctxLookupAgree
   concretizePtrCoverageStaticMemReachability lowerDloadPtrRawReachable
+  frameAllocationOwnership
   gasCount gasEvents gasOracleReplay unitMemInv unitTransformDefs
   lowerDloadDefs contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic
@@ -684,7 +686,8 @@ Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
       simp[inst_mem_ok_in_fn_def] >> metis_tac[]) >>
-  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def]
+  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def] >>
+  metis_tac[inst_mem_below_frontier_frontiers]
 QED
 
 Theorem invoke_mem_facts[local]:
@@ -695,7 +698,7 @@ Proof
   `inst = inst with inst_opcode := INVOKE` by
     simp[instruction_component_equality] >>
   pop_assum (fn th => once_rewrite_tac [th]) >>
-  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontier_def]
+  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontiers_def]
 QED
 
 Theorem focus_at_ok[local]:
@@ -744,6 +747,7 @@ Theorem gas_origin_ptr_focus_o1_safe_upto:
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
   ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
   mem_inv dload_headroom_ok ctx vs /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
   o1_safe_upto D lo (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) ctx vs
 Proof
@@ -791,5 +795,16 @@ Proof
     (qpat_x_assum `mem_inv _ _ _` mp_tac >>
      simp[mem_inv_raw_reachable, dload_headroom_ok_def] >>
      rpt strip_tac >> res_tac >> decide_tac) >>
+  `!fn inst s. raw_reachable vs ctx fn inst s ==>
+     dalloca_no_wrap inst s /\
+     w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (rpt gen_tac >> strip_tac >>
+     `EVERY pre_fmp_ops ctx.ctx_functions` by
+       fs[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >>
+     drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+     simp[dalloca_no_wrap_def] >> strip_tac >>
+     drule ptr_raw_reachable_frame >> strip_tac >>
+     metis_tac[frame_reachable_dalloca]) >>
   rw[o1_safe_upto_def, o1_ptr_safe_upto_def, raw_mem_ok_def] >> metis_tac[]
 QED

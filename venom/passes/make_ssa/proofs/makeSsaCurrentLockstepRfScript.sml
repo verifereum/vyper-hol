@@ -51,5 +51,11 @@ Proof
       `?b'. lookup_block s.vs_current_bb fn'.fn_blocks = SOME b'` by
         metis_tac[lookup_block_MEM_some] >>
       qexists_tac `b'` >> gvs[] >> first_x_assum irule >> metis_tac[]) >>
-  simp[mem_corr_def]
+  simp[mem_corr_def] >>
+  `LIST_REL (\op op'. op_rename sg op op' /\
+       eval_operand op' s' = eval_operand op s)
+       inst.inst_operands inst'.inst_operands` by
+    (irule LIST_REL_op_rename_eval >> fs[inst_pair_def]) >>
+  fs[inst_pair_def, dalloca_no_wrap_def] >> rpt strip_tac >>
+  gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]
 QED

@@ -33,7 +33,7 @@ Theorem ricf_call_current_argument_mapped[local]:
   ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
   ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
   occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   cb < LENGTH fn.fn_blocks /\
   s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
@@ -95,7 +95,7 @@ Theorem ricf_call_install:
   ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
   ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
   occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   cb < LENGTH fn.fn_blocks /\
   s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\

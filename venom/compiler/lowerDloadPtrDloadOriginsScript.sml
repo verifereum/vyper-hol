@@ -173,7 +173,8 @@ Theorem dload_positive_prefix_fresh_reserve:
     (t0::MAP (\d. d.cf_state) ds) /\
   dload_headroom_ok C f i s ==>
   (FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
-    t0.vs_alloca_next + 32 < dimword(:256))
+    t0.vs_alloca_next + 32 < dimword(:256) /\
+    (ctx_has_dalloca C ==> t0.vs_alloca_next + 32 <= w2n s.vs_initial_fmp))
 Proof
   rpt strip_tac >>
   `SUM (MAP (\r. CARD r.dr_scratch)
@@ -193,5 +194,6 @@ Proof
   `FINITE r.dr_scratch /\ (EL 0 xs).inst_id NOTIN r.dr_scratch` by
     fs[FLOOKUP_DEF] >>
   drule dload_table_stack_current >> strip_tac >>
-  gvs[dload_headroom_ok_def, CARD_INSERT, FLOOKUP_DEF] >> decide_tac
+  gvs[dload_headroom_ok_def, ctx_has_dalloca_def, CARD_INSERT, FLOOKUP_DEF] >>
+  rpt strip_tac >> gvs[] >> decide_tac
 QED

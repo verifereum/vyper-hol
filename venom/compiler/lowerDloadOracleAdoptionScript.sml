@@ -119,12 +119,10 @@ QED
      No map adoption (cr_static=T), no mask reset (opcode is not CALL).
      Companion transport uses retained input maps; arbitrary input masks.
 
-   DELEGATECALL -- venomExecSemantics:493-506, extract_venom_result:437-471:
-     Concrete EVM execution, NOT the outcome oracle. Success uses rollback
-     accounts/tStorage, failure retains input maps. No mask reset. taint_ok:
-     582-584 supplies empty source storage/transient masks; the checked
-     ld_storage_sensitive_exact derives exact input maps and empty target
-     masks. Full concrete-EVM congruence remains external-closure work.
+   DELEGATECALL -- exec_delegatecall: consume_call_outcome on a
+     DelegateMessageCall request, like CALL. No mask reset (opcode is not
+     CALL), and taint_ok gives no clean-mask premise; each run sends its own
+     request, and the two agree outside the dead masks (taint_within).
 
    CREATE/CREATE2 -- venomExecSemantics:509-518,1107-1127;
      venomCallOracleDefs:76-119: CreateCall/Create2Call request, cr_static=F.

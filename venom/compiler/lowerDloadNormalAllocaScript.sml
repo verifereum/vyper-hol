@@ -38,6 +38,7 @@ Theorem ld_alloca_normal_data_backward_fresh_bounds:
   (FLOOKUP L i.inst_id = NONE ==>
     s.vs_alloca_next + w2n n < dimword(:256) /\
     t.vs_alloca_next + w2n n < dimword(:256)) /\
+  (FLOOKUP L i.inst_id = NONE ==> t'.vs_alloca_next <= dyn_floor CS s) /\
   step_inst fuelT CT i t = OK t' ==>
   ?s' E' k' L' H'.
     step_inst fuelS CS i s = OK s' /\
@@ -64,7 +65,7 @@ Proof
     bt+sz <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)` by
     metis_tac[] >>
   drule_all ld_alloca_certificate_backward >>
-  disch_then (qspecl_then [`fuelS`,`CS`] strip_assume_tac) >>
+  disch_then (qspec_then `fuelS` strip_assume_tac) >>
   `n' = n` by fs[] >> qpat_x_assum `n' = n` SUBST_ALL_TAC >>
   qexistsl [`s'`,`k'`,`L'`,`H'`] >> simp[] >>
   `FLOOKUP L i.inst_id = NONE ==> sz = w2n n` by
@@ -81,6 +82,12 @@ Proof
      qpat_x_assum `eval_operand op s = SOME n` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `dyn_floor CS s' = dyn_floor CS s` by
+    (`s'.vs_initial_fmp = s.vs_initial_fmp` by
+       (qpat_x_assum `(s' with <|vs_vars := _; vs_allocas := _;
+                                 vs_alloca_next := _|>) = s`
+          (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+     simp[dyn_floor_def]) >>
   `((if FLOOKUP L i.inst_id = NONE then E |+ ((0,k),(bs,bt,w2n n)) else E)) = E'` by
     (Cases_on `FLOOKUP L i.inst_id = NONE` >> gvs[]) >>
   qpat_x_assum `E' = _` (fn extension =>
@@ -149,7 +156,7 @@ Resume ld_alloca_normal_data_backward_fresh_bounds[fresh_strict_endpoints]:
   `s'.vs_alloca_next < dimword(:256) /\
    t'.vs_alloca_next < dimword(:256)` by decide_tac >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!owner b c n. _ IN _ /\ _ ==> _`
+  qpat_x_assum `!owner b c n. _ IN _ /\ _ ==> lo <= _ /\ _`
     drule >> strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
 QED
 
@@ -231,6 +238,7 @@ Theorem ld_alloca_normal_data_backward:
   (FLOOKUP L i.inst_id = NONE ==> (0,k) NOTIN live) /\
   s.vs_alloca_next + w2n n < dimword(:256) /\
   t.vs_alloca_next + w2n n < dimword(:256) /\
+  (FLOOKUP L i.inst_id = NONE ==> t'.vs_alloca_next <= dyn_floor CS s) /\
   step_inst fuelT CT i t = OK t' ==>
   ?s' E' k' L' H'.
     step_inst fuelS CS i s = OK s' /\
