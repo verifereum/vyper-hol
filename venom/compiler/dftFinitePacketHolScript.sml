@@ -44,6 +44,7 @@ Ancestors
   dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
   dftPacketPseudoHistoryFrame
+  dftPacketPseudoHistoryReplay
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
