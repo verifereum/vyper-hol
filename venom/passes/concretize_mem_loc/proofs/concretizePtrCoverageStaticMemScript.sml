@@ -193,7 +193,7 @@ Proof
   `at.po_inst.inst_opcode <> DALLOCA` by
     (rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
      gvs[mk_assign_inst_def, mk_nop_inst_def]) >>
-  simp[dalloca_no_wrap_def]
+  simp[unitTransformDefsTheory.dalloca_no_wrap_def]
 QED
 
 Resume ptr_paired_target_static_fields[dalloca]:
@@ -224,7 +224,7 @@ Resume ptr_paired_target_static_fields[dalloca]:
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
     (irule ptr_nonopaque_instruction_operands >> simp[]) >>
-  simp[dalloca_no_wrap_def] >> rpt strip_tac >>
+  simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
   `MEM sz_op a.po_inst.inst_operands` by simp[] >>
   `op_taint a.po_taint sz_op = {}` by
     (spose_not_then assume_tac >> fs[taint_ok_def] >>
@@ -240,7 +240,7 @@ Resume ptr_paired_target_static_fields[dalloca]:
   `eval_operand sz_op a.po_state = SOME sz` by
     (drule ptr_mixed_scalar_eval >> disch_then drule >>
      disch_then (qspec_then `sz_op` mp_tac) >> fs[EVERY_MEM]) >>
-  fs[raw_mem_ok_def, dalloca_no_wrap_def]
+  fs[raw_mem_ok_def, unitTransformDefsTheory.dalloca_no_wrap_def]
 QED
 
 Finalise ptr_paired_target_static_fields
@@ -313,7 +313,7 @@ Proof
           ptr_observe_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   gvs[ptr_observe_def] >>
   `dalloca_no_wrap inst s` by
-    (simp[dalloca_no_wrap_def] >> strip_tac >>
+    (simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
      `MEM fn' C'.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
      `ALL_DISTINCT (fn_labels fn')` by gvs[EVERY_MEM] >>
      drule raw_reachable_active >> rewrite_tac[active_inst_def] >> strip_tac >>

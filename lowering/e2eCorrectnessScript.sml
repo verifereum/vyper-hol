@@ -797,6 +797,7 @@ QED
 Theorem selected_raw_memory[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   o1_source_unit_ok unit /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME "__entry" /\
@@ -954,6 +955,12 @@ Proof
   strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_safe_blocks D` >>
+  `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by
+    (qpat_assum `gas_variant _ _` mp_tac >>
+     pure_rewrite_tac[gas_variant_def] >>
+     disch_then (mp_tac o Q.AP_TERM
+       `\s:venom_state. w2n s.vs_initial_fmp <= w2n s.vs_fmp`) >>
+     simp[entry_venom_state_def]) >>
   `raw_unit_memory_ok unit.cu_context vs /\
    ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
    mem_inv dload_offset_ok unit.cu_context vs /\

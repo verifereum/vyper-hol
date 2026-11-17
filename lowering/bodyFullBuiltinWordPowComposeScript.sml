@@ -21,7 +21,7 @@ Proof
   simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
   strip_tac >>
   `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-  simp[unitMemInvTheory.dalloca_no_wrap_def]
+  simp[unitTransformDefsTheory.dalloca_no_wrap_def]
 QED
 
 Theorem pow_mod256_sim_full_from_suffix:

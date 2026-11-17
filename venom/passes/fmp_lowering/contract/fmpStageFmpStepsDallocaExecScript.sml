@@ -18,7 +18,7 @@ Theorem fmp_dalloca_source:
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), terminates_def] >>
-  gvs[dalloca_no_wrap_def] >>
+  gvs[unitTransformDefsTheory.dalloca_no_wrap_def] >>
   simp[GSYM word_add_n2w, WORD_ADD_COMM]
 QED
 
