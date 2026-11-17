@@ -1,32 +1,9 @@
 (* Counted control edges for checked storage-copy loops. *)
 Theory storageCopyControlRaisePtr
 Ancestors
+  bodyPtrBopInLoopControl
   fragGasSeqPtr fragGasPathPtr ptrSafeRun ptrDiscipline gasCount venomInst venomState
   venomExecSemantics venomExecProofs venomInstProofs exprLoweringProps codegenRel contextCodegenRel
-
-Theorem storage_copy_jump_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
-  gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))
-Proof
-  strip_tac >>
-  `ptr_safe_step D 0 0 ctx func PG G tn
-     (mk_inst id JMP [Label lbl] []) s` by
-    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
-          source_memory_read_ranges_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
-  `gas_path_ptr_edge D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))` by
-    (rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     fs[mk_inst_def] >> metis_tac[]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
-QED
 
 Theorem storage_copy_branch_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -178,7 +155,7 @@ Proof
      (update_var cv 0w s with vs_inst_idx := SUC s.vs_inst_idx) 0
      (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
      (OK (jump_to hdr (update_var cv 0w s with vs_inst_idx := SUC s.vs_inst_idx)))` by
-    (irule storage_copy_jump_path_ptr >> simp[update_var_def] >> metis_tac[]) >>
+    (irule bodyPtrBopInLoopControlTheory.membership_jump_path >> simp[update_var_def] >> metis_tac[]) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
 

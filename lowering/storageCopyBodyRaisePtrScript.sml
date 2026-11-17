@@ -43,48 +43,6 @@ Proof
        op_taint_def, FLOOKUP_UPDATE, EXTENSION]
 QED
 
-Theorem storage_copy_load_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx =
-    SOME (mk_inst id (if tr then TLOAD else SLOAD) [src] [out]) /\
-  eval_operand src s = SOME slot /\ op_taint tn src = {} ==>
-  gas_path_ptr D 0 ctx fn PG G tn s 0
-    (DRESTRICT G (COMPL {out}))
-    (tn with t_var := tn.t_var |+
-      (out,key_taint (if tr then tn.t_trans else tn.t_stor) slot))
-    (OK (update_var out (if tr then tload slot s else sload slot s) s
-      with vs_inst_idx := SUC s.vs_inst_idx))
-Proof
-  strip_tac >>
-  qabbrev_tac `i = mk_inst id (if tr then TLOAD else SLOAD) [src] [out]` >>
-  qabbrev_tac `u = update_var out (if tr then tload slot s else sload slot s) s` >>
-  `step_inst_base i s = OK u` by
-    (unabbrev_all_tac >> Cases_on `tr` >>
-     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_read1_def]) >>
-  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
-    (simp[Abbr `i`] >> Cases_on `tr` >>
-     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-          mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-     simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke] >>
-     gvs[Abbr `u`, update_var_def] >> metis_tac[]) >>
-  `step_prov PG G i u = DRESTRICT G (COMPL {out})` by
-    (Cases_on `tr` >> simp[Abbr `i`, step_prov_def, set_prov_def,
-                            out_prov_def, mk_inst_def]) >>
-  `step_taint i s u tn = tn with t_var := tn.t_var |+
-     (out,key_taint (if tr then tn.t_trans else tn.t_stor) slot)` by
-    (simp[Abbr `i`] >> irule payloadLoadStorePtrTheory.storage_load_payload_taint >> simp[Abbr `u`, update_var_def]) >>
-  `gas_path_ptr_edge D 0 ctx fn PG G tn s 0
-    (DRESTRICT G (COMPL {out}))
-    (tn with t_var := tn.t_var |+
-      (out,key_taint (if tr then tn.t_trans else tn.t_stor) slot))
-    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (drule_at (Pat `step_inst_base _ _ = _`) straight_line_ptr_edge >>
-     Cases_on `tr` >> gvs[Abbr `i`, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
-  drule (cj 2 gas_path_ptr_rules) >> simp[] >> disch_then irule >>
-  irule (cj 1 gas_path_ptr_rules) >> simp[Abbr `u`, update_var_def]
-QED
-
 Theorem storage_copy_mstore_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
