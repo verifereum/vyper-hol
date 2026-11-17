@@ -33,7 +33,7 @@ QED
 
 Theorem source_exempt_call_result_rel:
   source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gobs am tx) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   simp[source_exempt_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
@@ -317,12 +317,13 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_success:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx = (INL v, am', rqs) /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx (INL v, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_corresponds_def] >>
@@ -333,6 +334,7 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_assertion:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (AssertException s), am', rqs) /\
   external_call_result_rel
@@ -340,7 +342,7 @@ Theorem external_call_result_rel_frame_assertion:
     tops ret tx
     (INR (AssertException s), am', rqs) (Abort a ss) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >> gvs[call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
   irule venom_frame_rel_assertion >> qexistsl_tac [`a`, `ss`] >>
@@ -348,6 +350,7 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_halt:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR HaltException, am', rqs) /\
   external_call_result_rel
@@ -355,7 +358,7 @@ Theorem external_call_result_rel_frame_halt:
     tops ret tx
     (INR HaltException, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_corresponds_def] >>
@@ -368,20 +371,21 @@ Theorem external_call_result_rel_frame_runtime:
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error (RuntimeError m)), am', rqs) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >> drule venom_frame_rel_abort_failure >>
   simp[call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM]
 QED
 
 Theorem external_call_result_rel_frame_error:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error e), am', rqs) /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx (INR (Error e), am', rqs) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >> Cases_on `e` >> Cases_on `res` >>
   gvs[external_call_result_rel_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM,
@@ -394,12 +398,13 @@ QED
  * A Halt paired with Error can only be the deliberately exempt decoder case.
  *)
 Theorem external_call_result_rel_frame:
+  external_return_type tops tx.function_name = ret /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx
     (call_external (SOME (MAP SND (call_trace es))) gobs am tx) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
