@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState
+  sum venomState vyperFiniteStoragePreservation
 
 val _ = Parse.hide "body";
 
@@ -1256,6 +1256,24 @@ Proof
 QED
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
+(* A storage-backed compiled result retains a source storage place.
+   The actual source evaluation records its finite observed region even
+   when the RHS has effects. *)
+Theorem body_assign_rhs_storage_live[local]:
+  !tops ctx cenv cx env es e H es1 sa sb vv pv func s0 s.
+    body_inv tops ctx cenv cx /\
+    runtime_consistent env cx es /\ well_typed_expr env e /\
+    functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    valid_horizon cx es H es1.storage_trace /\
+    compile_expr cenv (expr_type e) e sa = (vv,sb) /\
+    eval_expr cx e es = (INL pv,es1) /\
+    vv_post H ctx func cenv cx e es sa sb s0 es1 pv vv s ==>
+    vv_storage_live H cx vv es1 s
+Proof
+  FAIL_TAC "Pending saved-RHS storage-liveness proof"
+QED
+
 Theorem body_assign_other_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
