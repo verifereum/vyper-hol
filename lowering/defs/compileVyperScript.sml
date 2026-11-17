@@ -1709,6 +1709,80 @@ Definition order_internals_def:
       ints
 End
 
+Theorem PERM_key_order[local]:
+  !names l. ALL_DISTINCT names ==>
+    PERM (FLAT (MAP (\n. FILTER (\x. k x = n) l) names) ++
+          FILTER (\x. ~MEM (k x) names) l) l
+Proof
+  Induct
+  >- (simp[] >> TRY (Induct_on `l` >> simp[])) >>
+  rpt strip_tac >> fs[] >>
+  first_x_assum (qspec_then `FILTER (\x. k x <> h) l` mp_tac) >>
+  simp[rich_listTheory.FILTER_FILTER] >>
+  `FLAT (MAP (\n. FILTER (\x. k x = n /\ k x <> h) l) names) =
+   FLAT (MAP (\n. FILTER (\x. k x = n) l) names)`
+    by (AP_TERM_TAC >> irule listTheory.MAP_CONG >> rw[] >>
+        simp[rich_listTheory.FILTER_EQ] >> rw[] >> metis_tac[]) >>
+  `FILTER (\x. ~MEM (k x) names /\ k x <> h) l =
+   FILTER (\x. k x <> h /\ ~MEM (k x) names) l`
+    by (simp[rich_listTheory.FILTER_EQ] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  irule sortingTheory.PERM_TRANS >>
+  qexists_tac `FILTER (\x. k x = h) l ++ FILTER (\x. k x <> h) l` >>
+  conj_tac
+  >- ASM_REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+  ONCE_REWRITE_TAC [sortingTheory.PERM_SYM] >>
+  `FILTER (\x. k x <> h) l = FILTER ($~ o (\x. k x = h)) l`
+    by simp[combinTheory.o_DEF] >>
+  simp[sortingTheory.PERM_SPLIT]
+QED
+
+Theorem order_internals_key[local]:
+  order_internals names ints =
+    FLAT (MAP (\n. FILTER (\x. FST (SND (SND (SND x))) = n) ints) names) ++
+    FILTER (\x. ~MEM (FST (SND (SND (SND x)))) names) ints
+Proof
+  simp[order_internals_def, pairTheory.LAMBDA_PROD]
+QED
+
+Theorem MEM_order_internals[simp]:
+  !names ints x. MEM x (order_internals names ints) <=> MEM x ints
+Proof
+  rw[order_internals_key, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+     listTheory.MEM_FILTER, PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem PERM_order_internals:
+  !names ints. ALL_DISTINCT names ==> PERM (order_internals names ints) ints
+Proof
+  simp[order_internals_key, PERM_key_order]
+QED
+
+Theorem reach_internals_distinct[local]:
+  !n ints seen gs. ALL_DISTINCT seen ==>
+    ALL_DISTINCT (reach_internals ints n seen gs)
+Proof
+  Induct >> simp[reach_internals_def] >>
+  rpt gen_tac >> qid_spec_tac `seen` >> qid_spec_tac `gs` >>
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> rw[listTheory.ALL_DISTINCT_SNOC] >> gs[]
+QED
+
+Theorem PERM_order_runtime_internals:
+  !tops ints. PERM (order_internals (runtime_internal_order tops ints) ints) ints
+Proof
+  simp[PERM_order_internals, runtime_internal_order_def,
+       reach_internals_distinct]
+QED
+
+Theorem PERM_order_deploy_internals:
+  !ctor ints. PERM (order_internals (deploy_internal_order ctor ints) ints) ints
+Proof
+  simp[PERM_order_internals, deploy_internal_order_def,
+       reach_internals_distinct]
+QED
+
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
