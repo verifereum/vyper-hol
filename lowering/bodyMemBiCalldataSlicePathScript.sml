@@ -63,7 +63,9 @@ Theorem slice_state_rel_any_horizon[local]:
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   stmt_state_rel H ctx func cenv cx es t
 Proof
-  strip_tac >> drule_all slice_calldata_run >>
+  strip_tac >>
+  drule_all (REWRITE_RULE [LESS_EQ_REFL]
+    (Q.INST [`m` |-> `n`] (SPEC_ALL slice_calldata_run))) >>
   qpat_x_assum `~(_ \/ _)` (fn th => simp[th]) >>
   strip_tac >> gvs[]
 QED
@@ -122,7 +124,8 @@ Proof
      simp[]) >>
   `n < dimword (:256) /\ a < dimword (:256)` by
     fs[wordsTheory.dimword_def] >>
-  drule_all slice_calldata_run >>
+  drule_all (REWRITE_RULE [LESS_EQ_REFL]
+    (Q.INST [`m` |-> `n`] (SPEC_ALL slice_calldata_run))) >>
   Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
   gns[wordsTheory.dimword_def] >> strip_tac
   >- suspend "abort" >>
@@ -189,7 +192,9 @@ Resume slice_calldata_path_mem[success]:
      `storage_well_formed_on cx es (FST H)` by
        (qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (qspec_then `H` mp_tac) >>
         impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
-     irule slice_calldata_vv_post >> simp[] >>
+     irule (REWRITE_RULE [LESS_EQ_REFL]
+       (Q.INST [`m` |-> `n`] (SPEC_ALL slice_calldata_vv_post))) >>
+     simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `sa.cs_next_id + 7` >>
      conj_tac >- simp[] >> conj_tac >- simp[] >>
