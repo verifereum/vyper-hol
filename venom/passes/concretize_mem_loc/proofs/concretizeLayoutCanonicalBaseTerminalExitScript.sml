@@ -16,7 +16,7 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalBase concretizeLayout
 Theorem layout_ordinary_revert_empty:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   ptr_static_support P fn G /\
-  resolved_frame_ok birth cache PG G om rp rv ids frames /\
+  resolved_frame_ok dyn birth cache PG G om rp rv ids frames /\
   taint_ok fn tn inst s /\ inst.inst_opcode = REVERT /\
   s.vs_labels = t.vs_labels /\ variable_domains s t /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
