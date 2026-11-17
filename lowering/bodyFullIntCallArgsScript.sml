@@ -525,6 +525,96 @@ Proof
   simp[]
 QED
 
+(* Prepare defaults in caller scopes at the supplied-argument endpoint. *)
+Theorem intcall_args_defaults_pre:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx tenv ee /\
+  well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
+  call_evaluation_safe cx
+    (int_calls_expr (Call ann (IntCall (NONE,name)) es dflt)) /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  EVERY (\e. expr_body_pre (cenv_without_defaults cenv name)
+      (cx with stk updated_by CONS (NONE,name))
+      (tenv with current_src := NONE) e ee) (DROP k dflts)
+Proof
+  rpt strip_tac >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[bodySimTheory.body_inv_def] >>
+  `cx_tops cx = tops` by
+    gvs[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
+        vyperContextTheory.get_module_code_def] >>
+  `well_typed_exprs (tenv with current_src := NONE) dflts` by
+    metis_tac[intcall_args_defaults_typed] >>
+  `alloc_limits_exprs (cenv_without_defaults cenv name) dflts` by
+    metis_tac[intcall_args_defaults_alloc] >>
+  `expr_sim_inv (cenv_without_defaults cenv name)
+     (cx with stk updated_by CONS (NONE,name))
+     (tenv with current_src := NONE) ee` by
+    metis_tac[intcall_args_defaults_inv] >>
+  `call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+     (int_calls_exprs (DROP k dflts))` by
+    metis_tac[vyperTypeEvalSoundnessTheory.intcall_call_evaluation_safe_needed_defaults] >>
+  `supported_pure_exprs tops dflts` by
+    (drule_all supportedProgramTheory.supported_program_declaration >>
+     simp[supportedProgramTheory.supported_declaration_body_def]) >>
+  simp[EVERY_MEM] >> qx_gen_tac `e` >> strip_tac >>
+  `MEM e dflts` by metis_tac[rich_listTheory.MEM_DROP_IMP] >>
+  `well_typed_expr (tenv with current_src := NONE) e` by
+    metis_tac[exprSimSourceTheory.well_typed_exprs_member] >>
+  `alloc_limits_expr (cenv_without_defaults cenv name) e` by
+    metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem] >>
+  `call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+     (int_calls_expr e)` by
+    metis_tac[exprSimSourceTheory.call_evaluation_safe_exprs_mem] >>
+  `supported_expr tops e` by
+    (drule_all supportedProgramTheory.supported_program_defaults >>
+     simp[EVERY_MEM, supportedProgramTheory.supported_default_expression_def]) >>
+  `body_inv tops ctx (cenv_without_defaults cenv name)
+     (cx with stk updated_by CONS (NONE,name))` by
+    metis_tac[intcall_args_defaults_body_inv] >>
+  `byte_widths_expr e` by
+    (irule externalBodyWidthsTheory.well_typed_expr_byte_widths >>
+     qexists `tenv with current_src := NONE` >> simp[] >>
+     `env_consistent tenv cx ee` by gvs[expr_sim_inv_def] >>
+     conj_tac
+     >- metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
+     gvs[vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  drule bodyExprPreFactsTheory.supported_expr_body_calls >> strip_tac >>
+  `~supported_expr_exists
+      (const_name_root (cx with stk updated_by CONS (NONE,name))) e` by
+    metis_tac[bodySimTheory.body_inv_const_name_free] >>
+  simp[expr_body_pre_def, EVERY_MEM] >> conj_tac
+  >- (gvs[EVERY_MEM, vyperContextTheory.get_module_code_def] >>
+      rpt strip_tac >> qexists `tops` >> simp[]) >>
+  conj_tac
+  >- (`cx_tops (cx with stk updated_by CONS (NONE,name)) = tops` by
+        gvs[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
+            vyperContextTheory.get_module_code_def] >>
+      simp[supportedProgramTheory.occurs_abi_decode_target_def, EXISTS_MEM] >>
+      rpt strip_tac >>
+      qexists `FunctionDecl Internal mut nr rr name args dflts ret ss` >>
+      simp[supportedProgramTheory.declaration_abi_decode_target_def,
+           supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
+      metis_tac[]) >>
+  qpat_x_assum `body_inv tops ctx cenv cx` mp_tac >>
+  simp[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def]
+QED
+
+Theorem intcall_args_defaults_ih:
+  (!s1 vs t1. ~MEM (NONE,name) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) ==>
+     body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+  ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,ee) ==>
+  body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+Proof
+  metis_tac[]
+QED
+
 (* A completed memory argument is protected by its full allocation, not by
    an arbitrary fixed-low memory frame.  Restrict both byte and taint frames
    to its value footprint before applying the canonical robust transport. *)
