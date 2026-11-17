@@ -242,7 +242,7 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
             simp[Abbr`zt`, ptr_observe_def])) >> simp[]) >>
       Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
       >- (`a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
-            (qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state` mp_tac >>
+            (qpat_x_assum `ptr_history_content a.po_taint a.po_state at.po_state` mp_tac >>
              simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
                   ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
              strip_tac >> first_assum ACCEPT_TAC) >>
