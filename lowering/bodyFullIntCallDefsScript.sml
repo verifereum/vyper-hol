@@ -90,7 +90,7 @@ End
    ends with: the storage the callee leaves is well formed on H's domain;
    its storage, transient and immutables taint is in DF H's dead bytes, and
    the fixed region [0, lo) is tainted only where the immutables section
-   is dead; it taints no byte below t's frontier outside the call's own
+   is dead; it taints no byte in [lo, t's frontier) outside the call's own
    allocations (ids in [n,m)) that the caller's taint tn did not hold; and
    the return buffer rb, if any, holds the returned value whatever its
    tainted bytes hold. *)
@@ -106,7 +106,7 @@ Definition intcall_callee_exit_full_def:
       stor_taint_ok_at (DF H) (SND gt) s' /\
       (!i. i < lo /\ i IN (SND gt).t_mem ==>
            imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo s'.vs_memory) i) /\
-      (!i. i < t.vs_alloca_next /\ i IN (SND gt).t_mem /\
+      (!i. lo <= i /\ i < t.vs_alloca_next /\ i IN (SND gt).t_mem /\
            (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
                           n <= aid /\ aid < m ==> i < off \/ off + asz <= i) ==>
            i IN tn.t_mem) /\
