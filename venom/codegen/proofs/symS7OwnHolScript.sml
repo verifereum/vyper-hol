@@ -5,7 +5,7 @@ Ancestors
   asmSymModeInterfaceOwn asmSymModeOwn asmSymOwnStep asmSymRelocLabelsOwn
   codegenEntrySymbolicOwn codegenSymbolicTerminalOwn
   symBodyAlgebra symBumpOwn symBumpRunOwn symControlPrefixOwn
-  symEmitCodeEndOwn symEmitCodecopyOwn symEmitDischargeOwn symEmitFrameOwn
+  symControlReplayOwn symEmitCodeEndOwn symEmitCodecopyOwn symEmitDischargeOwn symEmitFrameOwn
   symEmitNamedOwn symEmitOwn symEmitSourceOwn symEmitStoreOwn
   symFrameBoundaryEntryPackaging symFrameBoundaryNumeric symFrameBoundaryOwn
   symFrameBoundaryPairing symFrameBoundaryPhiPackaging symFrameInvokeSupport
@@ -13,4 +13,4 @@ Ancestors
   symInstEmissionOwn symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
   symInvokeEntryFacts symInvokeEntryOwn
   symGeneratedAssignOwn symGeneratedZeroOwn
-  symFrameControlFacts symControlRestoreScheduleOwn symControlScratchOwn
+  symInstDispatchOwn symFrameControlFacts symControlRestoreScheduleOwn symControlScratchOwn symControlTerminalSafetyOwn
