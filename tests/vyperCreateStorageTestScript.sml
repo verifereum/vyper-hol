@@ -1,5 +1,6 @@
 Theory vyperCreateStorageTest
 Ancestors
+  vyperSmallStepCV
   vyperCreateSelfdestruct vyperCreate vyperInterpreter
   extCallOracle vyperCallOutcome
   vyperSmallStep[ignore_grammar] vfmExecution vfmState
