@@ -16,8 +16,9 @@ Theorem annassign_word_full_bind[local]:
     (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,entry,Ga,tna)
-    P (\H res ee gt r. expr_exit res r) /\
-  (!H exc ee gt r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee gt r) /\
+    P (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r) /\
+  (!H exc ee gt r. expr_exit (INR exc : value + exception) r /\
+    halt_exit H cx ee (INR exc) r ==> R H (INR exc) ee gt r) /\
   (!marks res mid G1 tn1 u.
     (!tail. bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks entry.vs_gas_readings ++ tail) =
@@ -56,7 +57,8 @@ Proof
   irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> rpt strip_tac >> Cases_on `res`
-  >- fs[exprSimDefsTheory.expr_exit_def] >> metis_tac[]
+  >- fs[exprSimDefsTheory.expr_exit_def] >>
+  simp[] >> first_x_assum irule >> fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem annassign_word_full_continuation[local]:
@@ -138,6 +140,10 @@ Theorem annassign_word_full_final_post[local]:
   (!x. not_fresh_at sa x ==> lookup_var x entry = lookup_var x s0) /\
   (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP entry.vs_allocas aid = SOME z) /\
   ghost_kept_at lo ce es a Ga tna entry G1 tn1 /\
+  alloca_frame old es sa s0 ce es entry /\
+  alloca_frame ce es a entry ce mid u /\
+  ghost_kept_at lo old es sa G0 tn0 s0 Ga tna /\
+  sa.cs_next_id <= a.cs_next_id /\ sa.cs_next_id <= inst.inst_id /\
   (!x. not_fresh_at sa x ==> FLOOKUP Ga x = FLOOKUP G0 x /\
     op_taint tna (Var x) = op_taint tn0 (Var x)) /\
   (!ce'. stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
@@ -151,12 +157,42 @@ Theorem annassign_word_full_final_post[local]:
     (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z) /\
     (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP t.vs_allocas aid = SOME z) /\
     (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
-       op_taint tnf (Var x) = op_taint tn0 (Var x)) ==> R) ==> R
+       op_taint tnf (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame old es sa s0 ce' out t /\
+    (!aid off sz i.
+      FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b sz'. local_region old es.scopes s0 n b sz' ==>
+        off + sz <= b \/ b + sz' <= off) /\
+      off <= i /\ i < off + sz /\ i IN tnf.t_mem ==> i IN tn0.t_mem) ==> R) ==> R
 Proof
   rpt strip_tac >>
   drule_all annassign_word_full_installation_post >> strip_tac >>
   drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
     annassign_word_full_final_frame) >> strip_tac >>
+  `allocas_non_overlapping u` by
+    (fs[loweringPostsTheory.expr_post_def] >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ u`
+       (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+     simp[venomMemDefsTheory.alloca_inv_def]) >>
+  `alloca_frame old es sa s0 ce out t` by
+    (drule_all annassign_continuation_success >> strip_tac >> gvs[] >>
+     irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       annassign_word_full_frame_post) >>
+     goal_assum (drule_at (Pat `alloca_frame old es sa s0 ce es entry`)) >>
+     goal_assum (drule_at (Pat `alloca_frame ce es a entry ce mid u`)) >>
+     goal_assum (drule_at (Pat `FLOOKUP u.vs_allocas _ = SOME (_,32)`)) >>
+     qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
+  `!aid off sz i.
+    FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+    (!n b sz'. local_region old es.scopes s0 n b sz' ==>
+      off + sz <= b \/ b + sz' <= off) /\
+    off <= i /\ i < off + sz /\ i IN tnf.t_mem ==> i IN tn0.t_mem` by
+    (irule annassign_word_full_taint_post >>
+     goal_assum (drule_at (Pat `alloca_frame old es sa s0 ce es entry`)) >>
+     goal_assum (drule_at (Pat `FLOOKUP u.vs_allocas _ = SOME (_,32)`)) >>
+     qexistsl_tac [`G0`, `G1`, `Ga`, `a`, `lo`, `tn1`, `tna`] >>
+     fs[loweringPostsTheory.expr_post_def]) >>
   `~block_is_terminated sf` by
     (drule exprOpenPrimitivesTheory.emit_void_terminated >>
      simp[venomInstTheory.is_terminator_def]) >>
@@ -351,21 +387,24 @@ Resume annassign_word_full_alloc_entry[prefix_frame]:
                          vs_allocas := _; vs_alloca_next := _|> = s0` mp_tac >>
      disch_then (mp_tac o AP_TERM ``\s. s.vs_memory``) >> simp[]) >>
   `alloca_frame old es sa s0 ce es t` by
-    (irule annassign_word_full_prefix_frame >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ old _ _ s0`)) >>
-     simp[] >>
-     drule_all declare_local_ptr >> strip_tac >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       annassign_word_full_prefix_frame) >>
+     drule_all declare_local_ptr >> strip_tac >> simp[] >>
+     conj_tac >- (qexists_tac `id` >> simp[]) >>
+     qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`, `func`] >> simp[]) >>
   `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) ==>
                 off + sz <= s0.vs_alloca_next` by
-    (drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
-     simp[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+    (qpat_assum `stmt_state_rel _ _ _ old _ _ s0`
+       (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+     simp[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
   `!name off sz. local_region old es.scopes s0 name off sz ==>
                 off + sz <= s0.vs_alloca_next` by
     metis_tac[bodyMemoryDefsTheory.body_local_region_frontier] >>
   `ghost_kept_at lo old es sa G0 tn0 s0 G' tn'` by
     (irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_kept_at >>
-     qexistsl_tac [`G0`, `s0`, `tn0`, `w2n w + 32`] >>
-     simp[bodyPtrDefsTheory.ghost_kept_at_def]) >>
+     qexistsl_tac [`G0`, `w2n w + 32`, `s0`, `tn0`] >>
+     simp[bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]) >>
   qexistsl_tac [`w`, `t`, `G'`, `tn'`] >> simp[] >> metis_tac[]
 QED
 
@@ -411,7 +450,7 @@ Theorem annassign_word_full_rhs[local]:
       ptr_val_ok cx (post_value_type ce e) v op Gf tnf u /\
       (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op Gf u) /\
       ghost_kept_at lo ce es a G tn t Gf tnf)
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
@@ -425,12 +464,9 @@ Proof
      `op`, `t`, `G`, `tn`] mp_tac) >>
   impl_tac >-
     (asm_rewrite_tac[] >> rpt conj_tac
-     >~ [`!H. dead_lo_ok H _ _ ce _`]
      >- (qpat_x_assum `!H. dead_lo_ok H _ _ old _` mp_tac >>
          simp[bodyPtrDefsTheory.dead_lo_ok_def])
-     >~ [`!x sz. ce.ce_return_buf = _ ==> _`]
      >- (rpt strip_tac >> metis_tac[])
-     >~ [`!x sz. ce.ce_return_pc = _ ==> _`]
      >- (rpt strip_tac >> fs[ret_pc_ok_def] >> metis_tac[])
      >~ [`gas_admissible _ expr_res_ok es`]
      >- (drule annassign_admissible_rhs >> simp[])
@@ -616,7 +652,7 @@ Theorem annassign_word_full_runtime_preparation[local]:
         ptr_val_ok cx (post_value_type cenv' e) v op Gf tnf u /\
         (~is_word_type (post_value_type cenv' e) ==> ptr_buf_ok cenv' e op Gf u) /\
         ghost_kept_at lo cenv' es a Ga tna t Gf tnf)
-      (\H res ee gt r. expr_exit res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> drule_all annassign_word_full_declared_layout >>
   disch_then (qx_choosel_then [`p`, `sa'`, `sb`, `vop`] strip_assume_tac) >> gvs[] >>
@@ -708,7 +744,9 @@ Theorem annassign_word_full_source_action[local]:
         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t'.vs_allocas aid = SOME b) /\
         (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
           op_taint tn (Var x) = op_taint tn0 (Var x)))
-      (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)) \/
+      (\H res ee gt r.
+        (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+        halt_exit H cx ee res r)) \/
   (?exc. res = INR exc /\ !H. valid_horizon cx st0 H mid.storage_trace ==>
     ?ce. stmt_lands lctx sf (INR exc) u /\ ~u.vs_halted /\
       (INR exc = INL () ==> ~block_is_terminated sf /\ ce = cenv') /\
@@ -803,7 +841,9 @@ Theorem annassign_word_full_execution:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r.
+        (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+        halt_exit H cx ee res r)
 Proof
   strip_tac >>
   rename1 `compile_stmt _ _ _ (AnnAssign _ _ e) _ = ((),r'')` >>
@@ -823,7 +863,9 @@ QED
 Resume annassign_word_full_execution[compose]:
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule annassign_word_full_bind >> conj_tac
-  >- (rpt strip_tac >> simp[bodyPtrDefsTheory.stmt_exit_ptr_def] >>
+  >- (rpt strip_tac >> simp[bodyPtrDefsTheory.stmt_exit_ptr_def,
+        exprSimDefsTheory.halt_exit_def] >>
+      fs[exprSimDefsTheory.halt_exit_def] >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qunabbrev_tac `childR` >>
   goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
