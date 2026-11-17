@@ -95,15 +95,21 @@ Theorem binop_frag_bytes_bitwise:
     ctx func cenv cx bop ty (BaseT (BytesT (Fixed n))) bl el tys
     (BytesV xs) (BytesV ys) (word_of_bytes_be xs) (word_of_bytes_be ys) es
 Proof
-  strip_tac >> drule_all bop_result_bytes_bitwise >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `n` |-> `n`, `bop` |-> `bop`,
+    `tys` |-> `tys`, `xs` |-> `xs`, `ys` |-> `ys`, `es` |-> `es`]
+    bop_result_bytes_bitwise) >> simp[] >> strip_tac >>
   irule (Q.INST [`v` |-> `BytesV bs`, `w` |-> `word_of_bytes_be bs`]
     binop_frag_post_success) >>
-  rpt conj_tac
-  >- metis_tac[straight_fresh_compile_bitwise]
-  >- first_assum ACCEPT_TAC
-  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
-          is_word_type_def, typed_bytes_word] >>
-  rpt strip_tac >> drule_all compile_bitwise_run >> simp[]
+  conj_tac >- metis_tac[straight_fresh_compile_bitwise] >>
+  qexists_tac `bs` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `sb`, `op`,
+        `ss`, `word_of_bytes_be xs`, `word_of_bytes_be ys`] mp_tac
+        (Q.GENL [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `sb`, `op`,
+          `ss`, `w1`, `w2`] compile_bitwise_run) >> simp[]) >>
+  simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+       is_word_type_def, typed_bytes_word]
 QED
 
 Theorem bop_result_bytes_shift:
@@ -133,15 +139,20 @@ Theorem binop_frag_bytes_shift:
     (BaseT (BytesT (Fixed 32))) bl el tys
     (BytesV bs) (IntV i) (word_of_bytes_be bs) (i2w i) es
 Proof
-  strip_tac >> drule_all bop_result_bytes_shift >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `bop` |-> `bop`, `tys` |-> `tys`,
+    `bs` |-> `bs`, `i` |-> `i`, `es` |-> `es`]
+    bop_result_bytes_shift) >> simp[] >> strip_tac >>
   irule (Q.INST [`v` |-> `BytesV out`, `w` |-> `word_of_bytes_be out`]
     binop_frag_post_success) >>
-  rpt conj_tac
-  >- metis_tac[straight_fresh_compile_shift]
-  >- first_assum ACCEPT_TAC
-  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
-          is_word_type_def, typed_bytes_word] >>
-  rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
+  conj_tac >- metis_tac[straight_fresh_compile_shift] >>
+  qexists_tac `out` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qspecl_then [`bop`, `x`, `y`, `BaseT (BytesT (Fixed 32))`, `bl`, `el`,
+        `sa`, `sb`, `op`, `ss`, `word_of_bytes_be bs`, `i2w i`] mp_tac
+        compile_shift_run >> Cases_on `bop = ShL` >> simp[is_signed_type_def]) >>
+  simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+       is_word_type_def, typed_bytes_word]
 QED
 
 Theorem bop_result_bytes_augshift:
@@ -165,15 +176,21 @@ Theorem binop_frag_bytes_augshift:
     (BaseT (BytesT (Fixed 32))) bl el tys
     (BytesV bs) (BytesV amount) (word_of_bytes_be bs) (word_of_bytes_be amount) es
 Proof
-  strip_tac >> drule_all bop_result_bytes_augshift >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `bop` |-> `bop`, `tys` |-> `tys`,
+    `bs` |-> `bs`, `amount` |-> `amount`, `es` |-> `es`]
+    bop_result_bytes_augshift) >> simp[] >> strip_tac >>
   irule (Q.INST [`v` |-> `BytesV out`, `w` |-> `word_of_bytes_be out`]
     binop_frag_post_success) >>
-  rpt conj_tac
-  >- metis_tac[straight_fresh_compile_shift]
-  >- first_assum ACCEPT_TAC
-  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
-          is_word_type_def, typed_bytes_word] >>
-  rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
+  conj_tac >- metis_tac[straight_fresh_compile_shift] >>
+  qexists_tac `out` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qspecl_then [`bop`, `x`, `y`, `BaseT (BytesT (Fixed 32))`, `bl`, `el`,
+        `sa`, `sb`, `op`, `ss`, `word_of_bytes_be bs`,
+        `word_of_bytes_be amount`] mp_tac compile_shift_run >>
+      Cases_on `bop = ShL` >> simp[is_signed_type_def]) >>
+  simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+       is_word_type_def, typed_bytes_word]
 QED
 
 Theorem binop_frag_bytes_typed:
@@ -195,7 +212,7 @@ Proof
       Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
       simp[typed_bytes_word] >> irule binop_frag_bytes_bitwise >> simp[]) >>
   `bop = ShL \/ bop = ShR` by gvs[] >>
-  Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+  (Cases_on `t2 = BaseT (BytesT (Fixed 32))`
   >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
       simp[typed_bytes_word] >> irule binop_frag_bytes_augshift >> simp[]) >>
@@ -210,7 +227,7 @@ Proof
   Cases_on `v1` >> gvs[value_has_type_def] >>
   simp[typed_bytes_word, typed_val_to_w256_word_value, word_value_def,
        val_to_w256_def] >>
-  irule binop_frag_bytes_shift >> simp[]
+  irule binop_frag_bytes_shift >> simp[])
 QED
 
 Theorem compile_bytes_binop_run:
@@ -230,41 +247,53 @@ Theorem compile_bytes_binop_run:
     run_inst_seq (emitted_insts sa sb) s = OK t /\ expr_val_rel cx ann v op t
 Proof
   strip_tac >>
+  mp_tac (Q.INST [`bop` |-> `bop`, `x` |-> `x`, `y` |-> `y`, `m` |-> `m`,
+    `bl` |-> `bl`, `el` |-> `el`, `sa` |-> `sa`, `sb` |-> `sb`, `op` |-> `op`,
+    `s` |-> `s`, `w1` |-> `typed_val_to_w256 tv1 v1`,
+    `w2` |-> `typed_val_to_w256 tv2 v2`] compile_bytes_word_run) >>
+  simp[] >> strip_tac >>
   Cases_on `bop = And \/ bop = Or \/ bop = XOr`
-  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def,
-          optionTheory.IF_EQUALS_OPTION] >>
-      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
-      fs[typed_bytes_word] >>
-      drule_all bop_result_bytes_bitwise >> strip_tac >>
-      qmatch_asmsub_rename_tac `bop_result _ _ _ _ _ _ _ = INL (BytesV result_bs)` >>
-      drule_all compile_bytes_word_run >> strip_tac >>
-      qexistsl_tac [`BytesV result_bs`, `t`] >>
-      gvs[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+  >- (`ann = BaseT (BytesT (Fixed m)) /\
+       ?xs ys. v1 = BytesV xs /\ v2 = BytesV ys /\
+         LENGTH xs = m /\ LENGTH ys = m /\ m <= 32` by
+        (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def,
+             optionTheory.IF_EQUALS_OPTION] >>
+         Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def]) >>
+      mp_tac (Q.INST [`cx` |-> `cx`, `n` |-> `m`, `bop` |-> `bop`,
+        `tys` |-> `tys`, `xs` |-> `xs`, `ys` |-> `ys`, `es` |-> `es`]
+        bop_result_bytes_bitwise) >> simp[] >> strip_tac >>
+      qexists_tac `BytesV bs` >>
+      gvs[well_typed_binop_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def,
           is_word_type_def, typed_bytes_word]) >>
   `bop = ShL \/ bop = ShR` by gvs[] >>
-  Cases_on `t2 = BaseT (BytesT (Fixed 32))`
-  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
-      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
-      fs[typed_bytes_word] >>
-      drule_all bop_result_bytes_augshift >> strip_tac >>
-      drule_all compile_bytes_word_run >> strip_tac >>
-      qexistsl_tac [`BytesV out`, `t`] >>
-      gvs[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+  (Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+  >- (`ann = BaseT (BytesT (Fixed 32)) /\ m = 32 /\
+       ?bs amount. v1 = BytesV bs /\ v2 = BytesV amount /\
+         LENGTH bs = 32 /\ LENGTH amount = 32` by
+        (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
+         Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def]) >>
+      mp_tac (Q.INST [`cx` |-> `cx`, `bop` |-> `bop`, `tys` |-> `tys`,
+        `bs` |-> `bs`, `amount` |-> `amount`, `es` |-> `es`]
+        bop_result_bytes_augshift) >> simp[] >> strip_tac >>
+      qexists_tac `BytesV out` >>
+      gvs[well_typed_binop_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def,
           is_word_type_def, typed_bytes_word]) >>
   `ann = BaseT (BytesT (Fixed 32)) /\ m = 32 /\ is_int_type t2` by
-    gvs[well_typed_binop_def] >> gvs[] >>
-  drule_all int_type_value >> strip_tac >> gvs[] >>
-  `within_int_bound (Unsigned 256) i` by
-    (Cases_on `is_signed_type t2` >> gvs[] >>
-     metis_tac[within_int_bound_unsigned_256]) >>
-  gvs[vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
-  Cases_on `v1` >> gvs[value_has_type_def] >>
-  fs[typed_bytes_word, typed_val_to_w256_word_value, word_value_def,
-     val_to_w256_def] >>
-  drule_all bop_result_bytes_shift >> strip_tac >>
-  drule_all compile_bytes_word_run >> strip_tac >>
-  qexistsl_tac [`BytesV out`, `t`] >>
+    gvs[well_typed_binop_def] >>
+  `?bs i. v1 = BytesV bs /\ v2 = IntV i /\ LENGTH bs = 32 /\
+          within_int_bound (Unsigned 256) i` by
+    (drule_all int_type_value >> strip_tac >> gvs[] >>
+     `within_int_bound (Unsigned 256) i` by
+       (Cases_on `is_signed_type t2` >> gvs[] >>
+        metis_tac[within_int_bound_unsigned_256]) >>
+     gvs[vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
+     Cases_on `v1` >> gvs[value_has_type_def]) >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `bop` |-> `bop`, `tys` |-> `tys`,
+    `bs` |-> `bs`, `i` |-> `i`, `es` |-> `es`]
+    bop_result_bytes_shift) >> simp[] >> strip_tac >>
+  qexists_tac `BytesV out` >>
   gvs[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
-      is_word_type_def, typed_bytes_word]
+      is_word_type_def, typed_bytes_word, typed_val_to_w256_word_value,
+      word_value_def, val_to_w256_def])
 QED
 
