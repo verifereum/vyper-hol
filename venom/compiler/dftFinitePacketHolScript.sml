@@ -10,7 +10,7 @@ Ancestors
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
-  dftPacketCallLocalPreservation
+  dftPacketCallLocalPreservation dftPacketCallReplayPreservation
   dftPacketCalleeAlignment
   dftPacketCallFreshEntry dftPacketClosedRowNative
   dftPacketClosedRows
