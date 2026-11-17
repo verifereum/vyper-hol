@@ -214,6 +214,7 @@ Theorem request_agree_dead_trans:
 Proof
   rw[request_agree_def, request_agree_except_def]
   >- gvs[extCallOracleTheory.call_request_component_equality]
+  >- gvs[extCallOracleTheory.call_request_component_equality]
   >- metis_tac[accounts_agree_dead_trans]
   >> metis_tac[transient_agree_dead_trans]
 QED
@@ -331,7 +332,7 @@ Proof
        call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def,
        tx_return_bytes_def, LET_THM] >>
   rpt strip_tac >> qexists_tac `ss.vs_returndata` >>
-  gvs[logs_correspond_def, LIST_REL_eq]
+  gvs[logs_correspond_def, LIST_REL_eq, tx_return_bytes_def]
 QED
 
 Theorem external_call_result_rel_frame_assertion:
