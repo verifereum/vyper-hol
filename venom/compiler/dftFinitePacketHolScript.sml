@@ -2,6 +2,7 @@ Theory dftFinitePacketHol
 Ancestors
   dftFinitePacket
   dftFinitePacketReachability
+  dftPacketBlockRootedAppend
   dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketCallNative
