@@ -31,5 +31,6 @@ Proof
                `Inv`, `vs`, `es`] mp_tac codegen_correct_asm_opt >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexistsl_tac [`r`, `es'`] >>
-  gvs[venom_frame_rel_def]
+  gvs[venom_frame_rel_def] >>
+  disj2_tac >> qexists_tac `lgs` >> first_assum ACCEPT_TAC
 QED
