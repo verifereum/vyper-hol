@@ -113,6 +113,28 @@ QED
 
 (* ===== Whole-record frame and guarded typing ===== *)
 
+Theorem take_call_outcome_preserved_fields[simp]:
+  (SND (take_call_outcome gas_cap target calldata value_opt st)).accounts = st.accounts /\
+  (SND (take_call_outcome gas_cap target calldata value_opt st)).tStorage = st.tStorage /\
+  (SND (take_call_outcome gas_cap target calldata value_opt st)).scopes = st.scopes /\
+  (SND (take_call_outcome gas_cap target calldata value_opt st)).immutables = st.immutables /\
+  (SND (take_call_outcome gas_cap target calldata value_opt st)).gas_obs = st.gas_obs
+Proof
+  Cases_on `take_call_outcome gas_cap target calldata value_opt st` >>
+  drule take_call_outcome_frame >> simp[evaluation_state_component_equality]
+QED
+
+Theorem take_call_outcome_gas_obs[simp]:
+  take_call_outcome gas_cap target calldata value_opt (st with gas_obs := readings) =
+    (FST (take_call_outcome gas_cap target calldata value_opt st),
+     SND (take_call_outcome gas_cap target calldata value_opt st) with gas_obs := readings)
+Proof
+  Cases_on `st.outcomes` >>
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
+QED
+
 (* Failed CREATE outcomes retain their account/transient snapshots. Only
    failed message calls, or any static request, leave the whole state alone. *)
 Theorem adopt_call_outcome_static_failed:
