@@ -16,6 +16,22 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+Theorem type_stmt_assigntuple:
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) =
+    (if atarget_accepts env (TupleTarget gs) (expr_type e) /\
+        well_typed_expr env e /\ assignable_type env.type_defs (expr_type e)
+     then SOME env else NONE)
+Proof
+  simp_tac bool_ss [Once type_stmt_def]
+QED
+
+Theorem supported_stmt_assigntuple:
+  supported_stmt tops bindings (Assign (TupleTarget gs) e) =
+    supported_assignment tops bindings (TupleTarget gs) e
+Proof
+  simp_tac bool_ss [Once supported_stmt_def]
+QED
+
 (* A local copy preserves the disjoint snapshot used by later tuple targets. *)
 Theorem body_assign_tuple_local_copy_snapshot_post:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
