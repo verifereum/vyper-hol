@@ -13,9 +13,8 @@ Ancestors
   emitHelperProps compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState finite_map arithmetic
 
-(* H moved the arm's obligations: the root's vv_post needs the arm's
-   value placed (vv_at) when it is not a word, and the root is pure only
-   when the selected arm is. *)
+(* A nonword arm retains both its placement and place pointer; the root
+   is pure only when the selected arm is. *)
 Theorem ifexp_arm_finish_full:
   (* the root's premises *)
   stmt_state_rel H ctx func cenv cx es s0 /\ return_buf_frame d cenv sa s0 /\
@@ -36,6 +35,8 @@ Theorem ifexp_arm_finish_full:
   expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   (~is_word_type t ==>
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~is_word_type t ==>
+   vv_place_ptr cenv cx ee u tv (LocatedValue t (mk_ptr op LocMemory))) /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   expr_store_bound cx t v op u /\
   u.vs_current_bb = sd.cs_current_bb /\
@@ -71,7 +72,7 @@ Theorem ifexp_arm_finish_full:
             (update_var rv w u) tn) /\
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
       (u, G, tn) [] (OK z, Gz, tf) /\
-    vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee (Value v)
+    vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
       (if is_word_type t then StackValue t (Var rv)
        else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
     vv_store_bound cx (expr_type (IfExp t c a b))
@@ -152,9 +153,14 @@ Proof
   conj_tac
   >- (simp[Abbr `u1`] >>
       irule (SRULE [vyperASTTheory.expr_type_def]
-        (Q.SPECL [`func`, `cenv`, `cx`, `IfExp t c a b`]
-          vv_post_of_expr_post)) >>
-      simp[] >>
+        (Q.INST [`e` |-> `IfExp t c a b`] ifexp_root_vv_post_of_expr_post_read)) >>
+      conj_tac
+      >- (strip_tac >> irule ifexp_place_ptr_root_var >> fs[] >> metis_tac[]) >>
+      conj_tac
+      >- (strip_tac >> irule ifexp_vv_at_root_frame >> simp[] >>
+          conj_tac >- metis_tac[] >>
+          qexistsl_tac [`op`, `sc`, `sd`] >> simp[] >> decide_tac) >>
+      qexists_tac `v` >> simp[] >>
       irule expr_post_ifexp >>
       `~not_fresh_at sa rv` by metis_tac[] >> simp[] >>
       qexistsl_tac [`op`, `cop`, `e`, `es1`, `lbl`, `s1`, `sc`, `sd`, `tt`, `v1`] >>
@@ -280,6 +286,8 @@ Theorem ifexp_arm_finish_full_family:
   MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
   (~is_word_type t ==>
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~is_word_type t ==>
+   vv_place_ptr cenv cx ee u tv (LocatedValue t (mk_ptr op LocMemory))) /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   expr_store_bound cx t v op u /\
   u.vs_current_bb = sd.cs_current_bb /\
@@ -308,7 +316,7 @@ Theorem ifexp_arm_finish_full_family:
     !H. valid_horizon cx st0 H tr ==>
         gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
           (u, G, tn) [] (OK z, Gz, tf) /\
-        vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee (Value v)
+        vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
           (if is_word_type t then StackValue t (Var rv)
            else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
         vv_store_bound cx (expr_type (IfExp t c a b))
