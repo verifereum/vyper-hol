@@ -361,3 +361,78 @@ Resume current_prepared_finite_events[no_entry]:
   qexists `gas_events_blocks fuel C fn' t'` >> gvs[run_blocks_unfold]
 QED
 Finalise current_prepared_finite_events
+
+Theorem current_focus_same_context_events:
+  (!s fn renamed s' A H events fn' eb l old bb raw post done k C t t' next.
+    current_wf_phi_context s fn renamed s' A H events /\
+    fn' = fn with fn_blocks := simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+    entry_block fn = SOME eb /\ wf_function fn' /\ wf_ssa fn' /\ fn_inst_wf fn' /\
+    lookup_block l fn.fn_blocks = SOME old /\ lookup_block l fn'.fn_blocks = SOME bb /\
+    raw.vs_current_bb = l /\ enters_block fn raw post /\ done.vs_current_bb = l /\
+    strict_dom_vars_defined fn' done /\ fn_reachable fn' l /\
+    done.vs_inst_idx <= LENGTH bb.bb_instructions /\
+    (!j x. j < done.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\ MEM x (EL j bb.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x done)) /\
+    exec_block k C old post = OK t /\ exec_block k C bb done = OK t' /\
+    current_cut_inv fn A renamed H events l (LENGTH old.bb_instructions) t t' /\
+    ~t.vs_halted /\ enters_block fn t next ==>
+    ?old_h bb_h pre_h post_h done_h.
+      lookup_block t.vs_current_bb fn.fn_blocks = SOME old_h /\
+      lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb_h /\
+      A t.vs_current_bb = current_block_annotations old_h pre_h /\
+      LENGTH bb_h.bb_instructions = LENGTH pre_h + LENGTH old_h.bb_instructions /\
+      next.vs_inst_idx = LENGTH (collect_phis old_h.bb_instructions) /\
+      enters_block fn' t' post_h /\
+      post_h.vs_inst_idx = phi_prefix_length bb_h.bb_instructions /\
+      current_prefix_steps k C
+        (TAKE (LENGTH pre_h + LENGTH (collect_phis old_h.bb_instructions) - phi_prefix_length bb_h.bb_instructions)
+          (DROP (phi_prefix_length bb_h.bb_instructions) bb_h.bb_instructions)) post_h done_h /\
+      (!j. j < LENGTH (TAKE (LENGTH pre_h + LENGTH (collect_phis old_h.bb_instructions) - phi_prefix_length bb_h.bb_instructions)
+          (DROP (phi_prefix_length bb_h.bb_instructions) bb_h.bb_instructions)) ==>
+        (EL j (TAKE (LENGTH pre_h + LENGTH (collect_phis old_h.bb_instructions) - phi_prefix_length bb_h.bb_instructions)
+          (DROP (phi_prefix_length bb_h.bb_instructions) bb_h.bb_instructions))).inst_opcode = ASSIGN \/
+        (EL j (TAKE (LENGTH pre_h + LENGTH (collect_phis old_h.bb_instructions) - phi_prefix_length bb_h.bb_instructions)
+          (DROP (phi_prefix_length bb_h.bb_instructions) bb_h.bb_instructions))).inst_opcode = NOP) /\
+      current_cut_inv fn A renamed H events t.vs_current_bb (LENGTH (collect_phis old_h.bb_instructions)) next done_h /\
+      done_h.vs_inst_idx = LENGTH pre_h + LENGTH (collect_phis old_h.bb_instructions) /\
+      done_h.vs_current_bb = t.vs_current_bb /\
+      strict_dom_vars_defined fn' done_h /\ fn_reachable fn' t.vs_current_bb /\
+      done_h.vs_inst_idx <= LENGTH bb_h.bb_instructions /\
+      (!j x. j < done_h.vs_inst_idx /\ j < LENGTH bb_h.bb_instructions /\ MEM x (EL j bb_h.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x done_h))) ==>
+  !s fn fn' s' st fuel C.
+    make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+    first_block_no_preds fn /\ first_block_no_phi fn /\
+    ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+    make_ssa_current_fn s fn = (fn',s') /\ fn_entry_state fn st ==>
+    ?extra.
+      gas_events_blocks fuel C fn' st = gas_events_blocks fuel C fn st ++ extra /\
+      (terminates (run_blocks fuel C fn st) ==>
+        extra = [] /\ frame_result_rel (run_blocks fuel C fn st) (run_blocks fuel C fn' st))
+Proof
+  disch_then (mk_asm "successor") >> rpt gen_tac >> strip_tac >>
+  `?eb. entry_block fn = SOME eb` by
+    (Cases_on `fn.fn_blocks` >> fs[fn_entry_state_def, fn_entry_label_def, entry_block_def]) >>
+  `ctx_bisim C C` by metis_tac[simplifyCfgSimToolsTheory.ctx_bisim_refl] >>
+  drule_all make_ssa_lockstep_phi_context >> strip_tac >>
+  drule_all current_target_entry_prefix_initial >> strip_tac >>
+  drule_all make_ssa_lockstep_entry_states >> strip_tac >>
+  drule_all current_phi_context_entry_cut >> strip_tac >>
+  `wf_function fn'` by metis_tac[o1MakeSsaStructuralShapeTheory.make_ssa_current_fn_wf_function] >>
+  `fn_inst_wf fn'` by metis_tac[o1MakeSsaFormatsTheory.make_ssa_current_fn_inst_wf] >>
+  `wf_ssa fn'` by
+    (irule makeSsaCurrentWfSsaTheory.make_ssa_current_fn_wf_ssa >>
+     qexistsl [`fn`, `s`, `s'`] >>
+     fs[o1PassContractTheory.make_ssa_input_ok_def, IgnAsm `fn' = _`] >>
+     conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]) >>
+  `st.vs_current_bb = eb.bb_label /\ st.vs_inst_idx = 0` by
+    (Cases_on `fn.fn_blocks` >> fs[fn_entry_state_def, fn_entry_label_def, entry_block_def]) >>
+  `bb' = bb` by gvs[IgnAsm `fn' = _`] >>
+  qpat_x_assum `bb' = bb` SUBST_ALL_TAC >>
+  irule current_prepared_finite_events >>
+  (conj_tac >- asm "successor" ACCEPT_TAC) >>
+  simp[IgnAsm `fn' = _`] >>
+  goal_assum (drule_at (Pat `current_wf_phi_context _ _ _ _ _ _ _`)) >>
+  simp[IgnAsm `fn' = _`] >>
+  qexistsl [`st`, `st`, `st`] >>
+  simp[IgnAsm `fn' = _`, current_prefix_steps_def] >>
+  first_assum ACCEPT_TAC
+QED
