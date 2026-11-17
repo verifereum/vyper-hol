@@ -562,7 +562,7 @@ Theorem exec_ext_call_abort_iff:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
   rename1 `head::tail` >> Cases_on `tail` >>
-  simp[exec_ext_call_def, AllCaseEqs()]
+  simp[exec_ext_call_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem exec_delegatecall_abort_iff:
@@ -572,7 +572,7 @@ Theorem exec_delegatecall_abort_iff:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def] >>
   rename1 `head::tail` >> Cases_on `tail` >>
-  simp[exec_delegatecall_def, AllCaseEqs()]
+  simp[exec_delegatecall_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem exec_create_abort_iff:
@@ -591,7 +591,7 @@ Theorem exec_create_not_Halt:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >> simp[] >> simp[]
+  rpt IF_CASES_TAC >> simp[]
 QED
 
 Theorem exec_create_not_IntRet:
@@ -599,7 +599,7 @@ Theorem exec_create_not_IntRet:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >> simp[] >> simp[]
+  rpt IF_CASES_TAC >> simp[]
 QED
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.

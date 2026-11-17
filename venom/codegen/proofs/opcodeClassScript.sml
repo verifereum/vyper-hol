@@ -518,7 +518,8 @@ Proof
   drule ext_call_opcode_cases >> strip_tac >> simp[] >>
   strip_tac >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[exec_ext_call_abort_iff, exec_delegatecall_abort_iff]
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:

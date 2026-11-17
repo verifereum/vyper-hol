@@ -135,7 +135,9 @@ Theorem take_call_outcome_guard_rejected:
                requests := record_request rq st.requests;
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> drule_all take_call_outcome_SOME >> simp[]
+  rpt strip_tac >>
+  `os <> []` by (Cases_on `os` >> gvs[take_outcome_def, failed_outcome_def]) >>
+  drule_all take_call_outcome_SOME >> simp[]
 QED
 
 Theorem take_request_outcome_error:
@@ -211,13 +213,14 @@ Theorem take_request_outcome_suffix:
     LENGTH prefix <= 1 /\
     (computed_precompile rq ==> st'.requests = st.requests)
 Proof
-  rpt strip_tac >> Cases_on `os` >> gvs[take_request_outcome_def]
-  >- (qexists_tac `[]` >> simp[]) >>
+  rpt strip_tac >> Cases_on `os`
+  >- (gvs[take_request_outcome_def] >> qexists_tac `[]` >> simp[]) >>
+  rename1 `head::tail` >> gvs[take_request_outcome_def] >>
   pairarg_tac >>
-  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  `rest = tail` by
+    (mp_tac (Q.INST [`os` |-> `head::tail`] take_outcome_rest) >> simp[]) >>
   gvs[AllCaseEqs(), record_request_def] >>
-  Cases_on `os` >> simp[] >>
-  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
+  qexists_tac `[head]` >> simp[]
 QED
 
 Theorem take_call_outcome_suffix:

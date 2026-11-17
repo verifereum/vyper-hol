@@ -373,11 +373,11 @@ Theorem take_create_outcome_suffix:
     st'.requests = st.requests ++
       (if os = [] then [] else [create_outcome_request kind value initcode st])
 Proof
-  rpt strip_tac >> Cases_on `os` >>
-  gvs[take_create_outcome_def]
-  >- (qexists_tac `[]` >> simp[]) >>
-  pairarg_tac >> gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
-  rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
+  rpt strip_tac >> Cases_on `os`
+  >- (gvs[take_create_outcome_def] >> qexists_tac `[]` >> simp[]) >>
+  rename1 `head::tail` >>
+  gvs[take_create_outcome_def, take_outcome_def, record_request_def, AllCaseEqs()] >>
+  qexists_tac `[head]` >> simp[]
 QED
 
 Theorem adopt_create_outcome_equation:
