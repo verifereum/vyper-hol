@@ -22,7 +22,7 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshRootSuccessSplit dftPacketFreshChildStop
   dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
-  dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
+  dftPacketFreshSingletonNormalize dftPacketFreshSingletonNative dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -34,7 +34,7 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
+  dftPacketInvokePrefixStop dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
   dftPacketPreterminalNativeAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry dftPacketPseudoAdvance
