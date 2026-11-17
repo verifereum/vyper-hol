@@ -287,7 +287,8 @@ Proof
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
-     qexists_tac `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)` >>
+     qexistsl_tac [`gas_cap`,
+       `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)`] >>
      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
   `write_memory_with_expansion (w2n rp)
       (TAKE (w2n cap) outcome.co_returnData) s = s with vs_memory := t.vs_memory` by
@@ -306,9 +307,15 @@ Proof
   qexists_tac `t` >> conj_tac
   >- (qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
-      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
-      pure_once_rewrite_tac[step_inst_base_def] >>
-      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >> simp[]) >>
+      qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `inst.inst_opcode = _` mp_tac >>
+      qpat_x_assum `inst.inst_operands = _` mp_tac >>
+      rpt (qpat_x_assum `eval_operand _ _ = _` mp_tac) >>
+      qpat_x_assum `s.vs_call_ctx.cc_static = _` mp_tac >>
+      qpat_x_assum `cx.txn.is_static ==> _` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      Cases_on `stat` >> Cases_on `cx.txn.is_static` >>
+      simp[step_inst_base_opcode_eqs]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -399,7 +406,7 @@ Theorem raw_call_finish_static_abort:
   frag_path ctx sa sb (\u. u = s) Q
     (\r. ?t. r = Abort ExHalt_abort t)
 Proof
-  strip_tac >> drule raw_call_finish_prefix >> strip_tac >>
+  strip_tac >> drule raw_call_finish_prefix >> strip_tac >> gvs[] >>
   `cs_extends sa sc` by
     (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
      irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
@@ -1497,6 +1504,7 @@ Theorem calldata_take_call_outcome_bound:
 Proof
   Cases_on `es.outcomes` >>
   simp[vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def] >>
+  rename1 `es.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
   pairarg_tac >> simp[] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule calldata_take_outcome_bound >>
@@ -1516,7 +1524,9 @@ Theorem calldata_take_call_outcome_gas_obs[local]:
     (SND (take_call_outcome gas_cap target cd vo st)).gas_obs = st.gas_obs
 Proof
   rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
+  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[LET_THM, UNCURRY] >> rw[]
 QED
 
 Theorem calldata_adopt_call_outcome_gas_obs[local]:

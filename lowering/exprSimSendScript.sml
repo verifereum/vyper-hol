@@ -394,6 +394,7 @@ Proof
     SRULE [mk_inst_def]) >>
   disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
   gvs[mk_inst_def]
+  >- (qexists_tac `t` >> simp[])
   >- (qexists_tac `t` >> simp[]) >>
   metis_tac[]
 QED
@@ -492,9 +493,8 @@ Proof
     simp[call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[take_call_outcome_def, take_request_outcome_def] >>
   rename1 `st.outcomes = SOME os` >>
-  Cases_on `take_outcome
-    (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) os` >>
-  rw[]
+  Cases_on `os` >> simp[] >>
+  pairarg_tac >> simp[] >> rw[]
 QED
 
 Theorem adopt_call_outcome_gas_obs[local]:
@@ -888,8 +888,11 @@ Proof
   FIRST [first_assum ACCEPT_TAC,
          irule address_typed_dest >> first_assum ACCEPT_TAC,
          irule uint256_typed_dest >> first_assum ACCEPT_TAC,
-         Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC]
+         Cases_on `has_gas` >>
+         gvs[LENGTH_EQ_NUM_compute, ext_call_kwarg_def, eval_operand_def,
+             vyperValueTheory.evaluate_type_def] >>
+         imp_res_tac uint256_typed_dest >>
+         imp_res_tac address_typed_dest >> simp[]]
 QED
 
 (* TOP-LEVEL *)
