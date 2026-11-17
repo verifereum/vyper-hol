@@ -268,6 +268,8 @@ Theorem intcall_callee_body_sim:
        intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
          (mut,nr,args,ret,ss,rr) prev penv rtv es1 t) /\
     gas_invoke_entry (ctx,func) t callee entered /\
+    (!fn inst s. frag_reachable ctx callee entered fn inst s ==>
+                 dalloca_no_wrap inst s) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\

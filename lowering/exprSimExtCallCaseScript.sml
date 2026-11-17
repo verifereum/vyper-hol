@@ -238,6 +238,8 @@ Theorem extcall_request_setup:
       (eval_expr cx
          (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
             args dflt)) expr_vv_res_ok es /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                 dalloca_no_wrap inst s) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es s0 /\
        storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\

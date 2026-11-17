@@ -99,7 +99,6 @@ Definition stmt_frag_mem_def:
       ret_pc_ok cenv sa s0 /\ ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
       return_buf_frame d cenv sa s0 /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 ∧
         storage_well_formed_on cx es (FST H)) ∧ alloca_history func s0 ∧

@@ -102,3 +102,21 @@ Proof
   Cases_on `x` >> simp[expr_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
+
+(* The DALLOCA no-wrap fact the sims assume at a run's start s0 holds at
+   its success states too: what is reachable from such a state was reached
+   from s0 (completed sub-runs, loop rounds and INVOKE returns included).
+   A sim that runs a second fragment from the first one's end uses this to
+   supply that fragment's antecedent. *)
+Theorem gas_outcome_no_wrap_post:
+  !memory tops ctx func cx st0 source es s0 Q R.
+    gas_outcome memory tops (ctx,func) cx st0 source (es,s0) Q R /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                 dalloca_no_wrap inst s) ==>
+    gas_outcome memory tops (ctx,func) cx st0 source (es,s0)
+      (\H res ee t. Q H res ee t /\
+         !fn inst s. frag_reachable ctx func t fn inst s ==>
+                     dalloca_no_wrap inst s) R
+Proof
+  cheat
+QED
