@@ -17,6 +17,36 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
 
+(* Empty local typing maps can be weakened without changing static maps. *)
+Theorem intcall_args_defaults_typing_mutual[local]:
+  (!env e. well_typed_expr env e ==>
+    !tenv. env = defaults_env tenv ==> well_typed_expr tenv e) /\
+  (!env e vt. type_place_expr env e = SOME vt ==>
+    !tenv. env = defaults_env tenv ==> type_place_expr tenv e = SOME vt) /\
+  (!env tgt vt. type_place_target env tgt = SOME vt ==>
+    !tenv. env = defaults_env tenv ==> type_place_target tenv tgt = SOME vt) /\
+  (!env es. well_typed_exprs env es ==>
+    !tenv. env = defaults_env tenv ==> well_typed_exprs tenv es) /\
+  (!env opt. well_typed_opt env opt ==>
+    !tenv. env = defaults_env tenv ==> well_typed_opt tenv opt) /\
+  (!env fs. well_typed_named_exprs env fs ==>
+    !tenv. env = defaults_env tenv ==> well_typed_named_exprs tenv fs)
+Proof
+  ho_match_mp_tac well_typed_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[defaults_env_def, well_typed_expr_def]
+  >- (disj1_tac >> irule subscript_base_type_exact_transfer >>
+      first_assum (irule_at Any) >> simp[]) >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem intcall_args_defaults_typing_weaken:
+  supported_pure_exprs tops ds /\ well_typed_exprs (defaults_env tenv) ds ==>
+  well_typed_exprs tenv ds
+Proof
+  metis_tac[intcall_args_defaults_typing_mutual]
+QED
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
