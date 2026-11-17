@@ -22,12 +22,12 @@ Ancestors
   dftPacketFillingBoundary
   dftPacketFreshCut dftPacketFreshRootSuccessSplit
   dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
-  dftPacketNativeContinuation
+  dftPacketNativeContinuation dftPacketPseudoNativeNext
   dftPacketNativePrefixBoundary
   dftPacketNativeSupplierReplay
   dftPacketNativeSlice
@@ -44,7 +44,7 @@ Ancestors
   dftPacketRetainedOracle
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative
+  dftPacketReturnNative dftPacketTraceCallProvenance
   dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts
   dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
@@ -60,4 +60,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess dftPacketFreshRootGeometry
