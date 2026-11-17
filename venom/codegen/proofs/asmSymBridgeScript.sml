@@ -2877,33 +2877,63 @@ QED
 
 (* ===== One step ===== *)
 
+Theorem asm_sym_op_step_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  (!dest i w. sym_jump_dest p dest = SOME i /\
+    sval_conc lo dest = SOME w ==>
+    FLOOKUP (build_offset_to_pc p) (w2n w) = SOME i) /\
+  (!l d w. sym_data_label p env l /\ sym_delta_ok d /\
+    sval_conc lo (Lab l d) = SOME w ==>
+    ?off. FLOOKUP lo l = SOME off /\
+      env ' l = DROP off cs.as_code /\ w2n w = off + d) ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_op p env name ss)
+    (asm_step_op (build_offset_to_pc p) name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `name = "POP"` >- (gvs[] >> irule (Q.SPECL [`lo`, `code_ok`] sym_pop_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  Cases_on `name = "JUMP"`
+  >- (simp[sym_step_op_def] >> irule (Q.SPECL [`lo`, `code_ok`] sym_jump_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  Cases_on `name = "JUMPI"`
+  >- (simp[sym_step_op_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_jumpi_sim_core |> SRULE []) >>
+      simp[] >> metis_tac[]) >>
+  Cases_on `name = "ADD"`
+  >- (simp[sym_step_op_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_add_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  Cases_on `name = "MSTORE"`
+  >- (simp[sym_step_op_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_mstore_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  Cases_on `name = "MLOAD"`
+  >- (simp[sym_step_op_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_mload_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  Cases_on `name = "CODECOPY"`
+  >- (simp[sym_step_op_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_codecopy_sim_core |> SRULE []) >>
+      simp[] >> metis_tac[]) >>
+  Cases_on `name = "CODESIZE"` >- simp[sym_step_op_def] >>
+  simp[sym_step_op_def] >>
+  Cases_on `ALOOKUP dup_table name` >> simp[]
+  >- (Cases_on `ALOOKUP swap_table name` >> simp[]
+      >- (irule (Q.SPECL [`lo`, `code_ok`] sym_step_concrete_sim_core |> SRULE []) >>
+          simp[] >> metis_tac[]) >>
+      irule (Q.SPECL [`lo`, `code_ok`] sym_swap_sim_core |> SRULE []) >> simp[] >> metis_tac[]) >>
+  irule (Q.SPECL [`lo`, `code_ok`] sym_dup_sim_core |> SRULE []) >> simp[] >> metis_tac[]
+QED
+
 Theorem asm_sym_op_step[local]:
   asm_static_wf p ∧ asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_step_op p env name ss)
     (asm_step_op (build_offset_to_pc p) name cs)
 Proof
   strip_tac >>
-  Cases_on `name = "POP"` >- (gvs[] >> irule sym_pop_sim >> simp[]) >>
-  Cases_on `name = "JUMP"`
-  >- (simp[sym_step_op_def] >> irule sym_jump_sim >> simp[]) >>
-  Cases_on `name = "JUMPI"`
-  >- (simp[sym_step_op_def] >> irule sym_jumpi_sim >> simp[]) >>
-  Cases_on `name = "ADD"`
-  >- (simp[sym_step_op_def] >> irule sym_add_sim >> simp[]) >>
-  Cases_on `name = "MSTORE"`
-  >- (simp[sym_step_op_def] >> irule sym_mstore_sim >> simp[]) >>
-  Cases_on `name = "MLOAD"`
-  >- (simp[sym_step_op_def] >> irule sym_mload_sim >> simp[]) >>
-  Cases_on `name = "CODECOPY"`
-  >- (simp[sym_step_op_def] >> irule sym_codecopy_sim >> simp[]) >>
-  Cases_on `name = "CODESIZE"`
-  >- simp[sym_step_op_def, asm_sym_step_rel_def] >>
-  simp[sym_step_op_def] >>
-  Cases_on `ALOOKUP dup_table name` >> simp[]
-  >- (Cases_on `ALOOKUP swap_table name` >> simp[]
-      >- (irule sym_step_concrete_sim >> simp[]) >>
-      irule sym_swap_sim >> simp[]) >>
-  irule sym_dup_sim >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac asm_sym_op_step_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> conj_tac
+  >- (rpt strip_tac >>
+      `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
+      drule_all sym_codecopy_address >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  metis_tac[sym_jump_dest_conc]
 QED
 
 (* Every label a push refers to has an offset. *)
@@ -2937,30 +2967,54 @@ Proof
   gvs[finite_mapTheory.FLOOKUP_DEF]
 QED
 
+Theorem asm_sym_inst_step_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ MEM inst p /\
+  (!l. MEM (AsmPushLabel l) p \/ (?d. MEM (AsmPushOfst l d) p) ==>
+    ?off. FLOOKUP lo l = SOME off) /\
+  (!dest i w. sym_jump_dest p dest = SOME i /\
+    sval_conc lo dest = SOME w ==>
+    FLOOKUP (build_offset_to_pc p) (w2n w) = SOME i) /\
+  (!l d w. sym_data_label p env l /\ sym_delta_ok d /\
+    sval_conc lo (Lab l d) = SOME w ==>
+    ?off. FLOOKUP lo l = SOME off /\
+      env ' l = DROP off cs.as_code /\ w2n w = off + d) ==>
+  bridge_result (bridge_core lo code_ok) (sym_step p env inst ss)
+    (asm_step lo (build_offset_to_pc p) inst cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sym_delta_ok 0` by simp[sym_delta_ok_def, wordsTheory.dimword_def] >>
+  Cases_on `inst` >> simp[sym_step_def, asm_step_def]
+  >~ [`AsmOp name`]
+  >- (irule (Q.SPECL [`lo`, `code_ok`] asm_sym_op_step_core |> SRULE []) >>
+      simp[] >> metis_tac[])
+  >~ [`AsmPushLabel l`]
+  >- (`?off. FLOOKUP lo l = SOME off` by metis_tac[] >>
+      simp[] >>
+      irule (Q.SPECL [`lo`, `code_ok`] asm_sym_rel_core_next |> SRULE []) >>
+      simp[sval_conc_def] >> metis_tac[])
+  >~ [`AsmPushOfst l d`]
+  >- (`?off. FLOOKUP lo l = SOME off` by metis_tac[] >>
+      simp[sym_push_lab_def] >>
+      irule (Q.SPECL [`lo`, `code_ok`] asm_sym_rel_core_next |> SRULE []) >>
+      simp[sval_conc_def] >> metis_tac[]) >>
+  gvs[sym_lift_def, asm_next_def, sval_conc_def] >> metis_tac[]
+QED
+
 Theorem asm_sym_inst_step[local]:
   asm_static_wf p ∧ asm_sym_rel p env cs ss ∧ MEM inst p ⇒
   asm_sym_step_rel p env (sym_step p env inst ss)
     (asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs)
 Proof
   strip_tac >>
-  `sym_delta_ok 0` by simp[sym_delta_ok_def, wordsTheory.dimword_def] >>
-  Cases_on `inst` >> simp[sym_step_def, asm_step_def]
-  >~ [`AsmOp name`] >- (irule asm_sym_op_step >> simp[])
-  >~ [`AsmPushLabel l`]
-  >- (`∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off`
-        by metis_tac[asm_label_ref_defined] >>
-      simp[] >> irule asm_sym_rel_next >> simp[sval_conc_def] >>
-      fs[asm_sym_rel_def])
-  >~ [`AsmPushOfst l d`]
-  >- (`∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off`
-        by metis_tac[asm_label_ref_defined] >>
-      simp[sym_push_lab_def] >>
-      simp[asm_sym_step_rel_def] >>
-      irule asm_sym_rel_next >> simp[sval_conc_def] >>
-      fs[asm_sym_rel_def]) >>
-  gvs[sym_lift_def, asm_sym_step_rel_def, asm_next_def, asm_sym_rel_def,
-      sval_conc_def] >>
-  metis_tac[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac asm_sym_inst_step_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
+      drule_all sym_codecopy_address >> metis_tac[arithmeticTheory.ADD_COMM])
+  >- metis_tac[asm_label_ref_defined] >>
+  metis_tac[sym_jump_dest_conc]
 QED
 
 Theorem asm_sym_step:
@@ -3017,6 +3071,50 @@ Proof
   gvs[asm_steps_def, asm_result_sym_def, sym_result_rel_def]
 QED
 
+(* The shared forward induction needs only the step relation and the run's
+   successor equation; both symbolic machines instantiate this interface. *)
+Theorem asm_sym_run_forward_core:
+  !R sstep srun lo otp p.
+    (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
+    (!fuel ss. srun (SUC fuel) ss =
+      if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
+      else case sstep (EL ss.sym_base.as_pc p) ss of
+        SymOK ss' => srun fuel ss' | r => r) /\
+    (!cs ss. R cs ss /\ cs.as_pc < LENGTH p ==>
+      bridge_result R (sstep (EL cs.as_pc p) ss)
+        (asm_step lo otp (EL cs.as_pc p) cs)) ==>
+    !n cs ss.
+      R cs ss /\ (!fuel msg. srun fuel ss <> SymBad msg) /\
+      sym_terminal (asm_result_sym (asm_steps lo otp p n cs)) ==>
+      ?fuel. sym_result_rel (asm_result_sym (asm_steps lo otp p n cs))
+        (srun fuel ss)
+Proof
+  rpt gen_tac >> strip_tac >> Induct
+  >- simp[asm_steps_def, asm_result_sym_def, sym_terminal_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+  reverse (Cases_on `cs.as_pc < LENGTH p`)
+  >- gvs[asm_steps_def, asm_result_sym_def, sym_terminal_def] >>
+  `bridge_result R (sstep (EL cs.as_pc p) ss)
+     (asm_step lo otp (EL cs.as_pc p) cs)` by metis_tac[] >>
+  Cases_on `sstep (EL cs.as_pc p) ss` >> fs[]
+  >~ [`sstep _ _ = SymOK ss1`]
+  >- (fs[asm_steps_def] >>
+      rename1 `asm_steps _ _ _ n cs1` >>
+      `!fuel msg. srun fuel ss1 <> SymBad msg` by
+        (rpt gen_tac >>
+         qpat_x_assum `!fuel msg. srun fuel ss <> _`
+           (qspecl_then [`SUC fuel`, `msg`] mp_tac) >> simp[]) >>
+      qpat_x_assum `!cs ss. _ ==> ?fuel. _`
+        (qspecl_then [`cs1`, `ss1`] mp_tac) >> simp[] >> strip_tac >>
+      qexists_tac `SUC fuel` >> simp[])
+  >~ [`sstep _ _ = SymBad msg`]
+  >- (qpat_x_assum `!fuel msg. srun fuel ss <> _`
+        (qspecl_then [`SUC 0`, `msg`] mp_tac) >> simp[]) >>
+  qexists_tac `SUC 0` >>
+  fs[asm_steps_def, asm_result_sym_def, sym_result_rel_def, sym_terminal_def]
+QED
+
 Theorem asm_sym_run_forward[local]:
   ∀n cs ss.
     asm_static_wf p ∧ asm_sym_rel p env cs ss ∧
@@ -3030,32 +3128,14 @@ Theorem asm_sym_run_forward[local]:
             p n cs))
       (sym_run p env fuel ss)
 Proof
-  Induct >- simp[asm_steps_def, asm_result_sym_def, sym_terminal_def] >>
   rpt gen_tac >> strip_tac >>
-  drule asm_sym_rel_pc >> strip_tac >>
-  reverse (Cases_on `cs.as_pc < LENGTH p`)
-  >- gvs[asm_steps_def, asm_result_sym_def, sym_terminal_def] >>
-  drule_all asm_sym_step >>
-  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
-  simp[asm_sym_step_rel_def] >> rpt strip_tac
-  >~ [`sym_step _ _ _ _ = SymOK ss1`]
-  >- (gvs[asm_steps_def] >>
-      rename1 `asm_steps _ _ _ n cs1` >>
-      `∀fuel msg. sym_run p env fuel ss1 ≠ SymBad msg`
-        by (rpt gen_tac >>
-            qpat_x_assum `∀fuel msg. sym_run _ _ _ ss ≠ _`
-              (qspecl_then [`SUC fuel`, `msg`] mp_tac) >>
-            simp[sym_run_SUC]) >>
-      qpat_x_assum `∀cs ss. _ ⇒ _` (qspecl_then [`cs1`, `ss1`] mp_tac) >>
-      simp[] >> strip_tac >>
-      qexists_tac `SUC fuel` >> simp[sym_run_SUC])
-  >~ [`sym_step _ _ _ _ = SymBad msg`]
-  >- (qpat_x_assum `∀fuel msg. sym_run _ _ _ ss ≠ _`
-        (qspecl_then [`SUC 0`, `msg`] mp_tac) >>
-      simp[sym_run_SUC]) >>
-  qexists_tac `SUC 0` >>
-  gvs[asm_steps_def, asm_result_sym_def, sym_run_SUC, sym_result_rel_def,
-      sym_terminal_def]
+  qspecl_then [`asm_sym_rel p env`, `sym_step p env`, `sym_run p env`,
+               `SND (compute_label_offsets p)`, `build_offset_to_pc p`, `p`]
+    mp_tac asm_sym_run_forward_core >>
+  simp[asm_sym_step_rel_core_canonical, sym_run_SUC] >>
+  impl_tac
+  >- (conj_tac >- metis_tac[asm_sym_rel_pc] >> metis_tac[asm_sym_step]) >>
+  disch_then irule >> simp[]
 QED
 
 (* TOP-LEVEL: a concrete run that ends (halts, reverts or faults) is a
