@@ -2071,6 +2071,29 @@ Proof
   simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]
 QED
 
+(* Boundary plans already have successful legacy runs.  Transport just the
+   execution component, retaining their kinds, pc and memory-label facts. *)
+Theorem sym_clean_stack_plan_numeric_mode:
+  !allow_own own liveness cfg fn bb ps ops ps' p env cp ret srest initial_fmp R ss.
+    clean_stack_plan liveness cfg fn bb ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps_mode allow_own p env own
+        (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all sym_clean_stack_plan_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >> irule sym_steps_mode_ok >> simp[]
+QED
+
 Theorem clean_stack_plan_frame_sim_exact:
   !ctx cp lo o2pc prog liveness cfg fn bb base ps vs as clean_ops ps2
    r ra rest mem0.
@@ -2490,6 +2513,31 @@ Proof
   qexistsl [`installed`, `installed`] >> asm_rewrite_tac[] >> conj_tac
   >- (rpt strip_tac >> irule sym_label_numeric >> simp[]) >>
   rpt strip_tac >> irule sym_prepare_params_numeric >> metis_tac[]
+QED
+
+Theorem sym_label_prepare_numeric_mode:
+  !allow_own own ch growth spill_base lbl_ctr ps0 params installed liveness fn ops ps1
+    p env cp ret srest initial_fmp R ss lbl.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+    codegen_ready_fn fn /\
+    prepare_params_plan liveness fn ps0 = (ops,ps1) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+    (!b. ps1.ps_alloc.sa_spill_base <= b /\ b < ps1.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest installed ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (SOLabel lbl :: ops)) ==>
+    ?out. sym_steps_mode allow_own p env own
+        (LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps1 out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops)) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all sym_label_prepare_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >> irule sym_steps_mode_ok >> simp[]
 QED
 
 Theorem sym_entry_prefix_asm:
