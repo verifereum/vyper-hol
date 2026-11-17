@@ -71,7 +71,7 @@ Theorem ifexp_arm_finish_full:
             (update_var rv w u) tn) /\
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
       (u, G, tn) [] (OK z, Gz, tf) /\
-    vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
+    vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee (Value v)
       (if is_word_type t then StackValue t (Var rv)
        else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
     vv_store_bound cx (expr_type (IfExp t c a b))
@@ -152,38 +152,9 @@ Proof
   conj_tac
   >- (simp[Abbr `u1`] >>
       irule (SRULE [vyperASTTheory.expr_type_def]
-        (Q.INST [`e` |-> `IfExp t c a b`] ifexp_root_vv_post_of_expr_post_read)) >>
-      conj_tac
-      >- (strip_tac >>
-          `vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u`
-            by fs[] >>
-          `sa.cs_next_id <= sc.cs_next_id` by decide_tac >>
-          qpat_x_assum `local_ptrs_reserved cenv sa` mp_tac >>
-          qpat_x_assum `!x. not_fresh_at sa x ==> x <> rv` mp_tac >>
-          qpat_x_assum `sa.cs_next_id <= sc.cs_next_id` mp_tac >>
-          qpat_x_assum `sd.cs_next_id <= sb.cs_next_id` mp_tac >>
-          qpat_x_assum `eval_operand op u = SOME w` mp_tac >>
-          qpat_x_assum `vv_at cenv cx t sc sd ee tv _ u` mp_tac >>
-          rpt (pop_assum kall_tac) >> rpt strip_tac >>
-          qabbrev_tac `ss = jump_to xl (update_var rv w u with vs_inst_idx := k)` >>
-          `ss.vs_allocas = u.vs_allocas /\ lookup_var rv ss = SOME w /\
-           (!x. x <> rv ==> lookup_var x ss = lookup_var x u)` by
-            simp[Abbr `ss`, jump_to_def, update_var_def, lookup_var_def,
-                 FLOOKUP_UPDATE] >>
-          `!n b sz. local_region cenv ee.scopes ss n b sz <=>
-                    local_region cenv ee.scopes u n b sz` by
-            (rpt gen_tac >> simp[local_region_def] >> eq_tac >> rpt strip_tac >>
-             fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-          qpat_x_assum `vv_at _ _ _ _ _ _ _ _ u` mp_tac >>
-          simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def] >>
-          rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]
-          >~ [`FLOOKUP u.vs_allocas aid = SOME _`]
-          >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
-              `sa.cs_next_id <= aid /\ aid < sb.cs_next_id` by decide_tac >>
-              rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >>
-          rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      qexists_tac `v` >> simp[] >>
+        (Q.SPECL [`func`, `cenv`, `cx`, `IfExp t c a b`]
+          vv_post_of_expr_post)) >>
+      simp[] >>
       irule expr_post_ifexp >>
       `~not_fresh_at sa rv` by metis_tac[] >> simp[] >>
       qexistsl_tac [`op`, `cop`, `e`, `es1`, `lbl`, `s1`, `sc`, `sd`, `tt`, `v1`] >>
@@ -337,7 +308,7 @@ Theorem ifexp_arm_finish_full_family:
     !H. valid_horizon cx st0 H tr ==>
         gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
           (u, G, tn) [] (OK z, Gz, tf) /\
-        vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
+        vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee (Value v)
           (if is_word_type t then StackValue t (Var rv)
            else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
         vv_store_bound cx (expr_type (IfExp t c a b))
