@@ -7,7 +7,7 @@
  *)
 Theory bodyFullIntCallCallee
 Ancestors
-  bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull intCallMaterializeFull
+  bodyFullIntCallDefs bodyFullIntCallByteFrame bodyIntCallSeams bodyFullPreds bodySimFull intCallMaterializeFull
   gasOutcomeFull fragGasFocus bodyPtrDefs gasShadow exprSimHypsDefs
   vyperInterpreter vyperAST list
 
