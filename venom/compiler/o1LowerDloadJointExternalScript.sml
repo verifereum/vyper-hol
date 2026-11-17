@@ -251,6 +251,8 @@ Proof
   drule_all ld_joint_delegatecall_operands >>
   disch_then (qx_choose_then `di_target` (qx_choose_then `dr_target` assume_tac)) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
   `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
     (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
@@ -258,6 +260,7 @@ Proof
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[ld_joint_boundary_def, ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   qabbrev_tac `rq = venom_call_request s daval 0w dival dzval F with
                       <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n dgval)|>` >>
   `venom_call_request t daval 0w di_target dzval F with
