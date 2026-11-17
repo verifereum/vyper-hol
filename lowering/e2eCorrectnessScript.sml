@@ -796,7 +796,7 @@ QED
    pointer-safe runs, through the loweringMemCorrect bridges. *)
 Theorem selected_raw_memory[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  o1_source_unit_ok unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
@@ -811,7 +811,6 @@ Theorem selected_raw_memory[local]:
   mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`, `"__entry"`, `D`]
             lower_vyper_runtime_unit_memory_ok) >>
   impl_tac >- fs[] >> strip_tac >> simp[] >>
@@ -923,6 +922,9 @@ Proof
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule every_no_dalloca >>
+     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>

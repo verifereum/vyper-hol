@@ -14763,7 +14763,6 @@ Proof
   simp[mk_raw_function_def]
 QED
 
-(* The packaged unit has the O1 source shape, for code without DALLOCA. *)
 Theorem entry_unit_source_ok:
   !entry_label entry descs segs data.
     ~jump_label_ok entry_label /\ ~reserved_label entry_label /\
@@ -14784,8 +14783,6 @@ Theorem entry_unit_source_ok:
        MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
        i.inst_opcode = RETPC_PARAM /\
        MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
-    EVERY (\i. i.inst_opcode <> DALLOCA)
-      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
     rets_scoped (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=
@@ -14841,18 +14838,33 @@ Proof
   `!fn. MEM fn ifns ==>
         EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn)`
     by (rpt strip_tac >> res_tac >> fs[EVERY_MEM, lowered_inst_ok_def]) >>
-  `!fn inst. MEM fn ifns /\ MEM inst (fn_insts fn) ==> MEM inst insts`
-    by (rpt gen_tac >> strip_tac >>
-        qpat_x_assum `MEM fn ifns` mp_tac >> simp[Abbr `ifns`] >> strip_tac >>
-        drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
-        gvs[Abbr `insts`, fn_insts_def, MEM_fn_insts_blocks_iff,
-            mk_internal_function_metadata, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        metis_tac[]) >>
   simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
        mk_venom_context_def, internal_termination_ok_def,
        mk_raw_function_fields] >>
   rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM] >>
-  rpt strip_tac >> res_tac >> res_tac >> gvs[]
+  rpt strip_tac >> res_tac >> fs[lowered_inst_ok_def]
+QED
+
+(* Shaped code has no DALLOCA, and packaging adds none. *)
+Theorem entry_unit_no_dalloca:
+  !entry_label entry descs segs.
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) entry /\
+    LIST_REL internal_segment_ok descs segs ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      (mk_raw_function entry_label entry ::
+       MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                       (SND (SND d))) descs segs)
+Proof
+  rpt strip_tac >> simp[] >> conj_tac
+  >- (gvs[EVERY_MEM, fn_insts_def, mk_raw_function_fields,
+          MEM_fn_insts_blocks_iff, PULL_EXISTS] >>
+      rpt strip_tac >> res_tac >> fs[lowered_inst_ok_def]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
+  rename1 `internal_segment_ok d seg` >> PairCases_on `d` >>
+  gvs[internal_segment_ok_def, EVERY_MEM, fn_insts_def,
+      mk_internal_function_metadata, MEM_fn_insts_blocks_iff] >>
+  res_tac >> fs[lowered_inst_ok_def]
 QED
 
 Theorem lowered_unit_source_ok:
@@ -14874,8 +14886,6 @@ Theorem lowered_unit_source_ok:
        MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
        i.inst_opcode = RETPC_PARAM /\
        MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
-    EVERY (\i. i.inst_opcode <> DALLOCA)
-      (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
     rets_scoped (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=
@@ -14966,7 +14976,9 @@ Theorem run_lowering_source_unit_ok:
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   `lowering_policy_ok rpolicy`
@@ -15012,13 +15024,18 @@ Proof
     by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
         REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
         match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     (mk_raw_function "__entry" entry_blocks ::
+      MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                      (SND (SND d))) (internal_fn_descriptors internal_fns) segs)`
+    by (irule entry_unit_no_dalloca >> fs[]) >>
   qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
   conj_tac >-
    (irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[mk_venom_context_def]
+  fs[mk_venom_context_def]
 QED
 
 Theorem run_grouped_lowering_source_unit_ok:
@@ -15030,7 +15047,9 @@ Theorem run_grouped_lowering_source_unit_ok:
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   drule run_grouped_lowering_policy >> strip_tac >>
@@ -15071,13 +15090,18 @@ Proof
     by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
         REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
         match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     (mk_raw_function "__entry" entry_blocks ::
+      MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                      (SND (SND d))) (internal_fn_descriptors internal_fns) segs)`
+    by (irule entry_unit_no_dalloca >> fs[]) >>
   qpat_x_assum `run_grouped_lowering _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_grouped_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
   conj_tac >-
    (irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[mk_venom_context_def]
+  fs[mk_venom_context_def]
 QED
 
 (* ===== Source side: selectors and internal names ===== *)
@@ -15199,7 +15223,9 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params:
                     (FST (SND (classify_functions tops)))) ==>
     o1_source_unit_ok unit /\
     EVERY (\inst. ~is_param_opcode inst.inst_opcode)
-      (fn_insts (HD unit.cu_context.ctx_functions))
+      (fn_insts (HD unit.cu_context.ctx_functions)) /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
@@ -15255,6 +15281,19 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
     ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                     (FST (SND (classify_functions tops)))) ==>
     o1_source_unit_ok unit
+Proof
+  metis_tac[lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params]
+QED
+
+(* The lowered runtime unit has no DALLOCA. *)
+Theorem lower_vyper_runtime_unit_no_dalloca:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    runtime_bodies_shape_ok tops /\
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                    (FST (SND (classify_functions tops)))) ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   metis_tac[lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params]
 QED

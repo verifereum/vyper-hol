@@ -242,7 +242,8 @@ QED
 Theorem o1_pipeline_label_flow_preserved:
   !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  unit_entry_no_params unit /\
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
   label_flow_ok unit.cu_context /\
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -254,6 +255,7 @@ Proof
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
   `ir_supply_inst_ok (init_ir_supply unit)` by simp[init_ir_supply_inst_ok] >>
   drule_all o1_pre_walk_rows >> strip_tac >>
+  drule_all o1_pre_walk_no_raw_fmp_ops >> strip_tac >>
   drule o1_pre_walk_seed_free_flow >> simp[] >> disch_tac >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   `unit.cu_context.ctx_entry = SOME entry` by metis_tac[] >>

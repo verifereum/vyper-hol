@@ -27,6 +27,15 @@ End
 
 (* ===== S4: semantic forward simulation ===== *)
 
+(* No DALLOCA, stated per instruction. *)
+Theorem every_no_dalloca:
+  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+    ctx.ctx_functions ==> ~ctx_has_dalloca ctx
+Proof
+  simp[ctx_has_dalloca_def, listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+  metis_tac[]
+QED
+
 (* S4 -- Milestone 3, from the per-pass contracts.
  * Premises added to the original admission: the source's entry function
  * has no PARAM (unit_entry_no_params); every variable a use reads is
