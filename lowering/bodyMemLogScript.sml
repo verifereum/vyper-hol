@@ -3,7 +3,7 @@ Theory bodyMemLog
 Ancestors
   allocLimitsProps exprSimSource
   bodyMemoryPreds stmtLogMemory bodySimLogArgs
-  exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySimStmtCases bodySim
+  exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySimStmtFacts bodySim
   supportedExprs supportedExprTraverse supportedStmtTraverse supportedStmts
   supportedProgram vyperTypeCallGraph vyperTypeSystem vyperTypeExprResult
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness

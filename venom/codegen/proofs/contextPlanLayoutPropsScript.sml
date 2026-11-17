@@ -118,6 +118,11 @@ Theorem generate_context_plan_with_layout:
   context_plan_layout_wf cp /\ cp.cp_initial_fmp < dimword (:256)
 Proof
   strip_tac >>
+  `cp.cp_initial_fmp < dimword (:256)` by
+    (drule generate_context_plan_with_headroom >>
+     simp[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
+     decide_tac) >>
+  simp[] >>
   qpat_x_assum `generate_context_plan_with _ _ = _` mp_tac >>
   simp[generate_context_plan_with_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
@@ -186,6 +191,7 @@ Proof
      base <= ps.ps_alloc.sa_next_offset` by
     (simp[Abbr `gen`] >> rpt strip_tac >>
      drule generate_fn_plan_with_cleanup_alloc_mono >> simp[]) >>
+  drule_all generate_context_plan_with_layout >> strip_tac >> simp[] >>
   qpat_x_assum `generate_context_plan_with _ _ = _` mp_tac >>
   simp[generate_context_plan_with_def, AllCaseEqs()] >>
   strip_tac >> gvs[finish_context_plan_def] >>

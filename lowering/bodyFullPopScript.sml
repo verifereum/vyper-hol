@@ -1752,6 +1752,7 @@ Resume pop_vv_full_of_target[memory_suffix]:
         (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
   conj_tac >- suspend "memory_ghost" >>
   conj_tac >- suspend "memory_pointer" >>
+  conj_tac >- simp[Abbr `result`, NoAsms] >>
   simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
   conj_tac >- suspend "memory_buffer" >>
   irule ghost_kept_at_clean_suffix >>
@@ -2433,6 +2434,7 @@ Resume pop_vv_full_of_target[storage_positive]:
   conj_tac >- simp[] >> conj_tac >- simp[nested_pop_suffix_def] >>
   conj_tac >- suspend "storage_history" >> conj_tac >- simp[] >>
   conj_tac >- suspend "storage_ghost" >> conj_tac >- suspend "storage_pointer" >>
+  conj_tac >- simp[Abbr `result`, NoAsms] >>
   Cases_on `tr` >> simp[contextTheory.vv_location_def,contextTheory.mk_ptr_def] >>
   irule ghost_kept_at_clean_suffix >>
   qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1` (irule_at Any) >>

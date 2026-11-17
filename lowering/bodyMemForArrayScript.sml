@@ -8,7 +8,7 @@ Ancestors
   bodyMemoryPreds bodySeqMemory stmtForArrayMemory bodySimDeclCases
   stmtSimForArray stmtSimForArrayFrame venomState exprLoweringProps
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
-  vyperTypeStoragePreservation list finite_map bodySim bodySimStmtCases
+  vyperTypeStoragePreservation list finite_map bodySim
   allocLimits exprSimHyps exprLoweringProps stmtLowering stmtLoweringMono
   stmtSimForParts vyperTyping fragExec compileEnv loweringStateRelDefs valueEncoding
   supportedStmts supportedStmtTraverse supportedExprs vyperAST

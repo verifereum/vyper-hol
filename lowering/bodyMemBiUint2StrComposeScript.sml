@@ -19,7 +19,7 @@ QED
    horizon-dependent part, and the uint2str code leaves them alone. *)
 Theorem uint2str_typed_mem_path[local]:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
-  expr_type e = BaseT (UintT k) /\ 78 <= n /\
+  expr_type e = BaseT (UintT k) /\ LENGTH (num_to_dec_string (2 ** k - 1)) <= n /\
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   as_ptr_val (BaseT (StringT n)) LocMemory
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
@@ -66,6 +66,9 @@ Proof
   `type_memory_bytes cenv (BaseT (StringT n))+n < dimword (:256)` by
     (simp[dimword_def] >> decide_tac) >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  `LENGTH (num_to_dec_string (w2n (val_to_w256 v : bytes32))) <= n` by
+    (`w2n (val_to_w256 v : bytes32) < 2 ** k` by gvs[value_has_type_def] >>
+     metis_tac[vyperTypeBuiltinsTheory.uint2str_width_bound, LESS_EQ_TRANS]) >>
   `w2n (val_to_w256 v : bytes32) < dimword (:256)` by simp[w2n_lt] >>
   drule_all uint2str_numeric_mem_path >> strip_tac >>
   qexistsl_tac [`t`, `StringV (num_to_dec_string (w2n (val_to_w256 v)))`] >>
@@ -83,7 +86,7 @@ Theorem compile_uint2str_typed_vv_sim_mem:
   expr_vv_sim_mem ctx func cenv cx ty (Builtin ann (Uint2Str n) [e]) es
 Proof
   strip_tac >>
-  `?k. ann = BaseT (StringT n) /\ expr_type e = BaseT (UintT k) /\ 78 <= n` by
+  `?k. ann = BaseT (StringT n) /\ expr_type e = BaseT (UintT k) /\ LENGTH (num_to_dec_string (2 ** k - 1)) <= n` by
     (fs[expr_body_pre_def] >> drule uint2str_expr_types >> simp[] >> metis_tac[]) >> gvs[] >>
   rewrite_tac[expr_vv_sim_mem_def] >> rpt strip_tac >>
   `expr_body_pre cenv cx env e es` by
