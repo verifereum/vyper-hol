@@ -42,10 +42,11 @@ Ancestors
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
+  dftPacketPseudoHistoryFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative
+  dftPacketReturnNative dftPacketReturnRowSupply
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
