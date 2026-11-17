@@ -9,6 +9,11 @@ version = "0.2.3"
 roots = [
   # the results: semantics, analyses, passes, lowering and compiler proofs
   "vyperHolScript.sml",
+  # joint TypeBuiltin providers awaiting dispatcher integration
+  "lowering/bodyFullTypeBuiltinConvertScript.sml",
+  "lowering/bodyFullTypeBuiltinExtract32Script.sml",
+  "lowering/bodyFullTypeBuiltinWordsScript.sml",
+  "lowering/bodyFullTypeBuiltinEmptyScript.sml",
   # whitelist-removal leaves awaiting integration into the stage proofs
   "lowering/whitelist/whitelistVisibilityScript.sml",
   "lowering/whitelist/whitelistExprOpenScript.sml",
