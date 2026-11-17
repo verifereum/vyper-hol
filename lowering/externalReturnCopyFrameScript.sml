@@ -1,73 +1,10 @@
 (* Task-owned destination frame for footprint-sensitive return copies. *)
 Theory externalReturnCopyFrame
 Ancestors
+  typedMemoryCopy
   externalReturnCopyBase externalReturnFootprint valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs venomState compileEnv loweringPosts arithmetic
   exprSimBufferEmpty
-
-Definition return_copy_memory_frame_def:
-  return_copy_memory_frame off len mem mem' <=>
-    (!a n. a + n <= off \/ off + len <= a ==>
-      mem_bytes_at a n mem' = mem_bytes_at a n mem) /\
-    LENGTH mem <= LENGTH mem'
-End
-
-Definition return_copy_frame_def:
-  return_copy_frame sa off len s t <=>
-    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-              vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
-              vs_inst_idx := s.vs_inst_idx|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    return_copy_memory_frame off len s.vs_memory t.vs_memory
-End
-
-Theorem return_copy_memory_frame_refl[simp]:
-  return_copy_memory_frame off len mem mem
-Proof
-  simp[return_copy_memory_frame_def]
-QED
-
-Theorem return_copy_memory_frame_trans:
-  return_copy_memory_frame off len mem1 mem2 /\
-  return_copy_memory_frame off len mem2 mem3 ==>
-  return_copy_memory_frame off len mem1 mem3
-Proof
-  rw[return_copy_memory_frame_def] >> metis_tac[LESS_EQ_TRANS]
-QED
-
-Theorem return_copy_memory_frame_subinterval:
-  off <= child /\ child + clen <= off + len /\
-  return_copy_memory_frame child clen mem mem' ==>
-  return_copy_memory_frame off len mem mem'
-Proof
-  rw[return_copy_memory_frame_def] >>
-  `a + n <= child \/ child + clen <= a` by decide_tac >> metis_tac[]
-QED
-
-Theorem return_copy_frame_refl[simp]:
-  return_copy_frame sa off len s s
-Proof
-  simp[return_copy_frame_def]
-QED
-
-Theorem return_copy_frame_trans:
-  return_copy_frame sa off len s t /\ return_copy_frame sa off len t u ==>
-  return_copy_frame sa off len s u
-Proof
-  rw[return_copy_frame_def]
-  >- gvs[venom_state_component_equality] >>
-  metis_tac[return_copy_memory_frame_trans]
-QED
-
-Theorem return_copy_frame_subinterval:
-  off <= child /\ child + clen <= off + len /\
-  return_copy_frame sa child clen s t ==>
-  return_copy_frame sa off len s t
-Proof
-  rw[return_copy_frame_def] >>
-  irule return_copy_memory_frame_subinterval >>
-  qexistsl_tac [`child`, `clen`] >> simp[]
-QED
 
 Theorem return_aggregate_footprint:
   (!bs. v <> BytesV bs) /\ (!str. v <> StringV str) ==>
@@ -120,12 +57,12 @@ Proof
 QED
 
 Theorem return_copy_preserves_source:
-  return_copy_frame sa dst dlen s t /\
+  typed_copy_state_frame sa dst dlen s t /\
   val_in_memory tv v src s.vs_memory /\ val_wf tv v /\
   (src + val_footprint tv v <= dst \/ dst + dlen <= src) ==>
   val_in_memory tv v src t.vs_memory
 Proof
-  rw[return_copy_frame_def, return_copy_memory_frame_def] >>
+  rw[typed_copy_state_frame_def, typed_copy_frame_def] >>
   irule return_memory_footprint_agree >> simp[] >>
   qexists_tac `s.vs_memory` >> simp[]
 QED
@@ -189,6 +126,6 @@ Definition return_copy_entry_def:
          w2n dw + type_memory_size dtv <= w2n sw)) ==>
       frag_exec ctx sa sb (\u. u = s)
         (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
-             return_copy_frame sa (w2n dw) (type_memory_size dtv) s t)
+             typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t)
         (\r. F)
 End
