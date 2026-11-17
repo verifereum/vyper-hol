@@ -81,7 +81,7 @@ Proof
   qexists_tac `actual` >>
   ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
   `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
-  irule abi_encode_bytes_vv_post >>
+  irule (Q.INST [`result` |-> `Value (BytesV (payload))`] abi_encode_bytes_vv_post) >>
   goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl_tac [`sa.cs_next_id`, `p`, `outsz`] >>

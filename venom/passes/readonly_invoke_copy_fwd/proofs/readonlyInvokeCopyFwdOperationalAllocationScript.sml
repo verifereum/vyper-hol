@@ -127,7 +127,7 @@ Proof
   strip_tac >>
   `occurrence_allocas_ok B a s` by
     (fs[ricf_heterogeneous_source_ledger_def] >>
-     drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+     drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   conj_tac >- metis_tac[ricf_alloca_support_fresh] >>
   `(s.vs_alloca_next,w2n amount) NOTIN FDOM sites` by
     metis_tac[ricf_alloca_map_fresh] >>
@@ -288,7 +288,7 @@ Proof
   conj_tac
   >- (irule ricf_global_support_next >>
       `occurrence_allocas_ok B a s` by
-        (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+        (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
       metis_tac[]) >>
   rpt strip_tac >>
   irule ricf_heterogeneous_source_ledger_actual_next >>

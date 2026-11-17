@@ -348,12 +348,3 @@ Proof
   metis_tac[frame_reachable_raw_certificate]
 QED
 
-
-Theorem frame_reachable_functions_member:
-  !vs ctx ds PH H un g j t.
-    frame_reachable vs ctx ds PH H un g j t ==>
-    MEM g ctx.ctx_functions /\ EVERY (\d. MEM d.cf_fn ctx.ctx_functions) ds
-Proof
-  ho_match_mp_tac frame_reachable_ind >>
-  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[lookup_function_MEM]
-QED

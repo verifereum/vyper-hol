@@ -104,6 +104,170 @@ Proof
   `!w:bytes32. w << 0 = w` by wordsLib.WORD_DECIDE_TAC >> simp[]
 QED
 
+(* Bool and decimal sources: the encoded word of a bool is 0 or 1 and a
+   decimal is its scaled signed value, so each of these conversions is the
+   integer conversion of that word. *)
+Theorem scalar_bool_word:
+  !b. typed_val_to_w256 (BaseTV BoolT) (BoolV b) = i2w (if b then 1 else 0)
+Proof
+  Cases >> simp[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def]
+QED
+
+Theorem scalar_bool_bytes_result_frag:
+  !ctx func cenv cx m b es0.
+    0 < m /\ m <= 32 ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x (ConvIntToBytesM F 8 m))
+      (typed_val_to_w256 (BaseTV BoolT) (BoolV b))
+      (BaseT (BytesT (Fixed m)))
+      (convert_result cx (BaseT BoolT) (BaseT (BytesT (Fixed m))) (BoolV b)) es0
+Proof
+  rpt strip_tac >>
+  `convert_result cx (BaseT BoolT) (BaseT (BytesT (Fixed m))) (BoolV b) =
+   convert_result cx (BaseT (UintT 8)) (BaseT (BytesT (Fixed m)))
+     (IntV (if b then 1 else 0))` by
+    (Cases_on `b` >>
+     simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+          integer_wordTheory.i2w_def]) >>
+  simp[scalar_bool_word] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `F`, `8`, `m`,
+               `if b then 1 else 0`, `es0`] mp_tac scalar_int_bytes_result_frag >>
+  simp[]
+QED
+
+Theorem scalar_decimal_bytes_result_frag:
+  !ctx func cenv cx m i es0.
+    21 <= m /\ m <= 32 ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x (ConvIntToBytesM T 168 m))
+      (typed_val_to_w256 (BaseTV DecimalT) (DecimalV i))
+      (BaseT (BytesT (Fixed m)))
+      (convert_result cx (BaseT DecimalT) (BaseT (BytesT (Fixed m)))
+         (DecimalV i)) es0
+Proof
+  rpt strip_tac >>
+  `convert_result cx (BaseT DecimalT) (BaseT (BytesT (Fixed m))) (DecimalV i) =
+   convert_result cx (BaseT (IntT 168)) (BaseT (BytesT (Fixed m))) (IntV i)` by
+    simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  `typed_val_to_w256 (BaseTV DecimalT) (DecimalV i) = i2w i` by
+    simp[typed_val_to_w256_def, val_to_w256_def] >>
+  simp[] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `T`, `168`, `m`, `i`, `es0`]
+    mp_tac scalar_int_bytes_result_frag >>
+  simp[]
+QED
+
+Theorem scalar_decimal_bool_run:
+  !i x sa sb op ss.
+    within_int_bound (Signed 168) i /\
+    compile_type_convert x ConvToBool sa = (op, sb) /\
+    fresh_vars_wrt sa ss /\
+    eval_operand x ss = SOME (typed_val_to_w256 (BaseTV DecimalT) (DecimalV i)) ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+          eval_operand op ss' = SOME (bool_to_word (i <> 0))
+Proof
+  rpt strip_tac >> gvs[typed_val_to_w256_def, val_to_w256_def] >>
+  drule_all convert_bool_run >> strip_tac >>
+  qexists_tac `ss'` >> simp[] >>
+  qspecl_then [`168`, `T`, `i`] mp_tac i2w_eq_0_within >> simp[] >>
+  Cases_on `i = 0` >> gvs[bool_to_word_def] >>
+  simp[integer_wordTheory.i2w_def]
+QED
+
+Theorem scalar_address_bool_run:
+  !bs x sa sb op ss.
+    LENGTH bs = 20 /\
+    compile_type_convert x ConvToBool sa = (op, sb) /\
+    fresh_vars_wrt sa ss /\
+    eval_operand x ss = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+          eval_operand op ss' = SOME (bool_to_word (EXISTS (\b. b <> 0w) bs))
+Proof
+  rpt strip_tac >> gvs[typed_val_to_w256_def, val_to_w256_def] >>
+  drule_all convert_bool_run >> strip_tac >>
+  qexists_tac `ss'` >> simp[scalar_address_zero] >>
+  simp[EXISTS_MEM, EVERY_MEM] >> Cases_on `EXISTS (\b. b <> 0w) bs` >>
+  gvs[EXISTS_MEM, EVERY_MEM, bool_to_word_def]
+QED
+
+Theorem scalar_bool_decimal_run:
+  !b x sa sb op ss.
+    compile_type_convert x (ConvBoolToDecimal 10000000000) sa = (op, sb) /\
+    fresh_vars_wrt sa ss /\
+    eval_operand x ss = SOME (typed_val_to_w256 (BaseTV BoolT) (BoolV b)) ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+          eval_operand op ss' = SOME (i2w (if b then decimal_scale else 0))
+Proof
+  rpt strip_tac >>
+  gvs[typed_val_to_w256_def, val_to_w256_def, compile_type_convert_def] >>
+  qspecl_then [`x`, `Lit (n2w 10000000000)`, `if b then 1w else 0w`,
+               `n2w 10000000000`, `sa`, `op`, `sb`, `ss`] mp_tac
+    emit_op_MUL_correct >>
+  simp[eval_operand_def] >> strip_tac >> qexists_tac `ss'` >> simp[] >>
+  Cases_on `b` >>
+  simp[decimal_scale_def, integer_wordTheory.i2w_def,
+       wordsTheory.WORD_MULT_CLAUSES]
+QED
+
+Theorem scalar_decimal_bool_result_frag:
+  !ctx func cenv cx i es0.
+    within_int_bound (Signed 168) i ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x ConvToBool)
+      (typed_val_to_w256 (BaseTV DecimalT) (DecimalV i))
+      (BaseT BoolT)
+      (convert_result cx (BaseT DecimalT) (BaseT BoolT) (DecimalV i)) es0
+Proof
+  rpt strip_tac >> irule unop_frag_straight >>
+  simp[straight_fresh_convert, is_word_type_def] >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  strip_tac >> qexists_tac `bool_to_word (i <> 0)` >>
+  simp[evaluate_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  conj_tac >- (Cases_on `i = 0` >> simp[bool_to_word_def]) >>
+  rpt strip_tac >>
+  qspecl_then [`i`, `x`, `sa`, `sb`, `op`, `ss`] mp_tac scalar_decimal_bool_run >>
+  impl_tac >- gvs[typed_val_to_w256_def, val_to_w256_def] >> simp[]
+QED
+
+Theorem scalar_address_bool_result_frag:
+  !ctx func cenv cx bs es0.
+    LENGTH bs = 20 ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x ConvToBool)
+      (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
+      (BaseT BoolT)
+      (convert_result cx (BaseT AddressT) (BaseT BoolT) (BytesV bs)) es0
+Proof
+  rpt strip_tac >> irule unop_frag_straight >>
+  simp[straight_fresh_convert, is_word_type_def] >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  strip_tac >> qexists_tac `bool_to_word (EXISTS (\b. b <> 0w) bs)` >>
+  simp[evaluate_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  conj_tac >- (Cases_on `EXISTS (\b. b <> 0w) bs` >> simp[bool_to_word_def]) >>
+  rpt strip_tac >>
+  qspecl_then [`bs`, `x`, `sa`, `sb`, `op`, `ss`] mp_tac scalar_address_bool_run >>
+  impl_tac >- gvs[typed_val_to_w256_def, val_to_w256_def] >> simp[]
+QED
+
+Theorem scalar_bool_decimal_result_frag:
+  !ctx func cenv cx b es0.
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x (ConvBoolToDecimal 10000000000))
+      (typed_val_to_w256 (BaseTV BoolT) (BoolV b))
+      (BaseT DecimalT)
+      (convert_result cx (BaseT BoolT) (BaseT DecimalT) (BoolV b)) es0
+Proof
+  rpt strip_tac >> irule unop_frag_straight >>
+  simp[straight_fresh_convert_scalar, is_word_type_def] >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  strip_tac >>
+  qexists_tac `i2w (if b then decimal_scale else 0)` >>
+  simp[evaluate_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  rpt strip_tac >>
+  qspecl_then [`b`, `x`, `sa`, `sb`, `op`, `ss`] mp_tac scalar_bool_decimal_run >>
+  impl_tac >- gvs[typed_val_to_w256_def, val_to_w256_def] >> simp[]
+QED
+
 Theorem scalar_address_uint_result_frag:
   !ctx func cenv cx bs b es0.
     LENGTH bs = 20 /\ 0 < b /\ b <= 256 ==>
@@ -130,92 +294,4 @@ Proof
       disch_then (qspecl_then [`i`, `ss`] mp_tac) >> simp[]) >>
   strip_tac >> rpt strip_tac >> drule convert_int_run >>
   disch_then (qspecl_then [`i`, `ss`] mp_tac) >> simp[]
-QED
-
-Theorem scalar_address_word_range:
-  !i. -&(2**255) <= i /\ i < &(2**256) ==>
-    (within_int_bound (Unsigned 160) (&w2n (i2w i:bytes32)) <=>
-     within_int_bound (Unsigned 160) i)
-Proof
-  rpt strip_tac >>
-  `(&w2n (i2w i:bytes32):int) = i % &(2**256)` by
-    simp[w2n_i2w, dimword_def] >>
-  asm_rewrite_tac[] >>
-  simp[within_int_bound_ineq] >>
-  Cases_on `0 <= i`
-  >- (fs[integerTheory.INT_MOD_ID] >> intLib.ARITH_TAC) >>
-  `i % &(2**256) = i + &(2**256)` by
-    (irule integerTheory.INT_MOD_UNIQUE >>
-     qexists_tac `-1` >> fs[] >> intLib.ARITH_TAC) >>
-  fs[] >> intLib.ARITH_TAC
-QED
-
-Theorem scalar_to_address_clamp:
-  !x. compile_type_convert x ConvToAddress = compile_int_clamp F 160 x
-Proof
-  simp[compile_type_convert_def, compile_int_clamp_def]
-QED
-
-Theorem scalar_int_address_run_ok:
-  !x st op st' ss i.
-    compile_type_convert x ConvToAddress st = (op,st') /\
-    fresh_vars_wrt st ss /\ eval_operand x ss = SOME (i2w i) /\
-    within_int_bound (Unsigned 160) i ==>
-    ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
-      eval_operand op ss' = SOME (i2w i)
-Proof
-  rpt strip_tac >>
-  gvs[scalar_to_address_clamp] >>
-  irule scalar_int_clamp_word_ok >> simp[] >>
-  qexistsl_tac [`160`, `F`, `x`] >>
-  simp[in_type_range_within] >>
-  `0 <= i /\ i < &(2**160)` by gvs[within_int_bound_ineq] >>
-  `i = &Num i` by intLib.ARITH_TAC >>
-  `Num i < 2**256` by (fs[] >> intLib.ARITH_TAC) >>
-  qpat_x_assum `i = &Num i` SUBST1_TAC >>
-  fs[i2w_pos, w2n_n2w, dimword_def, in_type_range_def,
-     type_bounds_def, is_signed_type_def, type_bits_def] >> intLib.ARITH_TAC
-QED
-
-Theorem scalar_int_address_run_abort:
-  !x st op st' ss i.
-    compile_type_convert x ConvToAddress st = (op,st') /\
-    fresh_vars_wrt st ss /\ eval_operand x ss = SOME (i2w i) /\
-    -&(2**255) <= i /\ i < &(2**256) /\
-    ~within_int_bound (Unsigned 160) i ==>
-    ?ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  rpt strip_tac >> gvs[scalar_to_address_clamp] >>
-  irule scalar_int_clamp_word_abort >> simp[] >>
-  qexistsl_tac [`160`, `op`, `F`, `i2w i`, `x`] >>
-  `~within_int_bound (Unsigned 160) (&w2n (i2w i:bytes32))` by
-    (qspec_then `i` mp_tac scalar_address_word_range >> fs[]) >>
-  gvs[in_type_range_def, type_bits_def, is_signed_type_def,
-      within_int_bound_ineq]
-QED
-
-Theorem scalar_int_address_result_frag:
-  !ctx func cenv cx src i es0.
-    -&(2**255) <= i /\ i < &(2**256) ==>
-    unop_frag ctx func cenv cx
-      (\x. compile_type_convert x ConvToAddress)
-      (i2w i) (BaseT AddressT)
-      (convert_result cx src (BaseT AddressT) (IntV i)) es0
-Proof
-  rpt strip_tac >>
-  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
-  irule unop_frag_straight >>
-  simp[straight_fresh_convert_scalar, is_word_type_def] >>
-  Cases_on `within_int_bound (Unsigned 160) i` >> simp[]
-  >- (strip_tac >> qexists_tac `i2w i` >>
-      `0 <= i /\ i < &(2**160)` by fs[within_int_bound_ineq] >>
-      `i = &Num i` by intLib.ARITH_TAC >>
-      `Num i < 2**160` by (fs[] >> intLib.ARITH_TAC) >>
-      simp[evaluate_type_def, scalar_typed_address_word] >>
-      conj_tac
-      >- (qpat_x_assum `i = &Num i` SUBST1_TAC >>
-          simp[i2w_pos, w2w_def, w2n_n2w, dimword_def,
-               fcpLib.INDEX_CONV ``dimindex(:160)``] >> fs[]) >>
-      rpt strip_tac >> drule_all scalar_int_address_run_ok >> simp[]) >>
-  strip_tac >> rpt strip_tac >> drule_all scalar_int_address_run_abort >> simp[]
 QED

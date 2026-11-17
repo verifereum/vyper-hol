@@ -7,6 +7,7 @@ Theorem fmp_stage_protected_lifetime:
     (\C' f observed. view C' f observed /\
       EVERY fmp_sig_no_param observed.cu_context.ctx_functions) C C' /\
   EVERY (o1_fn_row 3) C.ctx_functions /\
+  EVERY no_raw_fmp_ops C.ctx_functions /\
   EVERY (\f. !x. code_end_var f x ==>
     ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
       d.inst_operands = [op; Label "code_end"] /\ d.inst_outputs = [x] /\
