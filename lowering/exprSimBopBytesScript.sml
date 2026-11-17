@@ -4,7 +4,7 @@ Ancestors
   exprBopBytes exprSimBopTyped exprSimHyps exprSimSource exprSimHypsDefs
   exprSimDefs exprSimProps exprLoweringProps loweringPosts
   exprBopSimProps exprLowering compileEnv valueEncoding
-  vyperTypeSystem vyperValue vyperTyping vyperAST vyperInterpreter
+  vyperTypeSystem vyperValue vyperTyping vyperAST vyperInterpreter vyperTypeCallGraph
   list option
 
 Theorem compile_bop_bytes_case:
@@ -27,16 +27,22 @@ Proof
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1` by
-    (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
+    (qpat_assum `expr_body_pre _ _ _ e1 _`
+       (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >> simp[IS_SOME_EXISTS]) >>
   `?tv2. evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2` by
-    (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
+    (qpat_assum `expr_body_pre _ _ _ e2 es`
+       (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >> simp[IS_SOME_EXISTS]) >>
   `ann = expr_type e1 /\ is_word_type ann /\
    is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
    ~is_bytestring_type (expr_type e1) /\ ~is_ArrayT (expr_type e2)` by
-    (gvs[] >> gvs[well_typed_binop_def, is_word_type_def,
+    (qpat_x_assum `expr_type e1 = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+     gvs[well_typed_binop_def, is_word_type_def,
                   is_int_type_def, is_bytestring_type_def,
                   vyperValueTheory.evaluate_type_def,
-                  optionTheory.IF_EQUALS_OPTION]) >>
+                  optionTheory.IF_EQUALS_OPTION] >>
+     Cases_on `expr_type e2` >> gvs[is_int_type_def, is_word_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_word_type_def]) >>
   irule compile_bop_rel_sim >> rpt conj_tac
   >~ [`binop_frag_post`]
   >- (qexistsl_tac [`tv1`, `tv2`] >>
@@ -62,7 +68,7 @@ Proof
         (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
       irule binop_frag_bytes_typed >> simp[] >> metis_tac[])
   >~ [`compile_binop`]
-  >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
+  >- (rpt gen_tac >> strip_tac >> drule compile_binop_grows >> simp[])
   >~ [`lower_value`]
   >- (rpt gen_tac >> strip_tac >>
       drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
