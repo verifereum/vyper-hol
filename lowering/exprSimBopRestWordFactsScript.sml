@@ -10,8 +10,9 @@ Theorem rest_word_typed_membership:
   ~(word_value_type t1 /\ word_value_type t2) /\
   ~((bop = Eq \/ bop = NotEq) /\
     (t1 = BaseT AddressT \/ ?m. t1 = BaseT (BytesT (Fixed m)))) ==>
-  (bop = In \/ bop = NotIn) /\ is_word_type t1 /\
-  (?bd. t2 = ArrayT t1 bd)
+  ((?m. t1 = BaseT (BytesT (Fixed m))) /\ MEM bop [And;Or;XOr;ShL;ShR]) \/
+  ((bop = In \/ bop = NotIn) /\ is_word_type t1 /\
+   (?bd. t2 = ArrayT t1 bd))
 Proof
   Cases_on `bop` >>
   simp[well_typed_binop_def, word_value_type_def] >>

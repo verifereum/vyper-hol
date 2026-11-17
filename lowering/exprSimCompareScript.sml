@@ -254,7 +254,7 @@ Theorem compile_compare_words_sim:
        INL (BoolV (eval_compare bop ty w1 w2))) ==>
     binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_words_def] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_words_def, binop_frag_post_def] >>
   rpt strip_tac >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac >>
   `straight_fresh (compile_binop bop x y ty bl el)` by
