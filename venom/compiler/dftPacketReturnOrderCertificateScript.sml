@@ -264,6 +264,55 @@ Proof
       qpat_x_assum `!f. MEM f order /\ _ ==> _` kall_tac >>
       qpat_x_assum `EL i order = inc + SUC i` kall_tac >>
       qpat_x_assum `!F. N <= F ==> _` (mk_asm "terminal_semantics") >>
-      gvs[] >> FAIL_TAC "terminal row") >>
-  FAIL_TAC "old row"
+      gvs[] >>
+      qpat_x_assum `!f bb bt ps xs ys rho ini h0 be hbe count front closed brest ms es ks. _`
+        (drule_all_then strip_assume_tac) >>
+      `eval_phis (EL i entries) (EL i bts).bb_instructions = OK sp /\
+       FOLDR (dft_exec_cons (N-EL i order) C8) OK
+         (DROP (phi_prefix_length (EL i bts).bb_instructions) cps)
+         (sp with vs_inst_idx := phi_prefix_length (EL i bts).bb_instructions) = OK be`
+        by simp[] >>
+      drule_all return_order_row_shape >> strip_tac >>
+      asm_x "terminal_semantics" (assume_tac o SRULE []) >>
+      `LENGTH (FLAT cms) = LENGTH (FLAT ces) /\
+       LENGTH (FLAT cms) = LENGTH (FLAT cks)` by
+        metis_tac[LENGTH_FLAT,MAP_EQ_LIST_REL,LIST_REL_LENGTH] >>
+      `FILTER IS_SOME (FLAT cms) = FLAT cms` by metis_tac[FILTER_EQ_ID] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl [`sp`,`N-EL i order`,`C8`] >> fs[] >>
+      qpat_x_assum `!F. N <= F ==> _` mp_tac >>
+      qpat_x_assum `be.vs_inst_idx = _` (fn th => rewrite_tac[th]) >>
+      metis_tac[]) >>
+  qpat_x_assum `!F. N <= F ==> _` kall_tac >>
+  qpat_x_assum `!f bb bt ps xs ys rho ini h0 be hbe count front rest ms es ks. _`
+    (mk_asm "closed_rows") >>
+  `SUC i < LENGTH order` by decide_tac >>
+  `FLOOKUP blocks' (b,EL i order) = FLOOKUP blocks (b,EL i order)` by
+    (first_x_assum irule >> simp[]) >>
+  gvs[] >>
+  `?ms es ks. FLOOKUP ms_tab (b,inc + SUC i) = SOME ms /\
+    FLOOKUP es_tab (b,inc + SUC i) = SOME es /\
+    FLOOKUP ks_tab (b,inc + SUC i) = SOME ks` by
+    metis_tac[flookup_thm] >>
+  qpat_x_assum `!f bb bt ps xs ys rho ini h0 be hbe count front closed brest ms es ks. _`
+    (drule_all_then strip_assume_tac) >>
+  asm_x "closed_rows" (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!F. N <= F ==> _` (mk_asm "old_semantics") >>
+  gvs[] >>
+  `eval_phis (EL i entries) (EL i bts).bb_instructions = OK sp /\
+   FOLDR (dft_exec_cons (N-(inc + SUC i)) C8) OK
+     (DROP (phi_prefix_length (EL i bts).bb_instructions) ps)
+     (sp with vs_inst_idx := phi_prefix_length (EL i bts).bb_instructions) = OK be`
+    by simp[] >>
+  drule_all return_order_row_shape >> strip_tac >>
+  asm_x "old_semantics" (assume_tac o SRULE []) >>
+  `LENGTH (FLAT ms) = LENGTH (FLAT es) /\
+   LENGTH (FLAT ms) = LENGTH (FLAT ks)` by
+    metis_tac[LENGTH_FLAT,MAP_EQ_LIST_REL,LIST_REL_LENGTH] >>
+  `FILTER IS_SOME (FLAT ms) = FLAT ms` by metis_tac[FILTER_EQ_ID] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`sp`,`N-(inc + SUC i)`,`C8`] >> fs[] >>
+  qpat_x_assum `!F. N <= F ==> _` mp_tac >>
+  qpat_x_assum `be.vs_inst_idx = _` (fn th => rewrite_tac[th]) >>
+  metis_tac[]
 QED
