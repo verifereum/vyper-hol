@@ -541,7 +541,8 @@ QED
 
 (* Postcondition packaging stays independent of the header-write proof. *)
 Theorem pop_storage_vv_post:
-  (!id path. tv <> PlaceR (MemoryPlace id path)) /\
+  vv_place_ptr cenv cx es' u tv
+    (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) /\
   es'.scopes = es.scopes /\
   stmt_state_rel H ctx func cenv cx es' u /\
   storage_well_formed_on cx es' (FST H) /\
@@ -554,7 +555,9 @@ Theorem pop_storage_vv_post:
 Proof
   strip_tac >>
   `locals_kept cenv es es' s0 u` by (irule locals_kept_mem >> simp[]) >>
-  Cases_on `tr` >>
+  Cases_on `tr` >> fs[contextTheory.mk_ptr_def] >>
+  `!id path. tv <> PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >> gvs[loweringPostsTheory.vv_place_ptr_def]) >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
        loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
        expr_type_def]
@@ -1002,6 +1005,19 @@ Resume compile_pop_storage_normalized_sim[positive]:
      Cases_on `tr` >> simp[sstore_def, tstore_def]) >>
   `well_formed_type_value (ArrayTV tv (Dynamic n))` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `!es1. vv_place_ptr cenv cx es1 u
+      (PlaceR (StoragePlace tr
+        (n2w slot + n2w (1 + (w2n (lookup_storage (n2w slot)
+           (get_storage cx es tr)) - 1) * type_slot_size tv)) tv))
+      (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))` by
+    (`lookup_var x6 u = SOME (n2w slot + n2w (1 + (w2n (lookup_storage (n2w slot)
+           (get_storage cx es tr)) - 1) * type_slot_size tv))` by
+       (PURE_ASM_REWRITE_TAC [] >>
+        pure_rewrite_tac[wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
+          arithmeticTheory.ADD_ASSOC] >> REFL_TAC) >>
+     Cases_on `tr` >>
+     simp[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
+          loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
   (* The target run is fixed; the post holds in every horizon of the trace. *)
   `!H. valid_horizon cx st0 H
          (es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) ==>

@@ -24,7 +24,7 @@ Theorem ld_mstore8_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   ld_shared_state tn un s t /\
   ld_frame_embedding E L H s t /\ ld_alloc_account keys d A s t /\
@@ -38,13 +38,15 @@ Theorem ld_mstore8_certificate_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz <= s.vs_alloca_next /\ bt+sz <= t.vs_alloca_next) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
   un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\ un.t_imm SUBSET tn.t_imm /\
   step_inst fuel CT i t = OK t' ==>
   ?s'. step_inst fuel CS i s = OK s' /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t' /\
@@ -103,22 +105,24 @@ Proof
     (drule ld_owned_operand_clean >> disch_then (qspec_then `value` mp_tac) >> simp[]) >>
   `MEM (w2n x,1) (source_memory_write_ranges i s)` by
     simp[source_memory_write_ranges_def, fixed_source_write_range_def] >>
-  `((w2n x = w2n y /\ w2n x+1 <= lo) \/
+  (* one goal, not three: a label shared by 3+ goals breaks Finalise *)
+  Q.SUBGOAL_THEN `((w2n x = w2n y /\ w2n x+1 <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
-      bs <= w2n x /\ w2n x+1 <= bs+sz /\ w2n y = bt+(w2n x-bs)))` by
-    suspend "write_classification" >>
-  `!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+      bs <= w2n x /\ w2n x+1 <= bs+sz /\ w2n y = bt+(w2n x-bs)) \/
+    (w2n x = w2n y /\ dyn_floor CS s <= w2n x))` assume_tac
+  >- suspend "write_classification" >>
+  `!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
      (a = w2n x <=> b = w2n y)` by
-    (`(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+    (`(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
         ((w2n x<=a /\ a<w2n x+1) <=> (w2n y<=b /\ b<w2n y+1))) /\
-      (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+      (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
         w2n x<=a /\ a<w2n x+1 ==> a-w2n x=b-w2n y)` by
        (irule ld_fixed_live_write_footprint >> metis_tac[]) >>
      rpt gen_tac >> strip_tac >>
      qpat_x_assum `!a b. _ ==> ((_ /\ _) <=> (_ /\ _))`
        (qspecl_then [`a`,`b`] mp_tac) >> simp[] >> decide_tac) >>
   `?s'. step_inst fuel CS i s = OK s' /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t' /\
@@ -150,14 +154,20 @@ Resume ld_mstore8_certificate_backward[value_provenance]:
 QED
 
 Resume ld_mstore8_certificate_backward[write_classification]:
-  drule ld_access_write_classification >>
-  disch_then (qspecl_then [`w2n x`,`1`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n (x:bytes32)`, `len` |-> `1`, `inst` |-> `i`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
-      drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
-  disj2_tac >> gvs[mem_write_ops_def] >>
+      drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >> simp[])
+  >>> REVERSE_LT
+  >- (rpt disj2_tac >>
+      `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
+      drule ld_owned_operand_clean >>
+      disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
+  disj2_tac >> disj1_tac >> gvs[mem_write_ops_def] >>
   `owner IN live` by metis_tac[] >>
   `v' IN U` by simp[] >>
   `?bt. ld_site_entry E owner bs bt sz` by
@@ -171,7 +181,7 @@ Resume ld_mstore8_certificate_backward[write_classification]:
 QED
 
 Resume ld_mstore8_certificate_backward[frame_transport]:
-  markerLib.RESUME_TAC >> rpt strip_tac >> qexists_tac `s'` >> asm_rewrite_tac[] >>
+  rpt strip_tac >> qexists_tac `s'` >> asm_rewrite_tac[] >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   simp[ld_empty_outputs_prov_tvar, ld_frame_embedding_def, ld_alloc_account_def,

@@ -201,8 +201,10 @@ Proof
   metis_tac[ld_access_ok_raise_floor]
 QED
 
-Theorem ld_o1_src_inv_frontier_discipline:
-  o1PassContract$o1_run_state_ok vs0 /\ o1PassContract$o1_src_inv D C vs0 ==>
+Theorem ld_o1_src_inv_frontier_discipline_static:
+  unitTransformDefs$o1_initial_state_ok vs0 /\
+  vs0.vs_fmp = vs0.vs_initial_fmp /\ lowerDloadDefs$code_layout_valid vs0 /\
+  o1PassContract$o1_src_inv D C vs0 ==>
   ptr_discipline vs0.vs_alloca_next C vs0
 Proof
   strip_tac >>
@@ -214,4 +216,12 @@ Proof
   drule ld_ptr_discipline_raise_floor >>
   disch_then (qspec_then `vs0.vs_alloca_next` irule) >>
   gvs[ptr_discipline_def]
+QED
+
+Theorem ld_o1_src_inv_frontier_discipline:
+  o1PassContract$o1_run_state_ok vs0 /\ o1PassContract$o1_src_inv D C vs0 ==>
+  ptr_discipline vs0.vs_alloca_next C vs0
+Proof
+  simp[o1PassContractTheory.o1_run_state_ok_def] >>
+  metis_tac[ld_o1_src_inv_frontier_discipline_static]
 QED

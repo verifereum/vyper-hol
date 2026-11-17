@@ -445,7 +445,8 @@ Proof
     metis_tac[mem_safe_run_head] >>
   pop_assum strip_assume_tac >> simp[inst_mem_ok_in_fn_def]
   >~ [`mem_safe_step 0 ctx inst s`]
-  >- (pop_assum mp_tac >> simp[Once mem_safe_step_def]) >>
+  >- (pop_assum mp_tac >> simp[Once mem_safe_step_def] >>
+      metis_tac[inst_mem_below_frontier_frontiers]) >>
   metis_tac[]
 QED
 

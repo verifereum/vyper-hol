@@ -5,7 +5,7 @@ Ancestors lowerDloadPtrJointCall lowerDloadPtrPhaseNext lowerDloadPtrReplay
   ptrDiscipline venomExecSemantics venomState venomInst venomWf
   unitShapeDefs codegenRel contextCodegenRel list pred_set finite_map
 
-Theorem dload_joint_interior_next_closed:
+val dload_joint_interior_next_closed_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -13,7 +13,7 @@ Theorem dload_joint_interior_next_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -54,7 +54,7 @@ Theorem dload_joint_interior_next_closed:
   active_inst g next (v with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -91,7 +91,15 @@ Theorem dload_joint_interior_next_closed:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_interior_next_closed_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_interior_next_closed_header)))))))
 Proof
   strip_tac >>
   `MEM f C.ctx_functions` by
@@ -102,7 +110,7 @@ Proof
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks)` by
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
-  `dload_phase_core pfuel C' q f g i emitted n lo fs
+  `dload_phase_core fl pfuel C' q f g i emitted n lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G tn s t H un cs ds` by
@@ -114,4 +122,13 @@ Proof
   qexistsl [`cs`,`PG`,`G`,`tn`,`f`,`i`,`s`,`q`,`emitted`,`SUC n`,
     `pfuel`,`t0`,`H0`,`un0`,`fs`] >> simp[] >>
   irule dload_prefix_extend >> simp[] >> metis_tac[]
+QED
+
+Theorem dload_joint_interior_next_closed:
+  ^dload_joint_interior_next_closed_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_interior_next_closed_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED

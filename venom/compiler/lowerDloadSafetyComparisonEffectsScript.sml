@@ -37,9 +37,48 @@ Proof
   gvs[ld_wordrel_SOME, ld_erase_def] >> metis_tac[]
 QED
 
+(* A selected variable's ghost site is its erased site, which lies below
+   the dynamic floor. *)
+Theorem ld_ghost_selected_low[local]:
+  ld_ghost_ok fl A H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
+  FLOOKUP H v = SOME a /\ FLOOKUP G v = SOME (b,n) /\ 0 < n ==>
+  b < fl /\ FLOOKUP (ld_erase A o_f H) v = SOME (b,n)
+Proof
+  strip_tac >>
+  `FLOOKUP G v = SOME (ld_erase A a)` by fs[ld_ghost_ok_def] >>
+  `ld_erase A a = (b,n)` by gvs[] >>
+  simp[FLOOKUP_o_f] >>
+  qpat_x_assum `ld_erase A a = (b,n)` mp_tac >>
+  simp[ld_erase_def] >> Cases_on `FLOOKUP A a` >- gvs[] >>
+  PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
+  res_tac >> decide_tac
+QED
+
+(* Two variables sharing a positive ghost site, one of them selected,
+   are both selected: an unselected variable's site lies at or above the
+   floor, a selected one's below it. *)
+Theorem ld_ghost_pair_selected[local]:
+  ld_ghost_ok fl A H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
+  FLOOKUP G u = SOME (b,n) /\ FLOOKUP G w = SOME (b,n) /\ 0 < n /\
+  FLOOKUP H u = SOME a ==>
+  FLOOKUP (ld_erase A o_f H) u = SOME (b,n) /\
+  FLOOKUP (ld_erase A o_f H) w = SOME (b,n)
+Proof
+  strip_tac >> drule_all ld_ghost_selected_low >> strip_tac >> simp[] >>
+  Cases_on `FLOOKUP H w`
+  >- (qpat_x_assum `ld_ghost_ok _ _ _ _` mp_tac >> simp[ld_ghost_ok_def] >>
+      strip_tac >> first_x_assum (qspec_then `w` mp_tac) >> gvs[] >>
+      decide_tac) >>
+  `FLOOKUP G w = SOME (ld_erase A x)` by fs[ld_ghost_ok_def] >>
+  gvs[FLOOKUP_o_f]
+QED
+
 Theorem ld_comparison_selected[local]:
   ld_vars P A f /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
   MEM inst.inst_opcode [LT;GT;EQ] /\ inst.inst_operands = [Var u;Var w] /\
   (u IN FDOM f.lf_H \/ w IN FDOM f.lf_H) /\
   ~retpc_var f.lf_fn u /\ ~retpc_var f.lf_fn w /\
@@ -61,9 +100,18 @@ Proof
     eval_operand (Var w) f.lf_src = SOME x2 /\
     b <= w2n x1 /\ w2n x1 <= b+n /\
     b <= w2n x2 /\ w2n x2 <= b+n` by
-    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-     simp[access_ok_def] >> strip_tac >>
-     gvs[] >> metis_tac[]) >>
+    (`?b n x1 x2. FLOOKUP G u = SOME (b,n) /\ FLOOKUP G w = SOME (b,n) /\
+        0 < n /\ eval_operand (Var u) f.lf_src = SOME x1 /\
+        eval_operand (Var w) f.lf_src = SOME x2 /\
+        b <= w2n x1 /\ w2n x1 <= b+n /\ b <= w2n x2 /\ w2n x2 <= b+n` by
+       (`u IN FDOM G \/ w IN FDOM G` by
+          metis_tac[ld_ghost_ok_def, finite_mapTheory.flookup_thm] >>
+        qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+        simp[access_ok_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
+     qexistsl_tac [`b`, `n`, `x1`, `x2`] >> asm_rewrite_tac[] >>
+     `(?a. FLOOKUP f.lf_H u = SOME a) \/ (?a. FLOOKUP f.lf_H w = SOME a)` by
+       metis_tac[finite_mapTheory.flookup_thm] >>
+     metis_tac[ld_ghost_pair_selected]) >>
   `?a c. FLOOKUP f.lf_H u = SOME a /\ FLOOKUP A a = SOME (b,c,n) /\
     ld_wordrel A (SOME a) x1 y1` by
     (irule ld_selected_erased_site >> metis_tac[]) >>
@@ -78,7 +126,8 @@ Theorem ld_comparison_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
   MEM inst.inst_opcode [LT;GT;EQ] /\ inst.inst_operands = [op1;op2] /\
   eval_operand op1 f.lf_tgt = SOME y1 /\
   eval_operand op2 f.lf_tgt = SOME y2 /\
@@ -148,7 +197,8 @@ Theorem ld_comparison_vars[local]:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
   MEM inst.inst_opcode [LT;GT;EQ] /\ step_inst_base inst f.lf_tgt = OK ts /\
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
   (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> c+n < dimword (:256)) ==>
@@ -173,7 +223,8 @@ Theorem ld_comparison_effect:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= fl) /\
   MEM inst.inst_opcode [LT;GT;EQ] /\ step_inst_base inst f.lf_tgt = OK ts /\
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
   (!a b c n. FLOOKUP A a = SOME (b,c,n) ==> c+n < dimword (:256)) /\

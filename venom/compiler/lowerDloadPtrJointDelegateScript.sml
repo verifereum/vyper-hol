@@ -9,7 +9,7 @@ Ancestors lowerDloadPtrDelegate lowerDloadPtrBlockEntry lowerDloadPtrCall lowerD
 val normal = ``\R ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -46,7 +46,7 @@ val normal = ``\R ds PH H un g j t.
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
           c.cf_inst [c.cf_inst] 0))``;
 
-Theorem dload_joint_tracked_delegate_next:
+val dload_joint_tracked_delegate_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -57,7 +57,15 @@ Theorem dload_joint_tracked_delegate_next:
   step_inst fuel C' j t = OK t1 /\
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   (^normal) (\i. T) ds PH (step_prov PH H j t1) (step_taint j t t1 un) g next
-    (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+    (t1 with vs_inst_idx := SUC t.vs_inst_idx)``;
+
+Theorem dload_joint_tracked_delegate_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_delegate_next_header)))))))
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   pure_rewrite_tac[AND_CLAUSES] >> strip_tac >>
@@ -80,7 +88,7 @@ Proof
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
   `?s1. step_inst fuel C i s = OK s1 /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -127,7 +135,7 @@ Proof
       irule dload_boundary_core_delegate >> simp[] >> metis_tac[]) >>
   `~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE` by simp[] >>
   drule_all dload_singleton_reachable_next_fields >> strip_tac >>
-  `dload_boundary_core lo fs
+  `dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -135,12 +143,23 @@ Proof
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t0.vs_inst_idx) cs ds` by
     (drule dload_boundary_core_index_update >> simp[]) >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 t1 _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s1 t1 _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_unchanged_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>
   disch_then (qspecl_then [`t0`,`s`,`next`,`P`,`C'`] mp_tac) >>
   simp[EVERY_MEM, EL] >>
   (impl_tac >- (conj_tac >- fs[EVERY_MEM] >> fs[lookup_var_def])) >> simp[]
+QED
+
+
+Theorem dload_joint_tracked_delegate_next:
+  ^dload_joint_tracked_delegate_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_delegate_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED

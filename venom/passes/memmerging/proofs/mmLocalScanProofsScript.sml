@@ -13,6 +13,8 @@ Ancestors
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\

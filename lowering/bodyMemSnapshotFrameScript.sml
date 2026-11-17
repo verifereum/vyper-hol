@@ -6,6 +6,7 @@ Ancestors
 
 Theorem snapshot_store_post_frame:
   expr_post H ctx func ce cx e es sa sc s0 ee v src s /\
+  read_result cx raw ee = (INL v, ee) /\
   post_value_type ce e = expr_type e /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   copy_static z = copy_static s /\
@@ -24,11 +25,21 @@ Theorem snapshot_store_post_frame:
     (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) ee z /\
   vv_at ce cx (expr_type e) sa sb ee raw
     (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z ==>
-  vv_post H ctx func ce cx e es sa sb s0 ee raw
+  vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
     (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
   pure_frame ce func ee sm s z
 Proof
   strip_tac >>
+  `vv_holds ce cx (expr_type e) (Value v)
+     (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) ee z` by
+    (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_holds_def] >> simp[vyperStateTheory.read_result_def,
+                               vyperStateTheory.return_def]) >>
+  `vv_at ce cx (expr_type e) sa sb ee (Value v)
+     (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z` by
+    (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_at_def] >> simp[vyperStateTheory.read_result_def,
+                            vyperStateTheory.return_def] >> metis_tac[]) >>
   `!n lb len. local_region ce es.scopes s0 n lb len ==>
      regions_disjoint b sz lb len` by
     (rpt strip_tac >>

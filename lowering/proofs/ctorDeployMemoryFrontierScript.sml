@@ -170,22 +170,33 @@ Proof
   gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]
 QED
 
-(* Every reachable frontier, plus 32 bytes per DLOAD, stays below 2^256. *)
+(* Every reachable frontier, plus 32 bytes per DLOAD, stays below 2^256;
+   with a DALLOCA in the unit, below the initial free-memory pointer too,
+   which every reachable state keeps. *)
 Theorem lowered_unit_dload_headroom_ok_from:
   !k ctx name fn vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     vs.vs_alloca_next = k /\
-    k + unit_alloca_budget ctx + 32 * ctx_dload_count ctx < dimword (:256)
+    k + unit_alloca_budget ctx + 32 * ctx_dload_count ctx < dimword (:256) /\
+    (ctx_has_dalloca ctx ==>
+     k + unit_alloca_budget ctx + 32 * ctx_dload_count ctx <=
+       w2n vs.vs_initial_fmp)
     ==> mem_inv dload_headroom_ok ctx vs
 Proof
   rpt strip_tac >>
   drule_all lowered_unit_entry_facts >> strip_tac >>
-  simp[mem_inv_def, codegen_reachability_package_def] >>
-  qexists_tac `alloca_frontier_inv_from k` >> rpt conj_tac
-  >- (irule alloca_frontier_inv_from_closed >> simp[])
-  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
-  rw[dload_headroom_ok_def, alloca_frontier_inv_from_def] >>
+  `mem_inv (\ctx fn inst s. s.vs_alloca_next <= k + unit_alloca_budget ctx)
+     ctx vs` by
+    (simp[mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `alloca_frontier_inv_from k` >> rpt conj_tac
+     >- (irule alloca_frontier_inv_from_closed >> simp[])
+     >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
+     rw[alloca_frontier_inv_from_def] >> decide_tac) >>
+  fs[mem_inv_raw_reachable] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >> strip_tac >>
+  fs[dload_headroom_ok_def, ctx_has_dalloca_def] >> rw[] >> fs[] >>
   decide_tac
 QED
 

@@ -30,6 +30,18 @@ Theorem compose_lower_dload_own:
   (2 <= 3 ==> no_raw_fmp_ops out.fpo_function) /\ fmp_sig_no_param out.fpo_function)
 Proof
   simp[] >> rpt gen_tac >> strip_tac >>
+  `fmp_sig_no_param out.fpo_function` by
+    (drule fn_pass_step_fmp_sig_no_param >>
+     simp[fn_pass_tag_def] >> metis_tac[]) >>
+  `no_raw_fmp_ops out.fpo_function` by
+    (drule lower_dload_step_supply >> strip_tac >>
+     fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
+     drule_all o1ContractLowerDloadTheory.lower_dload_function_supply_member >> strip_tac >>
+     rename1 `lower_dload_inst_supply u oldi = (ys,v)` >>
+     Cases_on `oldi.inst_opcode = DLOAD` >>
+     Cases_on `oldi.inst_opcode = DLOADBYTES` >>
+     gvs[lowerDloadDefsTheory.lower_dload_inst_supply_def,
+         AllCaseEqs(), is_raw_fmp_opcode_def] >> metis_tac[]) >>
   `o1_step_contract_at 1 rp (CFP_Simple VP_LowerDload)` by
     (mp_tac (Q.SPEC `rp` (GEN_ALL o1_fn_passes_steps)) >>
      simp[o1_fn_passes_def, o1_step_contracts_from_def] >>

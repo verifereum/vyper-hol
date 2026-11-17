@@ -22,6 +22,7 @@ Ancestors
   vyperCreateStorageTest
   vyperCustomErrorTest
   vyperDecimalConvertTest
+  vyperScalarConvertPairsTest
   vyperEqualitySemanticsTest
   vyperDecimalMulTest
   vyperDelegateRawCallTest

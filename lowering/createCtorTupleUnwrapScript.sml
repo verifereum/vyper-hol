@@ -10,11 +10,16 @@ Theorem ctor_captured_vv_post:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
-  vv_at ce cx ty origin sm es raw vv s ==>
+  vv_at ce cx ty origin sm es raw vv s /\
+  read_result cx raw es = (INL v,es) ==>
   vv_post H ctx func ce cx (Pop ty (NameTarget ""))
-    es origin sm s es raw vv s
+    es origin sm s es (Value v) vv s
 Proof
-  simp[vv_post_def, expr_type_def]
+  Cases_on `vv` >>
+  simp[vv_post_def, expr_type_def, vv_holds_def, vv_at_def,
+       storage_holds_def, immutable_holds_def, read_result_def, return_def] >>
+  rpt strip_tac >> gvs[] >> rpt strip_tac >>
+  metis_tac[]
 QED
 
 Theorem ctor_captured_unwrap_post_path:
@@ -44,7 +49,6 @@ Theorem ctor_captured_unwrap_post_path:
 Proof
   strip_tac >>
   drule_all ctor_captured_vv_post >> strip_tac >>
-  drule_all exprSimUnwrapPropsTheory.vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_fields >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[expr_type_def, gas_marked_path_def]
@@ -88,7 +92,6 @@ Proof
   `local_ptrs_reserved ce sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
   drule_all ctor_captured_vv_post >> strip_tac >>
-  drule_all exprSimUnwrapPropsTheory.vv_post_read_result >> strip_tac >>
   Cases_on `vv`
   >- (gvs[exprLoweringTheory.unwrap_value_def, compileEnvTheory.comp_return_def] >>
       qexists_tac `s` >> simp[gas_marked_path_def, cj 1 gas_path_rules] >>
