@@ -13,7 +13,7 @@ Ancestors
   symBumpInstSim symInstDispatch symShuffleSim codegenSymRel fnFrameDeepInst asmSymBridge asmSymSem
   fnPlanPrefix frameRel contextCodegenRel codegenRel unitShapeDefs
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
-  venomInst dfgDefs
+  venomInst dfgDefs symFrameInstOwn symFrameBoundaryPairing symEmitSim
 
 Theorem bump_operand_shape[local]:
   inst.inst_opcode = BUMP /\ inst_wf inst ==>
@@ -22,10 +22,7 @@ Theorem bump_operand_shape[local]:
     inst.inst_outputs = [ptr; next] /\
     compute_operands inst = [base_op; size_op]
 Proof
-  strip_tac >>
-  gvs[venomWfTheory.inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
-  simp[compute_operands_def, python_stack_operands_def,
-       ir_specific_operand_order_def]
+  MATCH_ACCEPT_TAC symFrameInstOwnTheory.bump_operand_shape
 QED
 
 Theorem sym_inst_frame_sim_deep:
@@ -163,27 +160,22 @@ Theorem sym_inst_frame_sim_deep:
 Proof
   rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
   gen_tac >> strip_tac >>
-  drule_all_then strip_assume_tac gen_inst_frame_sim_deep_count >>
-  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (rpt strip_tac >>
-     qpat_x_assum `!op. _ ==> IS_SOME (stack_get_depth _ _) \/ _` mp_tac >>
-     simp[fnPlanLineageInventoryTheory.stack_get_depth_is_some,
-          finite_mapTheory.FLOOKUP_DEF, COND_RAND]) >>
-  `?ss'. sym_steps prog env
-      (LENGTH (execute_plan cplan.cp_initial_fmp ops) -
-       (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0)) ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest ps' ss' /\
-    (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
-      FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b)` by
-    (Cases_on `inst.inst_opcode = BUMP` >> simp[]
-     >- (drule_all_then strip_assume_tac bump_operand_shape >>
-         qpat_assum `compute_operands inst = _` (fn eq =>
-           qpat_assum `inst.inst_opcode = BUMP` (fn opc =>
-             every_assum (assume_tac o PURE_REWRITE_RULE [eq, opc]))) >>
-         drule_all_then MATCH_ACCEPT_TAC sym_bump_inst_symbolic_run) >>
-     drule_all_then MATCH_ACCEPT_TAC sym_non_bump_inst_symbolic_run) >>
-  fs[sym_frame_inv_def] >>
-  drule_all_then strip_assume_tac asm_sym_steps_lockstep >>
-  gvs[] >> metis_tac[]
+  `inst.inst_opcode <> CODESIZE` by
+    metis_tac[symEmitSimTheory.label_flow_inst_not_codesize] >>
+  `sym_frame_inv_own lo prog env as.as_code ctx cplan fn ret srest labs0 ps as ss` by
+    metis_tac[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
+  `code_labels_agree prog lo` by
+    metis_tac[fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl] >>
+  gvs[] >>
+  drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (SRULE [sym_steps_mode_def] (Q.SPEC `F` sym_inst_frame_sim_deep_own)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >>
+  simp[fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl] >>
+  disch_then drule_all >>
+  strip_tac >>
+  qexistsl [`n`, `as'`, `ss'`] >> simp[] >>
+  metis_tac[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own]
 QED
