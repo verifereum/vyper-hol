@@ -489,9 +489,9 @@ Resume ld_available_suffix_revert_empty[assign]:
           qpat_x_assum `!k. k <= SUC d ==> _` (qspec_then `SUC k` mp_tac) >>
           simp[arithmeticTheory.ADD_CLAUSES] >>
           gvs[venomStateTheory.update_var_def, arithmeticTheory.ADD_CLAUSES, NoAsms])
-      >- metis_tac[] >>
-      qexists_tac `sites` >>
-      gvs[ld_env_agree_def]) >>
+      >- metis_tac[]
+      >- (qexists_tac `sites` >> gvs[ld_env_agree_def]) >>
+      qexists_tac `fl` >> gvs[]) >>
   gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
@@ -627,8 +627,9 @@ Resume ld_joint_forward_revert_empty[copy_success]:
       `SUC k <= j - s.vs_inst_idx` by decide_tac >>
       qpat_x_assum `!k. k <= _ ==> _` (qspec_then `SUC k` mp_tac) >>
       gvs[arithmeticTheory.ADD_CLAUSES, NoAsms])
-  >- metis_tac[] >>
-  qexists_tac `sites` >> gvs[ld_env_agree_def]
+  >- metis_tac[]
+  >- (qexists_tac `sites` >> gvs[ld_env_agree_def]) >>
+  qexists_tac `dyn_floor C vs` >> simp[]
 QED
 
 Finalise ld_joint_forward_revert_empty
