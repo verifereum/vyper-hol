@@ -162,6 +162,85 @@ Proof
        bind_def, return_def]
 QED
 
+Theorem intcall_args_extend_storage_scope_action[local]:
+  !cx tr slot tv sb s sc.
+    extend_storage_place cx tr slot tv sb (s with scopes := sc) =
+      (FST (extend_storage_place cx tr slot tv sb s),
+       SND (extend_storage_place cx tr slot tv sb s) with scopes := sc)
+Proof
+  recInduct extend_storage_place_ind >> rpt strip_tac >>
+  simp[extend_storage_place_def, raise_def]
+  >- (simp[bind_def, lift_option_type_def] >>
+      Cases_on `struct_field_slot fields id` >>
+      simp[return_def, raise_def] >> Cases_on `x` >> simp[return_def])
+  >- (Cases_on `bd` >> Cases_on `tr` >>
+      simp[resolve_array_element_def,
+           vyperStoragePlaceProvenanceTheory.resolve_array_element_empty,
+           get_storage_backend_def,
+           get_accounts_def, get_transient_storage_def, check_def,
+           assert_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def]) >>
+  simp[check_def, assert_def, ignore_bind_def, bind_def,
+       lift_option_type_def, return_def, raise_def] >>
+  rpt IF_CASES_TAC >> simp[] >> Cases_on `oEL (Num i) tvs` >>
+  simp[return_def, raise_def]
+QED
+
+Theorem intcall_args_extend_place_scope_action:
+  (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+  !cx sb s sc. extend_place cx r sb (s with scopes := sc) =
+    (FST (extend_place cx r sb s),
+     SND (extend_place cx r sb s) with scopes := sc)
+Proof
+  Cases_on `r` >> simp[extend_place_def, raise_def]
+  >- (rename1 `PlaceR p` >> Cases_on `p` >> simp[extend_place_def]
+      >- (rpt gen_tac >> irule intcall_args_scope_bind >> reverse conj_tac
+          >- simp[intcall_args_extend_storage_scope_action] >>
+          simp[return_def]) >>
+      rpt gen_tac >> irule intcall_args_scope_bind >> reverse conj_tac
+      >- (irule intcall_args_place_type_scope_action >> simp[]) >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      irule intcall_args_scope_bind >> reverse conj_tac
+      >- simp[intcall_args_read_place_scope_action, pairTheory.UNCURRY] >>
+      rpt gen_tac >> disch_tac >> BETA_TAC >>
+      simp[ignore_bind_def, lift_sum_def, bind_def, return_def, raise_def] >>
+      Cases_on `evaluate_subscripts v v' [sb]` >> simp[return_def, raise_def]) >>
+  rpt gen_tac >> Cases_on `sb` >> simp[extend_place_def, raise_def] >>
+  Cases_on `v` >> simp[return_def, lift_option_type_def, bind_def,
+    ignore_bind_def, record_storage_event_def] >>
+  Cases_on `evaluate_type (get_tenv cx) t'` >> simp[return_def, raise_def]
+QED
+
+Theorem intcall_args_extend_place_nonlocal:
+  (!id path. r <> PlaceR (MemoryPlace id path)) /\
+  extend_place cx r sb s = (INL r',t) ==>
+  (!id path. r' <> PlaceR (MemoryPlace id path))
+Proof
+  metis_tac[vyperLocalAccessFrameTheory.extend_place_memory_origin]
+QED
+
+Theorem intcall_args_select_result_scope_action:
+  (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+  !cx ty sb s sc. select_result cx ty r sb (s with scopes := sc) =
+    (FST (select_result cx ty r sb s),
+     SND (select_result cx ty r sb s) with scopes := sc)
+Proof
+  Cases_on `r` >> simp[select_result_def,
+    intcall_args_extend_place_scope_action] >>
+  rpt gen_tac >> simp[lift_option_type_def, bind_def] >>
+  Cases_on `evaluate_type (get_tenv cx) ty` >>
+  simp[return_def, raise_def, lift_sum_def, bind_def] >>
+  Cases_on `evaluate_subscripts x v [sb]` >> simp[return_def, raise_def]
+QED
+
+Theorem intcall_args_select_result_nonlocal:
+  (!id path. r <> PlaceR (MemoryPlace id path)) /\
+  select_result cx ty r sb s = (INL r',t) ==>
+  (!id path. r' <> PlaceR (MemoryPlace id path))
+Proof
+  metis_tac[exprSimPropsTheory.select_result_memory_place]
+QED
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
