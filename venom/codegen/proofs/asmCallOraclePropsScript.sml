@@ -10,22 +10,26 @@ Ancestors
 Theorem asm_consume_call_outcome_eq:
   s.as_outcomes <> [] ==>
   asm_consume_call_outcome rq ro rs stk s =
-    let outcome = FST (take_outcome rq s.as_outcomes);
-        adopted = adopt_outcome rq outcome
-          (s.as_accounts, s.as_transient, s.as_logs);
-        bytes = TAKE rs outcome.co_returnData
-    in AsmOK (asm_next (s with <|
-      as_stack := (if outcome.co_success then 1w else 0w) :: stk;
+    AsmOK (asm_next (s with <|
+      as_stack := (if (FST (take_outcome rq s.as_outcomes)).co_success
+                   then 1w else 0w) :: stk;
       as_outcomes := SND (take_outcome rq s.as_outcomes);
       as_requests := record_request rq s.as_requests;
-      as_accounts := FST adopted;
-      as_transient := FST (SND adopted);
-      as_logs := SND (SND adopted);
+      as_accounts := FST (adopt_outcome rq (FST (take_outcome rq s.as_outcomes))
+        (s.as_accounts, s.as_transient, s.as_logs));
+      as_transient := FST (SND (adopt_outcome rq (FST (take_outcome rq s.as_outcomes))
+        (s.as_accounts, s.as_transient, s.as_logs)));
+      as_logs := SND (SND (adopt_outcome rq (FST (take_outcome rq s.as_outcomes))
+        (s.as_accounts, s.as_transient, s.as_logs)));
       as_pending_deletions :=
-        adopt_outcome_deletions rq outcome s.as_pending_deletions;
-      as_returndata := outcome.co_returnData;
-      as_memory := TAKE ro s.as_memory ++ bytes ++
-                   DROP (ro + LENGTH bytes) s.as_memory |>))
+        adopt_outcome_deletions rq (FST (take_outcome rq s.as_outcomes))
+          s.as_pending_deletions;
+      as_returndata := (FST (take_outcome rq s.as_outcomes)).co_returnData;
+      as_memory := TAKE ro s.as_memory ++
+                   TAKE rs (FST (take_outcome rq s.as_outcomes)).co_returnData ++
+                   DROP (ro + LENGTH
+                     (TAKE rs (FST (take_outcome rq s.as_outcomes)).co_returnData))
+                     s.as_memory |>))
 Proof
   simp[asm_consume_call_outcome_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[]
