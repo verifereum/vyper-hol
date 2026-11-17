@@ -4,12 +4,21 @@ Ancestors
   o1PassContract unitTransformDefs unitShapeDefs lowerDloadRelocationBoundary
   ptrDiscipline finite_map list fcgDefs
 
+Theorem lower_dload_initial_allocations_static:
+  (o1_initial_state_ok s /\ s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s) ==>
+  s.vs_allocas = FEMPTY /\ s.vs_vars = FEMPTY /\ s.vs_memory = [] /\
+  ~s.vs_halted /\ s.vs_fmp = s.vs_initial_fmp
+Proof
+  simp[o1_run_state_ok_def, o1_initial_state_ok_def]
+QED
+
 Theorem lower_dload_initial_allocations:
   o1_run_state_ok s ==>
   s.vs_allocas = FEMPTY /\ s.vs_vars = FEMPTY /\ s.vs_memory = [] /\
   ~s.vs_halted /\ s.vs_fmp = s.vs_initial_fmp
 Proof
-  simp[o1_run_state_ok_def, o1_initial_state_ok_def]
+  simp[o1_run_state_ok_def] >>
+  metis_tac[lower_dload_initial_allocations_static]
 QED
 
 Theorem shape_retpc_operand_boundary:

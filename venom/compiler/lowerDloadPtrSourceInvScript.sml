@@ -35,8 +35,8 @@ Proof
   fs[o1_src_inv_def] >> metis_tac[]
 QED
 
-Theorem o1_src_frame_code_layout_valid:
-  o1_ctx_shape C /\ o1_src_inv D C vs /\ o1_run_state_ok vs /\
+Theorem o1_src_frame_code_layout_valid_static:
+  o1_ctx_shape C /\ o1_src_inv D C vs /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   frame_reachable vs C cs PG G tn f i s ==> code_layout_valid s
 Proof
   strip_tac >>
@@ -50,4 +50,11 @@ Proof
        mp_tac code_data_entry >> simp[]) >>
   drule_all raw_reachable_least >> simp[] >> strip_tac >>
   gvs[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]
+QED
+
+Theorem o1_src_frame_code_layout_valid:
+  o1_ctx_shape C /\ o1_src_inv D C vs /\ o1_run_state_ok vs /\
+  frame_reachable vs C cs PG G tn f i s ==> code_layout_valid s
+Proof
+  simp[o1_run_state_ok_def] >> metis_tac[o1_src_frame_code_layout_valid_static]
 QED

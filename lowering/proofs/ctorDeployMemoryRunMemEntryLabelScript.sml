@@ -80,6 +80,8 @@ Proof
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, ctor_checked_non_internal_return_pc] >>
   simp[cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -103,6 +105,8 @@ Proof
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -135,8 +139,9 @@ Proof
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  irule ctor_checked_internal_shape >> simp[]
+  simp[EVERY_MEM] >> rpt strip_tac
+  >- (irule ctor_checked_internal_shape >> gs[]) >>
+  fs[EVERY_MEM]
 QED
 
 Theorem ctor_checked_deploy_entry_label:

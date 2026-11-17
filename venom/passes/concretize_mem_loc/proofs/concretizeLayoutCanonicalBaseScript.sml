@@ -126,7 +126,7 @@ Proof
 QED
 
 Theorem layout_ordinary_source_facts:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   decoration_at fn inst s g.lop_config ==>
@@ -142,7 +142,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `o1_fn_shape C fn` by (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM inst (fn_insts fn)` by
     (qpat_x_assum `decoration_at _ _ _ _` mp_tac >>
@@ -154,7 +154,7 @@ Proof
 QED
 
 Theorem layout_canonical_ordinary_environment:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
     q n i s j t (INL g) /\ decoration_at fn i s q ==>
@@ -223,7 +223,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -270,7 +270,7 @@ Proof
 QED
 
 Theorem layout_canonical_assign_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -306,7 +306,7 @@ Proof
 QED
 
 Theorem layout_canonical_clean_value_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -352,7 +352,7 @@ Proof
 QED
 
 Theorem layout_canonical_affine_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -405,7 +405,7 @@ Theorem layout_canonical_compare_success:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -474,13 +474,15 @@ Proof
   Cases_on `i.inst_opcode` >> simp[PULL_EXISTS]
 QED
 
-Theorem layout_canonical_ordinary_nonterm_success:
+Theorem layout_canonical_ordinary_nonterm_success_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -496,7 +498,7 @@ Theorem layout_canonical_ordinary_nonterm_success:
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; DALLOCA; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
     (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
@@ -583,7 +585,7 @@ Proof
          `~joint_read_exempt (EL g.lop_cursor (q0::MAP SND path))` by
            (fs[layout_ordinary_trace_def, joint_read_exempt_def]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
-           layout_memory_store_trace_step >>
+           layout_memory_store_trace_step_headroom_static >>
          disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
@@ -597,12 +599,19 @@ Proof
            (qpat_x_assum `inst_wf i` mp_tac >>
             simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
          drule_all layout_bump_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = DALLOCA`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?v. i.inst_outputs = [v]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         `ctx_has_dalloca C ==>
+            ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp` by
+           metis_tac[] >>
+         drule_all layout_dalloca_trace_step_headroom_static >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
-       (irule layout_ordinary_single_output >> rpt conj_tac >>
-        FIRST [first_assum ACCEPT_TAC,
-               disj1_tac >> first_assum ACCEPT_TAC,
-               disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC,
-               disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC]) >>
+       (irule layout_ordinary_single_output >> fs[MEM] >> metis_tac[]) >>
      Cases_on `i.inst_opcode = ASSIGN`
      >- (gvs[] >>
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
@@ -686,7 +695,7 @@ Proof
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
          `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
-           layout_compare_trace_step >>
+           layout_compare_trace_step_static >>
          disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
@@ -786,6 +795,41 @@ Proof
   disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_ordinary_nonterm_success:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; DALLOCA; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_ordinary_nonterm_success_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

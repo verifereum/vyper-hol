@@ -20,6 +20,25 @@ Proof
   metis_tac[ld_global_bounds]
 QED
 
+(* Both ends of a selected allocation lie below their side's frontier. *)
+Theorem ld_alloc_frontiers:
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames /\ FLOOKUP A k = SOME (b,c,n) ==>
+  b+n <= (HD frames).lf_src.vs_alloca_next /\
+  c+n <= (HD frames).lf_tgt.vs_alloca_next
+Proof
+  strip_tac >> drule_all ld_slot_source_site >> strip_tac >>
+  `ld_maps A (EL j frames)` by gvs[EVERY_EL] >>
+  `FLOOKUP (EL j frames).lf_src.vs_allocas aid = SOME (b,n)` by
+    gvs[ld_sites_def] >>
+  `FLOOKUP (EL j frames).lf_tgt.vs_allocas aid = SOME (c,n)` by
+    (gvs[ld_maps_def] >>
+     qpat_x_assum `!aid b n. FLOOKUP _ aid = SOME (b,n) ==> ?c. _ /\ _` drule >> strip_tac >> gvs[]) >>
+  `(j,aid,c,n) IN ld_sites frames F` by
+    (simp[ld_sites_def] >> metis_tac[]) >>
+  imp_res_tac ld_global_bounds >> fs[]
+QED
+
 Theorem ld_alloc_separate:
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
   EVERY (ld_maps A) frames /\

@@ -21,7 +21,9 @@ Theorem ld_sync_ordinary_witness:
     lf_tv := (step_taint inst s ss tn).t_var|>) /\
   ld_memory lo A (step_taint inst s ss tn) ss ts /\
   ld_nonghost (step_taint inst s ss tn) ss ts /\
-  step_prov PG G inst ss = ld_erase A o_f H' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory /\
   (!a. a IN FRANGE H' ==> a IN FDOM A) /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -115,7 +117,9 @@ Theorem ld_sync_ordinary_coverage:
     lf_tv := (step_taint inst s ss tn).t_var|>) /\
   ld_memory lo A (step_taint inst s ss tn) ss ts /\
   ld_nonghost (step_taint inst s ss tn) ss ts /\
-  step_prov PG G inst ss = ld_erase A o_f H' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory /\
   (!a. a IN FRANGE H' ==> a IN FDOM A) /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -151,7 +155,9 @@ Theorem ld_sync_ordinary_owned_coverage:
     lf_tv := (step_taint inst s ss tn).t_var|>) /\
   ld_memory lo A (step_taint inst s ss tn) ss ts /\
   ld_nonghost (step_taint inst s ss tn) ss ts /\
-  step_prov PG G inst ss = ld_erase A o_f H' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory /\
   (!a. a IN FRANGE H' ==> a IN FDOM A) /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\

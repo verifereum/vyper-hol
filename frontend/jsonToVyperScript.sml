@@ -171,16 +171,18 @@ End
    convert an alias or dotted alias path to a source_id. *)
 
 (* Transform a single storage layout key.
-   (NONE, "counter") -> (NONE, "counter")  -- main module
-   (SOME "lib1", "counter") -> (SOME 0, "counter")  -- if import_map has ("lib1", 0) *)
+   (NONE, "counter") -> SOME (NONE, "counter")  -- main module
+   (SOME "lib1", "counter") -> SOME (SOME 0, "counter")  -- if import_map has ("lib1", 0)
+   An alias path the map doesn't know gives NONE: the entry is dropped, so
+   the variable has no slot, rather than taking a main-module key. *)
 Definition transform_layout_key_def:
   transform_layout_key import_map (alias_opt, var_name) =
     case alias_opt of
-    | NONE => (NONE, var_name)  (* Main module variable *)
+    | NONE => SOME (NONE, var_name)  (* Main module variable *)
     | SOME alias =>
         case ALOOKUP import_map alias of
-        | NONE => (NONE, var_name)  (* Unknown alias, treat as main module *)
-        | SOME src_id => (SOME src_id, var_name)
+        | NONE => NONE
+        | SOME src_id => SOME (SOME src_id, var_name)
 End
 
 
@@ -188,8 +190,10 @@ End
 Definition transform_storage_layout_def:
   transform_storage_layout import_map [] = [] ∧
   transform_storage_layout import_map ((key, slot) :: rest) =
-    (transform_layout_key import_map key, slot) ::
-    transform_storage_layout import_map rest
+    let rest' = transform_storage_layout import_map rest in
+    case transform_layout_key import_map key of
+    | SOME key' => (key', slot) :: rest'
+    | NONE => rest'
 End
 
 (* Extract semantic storage and transient-storage layouts from the compiler
@@ -766,7 +770,9 @@ Definition all_decl_types_valid_def:
      imported_decl_types_valid nominal_index all_import_maps constants origins main_src_id imports)
 End
 
-(* Canonical top-level value types are computed before expression bodies. *)
+(* Canonical top-level value types are computed before expression bodies.
+   A struct's field types are recorded alongside, keyed by the
+   struct_field_key "S.f", which no variable name can take. *)
 Definition collect_toplevel_types_def:
   collect_toplevel_types nominal_index all_import_maps ctx [] = [] ∧
   collect_toplevel_types nominal_index all_import_maps ctx
@@ -774,6 +780,11 @@ Definition collect_toplevel_types_def:
     (((expr_current_nsid ctx, name),
        canonical_decl_type nominal_index all_import_maps ctx inferred ann) ::
      collect_toplevel_types nominal_index all_import_maps ctx rest) ∧
+  collect_toplevel_types nominal_index all_import_maps ctx
+      (JTL_StructDef sname fields :: rest) =
+    MAP (λ(fname, ty). ((expr_current_nsid ctx, struct_field_key sname fname), ty))
+      (MAP (translate_arg nominal_index all_import_maps ctx) fields) ++
+    collect_toplevel_types nominal_index all_import_maps ctx rest ∧
   collect_toplevel_types nominal_index all_import_maps ctx (_ :: rest) =
     collect_toplevel_types nominal_index all_import_maps ctx rest
 End
@@ -1107,6 +1118,112 @@ Definition imported_override_declarations_valid_def:
      imported_override_declarations_valid rest)
 End
 
+(* ===== Constant declaration order =====
+   Vyper folds a module's constants in dependency order, so a constant may
+   refer to one declared after it; the checker and deployment fold them in
+   declaration order. Constants are emitted in dependency order, in the
+   positions constants already take, so no other declaration moves. *)
+
+Definition json_expr_names_def:
+  (json_expr_names (JE_Name id _ _ _) = [id]) ∧
+  (json_expr_names (JE_Attribute e _ _ _ _ _ _) = json_expr_names e) ∧
+  (json_expr_names (JE_Subscript e idx _) =
+    json_expr_names e ++ json_expr_names idx) ∧
+  (json_expr_names (JE_NamedExpr lhs rhs) =
+    json_expr_names lhs ++ json_expr_names rhs) ∧
+  (json_expr_names (JE_BinOp l _ r _) = json_expr_names l ++ json_expr_names r) ∧
+  (json_expr_names (JE_Compare l _ r) = json_expr_names l ++ json_expr_names r) ∧
+  (json_expr_names (JE_BoolOp _ es) = json_exprs_names es) ∧
+  (json_expr_names (JE_UnaryOp _ e _) = json_expr_names e) ∧
+  (json_expr_names (JE_IfExp test yes no _) =
+    json_expr_names test ++ json_expr_names yes ++ json_expr_names no) ∧
+  (json_expr_names (JE_Tuple es _) = json_exprs_names es) ∧
+  (json_expr_names (JE_List es _) = json_exprs_names es) ∧
+  (json_expr_names (JE_Call func args kws _ _) =
+    json_expr_names func ++ json_exprs_names args ++ json_keywords_names kws) ∧
+  (json_expr_names (JE_ExtCall _ _ _ _ target args kws) =
+    json_expr_names target ++ json_exprs_names args ++ json_keywords_names kws) ∧
+  (json_expr_names (JE_StaticCall _ _ _ _ target args kws) =
+    json_expr_names target ++ json_exprs_names args ++ json_keywords_names kws) ∧
+  (json_expr_names _ = []) ∧
+  (json_exprs_names [] = []) ∧
+  (json_exprs_names (e :: es) = json_expr_names e ++ json_exprs_names es) ∧
+  (json_keywords_names [] = []) ∧
+  (json_keywords_names (JKeyword _ e :: kws) =
+    json_expr_names e ++ json_keywords_names kws)
+End
+
+Definition is_constant_decl_def:
+  is_constant_decl (JTL_VariableDecl _ _ _ _ _ _ _ (SOME _)) = T ∧
+  is_constant_decl _ = F
+End
+
+Definition constant_decls_def:
+  constant_decls [] = [] ∧
+  constant_decls (t :: ts) =
+    if is_constant_decl t then t :: constant_decls ts else constant_decls ts
+End
+
+Definition constant_decl_name_def:
+  constant_decl_name (JTL_VariableDecl name _ _ _ _ _ _ _) = name ∧
+  constant_decl_name _ = ""
+End
+
+Definition constant_decl_names_def:
+  constant_decl_names [] = [] ∧
+  constant_decl_names (t :: ts) = constant_decl_name t :: constant_decl_names ts
+End
+
+Definition constant_decl_deps_def:
+  constant_decl_deps (JTL_VariableDecl _ _ _ _ _ _ _ (SOME init)) =
+    json_expr_names init ∧
+  constant_decl_deps _ = []
+End
+
+(* Every name the initializer reads that is one of the module's constants
+   has been emitted. *)
+Definition names_ready_def:
+  names_ready consts emitted [] = T ∧
+  names_ready consts emitted ((n:string) :: ns) =
+    ((¬MEM n consts ∨ MEM n emitted) ∧ names_ready consts emitted ns)
+End
+
+Definition ready_constants_def:
+  ready_constants consts emitted [] = ([], []) ∧
+  ready_constants consts emitted (t :: ts) =
+    let (ready, waiting) = ready_constants consts emitted ts in
+    if names_ready consts emitted (constant_decl_deps t)
+    then (t :: ready, waiting) else (ready, t :: waiting)
+End
+
+(* Each round emits every constant whose references are emitted; a round
+   that emits nothing (a cycle, which Vyper rejects) keeps source order. *)
+Definition sort_constants_def:
+  sort_constants 0 consts emitted pending = pending ∧
+  sort_constants (SUC fuel) consts emitted pending =
+    let (ready, waiting) = ready_constants consts emitted pending in
+    if ready = [] then pending
+    else ready ++ sort_constants fuel consts
+           (emitted ++ constant_decl_names ready) waiting
+End
+
+Definition refill_constants_def:
+  refill_constants [] cs = [] ∧
+  refill_constants (t :: ts) cs =
+    if is_constant_decl t then
+      (case cs of
+       | c :: cs' => c :: refill_constants ts cs'
+       | [] => t :: refill_constants ts [])
+    else t :: refill_constants ts cs
+End
+
+Definition order_module_constants_def:
+  order_module_constants tops =
+    let consts = constant_decls tops in
+    refill_constants tops
+      (sort_constants (LENGTH consts) (constant_decl_names consts) [] consts)
+End
+
 Definition translate_module_def:
   translate_module nominal_index all_import_maps all_toplevel_types override_map
       constants origins (JModule main_src_id nr_default toplevels) =
@@ -1115,7 +1232,7 @@ Definition translate_module_def:
     let type_ctx = expr_type_ctx expr_ctx in
     filter_some
       (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
-        toplevels)
+        (order_module_constants toplevels))
 End
 
 Definition is_function_toplevel_def:
@@ -1138,7 +1255,7 @@ Definition translate_imported_module_def:
       (MAP (λtop.
         if declaration_only ∧ is_function_toplevel top then NONE
         else translate_toplevel nominal_index all_import_maps expr_ctx type_ctx
-          nr_default top) body))
+          nr_default top) (order_module_constants body)))
 End
 
 Definition translate_imported_modules_def:
@@ -1252,12 +1369,15 @@ Definition initialized_module_paths_def:
       (initialized_chains body))
 End
 
-(* The main module's aliases, then every initialized module's alias path. *)
+(* Every initialized module's alias path, then the main module's aliases.
+   Vyper keys a layout by the initialized module's own alias
+   (data_positions.py, generate_layout_export), so `initializes: lib1.lib2`
+   gives key "lib2" even beside the main module's `import lib3 as lib2`. *)
 Definition layout_import_map_def:
   layout_import_map all_import_maps imports import_map toplevels =
-    import_map ++
     initialized_module_paths (LENGTH imports + 1) all_import_maps imports
-      import_map toplevels ""
+      import_map toplevels "" ++
+    import_map
 End
 
 (* Translate annotated AST, returning:

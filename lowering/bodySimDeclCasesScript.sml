@@ -34,7 +34,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimExprCases bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
+  list finite_map bodySim bodySimExprCases bodySimStmtFacts allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
@@ -355,7 +355,7 @@ Proof
   `lookup_scopes id es.scopes = NONE` by
     (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
      gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
-     res_tac >> gvs[FLOOKUP_DEF]) >>
+     res_tac >> FIRST [gvs[FLOOKUP_DEF]]) >>
   `type_memory_bytes cenv typ = type_memory_size tyv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv typ < 2 ** 64` by

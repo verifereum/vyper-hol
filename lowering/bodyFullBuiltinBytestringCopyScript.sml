@@ -270,6 +270,7 @@ Theorem bytestring_external_output_full_resources:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory /\
       (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
     mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+    (!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     ghost_kept_at lo cenv es sa G tn s HG tm /\
     locals_kept cenv es es s t /\ pure_frame cenv func es sa s t /\
@@ -431,6 +432,10 @@ Proof
        (qpat_assum `tm.t_mem SUBSET tn2.t_mem`
          (qspec_then `i` mp_tac o REWRITE_RULE[SUBSET_DEF]) >> simp[]) >>
      qpat_assum `!i. i IN tn2.t_mem <=> _` (qspec_then `i` mp_tac) >>
+     simp[] >> decide_tac) >>
+  `!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!i. i < s.vs_alloca_next /\ _ ==> _` irule >>
      simp[] >> decide_tac) >>
   `!name b len. local_region cenv es.scopes s name b len ==>
       local_region cenv es.scopes v name b len` by

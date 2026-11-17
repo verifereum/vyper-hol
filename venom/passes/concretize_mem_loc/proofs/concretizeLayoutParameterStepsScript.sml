@@ -23,17 +23,21 @@ QED
 Theorem parameter_step_resolution:
   inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [out] /\
-  PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv ==>
+  LENGTH PG = LENGTH rp /\
+  (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)) /\ resolution ct rp om rv ==>
   resolution ct rp (origin_step PG om inst post)
     (origin_set rv [out] (resolved_parameter_entry rp (w2n idx)))
 Proof
   strip_tac >> Cases_on `w2n idx < LENGTH rp`
-  >- (simp[origin_step_def, origin_out_def, EL_MAP] >>
-      irule resolution_origin_set >> simp[] >>
-      Cases_on `EL (w2n idx) rp` >> simp[] >>
-      PairCases_on `x` >> simp[resolve_tag_def]) >>
-  simp[origin_step_def, origin_out_def] >>
-  irule resolution_origin_set >> simp[resolve_tag_def]
+  >- (simp[origin_step_def, origin_out_def] >>
+      irule resolution_origin_set >> simp[resolved_parameter_entry_def] >>
+      Cases_on `EL (w2n idx) rp` >> simp[]
+      >- (Cases_on `EL (w2n idx) PG` >>
+          simp[resolve_tag_def, unresolved_tag_def]) >>
+      first_x_assum drule_all >> strip_tac >>
+      simp[resolve_tag_def]) >>
+  simp[origin_step_def, origin_out_def, resolved_parameter_entry_def] >>
+  irule resolution_origin_set >> simp[]
 QED
 
 Theorem parameter_root_write:
@@ -62,7 +66,8 @@ Theorem resolved_parameter_step:
   inst.inst_outputs = [out] /\
   parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
     s.vs_params t.vs_params /\
-  PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv /\
+  LENGTH PG = LENGTH rp /\
+  (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)) /\ resolution ct rp om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
   relocation_taint_le R tn un /\
@@ -127,5 +132,7 @@ Proof
   strip_tac >>
   qpat_assum `resolution caller_ct caller_rp caller_om caller_rv`
     (mp_then Any assume_tac resolution_arguments_erasure) >>
-  irule resolved_parameter_step >> simp[]
+  irule resolved_parameter_step >> simp[] >>
+  rpt strip_tac >> irule resolution_arguments_erasure >> simp[] >>
+  metis_tac[]
 QED

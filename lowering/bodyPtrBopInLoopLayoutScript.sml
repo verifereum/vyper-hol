@@ -116,7 +116,7 @@ Proof
     [emit_op_def, emit_inst_def, comp_bind_def, comp_return_def,
      fresh_var_def, fresh_id_def, emit_def])) >>
   CONV_TAC (LAND_CONV (SIMP_CONV (srw_ss()) [new_block_def,
-    comp_ignore_bind_def, comp_bind_def, comp_return_def])) >> simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC]
+    comp_ignore_bind_def, comp_bind_def, comp_return_def])) >> FIRST [simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC]]
 QED
 
 (* The dynamic header owns the load and the three capacity-check instructions. *)

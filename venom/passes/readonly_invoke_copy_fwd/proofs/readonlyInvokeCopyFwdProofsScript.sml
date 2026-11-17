@@ -13,7 +13,7 @@ Ancestors
   readonlyInvokeCopyFwdHistoryCopyAbort readonlyInvokeCopyFwdHistoryInheritedAccess
   readonlyInvokeCopyFwdHistorySuspension readonlyInvokeCopyFwdOpaqueStep
   readonlyInvokeCopyFwdOperationalEntry readonlyInvokeCopyFwdOrdinaryPremises
-  readonlyInvokeCopyFwdSteps readonlyInvokeCopyFwdStepsDelegate
+  readonlyInvokeCopyFwdSteps
   readonlyInvokeCopyFwdStepsErrors readonlyInvokeCopyFwdStepsHash
   readonlyInvokeCopyFwdStepsMemoryAll readonlyInvokeCopyFwdStepsSelfdestruct
   readonlyInvokeCopyFwdStepsValues
@@ -24,7 +24,7 @@ Ancestors
   venomState stateEquiv While list rich_list finite_map pred_set arithmetic
   pair option words ptrSafeRun ptrOkCheck memSafeRun unitMemInv
   taintAgree contextCodegenRel contextCodegenRelProps calleeTransport
-  pointerConfinedDefs
+  pointerConfinedDefs rawReachableFmp ctxLookupAgree ctxLookupAgreeHelpers
 
 (* Structural transformation facts are exported by readonlyInvokeCopyFwdPlan. *)
 (* ==========================================================================
@@ -725,15 +725,29 @@ Proof
         `"main"`, `ricf_witness_main`, `"main"`]
        ptr_safe_ptr_discipline) >>
      simp[ricf_witness_ptr_static]) >>
+  `!fn inst s.
+     raw_reachable (init_venom_state "main") ricf_witness_ctx fn inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (`EVERY pre_fmp_ops ricf_witness_ctx.ctx_functions /\
+      ~ctx_has_dalloca ricf_witness_ctx` by EVAL_TAC >>
+     rpt gen_tac >> strip_tac >>
+     drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >>
+     `inst.inst_opcode <> DALLOCA` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
+          (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+        imp_res_tac EVERY_active_inst >> gvs[]) >>
+     simp[dalloca_no_wrap_def, init_venom_state_def]) >>
   `mem_inv raw_mem_ok ricf_witness_ctx (init_venom_state "main")` by
-    (rewrite_tac[GSYM raw_unit_memory_ok_mem_inv] >>
-     qx_choose_then `J` strip_assume_tac ricf_witness_frontier_package >>
-     match_mp_tac (Q.SPECL
-       [`ricf_witness_ctx`, `init_venom_state "main"`, `"main"`,
-        `ricf_witness_main`, `"main"`, `J`]
-       mem_safe_raw_unit_memory_ok) >>
-     simp[ricf_witness_ptr_static] >>
-     qpat_x_assum `!f inst s. J _ _ _ _ ==> _` ACCEPT_TAC) >>
+    (simp[raw_unit_memory_ok_mem_inv] >> conj_tac
+     >- (qx_choose_then `J` strip_assume_tac ricf_witness_frontier_package >>
+         match_mp_tac (Q.SPECL
+           [`ricf_witness_ctx`, `init_venom_state "main"`, `"main"`,
+            `ricf_witness_main`, `"main"`, `J`]
+           mem_safe_raw_unit_memory_ok) >>
+         simp[ricf_witness_ptr_static] >>
+         conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qexistsl_tac
     [`<| d_stor := K (K UNIV); d_trans := K (K UNIV);
          d_imm := K UNIV; d_ret := K UNIV |>`, `0`,

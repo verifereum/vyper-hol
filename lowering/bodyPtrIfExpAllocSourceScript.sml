@@ -55,6 +55,16 @@ Proof
   `~expr_has_effect e ==> pure_frame cenv fn es sa s0 q` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >>
      gvs[vv_post_def]) >>
+  `?v. read_result cx raw es' = (INL v,es')` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def] >> strip_tac >>
+     Cases_on `vv` >> gvs[vv_holds_def] >>
+     BasicProvers.every_case_tac >>
+     gvs[storage_holds_def, immutable_holds_def]) >>
+  `vv_place_ptr cenv cx es' q raw vv` by
+    (irule vv_place_ptr_region_frame >> conj_tac >- metis_tac[] >>
+     qexists_tac `s` >>
+     gvs[vv_post_def]) >>
   gvs[vv_post_def] >>
   conj_tac
   >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>

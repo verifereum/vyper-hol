@@ -301,7 +301,7 @@ Proof
     qpat_x_assum `MEM i (fn_insts f)` mp_tac >>
     qpat_x_assum `MEM f ctx.ctx_functions` mp_tac >>
     rpt (pop_assum kall_tac) >>
-    simp[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[])) >>
+    simp[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[])) >>
   strip_tac >>
   asm_x "alloc_endpoint" kall_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qdata _` >>

@@ -27,7 +27,6 @@ QED
 Theorem ptr_source_tagged_call_traverse[local]:
   !n vs C h a tokens registry births PT TG saved owner aid v.
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack /\ FLOOKUP TG v = SOME (owner,aid) /\
   owner <> HD tokens /\ (!k. k < n ==> owner <> EL (SUC k) tokens) ==>
   ?u. MEM (Var u) (EL n a.po_stack).cf_inst.inst_operands /\
@@ -55,7 +54,6 @@ QED
 
 Theorem ptr_source_tagged_owner_call_operand:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack /\ EL (SUC n) tokens = owner /\
   FLOOKUP TG v = SOME (owner,aid) /\ fn_inst_wf (EL n a.po_stack).cf_fn ==>
   ?u. MEM (Var u) (EL n a.po_stack).cf_inst.inst_operands /\

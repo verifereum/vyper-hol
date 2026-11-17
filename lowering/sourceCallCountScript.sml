@@ -5525,9 +5525,30 @@ Proof
           gen_tac >> conj_tac >- REPLAY_INTERNAL_SUPPLIER_TAC >>
           conj_tac >- REPLAY_INTERNAL_SUPPLIER_TAC >>
           REPLAY_INTERNAL_SUPPLIER_TAC) >>
-        gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+        gen_tac >> conj_tac
+        >- (REPLAY_DROP_IHS >> BETA_TAC >>
+            MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+            >- REPLAY_SUFFIX_TAC >>
+            rpt gen_tac >> strip_tac >> BETA_TAC >>
+            simp_tac bool_ss [LET_THM, vyperStateTheory.ignore_bind_def] >>
+            MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+            >- REPLAY_SUFFIX_TAC >>
+            rpt gen_tac >> strip_tac >> BETA_TAC >>
+            MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+            >- REPLAY_SUFFIX_TAC >>
+            rpt gen_tac >> strip_tac >> REPLAY_SUFFIX_TAC) >>
         conj_tac >- REPLAY_TRACE_TAC >>
-        REPLAY_SAFETY_TAC) >>
+        REPLAY_DROP_IHS >> BETA_TAC >>
+        MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+        >- REPLAY_SAFETY_TAC >>
+        rpt gen_tac >> strip_tac >> BETA_TAC >>
+        simp_tac bool_ss [LET_THM, vyperStateTheory.ignore_bind_def] >>
+        MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+        >- REPLAY_SAFETY_TAC >>
+        rpt gen_tac >> strip_tac >> BETA_TAC >>
+        MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+        >- REPLAY_SAFETY_TAC >>
+        rpt gen_tac >> strip_tac >> REPLAY_SAFETY_TAC) >>
       gen_tac >> conj_tac
       >- (REPLAY_DROP_IHS >> BETA_TAC >>
           MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
