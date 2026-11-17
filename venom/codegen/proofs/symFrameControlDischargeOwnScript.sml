@@ -1,7 +1,7 @@
 (* Remaining unconditional control exports, specialized from shared kernels. *)
 Theory symFrameControlDischargeOwn
 Ancestors
-  symFrameControlOwn symControlTerminalOwn symControlRetOwn
+  symFrameControlOwn symControlTerminalOwn symControlRetOwn symControlTerminalDischargeOwn
   symControlForwardContinuationOwn asmSymModeOwn asmSymBridge
   codegenSymRel codegenSymOwnRel spillWordBounds
 
