@@ -27,7 +27,7 @@ Theorem sha_fixed_abort_ptr_at:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -94,7 +94,7 @@ Proof
      qexistsl_tac [`G2`, `tn2`] >> gvs[Abbr `a`]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
     (drule_all hash_sha256_alloc_tail_nonterminators >> simp[]) >>
-  `?u. run_inst_seq (emitted_insts sm sb) t = Abort Revert_abort u /\
+  `?u. run_inst_seq (emitted_insts sm sb) t = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u /\
        t' = u with vs_inst_idx := s.vs_inst_idx+2` by
     (qpat_x_assum `run_inst_seq (emitted_insts sm sb) a = _` mp_tac >>
      simp[Abbr `a`, run_inst_seq_inst_idx] >>
