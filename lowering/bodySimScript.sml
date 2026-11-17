@@ -108,7 +108,6 @@ Definition body_inv_def:
     cenv.ce_func_info =
       build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_func_return_type = build_func_return_type tops /\
-    cenv.ce_func_defaults = build_func_defaults tops /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\
