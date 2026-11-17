@@ -12,6 +12,7 @@ Ancestors
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
+  bodyFullMemoryCopy context
 
 val _ = Parse.hide "body";
 
@@ -83,6 +84,55 @@ Proof
   simp[] >> strip_tac >>
   `~(w2n dst <= i /\ i < w2n dst + type_memory_size entry.type)` by decide_tac >>
   metis_tac[])
+QED
+
+(* The positive MCOPY emitted by tuple staging selects one joint endpoint. *)
+Theorem body_assign_tuple_stage_mcopy_path:
+  emit_void MCOPY [Var xd; Var xs; Lit (n2w n)] sa = ((),sb) /\
+  0 < n /\ type_memory_size (TupleTV tvs) = n /\
+  val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem) /\
+  ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
+  w2n sw + n < dimword (:256) /\ w2n dw + n < dimword (:256) /\
+  w2n sw + n <= s.vs_alloca_next /\ w2n dw + n <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n dw) t.vs_memory /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n dw) mem) /\
+    typed_copy_state_frame sa (w2n dw) n s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw+n) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `compile_copy_memory (Var xd) (Var xs) n sa = ((),sb)` by
+    (Cases_on `n` >> gvs[compile_copy_memory_def]) >>
+  Q.SUBGOAL_THEN `n = 0 \/ w2n sw + n <= s.vs_alloca_next` assume_tac
+  >- simp[] >>
+  Q.SUBGOAL_THEN `n = 0 \/ w2n dw + n <= s.vs_alloca_next` assume_tac
+  >- simp[] >>
+  drule_all body_full_memory_copy_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
+  simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
 (* A source that is a widened aggregate call. *)
