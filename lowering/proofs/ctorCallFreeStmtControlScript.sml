@@ -1,7 +1,7 @@
 (* Structured control opcode boundaries, parameterized by body preservation. *)
 Theory ctorCallFreeStmtControl
 Ancestors
-  list pair stmtLowering emitHelper context exprLowering venomInst loweringShapeDefs
+  list pair stmtLowering emitHelper context compileEnv exprLowering venomInst loweringShapeDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks ctorCallFreeStmtStorage
   supportedExprTraverse supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
@@ -22,24 +22,51 @@ Proof
   gen_tac >> IF_CASES_TAC >> simp[every_state_insts_return, opcode_every_emit_inst]
 QED
 
+Theorem every_state_insts_declare_local_bind[local]:
+  (!ce' st. ce'.ce_func_defaults = ce.ce_func_defaults ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce' st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (comp_bind (declare_local ce id ty) f st)))
+Proof
+  strip_tac >> Cases_on `ce.ce_alloca_locals` >>
+  simp[declare_local_def, comp_bind_def, comp_return_def, fresh_var_def] >>
+  rpt strip_tac >> first_x_assum irule >> fs[state_insts_def, all_blocks_def]
+QED
+
 Theorem opcode_every_stmt_if:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !cond b1 b2.
-  (!ce lc ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce lc ty st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmts ce lc ty b1 st)))) /\
-  (!ce lc ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce lc ty st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmts ce lc ty b2 st)))) ==>
   !ce lc ty.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (If cond b1 b2) /\
   ~supported_stmt_expr_exists expr_shape_root (If cond b1 b2) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -51,14 +78,16 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+  rpt (FIRST [ho_match_mp_tac every_state_insts_declare_local_bind >>
+      gen_tac >> gen_tac >> strip_tac >> qid_spec_tac `st`,
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[every_state_insts_return, every_state_insts_get,
       every_state_insts_fresh_label, every_state_insts_new_block,
       opcode_every_emit_inst, (UNDISCH opcode_every_jmp_if_not_terminated)]),
     qid_spec_tac `st` >> ho_match_mp_tac every_state_insts_lower_value >>
-      simp[(UNDISCH opcode_every_unwrap_value)]])
+      simp[(UNDISCH opcode_every_unwrap_value)]]) >> metis_tac[]
 QED
 
 Theorem opcode_every_stmt_for_range:
@@ -66,16 +95,26 @@ Theorem opcode_every_stmt_for_range:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !id fty start_e end_e bound body.
-  (!ce lc ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce lc ty st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmts ce lc ty body st)))) ==>
   !ce lc ty.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (For id fty (Range start_e end_e) bound body) /\
   ~supported_stmt_expr_exists expr_shape_root (For id fty (Range start_e end_e) bound body) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -86,8 +125,15 @@ Proof
   strip_tac >>
   strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[supported_stmt_expr_exists_def, supported_iterator_exists_def] >> strip_tac >>
+  `!ty e st. ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_expr ce ty e st)))`
+    by metis_tac[] >>
   simp[Once compile_stmt_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+  rpt (FIRST [ho_match_mp_tac every_state_insts_declare_local_bind >>
+      gen_tac >> gen_tac >> strip_tac >> qid_spec_tac `st`,
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac,
     CHANGED_TAC (simp[every_state_insts_return, every_state_insts_fresh_var,
@@ -108,9 +154,11 @@ Proof
       qmatch_goalsub_rename_tac `literal_CASE lit_end` >>
       Cases_on `lit_end` >> simp[every_state_insts_return, (UNDISCH opcode_every_range_bound_checks)] >>
       qmatch_goalsub_rename_tac `literal_CASE lit_start` >>
-      Cases_on `lit_start` >> simp[every_state_insts_return, (UNDISCH opcode_every_range_bound_checks)]) >>
-  qmatch_goalsub_abbrev_tac `FLOOKUP vars id` >>
-  Cases_on `FLOOKUP vars id` >> simp[opcode_every_emit_void] >>
+      Cases_on `lit_start` >> simp[every_state_insts_return, (UNDISCH opcode_every_range_bound_checks)])
+  >>~- ([`compile_stmts _ _ _ _ _ (* sg *)`],
+         rpt strip_tac >> first_assum irule >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `FLOOKUP vars loop_id` >>
+  Cases_on `FLOOKUP vars loop_id` >> simp[opcode_every_emit_void] >>
   rename1 `SOME loc` >> Cases_on `loc` >> simp[opcode_every_emit_void]
 QED
 
@@ -119,16 +167,26 @@ Theorem opcode_every_stmt_for_array:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !id fty arr bound body.
-  (!ce lc ty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce lc ty st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmts ce lc ty body st)))) ==>
   !ce lc ty.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (For id fty (Array arr) bound body) /\
   ~supported_stmt_expr_exists expr_shape_root (For id fty (Array arr) bound body) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -139,17 +197,26 @@ Proof
   strip_tac >>
   strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[supported_stmt_expr_exists_def, supported_iterator_exists_def] >> strip_tac >>
+  `!ty e st. ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_expr ce ty e st)))`
+    by metis_tac[] >>
   simp[Once compile_stmt_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+  rpt (FIRST [ho_match_mp_tac every_state_insts_declare_local_bind >>
+      gen_tac >> gen_tac >> strip_tac >> qid_spec_tac `st`,
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[every_state_insts_return, every_state_insts_fresh_var,
       every_state_insts_fresh_label, every_state_insts_new_block,
       (UNDISCH opcode_every_declare_local), (UNDISCH opcode_every_emit_local_alloca),
       opcode_every_emit_inst, opcode_every_emit_void, opcode_every_emit_op,
-      (UNDISCH opcode_every_ptr_load), (UNDISCH opcode_every_iter_elem_copy), (UNDISCH opcode_every_jmp_if_not_terminated)])]) >>
-  qmatch_goalsub_abbrev_tac `FLOOKUP vars id` >>
-  Cases_on `FLOOKUP vars id` >> simp[opcode_every_emit_void] >>
+      (UNDISCH opcode_every_ptr_load), (UNDISCH opcode_every_iter_elem_copy), (UNDISCH opcode_every_jmp_if_not_terminated)])])
+  >>~- ([`compile_stmts _ _ _ _ _ (* sg *)`],
+         rpt strip_tac >> first_assum irule >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `FLOOKUP vars loop_id` >>
+  Cases_on `FLOOKUP vars loop_id` >> simp[opcode_every_emit_void] >>
   rename1 `SOME targetloc` >> Cases_on `targetloc` >>
   simp[(UNDISCH opcode_every_iter_elem_copy), opcode_every_emit_void]
 QED
