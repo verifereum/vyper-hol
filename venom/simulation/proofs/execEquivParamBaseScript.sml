@@ -545,9 +545,13 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
+  Cases_on `s2.vs_outcomes = []`
+  >- (simp[lift_result_def, halt_state_def] >>
+      irule vsr_halted_R_term >>
+      metis_tac[vsr_set_returndata_R_term]) >>
   Cases_on `(FST (take_outcome
     (venom_call_request s2 addr value ao as_ is_static with cr_gas := SOME (w2n gas)) s2.vs_outcomes)).co_success` >>
-  simp[] >> ext_call_result_tac ()
+  simp[lift_result_def] >> ext_call_result_tac ()
 QED
 
 (* Original concrete-call proof retained:
@@ -590,10 +594,14 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def, lift_result_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_delegatecall_def, lift_result_def] >>
+  Cases_on `s2.vs_outcomes = []`
+  >- (simp[lift_result_def, halt_state_def] >>
+      irule vsr_halted_R_term >>
+      metis_tac[vsr_set_returndata_R_term]) >>
   Cases_on `(FST (take_outcome
     (venom_call_request s2 addr 0w ao as_ F with
        <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>) s2.vs_outcomes)).co_success` >>
-  simp[] >> ext_call_result_tac ()
+  simp[lift_result_def] >> ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_create:
@@ -614,6 +622,10 @@ Proof
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_create_def, lift_result_def] >>
   Cases_on `w2n sz > 2 * max_code_size`
+  >- (simp[lift_result_def, halt_state_def] >>
+      irule vsr_halted_R_term >>
+      metis_tac[vsr_set_returndata_R_term]) >>
+  Cases_on `s2.vs_outcomes = []`
   >- (simp[lift_result_def, halt_state_def] >>
       irule vsr_halted_R_term >>
       metis_tac[vsr_set_returndata_R_term]) >>
