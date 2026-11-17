@@ -18,7 +18,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringCalldataCorrect callPremiseDispatch sourceCallCount
+  loweringCalldataCorrect callPremiseDispatch
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout asmOptimizer codegenEncodingWf
@@ -908,17 +908,6 @@ QED
 
 (* ADMISSION: transport from the optimized code's transaction back to tx,
    for programs that do not read their own code.  Waits for its proof. *)
-Theorem source_calls_within_code_update:
-  ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
-  ~program_reads_self_code tops ==>
-  (source_calls_within n am (tx with code := c) os gobs <=>
-   source_calls_within n am tx os gobs)
-Proof
-  cheat
-QED
-
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
 Theorem call_storage_ok_code_update:
   ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
   ~program_reads_self_code tops ==>
@@ -1099,8 +1088,7 @@ Theorem vyper_call_correct_at_marks:
     supported_program tops /\
     source_typing_ok tops am txp /\
     call_state_rel tops (assemble prog') am tx es /\
-    (!obs. source_calls_within (2 ** 64) am txp
-             (MAP SND (call_trace es)) obs) /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     resolve_o1_policy policy = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -1251,8 +1239,7 @@ Theorem call_pipeline_gas_link:
     supported_program tops /\
     source_typing_ok tops am txp /\
     call_state_rel tops (assemble prog') am tx es /\
-    (!obs. source_calls_within (2 ** 64) am txp
-             (MAP SND (call_trace es)) obs) /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     resolve_o1_policy policy = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -1315,8 +1302,7 @@ Theorem vyper_call_correct_from_gas_link:
     supported_program tops /\
     source_typing_ok tops am txp /\
     call_state_rel tops (assemble prog') am tx es /\
-    (!obs. source_calls_within (2 ** 64) am txp
-             (MAP SND (call_trace es)) obs) /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     resolve_o1_policy policy = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -1386,8 +1372,7 @@ Theorem vyper_call_correct_identity:
     call_state_rel tops runtime_bc am tx es /\
     dispatched_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    (!obs. source_calls_within (2 ** 64) am tx
-       (MAP SND (call_trace es)) obs)
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1442,8 +1427,7 @@ Theorem vyper_call_correct_asm_opt:
     call_state_rel tops runtime_bc am tx es /\
     dispatched_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    (!obs. source_calls_within (2 ** 64) am tx
-       (MAP SND (call_trace es)) obs)
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1466,8 +1450,7 @@ Theorem vyper_call_correct_dispatched:
     call_state_rel tops runtime_bc am tx es /\
     dispatched_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    (!obs. source_calls_within (2 ** 64) am tx
-       (MAP SND (call_trace es)) obs)
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
