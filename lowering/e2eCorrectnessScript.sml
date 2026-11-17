@@ -1617,16 +1617,6 @@ Proof
   drule_all vyper_call_reverts_asm_opt >> simp[]
 QED
 
-(* The source call bound for the call the calldata dispatches to. *)
-Definition calldata_calls_within_def:
-  calldata_calls_within tops am tx es <=>
-    !f vals obs.
-      calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-      source_calls_within (2 ** 64) am
-        (tx with <| function_name := f; args := vals |>)
-        (MAP SND (call_trace es)) obs
-End
-
 (* What the call does for the calldata tx carries: revert with empty
    returndata when it dispatches to nothing, else the source result of
    the external call it dispatches to. *)
@@ -1655,7 +1645,7 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    calldata_calls_within tops am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     (!f vals.
        calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
        ?mut args dflts ret body.

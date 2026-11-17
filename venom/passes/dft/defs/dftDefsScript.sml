@@ -173,9 +173,11 @@ End
 
 (* DFT's own abort classes, for which instructions it may reorder: an
    ASSERT reverts, ASSERT_UNREACHABLE and RETURNDATACOPY halt
-   exceptionally, an INVOKE may end any way, and nothing else aborts in the
-   non-static frames DFT's output runs in.  Unlike opcode_fail_class, the
-   state writes a static frame aborts (SSTORE, LOG, CALL, ...) are none. *)
+   exceptionally, and an INVOKE may end any way.  Unlike opcode_fail_class,
+   the state writes a static frame aborts (SSTORE, LOG, CALL, ...) and the
+   calls that abort when no outcome is left are none: those aborts are
+   ExHalt, and an output run may end any way where its input run halted
+   exceptionally (dead_result_rel). *)
 Definition dft_abort_kind_def:
   dft_abort_kind ASSERT = CanRevert /\
   dft_abort_kind ASSERT_UNREACHABLE = CanExHalt /\

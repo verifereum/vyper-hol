@@ -47,7 +47,7 @@ End
 
 (* All recorded base Step events in the five rules have an actual OK
  * result. Static/size aborts have no advancing Step event and no debit.
- * Empty-oracle CALL/CREATE still return OK and therefore debit one.
+ * An empty-oracle CALL/CREATE aborts, so each debit takes one outcome.
  *)
 Definition lower_event_consumes_def:
   (lower_event_consumes (BudgetStep n p i f r q) <=>

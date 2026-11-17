@@ -24,12 +24,14 @@ End
 val () = cv_auto_trans call_outcome_request_def;
 
 (* Taking an outcome for a request: the request is recorded, and a
-   successful non-static outcome's accounts must be well typed.  Calls and
-   delegate calls differ only in the request they take for. *)
+   successful non-static outcome's accounts must be well typed.  A call that
+   finds no outcome left is an error.  Calls and delegate calls differ only
+   in the request they take for. *)
 Definition take_request_outcome_def:
   take_request_outcome rq st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")), st)
+    | SOME [] => (INR (Error (RuntimeError "take_call_outcome")), st)
     | SOME os =>
       let (outcome, rest) = take_outcome rq os in
       let st' = st with <| outcomes := SOME rest;
@@ -226,10 +228,13 @@ Definition create_outcome_request_def:
 End
 val () = cv_auto_trans create_outcome_request_def;
 
+(* As take_request_outcome: a create that finds no outcome left is an
+   error. *)
 Definition take_create_outcome_def:
   take_create_outcome kind value initcode st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_create_outcome")), st)
+    | SOME [] => (INR (Error (RuntimeError "take_create_outcome")), st)
     | SOME os =>
       let rq = create_outcome_request kind value initcode st in
       let (outcome, rest) = take_outcome rq os in
