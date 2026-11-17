@@ -1,6 +1,7 @@
 (* Value resources at the endpoint of the concrete RaiseReason head. *)
 Theory bodyFullRaiseReasonHeadValue
 Ancestors
+  reasonSourceProps
   bodyFullRaiseReasonHeadGhost bodyFullRaiseReasonHead
   stmtReasonMemory revertReasonLayout revertReasonPrefixFramePtr
   exprSimVVFrame exprSimIfExpWidenedAdapter exprSimProps exprLoweringProps
@@ -329,6 +330,9 @@ Proof
       disch_then (qspec_then `t` mp_tac) >>
       impl_tac >- (simp[ADD_COMM] >> metis_tac[]) >> simp[])
   >- suspend "at"
+  >- (irule vv_place_ptr_region_frame >>
+      conj_tac >- metis_tac[reason_vv_read_success] >>
+      qexists_tac `s` >> simp[])
   >- (strip_tac >> irule vv_own_alloc_mono_frame >>
       qexistsl_tac [`s`, `sm`] >> simp[])
   >- (strip_tac >> irule reason_head_vv_storage_live >>
