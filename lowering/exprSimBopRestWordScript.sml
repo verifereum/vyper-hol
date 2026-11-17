@@ -12,7 +12,7 @@ Theory exprSimBopRestWord
 Ancestors
   exprSimBopRestWordLoads exprSimBopRestWordCompose exprSimBopRestWordFacts
   exprSimUnopCompose
-  exprSimBopTyped
+  exprSimBopTyped exprSimBopBytes
   exprSimUnopProps
   exprSimSource
   exprSimHypsDefs
@@ -80,10 +80,13 @@ Theorem compile_bop_rest_word_case:
     expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `(?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
+            MEM bop [And;Or;XOr;ShL;ShR]`
+  >- (irule compile_bop_bytes_case >> metis_tac[]) >>
   pure_rewrite_tac [expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
-  drule_all rest_word_typed_membership >> strip_tac >>
+  drule_all rest_word_typed_membership >> strip_tac >> gvs[] >>
   irule compile_rest_word_membership_sim >> metis_tac[]
 QED

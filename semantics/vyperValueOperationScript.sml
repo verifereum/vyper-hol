@@ -319,6 +319,18 @@ Definition evaluate_binop_def:
               if is_Unsigned u then INL $ IntV (int_mod r &(2 ** b))
               else INL $ IntV (signed_int_mod b r))
            | _ => INR (TypeError "binop"))
+       | BytesV bs => (case v2 of IntV i2 =>
+           if LENGTH bs <> 32 then INR (TypeError "binop")
+           else if i2 < 0 then INR (RuntimeError "ShL0")
+           else INL $ BytesV $ word_to_bytes_be
+             ((word_of_bytes_be bs : bytes32) << Num i2)
+           | BytesV amount =>
+             if LENGTH bs = 32 /\ LENGTH amount = 32 then
+               INL $ BytesV $ word_to_bytes_be
+                 ((word_of_bytes_be bs : bytes32) <<
+                  w2n (word_of_bytes_be amount : bytes32))
+             else INR (TypeError "binop")
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -326,10 +338,27 @@ Definition evaluate_binop_def:
               currently enforced by callers/type-system assumptions. *)
            (if i2 < 0 then INR (RuntimeError "ShR0")
             else INL $ IntV $ int_shift_right (Num i2) i1) | _ => INR (TypeError "binop"))
+       | BytesV bs => (case v2 of IntV i2 =>
+           if LENGTH bs <> 32 then INR (TypeError "binop")
+           else if i2 < 0 then INR (RuntimeError "ShR0")
+           else INL $ BytesV $ word_to_bytes_be
+             ((word_of_bytes_be bs : bytes32) >>> Num i2)
+           | BytesV amount =>
+             if LENGTH bs = 32 /\ LENGTH amount = 32 then
+               INL $ BytesV $ word_to_bytes_be
+                 ((word_of_bytes_be bs : bytes32) >>>
+                  w2n (word_of_bytes_be amount : bytes32))
+             else INR (TypeError "binop")
+           | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | And => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            bounded_int_op u (int_and i1 i2) | _ => INR (TypeError "binop"))
+       | BytesV bs1 => (case v2 of BytesV bs2 =>
+           if LENGTH bs1 = LENGTH bs2
+           then INL $ BytesV (MAP2 word_and bs1 bs2)
+           else INR (TypeError "binop")
+           | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
@@ -339,6 +368,11 @@ Definition evaluate_binop_def:
      | Or => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            bounded_int_op u (int_or i1 i2) | _ => INR (TypeError "binop"))
+       | BytesV bs1 => (case v2 of BytesV bs2 =>
+           if LENGTH bs1 = LENGTH bs2
+           then INL $ BytesV (MAP2 word_or bs1 bs2)
+           else INR (TypeError "binop")
+           | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
@@ -348,6 +382,11 @@ Definition evaluate_binop_def:
      | XOr => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            bounded_int_op u (int_xor i1 i2) | _ => INR (TypeError "binop"))
+       | BytesV bs1 => (case v2 of BytesV bs2 =>
+           if LENGTH bs1 = LENGTH bs2
+           then INL $ BytesV (MAP2 word_xor bs1 bs2)
+           else INR (TypeError "binop")
+           | _ => INR (TypeError "binop"))
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
