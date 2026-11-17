@@ -134,6 +134,7 @@ Proof
 QED
 
 (* The symbolic prefix and the concrete endpoint share an explicit count. *)
+
 Theorem sym_selected_prefix_frame_sim_marked:
   !opc operands nl ps iops prepared dfg selected rops arranged spillbase
     fn r cp p env ret srest labs0 ctx cs ss initial_fmp.
@@ -165,24 +166,20 @@ Theorem sym_selected_prefix_frame_sim_marked:
     sym_frame_inv p env ctx cp fn ret srest labs0 arranged cs' ss' /\
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops))
 Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `MEM r cplan.cp_regions` >>
-  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
-    fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc
-     (execute_plan initial_fmp (iops ++ rops))` by simp[] >>
-  drule_all sym_selected_prefix_sim_marked >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac
-  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
-      metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`]
+      (SPEC_ALL sym_selected_prefix_frame_sim_marked_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 (* Region-local shuffles expose the same frame boundary as input preparation. *)
+
 Theorem sym_prefix_ops_frame_sim:
   !ops initial_fmp p env cp fn ret srest ps ss ctx labs0 cs r.
   prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) ops /\
@@ -205,22 +202,15 @@ Theorem sym_prefix_ops_frame_sim:
       cs' ss' /\
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
-  rename1 `MEM r cplan.cp_regions` >>
-  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
-  drule_all (BETA_RULE (Q.INST
-    [`R` |-> `\b. r.sr_spill_base <= b /\ b < r.sr_spill_end`]
-    (SPEC_ALL sym_prefix_ops_sim))) >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac
-  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
-      metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+      (SPEC_ALL sym_prefix_ops_frame_sim_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 Theorem sym_spill_free_prefix_frame_sim:
@@ -243,21 +233,15 @@ Theorem sym_spill_free_prefix_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops) /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
-  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
-  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
-  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
-    F /\ context_spill_byte cplan b` by simp[] >>
-  drule_all (BETA_RULE (Q.INST [`R` |-> `\b:num. F`]
-    (SPEC_ALL sym_prefix_ops_sim))) >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac >- (fs[sym_frame_inv_def] >> metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+      (SPEC_ALL sym_spill_free_prefix_frame_sim_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 Theorem do_restore_symbolic_prefix_facts:
