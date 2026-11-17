@@ -220,6 +220,7 @@ End
    relation ties the output entry state to the actual EVM readings. *)
 Theorem e2e_vyper_to_evm_states:
   !gobs tops ret am tx ctx ctx' vs_in vs_out es.
+    external_return_type tops tx.function_name = ret /\
     vs_in.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel
               (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
@@ -238,7 +239,7 @@ Theorem e2e_vyper_to_evm_states:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/ precompile_call_starved es \/
-             call_result_rel_at gobs tops ret am tx es r es')
+             call_result_rel_at gobs tops am tx es r es')
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -261,6 +262,7 @@ QED
 
 Theorem e2e_vyper_to_evm:
   !gobs tops ret am tx ctx ctx' vs es.
+    external_return_type tops tx.function_name = ret /\
     vs.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel
               (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
@@ -279,7 +281,7 @@ Theorem e2e_vyper_to_evm:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/
-             call_result_rel_at gobs tops ret am tx es r es')
+             call_result_rel_at gobs tops am tx es r es')
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -781,20 +783,128 @@ Proof
   gvs[initial_venom_state_rel_def, venom_env_rel_def]
 QED
 
+(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
+   proof. *)
+Theorem raw_variant_outcomes:
+  raw_variant fmp si so ==> si.vs_outcomes = so.vs_outcomes
+Proof
+  cheat
+QED
+
+(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
+   proof. *)
+Theorem raw_variant_call_ctx:
+  raw_variant fmp si so ==> si.vs_call_ctx = so.vs_call_ctx
+Proof
+  cheat
+QED
+
+(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
+   proof. *)
+Theorem raw_variant_initial_venom_state_rel:
+  raw_variant fmp si so /\ initial_venom_state_rel tops am tx so ==>
+  initial_venom_state_rel tops am tx si
+Proof
+  cheat
+QED
+
+(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
+   proof. *)
+Theorem raw_variant_opt_entry_calldata_bound:
+  !tops bc am tx prog prog' cp es fmp vs.
+    call_state_rel tops bc am tx es /\
+    raw_variant fmp vs (opt_entry_state prog prog' cp es) ==>
+    LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64
+Proof
+  cheat
+QED
+
+(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
+   proof. *)
+Theorem raw_fmp_choice:
+  !tops rpolicy unit out cp prog prog' es fmp.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    fmp = (n2w (MAX cp.cp_initial_fmp
+                  (unit_alloca_budget unit.cu_context +
+                   32 * ctx_dload_count unit.cu_context)) : bytes32) ==>
+    w2n (opt_entry_state prog prog' cp es).vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem source_typing_ok_code_update:
+  source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
+  source_typing_ok tops am (tx with code := c)
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem dispatched_vyper_call_code_update:
+  dispatched_vyper_call tops (tx with code := c) calldata ret <=>
+  dispatched_vyper_call tops tx calldata ret
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem source_calls_within_code_update:
+  ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+  ~program_reads_self_code tops ==>
+  (source_calls_within n am (tx with code := c) os gobs <=>
+   source_calls_within n am tx os gobs)
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem call_storage_ok_code_update:
+  ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+  ~program_reads_self_code tops ==>
+  (call_storage_ok am (tx with code := c) os gobs <=>
+   call_storage_ok am tx os gobs)
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem call_result_rel_at_code_update:
+  ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+  ~program_reads_self_code tops ==>
+  (call_result_rel_at gobs tops am (tx with code := c) es r es' <=>
+   call_result_rel_at gobs tops am tx es r es')
+Proof
+  cheat
+QED
+
+(* ADMISSION: transport from the optimized code's transaction back to tx,
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem call_result_rel_code_update:
+  ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+  ~program_reads_self_code tops ==>
+  (call_result_rel tops am (tx with code := c) es r es' <=>
+   call_result_rel tops am tx es r es')
+Proof
+  cheat
+QED
+
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* The call theorem at one fixed gas marking, then at every guarded filling of
    the frame's gas readings through the gas link. *)
 
-Theorem gas_readings_rel_mono[local]:
-  !readings P Q.
-    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
-    gas_readings_rel readings Q T
-Proof
-  rw[gas_readings_rel_def] >> metis_tac[]
-QED
-
 Theorem call_at_horizon_composition[local]:
   run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
+  external_return_type tops tx.function_name = ret /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gs))
     tops ret tx (call_external (SOME (MAP SND (call_trace es))) gs am tx)
@@ -807,7 +917,7 @@ Theorem call_at_horizon_composition[local]:
   (!n. ?r' es''. run_call es = SOME (r', es'') /\
     (frame_resource_starved es r' es'' \/
      venom_frame_rel es r' es'' (run_context n ctx' vs'))) ==>
-  call_result_rel_at gs tops ret am tx es r es'
+  call_result_rel_at gs tops am tx es r es'
 Proof
   rpt strip_tac >>
   drule_all external_call_result_rel_terminates >> strip_tac >>
@@ -928,44 +1038,62 @@ QED
    certificate at marks; the result relation holds at every filling past the
    marked readings where the storage guards hold. *)
 Theorem vyper_call_correct_at_marks:
-  !policy tops deploy_bc runtime_bc am tx ret es rpolicy unit out prog cp vs marks.
-    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+  !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
+   am tx txp ret es vs0 fmp vs marks.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
+    source_typing_ok tops am txp /\
+    call_state_rel tops (assemble prog') am tx es /\
+    (!obs. source_calls_within (2 ** 64) am txp
+             (MAP SND (call_trace es)) obs) /\
     resolve_o1_policy policy = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     codegen_assembly rpolicy out.po_unit = SOME prog /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
-    gas_variant vs (entry_venom_state prog cp es) /\
-    (!H:(bool # bytes32 # type_value) list # num list. raw_unit_memory_ok unit.cu_context vs /\
-         ptr_discipline 0 unit.cu_context vs /\
-         taint_within (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-           unit.cu_context vs /\
-         mem_inv dload_offset_ok unit.cu_context vs /\
-         mem_inv dload_headroom_ok unit.cu_context vs ==>
-         ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-           unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-         (o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) \/
-          ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-             mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-               out.po_unit.cu_context (entry_venom_state prog cp es)) /\
-           !fuel. terminates (run_context fuel unit.cu_context vs) ==>
-                  ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
-    source_unit_execution_correct_at marks tops ret am tx unit vs
+    fin rpolicy prog = SOME prog' /\
+    vs0 = opt_entry_state prog prog' cp es /\
+    txp = tx with code := vs0.vs_code /\
+    w2n vs0.vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+    external_return_type tops tx.function_name = ret /\
+    raw_variant fmp vs vs0 /\
+    (!H:(bool # bytes32 # type_value) list # num list.
+       (?fr. terminates (run_context fr unit.cu_context vs)) /\
+       raw_unit_memory_ok unit.cu_context vs /\
+       ptr_discipline 0 unit.cu_context vs /\
+       taint_within
+         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+         unit.cu_context vs /\
+       mem_inv dload_offset_ok unit.cu_context vs /\
+       mem_inv dload_headroom_ok unit.cu_context vs ==>
+       ctx_sim
+         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+         unit.cu_context out.po_unit.cu_context vs
+         vs0 /\
+       (fin = asm_opt_finalizer ==>
+          code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
+       (o1_lowered_inv out.po_unit.cu_context vs0 \/
+        ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+             out.po_unit.cu_context vs0) /\
+         !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
+    source_unit_execution_correct_at marks tops ret am txp unit vs
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
        !tail.
-         source_storage_ok am tx (MAP SND (call_trace es))
-           (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-         call_outcomes_storage_ok am tx (MAP SND (call_trace es))
+         call_storage_ok am txp (MAP SND (call_trace es))
            (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
          call_result_rel_at (gas_explicit marks vs.vs_gas_readings ++ tail)
-           tops ret am tx es r es')
+           tops am txp es r es')
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -1117,44 +1245,62 @@ QED
 (* Where the frame is not starved and the gas link holds, the call result
    relation holds at every guarded filling. *)
 Theorem vyper_call_correct_from_gas_link:
-  !policy tops deploy_bc runtime_bc am tx ret es r es' rpolicy unit out prog cp.
-    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+  !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
+   am tx txp ret es vs0 fmp r es'.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
+    source_typing_ok tops am txp /\
+    call_state_rel tops (assemble prog') am tx es /\
+    (!obs. source_calls_within (2 ** 64) am txp
+             (MAP SND (call_trace es)) obs) /\
     resolve_o1_policy policy = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     codegen_assembly rpolicy out.po_unit = SOME prog /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
+    fin rpolicy prog = SOME prog' /\
+    vs0 = opt_entry_state prog prog' cp es /\
+    txp = tx with code := vs0.vs_code /\
+    w2n vs0.vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+    external_return_type tops tx.function_name = ret /\
     run_call es = SOME (r, es') /\
     (frame_resource_starved es r es' \/
      gas_readings_rel (gas_readings es)
-       (\gs. source_storage_ok am tx (MAP SND (call_trace es)) gs /\
-             call_outcomes_storage_ok am tx (MAP SND (call_trace es)) gs ==>
-             ?vs marks tail.
-               gs = gas_explicit marks vs.vs_gas_readings ++ tail /\
-               gas_variant vs (entry_venom_state prog cp es) /\
-               (!H:(bool # bytes32 # type_value) list # num list.
-                  raw_unit_memory_ok unit.cu_context vs /\
-                  ptr_discipline 0 unit.cu_context vs /\
-                  taint_within (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-                    unit.cu_context vs /\
-                  mem_inv dload_offset_ok unit.cu_context vs /\
-                  mem_inv dload_headroom_ok unit.cu_context vs ==>
-                  ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-                    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-                  (o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) \/
-                   ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-                      mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                                lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-                        out.po_unit.cu_context (entry_venom_state prog cp es)) /\
-                    !fuel. terminates (run_context fuel unit.cu_context vs) ==>
-                           ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
-               source_unit_execution_correct_at marks tops ret am tx unit vs) T)
+       (\gs. call_storage_ok am txp (MAP SND (call_trace es)) gs ==>
+          ?vs marks tail.
+            gs = gas_explicit marks vs.vs_gas_readings ++ tail /\
+            raw_variant fmp vs vs0 /\
+            (!H:(bool # bytes32 # type_value) list # num list.
+               (?fr. terminates (run_context fr unit.cu_context vs)) /\
+               raw_unit_memory_ok unit.cu_context vs /\
+               ptr_discipline 0 unit.cu_context vs /\
+               taint_within
+                 (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+                 unit.cu_context vs /\
+               mem_inv dload_offset_ok unit.cu_context vs /\
+               mem_inv dload_headroom_ok unit.cu_context vs ==>
+               ctx_sim
+                 (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+                 unit.cu_context out.po_unit.cu_context vs
+                 vs0 /\
+               (fin = asm_opt_finalizer ==>
+                  code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
+               (o1_lowered_inv out.po_unit.cu_context vs0 \/
+                ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+                   mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                             lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+                     out.po_unit.cu_context vs0) /\
+                 !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                        ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
+            source_unit_execution_correct_at marks tops ret am txp unit vs))
     ==>
     frame_resource_starved es r es' \/
-    call_result_rel tops ret am tx es r es'
+    call_result_rel tops am txp es r es'
 Proof
   rpt strip_tac >>
   Cases_on `frame_resource_starved es r es'` >> fs[] >>

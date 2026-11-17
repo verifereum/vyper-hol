@@ -16,8 +16,8 @@ Ancestors
 
 Theorem gas_readings_rel_mono:
   !readings P Q.
-    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
-    gas_readings_rel readings Q T
+    gas_readings_rel readings P /\ (!gs. P gs ==> Q gs) ==>
+    gas_readings_rel readings Q
 Proof
   rw[gas_readings_rel_def] >> metis_tac[]
 QED
