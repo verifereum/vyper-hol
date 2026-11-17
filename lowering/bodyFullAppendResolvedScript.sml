@@ -1,6 +1,7 @@
 (* Robust reconstruction of a memory array after appending one word. *)
 Theory bodyFullAppendResolved
 Ancestors
+  stateRelProj
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyInvNoDalloca
   bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath

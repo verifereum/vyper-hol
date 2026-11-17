@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  stateRelProj
   bodyFullTarget bodyAppendResolvedPre gasOutcomeFullCompose stmtLoweringMono
   loweringPosts supportedTypes exprSimSource gasShadowCompileStmtHelpers
   exprLoweringProps
