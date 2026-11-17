@@ -149,9 +149,9 @@ QED
 
 Theorem entry_code_tuple_store_all:
   !tys targets vals ce.
-    (!bt e ce' et. MEM (BaseTarget bt) targets /\ MEM e (target_indices bt) ==>
+    (!bt e et. MEM (BaseTarget bt) targets /\ MEM e (target_indices bt) ==>
       entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-        (compile_expr ce' et e)) ==>
+        (compile_expr ce et e)) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_tuple_store_all ce tys targets vals)
 Proof
@@ -171,9 +171,9 @@ Proof
 QED
 
 Theorem entry_code_tuple_unpack:
-  (!bt e ce' et. MEM (BaseTarget bt) targets /\ MEM e (target_indices bt) ==>
+  (!bt e et. MEM (BaseTarget bt) targets /\ MEM e (target_indices bt) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et e)) ==>
+      (compile_expr ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_tuple_unpack ce ty stage targets src)
 Proof
