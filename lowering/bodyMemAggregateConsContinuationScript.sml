@@ -7,7 +7,7 @@ Ancestors
   exprSimHypsDefs loweringPosts bodyMemAggregatePath gasSummary
   bodyMemAggregateContinuation fragGasMode
 
-Theorem aggregate_add_slice_entry_mem[local]:
+Theorem aggregate_add_slice_entry_mem:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
@@ -67,7 +67,7 @@ Proof
   qexistsl_tac [`d`, `q`] >> fs[eval_operand_def, word_add_n2w]
 QED
 
-Theorem aggregate_slice_frame_transport[local]:
+Theorem aggregate_slice_frame_transport:
   u.vs_memory = r.vs_memory /\ u.vs_allocas = r.vs_allocas /\
   (!z. not_fresh_at sm z ==> lookup_var z u = lookup_var z r) /\
   (!z. not_fresh_at sm z ==> not_fresh_at sn z) /\

@@ -53,7 +53,9 @@ Theorem aug_place_storage_endpoint:
       bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         ptv bop old rhs)) (write_place cx (StoragePlace tr slot tv)))))) (mid,t) Q
-    (\H res ff rr. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res rr)
+    (\H res ff rr.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res rr) /\
+      halt_exit H cx ff res rr)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule aug_place_typing >> strip_tac >>
@@ -75,7 +77,8 @@ Proof
   disch_then (drule_at (Pat `eval_target_place`)) >>
   disch_then (drule_at (Pat `emit_op`)) >> simp[] >>
   disch_then (qspec_then `tops` mp_tac) >> simp[] >>
-  disch_then (drule_at (Pat `expr_body_pre`)) >> simp[] >> strip_tac >>
+  disch_then (drule_at (Pat `expr_body_pre`)) >> simp[] >>
+  disch_then (qspec_then `st0` mp_tac) >> simp[] >> strip_tac >>
   `expr_body_pre cenv cx env e mid` by
     (irule stmtSimAugAssignPlaceMemoryTheory.aug_place_rhs_pre_target_gas_obs >>
      goal_assum (drule_at (Pat `eval_target_place`)) >> simp[]) >>
@@ -85,7 +88,6 @@ Proof
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[exprSimHypsTheory.expr_body_pre_type_evaluates] >>
-  `~cx.txn.is_static` by fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `?offset tv0 path delta. MEM (StorageRoot tr offset tv0) mid.storage_trace /\
      storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta` by
     (qpat_assum `eval_target_place cx bt (es with gas_obs := _) = _`
@@ -125,7 +127,8 @@ Proof
      rewrite_tac[loweringPostsTheory.target_post_def] >> strip_tac >>
      conj_tac
      >- (mp_tac (Q.INST [`es` |-> `mid`, `s` |-> `t`]
-           exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+           (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+             exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
          strip_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
@@ -134,19 +137,35 @@ Proof
                   `cx`, `sp`, `mid`, `u`] mp_tac
        augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
      impl_tac >- simp[] >> simp[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (irule aug_place_reads_suffix >> simp[] >>
+      qexists_tac `Q` >> simp[] >>
+      goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
+      irule aug_place_loaded_storage_static_suffix >> simp[] >>
+      conj_tac >- gvs[] >>
+      goal_assum (drule_at (Pat `emit_void`)) >>
+      goal_assum (drule_at (Pat `lower_value`)) >>
+      goal_assum (drule_at (Pat `compile_binop`)) >> simp[] >>
+      goal_assum (drule_at (Pat `type_stmt`)) >>
+      qexistsl_tac [`es`, `lctx`, `gas_explicit marks s0.vs_gas_readings`] >>
+      gvs[]) >>
   irule aug_place_reads_suffix >> simp[] >>
   qexists_tac `\H res ee v. res = INL () /\
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
-  irule aug_place_loaded_storage_suffix >> simp[] >> conj_tac
+  irule aug_place_loaded_storage_suffix >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- gvs[] >> conj_tac
   >- (goal_assum (drule_at (Pat `lower_value`)) >>
       goal_assum (drule_at (Pat `compile_binop`)) >> simp[] >>
       qexists_tac `FST r` >> conj_tac
       >- (qx_gen_tac `l` >>
           qpat_assum `!l. cur <> Label l /\ FST r <> Label l`
             (ACCEPT_TAC o CONJUNCT2 o Q.SPEC `l`)) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `type_stmt`)) >>
-  goal_assum (drule_at (Pat `eval_target_place`)) >> simp[]
+      gvs[]) >>
+  conj_tac
+  >- (goal_assum (drule_at (Pat `type_stmt`)) >>
+      qexistsl_tac [`es`, `gas_explicit marks s0.vs_gas_readings`] >> gvs[]) >>
+  gvs[]
 QED

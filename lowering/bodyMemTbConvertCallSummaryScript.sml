@@ -58,7 +58,7 @@ Proof
        read_result cx tv ee = (INL w,ee)` by
     (gen_tac >> simp[gas_marked_exec_def] >> metis_tac[]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H0` assume_tac) >>
+    (qspec_then `H0` (drule_then assume_tac)) >>
   drule_all convert_call_marked_read_window >> strip_tac >>
   qpat_x_assum `s1 = sm` SUBST_ALL_TAC >>
   `read_result cx tv ee = (INL v,ee)` by metis_tac[] >>
@@ -86,11 +86,13 @@ Proof
      lowered_value_type cenv (Call a (IntCall fid) args drv) = BaseT (StringT 0)) ==>
      v = BytesV [] \/ v = StringV "")` by
     metis_tac[convert_call_read_zero_empty, expr_body_pre_gas_obs] >>
-  irule (Q.INST [`v` |-> `v`, `u` |-> `t`] convert_read_summary_bind) >> simp[] >>
-  mp_tac (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`, `t` |-> `ann`,
+  irule convert_read_summary_bind >> simp[] >>
+  qexistsl_tac [`t`,`v`] >> simp[] >>
+  mp_tac (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`,
                   `t0` |-> `t`, `v1` |-> `v`, `s1` |-> `sm`, `x` |-> `x`,
                   `sb` |-> `sb`, `op` |-> `op`, `ee` |-> `ee`,
-                  `tenv` |-> `env.type_defs`] dynamic_continuation_summary_mem
+                  `tenv` |-> `env.type_defs`]
+          (Q.INST [`t` |-> `ann`] dynamic_continuation_summary_mem)
           |> REWRITE_RULE [ASSUME ``(ee:evaluation_state) with gas_obs := [] = ee``]) >>
   (impl_tac >- (simp[vyperASTTheory.expr_type_def] >> metis_tac[])) >>
   simp[vyperASTTheory.expr_type_def]
@@ -151,7 +153,7 @@ Proof
        read_result cx tv ee = (INL w,ee)` by
     (gen_tac >> simp[gas_marked_exec_def] >> metis_tac[]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H0` assume_tac) >>
+    (qspec_then `H0` (drule_then assume_tac)) >>
   drule_all convert_call_marked_read_window >> strip_tac >>
   qpat_x_assum `s1 = sm` SUBST_ALL_TAC >>
   `read_result cx tv ee = (INL v,ee)` by metis_tac[] >>
@@ -184,8 +186,10 @@ Proof
     (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def, stmt_state_rel_def]) >>
      first_assum ACCEPT_TAC) >>
-  irule (Q.INST [`v` |-> `v`, `u` |-> `t`] convert_read_summary_bind) >> simp[] >>
-  irule (Q.INST [`Q` |-> `\res fin tt. !H. valid_horizon cx st0 H fin.storage_trace ==>
+  irule convert_read_summary_bind >> simp[] >>
+  qexistsl_tac [`t`,`v`] >> simp[] >>
+  irule convert_summary_post_mono >>
+  qexistsl_tac [`\res fin tt. !H. valid_horizon cx st0 H fin.storage_trace ==>
       ?v'. res = INL v' /\
       expr_post H ctx func cenv cx
         (TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]) es sa sb s0
@@ -195,14 +199,13 @@ Proof
       alloca_history func tt /\ t.vs_alloca_next <= tt.vs_alloca_next /\
       (?w. eval_operand op tt = SOME w /\
         w2n w + type_memory_bytes cenv ann <= tt.vs_alloca_next)`,
-    `R` |-> `\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==> expr_exit res r`]
-    convert_summary_post_mono) >>
-  rpt conj_tac >|
-  [rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt strip_tac >>
+    `\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==> expr_exit res r`] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt conj_tac >|
+  [simp[],
+   rpt gen_tac >> rpt strip_tac >>
    qpat_x_assum `!H'. valid_horizon cx st0 H' fin.storage_trace ==> _`
      (drule_then strip_assume_tac) >>
    metis_tac[arithmeticTheory.LESS_EQ_TRANS],
-   rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> simp[],
    ALL_TAC] >>
   mp_tac (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`,
                   `e` |-> `TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]`,
@@ -215,6 +218,6 @@ Proof
                            listTheory.EXISTS_DEF]) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                 TRY (simp[vyperASTTheory.expr_type_def] >> NO_TAC) >>
-                metis_tac[arithmeticTheory.ADD_COMM])) >>
+                metis_tac[vyperASTTheory.expr_type_def, arithmeticTheory.ADD_COMM])) >>
   simp[]
 QED

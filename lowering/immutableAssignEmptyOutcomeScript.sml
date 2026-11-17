@@ -76,6 +76,14 @@ Proof
      gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[pairTheory.PAIR]) >>
   `has_length_word ity` by metis_tac[type_widens_to_has_length_word] >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel (H0:(bool # 256 word # type_value) list # num list)
+     ctx func ce cx es s0` by metis_tac[] >>
   `compile_get_target_ptr compile_expr ce (TopLevelNameTarget (ce.ce_module,id)) =
      comp_return (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` by
     (simp[FUN_EQ_THM,comp_return_def] >> gen_tac >>
@@ -126,11 +134,15 @@ Resume immutable_assign_empty_stmt_mem[endpoint]:
 QED
 
 Resume immutable_assign_empty_stmt_mem[state]:
-  `stmt_state_rel ctx func ce cx ee u` by suspend "reconstruction" >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx ee u` by
+    (rpt strip_tac >> suspend "reconstruction") >>
   suspend "outcome"
 QED
 
 Resume immutable_assign_empty_stmt_mem[reconstruction]:
+  `stmt_state_rel (H:(bool # 256 word # type_value) list # num list)
+     ctx func ce cx es s0` by metis_tac[] >>
   `write_place cx (ImmutablePlace ce.ce_module id []) (default_value tv) es =
      (INL (),ee)` by
     (Cases_on `ALOOKUP es.immutables cx.txn.target`
@@ -139,9 +151,10 @@ Resume immutable_assign_empty_stmt_mem[reconstruction]:
      drule_all immutable_augassign_write_source >>
      disch_then (qspec_then `default_value tv` mp_tac) >>
      simp[Abbr `ee`,update_immutable_def]) >>
-  mp_tac (Q.INST [`s` |-> `s0`, `q` |-> `u`, `ty` |-> `ity`]
-    (SPEC_ALL immutable_assign_empty_store_restore)) >>
-  impl_tac >- (simp[venom_state_component_equality] >> metis_tac[]) >> simp[]
+  irule immutable_assign_empty_store_restore >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`env`, `es`, `id`, `off`, `s0`, `sa`, `tv`, `ity`] >>
+  simp[venom_state_component_equality] >> metis_tac[]
 QED
 
 Resume immutable_assign_empty_stmt_mem[outcome]:
@@ -160,16 +173,26 @@ Resume immutable_assign_empty_stmt_mem[outcome]:
      mp_tac (Q.INST [`es` |-> `es with gas_obs := tail`,
        `src` |-> `ce.ce_module`] (SPEC_ALL immutable_assign_empty_source)) >>
      simp[Abbr `ee`] >> metis_tac[]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_at_def] >>
-  qexistsl_tac [`INL ()`, `ee`, `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
-  simp[gas_marked_exec_def,stmt_lands_def,cenv_top_ext_refl,
-       stmt_state_rel_inst_idx] >>
   `return_buf_frame d ce sb (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (mp_tac (Q.INST [`cenv` |-> `ce`, `cenv'` |-> `ce`, `s` |-> `s0`,
        `s'` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
        (SPEC_ALL return_buf_frame_frame)) >>
      simp[lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
+  `ee.storage_trace = es.storage_trace /\
+   (!rs:(bool # 256 word # type_value) list.
+      storage_well_formed_on cx (ee with gas_obs := []) rs <=>
+      storage_well_formed_on cx es rs)` by
+    (simp[Abbr `ee`] >> gen_tac >>
+     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
+  qexistsl_tac [`INL ()`, `ee`, `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  conj_tac >- fs[gas_marked_exec_def] >>
+  disj1_tac >> simp[stmt_lands_def,cenv_top_ext_refl,stmt_state_rel_inst_idx] >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func ce cx ee u /\ storage_well_formed_on cx es (FST H)` by
+    metis_tac[] >>
+  simp[] >>
   gvs[lookup_var_def,LENGTH_APPEND,same_blocks_def] >> metis_tac[]
 QED
 

@@ -15,7 +15,49 @@ Ancestors
   fragGasOriginPtrDead bodyFieldMemoryProps logTupleOwnershipPtr exprPtrUnwrapStorageShape
   exprPtrUnwrapCodeCopyShape exprPtrCleanBufferPost bodyFullUnwrapCodeCtorRun
   bodyFullUnwrapCodeCtorSemantic bodyFullUnwrapCodeCtorFrame loweringStateRelDefs
+  exprPtrUnwrapAllocSemantic exprSimStorageCopy localPtrsProps
+  exprSimIfExpWidenedProvenance
 
+
+(* The copy retains the concrete allocation site at its selected endpoint. *)
+Theorem code_copy_allocation_site[local]:
+  compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sb /\ nb < dimword (:256) /\
+  buf.buf_operand = Var root /\
+  step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+  copy_runtime_frame mid (u with vs_inst_idx := k) sc z /\ ci_mono mid sc /\
+  stmt_state_rel H ctx func cenv cx ee z ==>
+  ?w. lookup_var root z = SOME w /\
+    FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n w,nb) /\
+    sb.cs_next_id < sc.cs_next_id /\
+    (!name b len. local_region cenv ee.scopes z name b len ==>
+      w2n w + nb <= b \/ b+len <= w2n w)
+Proof
+  strip_tac >>
+  drule_all unwrap_alloc_semantic_state >>
+  disch_then (qspec_then `k` strip_assume_tac) >>
+  `not_fresh_at mid root` by
+    (drule allocated_copy_operands_old >>
+     disch_then (qspec_then `Lit 0w` mp_tac) >> simp[]) >>
+  `z.vs_allocas = u.vs_allocas /\ lookup_var root z = lookup_var root u` by
+    (fs[copy_runtime_frame_def, lookup_var_def] >>
+     drule copy_static_fields >> simp[]) >>
+  `sb.cs_next_id < mid.cs_next_id` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  `not_local_ptr cenv ee.scopes root` by
+    (drule unwrap_alloc_generated_code >> strip_tac >> gvs[] >>
+     irule local_ptrs_reserved_fresh >> qexists `sb` >> simp[]) >>
+  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) (fn_insts func)` by
+    (drule unwrap_alloc_generated_code >> strip_tac >>
+     drule_all buffer_alloc_code >> gvs[]) >>
+  `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n w,nb)` by simp[] >>
+  qexists `w` >> fs[ci_mono_def] >> rpt strip_tac >>
+  drule_all unwrap_alloc_local_disjoint >>
+  simp[regions_disjoint_def] >> metis_tac[]
+QED
 
 (* Runtime data-section branch. *)
 Theorem unwrap_code_copy_runtime_origin_ptr:
@@ -28,7 +70,7 @@ Theorem unwrap_code_copy_runtime_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -68,6 +110,14 @@ Theorem unwrap_code_copy_runtime_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -207,6 +257,19 @@ Proof
   `u = update_var root dst
     (buffer_allocation_fields s sb.cs_next_id (type_memory_size rty))` by simp[] >>
   drule_all runtime_code_copy_retained_frames >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx ee z` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  `val_wf rty v /\ val_footprint rty v <= type_memory_size rty` by
+    (fs[expr_post_def, expr_val_at_def] >> metis_tac[exprSimPropsTheory.val_footprint_le]) >>
+  `vv_at cenv cx (post_value_type cenv e) sb cs'' ee tv
+    (LocatedValue (post_value_type cenv e) (mk_ptr (Var root) LocMemory))
+    (z with vs_inst_idx := LENGTH cs''.cs_current_insts)` by
+    (qpat_assum `copy_runtime_frame mid allocst _ z` mp_tac >>
+     qpat_assum `allocst = _` (fn th => rewrite_tac[th]) >> disch_tac >>
+     drule_all code_copy_allocation_site >> strip_tac >>
+     irule allocated_vv_at >> simp[eval_operand_def, lookup_var_def, log_local_region_inst_idx] >>
+     qexistsl [`type_memory_size rty`, `sb.cs_next_id`, `w2n w`, `w`] >>
+     gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
   simp[] >>
   conj_tac >-
@@ -231,7 +294,7 @@ Proof
   `not_fresh_at mid root` by
     (drule_all allocated_copy_operands_old >> simp[]) >>
   `lookup_var root z = SOME dst` by
-    (fs[copy_runtime_frame_def] >> metis_tac[]) >>
+    (fs[copy_runtime_frame_def, lookup_var_def] >> metis_tac[]) >>
   conj_tac >-
     (fs[expr_post_def, expr_val_at_def] >>
      simp[expr_store_bound_def, eval_operand_def] >> rpt strip_tac >>
@@ -269,7 +332,7 @@ Theorem unwrap_code_copy_ctor_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -309,6 +372,14 @@ Theorem unwrap_code_copy_ctor_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -443,7 +514,7 @@ Proof
   `not_fresh_at mid root` by
     (drule_all allocated_copy_operands_old >> simp[]) >>
   `lookup_var root z = SOME dst` by
-    (fs[copy_runtime_frame_def] >> metis_tac[]) >>
+    (fs[copy_runtime_frame_def, lookup_var_def] >> metis_tac[]) >>
   `w2n a + type_memory_size rty < dimword(:256)` by metis_tac[immutable_holds_bounds] >>
   `regions_disjoint (w2n a) (type_memory_size rty) (w2n dst) (type_memory_size rty)` by
     (gvs[regions_disjoint_def] >> decide_tac) >>
@@ -500,6 +571,17 @@ Proof
     (z with vs_inst_idx := LENGTH cs''.cs_current_insts)` by
     (irule ctor_code_copy_ptr_val_ok >>
      metis_tac[]) >>
+  `vv_at cenv cx (post_value_type cenv e) sb cs'' ee tv
+    (LocatedValue (post_value_type cenv e) (mk_ptr (Var root) LocMemory))
+    (z with vs_inst_idx := LENGTH cs''.cs_current_insts)` by
+    (`stmt_state_rel H0 ctx func cenv cx ee z` by
+       (fs[expr_post_def] >> metis_tac[]) >>
+     qpat_assum `copy_runtime_frame mid allocst _ z` mp_tac >>
+     qpat_assum `allocst = _` (fn th => rewrite_tac[th]) >> disch_tac >>
+     drule_all code_copy_allocation_site >> strip_tac >>
+     irule allocated_vv_at >> simp[eval_operand_def, lookup_var_def, log_local_region_inst_idx] >>
+     qexistsl [`type_memory_size rty`, `sb.cs_next_id`, `w2n w`, `w`] >>
+     gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
   simp[] >>
   conj_tac >-
@@ -518,6 +600,8 @@ Proof
      simp[expr_post_def, vv_post_def, vv_at_def, expr_val_at_def,
        mk_ptr_def, local_place_at_def, eval_operand_def,
        log_local_region_inst_idx] >> rpt strip_tac >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >-
     (simp[expr_store_bound_def, eval_operand_def] >> rpt strip_tac >>
      gvs[lookup_var_def] >> decide_tac) >>
@@ -544,7 +628,7 @@ Theorem unwrap_code_copy_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -584,6 +668,14 @@ Theorem unwrap_code_copy_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\

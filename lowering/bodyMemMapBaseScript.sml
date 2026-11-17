@@ -59,7 +59,7 @@ Proof
         (if tr then LocTransient else LocStorage)),sa)` by
     (Cases_on `tr` >> gvs[compile_expr_def, vyperASTTheory.expr_type_def]) >>
   gvs[] >>
-  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INL (HashMapRef tr (n2w slot) kt vt)`, `es`, `OK s0`] >>
   conj_tac >- (irule toplevel_mapping_marked_exec_mem >> simp[]) >>

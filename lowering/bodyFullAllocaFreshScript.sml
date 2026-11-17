@@ -13,7 +13,7 @@
  *)
 Theory bodyFullAllocaFresh
 Ancestors
-  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr
+  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr exprPtrUnwrapAllocation
   bodyPtrIfExpAllocLocals bodyPtrStructLitMonotoneRepresentation
   ptrSafetyTransport fragExecPtr fragGasSeqPtr fragExecMem instMemFrontier
   decoderGhostFramePtr abiBuiltinAllocation emitHelperProps exprLoweringProps
@@ -77,7 +77,7 @@ Theorem alloc_buffer_origin_ptr_path_exact:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
@@ -145,7 +145,9 @@ Proof
          (step_prov PG G ins t) (step_taint ins s t tn)` by
     (gen_tac >> simp[inst_seq_ptr_def] >>
      irule ptr_inst_ok_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[Abbr `ins`, ptr_inst_ok_alloca]) >>
+     qexists_tac `0` >> simp[Abbr `ins`] >>
+     irule unwrap_alloc_ptr_check >> simp[allocas_from_def] >>
+     qexists_tac `t` >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
               ~is_terminator i.inst_opcode) [ins]` by
     simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
@@ -209,7 +211,7 @@ Theorem alloc_buffer_origin_ptr_path:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.

@@ -13,7 +13,7 @@ Ancestors
    on this base.  The memory twin is cut along those seams once they are. *)
 Theorem intcall_mem_call_step:
   (!tops ctx func cx cenv ret_ty ret_tv rb rpc rsz.
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     cenv.ce_module = NONE /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))

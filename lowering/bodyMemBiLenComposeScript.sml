@@ -99,8 +99,10 @@ Proof
                     `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
                     `tv`,`fe with gas_obs := []`] expr_body_pre_runtime_typed) >>
           simp[] >> strip_tac >>
-          mp_tac (Q.SPECL [`H0`,`env`,`ctx`,`func`,`cenv`,`cx`,`e`,`es`,`sa`,`sm`,`lsb`,`s0`,
-                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`,`ptv`] len_vv_path_mem) >>
+          mp_tac (Q.SPECL [`env`,`ctx`,`func`,`cenv`,`cx`,`e`,`es`,`sa`,`sm`,`lsb`,`s0`,
+                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`,`ptv`]
+                    (Q.INST [`H` |-> `H0`]
+                      (INST_TYPE [alpha |-> ``:256``] len_vv_path_mem))) >>
           (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >> strip_tac >>
           `!tail. result_array_length cx tv (fe with gas_obs := tail) =
                   (INL n, fe with gas_obs := tail)` by
@@ -120,8 +122,12 @@ Proof
           first_x_assum (qspec_then `H2` mp_tac) >>
           impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
           rpt conj_tac
-          >- (irule vv_post_fields_transport >>
-              qexistsl_tac [`H0`, `t`] >>
+          >- (MATCH_MP_TAC (Q.SPECL [`H0`, `H2`, `ctx`, `func`, `cenv`, `cx`,
+                `Builtin (BaseT (UintT 256)) Len [e]`, `es`, `sa`, `lsb`, `s0`,
+                `fe with gas_obs := []`, `Value (IntV (&n))`,
+                `StackValue (BaseT (UintT 256)) lop`, `t'`, `t`]
+                vv_post_fields_transport) >>
+              conj_tac >- first_assum ACCEPT_TAC >>
               fs[vv_post_def, vv_storage_live_def])
           >- simp[vv_store_bound_stack_word, expr_type_def, is_word_type_def]
           >> simp[expr_type_def] >> gvs[]) >>
@@ -142,7 +148,7 @@ Proof
       qexistsl_tac [`INR exn`,`fe`,`fr`] >>
       simp[] >> conj_tac
       >- (rewrite_tac[len_source] >> irule gas_marked_exec_bind_exception >> simp[]) >>
-      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      gvs[] >> disj2_tac >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule len_exempt_cert >> simp[]

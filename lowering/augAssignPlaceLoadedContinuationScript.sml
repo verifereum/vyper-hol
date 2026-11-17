@@ -58,7 +58,9 @@ Theorem aug_place_loaded_memory_suffix:
     (\H res ff v. res = INL () /\
       stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aug_place_memory_reads_replay >> strip_tac >>
@@ -81,7 +83,8 @@ Proof
      goal_assum (drule_at (Pat `supported_target_info`)) >>
      goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
      qexists_tac `es with gas_obs := prefix ++ gs` >> simp[]) >>
-  drule_all aug_place_memory_rhs_callback >> strip_tac >>
+  drule_all aug_place_memory_rhs_callback >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
@@ -96,7 +99,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> strip_tac >>
-  drule aug_place_store_backends >> strip_tac >>
+  drule (INST_TYPE [alpha |-> ``:256``] aug_place_store_backends) >> strip_tac >>
   qpat_x_assum `!b. storage_well_formed_on cx ff b <=> _`
     (fn th => REWRITE_TAC [th]) >>
   first_assum ACCEPT_TAC

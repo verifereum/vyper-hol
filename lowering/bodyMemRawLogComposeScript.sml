@@ -4,7 +4,50 @@ Ancestors
   bodyMemRawLogExecution bodyMemRawLogStages bodyMemRawLogAllocation bodySimRawLogTails valueEncodingDefs
   bodyMemBiKeccakBounds stmtSimLogSuffix exprSimHash exprSimRawLog
   exprSimProps exprSimHyps exprSimMemDefs gasSummary fragGasMode gasOutcome
-  vyperTyping vyperValue vyperState valueEncoding venomState e2eDefs list
+  vyperTyping vyperValue vyperState valueEncoding venomState e2eDefs list rich_list
+  fragGasSeqAbort exprLoweringProps fragExec
+
+Theorem raw_log_static_continuation_mem:
+  cx.txn.is_static /\ dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
+  fn_has_code sm sb func /\ sb.cs_current_bb = sm.cs_current_bb /\
+  sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sm sb) /\
+  run_inst_seq_mem_ok (emitted_insts sm sb) s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort t ==>
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
+    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
+        type_check (LENGTH vals <= 4) "raw_log too many topics";
+        check_not_static cx;
+        push_log (encode_raw_event_values cx.txn.target vals bs');
+        return NoneV od) (es,s) Q (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     `!k. LENGTH sm.cs_current_insts - (LENGTH sm.cs_current_insts + k) = 0`
+       by decide_tac >> simp[DROP_APPEND]) >>
+  drule_at (Pat `run_inst_seq _ _ = _`)
+    (Q.SPEC `T` run_inst_seq_abort_gas_path) >> simp[] >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choosel_then [`n`, `j`] strip_assume_tac) >>
+  mp_tac (Q.INST [`memory` |-> `T`, `t` |-> `t with vs_inst_idx := j`,
+    `es` |-> `es`, `Q` |-> `\rr ee u. F`] raw_log_static_tail_summary) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac >>
+  `res = INR (Error (RuntimeError "write in static context"))` by
+    (fs[gas_marked_exec_def] >>
+     gvs[bind_def, ignore_bind_def,
+        lift_option_type_def, type_check_def, check_not_static_def,
+        check_def, assert_def, return_def]) >>
+  qexists_tac `REPLICATE n F` >> disj2_tac >> disj1_tac >>
+  qexistsl_tac [`res`, `es_end`, `r`] >>
+  gvs[exprSimDefsTheory.halt_exit_def]
+QED
 
 Theorem raw_log_data_operands_mem:
   wb_args_post H ctx func cenv cx es0 sa s0 es1 ops vals t /\
@@ -84,6 +127,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_continuation_mem:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op,s2) /\
@@ -119,7 +163,7 @@ Theorem raw_log_dynamic_continuation_mem:
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
@@ -163,6 +207,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_continuation_mem:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
@@ -195,7 +240,7 @@ Theorem raw_log_fixed_continuation_mem:
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by

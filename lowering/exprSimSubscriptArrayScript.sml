@@ -136,7 +136,9 @@ Resume compile_subscript_array_framed_base_case[base_exit]:
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
       first_assum ACCEPT_TAC) >>
-  fs[] >> disj2_tac >> first_assum ACCEPT_TAC
+  fs[] >> disj2_tac >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> simp[]
 QED
 Resume compile_subscript_array_framed_base_case[base_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -185,7 +187,7 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
           (LocatedValue ann (mk_ptr dst loc)) t' /\
         t'.vs_current_bb = sb.cs_current_bb /\
         t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-     (\H res ee out. expr_exit res out)` suffices_by
+     (\H res ee out. expr_exit res out /\ halt_exit H cx ee res out)` suffices_by
     simp[gasOutcomeTheory.gas_outcome_def] >>
   qpat_assum `~subscript_reads_base _ _ _`
     (irule o MATCH_MP framed_array_after_base) >> simp[] >>

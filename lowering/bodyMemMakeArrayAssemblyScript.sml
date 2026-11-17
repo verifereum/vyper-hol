@@ -1,6 +1,7 @@
 (* Shared MakeArray memory simulation, including physically widened children. *)
 Theory bodyMemMakeArrayAssembly
 Ancestors
+  gasOutcome
   bodyMemAggregateFrames bodyMemArrayLayout bodyMemTupleLayout bodyMemAggregateResult bodyMemAggregateAlloc bodyMemAggregateAssembly
   bodyMemAggregateTraversal bodyMemArrayAdapters bodyExprForceMemory
   exprSimAggregates exprSimAggregateLayout exprSimHyps exprSimMemDefs
@@ -49,7 +50,10 @@ Proof
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `stmt_state_rel H0 ctx func cenv cx st s0` by metis_tac[] >>
   drule_all tuple_body_allocation_layout >> strip_tac >> gvs[] >>
-  drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `H0`]
+    (INST_TYPE [alpha |-> ``:256``]
+      aggregate_buffer_alloc_counted_mem_any_block)) >> strip_tac >> gvs[] >>
   (* The allocation keeps the fields the horizon reads, so the buffer state is
      related at every horizon the start state is. *)
   `!H. valid_horizon cx st0 H st.storage_trace ==>
@@ -63,7 +67,10 @@ Proof
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`st0`,`ctx`,`tops`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
-    irule aggregate_alloca_immutable_sep >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+      drule >> strip_tac >>
+    irule (Q.INST [`H` |-> `H0`]
+      (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep)) >>
     goal_assum (drule_at (Pat `stmt_state_rel H0 ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -72,6 +79,10 @@ Proof
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
+  MATCH_MP_TAC (SRULE [] (Q.INST
+    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
+  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
+    fs[expr_body_pre_def]) >>
   simp[aggregate_tuple_action_mem] >>
   drule aggregate_outcome_source_run_mem >> strip_tac >>
   irule aggregate_outcome_map_mem >> goal_assum (drule_at Any) >>
@@ -112,7 +123,8 @@ Proof
          disch_then ACCEPT_TAC)
      >- (irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
-  drule_at (Pat `expr_body_pre _ _ _ _ _`) aggregate_completed_buffer_result >>
+  drule_at (Pat `expr_body_pre _ _ _ _ _`)
+    (INST_TYPE [alpha |-> ``:256``] aggregate_completed_buffer_result) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   disch_then match_mp_tac >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def, is_word_type_def,
@@ -153,7 +165,10 @@ Proof
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `stmt_state_rel H0 ctx func cenv cx st s0` by metis_tac[] >>
   drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
-  drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `H0`]
+    (INST_TYPE [alpha |-> ``:256``]
+      aggregate_buffer_alloc_counted_mem_any_block)) >> strip_tac >> gvs[] >>
   (* The allocation keeps the fields the horizon reads, so the buffer state is
      related at every horizon the start state is. *)
   `!H. valid_horizon cx st0 H st.storage_trace ==>
@@ -167,7 +182,10 @@ Proof
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`env`,`st`,`ctx`,`tops`,`st0`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
-    irule aggregate_alloca_immutable_prefix_sep >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+      drule >> strip_tac >>
+    irule (Q.INST [`H` |-> `H0`]
+      (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_prefix_sep)) >>
     goal_assum (drule_at (Pat `stmt_state_rel H0 ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -176,6 +194,10 @@ Proof
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
+  MATCH_MP_TAC (SRULE [] (Q.INST
+    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
+  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
+    fs[expr_body_pre_def]) >>
   `eval_expr cx (Builtin (ArrayT et n) (MakeArray (SOME et) n) es) =
     bind (eval_exprs cx es) (return o (\vs. Value (ArrayV (make_array_value tv n vs))))` by
     (irule aggregate_array_action_mem >> simp[]) >>
@@ -222,7 +244,8 @@ Proof
          disch_then ACCEPT_TAC)
      >- (irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
-  drule_at (Pat `expr_body_pre _ _ _ _ _`) aggregate_completed_buffer_result >>
+  drule_at (Pat `expr_body_pre _ _ _ _ _`)
+    (INST_TYPE [alpha |-> ``:256``] aggregate_completed_buffer_result) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   disch_then match_mp_tac >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def, is_word_type_def,

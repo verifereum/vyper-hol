@@ -48,7 +48,7 @@ Theorem compile_mapping_subscript_outcome_mem:
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_tac >> match_mp_tac compile_mapping_subscript_outcome_mem_given_tail >>
   conj_tac
@@ -134,16 +134,15 @@ Proof
   `MEM (tr,hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv),tvt) (FST H) /\
    regions_consistent (FST H)` by
     (fs[vyperStorageFootprintTheory.valid_horizon_def, vyperStorageFootprintTheory.storage_observations_ok_def,
-        vyperStorageFootprintTheory.storage_trace_regions_def, EVERY_APPEND, EVERY_MEM]) >>
+        vyperStorageFootprintTheory.storage_trace_regions_def,
+        listTheory.EVERY_APPEND, listTheory.EVERY_MEM]) >>
   drule_all mapping_leaf_storage_valid >> strip_tac >>
   drule_all (SRULE [] (Q.INST
     [`es` |-> `ef with storage_trace := ef.storage_trace ++
       [StorageRoot tr
         (w2n (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv))) tvt]`]
     mapping_leaf_vv_holds)) >> strip_tac >>
-  simp[vv_post_def, expr_type_def, vv_at_def] >>
-  conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
-  conj_tac >- (rpt strip_tac >> Cases_on `tr` >> gvs[slot_loc_def]) >>
+  simp[vv_post_def, vyperASTTheory.expr_type_def, vv_at_def] >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>

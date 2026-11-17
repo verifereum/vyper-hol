@@ -100,6 +100,7 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ t1 = SOME _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   disch_then (qspecl_then [`asz`, `inst.inst_id`] mp_tac) >>
+  disch_then (qspec_then `H` mp_tac) >>
   (impl_tac >- (simp[] >> fs[body_inv_def, expr_sim_inv_def] >>
     metis_tac[arithmeticTheory.ADD_COMM])) >> strip_tac >>
   `body_exprs_mem_ok cx args` by metis_tac[aggregate_body_exprs_mem_tail] >>

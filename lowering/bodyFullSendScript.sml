@@ -18,7 +18,14 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* LOCAL STUB - foreign launch blocker; original proof and suspensions retained.
+Theorem send_expr_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+   has_gas args dflt es.
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    body_exprs_full_ok cx args ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
   rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
@@ -492,7 +499,10 @@ Resume send_expr_sim_full[gas_child]:
   qpat_assum `gas_outcome_full _ _ _ _ _ _ gasQ gasR` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `gasR`,Abbr `amountR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]
+  Cases_on `res`
+  >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
+      simp[exprSimDefsTheory.expr_exit_def]) >>
+  simp[]
 QED
 
 Resume send_expr_sim_full[call_tail]:
@@ -714,8 +724,10 @@ Resume send_expr_sim_full[gas_call_tail]:
     metis_tac[uint256_typed_dest] >>
   `outcomes_accounts_typed gas_end.outcomes /\
    accounts_runtime_well_typed gas_end.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+    (qpat_assum `expr_sim_inv cenv cx env gas_end` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
   `s0.vs_alloca_next <= gas_s.vs_alloca_next` by
     metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   `MAP finite_map$FDOM es.scopes = MAP finite_map$FDOM gas_end.scopes` by
@@ -756,19 +768,6 @@ Resume send_expr_sim_full[gas_suffix_finish]:
 QED
 
 Finalise send_expr_sim_full
-
-*)
-Theorem send_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
-   has_gas args dflt es.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    body_exprs_full_ok cx args ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Call ann (Send has_gas) args dflt) es
-Proof
-  cheat
-QED
 
 Theorem send_expr_vv_sim_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann

@@ -78,7 +78,7 @@ Definition log_args_res_ok_def:
     !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)
 End
 
-Theorem log_head_admissible[local]:
+Theorem log_head_admissible:
   gas_admissible (eval_exprs cx (e::args)) log_args_res_ok es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
 Proof
@@ -89,7 +89,7 @@ Proof
   first_x_assum drule >> simp[log_args_res_ok_def]
 QED
 
-Theorem log_tail_admissible[local]:
+Theorem log_tail_admissible:
   gas_admissible (eval_exprs cx (e::args)) log_args_res_ok es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
             (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)) ==>

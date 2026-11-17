@@ -276,7 +276,7 @@ Resume evaluate_unwritten_local[builtin_ok]:
      qpat_x_assum `~MEM _ (accesses_exprs es)` mp_tac >>
      rpt (pop_assum kall_tac) >>
      rw[code_slice_source_SOME] >> gvs[accesses_expr_def]) >>
-  simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> FIRST [gvs[]] >>
   imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED

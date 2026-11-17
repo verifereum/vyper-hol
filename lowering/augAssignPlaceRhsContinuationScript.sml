@@ -67,7 +67,8 @@ Theorem aug_place_operator_write_path_mem[local]:
              res (ff with gas_obs := []) u)) \/
      (exit_result r /\
       !H. valid_horizon cx st0 H ff.storage_trace ==>
-          !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r))
+          (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+          halt_exit H cx (ff with gas_obs := []) res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
@@ -129,12 +130,10 @@ Proof
       >- first_assum ACCEPT_TAC >>
       gen_tac >> strip_tac >>
       `valid_horizon cx st0 H ee.storage_trace` by
-        (mp_tac (Q.INST [`f` |-> `write_place cx p v`, `st` |-> `ee`,
-                         `res` |-> `INL ()`, `st'` |-> `ff`]
-                   (INST_TYPE [alpha |-> ``:unit``]
-                      vyperStorageFootprintTheory.valid_horizon_frame)) >>
-         impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
-         first_assum ACCEPT_TAC) >>
+        (irule (INST_TYPE [alpha |-> ``:unit``]
+                  vyperStorageFootprintTheory.valid_horizon_frame) >>
+         qexists_tac `write_place cx p v` >>
+         simp[vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
       `stmt_state_rel H ctx func cenv cx ee t` by
         (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
                           stmt_state_rel H _ _ _ _ ee t /\ _`
@@ -181,9 +180,11 @@ Proof
   qexistsl_tac [`INR (Error err)`, `ee`, `r`] >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  rpt gen_tac >> strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] stmtSimPropsTheory.expr_exit_INR_type] >>
-  gvs[]
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (simp[stmtSimDefsTheory.stmt_exit_def] >>
+      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
+        stmtSimPropsTheory.expr_exit_INR_type] >> gvs[]) >>
+  simp[exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem aug_place_rhs_operator_write_mem:
@@ -244,12 +245,16 @@ Theorem aug_place_rhs_operator_write_mem:
     (\H res ff u. res = INL () /\
       stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   strip_tac >>
   `!z. y = Var z ==> not_fresh_at s2 z` by
-    (drule_all exprOperandVarTheory.compile_lower_value_var >> strip_tac >>
-     first_assum ACCEPT_TAC) >>
+    (gen_tac >> strip_tac >>
+     irule exprOperandVarTheory.compile_lower_value_var >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`cenv`, `e`, `s1`, `ty`] >> simp[]) >>
   `(!z. x = Var z ==> not_fresh_at s2 z) /\
    (!z. dst = Var z ==> not_fresh_at s2 z) /\
    (!z. not_fresh_at sa z ==> not_fresh_at s2 z)` by metis_tac[] >>
@@ -258,21 +263,26 @@ Proof
   disch_then (qspecl_then [`st0`, `s1`, `s2`, `y`, `s0`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   irule forced_then_outcome >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> BETA_TAC >> conj_tac
+      >- (simp[stmtSimDefsTheory.stmt_exit_def] >>
+          ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
+            stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+      gvs[exprSimDefsTheory.halt_exit_def]) >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
+           vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
   qexists_tac `\H v ee t. expr_post H ctx func cenv cx e es s1 s2 s0 ee v y t /\
     expr_store_bound cx (expr_type e) v y t /\
     t.vs_current_bb = s2.cs_current_bb /\
     t.vs_inst_idx = LENGTH s2.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   BETA_TAC >>
-  rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-      simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
-           vyperStorageTraceTheory.storage_trace_frame_write_place])
+  conj_tac
   >- suspend "callback"
-  >- (rpt strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
-      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-        stmtSimPropsTheory.expr_exit_INR_type] >> simp[])
+  >- first_assum ACCEPT_TAC
 QED
 
 Resume aug_place_rhs_operator_write_mem[callback]:
@@ -299,21 +309,23 @@ Resume aug_place_rhs_operator_write_mem[callback]:
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `!rhs ee. ee.gas_obs = [] /\ _ ==> _`
     (qspecl_then [`v`, `ee`] mp_tac) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  impl_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `gs` >> first_assum ACCEPT_TAC) >> strip_tac >>
   `eval_operand y t = SOME (val_to_w256 v)` by
     (drule_all expr_post_word_operand >> simp[]) >>
   `eval_operand x t = SOME (val_to_w256 cur) /\ eval_operand dst t = SOME w` by
-    (conj_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
-     qexistsl_tac [`s1`, `s0`] >> rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+    (conj_tac >>
+     (irule exprBopSimPropsTheory.eval_operand_frame >>
+      conj_tac >- simp[] >>
+      qexistsl_tac [`s1`, `s0`] >> rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   `place_ptr_rel cenv cx t (PlaceR p) w (SOME loc) (Type ty)` by
     (Cases_on `p`
      >- fs[place_ptr_rel_def]
      >- (rename1 `PlaceR (MemoryPlace id path)` >>
-         mp_tac (Q.INST [`sa` |-> `s1`, `s` |-> `t`, `loc` |-> `SOME loc`,
-                         `vt` |-> `Type ty`] aug_place_memory_ptr_frame) >>
-         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-         strip_tac >> first_assum ACCEPT_TAC)
+         irule aug_place_memory_ptr_frame >>
+         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[])
      >> fs[place_ptr_rel_def]) >>
   `loc = LocMemory ==> w2n w + 32 <= t.vs_alloca_next` by
     (strip_tac >>
@@ -344,7 +356,9 @@ Resume aug_place_rhs_operator_write_mem[callback]:
   `alloca_frame cenv es0 sa s_entry cenv ee t` by
     (`alloca_frame cenv es s1 s0 cenv ee t` by
        (mp_tac (Q.INST [`H` |-> `H0`, `sa` |-> `s1`, `sb` |-> `s2`,
-                        `op` |-> `y`] stmtSimDefsTheory.expr_post_alloca_frame) >>
+                        `op` |-> `y`]
+                  (INST_TYPE [alpha |-> ``:256``]
+                    stmtSimDefsTheory.expr_post_alloca_frame)) >>
         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
         strip_tac >> first_assum ACCEPT_TAC) >>
      irule stmtSimDefsTheory.alloca_frame_trans >>
@@ -392,7 +406,7 @@ Resume aug_place_rhs_operator_write_mem[callback]:
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       gen_tac >> strip_tac >>
       qpat_x_assum `!H. valid_horizon cx st0 H ff.storage_trace ==>
-                        !tail. stmt_exit _ _ _ _`
+                        (!tail. stmt_exit _ _ _ _) /\ _`
         (qspec_then `H` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> simp[])
 QED

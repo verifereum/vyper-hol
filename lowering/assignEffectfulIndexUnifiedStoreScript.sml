@@ -4,11 +4,15 @@ Ancestors
   placeRelayoutMemoryRun exprSimProps vyperTypeArgFits compileEnv
   tuplePlaceStep assignEffectfulIndexSnapshotFrame loweringPosts freshWrites
   aggregateEvaluatedLayout exprLoweringProps venomMemDefs valueEncodingTyping
-  tuplePlaceSnapshot exprSimHyps
+  tuplePlaceSnapshot exprSimHyps vyperStorageFootprint vyperStoragePlaceObserved
 
 Theorem assign_effectful_snapshot_unified_store_ready:
-  target_post ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
-    (dst,SOME loc,SOME (ValPT dty)) s /\
+  (?H. valid_horizon cx st0 H mid.storage_trace) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+      (dst,SOME loc,SOME (ValPT dty)) s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ val_wf stv v /\
@@ -31,7 +35,7 @@ Theorem assign_effectful_snapshot_unified_store_ready:
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv st /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv st /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id mid.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -52,22 +56,26 @@ Theorem assign_effectful_snapshot_unified_store_ready:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func cenv cx ff z /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff z) /\
     (!x. not_fresh_at st x ==> lookup_var x z = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b) /\
     ~z.vs_halted /\ z.vs_current_bb = sf.cs_current_bb /\
     z.vs_inst_idx = LENGTH sf.cs_current_insts /\
     alloca_frame cenv mid st s cenv ff z
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `target_post H0 ctx func cenv cx ee ss st u mid (PlaceR p) (Type dty)
+     (dst,SOME loc,SOME (ValPT dty)) s` by metis_tac[] >>
   Cases_on `loc = LocMemory /\
     ~(is_word_type (lowered_value_type cenv e) \/ dty = lowered_value_type cenv e)`
   >- suspend "widening" >>
   irule assign_effectful_snapshot_owned_store_ready >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  qexistsl_tac [`dtv`, `dw`, `stv`, `sw`, `v`] >> simp[] >>
+  reverse conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl_tac [`dst`, `dtv`, `dty`, `dw`, `e`, `ee`, `loc`, `p`,
+    `snap`, `ss`, `stv`, `sw`, `u`, `v`] >> simp[] >>
   Cases_on `loc = LocMemory` >> gvs[arithmeticTheory.ADD_COMM]
 QED
 
@@ -76,8 +84,9 @@ Resume assign_effectful_snapshot_unified_store_ready[widening]:
   Cases_on `is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)`
   >- (irule assign_effectful_snapshot_bytes_store_ready >> simp[] >>
       conj_tac >- metis_tac[] >>
-      goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-      qexistsl_tac [`dtv`, `dw`, `e`, `snap`, `stv`, `sw`, `v`] >>
+      reverse conj_tac >- (qexists_tac `env` >> simp[]) >>
+      qexistsl_tac [`dst`, `dtv`, `dty`, `dw`, `e`, `ee`, `p`, `snap`,
+        `ss`, `stv`, `sw`, `u`, `v`] >>
       gvs[arithmeticTheory.ADD_COMM] >>
       qexistsl_tac [`aid`, `sz`] >> simp[arithmeticTheory.ADD_COMM] >>
       metis_tac[]) >>
@@ -93,9 +102,10 @@ Resume assign_effectful_snapshot_unified_store_ready[relayout]:
     metis_tac[tuple_place_target_operand] >>
   `val_in_memory stv v (w2n sw) s.vs_memory` by
     metis_tac[assign_effectful_target_snapshot_value, arithmeticTheory.ADD_COMM] >>
-  `stmt_state_rel ctx func cenv cx mid s /\
+  `stmt_state_rel H0 ctx func cenv cx mid s /\
    place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
-   (!x. dst = Var x ==> not_fresh_at st x)` by gvs[target_post_def] >>
+   (!x. dst = Var x ==> not_fresh_at st x)` by
+    (fs[target_post_def] >> metis_tac[]) >>
   `!x. vv_operand snap = Var x ==> not_fresh_at st x` by
     metis_tac[not_fresh_at_mono] >>
   `value_has_type dtv v` by
@@ -112,10 +122,15 @@ Resume assign_effectful_snapshot_unified_store_ready[relayout]:
        gvs[stmt_state_rel_def, alloca_inv_def] >>
      `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
      fs[alloca_next_valid_def] >> res_tac >> decide_tac) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid s` by
+    (rpt strip_tac >> fs[target_post_def] >> metis_tac[]) >>
   fs[] >> irule place_relayout_memory_run >> simp[] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  simp[val_footprint_le]
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl_tac [`type_memory_bytes cenv dty`, `dst`, `dtv`, `dty`, `dw`, `p`,
+    `vv_operand snap`, `SOME LocMemory`, `stv`, `lowered_value_type cenv e`,
+    `sw`, `v`] >> simp[val_footprint_le, arithmeticTheory.ADD_COMM] >>
+  decide_tac
 QED
 Finalise assign_effectful_snapshot_unified_store_ready

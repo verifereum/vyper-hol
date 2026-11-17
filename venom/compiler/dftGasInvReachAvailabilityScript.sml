@@ -200,28 +200,11 @@ Proof
   drule_all inv_ev_prefix_available >> simp[]
 QED
 
-Theorem inv_ev_step_labels[local]:
-  ev_step orc p d fuel ctx inst s = OK t ==> t.vs_labels = s.vs_labels
-Proof
-  simp[Once ev_step_def] >> Cases_on `inst.inst_opcode = GAS`
-  >- (simp[ev_gas_def] >> strip_tac >> gvs[AllCaseEqs()]) >>
-  simp[] >> Cases_on `inst.inst_opcode = INVOKE`
-  >- (simp[] >> strip_tac >> gvs[AllCaseEqs()] >>
-      rename1 `bind_outputs _ ret.iret_values _ = SOME _` >>
-      drule inv_bind_outputs_frame >>
-      Cases_on `ret.iret_adopt_fmp` >>
-      simp[adopt_return_fmp_def, merge_callee_state_def]) >>
-  simp[] >> strip_tac >>
-  `step_inst fuel ctx inst s = OK t` by
-    simp[Once step_inst_def] >>
-  metis_tac[step_inst_preserves_labels_always]
-QED
-
 Theorem inv_ev_prefix_labels[local]:
   !n s t. inv_ev_prefix orc p d ctx bb n s t ==> t.vs_labels = s.vs_labels
 Proof
   Induct >> simp[inv_ev_prefix_suc] >> rpt strip_tac >>
-  drule inv_ev_step_labels >> strip_tac >> first_x_assum drule >> simp[]
+  drule ev_step_labels >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
 Theorem inv_ev_reachable_labels_bound[local]:
@@ -229,13 +212,7 @@ Theorem inv_ev_reachable_labels_bound[local]:
   ev_reachable orc initial ctx p d fn inst t ==>
   ctx_labels_bound ctx initial.vs_labels ==> ctx_labels_bound ctx t.vs_labels
 Proof
-  ho_match_mp_tac ev_reachable_ind >> rpt strip_tac >>
-  gvs[enters_block_def]
-  >- (drule eval_phis_preserves_labels >> gvs[])
-  >- (drule inv_ev_step_labels >> gvs[])
-  >- (drule eval_phis_preserves_labels >> drule inv_ev_step_labels >> gvs[])
-  >> drule eval_phis_preserves_labels >> strip_tac >>
-  metis_tac[ctx_labels_bound_setup_callee]
+  metis_tac[ev_reachable_labels]
 QED
 
 Theorem inv_ev_prefix_index[local]:

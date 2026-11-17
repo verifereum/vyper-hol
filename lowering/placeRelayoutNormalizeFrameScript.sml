@@ -7,7 +7,7 @@ Ancestors
   vyperTypeSystem list finite_map venomInst venomState fragExec exprSimProps
   loweringSlice compileEnv loweringStateRelDefs exprSimStorageCopy aggregateCodeTrace aggregateCountedRenamedStore
   placeRelayoutNormalizeCode aggregateCountedRawRelabel aggregateCountedStraightStore
-  exprSimHash aggregateCountedStraightExec exprSimAbiGasBridge
+  exprSimHash aggregateCountedStraightExec exprSimAbiGasBridge exprSimUnwrap
 
 Theorem place_alloc_buffer_source_frag:
   !H ctx func cenv cx es sm mid buf sz s src a R.
@@ -33,10 +33,13 @@ Theorem place_alloc_buffer_source_frag:
          regions_disjoint (w2n w) sz b len) /\
       (!name b len. local_region cenv es.scopes u name b len ==>
          regions_disjoint (w2n w) sz b len) /\
-      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
+      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p) /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all alloc_buffer_fields >> strip_tac >>
   `t.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
   `eval_operand src t = SOME a` by
     (Cases_on `src` >> gvs[eval_operand_def]) >>
@@ -107,7 +110,9 @@ Theorem place_normalize_framed_frag:
                  FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
                  regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
                (!name b len. local_region cenv es.scopes s name b len ==>
-                 regions_disjoint (w2n w) (type_memory_size dtv) b len)) R
+                 regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
+               u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+               u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx) R
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `cs_extends sa sm` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
@@ -167,6 +172,9 @@ Resume place_normalize_framed_frag[post]:
   markerLib.RESUME_TAC >> (disch_then assume_tac >> drule frag_exec_weaken >>
   disch_then irule >> simp[] >> rpt strip_tac >>
   drule copy_static_fields >> strip_tac >>
+  qpat_assum `copy_static _ = copy_static _`
+    (assume_tac o SIMP_RULE (srw_ss()) [copy_static_def] o
+      AP_TERM ``venom_state_vs_requests``) >>
   qexists_tac `w` >> simp[] >> conj_tac
   >- (gvs[eval_operand_def] >> first_x_assum irule >> simp[]) >>
   conj_tac
@@ -270,7 +278,9 @@ Theorem place_normalize_framed_path:
       (!name b len. local_region cenv es.scopes s name b len ==>
         regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
       ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all place_normalize_framed_frag >>

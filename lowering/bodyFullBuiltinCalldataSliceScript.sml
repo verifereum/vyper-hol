@@ -3,7 +3,7 @@ Theory bodyFullBuiltinCalldataSlice
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullBuiltinBytestringCalldataCase bodyFullBuiltinBytestringCalldataRun
   bodyFullBuiltinBytestringCalldataAbort
-  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull
+  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull bodyInvNoDalloca
   bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr ptrDiscipline localPtrsProps
   reasonCodeResourcesPtr bodyPtrAttributeFields
   valueEncodingDefs vyperValue vyperTypeInvariants exprSimProps exprSimMemDefs
@@ -18,9 +18,17 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
 Libs
   pairLib
 
-(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Theorem calldata_slice_vv_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+    (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
+      body_exprs_full_ok cx args) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin ann (CalldataSlice n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all calldata_slice_body_operand_full >>
   disch_then (qspecl_then [`shadow_func`,`shadow_ctx`,`lo`,`func`,`d`,`PG`,`DF`]
     strip_assume_tac) >> gvs[] >>
@@ -78,7 +86,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`ss`,`x`,`s0`,`G0`,`tn0`]
     mp_tac) >>
-  (impl_tac >- fs[]) >> disch_tac >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   `eval_expr cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) =
     bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. ((case builtin_result cx mid.accounts (BaseT (BytesT (Dynamic n)))
@@ -104,7 +112,8 @@ Proof
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
       conj_tac >- simp[] >>
       simp[Abbr `childR`] >> rpt strip_tac >> Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_def,stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gvs[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def,
+          stmtSimPropsTheory.expr_exit_INR_type]) >>
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by gvs[storage_trace_domain_def] >>
@@ -438,22 +447,18 @@ Proof
     `res` |-> `INR (Error (RuntimeError errstr))`,`ee` |-> `mid`,
     `G'` |-> `HG`,`tn'` |-> `tm`] gas_outcome_full_exit) >>
   simp[exit_result_def,exprSimDefsTheory.expr_exit_def] >>
-  qexistsl_tac [`HG`,`errstr`,`mid`,`tm`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`errstr`,`mid`,`tm`,`u`] >>
+  simp[exprSimDefsTheory.halt_exit_def]
 QED
-*)
-Theorem calldata_slice_vv_sim_full:
+
+Theorem calldata_slice_expr_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
-Proof
-  cheat
-QED
-
-(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -475,16 +480,4 @@ Proof
       (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
-QED
-*)
-Theorem calldata_slice_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
-    (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin ann (CalldataSlice n) args) es
-Proof
-  cheat
 QED

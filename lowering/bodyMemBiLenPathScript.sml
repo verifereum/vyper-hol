@@ -127,7 +127,9 @@ Proof
      qexistsl [`t`, `sm`] >> pure_asm_rewrite_tac[] >>
      simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
   qexists_tac `t'` >> simp[] >>
-  irule len_vv_post_load >> simp[] >>
-  qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[] >>
+  conj_tac
+  >- (irule len_vv_post_load >> simp[] >>
+      qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[] >>
+      qpat_x_assum `t' = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
   qpat_x_assum `t' = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]
 QED

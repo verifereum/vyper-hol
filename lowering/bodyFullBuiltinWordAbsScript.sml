@@ -182,9 +182,16 @@ Resume abs_suffix_success_full[ghosts]:
   simp[compile_builtin_abs_def, compile_select_def, comp_bind_def,
        comp_ignore_bind_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def, mk_inst_def] >>
-  strip_tac >> gvs[] >> gvs[emitted_insts_def] >>
+  strip_tac >> gvs[] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE
+    [emitted_insts_def, compile_state_accfupds, combinTheory.K_THM]) >>
+  pure_rewrite_tac [emitted_insts_def, compile_state_accfupds,
+    combinTheory.K_THM, GSYM APPEND_ASSOC] >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  fs[rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def, AllCaseEqs()] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [rich_listTheory.DROP_LENGTH_APPEND, APPEND]) >>
+  pure_rewrite_tac [rich_listTheory.DROP_LENGTH_APPEND, APPEND] >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  simp_tac (srw_ss()) [run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `step_inst_base i0 s = OK s1` >>
   `!a. MEM a i0.inst_operands ==> op_prov G a = NONE /\ op_taint tn a = {}` by
     (rw[Abbr `i0`] >> simp[op_prov_def, op_taint_def]) >>
@@ -199,9 +206,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G1 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn1 (Var _)` >>
   `op_prov G1 x = NONE /\ op_taint tn1 x = {}` by metis_tac[] >>
-  `allocas_from lo s1` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s1` by
+    (qpat_assum `allocas_from lo s` mp_tac >>
+     qpat_assum `s1.vs_allocas = s.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `s1.vs_allocas = s.vs_allocas` mp_tac >>
+     qpat_assum `s1.vs_fmp = s.vs_fmp` mp_tac >>
+     qpat_assum `s1.vs_initial_fmp = s.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i1 s1 = OK s2` >>
   `!a. MEM a i1.inst_operands ==> op_prov G1 a = NONE /\ op_taint tn1 a = {}` by
     (rw[Abbr `i1`] >> simp[op_prov_def, op_taint_def]) >>
@@ -213,9 +227,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G2 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn2 (Var _)` >>
   `op_prov G2 x = NONE /\ op_taint tn2 x = {}` by metis_tac[] >>
-  `allocas_from lo s2` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s2` by
+    (qpat_assum `allocas_from lo s1` mp_tac >>
+     qpat_assum `s2.vs_allocas = s1.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     qpat_assum `s2.vs_allocas = s1.vs_allocas` mp_tac >>
+     qpat_assum `s2.vs_fmp = s1.vs_fmp` mp_tac >>
+     qpat_assum `s2.vs_initial_fmp = s1.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i2 s2 = OK s3` >>
   `!a. MEM a i2.inst_operands ==> op_prov G2 a = NONE /\ op_taint tn2 a = {}` by
     (rw[Abbr `i2`] >>
@@ -228,9 +249,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G3 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn3 (Var _)` >>
   `op_prov G3 x = NONE /\ op_taint tn3 x = {}` by metis_tac[] >>
-  `allocas_from lo s3` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s3` by
+    (qpat_assum `allocas_from lo s2` mp_tac >>
+     qpat_assum `s3.vs_allocas = s2.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     qpat_assum `s3.vs_allocas = s2.vs_allocas` mp_tac >>
+     qpat_assum `s3.vs_fmp = s2.vs_fmp` mp_tac >>
+     qpat_assum `s3.vs_initial_fmp = s2.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i3 s3 = OK s4` >>
   `!a. MEM a i3.inst_operands ==> op_prov G3 a = NONE /\ op_taint tn3 a = {}` by
     (rw[Abbr `i3`] >> simp[Abbr `i0`, Abbr `i1`, Abbr `i2`]) >>
@@ -242,9 +270,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G4 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn4 (Var _)` >>
   `op_prov G4 x = NONE /\ op_taint tn4 x = {}` by metis_tac[] >>
-  `allocas_from lo s4` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s4` by
+    (qpat_assum `allocas_from lo s3` mp_tac >>
+     qpat_assum `s4.vs_allocas = s3.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s3` mp_tac >>
+     qpat_assum `s4.vs_allocas = s3.vs_allocas` mp_tac >>
+     qpat_assum `s4.vs_fmp = s3.vs_fmp` mp_tac >>
+     qpat_assum `s4.vs_initial_fmp = s3.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i4 s4 = OK s5` >>
   `!a. MEM a i4.inst_operands ==> op_prov G4 a = NONE /\ op_taint tn4 a = {}` by
     (rw[Abbr `i4`] >> simp[Abbr `i3`]) >>
@@ -256,9 +291,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G5 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn5 (Var _)` >>
   `op_prov G5 x = NONE /\ op_taint tn5 x = {}` by metis_tac[] >>
-  `allocas_from lo s5` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s5` by
+    (qpat_assum `allocas_from lo s4` mp_tac >>
+     qpat_assum `s5.vs_allocas = s4.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s4` mp_tac >>
+     qpat_assum `s5.vs_allocas = s4.vs_allocas` mp_tac >>
+     qpat_assum `s5.vs_fmp = s4.vs_fmp` mp_tac >>
+     qpat_assum `s5.vs_initial_fmp = s4.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i5 s5 = OK s6` >>
   `!a. MEM a i5.inst_operands ==> op_prov G5 a = NONE /\ op_taint tn5 a = {}` by
     (rw[Abbr `i5`] >> simp[Abbr `i4`]) >>
@@ -270,9 +312,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G6 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn6 _` >>
   `op_prov G6 x = NONE /\ op_taint tn6 x = {}` by metis_tac[] >>
-  `allocas_from lo s6` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s6` by
+    (qpat_assum `allocas_from lo s5` mp_tac >>
+     qpat_assum `s6.vs_allocas = s5.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s6` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s5` mp_tac >>
+     qpat_assum `s6.vs_allocas = s5.vs_allocas` mp_tac >>
+     qpat_assum `s6.vs_fmp = s5.vs_fmp` mp_tac >>
+     qpat_assum `s6.vs_initial_fmp = s5.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i6 s6 = OK s7` >>
   `!a. MEM a i6.inst_operands ==> op_prov G6 a = NONE /\ op_taint tn6 a = {}` by
     (qpat_x_assum `!tn' t' s' lo' i fn ctx' PG G'. _` kall_tac >>
@@ -288,9 +337,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G7 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn7 (Var _)` >>
   `op_prov G7 x = NONE /\ op_taint tn7 x = {}` by metis_tac[] >>
-  `allocas_from lo s7` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s7` by
+    (qpat_assum `allocas_from lo s6` mp_tac >>
+     qpat_assum `s7.vs_allocas = s6.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s7` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s6` mp_tac >>
+     qpat_assum `s7.vs_allocas = s6.vs_allocas` mp_tac >>
+     qpat_assum `s7.vs_fmp = s6.vs_fmp` mp_tac >>
+     qpat_assum `s7.vs_initial_fmp = s6.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i7 s7 = OK s8` >>
   `!a. MEM a i7.inst_operands ==> op_prov G7 a = NONE /\ op_taint tn7 a = {}` by
     (qpat_x_assum `!tn' t' s' lo' i fn ctx' PG G'. _` kall_tac >>
@@ -309,9 +365,16 @@ Resume abs_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G8 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn8 (Var _)` >>
   `op_prov G8 x = NONE /\ op_taint tn8 x = {}` by metis_tac[] >>
-  `allocas_from lo s8` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s8` by
+    (qpat_assum `allocas_from lo s7` mp_tac >>
+     qpat_assum `s8.vs_allocas = s7.vs_allocas` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_from_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s8` by
-    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s7` mp_tac >>
+     qpat_assum `s8.vs_allocas = s7.vs_allocas` mp_tac >>
+     qpat_assum `s8.vs_fmp = s7.vs_fmp` mp_tac >>
+     qpat_assum `s8.vs_initial_fmp = s7.vs_initial_fmp` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `step_inst_base i8 s8 = OK t` >>
   `!a. MEM a i8.inst_operands ==> op_prov G8 a = NONE /\ op_taint tn8 a = {}` by
     (rw[Abbr `i8`] >> simp[Abbr `i7`]) >>
@@ -335,7 +398,8 @@ Resume abs_suffix_success_full[ghosts]:
      ~MEM v i4.inst_outputs /\ ~MEM v i5.inst_outputs /\
      ~MEM v i6.inst_outputs /\ ~MEM v i7.inst_outputs /\
      ~MEM v i8.inst_outputs` by
-      (fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+      (qpat_x_assum `not_fresh_at sa v`
+         (assume_tac o PURE_REWRITE_RULE [loweringStateRelDefsTheory.not_fresh_at_def]) >>
        simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`,
             Abbr `i5`, Abbr `i6`, Abbr `i7`, Abbr `i8`]) >>
     qpat_x_assum `!tn' t' s' lo' i fn ctx' PG G'. _` kall_tac >>

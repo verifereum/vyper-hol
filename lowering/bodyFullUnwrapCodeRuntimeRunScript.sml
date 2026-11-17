@@ -65,7 +65,7 @@ QED
 
 Theorem runtime_code_alloc_origin:
   compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\ buf.buf_operand = Var root /\
   step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
@@ -98,7 +98,7 @@ Theorem runtime_code_copy_origin_execution:
   compile_imm_copy_to_memory F imm src buf.buf_operand n 0 mid = ((),sc) /\
   fn_has_code sb mid func /\ fn_has_code mid sc func /\
   fn_inst_ids_distinct func /\ stmt_state_rel H ctx func cenv cx ee s /\
-  nb = 32*n /\ nb < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  nb = 32*n /\ nb < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -136,6 +136,13 @@ Proof
   strip_tac >> drule_all unwrap_alloc_entry >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `buf.buf_operand = Var root` >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (strip_tac >> drule_all unwrap_alloc_below_fmp >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     qpat_x_assum `a = u with vs_inst_idx := _`
+       (fn th => REWRITE_TAC [th]) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `!x. src = Var x ==> x <> root` by
     metis_tac[unwrap_alloc_old_operand_distinct] >>
   drule_all unwrap_alloc_old_operand_ghost >>

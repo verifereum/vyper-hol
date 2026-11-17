@@ -14,6 +14,7 @@ Theorem immutable_assign_mem_entry_post:
   s0.vs_alloca_next <= t.vs_alloca_next ==>
   stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
   cenv_top_ext ce ce fin.scopes /\ stmt_state_rel H ctx func ce cx fin t /\
+  storage_well_formed_on cx fin (FST H) /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

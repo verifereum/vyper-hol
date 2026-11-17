@@ -135,7 +135,7 @@ Theorem constructor_exit_zero_path_mem:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+  (nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
           storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
           nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
@@ -162,7 +162,8 @@ Proof
          (u with vs_inst_idx := 1)` by
         (simp[stmt_state_rel_inst_idx, Abbr `u`] >>
          irule constructor_unlock_stmt_state_rel >> simp[]) >>
-      `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      `~s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
       `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]
           (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -236,7 +237,7 @@ Proof
   `~(jump_to exit_lbl s0).vs_halted /\
    (jump_to exit_lbl s0).vs_current_bb = st_exit.cs_current_bb /\
    (jump_to exit_lbl s0).vs_inst_idx = 0` by simp[jump_to_def] >>
-  `F ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+  `F ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
      storage_locks_separated (FST (storage_trace_horizon es.storage_trace))
        (SND (storage_trace_horizon es.storage_trace)) /\
      MEM nkey (SND (storage_trace_horizon es.storage_trace)) /\
@@ -250,7 +251,8 @@ Proof
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
-       stmt_exit_def, exit_result_def, vyperStateTheory.raise_def]
+       stmt_exit_def, exit_result_def, exprSimDefsTheory.halt_exit_def,
+       vyperStateTheory.raise_def]
 QED
 
 Theorem constructor_frame_ret_ok_mem:

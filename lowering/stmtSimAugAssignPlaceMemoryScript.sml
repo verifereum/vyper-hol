@@ -642,7 +642,9 @@ Theorem aug_place_binop_store_outcome:
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry)
-    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+    (\H res ff r.
+      (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
+      halt_exit H cx ff res r)
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ k _ _ _` >>
@@ -737,6 +739,10 @@ Resume aug_place_binop_store_outcome[exit]:
     (Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs ee` >>
      gvs[expr_exit_def]) >>
   gvs[] >>
+  `ex <> HaltException` by
+    (qpat_x_assum `bop_result _ _ _ _ _ _ _ = INR ex`
+       (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.bop_result_def]) >>
+     simp[CaseEq "sum"] >> rpt strip_tac >> gvs[]) >>
   `!tail. k (ee with gas_obs := tail) = (INR ex,ee with gas_obs := tail)` by
     (unabbrev_all_tac >> drule aug_place_pure_suffix_gas_obs >> simp[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -744,7 +750,8 @@ Resume aug_place_binop_store_outcome[exit]:
   qexistsl_tac [`INR ex`, `ee`, `r`] >>
   conj_tac >- simp[]
   >- (disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-      BETA_TAC >> gen_tac >> strip_tac >> simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
+      BETA_TAC >> gen_tac >> strip_tac >> simp[stmt_exit_def, halt_exit_def] >>
+      gen_tac >> disj1_tac >>
       Cases_on `ex` >> Cases_on `r` >> gvs[expr_exit_def] >>
       rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >>
       gvs[expr_exit_def])
@@ -1266,7 +1273,9 @@ Proof
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) _` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+      simp[stmt_exit_def] >> (conj_tac
+      >- (gen_tac >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+      fs[halt_exit_def]))
   >- (rpt gen_tac >> strip_tac >> suspend "base_normal")
   >- simp[aug_place_rest_trace_frame]
 QED
@@ -1401,7 +1410,9 @@ Resume compile_augassign_place_memory_case[base_normal]:
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) _` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+      simp[stmt_exit_def] >> (conj_tac
+      >- (gen_tac >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+      fs[halt_exit_def]))
   >- (rpt gen_tac >> strip_tac >> suspend "rhs_normal")
   >- simp[aug_place_store_trace_frame]
 QED

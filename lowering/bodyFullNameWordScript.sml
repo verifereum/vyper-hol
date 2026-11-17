@@ -157,14 +157,29 @@ Proof
 QED
 
 Resume name_word_full[name_load_path]:
-  drule_all name_word_ghost_inputs >> strip_tac >> gvs[] >>
+  drule_all name_word_ghost_inputs >> strip_tac >> gvs[Abbr `inst`] >>
   `LENGTH sb.cs_current_insts = SUC s0.vs_inst_idx` by
     gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
         fresh_id_def, fresh_var_def, emit_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  drule_all name_word_full_edge >>
-  simp[Abbr `t`, Abbr `inst`, Abbr `u`, update_var_def] >>
+  `sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MLOAD [Var p] [out]]` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  `inst_mem_below_frontier (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s0` by
+    metis_tac[body_wordtype_name_MLOAD_frontier] >>
+  `allocas_from lo s0` by gvs[ghost_inv_at_def] >>
+  `ptr_inst_ok (DF H) lo 0 ctx func G0 tn0
+    (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s0` by
+    (irule ptr_inst_ok_mload_lo >> simp[]) >>
+  drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`)
+    straight_line_origin_ptr_edge >>
+  simp[mk_inst_def, is_terminator_def, inst_dload_in_section_def,
+       step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def,
+       Abbr `t`, Abbr `u`, update_var_def] >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
   once_rewrite_tac[GSYM APPEND_NIL] >>
   irule (cj 2 gas_origin_ptr_path_rules) >>

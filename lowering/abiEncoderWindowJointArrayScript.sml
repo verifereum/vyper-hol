@@ -263,7 +263,7 @@ Proof
      simp_tac (srw_ss()) [op_taint_def, FLOOKUP_UPDATE] >>
      rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
   `op_prov index_G count_op = NONE` by
-    (Cases_on `count_op` >> simp[op_prov_def] >>
+    (Cases_on `count_op` >> simp_tac (srw_ss()) [op_prov_def] >>
      qpat_assum `index_G = _` mp_tac >>
      qpat_assum `op_prov prefix_G _ = NONE` mp_tac >>
      qpat_assum `!x. Var _ = Var x ==> not_fresh_at loop_st x` mp_tac >>

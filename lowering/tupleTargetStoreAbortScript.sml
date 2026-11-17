@@ -54,9 +54,11 @@ Theorem tuple_source_list_outcome:
     (!i. i < LENGTH gs ==>
       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) ==>
-    ?res es'. !tail.
+    ?res es'. (!tail.
       assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
-        (res,es' with gas_obs := tail)
+        (res,es' with gas_obs := tail)) /\
+      (res = INL () \/
+       res = INR (Error (RuntimeError "write in static context")))
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
@@ -382,7 +384,8 @@ Proof
    s.vs_call_ctx.cc_static = cx.txn.is_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   drule_all tuple_source_list_outcome >>
-  disch_then (qx_choosel_then [`res`, `ee`] assume_tac) >>
+  disch_then (qx_choosel_then [`res`, `ee`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `assign_tuple_target_list cx gs vs es =
     (res,ee with gas_obs := es.gas_obs)` by
     (qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = _`

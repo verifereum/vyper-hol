@@ -183,8 +183,7 @@ Proof
      `vv_post H ctx func cenv cx e es sa sb s0 ee (Value rv)
         (FST (as_ptr_val ty LocMemory (op,sb)))
         (t0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-       FIRST [drule_all ec_two_operand_post >> simp[],
-              metis_tac[ec_two_operand_post]] >>
+       (drule_all ec_two_operand_post >> simp[]) >>
      `stmt_state_rel H ctx func cenv cx (ee with gas_obs := [])
         (t0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
        (qpat_assum `vv_post H ctx func cenv cx e es sa sb s0 ee (Value rv) _ _`

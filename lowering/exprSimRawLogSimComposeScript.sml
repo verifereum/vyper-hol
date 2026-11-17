@@ -93,10 +93,11 @@ Proof
           `?vs. res = INL vs` by metis_tac[] >> gvs[] >>
           irule raw_log_topics_outcome >>
           goal_assum (drule_at Any) >>
-          first_x_assum irule >> simp[] >> rpt conj_tac >>
-          TRY (metis_tac[] >> NO_TAC) >> rpt strip_tac >>
-          `?vs'. INL vs = INL vs' /\ P H vs' (mid with gas_obs := []) t` by
-            metis_tac[] >> gvs[]) >>
+          first_x_assum irule >> simp[] >> conj_tac
+          >- (qexists_tac `storage_trace_horizon mid.storage_trace` >>
+              first_assum ACCEPT_TAC) >>
+          qexists_tac `marks` >>
+          first_assum ACCEPT_TAC) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
         (assume_tac o SIMP_RULE (srw_ss()) []) >>
       `?ex. res = INR ex` by metis_tac[] >> gvs[] >>

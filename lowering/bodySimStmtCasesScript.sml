@@ -2450,12 +2450,28 @@ Proof
      TRY (conj_tac >-
           gvs[listTheory.EVERY_MEM, optionTheory.IS_SOME_EXISTS]) >>
      qexists_tac `[]` >> simp[]) >>
-  `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
+  qabbrev_tac `witness_es = es with <|
+    accounts := (\a. es.accounts a with storage := vfmState$empty_storage);
+    tStorage := K vfmState$empty_storage |>` >>
+  `contract_storage_well_formed cx witness_es` by
+    (irule zero_read_storage_contract_storage_well_formed >> Cases >>
+     simp[Abbr `witness_es`, vyperStorageBackendTheory.get_storage_def,
+          vyperStorageTheory.read_slot_def, vfmStateTheory.lookup_storage_def,
+          vfmStateTheory.empty_storage_def]) >>
+  `?v0. read_storage_slot cx tr (n2w slot) tvt witness_es = (INL v0, witness_es)` by
     (irule exprSimTopLevelPropsTheory.toplevel_storage_read_decodes >>
-     gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  drule_all eval_target_place_toplevel >> strip_tac >>
+     qpat_assum `find_var_decl_by_name id tops = _` (irule_at Any) >>
+     qpat_assum `lookup_var_slot_from_layout _ _ _ _ = SOME slot` (irule_at Any) >>
+     simp[]) >>
+  drule_all eval_target_place_toplevel >>
+  disch_then (qspec_then `witness_es` strip_assume_tac) >>
   `body_expr_ok cx e` by
-    (first_x_assum irule >> simp[read_place_def] >> metis_tac[]) >>
+    (qpat_x_assum `!s'' p t' s'3' cur t'' s'4' ptv t'3'. _`
+       (qspecl_then [`witness_es`, `StoragePlace tr (n2w slot) tvt`,
+         `witness_es with storage_trace := witness_es.storage_trace ++
+            [StorageRoot tr slot tvt]`, `witness_es`, `v0`, `witness_es`,
+         `witness_es`, `tvt`, `witness_es`] mp_tac) >>
+     simp[read_place_def]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
   irule compile_augassign_toplevel_case >> simp[DISJ_IMP_THM] >>
   conj_tac

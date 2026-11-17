@@ -13,7 +13,9 @@ Theorem assign_local_memory_full_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
-    Q (\H res ee gt r. expr_exit res r) /\
+    Q (\H res ee gt r.
+      expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) /\
   (!H res ee Gi ti u. Q H res ee Gi ti u ==> ?v. res = INL v) /\
   (!marks v mid Gi ti u.
     (!tail. bind (eval_expr cx e) (read_result cx)
@@ -31,7 +33,11 @@ Theorem assign_local_memory_full_outcome:
         P H (INL ()) (ff with gas_obs := []) Gf tf t)) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s,G,tn)
-    P (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+    P (\H res ee gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s.
+        (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) =
@@ -56,8 +62,11 @@ Proof
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
-  rpt strip_tac >> Cases_on `res` >- fs[expr_exit_def] >>
-  simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  rpt gen_tac >> POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+  Cases_on `res` >> fs[expr_exit_def] >>
+  Cases_on `y` >> Cases_on `r` >>
+  gvs[stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED
 
 Resume assign_local_memory_full_outcome[continue]:

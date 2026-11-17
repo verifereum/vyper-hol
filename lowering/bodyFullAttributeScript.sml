@@ -19,7 +19,13 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Theorem attribute_vv_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
+    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty obj es ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Attribute ann obj fld) es
 Proof
   rpt gen_tac >> strip_tac >> drule attr_pre_base >> strip_tac >>
   `post_value_type cenv obj = expr_type obj` by
@@ -51,7 +57,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
                           `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
   `eval_expr cx (Attribute ann obj fld) =
    bind (eval_expr cx obj) (\r. select_result cx (expr_type obj) r (AttrSubscript fld))` by
@@ -79,7 +85,8 @@ Proof
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[Abbr `baseR`] >>
-  simp[Abbr `baseQ`, Abbr `baseR`]
+  simp[Abbr `baseQ`, Abbr `baseR`] >>
+  rpt gen_tac >> Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume attribute_vv_sim_full[selected]:
@@ -164,6 +171,10 @@ Resume attribute_vv_sim_full[endpoint_posts]:
   conj_tac >- suspend "current_bb" >>
   conj_tac >- suspend "inst_idx" >>
   conj_tac >- suspend "alloca_history" >>
+  conj_tac >- (strip_tac >>
+               fs[ptrDisciplineTheory.allocas_below_fmp_def,
+                  venomStateTheory.update_var_def] >>
+               first_assum ACCEPT_TAC) >>
   conj_tac >- simp[venomStateTheory.update_var_def] >>
   conj_tac >- suspend "ghost_inv" >>
   conj_tac >- suspend "selected_ptr" >>
@@ -286,20 +297,10 @@ Resume attribute_vv_sim_full[pointer_posts]:
 QED
 
 Finalise attribute_vv_sim_full
-*)
-Theorem attribute_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
-    expr_body_pre cenv cx env (Attribute ann obj fld) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty obj es ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Attribute ann obj fld) es
-Proof
-  cheat
-QED
 
 
-(* LOCAL STUB - isolate foreign launch tower; original proof and suspensions retained. Never push.
+Theorem attribute_expr_full_ok:
+  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
@@ -323,10 +324,4 @@ Proof
      (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
-QED
-*)
-Theorem attribute_expr_full_ok:
-  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
-Proof
-  cheat
 QED

@@ -368,11 +368,16 @@ Proof
      `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
            value_has_type tv v` by
        (qpat_x_assum `!v'. INL v = INL v' ==> _` (qspec_then `v` mp_tac) >>
+        qpat_assum `expr_sim_inv _ _ _ _`
+          (mp_tac o CONJUNCT1 o
+           PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def] o
+           CONJUNCT1 o PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def] o
+           CONJUNCT1 o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
+        rpt (pop_assum kall_tac) >>
+        strip_tac >>
         simp[vyperTypeExprResultTheory.expr_result_typed_def,
           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-          vyperTypeInvariantsTheory.value_result_typed_def] >>
-        gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+          vyperTypeInvariantsTheory.value_result_typed_def]) >>
      `eval_operand x t = SOME (typed_val_to_w256 tv v)` by
        (irule exprBopSimPropsTheory.expr_val_rel_typed >>
         qexistsl_tac [`cx`, `expr_type e`] >> simp[] >>

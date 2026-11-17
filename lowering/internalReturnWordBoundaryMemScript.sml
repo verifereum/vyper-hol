@@ -15,7 +15,7 @@ Proof
 QED
 
 Theorem internal_return_word_boundary_mem:
-  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  ~cx.txn.is_static /\ cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_returns_count =
     returns_stack_count
       (\name. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)) ty /\
@@ -27,11 +27,11 @@ Theorem internal_return_word_boundary_mem:
   lower_value compile_expr ce ty e sa = (op,s1) /\
   fn_has_code sa sb func /\ ret_pc_ok ce sa s0 /\
   return_buf_frame NONE ce sa s0 /\
-  expr_post ctx func ce cx e es sa s1 s0 ee v op t /\
+  expr_post H ctx func ce cx e es sa s1 s0 ee v op t /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
   ?n r. gas_path_mem ctx func t n r /\
-    intret_q func cenv cx tv v (ee with scopes := []) r
+    intret_q H func cenv cx tv v (ee with scopes := []) r
 Proof
   strip_tac >>
   `expr_type e = ty` by
@@ -52,12 +52,12 @@ Proof
   `fn_has_code s1 sb func` by metis_tac[fn_has_code_split] >>
   `?pc. eval_operand (Var rpc) t = SOME pc` by
     (fs[ret_pc_ok_def, expr_post_def, eval_operand_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (ee with scopes := []) t` by
+  `stmt_state_rel H ctx func cenv cx (ee with scopes := []) t` by
     (irule internal_return_exit_stmt_state_rel >> qexists_tac `ce` >>
      fs[expr_post_def]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
     gvs[expr_post_def, expr_val_rel_def] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `ce.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
   drule_all compile_internal_word_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>

@@ -16,10 +16,12 @@ Theorem gas_shadow_insts_terminated:
   (case ys of [] => F | _ => is_terminator (LAST ys).inst_opcode)
 Proof
   Induct >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
+  rename1 `LIST_REL gas_shadow_inst xs ys_tail` >>
   Cases_on `xs`
   >- (gvs[] >> irule gas_shadow_inst_terminator >> simp[]) >>
-  Cases_on `t` >> gvs[] >>
-  first_x_assum (qspec_then `h'''::t''` mp_tac) >> simp[]
+  Cases_on `ys_tail` >> gvs[] >>
+  rename1 `_ = is_terminator (LAST (right_head::right_tail)).inst_opcode` >>
+  first_x_assum (qspec_then `right_head::right_tail` mp_tac) >> simp[]
 QED
 
 Theorem gas_shadow_state_terminated:
@@ -63,11 +65,15 @@ Theorem gas_shadow_is_empty_value_expr[simp]:
   is_empty_value_expr (gas_shadow_expr e) = is_empty_value_expr e
 Proof
   Cases_on `e` >> simp[gas_shadow_expr_def, is_empty_value_expr_def]
-  >- (Cases_on `b` >> Cases_on `l` >>
+  >- (rename1 `_ = is_empty_value_expr (Builtin ty builtin args)` >>
+      Cases_on `builtin` >> Cases_on `args` >>
       simp[gas_shadow_builtin_def, is_empty_value_expr_def]
-      >- (Cases_on `o'` >> simp[is_empty_value_expr_def]) >>
-      Cases_on `e = MsgGas` >> simp[is_empty_value_expr_def]) >>
-  Cases_on `t0` >> simp[is_empty_value_expr_def]
+      >- (rename1 `MakeArray elem_ty_opt array_bound` >>
+          Cases_on `elem_ty_opt` >> simp[is_empty_value_expr_def]) >>
+      rename1 `if env_var = MsgGas then Env GasPrice else Env env_var` >>
+      Cases_on `env_var = MsgGas` >> simp[is_empty_value_expr_def]) >>
+  rename1 `_ = is_empty_value_expr (TypeBuiltin ty type_builtin result_ty args)` >>
+  Cases_on `type_builtin` >> simp[is_empty_value_expr_def]
 QED
 
 Theorem gas_shadow_target_to_expr[simp]:

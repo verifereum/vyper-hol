@@ -7,7 +7,7 @@ Ancestors
   fragExec exprOperandVar gasSummary fragGasMode fragGasPath valueEncoding
   exprLowering exprSimWordArgs
 
-Theorem aggregate_tuple_cons_order_mem[local]:
+Theorem aggregate_tuple_cons_order_mem:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -40,7 +40,7 @@ Proof
   fs[ci_mono_def] >> decide_tac
 QED
 
-Theorem aggregate_tuple_tail_entry_mem[local]:
+Theorem aggregate_tuple_tail_entry_mem:
   OPT_MMAP (evaluate_type (get_tenv cx)) (dty::tys) = SOME (htv::tvs) /\
   (!a st. MEM a (e::args) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env a st) /\
@@ -222,7 +222,7 @@ fun window_side_tac (asl, w) =
    else first_assum ACCEPT_TAC ORELSE
      (rewrite_tac [CONJ_ASSOC] >> first_assum ACCEPT_TAC)) (asl, w)
 
-Theorem aggregate_tuple_tail_outcome_mem[local]:
+Theorem aggregate_tuple_tail_outcome_mem:
   gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
   es1.gas_obs = [] /\
   gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es1,q)
@@ -328,9 +328,9 @@ Proof
     simp[vyperStateTheory.evaluation_state_component_equality] >> asm_rewrite_tac[] >>
   BETA_TAC >> irule aggregate_tuple_values_outcome >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _`)) >>
-  conj_tac >~ [`tuple_in_memory _ _ _ _`]
-  >- suspend "tail_post" >>
-  simp[] >> rpt strip_tac >> gvs[]
+  conj_tac
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  suspend "tail_post"
 QED
 
 Resume aggregate_tuple_tail_outcome_mem[tail_post]:
@@ -494,7 +494,8 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
     (\H res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_at (Pat `compile_expr _ _ _ _ = _`) aggregate_tuple_head_tail_mem >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`)
+    (Q.INST [`H` |-> `H0`] aggregate_tuple_head_tail_mem) >>
   disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code ss sb _`)) >>
@@ -547,7 +548,13 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >>
      rewrite_tac[loweringPostsTheory.vv_post_def] >> strip_tac >>
      asm_rewrite_tac[] >>
-     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
+     MATCH_MP_TAC
+       (Q.INST [`H0` |-> `H0`, `H` |-> `H`, `ctx` |-> `ctx`,
+                `func` |-> `func`, `cenv` |-> `ce`, `cx` |-> `cx`,
+                `es` |-> `es1`, `u` |-> `q`, `s` |-> `t1`]
+         (INST_TYPE [beta |-> ``:256``]
+           exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     asm_rewrite_tac[]) >>
   qpat_x_assum `!st0 tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops. _`
     (qspec_then `st0` assume_tac) >>
   qpat_x_assum `!tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops. _`
@@ -556,6 +563,7 @@ Proof
   disch_then (drule_at (Pat `FLOOKUP q.vs_allocas _ = _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ es1`)) >>
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
+  disch_then (qspecl_then [`es1`, `func`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                 simp[] >> asm_rewrite_tac[])) >> strip_tac >>
   `FLOOKUP t1.vs_allocas inst.inst_id = SOME (b,asz) /\
@@ -682,7 +690,7 @@ Proof
   (* Off the trace's own domain the run is a bad-storage one; on it, its
      own horizon is valid at es1 and, by the frame, at es. *)
   reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_initial >> asm_rewrite_tac[] >>
       irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.storage_trace_frame_read_result] >> gen_tac >>
@@ -700,7 +708,8 @@ Proof
   `valid_horizon cx st0 H0 es.storage_trace` by
     (qpat_x_assum `eval_expr cx h _ = (INL tv,_)` assume_tac >>
      drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
-     gs[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     disch_then (qspecl_then [`st0`, `cx`, `H0`] mp_tac) >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
     (qspec_then `H0` mp_tac) >>
@@ -717,8 +726,9 @@ Proof
   rename1 `OPT_MMAP (evaluate_type (get_tenv cx)) dtys = SOME ttvs` >>
   fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   mp_tac (SRULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
-    aggregate_tuple_success_continuation_mem) >>
+    (Q.INST [`H0` |-> `H0`]
+      (INST_TYPE [alpha |-> ``:256``] aggregate_tuple_success_continuation_mem))) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-                simp[] >> asm_rewrite_tac[] >> metis_tac[])) >>
+                simp[] >> asm_rewrite_tac[])) >>
   disch_then MATCH_ACCEPT_TAC
 QED

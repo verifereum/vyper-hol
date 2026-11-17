@@ -454,14 +454,14 @@ Resume compile_augassign_local_mem[code]:
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-  drule_all augassign_local_load_mem >> strip_tac >>
+  drule_all (INST_TYPE [beta |-> ``:256``] augassign_local_load_mem) >> strip_tac >>
   `gas_marked_path T ctx func s0 0 (OK t)` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
        mp_tac >> simp[gas_marked_exec_def]) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        expr_post H ctx func cenv cx (Name ty id) es sa s1 s0
          (es with gas_obs := []) entry.value (Var out) t` by
-    (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+    (rpt strip_tac >> metis_tac[]) >>
   suspend "rhs_outcome"
 QED
 
@@ -515,15 +515,16 @@ Resume compile_augassign_local_mem[rhs_summary]:
   simp[gas_summary_at_def]
   >- suspend "rhs_normal" >>
   `expr_exit res r` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H1` mp_tac) >> simp[]) >>
   `?ex. res = INR ex` by (Cases_on `res` >> fs[expr_exit_def]) >> gvs[] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule augassign_rhs_exception_exec_mem_src >> conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
       qexists_tac `t` >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> rpt strip_tac
+  >- (simp[stmt_exit_def] >> disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume compile_augassign_local_mem[rhs_normal]:
@@ -666,7 +667,7 @@ Resume compile_augassign_local_mem[store]:
   mp_tac (Q.INST [`H` |-> `H1`]
     (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `ee with gas_obs := []`, `s`, `id`,
       `p`, `sz`, `pre`, `env1`, `cur`, `rest`, `result`, `entry.type`, `res_op`,
-      `s3`, `sb`] assign_local_word_store_path_mem)) >>
+      `s3`, `sb`] (INST_TYPE [alpha |-> ``:256``] assign_local_word_store_path_mem))) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `last` strip_assume_tac) >>
   `gas_marked_path T ctx func u 0 (OK last)` by
@@ -690,19 +691,23 @@ Resume compile_augassign_local_mem[post]:
   `valid_horizon cx st0 H ee.storage_trace` by
     (qpat_x_assum `valid_horizon _ _ H _` mp_tac >> simp[]) >>
   `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
+  `expr_post H ctx func cenv cx e (es with gas_obs := []) s1 s2 t
+     (ee with gas_obs := []) v rhs_op u` by metis_tac[] >>
   `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
    storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by metis_tac[] >>
   mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `ee with gas_obs := []`, `s`,
     `id`, `p`, `sz`, `pre`, `env1`, `cur`, `rest`, `result`, `entry.type`,
-    `res_op`, `s3`, `sb`] assign_local_word_store_path_mem) >>
+    `res_op`, `s3`, `sb`] (INST_TYPE [alpha |-> ``:256``] assign_local_word_store_path_mem)) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `last2` strip_assume_tac) >>
   `stmt_state_rel H ctx func cenv cx
      ((ee with gas_obs := []) with scopes :=
         pre ++ (env1 |+ (id, cur with <|value := result; popped := []|>)) ::
         rest) last` by
-    (irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H1`, `last2`] >> rpt conj_tac >> metis_tac[]) >>
+    (irule (Q.INST [`H0` |-> `H1`, `s` |-> `last2`]
+       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     rpt conj_tac >> metis_tac[]) >>
   `sa.cs_next_var <= s1.cs_next_var` by
     (qpat_x_assum `emit_op _ _ sa = _` mp_tac >>
      disch_then (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
@@ -726,15 +731,21 @@ Resume compile_augassign_local_mem[post]:
        metis_tac[freshWritesTheory.not_fresh_at_mono,
                  arithmeticTheory.LESS_EQ_TRANS] >>
      `lookup_var x u = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def]) >>
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+          (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        qpat_x_assum `!z w. not_fresh_at s1 z /\ lookup_var z t = SOME w ==>
+                            lookup_var z u = SOME w`
+          (qspecl_then [`x`, `w`] mp_tac) >> simp[]) >>
      metis_tac[]) >>
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP last.vs_allocas aid = SOME b` by
     (rpt strip_tac >>
      `FLOOKUP u.vs_allocas aid = SOME b` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def] >> metis_tac[]) >>
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+          (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        qpat_x_assum `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+                            FLOOKUP u.vs_allocas aid = SOME b`
+          (qspecl_then [`aid`, `b`] mp_tac) >> metis_tac[]) >>
      metis_tac[]) >>
   `s0.vs_alloca_next <= last.vs_alloca_next` by decide_tac >>
   `sa.cs_next_var <= sb.cs_next_var` by decide_tac >>
@@ -786,7 +797,7 @@ Resume compile_augassign_local_mem[operator_exit]:
       goal_assum (drule_at Any) >> simp[] >>
       irule augassign_error_continuation_exec_mem_src >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[stmt_exit_def] >> rpt strip_tac >>
+  simp[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
   metis_tac[expr_exit_INR_type]
 QED
 

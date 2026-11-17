@@ -647,6 +647,28 @@ Proof
   metis_tac[]
 QED
 
+Theorem scfg_fix_all_phis_frame_reach_back:
+  wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
+  (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
+  fn_entry_state fn s0 /\ frame_reach C (fix_all_phis fn) s0 j t /\
+  j.inst_opcode <> ASSIGN ==>
+  frame_reach C fn s0 j t
+Proof
+  strip_tac >>
+  `wf_function (fix_all_phis fn)` by metis_tac[fix_all_phis_wf] >>
+  drule_all scfg_frame_reach_decompose >>
+  disch_then (qx_choosel_then [`entry_state`,`target_block`,`phi_state`,`body_state`]
+    strip_assume_tac) >>
+  `scfg_bprefix C fn s0 entry_state` by
+    (irule scfg_fix_all_phis_bprefix_backward >> simp[] >>
+     metis_tac[scfg_bprefix_rules]) >>
+  qpat_x_assum `lookup_block _ _ = _` mp_tac >>
+  rewrite_tac[scfg_fix_all_phis_lookup] >>
+  Cases_on `lookup_block entry_state.vs_current_bb fn.fn_blocks` >> simp[] >>
+  strip_tac >> gvs[] >>
+  irule scfg_rooted_fix_phis_nonassign_reach >> simp[] >> metis_tac[]
+QED
+
 Theorem scfg_fix_all_phis_frame_sim_rf:
   wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
   (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) ==>
@@ -656,18 +678,9 @@ Proof
   `inst'.inst_opcode <> ASSIGN` by
     (strip_tac >> gvs[inst_mem_ranges_def,
       source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
-  `wf_function (fix_all_phis fn)` by metis_tac[fix_all_phis_wf] >>
-  drule_all scfg_frame_reach_decompose >> strip_tac >>
-  `scfg_bprefix C fn s0 s` by
-    (irule scfg_fix_all_phis_bprefix_backward >> simp[] >>
-     metis_tac[scfg_bprefix_rules]) >>
-  qpat_x_assum `lookup_block _ _ = _` mp_tac >>
-  rewrite_tac[scfg_fix_all_phis_lookup] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
-  strip_tac >> gvs[] >>
   `frame_reach C fn s0 inst' s'` by
-    (irule scfg_rooted_fix_phis_nonassign_reach >> simp[] >> metis_tac[]) >>
-  qexistsl_tac [`inst'`, `s'`] >> simp[mem_corr_refl] >>
+    (irule scfg_fix_all_phis_frame_reach_back >> simp[]) >>
+  qexistsl_tac [`inst'`,`s'`] >> simp[mem_corr_refl] >>
   metis_tac[scfg_fix_all_phis_revert_forward]
 QED
 
