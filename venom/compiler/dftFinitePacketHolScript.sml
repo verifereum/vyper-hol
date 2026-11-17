@@ -20,8 +20,8 @@ Ancestors
   dftPacketCutExtension
   dftPacketEntryReplay
   dftPacketFillingBoundary
-  dftPacketFreshCut dftPacketFreshRootSuccessSplit
-  dftPacketFreshChildStop
+  dftPacketFreshCut
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop dftPacketFreshSingletonStop
   dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
   dftPacketKeyMap
@@ -45,8 +45,8 @@ Ancestors
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
-  dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts
-  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketReturnRecordFrame
+  dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
