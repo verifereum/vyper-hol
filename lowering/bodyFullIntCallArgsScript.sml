@@ -2633,11 +2633,11 @@ Proof
         (qpat_assum `32+32*((len+31) DIV 32) <= type_memory_size rty` mp_tac >>
          qpat_assum `type_memory_size rty < 2 ** 64` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-         qspec_then `32` mp_tac DIVISION >> simp[] >>
+         qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
          disch_then (qspec_then `len+31` strip_assume_tac) >>
          qmatch_asmsub_abbrev_tac `len+31 = _ + residue` >>
          `residue < 32` by simp[Abbr `residue`] >>
-         gvs[dimword_def] >> decide_tac) >>
+         gvs[wordsTheory.dimword_def] >> decide_tac) >>
       `type_memory_size rty <= type_memory_bytes cenv dty` by
         (qpat_assum `type_widens_to (get_tenv cx) (expr_type e) dty` mp_tac >>
          qpat_assum `is_bytestring_type dty` mp_tac >>
@@ -2962,7 +2962,7 @@ Proof
      qpat_assum `~is_bytestring_type dty` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[vyperTypeSystemTheory.type_widens_to_def] >>
-     metis_tac[memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]) >>
+           metis_tac[valueCopyBytesTheory.arg_type_fits_bytestring_target]) >>
   `post_value_type cenv e = lowered_value_type cenv e` by
     (drule exprSimSourceTheory.expr_body_pre_var_types_well_formed >> strip_tac >>
      `well_typed_expr tenv e /\
