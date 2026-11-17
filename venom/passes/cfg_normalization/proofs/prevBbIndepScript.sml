@@ -311,6 +311,7 @@ QED
 
 val ext_call_rw_prev_bb =
   [LET_THM, read_mem_prev_bb, extract_venom_result_prev_bb,
+   halt_state_prev_bb, set_returndata_prev_bb,
    option_case_OPTION_MAP_prev_bb, update_var_prev_bb];
 
 val ext_call_prev_bb_ss = prev_bb_case_ss ++ rewrites

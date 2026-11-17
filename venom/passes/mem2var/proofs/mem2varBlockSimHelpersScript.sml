@@ -4481,7 +4481,7 @@ QED
    Chain passes step_inst result on s2 side to ih_cont,
    allowing pvars_set derivation for IH application. *)
 
-val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
 (* Abort: both sides run same non-promoted instruction *)
 Theorem step_inst_base_abort_input_equiv:

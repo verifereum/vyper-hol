@@ -566,6 +566,9 @@ Proof
   simp[outcomes_suffix_def] >> gen_tac >>
   Cases_on `salt` >> Cases_on `st.outcomes` >>
   simp[create_oracle_result_def, take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME (outcome::rest)` >>
   pairarg_tac >>
   rw[adopt_call_outcome_equation, create_outcome_request_def] >>
   gvs[AllCaseEqs(), extCallOracleTheory.take_outcome_def,
