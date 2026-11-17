@@ -18,6 +18,60 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
 
+(* The staging traversal never reads metadata past its expression prefix. *)
+Theorem intcall_args_stage_take:
+  !es flags dtys.
+    LENGTH es <= LENGTH flags /\ LENGTH es <= LENGTH dtys ==>
+    compile_stage_intcall_args compile_expr cenv es flags dtys si =
+    compile_stage_intcall_args compile_expr cenv es
+      (TAKE (LENGTH es) flags) (TAKE (LENGTH es) dtys) si
+Proof
+  `!es flags dtys.
+    LENGTH es <= LENGTH flags /\ LENGTH es <= LENGTH dtys ==>
+    compile_stage_intcall_args compile_expr cenv es flags dtys =
+    compile_stage_intcall_args compile_expr cenv es
+      (TAKE (LENGTH es) flags) (TAKE (LENGTH es) dtys)` suffices_by metis_tac[] >>
+  Induct_on `es` >- simp[compile_stage_intcall_args_def] >>
+  namedCases_on `flags` ["", "flag flags'"] >- simp[] >>
+  namedCases_on `dtys` ["", "dty dtys'"] >- simp[] >>
+  Cases_on `flag` >> simp[compile_stage_intcall_args_def]
+QED
+
+Theorem intcall_args_parameter_allocation_bounds_defaults:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args)
+Proof
+  rpt strip_tac >>
+  `MEM (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss))
+      (FST (SND (classify_functions tops)))` by
+    (simp[constSubstTheory.subst_consts_fn_def,
+          loweringShapePropsTheory.MEM_classify_internal] >>
+     qexistsl [`dflts`,`ss`] >> simp[]) >>
+  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+  simp[bodySimTheory.body_inv_def] >> strip_tac >>
+  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
+  PairCases_on `rest` >>
+  `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss))` by
+    (Cases_on `cx.in_deploy`
+     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
+         metis_tac[]) >>
+     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
+     metis_tac[]) >>
+  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
+  simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
+  strip_tac >>
+  `type_memory_bytes
+     (build_compile_env tops Internal mut name args ret
+       (subst_consts_stmts (module_consts_env tops []) ss) F) =
+     type_memory_bytes cenv` by
+    (irule compileEnvTheory.type_memory_bytes_frame >>
+     simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >>
+  gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
+
 (* Empty local typing maps can be weakened without changing static maps. *)
 Theorem intcall_args_defaults_typing_mutual[local]:
   (!env e. well_typed_expr env e ==>
