@@ -739,6 +739,37 @@ Proof
   BasicProvers.every_case_tac >> rw[] >> gvs[] >> metis_tac[]
 QED
 
+Theorem vv_place_ptr_region_frame:
+  vv_place_ptr cenv cx ee s tv vv /\
+  (?v. read_result cx tv ee = (INL v,ee)) /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv ee.scopes u n b sz <=>
+            local_region cenv ee.scopes s n b sz) ==>
+  vv_place_ptr cenv cx ee u tv vv
+Proof
+  strip_tac >>
+  `!id entry q sz w.
+    lookup_scopes id ee.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+    lookup_var q s = SOME w ==> lookup_var q u = SOME w` by
+    (rpt strip_tac >>
+     `local_region cenv ee.scopes s id (w2n w) sz` by
+       (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
+     `local_region cenv ee.scopes u id (w2n w) sz` by metis_tac[] >>
+     qpat_x_assum `local_region _ _ u _ _ _`
+       (strip_assume_tac o REWRITE_RULE [loweringStateRelDefsTheory.local_region_def]) >>
+     gvs[] >> metis_tac[wordsTheory.w2n_11]) >>
+  Cases_on `vv` >> gvs[vv_place_ptr_def, contextTheory.vv_operand_def] >>
+  Cases_on `tv` >> gvs[] >>
+  rename1 `PlaceR place` >> Cases_on `place` >> gvs[] >>
+  rename1 `read_result cx (PlaceR (MemoryPlace id path)) ee = _` >>
+  `?entry. lookup_scopes id ee.scopes = SOME entry` by
+    (Cases_on `lookup_scopes id ee.scopes` >>
+     gvs[read_result_def, read_place_def, get_scopes_def, bind_def,
+         lift_option_type_def, return_def, raise_def]) >>
+  metis_tac[]
+QED
+
 (* expr_post H with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s <=>
