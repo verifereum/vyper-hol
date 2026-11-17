@@ -736,6 +736,9 @@ Proof
   simp[exec_create_def] >> IF_CASES_TAC >> simp[lift_result_def]
   >- gvs[execution_equiv_def, execution_frame_def, halt_state_def,
          set_returndata_def, venom_state_component_equality] >>
+  IF_CASES_TAC >> simp[lift_result_def]
+  >- gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+         set_returndata_def, venom_state_component_equality] >>
   conj_tac
   >- (irule ao_main_observations_update >> simp[] >>
       irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
