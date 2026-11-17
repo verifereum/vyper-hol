@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage
+  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage bodyPtrMakeArrayCopyStateFrame typedMemoryCopy exprSimStorageCopy exprSimPtrLiteralBuffer context venomInst memSafeRun vyperTypeArgFits abiDecodeStaticProps typedCopyOriginPtrBase localPtrsProps assignTuplePtrCopyLen allocaHistory bodyFullPathHistory
 
 val _ = Parse.hide "body";
 
@@ -1737,3 +1737,200 @@ Theorem body_assign_other_full:
 Proof
   cheat
 QED
+
+Theorem body_assign_snapshot_memory_copy_joint:
+  compile_store_memory cenv (Var xs) buf.buf_operand pty pty sk = ((),sb) /\
+  buf.buf_operand = Var xd /\ ~is_word_type pty /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  evaluate_type (get_tenv cx) pty = SOME tv /\
+  type_memory_bytes cenv pty = type_memory_size tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  not_fresh_at sk xs /\ not_fresh_at sk xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME (n2w b) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n sw) mem) /\
+  ptr_covers G tn xs s (type_memory_size tv) /\
+  ptr_covers G tn xd s (type_memory_size tv) /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  b + type_memory_size tv < dimword (:256) /\
+  (type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
+  b + type_memory_size tv <= s.vs_alloca_next /\
+  (w2n sw + type_memory_size tv <= b \/ b + type_memory_size tv <= w2n sw) /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w (type_memory_size tv))] [p]) (fn_insts func) /\
+  FLOOKUP s.vs_allocas aid = SOME (b,type_memory_size tv) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b (type_memory_size tv) a len) /\
+  stmt_state_rel H0 ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sk /\ alloca_history func s /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sk x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sk x) /\
+  allocas_from lo s /\ lo <= b /\ lo <= s.vs_alloca_next /\
+  fn_has_code sk sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sk.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sk.cs_current_insts ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es Gf tf t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    lookup_var xd t = SOME (n2w b) /\
+    ptr_covers Gf tf xd t (type_memory_size tv) /\
+    FLOOKUP t.vs_allocas aid = SOME (b,type_memory_size tv) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory tv v b mem) /\
+    typed_copy_state_frame sk b (type_memory_size tv) s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    alloca_history func t /\ allocas_from lo t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!x. not_fresh_at sk x ==>
+      not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!name a len. local_region cenv es.scopes t name a len <=>
+      local_region cenv es.scopes s name a len) /\
+    (!es0 se s0 G0 tn0.
+      se.cs_next_var <= sk.cs_next_var /\
+      ghost_kept_at lo cenv es0 se G0 tn0 s0 G tn /\
+      alloca_frame cenv es0 se s0 cenv es s /\
+      (!old off sz. FLOOKUP s0.vs_allocas old = SOME (off,sz) /\
+        old < se.cs_next_id ==> regions_disjoint b (type_memory_size tv) off sz) /\
+      (!name off sz. local_region cenv es0.scopes s0 name off sz ==>
+        regions_disjoint b (type_memory_size tv) off sz) ==>
+      ghost_kept_at lo cenv es0 se G0 tn0 s0 Gf tf /\
+      alloca_frame cenv es0 se s0 cenv es t /\
+      (!old off sz i. FLOOKUP s0.vs_allocas old = SOME (off,sz) /\
+        old < se.cs_next_id /\
+        (!name a len. local_region cenv es0.scopes s0 name a len ==>
+          off+sz <= a \/ a+len <= off) /\
+        off <= i /\ i < off+sz /\ i IN tf.t_mem ==> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `b < dimword (:256)` by decide_tac >>
+  `w2n ((n2w b):bytes32) = b` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `compile_store_memory cenv (Var xs) (Var xd) pty pty sk = ((),sb)` by metis_tac[] >>
+  `type_widens_to (get_tenv cx) pty pty` by simp[] >>
+  SUBGOAL_THEN
+    ``w2n ((n2w b):bytes32) + type_memory_size tv < dimword (:256)``
+    assume_tac >- simp[] >>
+  SUBGOAL_THEN
+    ``type_memory_size tv = 0 \/ w2n ((n2w b):bytes32) + type_memory_size tv <= s.vs_alloca_next``
+    assume_tac >- simp[] >>
+  SUBGOAL_THEN
+    ``w2n (sw:bytes32) + type_memory_size tv <= w2n ((n2w b):bytes32) \/
+      w2n ((n2w b):bytes32) + type_memory_size tv <= w2n (sw:bytes32)``
+    assume_tac >- simp[] >>
+  drule_all body_full_memory_store_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `typed_copy_state_frame sk b (type_memory_size tv) s t` by metis_tac[] >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables /\
+   copy_static t = copy_static s` by
+    (qpat_assum `typed_copy_state_frame sk b _ _ _`
+      (mp_tac o CONJUNCT1 o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     simp[venom_state_component_equality,copy_static_def]) >>
+  `!a len. a+len <= b \/ b+type_memory_size tv <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    fs[typed_copy_state_frame_def,typed_copy_frame_def] >>
+  `!x. not_fresh_at sk x ==> not_fresh_at sb x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sk` >>
+     metis_tac[ci_mono_compile_store_memory,ci_mono_def,pairTheory.SND]) >>
+  `!name a len. local_region cenv es.scopes t name a len <=>
+    local_region cenv es.scopes s name a len` by
+    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
+  `!i. ~(b <= i /\ i < b+type_memory_size tv) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)` by
+    (rpt strip_tac >>
+     `i+1 <= b \/ b+type_memory_size tv <= i` by decide_tac >> metis_tac[]) >>
+  `allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (conj_tac >- metis_tac[allocas_from_def] >>
+     drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >> simp[] >>
+  conj_tac >- suspend "state" >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- (irule ptr_covers_lookup_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- suspend "history" >>
+  suspend "entry"
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[state]:
+  rpt strip_tac >> irule literal_copy_window_stmt_state_rel >>
+  qexistsl_tac [`aid`,`b`,`type_memory_size tv`,`p`,`sk`,`sk`,`s`] >>
+  simp[] >> metis_tac[typed_copy_state_frame_def,typed_copy_frame_def]
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[ghost]:
+  rpt strip_tac >> irule body_full_memory_ghost_frame >> simp[] >>
+  qexistsl_tac [`G`,`s`,`sk`,`tn`,`{i | b <= i /\ i < b+type_memory_size tv}`] >>
+  simp[] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all literal_ptr_local_footprint_exterior >> simp[])
+  >- (rpt strip_tac >>
+      `~(b <= i /\ i < b+type_memory_size tv)` by decide_tac >> metis_tac[]) >>
+  metis_tac[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[history]:
+  `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
+  metis_tac[body_full_path_alloca_history]
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[entry]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!old off sz i. FLOOKUP s0.vs_allocas old = SOME (off,sz) /\
+    old < se.cs_next_id /\ off <= i /\ i < off+sz ==>
+    ~(b <= i /\ i < b+type_memory_size tv)` by
+    (rpt strip_tac >>
+     `regions_disjoint b (type_memory_size tv) off sz` by metis_tac[] >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  conj_tac >- suspend "kept" >>
+  conj_tac >- suspend "frame" >> metis_tac[]
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[kept]:
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+  rewrite_tac[ghost_kept_at_def] >>
+  conj_tac >- (rpt strip_tac >>
+    `not_fresh_at sk x` by metis_tac[not_fresh_at_mono] >>
+    metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    `~(b <= i /\ i < b+type_memory_size tv)` by metis_tac[] >>
+    metis_tac[]) >>
+  rpt strip_tac >>
+  `regions_disjoint b (type_memory_size tv) b' sz` by metis_tac[] >>
+  `~(b <= i /\ i < b+type_memory_size tv)` by
+    (fs[regions_disjoint_def] >> decide_tac) >>
+  metis_tac[]
+QED
+
+Resume body_assign_snapshot_memory_copy_joint[frame]:
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ _`
+    (assume_tac o REWRITE_RULE [alloca_frame_def]) >>
+  rewrite_tac[alloca_frame_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `regions_disjoint b (type_memory_size tv) off sz` by metis_tac[] >>
+  SUBGOAL_THEN ``off+sz <= b \/ b+type_memory_size tv <= off`` assume_tac
+  >- (qpat_x_assum `regions_disjoint b _ off sz` mp_tac >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory` by
+    metis_tac[] >>
+  `mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory /\
+   (!n a len. local_region cenv es.scopes s n a len ==>
+     off+sz <= a \/ a+len <= off)` by metis_tac[] >>
+  conj_tac >- metis_tac[] >> metis_tac[]
+QED
+
+Finalise body_assign_snapshot_memory_copy_joint
