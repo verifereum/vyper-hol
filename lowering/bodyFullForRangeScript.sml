@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperAST gasShadow
   ASCIInumbers integer list finite_map pred_set
   stmtSimDefs venomMemDefs valueEncodingProps ptrDiscipline
-  venomState words
+  venomState words stateRelProj
 
 val _ = Parse.hide "body";
 
@@ -319,7 +319,10 @@ Proof
   `mem_bytes_at off oldsz s.vs_memory = mem_bytes_at off oldsz s00.vs_memory /\
    (!nm b z. local_region cenv e.scopes s nm b z ==>
               off + oldsz <= b \/ b + z <= off)` by
-    (fs[alloca_frame_def] >> metis_tac[]) >>
+    (qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[alloca_frame_def] >>
+     disch_then (qspecl_then [`aid`, `off`, `oldsz`] mp_tac) >> simp[] >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   conj_tac
   >- (`mem_bytes_at off oldsz (mstore (w2n w) value s).vs_memory =
         mem_bytes_at off oldsz s.vs_memory` by
@@ -331,4 +334,27 @@ Proof
   rename1 `lookup_var lp t = SOME lw` >>
   `lp <> dv` by (fs[not_local_ptr_def] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+(* Allocation leaves all existing bytes unchanged; newly tainted bytes start
+   beyond every old allocation, including reused allocation sites. *)
+Theorem range_alloca_full_frame:
+  stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ t.vs_memory = s.vs_memory /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (!i. i IN tn'.t_mem ==> i IN tn.t_mem \/ s.vs_alloca_next <= i) ==>
+  alloca_frame cenv es sa s cenv es t /\
+  (!aid off sz i.
+     FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+     (!name b len. local_region cenv es.scopes s name b len ==>
+                     off + sz <= b \/ b + len <= off) /\
+     off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn.t_mem)
+Proof
+  strip_tac >> conj_tac
+  >- (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+  drule stmt_state_rel_local_ptrs_alloca >>
+  simp[alloca_inv_def, alloca_next_valid_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `off + sz <= s.vs_alloca_next` by metis_tac[] >>
+  `~(s.vs_alloca_next <= i)` by decide_tac >> metis_tac[]
 QED
