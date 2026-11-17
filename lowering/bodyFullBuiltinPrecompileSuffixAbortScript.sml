@@ -138,3 +138,79 @@ Resume precompile_suffix_abort_full_family[assert_origin]:
 QED
 
 Finalise precompile_suffix_abort_full_family
+
+Theorem precompile_suffix_call_abort_full_family:
+  gi = mk_inst id GAS [] [gv] /\
+  ci = mk_inst (id+1) STATICCALL
+    [Var gv; Lit addr; Var src; Lit an; Var dst; Lit rn] [cv] /\
+  src <> gv /\ dst <> gv /\
+  eval_operand (Var src) s = SOME wi /\
+  eval_operand (Var dst) s = SOME wo /\
+  w2n wi + w2n an <= s.vs_alloca_next /\
+  w2n wo + w2n rn <= s.vs_alloca_next /\
+  step_inst_base gi s = OK u /\ step_inst_base ci u = Abort a t /\
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX [gi;ci] (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (func.fn_name,id) NOTIN explicit /\ ~ctx_has_dalloca ctx /\
+  (!H. valid_horizon cx st0 H trace ==>
+    ptr_covers G tn src s (w2n an) /\
+    ptr_covers G tn dst s (w2n rn) /\
+    (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tn.t_mem) /\
+    allocas_from lo s /\
+    tn.t_stor SUBSET (DF H).d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET (DF H).d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)) ==>
+  !H. valid_horizon cx st0 H trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
+      (Abort a (t with vs_inst_idx := SUC s.vs_inst_idx),
+       step_prov PG G gi u, step_taint gi s u tn)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+    (drule_then strip_assume_tac) >>
+  `inst_seq_ptr (DF H) lo ctx func PG G tn [gi;ci] s
+     (step_prov PG G gi u) (step_taint gi s u tn)` by
+    (irule suffix_abort_checked >> simp[] >> metis_tac[]) >>
+  `run_inst_seq_mem_ok [gi;ci] s` by
+    (simp[Once run_inst_seq_mem_ok_def, below_frontier_no_ranges,
+       inst_dload_in_section_def, mk_inst_def] >>
+     gvs[step_GAS] >>
+     simp[run_inst_seq_mem_ok_last, below_frontier_STATICCALL,
+       inst_dload_in_section_def, mk_inst_def, eval_operand_def,
+       lookup_var_def, FLOOKUP_UPDATE, update_var_def] >>
+     gvs[eval_operand_def, lookup_var_def, wordsTheory.dimword_def]) >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G gi u, step_taint gi s u tn)` by
+    (drule_all straight_line_origin_ptr_edge >>
+     gvs[run_inst_seq_mem_ok_def, inst_seq_ptr_def, mk_inst_def,
+       is_terminator_def]) >>
+  qabbrev_tac `w = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `~w.vs_halted /\ lookup_block w.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb w.vs_inst_idx = SOME ci` by
+    (drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+     `step_inst 0 ctx gi s = OK u` by simp[step_inst_non_invoke, mk_inst_def] >>
+     drule_all step_preserves_halted >> drule_all step_preserves_control_flow >>
+     gvs[Abbr `w`, mk_inst_def, is_terminator_def]) >>
+  `ptr_inst_ok (DF H) lo 0 ctx func (step_prov PG G gi u)
+     (step_taint gi s u tn) ci w` by
+    gvs[inst_seq_ptr_def, Abbr `w`] >>
+  `step_inst_base ci w = Abort a (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Abbr `w`, step_inst_inst_idx_indep, mk_inst_def,
+      is_terminator_def, exec_result_map_def] >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+     (w,step_prov PG G gi u,step_taint gi s u tn) []
+     (Abort a (t with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G gi u,step_taint gi s u tn)` by
+    (irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
+     simp[gas_origin_ptr_edge_def, gas_origin_edge_def, gas_path_ptr_edge_def] >>
+     conj_tac >> qexists_tac `0` >>
+     gvs[run_inst_seq_mem_ok_def, Abbr `w`, step_inst_non_invoke,
+       ptr_safe_step_def, gas_count_step_def, gas_events_step_def,
+       mk_inst_def, exit_result_def, mem_safe_step_non_invoke]) >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> simp[] >>
+  disch_then irule >> first_assum ACCEPT_TAC
+QED

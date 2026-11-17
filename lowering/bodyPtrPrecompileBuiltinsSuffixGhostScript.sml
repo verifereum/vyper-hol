@@ -164,7 +164,8 @@ Theorem computed_static_state_frame:
   (!x. x <> out ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all bodyPtrPrecompileBuiltinsRuntimeTheory.computed_static_exec_eq >>
-  strip_tac >> gvs[update_var_def, write_memory_with_expansion_def,
+  strip_tac >> Cases_on `s.vs_outcomes = []` >>
+  gvs[update_var_def, write_memory_with_expansion_def,
                    lookup_var_def, FLOOKUP_UPDATE]
 QED
 
