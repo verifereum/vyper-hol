@@ -33,15 +33,17 @@ Proof
   strip_tac >>
   `vv_holds ce cx (post_value_type ce e) (Value v) saved ee z` by
     (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_holds_def, vyperStateTheory.read_result_def,
+     Cases_on `saved` >>
+     simp[vv_holds_def, storage_holds_def, immutable_holds_def] >>
+     simp[vyperStateTheory.read_result_def,
           vyperStateTheory.return_def]) >>
   `vv_at ce cx (post_value_type ce e) sa sb ee (Value v) saved z` by
-    (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_at_def, vyperStateTheory.read_result_def,
-          vyperStateTheory.return_def] >> metis_tac[]) >>
+    (irule exprSimIfExpTheory.ifexp_vv_at_conditional >>
+     qexists_tac `raw` >> simp[]) >>
   `vv_own ce cx (post_value_type ce e) sa sb ee (Value v) saved z` by
     (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_own_def, vyperStateTheory.read_result_def,
+     Cases_on `saved` >>
+     simp[vv_own_def] >> simp[vyperStateTheory.read_result_def,
           vyperStateTheory.return_def]) >>
   `!n lb len. local_region ce es.scopes s0 n lb len ==>
     regions_disjoint b sz lb len` by
@@ -165,7 +167,7 @@ Proof
   `vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
      (LocatedValue lt (mk_ptr dst LocMemory)) z` by
     (irule lowered_snapshot_store_frame >> simp[] >>
-     qexistsl_tac [`w2n d`, `inst`, `s`, `sc`, `source`, `type_memory_size tv`] >> simp[] >>
+     qexistsl_tac [`w2n d`, `inst`, `raw`, `s`, `sc`, `source`, `type_memory_size tv`] >> simp[] >>
      conj_tac >- (rpt strip_tac >>
        qpat_x_assum `!n b len. local_region _ _ s _ _ _ ==> _` drule >> simp[]) >>
      conj_tac >- (rpt strip_tac >>
@@ -173,13 +175,17 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ z.vs_memory = _`
        (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
-  qexists_tac `z` >> simp[] >> conj_tac
-  >- (qpat_x_assum `vv_own _ _ _ sm sb _ raw _ _` mp_tac >>
-      simp[vv_own_def, vyperStateTheory.read_result_def,
+  `vv_own ce cx lt sm sb ee (Value v)
+     (LocatedValue lt (mk_ptr dst LocMemory)) z` by
+    (qpat_x_assum `vv_own _ _ _ sm sb _ raw _ _` mp_tac >>
+      simp[vv_own_def] >> simp[vyperStateTheory.read_result_def,
            vyperStateTheory.return_def]) >>
-  qpat_x_assum `vv_store_bound _ _ _ _ raw _ _` mp_tac >>
-  simp[vv_store_bound_def, vyperStateTheory.read_result_def,
-       vyperStateTheory.return_def]
+  `vv_store_bound cx lt lt ee (Value v)
+     (LocatedValue lt (mk_ptr dst LocMemory)) z` by
+    (qpat_x_assum `vv_store_bound _ _ _ _ raw _ _` mp_tac >>
+     simp[vv_store_bound_def] >> simp[vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def]) >>
+  qexists_tac `z` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 (* The capacity premise concerns the lowered layout, never the annotation.
