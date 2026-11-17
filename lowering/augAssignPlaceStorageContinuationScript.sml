@@ -5,6 +5,7 @@ Ancestors
   augAssignPlaceSourceMemory augAssignPlaceRhsContinuation
   exprSimProps exprSimSource exprSimHypsDefs exprSimLen
   stmtSimAugAssignPlaceStorage vyperState vyperStorageFootprint
+  stmtSimAugAssignPlace
   vyperStoragePlaceObserved vyperStorageTrace
 
 Theorem aug_place_loaded_storage_suffix_typed:
@@ -93,6 +94,7 @@ Proof
     (Q.INST [`cur` |-> `old`] (SPEC_ALL aug_place_rhs_operator_write_mem_typed))) >>
   impl_tac >- (
   simp[loweringPostsTheory.slot_loc_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (Cases_on `tr` >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   `?xs. ee.storage_trace = mid.storage_trace ++ xs` by
@@ -174,7 +176,8 @@ Proof
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       tv bop old rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule stmtSimAugAssignTheory.bop_result_augassign >> simp[]) >>
+    (irule stmtSimAugAssignTheory.bop_result_augassign >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [bodyBinopFragMemoryTheory.binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
@@ -194,6 +197,8 @@ Resume aug_place_static_operator_store_path_typed[store]:
   `eval_operand dst t = SOME slot` by
     (irule exprBopSimPropsTheory.eval_operand_frame >>
      conj_tac >- simp[] >> qexistsl_tac [`s2`, `s`] >> simp[]) >>
+  qpat_assum `expr_val_rel cx ty v op t`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_val_rel_def]) >>
   drule_all storageStoreFrameTheory.storage_emit_static_path_memory >>
   disch_then (qspecl_then [`T`, `ctx`] assume_tac) >>
   `gas_marked_path T ctx func s 0
@@ -410,8 +415,10 @@ Theorem aug_place_loaded_storage_suffix:
       (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
       halt_exit H cx ff res r)
 Proof
-  strip_tac >> irule aug_place_loaded_storage_suffix_typed >>
-  simp[] >> metis_tac[exprSimSourceTheory.word_value_type_word]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  imp_res_tac exprSimSourceTheory.word_value_type_word >>
+  mp_tac (SPEC_ALL aug_place_loaded_storage_suffix_typed) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]
 QED
 
 Theorem aug_place_loaded_storage_static_suffix:
@@ -453,6 +460,8 @@ Theorem aug_place_loaded_storage_static_suffix:
       (!tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r) /\
       halt_exit H cx ff res r)
 Proof
-  strip_tac >> irule aug_place_loaded_storage_static_suffix_typed >>
-  simp[] >> metis_tac[exprSimSourceTheory.word_value_type_word]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  imp_res_tac exprSimSourceTheory.word_value_type_word >>
+  mp_tac (SPEC_ALL aug_place_loaded_storage_static_suffix_typed) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]
 QED
