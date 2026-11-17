@@ -50,7 +50,7 @@ Proof
   >> simp[update_var_def]
 QED
 
-Theorem immutable_uint256_address_store_boundary:
+Theorem immutable_uint256_address_store_boundary_by_layout:
   stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
   local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME (BaseT (UintT 256)) /\
@@ -59,7 +59,9 @@ Theorem immutable_uint256_address_store_boundary:
   write_place cx (ImmutablePlace ce.ce_module id []) sv ee = (INL (),fin) /\
   value_has_type (BaseTV (UintT 256)) sv /\
   ghost_inv_at D lo d ce cx ee G tn s /\ (!im. D.d_imm im = UNIV) /\
-  struct_args_unique (cx_tops cx) /\
+  (!ty tv. evaluate_type (type_env (cx_tops cx)) ty = SOME tv ==>
+      type_mem_bytes (get_struct_fields (make_struct_fields_map (cx_tops cx))) ty =
+      type_memory_size tv) /\
   cx_tops cx = pre ++ VariableDecl vis Immutable id (BaseT (UintT 256)) slot :: post /\
   dst = compute_immutables_len (get_struct_fields (make_struct_fields_map (cx_tops cx))) pre /\
   alloca_frame ce es sa s0 ce ee s /\
@@ -113,6 +115,62 @@ Proof
           `id` |-> `iid`] (SPEC_ALL immutable_word_ctor_store)) >>
       simp[eval_operand_def, w2n_n2w, LESS_MOD]) >>
   mp_tac (Q.INST [`s` |-> `u`, `G` |-> `G1`, `tn` |-> `tn1`, `off` |-> `dst`, `v` |-> `sv`]
-    (SPEC_ALL immutable_uint256_store_boundary)) >>
+    (SPEC_ALL immutable_uint256_store_boundary_by_layout)) >>
   simp[] >> disch_then irule >> first_assum ACCEPT_TAC
+QED
+
+Theorem immutable_uint256_address_store_boundary:
+  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME (BaseT (UintT 256)) /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc dst) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME (BaseT (UintT 256)) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) sv ee = (INL (),fin) /\
+  value_has_type (BaseTV (UintT 256)) sv /\
+  ghost_inv_at D lo d ce cx ee G tn s /\ (!im. D.d_imm im = UNIV) /\
+  struct_args_unique (cx_tops cx) /\
+  cx_tops cx = pre ++ VariableDecl vis Immutable id (BaseT (UintT 256)) slot :: post /\
+  dst = compute_immutables_len (get_struct_fields (make_struct_fields_map (cx_tops cx))) pre /\
+  alloca_frame ce es sa s0 ce ee s /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
+  (!aid a sz i.
+     FLOOKUP s0.vs_allocas aid = SOME (a,sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region ce es.scopes s0 n b sz' ==>
+                a + sz <= b \/ b + sz' <= a) /\
+     a <= i /\ i < a + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+  ~not_fresh_at su tmp /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x) /\
+  eval_operand region s = SOME 0w /\ op_prov G region = NONE /\
+  op_taint tn region = {} /\
+  eval_operand op s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) sv) /\
+  op_taint tn op = {} /\ op <> Var tmp /\
+  dst + 32 <= lo /\ dst < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  u = update_var tmp (n2w dst) s /\
+  G1 = step_prov PG G (mk_inst iid ADD [region;Lit (n2w dst)] [tmp]) u /\
+  tn1 = step_taint (mk_inst iid ADD [region;Lit (n2w dst)] [tmp]) s u tn ==>
+  run_inst_seq [mk_inst iid ADD [region;Lit (n2w dst)] [tmp];
+    mk_inst (iid+1) ISTORE [Var tmp;op] []] s =
+    OK (istore dst (typed_val_to_w256 (BaseTV (UintT 256)) sv) u) /\
+  stmt_state_rel H ctx func ce cx fin
+    (istore dst (typed_val_to_w256 (BaseTV (UintT 256)) sv) u) /\
+  ghost_inv_at D lo d ce cx fin G1
+    (tn1 with <|t_mem := tn1.t_mem DIFF {i | dst <= i /\ i < dst + 32};
+               t_imm := key_update tn1.t_imm dst {}|>)
+    (istore dst (typed_val_to_w256 (BaseTV (UintT 256)) sv) u) /\
+  alloca_frame ce es sa s0 ce fin
+    (istore dst (typed_val_to_w256 (BaseTV (UintT 256)) sv) u) /\
+  (!aid a sz i.
+     FLOOKUP s0.vs_allocas aid = SOME (a,sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region ce es.scopes s0 n b sz' ==>
+                a + sz <= b \/ b + sz' <= a) /\
+     a <= i /\ i < a + sz /\
+     i IN (tn1.t_mem DIFF {j | dst <= j /\ j < dst + 32}) ==> i IN tn0.t_mem)
+Proof
+  strip_tac >>
+  mp_tac (SPEC_ALL immutable_uint256_address_store_boundary_by_layout) >>
+  asm_rewrite_tac[] >> disch_then irule >>
+  rpt gen_tac >> strip_tac >>
+  metis_tac[ctorDeployDeadSectionFrameTheory.imm_frame_size]
 QED

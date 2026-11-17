@@ -37,8 +37,10 @@ Proof
 QED
 
 (* Changing one immutable cannot change the deadness in another declaration. *)
-Theorem immutable_other_dead_frame:
-  struct_args_unique tops /\
+Theorem immutable_other_dead_frame_by_layout:
+  (!ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
+      type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+      type_memory_size tv) /\
   tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
   evaluate_type (type_env tops) ty = SOME tv /\
   off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
@@ -57,7 +59,7 @@ Proof
   `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
    type_memory_size tv /\
    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty2 =
-   type_memory_size tv2` by metis_tac[imm_frame_size] >>
+   type_memory_size tv2` by metis_tac[] >>
   Q.SUBGOAL_THEN `pre = pre2 \/ off + type_memory_size tv <=
       compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre2 \/
     compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre2 +
@@ -84,8 +86,10 @@ Proof
   qexistsl_tac [`pre2`, `vis2`, `name2`, `ty2`, `slot2`, `post2`, `tv2`] >> gvs[]
 QED
 
-Theorem immutable_bytes40_section_taint:
-  struct_args_unique tops /\
+Theorem immutable_bytes40_section_taint_by_layout:
+  (!ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
+      type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+      type_memory_size tv) /\
   tops = pre ++ VariableDecl vis Immutable name (BaseT (BytesT (Dynamic 40))) slot :: post /\
   off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
   LENGTH sec2 = LENGTH sec1 /\
@@ -126,10 +130,52 @@ Proof
     `slot` |-> `slot`, `post` |-> `post`,
     `tv` |-> `BaseTV (BytesT (Dynamic 40))`, `off` |-> `off`,
     `sec1` |-> `sec1`, `sec2` |-> `sec2`, `i` |-> `i`]
-    (SPEC_ALL immutable_other_dead_frame)) >>
+    (SPEC_ALL immutable_other_dead_frame_by_layout)) >>
   simp[evaluate_type_def, type_slot_size_def, vfmConstantsTheory.word_size_def,
        dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
   disch_then irule >>
   qpat_x_assum `~(off <= i /\ i < off + _)` mp_tac >> simp[]
 QED
 
+
+Theorem immutable_other_dead_frame:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec2 = LENGTH sec1 /\
+  (!j. j < LENGTH sec1 /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
+       EL j sec2 = EL j sec1) /\
+  ~(off <= i /\ i < off + type_memory_size tv) /\
+  imm_section_dead tops sec1 i ==>
+  imm_section_dead tops sec2 i
+Proof
+  strip_tac >> mp_tac (SPEC_ALL immutable_other_dead_frame_by_layout) >>
+  asm_rewrite_tac[] >> disch_then irule >>
+  rpt gen_tac >> strip_tac >> metis_tac[imm_frame_size]
+QED
+
+Theorem immutable_bytes40_section_taint:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name (BaseT (BytesT (Dynamic 40))) slot :: post /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec2 = LENGTH sec1 /\
+  (!j. j < LENGTH sec1 /\ ~(off <= j /\ j < off +
+        type_memory_size (BaseTV (BytesT (Dynamic 40)))) ==>
+       EL j sec2 = EL j sec1) /\
+  (!j. j < lo /\ j IN dirty ==> imm_section_dead tops sec1 j) /\
+  (!mem. mem_agree_outside dirty mem0 mem ==>
+     val_in_memory (BaseTV (BytesT (Dynamic 40))) (BytesV bs) src mem) /\
+  LENGTH bs < dimword (:256) /\
+  mem_word_at off sec2 = n2w (LENGTH bs) /\
+  32 + LENGTH bs <= copied /\
+  copied <= type_memory_size (BaseTV (BytesT (Dynamic 40))) /\
+  i < lo /\
+  i IN ((dirty DIFF {j | off <= j /\ j < off + copied}) UNION
+         {off + k | k < copied /\ src + k IN dirty}) ==>
+  imm_section_dead tops sec2 i
+Proof
+  strip_tac >> mp_tac (SPEC_ALL immutable_bytes40_section_taint_by_layout) >>
+  asm_rewrite_tac[] >> disch_then irule >>
+  rpt gen_tac >> strip_tac >> metis_tac[imm_frame_size]
+QED
