@@ -176,3 +176,166 @@ Resume store_slots_weak_control_family[elements]:
   FULL_SIMP_TAC std_ss [] >> slots_family_sequence
 QED
 Finalise store_slots_weak_control_family
+
+(* Instruction-level certificate: branch conditions are compiler temporaries. *)
+val slots_jnz = ``\i. i.inst_opcode = JNZ ==>
+  ?x l r. i.inst_operands = [Var x; Label l; Label r]``;
+val slots_instruction_action = ``\P m. !a r b. m a = (r,b) ==>
+  entry_shape a b /\ EVERY P (frag_code a b)``;
+
+Theorem slots_instruction_bind[local]:
+  !P m f. (^slots_instruction_action) P m /\
+    (!v. (^(inst [alpha |-> beta] slots_instruction_action)) P (f v)) ==>
+    (^(inst [alpha |-> beta] slots_instruction_action)) P (comp_bind m f)
+Proof
+  rpt gen_tac >> BETA_TAC >> strip_tac >> rpt gen_tac >>
+  simp_tac std_ss [comp_bind_def] >>
+  Cases_on `m a` >> strip_tac >> gvs[] >>
+  `entry_shape a r' /\ EVERY P (frag_code a r')` by metis_tac[] >>
+  `entry_shape r' b /\ EVERY P (frag_code r' b)` by metis_tac[] >>
+  conj_tac >- metis_tac[entry_shape_trans] >>
+  drule_all frag_code_compose_perm >> strip_tac >>
+  metis_tac[sortingTheory.PERM_EVERY, EVERY_APPEND]
+QED
+
+Theorem slots_instruction_ignore[local]:
+  !P m n. (^slots_instruction_action) P m /\
+    (^(inst [alpha |-> beta] slots_instruction_action)) P n ==>
+    (^(inst [alpha |-> beta] slots_instruction_action)) P (comp_ignore_bind m n)
+Proof
+  rpt gen_tac >> pure_rewrite_tac [comp_ignore_bind_def] >>
+  BETA_TAC >> strip_tac >> ho_match_mp_tac (BETA_RULE slots_instruction_bind) >> simp[]
+QED
+
+Theorem slots_instruction_branchless[local]:
+  !m. code_action (\opc. opc <> JNZ) m ==>
+    (^slots_instruction_action) (^slots_jnz) m
+Proof
+  simp[code_action_def, code_step_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem slots_instruction_emit_inst[local]:
+  !opc ops outs. (^slots_jnz) (mk_inst 0 opc ops outs) ==>
+    (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz) (emit_inst opc ops outs)
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def, mk_inst_def,
+    exprSimAbiEncodeObliviousContextTheory.entry_shape_def, frag_code_def, emitted_blocks_def, emitted_insts_def,
+    DROP_APPEND] >> metis_tac[]
+QED
+
+Theorem slots_instruction_header[local]:
+  !opc ops l r. opc <> JNZ ==>
+    (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz)
+      (do v <- emit_op opc ops; emit_inst JNZ [v; Label l; Label r] [] od)
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  simp[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, emit_def,
+    exprSimAbiEncodeObliviousContextTheory.entry_shape_def, frag_code_def, emitted_blocks_def, emitted_insts_def,
+    DROP_APPEND, mk_inst_def] >> rpt strip_tac >>
+  `LENGTH a.cs_current_insts - (LENGTH a.cs_current_insts + 1) = 0` by decide_tac >>
+  simp[]
+QED
+
+fun slots_instruction_sequence_with extra = rpt (FIRST (extra @ [
+  CHANGED_TAC BETA_TAC,
+  first_assum (MATCH_ACCEPT_TAC o BETA_RULE),
+  (MATCH_MP_TAC (BETA_RULE slots_instruction_header) >> simp[] >> NO_TAC),
+  (MATCH_MP_TAC (BETA_RULE slots_instruction_emit_inst) >> simp[mk_inst_def] >> NO_TAC),
+  (MATCH_MP_TAC (BETA_RULE slots_instruction_branchless) >>
+    simp[code_action_return, code_action_fresh_var, code_action_fresh_label,
+      code_action_new_block, code_action_emit_op, code_action_emit_void] >> NO_TAC),
+  ho_match_mp_tac (BETA_RULE slots_instruction_bind),
+  ho_match_mp_tac (BETA_RULE slots_instruction_ignore),
+  conj_tac, gen_tac]));
+val slots_instruction_sequence = slots_instruction_sequence_with [];
+
+Theorem store_slots_primitive_jnz[local]:
+  (!src dst cnt tr. (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz)
+    (comp_ignore_bind (compile_word_copy_loop_op src dst cnt LocMemory
+      (if tr then LocTransient else LocStorage) F) (comp_return ()))) /\
+  (!src. (^(inst [alpha |-> ``:operand``] slots_instruction_action)) (^slots_jnz)
+    (compile_bytestring_word_count src)) /\
+  (!src off. (^(inst [alpha |-> ``:operand``] slots_instruction_action)) (^slots_jnz)
+    (compile_lit_byte_offset src off))
+Proof
+  rpt conj_tac
+  >- (rpt gen_tac >> pure_rewrite_tac [store_slots_word_loop_skeleton] >>
+      BETA_TAC >> Cases_on `tr` >> slots_instruction_sequence)
+  >- (rpt gen_tac >> pure_rewrite_tac [compile_bytestring_word_count_def] >>
+      slots_instruction_sequence) >>
+  rpt gen_tac >> pure_rewrite_tac [compile_lit_byte_offset_def] >>
+  IF_CASES_TAC >- slots_instruction_sequence >> Cases_on `src` >>
+  simp_tac std_ss [venomStateTheory.operand_case_def] >> slots_instruction_sequence
+QED
+
+Theorem store_slots_jnz_family[local]:
+  (!cenv src dst ty tr. (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz)
+    (compile_store_slots cenv src dst ty tr)) /\
+  (!cenv src dst members mo so tr. (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz)
+    (compile_store_slots_members cenv src dst members mo so tr)) /\
+  (!cenv src dst elem cnt tr. (^(inst [alpha |-> ``:unit``] slots_instruction_action)) (^slots_jnz)
+    (compile_copy_elements_to_slots cenv src dst elem cnt tr))
+Proof
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac
+  >- suspend "dispatch"
+  >- (simp_tac std_ss [Once compile_store_slots_def] >> slots_instruction_sequence)
+  >- suspend "members"
+  >> suspend "elements"
+QED
+
+val slots_jnz_family_sequence = slots_instruction_sequence_with [
+  (first_assum (MATCH_MP_TAC o BETA_RULE) >> simp[] >> NO_TAC),
+  MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [COND_CLAUSES] (BETA_RULE (Q.INST [`tr` |-> `T`]
+    (SPEC_ALL (cj 1 store_slots_primitive_jnz))))),
+  MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [COND_CLAUSES] (BETA_RULE (Q.INST [`tr` |-> `F`]
+    (SPEC_ALL (cj 1 store_slots_primitive_jnz))))),
+  MATCH_ACCEPT_TAC (BETA_RULE (cj 1 store_slots_primitive_jnz)),
+  MATCH_ACCEPT_TAC (BETA_RULE (cj 2 store_slots_primitive_jnz)),
+  MATCH_ACCEPT_TAC (BETA_RULE (cj 3 store_slots_primitive_jnz))];
+
+Resume store_slots_jnz_family[dispatch]:
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac [Once compile_store_slots_def] >>
+  simp_tac std_ss [LET_THM] >>
+  Cases_on `~is_abi_dynamic cenv.ce_struct_fields ty`
+  >- (ASM_SIMP_TAC std_ss [] >> Cases_on `type_memory_bytes cenv ty DIV 32 = 1` >>
+      ASM_SIMP_TAC std_ss []
+      >- (Cases_on `tr` >> simp_tac std_ss [] >> slots_jnz_family_sequence) >>
+      Cases_on `tr` >>
+      simp_tac std_ss [compile_memory_to_storage_def, compile_memory_to_transient_def,
+        compile_word_copy_loop_def] >> slots_jnz_family_sequence) >>
+  ASM_SIMP_TAC std_ss [] >> Cases_on `is_bytestring_type ty`
+  >- (ASM_SIMP_TAC std_ss [] >> Cases_on `tr` >> simp_tac std_ss [] >>
+      slots_jnz_family_sequence) >>
+  ASM_SIMP_TAC std_ss [] >> Cases_on `~acyclic_struct_metadata cenv.ce_struct_fields` >>
+  ASM_SIMP_TAC std_ss []
+  >- slots_jnz_family_sequence >>
+  Cases_on `ty` >> FULL_SIMP_TAC std_ss [vyperASTTheory.type_case_def,
+    vyperASTTheory.type_11, vyperASTTheory.type_distinct]
+  >~ [`is_abi_dynamic _ (ArrayT el bd)`]
+  >- (Cases_on `bd` >> FULL_SIMP_TAC std_ss [vyperASTTheory.bound_case_def,
+        vyperASTTheory.bound_11, vyperASTTheory.bound_distinct] >>
+      Cases_on `tr` >> FULL_SIMP_TAC std_ss [] >> slots_jnz_family_sequence) >>
+  slots_jnz_family_sequence
+QED
+Resume store_slots_jnz_family[members]:
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac [Once compile_store_slots_def] >> slots_jnz_family_sequence
+QED
+Resume store_slots_jnz_family[elements]:
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac [store_slots_elements_skeleton] >> BETA_TAC >>
+  FULL_SIMP_TAC std_ss [] >> slots_jnz_family_sequence
+QED
+Finalise store_slots_jnz_family
+
+Theorem store_slots_fragment_jnz_operands:
+  compile_store_slots cenv src dst ty tr sa = ((),sb) /\
+  MEM i (frag_code sa sb) /\ i.inst_opcode = JNZ ==>
+  ?x l r. i.inst_operands = [Var x; Label l; Label r]
+Proof
+  mp_tac (BETA_RULE (cj 1 store_slots_jnz_family)) >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED

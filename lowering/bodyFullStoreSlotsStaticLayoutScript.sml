@@ -177,3 +177,19 @@ Proof
       disch_then drule >> simp[]) >>
   drule store_slots_fragment_syntax_shape >> simp[]
 QED
+
+Theorem store_slots_fragment_label_operand_target:
+  compile_store_slots cenv src dst ty tr sa = ((),sb) /\
+  MEM i (frag_code sa sb) /\
+  (i.inst_opcode = JMP \/ i.inst_opcode = JNZ) /\
+  MEM (Label l) i.inst_operands ==>
+  l = sb.cs_current_bb \/
+  MEM l (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb)))
+Proof
+  rpt strip_tac >>
+  imp_res_tac store_slots_fragment_jnz_operands >>
+  drule store_slots_fragment_control_layout >>
+  simp[EVERY_MEM] >> strip_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  gvs[MEM_MAP] >> metis_tac[]
+QED
