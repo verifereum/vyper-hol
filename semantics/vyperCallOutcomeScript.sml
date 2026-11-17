@@ -86,29 +86,49 @@ val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_t
 
 (* The evaluator's frame proofs use these. *)
 
-(* Definitional identity with PLAN 5.3, including the shared live snapshots.
-   The request constructor is factored only to avoid repeating that record. *)
+(* Definitional identity with PLAN 5.3, including the shared live snapshots. *)
 Theorem take_call_outcome_plan:
   take_call_outcome gas_cap target calldata value_opt st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME [] => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
-      let rq = <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
-                 cr_target := target;
-                 cr_value := (case value_opt of NONE => 0 | SOME v => v);
-                 cr_data := calldata; cr_static := IS_NONE value_opt;
-                 cr_accounts := st.accounts; cr_tStorage := st.tStorage|> in
-      let (outcome,rest) = take_outcome rq os in
-      let st' = st with <|outcomes := SOME rest;
-                          requests := record_request rq st.requests;
-                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> in
-      if outcome.co_success /\ ~rq.cr_static /\
-         ~accounts_runtime_well_typed outcome.co_accounts then
-        (INR (Error (RuntimeError "call outcome accounts")),st')
-      else (INL (rq,outcome),st')
+      case take_outcome
+        <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+          cr_target := target;
+          cr_value := (case value_opt of NONE => 0 | SOME v => v);
+          cr_data := calldata; cr_static := IS_NONE value_opt;
+          cr_accounts := st.accounts; cr_tStorage := st.tStorage|> os of
+      (outcome,rest) =>
+        (if outcome.co_success /\ ~IS_NONE value_opt /\
+            ~accounts_runtime_well_typed outcome.co_accounts then
+           INR (Error (RuntimeError "call outcome accounts"))
+         else INL
+           (<|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+              cr_target := target;
+              cr_value := (case value_opt of NONE => 0 | SOME v => v);
+              cr_data := calldata; cr_static := IS_NONE value_opt;
+              cr_accounts := st.accounts; cr_tStorage := st.tStorage|>,outcome),
+         st with <|outcomes := SOME rest;
+           requests := record_request
+             <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+               cr_target := target;
+               cr_value := (case value_opt of NONE => 0 | SOME v => v);
+               cr_data := calldata; cr_static := IS_NONE value_opt;
+               cr_accounts := st.accounts; cr_tStorage := st.tStorage|> st.requests;
+           storage_trace := st.storage_trace ++ [StorageOutcome
+             <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+               cr_target := target;
+               cr_value := (case value_opt of NONE => 0 | SOME v => v);
+               cr_data := calldata; cr_static := IS_NONE value_opt;
+               cr_accounts := st.accounts; cr_tStorage := st.tStorage|> outcome]|>)
 Proof
-  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def]
+  Cases_on `st.outcomes` >>
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def,
+       COND_RAND, COND_RATOR] >>
+  pairarg_tac >> rw[]
 QED
 
 Theorem take_request_outcome_frame:
