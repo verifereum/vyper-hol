@@ -35,7 +35,7 @@ Theory o1FrameLockstep
 Ancestors
   o1PassLift ptrDiscipline unitMemInv stateFrame contextCodegenRel
   codegenRel venomExecSemantics venomExecProps venomInst venomState
-  list finite_map option pred_set
+  list rich_list finite_map option pred_set
 
 (* ===== The renaming ===== *)
 
@@ -105,6 +105,32 @@ Definition phi_read_def:
              else NONE)
      else phi_read prev x rest)
 End
+
+Theorem phi_read_no_phis[local]:
+  EVERY (\i. i.inst_opcode <> PHI) insts ==> phi_read prev v insts = NONE
+Proof
+  Cases_on `insts` >> simp[phi_read_def] >> strip_tac >> simp[]
+QED
+
+Theorem phi_read_filter_prefix:
+  !insts prev v P.
+  (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
+    (EL i insts).inst_opcode = PHI) /\
+  (!i. MEM i insts /\ i.inst_opcode = PHI ==> P i) ==>
+  phi_read prev v (FILTER P insts) = phi_read prev v insts
+Proof
+  Induct >- simp[phi_read_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`P h` by metis_tac[MEM] >> simp[phi_read_def] >>
+      `phi_read prev v (FILTER P insts) = phi_read prev v insts` by
+        (first_x_assum irule >> simp[MEM] >> rpt strip_tac
+         >- (qpat_x_assum `!i j. _` (qspecl_then [`SUC i`,`SUC j`] mp_tac) >>
+             simp[EL_CONS]) >> metis_tac[MEM]) >> simp[]) >>
+  Cases_on `P h` >- simp[phi_read_def] >>
+  simp[phi_read_def] >> irule phi_read_no_phis >>
+  simp[EVERY_FILTER, EVERY_EL] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[EL_CONS]
+QED
 
 (* The operand x holds after the PHIs, read before them. *)
 Definition phi_eff_def:

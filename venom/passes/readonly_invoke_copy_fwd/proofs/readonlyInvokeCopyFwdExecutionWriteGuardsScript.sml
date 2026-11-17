@@ -37,8 +37,8 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
   `occurrence_natural_geometry lo a U B stk s /\
-   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
-    (drule occ_frame_reachable_annotation >>
+   occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def] >> strip_tac >>
      metis_tac[occ_frame_reachable_geometry, ptr_discipline_def,
        occ_frame_reachable_projection]) >>

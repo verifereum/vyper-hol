@@ -115,6 +115,16 @@ Proof
   metis_tac[joint_chain_prefix_reachable, joint_initial_reachable]
 QED
 
+Theorem joint_trace_reachable_at:
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es ==>
+  joint_config_reachable vs0 C (EL k (q0::qs))
+Proof
+  strip_tac >>
+  `LENGTH es = LENGTH qs` by metis_tac[joint_chain_length, joint_trace_def] >>
+  drule joint_trace_prefix_reachable >> simp[EVERY_EL] >> strip_tac >>
+  Cases_on `k` >> simp[] >> first_x_assum irule >> decide_tac
+QED
+
 (* The numeric index selects an occurrence, not merely a configuration value. *)
 Theorem joint_chain_edge_at:
   !n es q qs r. joint_chain ctx q es qs r /\ n < LENGTH es ==>

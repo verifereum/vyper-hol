@@ -56,12 +56,12 @@ Proof
   simp[ptr_stage_placements_def, MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem ptr_stage_placements_live_owner:
+Theorem ptr_stage_placements_live_owner_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   FLOOKUP TG v = SOME (token,aid) /\
@@ -77,8 +77,10 @@ Theorem ptr_stage_placements_live_owner:
     FLOOKUP positions (Allocation aid) = SOME (p,sz)
 Proof
   strip_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
   drule_all ptr_source_ownership_live_cache >> strip_tac >>
   `ptr_ledger_source_activations vs C h a tokens registry` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
@@ -92,11 +94,36 @@ Proof
     lookup_function (ptr_owner_view d a).cf_fn.fn_name C'.ctx_functions = SOME output /\
     MEM (Allocation aid,p,sz) output.fn_mems_used` by
     (Cases_on `d = LENGTH a.po_stack`
-     >- (gvs[ptr_owner_view_def] >> drule_all ptr_frame_current_mems >> simp[]) >>
+     >- (gvs[ptr_owner_view_def] >> drule_all ptr_frame_current_mems_static >> simp[]) >>
      `MEM (ptr_owner_view d a) a.po_stack` by
        (simp[ptr_owner_view_def] >> irule EL_MEM >> decide_tac) >>
-     drule_all ptr_frame_saved_mems >> simp[]) >>
+     drule_all ptr_frame_saved_mems_static >> simp[]) >>
   qexistsl [`d`,`(ptr_owner_view d a).cf_fn`,`output`,`p`] >> simp[] >>
   gvs[ptr_stage_placements_def] >>
   metis_tac[lookup_function_MEM]
+QED
+
+Theorem ptr_stage_placements_live_owner:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP TG v = SOME (token,aid) /\
+  FLOOKUP a.po_prov v = SOME (b,sz) ==>
+  ?d owner output p.
+    d <= LENGTH a.po_stack /\
+    EL (LENGTH a.po_stack-d) tokens = token /\
+    FLOOKUP registry token = SOME owner /\
+    owner = (ptr_owner_view d a).cf_fn /\
+    FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz) /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+    MEM (Allocation aid,p,sz) output.fn_mems_used /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_placements_live_owner_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

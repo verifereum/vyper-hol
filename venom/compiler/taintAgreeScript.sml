@@ -2207,8 +2207,10 @@ Proof
           step_writes_def, source_memory_write_ranges_def, written_taint_def,
           range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality] >>
      rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  simp[] >> irule taint_agree_update_var >> simp[word_agree_except_def] >>
-  irule taint_agree_gas_readings_update >> simp[]
+  simp[]
+  >- (irule taint_agree_update_var >> simp[word_agree_except_def]) >>
+  irule taint_agree_gas_readings_update >>
+  irule taint_agree_update_var >> simp[word_agree_except_def]
 QED
 
 Theorem taint_agree_frame_scalar:

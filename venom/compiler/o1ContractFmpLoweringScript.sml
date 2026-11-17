@@ -1,46 +1,22 @@
 (*
- * FmpLowering's O1 pass contract (o1_contract_fmp_lowering).  The stage
- * half is proved here; the step half is fmpStepContract's.
- *
- * Today's source admits none of DALLOCA, DRET, GETFMP, SETFMP, RETFMP
- * (raw_opcode_ok), and no earlier pass seals a function, so FmpLowering's
- * input functions are unsealed and FMP-free (row 3's fmp_free_ctx), in a
- * callee-first order (row 3's callee_first).  On such a function whose
- * callees are already sealed with no FMP parameter and no publication,
- * the analysis finds nothing to thread and the pass only seals the
- * function the same way (fmp_lower_function_seal_only).  The O1 walk
- * runs callees first and the later passes keep signatures, so by
- * induction on a callee-first order every function of the stage is
- * sealed so (fmp_lowering_stage_sealed).  The output context is then the
- * input up to signatures, which the semantics never reads (ctxSealAgree),
- * so runs are equal and the static memory phase becomes the lowered one
- * (fmp_lowering_stage_seal_only).
- *
- * The general stage, with dynamic allocations, waits until the source may
- * have them: there the pass relocates allocations.
+ * FmpLowering's O1 pass contract (o1_contract_fmp_lowering).  The step
+ * half is fmpStepContract's.  The stage half is assembled here from the
+ * stage simulation (fmpStageRunner) and the lowered memory phase
+ * (fmpStageCoverage), at the raw input state: the real state with its
+ * free-memory pointer fields set to the raw run's fmp.
  *
  * TOP-LEVEL:
- *   fmp_lower_function_seal_only - one run on an FMP-free function
- *   fmp_lowering_stage_sealed    - a whole stage only seals
- *   fmp_lowering_stage_seal_only - equal runs, memory phase lowered
- *   o1_static_stage_fmp_lowering - stage half, allowing static calls
- *   fmp_lowering_run_contract    - the stage half, row 3 to row 4
- *   o1_contract_fmp_lowering     - the pass contract
+ *   fmp_lowering_run_contract_gas - the stage half, row 3 to row 4
+ *   o1_contract_fmp_lowering      - the pass contract
  *)
 Theory o1ContractFmpLowering
 Ancestors
-  o1PassContract o1ScheduleDecomp ctxSealAgree fmpLowerDefs
-  fmpAnalysisDefs venomPassDispatcher venomFnScheduleRunner
-  venomPassSchedule unitMemInv fcgDefs venomInst list ctxLookupAgreeHelpers
-  unitShapeDefs venomWf contextCodegenRel irSupply venomFnScheduleRunnerProps
-  o1DretDesugarContract fmpStepContract o1ComposeSupport
-
-Theorem fmp_resolve_targets_some[local]:
-  !targets t. fmp_resolve_targets ctx targets /\ MEM t targets ==>
-              IS_SOME (lookup_function t ctx.ctx_functions)
-Proof
-  Induct >> rw[fmp_resolve_targets_def] >> gvs[]
-QED
+  o1PassContract o1ScheduleDecomp fmpLowerDefs fmpAnalysisDefs
+  venomPassDispatcher venomFnScheduleRunner venomPassSchedule
+  venomCompilerTypes venomState venomInst o1ComposeSupport fmpStepContract
+  fmpStageRunner fmpStageCoverage list
+  o1RequestContract fcgDefs ctxLookupAgreeHelpers fmpAnalysisProps
+  fmpStageFmpStepsCallAbi
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
    need and no publication. *)
@@ -59,8 +35,7 @@ Proof
   drule fmp_join_target_info_unneeded >> impl_tac
   >- (rpt strip_tac >>
       gvs[fmp_function_targets_def, AllCaseEqs()] >>
-      drule_all fmp_resolve_targets_some >>
-      simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+      drule_all fmp_resolve_targets_lookup >> strip_tac >>
       rename1 `lookup_function t ctx.ctx_functions = SOME g` >>
       drule_all fmp_collect_invokes_targets >> strip_tac >>
       `g.fn_fmp_signature =
@@ -97,17 +72,6 @@ Proof
   drule_all fmp_info_valid_seal_only >> strip_tac >> gvs[] >>
   gvs[fmp_checked_seal_def, fmp_seal_def, AllCaseEqs()] >>
   simp[venomInstTheory.ir_function_component_equality]
-QED
-
-(* The walk passes after FmpLowering all keep the FMP convention. *)
-Theorem fn_steps_after_fmp_signature:
-  fn_steps rpolicy (DROP 4 o1_fn_passes) g g' ==>
-  g'.fn_fmp_signature = g.fn_fmp_signature
-Proof
-  simp[o1_fn_passes_def, fn_steps_def, fn_pass_step_def,
-       fn_pass_effects_hold_def, fn_abi_effect_holds_def,
-       fn_pass_abi_effect_def, fn_fmp_convention_eq_def, fn_pass_tag_def] >>
-  rw[] >> gvs[]
 QED
 
 (* A callee named by an output function of the stage resolves there. *)
@@ -164,7 +128,8 @@ Proof
       `?g'. lookup_function name C'.ctx_functions = SOME g'` by metis_tac[] >>
       fs[o1_walk_view_def, walk_view_def] >>
       first_x_assum drule_all >> strip_tac >> gvs[] >>
-      drule fn_steps_after_fmp_signature >> metis_tac[]) >>
+      drule fn_steps_from_fn_steps >> strip_tac >>
+      drule fmp_call_later_signature >> metis_tac[]) >>
   simp[]
 QED
 
@@ -211,87 +176,76 @@ Proof
   disch_then (qspec_then `j` mp_tac) >> simp[]
 QED
 
-Theorem fmp_lowering_stage_seal_only:
+(* Why: the raw state is the real one with fmp in both free-memory pointer
+   fields, a raw variant of it; the stage simulation and the lowered
+   memory phase hold there, the static layout's end is the input's, which
+   FmpLowering keeps, and row 4's function rows carry make_ssa_input_ok. *)
+Theorem o1_static_stage_fmp_lowering_fixed:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
-  o1_ctx_shape C /\
-  EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
-    C.ctx_functions /\
-  callee_first names C.ctx_functions /\
-  mem_inv (static_mem_ok eom) C vs ==>
-  (!fuel. run_context fuel C' vs = run_context fuel C vs) /\
-  mem_inv (static_mem_ok eom) C' vs
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' ==>
+  raw_variant fmp
+    (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
+    (o1_inv D 3 C
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+     fmp_variant_room (SOME fmp) C' vs' ==>
+     ctx_sim_fuel I D C C'
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
+     ctx_abort_rq D C C'
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
+     o1_inv D (SUC 3) C' vs')
 Proof
-  strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
-  `ctx_seal_eq C C'`
-    by (fs[ctx_seal_eq_def, ctx_pass_stage_def] >>
-        irule LIST_REL_mono >> first_x_assum (irule_at Any) >>
-        simp[fn_seal_eq_def]) >>
-  conj_tac >- metis_tac[run_context_seal_eq] >>
-  `!fn fn' inst s. fn_seal_eq fn fn' /\ static_mem_ok eom C fn inst s ==>
-                   static_mem_ok eom C' fn' inst s`
-    by (rpt strip_tac >> drule fn_seal_eq_fields >>
-        fs[static_mem_ok_def,
-           in_revert_forward_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
-        metis_tac[]) >>
-  metis_tac[mem_inv_seal_eq]
+  strip_tac >>
+  conj_tac
+  >- simp[raw_variant_def, gas_variant_def,
+          venom_state_component_equality] >>
+  strip_tac >>
+  conj_tac >- metis_tac[fmp_lowering_stage_sim_static] >>
+  conj_tac >- metis_tac[fmp_lowering_stage_abort_rq_static] >>
+  `?eom. max_live_eom C = SOME eom` by
+    (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
+     simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
+  `mem_inv (lowered_mem_fact eom) C' vs'` by
+    metis_tac[fmp_lowering_stage_lowered_mem_static] >>
+  `max_live_eom C' = max_live_eom C` by
+    (irule ctx_pass_stage_max_live_eom >>
+     qexistsl [`CFP_Simple VP_FmpLowering`, `rpolicy`, `o1_walk_view rpolicy 3`] >>
+     simp[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
+  simp[o1_inv_def, o1_lowered_inv_def] >>
+  fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
 QED
 
-Theorem o1_ctx_shape_entry_no_return[local]:
-  o1_ctx_shape ctx /\ ctx.ctx_entry = SOME name /\
-  lookup_function name ctx.ctx_functions = SOME fn ==>
-  entry_fn_no_return fn
-Proof
-  rw[o1_ctx_shape_def, EVERY_MEM] >>
-  imp_res_tac lookup_function_MEM >>
-  imp_res_tac lookup_function_selected_name >>
-  res_tac >> gvs[o1_fn_shape_def]
-QED
-
-(* Why: the stage only seals (fmp_lowering_stage_sealed), so the output
-   runs as the input does, which simulates itself (its entry function
-   never returns), and the static memory phase is a lowered one. *)
 Theorem o1_static_stage_fmp_lowering:
-  !C C' vs.
-    ctx_pass_stage rpolicy (EL 3 o1_fn_passes) (o1_walk_view rpolicy 3) C C' /\
-    o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
-    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
-    code_layout_valid vs /\ o1_inv D 3 C vs ==>
-    ctx_sim_fuel (pass_fuel (EL 3 o1_fn_passes) C') D C C' vs vs /\
-    o1_inv D (SUC 3) C' vs
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' ==>
+  ?vs. raw_variant fmp vs vs' /\
+    (o1_inv D 3 C vs /\ fmp_variant_room (SOME fmp) C' vs' ==>
+     ctx_sim_fuel I D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
+     o1_inv D (SUC 3) C' vs')
+Proof
+  metis_tac[o1_static_stage_fmp_lowering_fixed]
+QED
+
+Theorem fmp_lowering_run_contract_gas:
+  o1_run_contract_gas rpolicy D fmp 3
 Proof
   `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
-  simp[o1_inv_def, o1_pre_def,
-       o1_static_inv_def, o1_lowered_inv_def, fmp_free_ctx_def,
-       pass_fuel_def] >>
+  simp[o1_run_contract_gas_def, o1_stage_contract_gas_def,
+       fmp_variant_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_all fmp_lowering_stage_seal_only >> strip_tac >>
-  drule_all fmp_lowering_stage_sealed >> strip_tac >>
-  `ctx_sim_fuel I D C C vs vs` by
-    (irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]) >>
-  conj_tac >- fs[ctx_sim_fuel_def] >>
-  `EVERY make_ssa_input_ok C'.ctx_functions` by
-    (qpat_x_assum `LIST_REL _ C.ctx_functions C'.ctx_functions` mp_tac >>
-     qpat_x_assum `EVERY make_ssa_input_ok C.ctx_functions` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
-     metis_tac[make_ssa_input_ok_fmp_signature]) >>
-  drule ctx_pass_stage_max_live_eom >>
-  simp[fn_pass_tag_def, fn_pass_static_layout_effect_def] >>
-  strip_tac >> qexists_tac `eom` >> simp[]
-QED
-
-Theorem fmp_lowering_run_contract:
-  o1_run_contract rpolicy D 3
-Proof
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_run_state_ok_def] >>
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_fmp_lowering) >> simp[]
+  `o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+   code_layout_valid vs'` by fs[o1_run_state_ok_def] >>
+  drule_all o1_static_stage_fmp_lowering >> simp[] >> metis_tac[]
 QED
 
 Theorem o1_contract_fmp_lowering:
   o1_step_contract_at 3 rpolicy (CFP_Simple VP_FmpLowering) /\
-  o1_run_contract rpolicy D 3
+  o1_run_contract_gas rpolicy D fmp 3
 Proof
-  simp[fmp_step_contract_at, fmp_lowering_run_contract]
+  simp[fmp_step_contract_at, fmp_lowering_run_contract_gas]
 QED
