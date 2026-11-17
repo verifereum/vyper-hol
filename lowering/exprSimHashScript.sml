@@ -514,12 +514,14 @@ Proof
          fcpTheory.finite_bit0, fcpTheory.finite_bit1,
          fcpTheory.index_one, fcpTheory.finite_one] >>
   `consume_call_outcome
-     (venom_call_request s 2w 0w args_off args_size T) (w2n ret_off) 32 s =
+     (venom_call_request s 2w 0w args_off args_size T with cr_gas := SOME (w2n gas))
+     (w2n ret_off) 32 s =
    (1w, (write_memory_with_expansion (w2n ret_off)
          (word_to_bytes (SHA_256_bytes bs) T) s) with
          <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
             vs_outcomes := rest |>)` by
-    (qspecl_then [`venom_call_request s 2w 0w args_off args_size T`,
+    (qspecl_then [`venom_call_request s 2w 0w args_off args_size T
+                    with cr_gas := SOME (w2n gas)`,
                     `w2n ret_off`, `s`] mp_tac
        (Q.GENL [`rq`, `ro`, `s`] sha256_consume_outcome) >>
      simp[venomCallOracleDefsTheory.venom_call_request_def,
@@ -543,7 +545,8 @@ Proof
          fcpTheory.finite_bit0, fcpTheory.finite_bit1,
          fcpTheory.index_one, fcpTheory.finite_one] >>
   `consume_call_outcome
-     (venom_call_request s 2w 0w args_off args_size T) (w2n ret_off) 32 s =
+     (venom_call_request s 2w 0w args_off args_size T with cr_gas := SOME (w2n gas))
+     (w2n ret_off) 32 s =
    (0w, (write_memory_with_expansion (w2n ret_off) [] s) with
      <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>)` by
     (irule sha256_consume_outcome_fail >>

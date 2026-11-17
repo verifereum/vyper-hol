@@ -108,8 +108,10 @@ Theorem send_call_step:
   eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
   step_inst_base inst s =
     OK (update_var out
-      (FST (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s))
-      (SND (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s)))
+      (FST (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s))
+      (SND (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s)))
 Proof
   strip_tac >>
   `venom_call_request s aw vw 0w 0w s.vs_call_ctx.cc_static =
@@ -156,7 +158,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  (metis_tac[])
 QED
 
 Theorem send_call_ghost_inv:
@@ -211,7 +213,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  qexistsl_tac [`0w`, `aw`, `0w`, `SOME (w2n gw)`, `0`, `0`, `vw`] >> simp[]
 QED
 
 Theorem send_call_ghost_inv_at:
@@ -331,7 +333,9 @@ Theorem send_read_call_step:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  IS_SOME (eval_operand gas s) /\
+  eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -372,6 +376,8 @@ Theorem send_read_checked_tail:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -423,6 +429,8 @@ Theorem send_read_state_rel_any:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -454,6 +462,8 @@ Theorem send_read_checked_tail_uniform[local]:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -584,6 +594,8 @@ Theorem send_tail_path_ptr:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -744,6 +756,8 @@ Theorem send_tail_summary_ptr:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -941,9 +955,13 @@ Resume send_expr_sim_ptr[normal]:
   `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
     fs[expr_sim_inv_def,
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw` by
+  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw /\
+    w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g)` by
     (Cases_on `has_gas` >> gvs[eval_operand_def, op_taint_def] >>
-     gvs[LENGTH_EQ_NUM_compute]) >>
+     gvs[LENGTH_EQ_NUM_compute, vyperInterpreterTheory.ext_call_kwarg_def,
+         vyperValueTheory.evaluate_type_def] >>
+     imp_res_tac uint256_typed_dest >> simp[]) >>
   `dest_AddressV to_v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) to_v))` by
     metis_tac[address_typed_dest] >>
   `dest_NumV amount_v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) amount_v))` by
