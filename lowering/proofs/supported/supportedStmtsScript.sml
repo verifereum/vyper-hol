@@ -155,10 +155,7 @@ Definition supported_iterator_def:
      | TopLevelName (ArrayT elem bd) nid =>
          elem = ty /\ bound_length bd <= n /\
          (IS_SOME (supported_immutable_type tops nid) \/
-          ?vis mut slot.
-            supported_variable_decl tops nid =
-              SOME (vis, mut, ArrayT elem bd, SOME slot) /\
-            (mut = Storage \/ mut = Transient))
+          supported_storage_value tops nid (ArrayT elem bd))
      | TopLevelName _ _ => F
      | _ => supported_expr tops e /\
             ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
