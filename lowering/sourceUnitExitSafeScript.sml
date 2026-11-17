@@ -38,9 +38,7 @@ Theorem source_unit_exit_safe_runs:
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     ~ctx_has_dalloca unit.cu_context /\
-    source_storage_ok am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
-    call_outcomes_storage_ok am tx vs.vs_outcomes
+    call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
     ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
