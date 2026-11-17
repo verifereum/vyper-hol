@@ -279,7 +279,7 @@ Definition tx_block_fields_rel_def:
     txp.blobHashes = tx.blob_hashes /\
     txp.baseFeePerBlobGas = tx.blob_base_fee /\
     txp.prevRandao = n2w tx.prev_randao /\
-    txp.prevHashes = tx.block_hashes /\ tx_env_ok tx
+    tx.block_hashes = TAKE 256 txp.prevHashes /\ tx_env_ok tx
 End
 
 Definition value_transfer_ok_def:
