@@ -12,7 +12,7 @@ Ancestors
   dftPacketCallEdgeClauses
   dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry dftPacketClosedRowNative
-  dftPacketClosedRows
+  dftPacketClosedRows dftPacketClosedBodyBoundary
   dftPacketCommonOracle
   dftPacketCutExtension
   dftPacketEntryReplay
