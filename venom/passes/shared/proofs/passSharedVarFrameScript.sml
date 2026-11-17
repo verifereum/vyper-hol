@@ -86,7 +86,7 @@ val step_base_result_tac =
 
 val _ = augment_srw_ss [rewrites
   [exec_result_helpers_not_intret, exec_call_helpers_not_intret,
-   exec_call_helpers_no_halt_abort]];
+   exec_call_helpers_no_halt]];
 
 (* ===================================================================== *)
 (* ===== External call update_var lemmas =============================== *)

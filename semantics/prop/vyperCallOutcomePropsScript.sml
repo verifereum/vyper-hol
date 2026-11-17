@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem take_call_outcome_SOME:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   take_outcome rq os = (outcome, rest) ==>
   take_call_outcome gas_cap target calldata value_opt st =
@@ -45,7 +45,8 @@ Theorem take_call_outcome_SOME:
                requests := record_request rq st.requests;
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
+  rpt strip_tac >> Cases_on `os` >>
+  gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_ordinary:
@@ -65,15 +66,11 @@ Proof
 QED
 
 Theorem take_call_outcome_exhausted:
-  st.outcomes = SOME [] /\
-  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
-  ~computed_precompile rq ==>
+  st.outcomes = SOME [] ==>
   take_call_outcome gas_cap target calldata value_opt st =
-    (INL (rq, failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
-               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
+    (INR (Error (RuntimeError "take_call_outcome")), st)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def]
+  simp[take_call_outcome_def, take_request_outcome_def]
 QED
 
 Theorem take_call_outcome_computed_valid:
@@ -101,7 +98,7 @@ Proof
 QED
 
 Theorem take_call_outcome_computed_invalid:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_call_outcome gas_cap target calldata value_opt st =
@@ -147,6 +144,8 @@ Theorem take_request_outcome_error:
   exc = Error (RuntimeError "call outcome accounts")
 Proof
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -184,6 +183,8 @@ Theorem take_request_outcome_success:
        accounts_runtime_well_typed outcome.co_accounts)
 Proof
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -210,7 +211,9 @@ Theorem take_request_outcome_suffix:
     LENGTH prefix <= 1 /\
     (computed_precompile rq ==> st'.requests = st.requests)
 Proof
-  rpt strip_tac >> gvs[take_request_outcome_def] >> pairarg_tac >>
+  rpt strip_tac >> Cases_on `os` >> gvs[take_request_outcome_def]
+  >- (qexists_tac `[]` >> simp[]) >>
+  pairarg_tac >>
   `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
   gvs[AllCaseEqs(), record_request_def] >>
   Cases_on `os` >> simp[] >>

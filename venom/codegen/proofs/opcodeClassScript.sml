@@ -87,15 +87,11 @@ Proof
   simp_tac exec_call_result_head_ss []
 QED
 
-Theorem exec_call_helpers_no_halt_abort:
+Theorem exec_call_helpers_no_halt:
   (!inst s g a v ao as_ ro rs is_s s'.
      exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
   (!inst s g a ao as_ ro rs s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
      exec_create inst s v off sz salt <> Halt s')
 Proof
@@ -104,7 +100,7 @@ QED
 
 val _ = augment_srw_ss [rewrites
   [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret,
-   exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+   exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 (* ===== Main classification theorems ===== *)
 
 Triviality step_inst_base_halt_terminator_opcodes[local]:
@@ -502,13 +498,16 @@ Proof
   Cases >> EVAL_TAC
 QED
 
-(* A static frame aborts at CALL with value. *)
+(* Calls abort on an exhausted oracle; value CALL also has a static guard. *)
 Theorem ext_call_not_halt_abort[local]:
   !inst s vs' a.
     is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Halt vs' /\
     (step_inst_base inst s <> Abort a vs' \/
      inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2 \/
+     (s.vs_outcomes = [] /\
+      (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+       inst.inst_opcode = DELEGATECALL)) \/
      (s.vs_call_ctx.cc_static /\ inst.inst_opcode = CALL))
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -660,6 +659,9 @@ Theorem step_inst_base_abort_opcodes:
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
+    (vs.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (vs.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
@@ -693,6 +695,9 @@ Theorem step_inst_base_abort_opcode:
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (s.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = CALL))
@@ -713,6 +718,9 @@ Theorem step_inst_abort_opcodes:
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
     inst.inst_opcode = INVOKE \/
+    (vs.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (vs.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/

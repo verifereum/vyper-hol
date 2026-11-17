@@ -92,6 +92,7 @@ Theorem take_call_outcome_plan:
   take_call_outcome gas_cap target calldata value_opt st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
+    | SOME [] => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
       let rq = <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
                  cr_target := target;
@@ -116,6 +117,8 @@ Theorem take_request_outcome_frame:
                  storage_trace := st'.storage_trace|>
 Proof
   Cases_on `st.outcomes` >>
+  simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
@@ -263,7 +266,7 @@ Proof
 QED
 
 Theorem take_create_outcome_SOME:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = create_outcome_request kind value initcode st /\
   take_outcome rq os = (outcome,rest) ==>
   take_create_outcome kind value initcode st =
@@ -273,7 +276,7 @@ Theorem take_create_outcome_SOME:
      st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> gvs[take_create_outcome_def, record_request_def] >>
+  rpt strip_tac >> Cases_on `os` >> gvs[take_create_outcome_def, record_request_def] >>
   rw[] >> gvs[]
 QED
 
@@ -292,24 +295,15 @@ Proof
 QED
 
 Theorem take_create_outcome_exhausted:
-  st.outcomes = SOME [] /\
-  rq = create_outcome_request kind value initcode st ==>
+  st.outcomes = SOME [] ==>
   take_create_outcome kind value initcode st =
-    (if ~accounts_runtime_well_typed st.accounts
-     then INR (Error (RuntimeError "create outcome accounts"))
-     else INL (rq,failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
-               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
+    (INR (Error (RuntimeError "take_create_outcome")), st)
 Proof
-  rpt strip_tac >>
-  `take_outcome rq [] = (failed_outcome rq,[])` by
-    simp[take_outcome_def] >>
-  drule_all take_create_outcome_SOME >>
-  simp[failed_outcome_def, create_outcome_request_def]
+  simp[take_create_outcome_def]
 QED
 
 Theorem take_create_outcome_guard_rejected:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = create_outcome_request kind value initcode st /\
   take_outcome rq os = (outcome,rest) /\
   ~accounts_runtime_well_typed outcome.co_accounts ==>
@@ -327,6 +321,8 @@ Theorem take_create_outcome_frame:
                  storage_trace := st'.storage_trace|>
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -336,6 +332,8 @@ Theorem take_create_outcome_error:
   exc = Error (RuntimeError "create outcome accounts")
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -362,6 +360,8 @@ Theorem take_create_outcome_success:
     accounts_runtime_well_typed outcome.co_accounts
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def, record_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def, record_request_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -370,11 +370,13 @@ Theorem take_create_outcome_suffix:
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
-    st'.requests = st.requests ++ [create_outcome_request kind value initcode st]
+    st'.requests = st.requests ++
+      (if os = [] then [] else [create_outcome_request kind value initcode st])
 Proof
-  rpt strip_tac >> gvs[take_create_outcome_def] >> pairarg_tac >>
-  gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
-  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  rpt strip_tac >> Cases_on `os` >>
+  gvs[take_create_outcome_def]
+  >- (qexists_tac `[]` >> simp[]) >>
+  pairarg_tac >> gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
   rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
 QED
 

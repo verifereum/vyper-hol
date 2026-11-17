@@ -128,7 +128,7 @@ Proof
        rpt (IF_CASES_TAC >> simp[]))) >> simp[]) >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs(),
-    exec_call_helpers_no_halt_abort] >>
+    exec_call_helpers_no_halt] >>
   strip_tac >> gvs[] >>
   `IS_SOME (eval_operands inst.inst_operands t)` by
     (simp[eval_operands_IS_SOME_EVERY] >> rpt conj_tac >>

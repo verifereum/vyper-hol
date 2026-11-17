@@ -62,7 +62,7 @@ fun spa_assume n inst_q s_q s'_q =
 (* ===== Non-terminator result type elimination ======================== *)
 (* ===================================================================== *)
 
-val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
 (* Index the guarded equations once; never expand the full opcode case
    when the opcode is already known. Shared by all result/frame proofs. *)
@@ -280,7 +280,7 @@ Theorem step_inst_base_static_write_abort:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) ==>
+     inst.inst_opcode = LOG) ==>
     s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) /\
     a = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
 Proof
@@ -288,6 +288,20 @@ Proof
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >> rw[AllCaseEqs()] >>
   gvs[exec_write2_def, AllCaseEqs(), eval_operands_def]
+QED
+
+Theorem step_inst_base_call_abort:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\ inst.inst_opcode = CALL ==>
+    (s.vs_call_ctx.cc_static \/ s.vs_outcomes = []) /\
+    IS_SOME (eval_operands inst.inst_operands s) /\
+    a = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >>
+  rw[AllCaseEqs(), exec_ext_call_abort_iff] >>
+  gvs[eval_operands_def]
 QED
 
 (* Base-instruction abort guards do not issue external requests. *)
@@ -327,7 +341,7 @@ Theorem step_inst_base_static_abort_input_equiv[local]:
   !inst s1 s2 a s1'.
     step_inst_base inst s1 = Abort a s1' /\
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) /\
+     inst.inst_opcode = LOG) /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
     s1.vs_labels = s2.vs_labels /\
     s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
@@ -473,6 +487,7 @@ Theorem step_inst_base_abort_input_equiv:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_labels = s2.vs_labels /\
+    (s1.vs_outcomes = [] <=> s2.vs_outcomes = []) /\
     s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof

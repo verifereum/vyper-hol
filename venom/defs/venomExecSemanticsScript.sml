@@ -555,15 +555,35 @@ Definition exec_create_def:
     | _ => Error "create requires single output"
 End
 
+Theorem exec_ext_call_abort_iff:
+  exec_ext_call inst s gas addr value ao sz ro rs is_static = Abort ab s' <=>
+  (?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [] /\
+  ab = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
+  rename1 `head::tail` >> Cases_on `tail` >>
+  simp[exec_ext_call_def, AllCaseEqs()]
+QED
+
+Theorem exec_delegatecall_abort_iff:
+  exec_delegatecall inst s gas addr ao sz ro rs = Abort ab s' <=>
+  (?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [] /\
+  ab = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def] >>
+  rename1 `head::tail` >> Cases_on `tail` >>
+  simp[exec_delegatecall_def, AllCaseEqs()]
+QED
+
 Theorem exec_create_abort_iff:
   exec_create inst s v off sz salt = Abort a s' <=>
   (?out. inst.inst_outputs = [out]) /\
-  w2n sz > 2 * max_code_size /\ a = ExHalt_abort /\
+  (w2n sz > 2 * max_code_size \/ s.vs_outcomes = []) /\ a = ExHalt_abort /\
   s' = halt_state (set_returndata [] s)
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >- (simp[] >> metis_tac[]) >> simp[]
+  rpt IF_CASES_TAC >> simp[] >> metis_tac[]
 QED
 
 Theorem exec_create_not_Halt:
