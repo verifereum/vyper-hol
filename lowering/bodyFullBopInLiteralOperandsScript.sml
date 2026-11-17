@@ -247,8 +247,12 @@ Proof
      Cases_on `rr` >> simp[bind_def, return_def]) >>
   simp [] >>
   reverse conj_tac
-  >- (rpt gen_tac >> strip_tac >> Cases_on `res'` >>
-      gvs[exprSimDefsTheory.expr_exit_INL, exprSimDefsTheory.halt_exit_def]) >>
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `expr_exit res' r` mp_tac >>
+      qpat_x_assum `halt_exit H cx ee res' r` mp_tac >>
+      qpat_x_assum `res = _` mp_tac >>
+      rpt (pop_assum kall_tac) >> Cases_on `res'` >>
+      simp[exprSimDefsTheory.expr_exit_INL, exprSimDefsTheory.halt_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `res' = INL _` SUBST_ALL_TAC >>
   qpat_x_assum `res = _` (SUBST_ALL_TAC o SRULE []) >>
