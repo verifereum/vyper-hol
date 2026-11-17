@@ -851,7 +851,15 @@ Proof
                            cr_gas := SOME (w2n gas)`, `w2n ro`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
-  Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var]
+  Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  Cases_on `t.vs_outcomes = []` >>
+  gvs[lift_result_def, le_padded_control_update_var] >>
+  irule (cj 1 le_padded_terminal_updates) >>
+  irule (cj 3 le_padded_terminal_updates) >>
+  gvs[le_padded_control_def]
 QED
 
 Theorem le_padded_consume_create:
@@ -873,12 +881,18 @@ Proof
   strip_tac >>
   `venom_create_request s value off sz salt =
    venom_create_request t value off sz salt` by metis_tac[le_padded_requests] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
   simp[exec_create_def] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def] >>
   IF_CASES_TAC >-
     metis_tac[le_padded_terminal_updates, le_padded_control_def, lift_result_def] >>
-  rpt (pairarg_tac >> simp[]) >>
+  Cases_on `t.vs_outcomes = []` >-
+    (simp[lift_result_def] >>
+     metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
+  simp[] >> rpt (pairarg_tac >> simp[]) >>
   drule le_padded_consume_create >>
   disch_then (qspec_then `venom_create_request t value off sz salt` mp_tac) >>
   simp[] >> strip_tac >> gvs[lift_result_def, le_padded_control_update_var]
@@ -937,7 +951,15 @@ Proof
     `w2n ro`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
-  Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var]
+  Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  Cases_on `t.vs_outcomes = []` >>
+  gvs[lift_result_def, le_padded_control_update_var] >>
+  irule (cj 1 le_padded_terminal_updates) >>
+  irule (cj 3 le_padded_terminal_updates) >>
+  gvs[le_padded_control_def]
 QED
 
 Theorem le_padded_call:
