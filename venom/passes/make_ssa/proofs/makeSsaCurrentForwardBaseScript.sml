@@ -297,15 +297,16 @@ Proof
    venom_call_request st' addr value ao sz static` by
     metis_tac[current_exec_oracle_requests_pair] >>
   qmatch_asmsub_abbrev_tac `venom_call_request st addr value ao sz static = rq` >>
-  `FST (consume_call_outcome rq (w2n ro) (w2n rs) st) = FST (consume_call_outcome rq (w2n ro) (w2n rs) st') /\
-   state_rel sg (SND (consume_call_outcome rq (w2n ro) (w2n rs) st))
-                (SND (consume_call_outcome rq (w2n ro) (w2n rs) st'))` by
+  `FST (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st) =
+   FST (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st'))` by
     metis_tac[current_exec_consume_call_pair] >>
   gvs[exec_ext_call_def, AllCaseEqs()] >>
   `LENGTH inst'.inst_outputs = 1` by fs[current_last_output_slots_def] >>
   Cases_on `inst'.inst_outputs` >> gvs[] >>
-  (* FIRST_PROVE gives each goal its own timed step. *)
-  FIRST_PROVE [metis_tac[current_exec_update_last_slots]]
+  irule current_exec_update_last_slots >> qexists_tac `sg` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem current_exec_create_pair_forward:
@@ -387,10 +388,10 @@ Proof
    venom_call_request st' addr 0w ao sz F` by
     metis_tac[current_exec_oracle_requests_pair] >>
   qmatch_asmsub_abbrev_tac `venom_call_request st addr 0w ao sz F = rq` >>
-  `FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st) =
-   FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st') /\
-   state_rel sg (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st))
-                (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st'))` by
+  `FST (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st) =
+   FST (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st'))` by
     metis_tac[current_exec_consume_call_pair] >>
   gvs[exec_delegatecall_def, AllCaseEqs()] >>
   `LENGTH inst'.inst_outputs = 1` by fs[current_last_output_slots_def] >>
