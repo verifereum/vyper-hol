@@ -53,7 +53,7 @@ Ancestors
   contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
   immutableAssignEmpty abiEncoderProps typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps immutableDeployAssignFacts
   bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout
-  stmtSimDeclMem assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist
+  stmtSimDeclMem assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist immutableRelation vyperPlaceFrames structFieldsProps byte
 Libs
   monadsyntax
 
@@ -2606,6 +2606,181 @@ Proof
      simp[]) >>
   metis_tac[]
 QED
+
+Theorem body_assign_empty_immutable_ghost:
+  ghost_inv_at D lo d ce cx es G tn s /\
+  dead_lo_ok H D lo ce cx /\
+  body_inv tops ctx ce cx /\ struct_args_unique tops /\
+  expr_sim_inv ce cx env es /\
+  stmt_state_rel H ctx func ce cx es s /\
+  local_ptrs_reserved ce sa /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x) /\
+  ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
+  has_length_word ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  write_place cx (ImmutablePlace ce.ce_module id []) (default_value tv) es =
+    (INL (),ee) /\
+  q.vs_memory = (mstore off 0w s).vs_memory /\
+  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+    vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
+    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at sa x ==>
+     lookup_var x q = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+     op_taint tf (Var x) = op_taint tn (Var x)) /\
+  tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+  tf.t_imm = tn.t_imm /\ tf.t_mem SUBSET tn.t_mem /\
+  (!i. off <= i /\ i < off+32 ==> i NOTIN tf.t_mem) ==>
+  ghost_inv_at D lo d ce cx ee Gf tf q
+Proof
+  strip_tac >>
+  `ce.ce_module = NONE /\ get_module_code cx NONE = SOME tops /\
+   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+   ce.ce_struct_fields = make_struct_fields_map tops` by
+    fs[body_inv_def, cenv_module_pins_def] >>
+  `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  drule body_inv_immutable_section_layout >>
+  simp[immutable_section_layout_def] >>
+  `FLOOKUP ce.ce_module_vars (NONE,id) = SOME (ImmutableLoc off)` by metis_tac[] >>
+  disch_then (drule_then strip_assume_tac) >>
+  `bare_globals_complete env.bare_globals cx` by
+    fs[env_consistent_def, env_context_consistent_def] >>
+  `FLOOKUP env.bare_globals (NONE,id) = SOME ty'` by
+    (qpat_x_assum `bare_globals_complete _ _` mp_tac >>
+     rewrite_tac[bare_globals_complete_def] >>
+     disch_then (qspec_then `NONE` mp_tac) >>
+     disch_then (qspec_then `tops` mp_tac) >> simp[] >>
+     disch_then (qspec_then `vis` mp_tac) >>
+     disch_then (qspec_then `Immutable` mp_tac) >>
+     disch_then (qspec_then `id` mp_tac) >>
+     disch_then (qspec_then `ty'` mp_tac) >>
+     disch_then (qspec_then `slot` mp_tac) >> simp[]) >>
+  `ty' = ty` by metis_tac[optionTheory.SOME_11] >>
+  `get_tenv cx = type_env tops` by
+    simp[get_tenv_def, type_env_all_modules_def, GSYM type_env_def] >>
+  `type_memory_bytes ce ty = type_memory_size tv` by
+    (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >>
+     fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+   type_memory_size tv` by metis_tac[type_mem_bytes_type_memory_bytes] >>
+  `lo = imm_len tops` by fs[dead_lo_ok_def] >>
+  `off + type_memory_size tv <= lo` by
+    (qpat_x_assum `lo = _` SUBST1_TAC >> simp[imm_len_def] >>
+     qpat_assum `tops = _` (fn th => once_rewrite_tac[th]) >>
+     simp[compute_immutables_len_append, compute_immutables_len_def] >> gvs[]) >>
+  `32 <= type_memory_size tv` by
+    (qspec_then `get_tenv cx` mp_tac memory_length_word_layout >>
+     disch_then (qspecl_then [`ty`,`tv`,`off`,`(mstore off 0w s).vs_memory`] mp_tac) >>
+     simp[mstore_mem_word_at_same]) >>
+  `!mem a n. a+n <= lo ==>
+     mem_bytes_at a n (mem_bytes_at 0 lo mem) = mem_bytes_at a n mem` by
+    ((rpt strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+     rename1 `j < n` >> `a+j < lo` by decide_tac >> simp[EL_mem_bytes_at] >> (gvs[EL_mem_bytes_at, LIST_EQ]))) >>
+  `mem_word_at off (mem_bytes_at 0 lo q.vs_memory) = 0w` by
+    (`off+32 <= lo` by decide_tac >>
+     `mem_bytes_at off 32 (mem_bytes_at 0 lo q.vs_memory) =
+      word_to_bytes (0w:bytes32) T` by simp[mem_bytes_at_mstore_same] >>
+     pure_rewrite_tac[mem_word_at_def, GSYM mem_bytes_at_def] >>
+     pure_asm_rewrite_tac[] >> simp[word_of_bytes_word_to_bytes]) >>
+  `!i. ~(off <= i /\ i < off+32) ==>
+     mem_bytes_at i 1 q.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >> (gvs[])) >>
+  `!i. ~(off <= i /\ i < off+32) ==>
+     mem_bytes_at i 1 (mem_bytes_at 0 lo q.vs_memory) =
+     mem_bytes_at i 1 (mem_bytes_at 0 lo s.vs_memory)` by
+    (rpt strip_tac >> Cases_on `i < lo` >- (simp[] >> (gvs[])) >>
+     `DROP i (mem_bytes_at 0 lo q.vs_memory) = [] /\
+      DROP i (mem_bytes_at 0 lo s.vs_memory) = []` by
+       (simp[DROP_EQ_NIL, LENGTH_mem_bytes_at] >> gvs[]) >>
+     pure_once_rewrite_tac[mem_bytes_at_def] >>
+     qpat_x_assum `DROP i (mem_bytes_at 0 lo q.vs_memory) = []` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `DROP i (mem_bytes_at 0 lo s.vs_memory) = []` (fn th => rewrite_tac[th])) >>
+  `!i. imm_section_dead tops (mem_bytes_at 0 lo s.vs_memory) i ==>
+     imm_section_dead tops (mem_bytes_at 0 lo q.vs_memory) i` by
+    ((rpt strip_tac >> irule body_assign_empty_immutable_dead >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`id`,`off`,`post`,`pre`,`mem_bytes_at 0 lo s.vs_memory`,
+                  `slot`,`tv`,`ty`,`vis`] >> gvs[] >> (gvs[body_assign_empty_immutable_dead]))) >>
+  `local_ptrs_rel func ce es.scopes s` by
+    (fs[Once stmt_state_rel_def] >> metis_tac[state_rel_local_ptrs_rel]) >>
+  `ee.scopes = es.scopes` by metis_tac[write_immutable_place_scopes] >>
+  `!name b len. local_region ce es.scopes s name b len ==>
+     mem_bytes_at b len q.vs_memory = mem_bytes_at b len s.vs_memory` by
+    (rpt strip_tac >> Cases_on `len = 0` >- simp[mem_bytes_at_def] >>
+     `0 < len` by decide_tac >>
+     `lo <= b` by (drule_all body_full_local_region_lower_bound >> simp[]) >>
+     `off+32 <= b` by decide_tac >>
+     simp[] >> irule mstore_mem_bytes_at_disjoint >> gvs[]) >>
+  `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>
+     ptr_covers Gf tf x q sz` by
+    (rw[ptr_covers_def] >> metis_tac[]) >>
+  `q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+   q.vs_call_ctx = s.vs_call_ctx /\ q.vs_allocas = s.vs_allocas /\
+   q.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _;
+       vs_immutables := _; vs_prev_bb := _; vs_current_bb := _;
+       vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  fs[ghost_inv_at_def] >> rpt conj_tac
+  >- suspend "locals"
+  >- suspend "return"
+  >- suspend "storage"
+  >- suspend "prefix"
+  >- suspend "base"
+  >> gvs[allocas_from_def] >> metis_tac[]
+QED
+
+Resume body_assign_empty_immutable_ghost[locals]:
+  rpt gen_tac >> strip_tac >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers G tn p s sz` by metis_tac[] >>
+  `?w0. lookup_var p s = SOME w0` by fs[ptr_covers_def] >>
+  `lookup_var p s = SOME w` by metis_tac[] >>
+  `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
+    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
+  `val_footprint entry.type entry.value <= sz` by
+    (drule val_footprint_le >> decide_tac) >>
+  `local_region ce es.scopes s name (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory entry.type entry.value (w2n w) m` by metis_tac[] >>
+  `mem_bytes_at (w2n w) sz q.vs_memory =
+   mem_bytes_at (w2n w) sz s.vs_memory` by metis_tac[] >>
+  `!i. w2n w <= i /\ i < w2n w+sz /\ i IN tf.t_mem ==>
+       i IN tn.t_mem` by (fs[SUBSET_DEF] >> metis_tac[]) >>
+  irule robust_val_in_memory_window_transport >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`sz`,`s.vs_memory`,`q.vs_memory`] >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume body_assign_empty_immutable_ghost[return]:
+  Cases_on `d` >> fs[return_buf_ptr_def] >>
+  rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
+  fs[return_buf_ptr_def] >> metis_tac[]
+QED
+
+Resume body_assign_empty_immutable_ghost[storage]:
+  fs[stor_taint_ok_at_def, dead_lo_ok_def]
+QED
+
+Resume body_assign_empty_immutable_ghost[prefix]:
+  gvs[SUBSET_DEF] >> metis_tac[]
+QED
+
+Resume body_assign_empty_immutable_ghost[base]:
+  metis_tac[local_ptrs_reserved_def]
+QED
+
+Finalise body_assign_empty_immutable_ghost
+
 Theorem body_assign_memory_place_execution:
   compile_assign_value cenv (Var xd) LocMemory (Var xs) F loc dty sty bytes sa = ((),sb) /\
   ~is_word_type dty /\ ~is_word_type sty /\
