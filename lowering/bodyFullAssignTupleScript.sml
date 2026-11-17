@@ -948,7 +948,97 @@ QED
 
 Finalise body_assign_tuple_nonlocal_write_ready
 
-(* A source that is a widened aggregate call. *)
+(* A successful nonlocal head observes its root before the joint slot store. *)
+val _ = HOLFlags.set_trace "types" 1;
+
+Theorem body_assign_tuple_nonlocal_head_full_path:
+  compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
+  assign_tuple_targets cx g v es = (INL (),es') /\
+  tuple_target_aligned cenv cx g ty tv /\
+  (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
+  eval_operand op s = SOME (typed_val_to_w256 tv v) /\ op_taint tn op = {} /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\ local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  es'.scopes = es.scopes /\
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_call_ctx = s.vs_call_ctx /\
+    tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==>
+      ptr_covers Gf tf x t cap) /\
+    (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+      stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es' t) /\
+    (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+      storage_well_formed_on cx es (FST H) ==>
+      storage_well_formed_on cx es' (FST H)) /\
+    (!st0 H D d. valid_horizon cx st0 H es'.storage_trace /\
+      dead_lo_ok H D lo cenv cx /\ ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es' Gf tf t)
+Proof
+  strip_tac >> drule_all body_assign_tuple_nonlocal_write_ready >>
+  disch_then (qx_choosel_then [`bt`,`tr`,`slot`,`obs`,`ee`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  `well_formed_type_value tv` by
+    (fs[tuple_target_aligned_def] >>
+     metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed]) >>
+  `!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+    storage_well_formed_on cx es (FST H) ==>
+    storage_well_formed_on cx es' (FST H)` by
+    (rpt strip_tac >> irule tuple_target_storage_write_wf >>
+     gvs[] >> metis_tac[]) >>
+  gvs[tuple_target_aligned_def] >- suspend "scalar" >>
+  suspend "field"
+QED
+
+Resume body_assign_tuple_nonlocal_head_full_path[scalar]:
+  drule_all tuple_target_toplevel_place >>
+  disch_then (qspec_then `es` assume_tac) >> gvs[] >>
+  drule_all stmtSimAssignStorageFactsTheory.compile_get_target_ptr_toplevel >>
+  disch_then (qspec_then `sa` assume_tac) >> gvs[] >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def,comp_return_def] >>
+  `eval_operand (Lit (n2w k)) s = SOME (n2w k) /\
+   op_taint tn (Lit (n2w k)) = {}` by simp[eval_operand_def,op_taint_def] >>
+  `es'.scopes = (es with storage_trace := obs).scopes` by simp[] >>
+  drule_all body_assign_tuple_storage_head_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`]
+    (qx_choosel_then [`t`,`tf`] (map_every assume_tac o CONJUNCTS))) >>
+  qexistsl [`t`,`G`,`tf`] >>
+  qpat_x_assum `t = _` kall_tac >> qpat_x_assum `tf = _` kall_tac >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
+        (drule_then assume_tac) >>
+      first_x_assum (qspec_then `H` drule) >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
+    (drule_then assume_tac) >>
+  qpat_x_assum `!H D d. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`H`,`D`,`d`] mp_tac) >> simp[]
+QED
+
+Resume body_assign_tuple_nonlocal_head_full_path[field]:
+  FAIL_TAC "field store"
+QED
+
+Finalise body_assign_tuple_nonlocal_head_full_path
+
 (* One local write, at the current source scope, retains the tuple snapshot. *)
 Theorem body_assign_tuple_local_head_full_path:
   compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [op] sa = ((),sb) /\
