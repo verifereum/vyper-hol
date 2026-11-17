@@ -181,23 +181,26 @@ Proof
      goal_assum (drule_at (Pat `alloca_frame old es sa s0 ce es entry`)) >>
      goal_assum (drule_at (Pat `alloca_frame ce es a entry ce mid u`)) >>
      goal_assum (drule_at (Pat `FLOOKUP u.vs_allocas _ = SOME (_,32)`)) >>
-     qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
+     qexistsl_tac [`H`, `b`, `ctx`, `cx`,
+       `<|assignable := T; type := tyv; value := v; popped := []|>`,
+       `func`, `id`, `p`] >>
+     fs[loweringPostsTheory.expr_post_def]) >>
   `!aid off sz i.
     FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region old es.scopes s0 n b sz' ==>
       off + sz <= b \/ b + sz' <= off) /\
     off <= i /\ i < off + sz /\ i IN tnf.t_mem ==> i IN tn0.t_mem` by
-    (irule annassign_word_full_taint_post >>
+    (match_mp_tac (GEN_ALL (INST_TYPE [alpha |-> ``:num # num``, beta |-> ``:256``]
+       annassign_word_full_taint_post)) >>
      goal_assum (drule_at (Pat `alloca_frame old es sa s0 ce es entry`)) >>
-     goal_assum (drule_at (Pat `FLOOKUP u.vs_allocas _ = SOME (_,32)`)) >>
-     qexistsl_tac [`G0`, `G1`, `Ga`, `a`, `lo`, `tn1`, `tna`] >>
-     fs[loweringPostsTheory.expr_post_def]) >>
+     qexistsl_tac [`w`, `u`, `tna`, `tn1`, `lo`, `inst.inst_id`,
+       `a`, `Ga`, `G1`, `G0`] >>
+     fs[loweringPostsTheory.expr_post_def] >> first_assum ACCEPT_TAC) >>
   `~block_is_terminated sf` by
     (drule exprOpenPrimitivesTheory.emit_void_terminated >>
      simp[venomInstTheory.is_terminator_def]) >>
   qpat_x_assum `!ce'. _ ==> R` (qspec_then `ce` irule) >>
-  gvs[loweringPostsTheory.stmt_lands_def]
+  gvs[loweringPostsTheory.stmt_lands_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem annassign_word_full_declared_entry[local]:
@@ -638,6 +641,8 @@ Theorem annassign_word_full_runtime_preparation[local]:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
        FLOOKUP Ga x = FLOOKUP G0 x /\ op_taint tna (Var x) = op_taint tn0 (Var x)) /\
     alloca_frame cenv es sa s0 cenv' es t /\
+    (?H:(bool # 256 word # type_value) list # num list.
+      stmt_state_rel H ctx func cenv' cx es t) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 Ga tna /\
     cenv'.ce_return_buf = cenv.ce_return_buf /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
     sa.cs_next_var <= a.cs_next_var /\
@@ -683,7 +688,12 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x t = SOME w` by metis_tac[] >>
   drule_all annassign_word_full_rhs >> disch_tac >>
-  qexistsl_tac [`w`, `t`, `G'`, `tn'`] >> fs[post_value_type_word] >> gvs[]
+  `?H:(bool # 256 word # type_value) list # num list.
+      stmt_state_rel H ctx func cenv' cx es t` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qexistsl_tac [`w`, `t`, `G'`, `tn'`] >> fs[post_value_type_word] >> gvs[] >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem annassign_word_full_source_action[local]:
@@ -727,6 +737,8 @@ Theorem annassign_word_full_source_action[local]:
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
     FLOOKUP Ga x = FLOOKUP G0 x /\ op_taint tna (Var x) = op_taint tn0 (Var x)) /\
   alloca_frame cenv es sa s0 cenv' es t /\
+  (?H:(bool # 256 word # type_value) list # num list.
+      stmt_state_rel H ctx func cenv' cx es t) /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 Ga tna /\
   cenv'.ce_return_buf = cenv.ce_return_buf /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
   sa.cs_next_var <= sa'.cs_next_var ==>
@@ -743,7 +755,13 @@ Theorem annassign_word_full_source_action[local]:
         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t' = SOME w) /\
         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t'.vs_allocas aid = SOME b) /\
         (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-          op_taint tn (Var x) = op_taint tn0 (Var x)))
+          op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+        alloca_frame cenv es sa s0 ce ee t' /\
+        (!aid off sz i.
+          FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+          (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+            off + sz <= b \/ b + sz' <= off) /\
+          off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
       (\H res ee gt r.
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
         halt_exit H cx ee res r)) \/
@@ -757,7 +775,13 @@ Theorem annassign_word_full_source_action[local]:
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G1 x = FLOOKUP G0 x /\
-        op_taint tn1 (Var x) = op_taint tn0 (Var x)))
+        op_taint tn1 (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 ce mid u /\
+      (!aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem))
 Proof
   rpt strip_tac >>
   drule annassign_word_full_store_ready >> disch_then drule >>
@@ -786,6 +810,17 @@ Proof
   qpat_assum `!tail. new_variable _ _ _ _ = _`
     (qspec_then `[]` (fn th => qpat_assum `mid with gas_obs := [] = mid`
       (fn eq => assume_tac (REWRITE_RULE [eq] th)))) >>
+  `sa.cs_next_id <= sa'.cs_next_id` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     drule emitHelperPropsTheory.emit_inst_extends >> simp[] >> strip_tac >> gvs[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv' es sa' t cenv' mid u` by
+    (irule (INST_TYPE [alpha |-> ``:256``]
+       stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
+     fs[loweringPostsTheory.expr_post_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
   drule annassign_word_full_final_post >> disch_then drule >>
   disch_then (fn th => qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac th)) >>
@@ -840,7 +875,13 @@ Theorem annassign_word_full_execution:
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-        op_taint tn (Var x) = op_taint tn0 (Var x)))
+        op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 ce ee t /\
+      (!aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
     (\H res ee gt r.
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
         halt_exit H cx ee res r)
