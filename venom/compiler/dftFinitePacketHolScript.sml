@@ -48,3 +48,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
+  dftPacketExistingPathRows
