@@ -543,44 +543,6 @@ QED
 
 *)
 
-(* Decimal Mul: the signed-result check also bounds the equivalent word quotient. *)
-Theorem decimal_mul_word_bound[local]:
-  !p. within_int_bound (Signed 168) (SGN p * (ABS p / 10000000000)) ==>
-      within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
-Proof
-  rpt strip_tac >>
-  `0 ≤ ABS p / 10000000000` by
-    (simp[integerTheory.int_div, integerTheory.INT_ABS] >>
-     Cases_on `0 ≤ p` >> simp[] >> intLib.ARITH_TAC) >>
-  `ABS p / 10000000000 < 2 ** 167 + 1` by
-    (qpat_x_assum `within_int_bound _ _` mp_tac >>
-     simp[within_int_bound_def, SGN_def] >>
-     Cases_on `p < 0` >> Cases_on `p = 0` >> simp[] >> intLib.ARITH_TAC) >>
-  `ABS p < (2 ** 167 + 1) * 10000000000` by
-    (irule int_div_lt_imp >> simp[integerTheory.INT_ABS_POS]) >>
-  `ABS p < 2 ** 255` by
-    (`(2:int) ** 167 * 10000000000 + 10000000000 < 2 ** 255` by EVAL_TAC >>
-     intLib.ARITH_TAC) >>
-  `within_int_bound (Signed 256) p` by
-    (simp[within_int_bound_def] >>
-     Cases_on `p < 0` >> fs[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
-  `w2i (i2w p : bytes32) = p` by
-    (qspecl_then [`p`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
-  `(0x2540BE400w : bytes32) ≠ 0w` by EVAL_TAC >>
-  `w2i (0x2540BE400w : bytes32) = 10000000000` by EVAL_TAC >>
-  `(i2w p : bytes32) / 0x2540BE400w = i2w (p quot 10000000000)` by
-    (drule integer_wordTheory.word_quot >>
-     disch_then (qspec_then `i2w p` mp_tac) >> simp[]) >>
-  `within_int_bound (Signed 168) (p quot 10000000000)` by
-    gvs[GSYM decimal_truncate_eq_quot] >>
-  `within_int_bound (Signed 256) (p quot 10000000000)` by
-    (qpat_x_assum `within_int_bound (Signed 168) _` mp_tac >>
-     simp[within_int_bound_def] >> intLib.ARITH_TAC) >>
-  `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000` by
-    (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
-  simp[]
-QED
-
 (* --- int_shift_right bounds machinery --- *)
 
 Theorem num_of_bits_bits_of_num[local]:

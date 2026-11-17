@@ -808,30 +808,6 @@ Proof
   qexists_tac `expr_type e` >> simp[]
 QED
 
-Theorem augassign_attr_rhs_word_operand[local]:
-  expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,ee) /\
-  expr_post H ctx func cenv cx e ep sa sb sm ee v rhs t ==>
-  eval_operand rhs t = SOME (val_to_w256 v)
-Proof
-  strip_tac >>
-  `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
-  qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
-  drule expr_body_pre_word_result >>
-  disch_then (qspecl_then [`INL v`, `ee`] mp_tac) >>
-  impl_tac >- (simp[bind_def] >>
-    qpat_x_assum `bind _ _ _ = _` mp_tac >>
-    simp[bind_def, AllCaseEqs()] >> metis_tac[]) >> strip_tac >>
-  qpat_x_assum `!tv. INL v = INL tv ==> _` (qspec_then `v` mp_tac) >>
-  simp[] >> strip_tac >>
-  `post_value_type cenv e = expr_type e` by
-    (irule loweringPostsTheory.post_value_type_word >>
-     metis_tac[word_value_type_word]) >>
-  irule expr_val_rel_word >> simp[] >>
-  qexistsl_tac [`cx`, `expr_type e`] >>
-  fs[expr_post_def, word_value_type_word]
-QED
-
 Theorem augassign_attr_operator_counted:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
        expr_post H ctx func cenv cx e (es with gas_obs := []) sa sb sm
