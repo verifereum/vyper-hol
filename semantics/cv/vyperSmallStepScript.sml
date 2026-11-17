@@ -687,7 +687,7 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
-      precompile_call_success bt;
+      precompile_call_success bt vs;
       return $ Value v
     od st) k ∧
   apply_vals cx [start_v; len_v; addr_v] st
@@ -1353,7 +1353,7 @@ Theorem ordinary_eval_expr_eq[local]:
       vs <- eval_exprs cx es;
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
-      precompile_call_success bt;
+      precompile_call_success bt vs;
       return v
     od;
     return $ Value v
