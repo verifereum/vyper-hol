@@ -7,7 +7,9 @@ Ancestors
   supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperTypeSystem vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperInterpreter vyperState vyperAST gasShadow
-  ASCIInumbers integer list finite_map
+  ASCIInumbers integer list finite_map pred_set
+  stmtSimDefs venomMemDefs valueEncodingProps ptrDiscipline
+  venomState words
 
 val _ = Parse.hide "body";
 
@@ -289,4 +291,60 @@ Proof
   strip_tac >>
   drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
   simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def]
+QED
+
+(* The counter allocation is newer than every protected original allocation. *)
+Theorem range_entry_anchor_frame:
+  !c0 e0 sa0 s00 cenv e s counter w sz id bc p dv t value tn1 tn tn00 entry.
+    alloca_frame c0 e0 sa0 s00 cenv e s /\
+    (!aid block. FLOOKUP s00.vs_allocas aid = SOME block ==>
+                 FLOOKUP s.vs_allocas aid = SOME block) /\
+    alloca_inv s /\ FLOOKUP s.vs_allocas counter = SOME (w2n w,sz) /\
+    sa0.cs_next_id <= counter /\ 32 <= sz /\
+    lookup_scopes id e.scopes = NONE /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+    not_local_ptr cenv e.scopes dv /\ p <> dv /\ lookup_var p s = SOME w /\
+    (!q. q <> dv ==> lookup_var q t = lookup_var q s) /\
+    t.vs_memory = (mstore (w2n w) value s).vs_memory /\
+    tn1.t_mem SUBSET tn.t_mem /\
+    (!aid off z i.
+       FLOOKUP s00.vs_allocas aid = SOME (off,z) /\ aid < sa0.cs_next_id /\
+       (!nm b0 z0. local_region c0 e0.scopes s00 nm b0 z0 ==>
+                    off+z <= b0 \/ b0+z0 <= off) /\
+       off <= i /\ i < off+z /\ i IN tn.t_mem ==> i IN tn00.t_mem) ==>
+    alloca_frame c0 e0 sa0 s00 bc
+      (e with scopes := (FEMPTY |+ (id,entry)) :: e.scopes) t /\
+    (!aid off z i.
+       FLOOKUP s00.vs_allocas aid = SOME (off,z) /\ aid < sa0.cs_next_id /\
+       (!nm b0 z0. local_region c0 e0.scopes s00 nm b0 z0 ==>
+                    off+z <= b0 \/ b0+z0 <= off) /\
+       off <= i /\ i < off+z /\ i IN tn1.t_mem ==> i IN tn00.t_mem)
+Proof
+  rpt gen_tac >> strip_tac >> reverse conj_tac
+  >- (fs[SUBSET_DEF] >> metis_tac[]) >>
+  rewrite_tac[alloca_frame_def] >>
+  map_every qx_gen_tac [`aid`, `off`, `oldsz`] >> strip_tac >>
+  `aid <> counter` by decide_tac >>
+  `FLOOKUP s.vs_allocas aid = SOME (off,oldsz)` by metis_tac[] >>
+  Q.SUBGOAL_THEN `off + oldsz <= w2n w \/ w2n w + sz <= off` assume_tac
+  >- (fs[alloca_inv_def, allocas_non_overlapping_def] >>
+      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
+        (qspec_then `aid` mp_tac) >>
+      disch_then (qspec_then `counter` mp_tac) >> simp[]) >>
+  `mem_bytes_at off oldsz s.vs_memory = mem_bytes_at off oldsz s00.vs_memory /\
+   (!nm b z. local_region cenv e.scopes s nm b z ==>
+              off + oldsz <= b \/ b + z <= off)` by
+    (fs[alloca_frame_def] >> metis_tac[]) >>
+  conj_tac
+  >- (`mem_bytes_at off oldsz (mstore (w2n w) value s).vs_memory =
+        mem_bytes_at off oldsz s.vs_memory` by
+        (irule mstore_mem_bytes_at_disjoint >> decide_tac) >> simp[]) >>
+  map_every qx_gen_tac [`nm`, `b`, `localsz`] >> strip_tac >> Cases_on `nm = id`
+  >- (gvs[local_region_def, lookup_scopes_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `local_region cenv e.scopes s nm b localsz` suffices_by metis_tac[] >>
+  gvs[local_region_def, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  rename1 `lookup_var lp t = SOME lw` >>
+  `lp <> dv` by (fs[not_local_ptr_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
