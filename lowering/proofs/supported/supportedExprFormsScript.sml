@@ -271,8 +271,10 @@ QED
 
 Theorem supported_shift_contract:
   (supported_binop ShL ty rhs lb ne <=>
-    (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
-      supported_unsigned_type rhs) /\
+    ((ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
+      supported_unsigned_type rhs) \/
+    (ty = BaseT (BytesT (Fixed 32)) /\
+      (supported_integer_type rhs \/ rhs = ty))) /\
   (supported_binop Exp ty rhs lb ne <=>
     supported_integer_type ty /\ (lb \/ ne))
 Proof
