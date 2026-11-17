@@ -814,7 +814,14 @@ Resume body_append_local_word_full[scope_old_vars]:
   gen_tac >> strip_tac >>
   `not_fresh_at sm x` by
     (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  simp[] >> metis_tac[]
+  conj_tac
+  >- (pure_rewrite_tac [lookup_var_def, venom_state_accfupds] >>
+      qpat_assum `!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x t`
+        (qspec_then `x` mp_tac) >>
+      pure_rewrite_tac [lookup_var_def] >>
+      disch_then irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!x. not_fresh_at sm x ==> FLOOKUP Gf x = _ /\ _`
+    (qspec_then `x` mp_tac) >> simp[]
 QED
 
 Resume body_append_local_word_full[scope_memory_frame]:
@@ -931,11 +938,31 @@ Resume body_append_local_word_full[success_alloca_frame]:
   qpat_assum `alloca_frame _ _ _ _ _ mid t` (irule_at Any) >>
   qpat_assum `local_region _ mid.scopes t id _ _` (irule_at Any) >>
   qexists_tac `32*(1+cap)` >> simp[] >>
-  FAIL_TAC "store args"
+  qexistsl_tac [`func`, `cx`, `ctx`, `storage_trace_horizon es.storage_trace`] >>
+  simp[] >> conj_tac
+  >- (fs[expr_post_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[lookup_var_def] >>
+      `not_fresh_at sm q` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> simp[] >> fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+      metis_tac[lookup_var_def]) >>
+  rpt strip_tac >>
+  qpat_assum `state_frame u = _` (mp_tac o AP_TERM ``\s:venom_state. s.vs_memory``) >>
+  simp_tac (srw_ss()) [stateFrameTheory.state_frame_def] >> disch_then SUBST1_TAC >>
+  dep_rewrite.DEP_REWRITE_TAC [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >>
+  decide_tac
 QED
 
 Resume body_append_local_word_full[success_alloca_taint]:
-  fs[ghost_kept_at_def, SUBSET_DEF] >> metis_tac[]
+  markerLib.RESUME_TAC >>
+  (qpat_assum `ghost_kept_at lo cenv _ sa G0 tn0 s0 G1 tn1`
+     (mp_tac o cj 2 o REWRITE_RULE [ghost_kept_at_def]) >>
+   pure_rewrite_tac [vyperStateTheory.evaluation_state_accfupds] >>
+   disch_then irule >>
+   conj_tac >- (qexistsl_tac [`aid`, `off`, `sz'`] >> simp[] >>
+               rpt conj_tac >> first_assum ACCEPT_TAC) >>
+   first_assum ACCEPT_TAC)
 QED
 
 
