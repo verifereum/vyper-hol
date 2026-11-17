@@ -50,7 +50,7 @@ Ancestors
   ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
   bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
-  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
+  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics representationCleanPtr valueEncoding valueEncodingDefs vyperTyping
 Libs
   monadsyntax
 
@@ -2768,4 +2768,30 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_bytes_source_live_clean:
+  evaluate_type tenv sty = SOME stv /\ is_bytestring_type sty /\
+  value_has_type stv v /\
+  (!mem. mem_agree_outside M s.vs_memory mem ==>
+         val_in_memory stv v a mem) ==>
+  ?len.
+    ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+     (?str. v = StringV str /\ len = LENGTH str)) /\
+    mload a s = n2w len /\
+    (!i. a <= i /\ i < a + 32 + len ==> i NOTIN M)
+Proof
+  strip_tac >>
+  `val_in_memory stv v a s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_all bytestring_type_value >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def]
+  >- (drule robust_val_in_memory_bytes_clean >> simp[] >> strip_tac >>
+      conj_tac
+      >- gvs[val_in_memory_def, mload_def, mem_word_at_def] >>
+      rpt strip_tac >> Cases_on `i < a + 32` >> gvs[])
+  >> drule robust_val_in_memory_string_clean >> strip_tac >>
+  conj_tac
+  >- gvs[val_in_memory_def, mload_def, mem_word_at_def] >>
+  rpt strip_tac >> Cases_on `i < a + 32` >> gvs[]
 QED
