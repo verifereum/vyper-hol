@@ -1134,6 +1134,25 @@ Proof
   rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]
 QED
 
+Theorem bound_labels_create_ctor_args:
+  !es s.
+  (!ty e t. MEM e es /\ EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_create_ctor_args cfn ce es s))))
+Proof
+  Induct_on `es` >> simp[compile_create_ctor_args_def, comp_return_def] >>
+  rpt strip_tac >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+              irule bound_labels_bind >> rpt conj_tac >> rpt gen_tac >>
+                rpt strip_tac,
+              irule bound_labels_snapshot_vv >> simp[],
+              CHANGED_TAC (simp[comp_return_def])]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem bound_labels_create_ctor_tuple[local]:
   (!ty e t. MEM e es /\ EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
      EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
@@ -1143,7 +1162,7 @@ Theorem bound_labels_create_ctor_tuple[local]:
 Proof
   strip_tac >> simp[compile_create_ctor_tuple_def] >> rpt strip_tac >> BETA_TAC >>
   irule bound_labels_bind >> reverse conj_tac
-  >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_multi_vvs >> simp[]) >>
+  >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_create_ctor_args >> simp[]) >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_alloc_buffer] >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_ignore_bind >>
   simp[bound_labels_extcall_store_values, comp_return_def]
@@ -1154,23 +1173,27 @@ Theorem bound_labels_create_blueprint_args[local]:
      EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (compile_create_blueprint_args cfn ce raw es s))))
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (compile_create_blueprint_args cfn ce raw later_es es s))))
 Proof
   strip_tac >> simp[compile_create_blueprint_args_def] >> IF_CASES_TAC
   >- (Cases_on `es` >> simp[] >- (irule bound_labels_ignore_bind >>
         simp[bound_labels_emit_inst, comp_return_def]) >>
       rename1 `h::tl` >> Cases_on `tl` >> simp[]
       >- (irule bound_labels_bind >> reverse conj_tac
-          >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]) >>
+          >- simp[] >>
+          rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
+          simp[bound_labels_snapshot_vv] >>
+          rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
+          simp[bound_labels_unwrap_value] >>
           rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_emit_op] >>
           rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
           simp[bound_labels_emit_op, comp_return_def]) >>
       irule bound_labels_ignore_bind >>
       simp[bound_labels_emit_inst, comp_return_def]) >>
   IF_CASES_TAC >- simp[comp_return_def] >> rpt strip_tac >> BETA_TAC >>
-  irule bound_labels_bind >> simp[bound_labels_alloc_buffer] >>
-  rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
+  irule bound_labels_bind >> reverse conj_tac
   >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_create_ctor_tuple >> simp[]) >>
+  rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_alloc_buffer] >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
   simp[cj 2 bound_labels_abi_encode, comp_return_def]
 QED
@@ -1186,23 +1209,24 @@ Proof
   strip_tac >> simp[compile_raw_create_def] >> rpt strip_tac >> BETA_TAC >>
   irule bound_labels_bind >> simp[] >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_create_snapshot] >>
-  rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
-  >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]) >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_emit_op] >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_emit_op] >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
   >- (simp[] >> rpt strip_tac >> IF_CASES_TAC >- simp[comp_return_def] >> rpt strip_tac >> BETA_TAC >>
-      irule bound_labels_bind >> simp[bound_labels_alloc_buffer] >>
-      rpt strip_tac >> BETA_TAC >> irule bound_labels_ignore_bind >>
-      simp[bound_labels_copy_memory_dynamic] >> rpt strip_tac >> BETA_TAC >>
       irule bound_labels_bind >> reverse conj_tac
       >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_create_ctor_tuple >> simp[]) >>
-      rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_emit_op] >>
+      rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> simp[bound_labels_alloc_buffer] >>
+      rpt strip_tac >> BETA_TAC >> irule bound_labels_ignore_bind >>
+      simp[bound_labels_copy_memory_dynamic] >> rpt strip_tac >> BETA_TAC >>
+      irule bound_labels_bind >> simp[bound_labels_emit_op] >>
       rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
       simp[cj 2 bound_labels_abi_encode] >>
       rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
       simp[bound_labels_emit_op, comp_return_def]) >>
   simp[pairTheory.FORALL_PROD] >> rpt strip_tac >> BETA_TAC >>
+  irule bound_labels_bind >> reverse conj_tac
+  >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]) >>
+  rpt strip_tac >> BETA_TAC >>
   irule bound_labels_bind >> reverse conj_tac
   >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_create_salt >> simp[]) >>
   simp[bound_labels_create_dispatch]
@@ -1258,6 +1282,12 @@ Proof
       irule bound_labels_bind >> reverse conj_tac
       >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]) >>
       rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
+      >- (simp[] >> rpt strip_tac >> BETA_TAC >>
+          irule bound_labels_create_blueprint_args >> simp[] >>
+          rpt strip_tac >> first_x_assum irule >> Cases_on `salted` >> gvs[] >>
+          Cases_on `rest` >> gvs[] >> metis_tac[listTheory.MEM_TL, listTheory.MEM]) >>
+      simp[pairTheory.FORALL_PROD] >>
+      rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
       >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[]) >>
       rpt strip_tac >> simp[] >>
   irule bound_labels_bind >> reverse conj_tac
@@ -1270,14 +1300,7 @@ Proof
       rpt strip_tac >> first_x_assum irule >>
       Cases_on `rest` >> gvs[] >> rename1 `HD tl` >> Cases_on `tl` >> gvs[]) >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>
-  simp[bound_labels_create_blueprint_check] >>
-  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >> BETA_TAC >>
-  irule bound_labels_bind >> reverse conj_tac
-  >- (simp[] >> rpt strip_tac >> BETA_TAC >>
-      irule bound_labels_create_blueprint_args >> simp[] >>
-      rpt strip_tac >> first_x_assum irule >> Cases_on `salted` >> gvs[] >>
-      Cases_on `rest` >> gvs[] >> metis_tac[listTheory.MEM_TL, listTheory.MEM]) >>
-  simp[pairTheory.FORALL_PROD, bound_labels_create_blueprint_append]
+  simp[bound_labels_create_blueprint_check, bound_labels_create_blueprint_append]
 QED
 
 Theorem bound_labels_call:
