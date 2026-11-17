@@ -47,6 +47,60 @@ Proof
   metis_tac[intcall_args_defaults_typing_mutual]
 QED
 
+(* Nonlocal places cannot observe the caller's scope stack. *)
+Theorem intcall_args_read_place_scope_action[local]:
+  (!id path. p <> MemoryPlace id path) ==>
+  !cx s scopes. read_place cx p (s with scopes := scopes) =
+    (let (res,t) = read_place cx p s in (res,t with scopes := scopes))
+Proof
+  Cases_on `p` >> simp[read_place_def]
+  >- simp[vyperLookupStorageScopesTheory.read_storage_slot_scopes,
+          pairTheory.UNCURRY, read_storage_slot_state_snd] >>
+  rpt strip_tac >>
+  simp[get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, lift_option_type_def, lift_sum_def,
+                            return_def, raise_def])
+QED
+
+Theorem intcall_args_scope_bind[local]:
+  (!s sc. a (s with scopes := sc) =
+    (FST (a s),SND (a s) with scopes := sc)) /\
+  (!s0 v t. a s0 = (INL v,t) ==>
+    !s sc. k v (s with scopes := sc) =
+      (FST (k v s),SND (k v s) with scopes := sc)) ==>
+  !s sc. bind a k (s with scopes := sc) =
+    (FST (bind a k s),SND (bind a k s) with scopes := sc)
+Proof
+  rpt strip_tac >> simp[bind_def] >>
+  namedCases_on `a s` ["res mid"] >>
+  namedCases_on `res` ["v", "err"] >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem intcall_args_read_result_scope_action[local]:
+  (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+  !cx s sc. read_result cx r (s with scopes := sc) =
+    (FST (read_result cx r s),SND (read_result cx r s) with scopes := sc)
+Proof
+  Cases_on `r` >> simp[read_result_def, return_def, raise_def] >>
+  strip_tac >> drule intcall_args_read_place_scope_action >>
+  simp[pairTheory.UNCURRY]
+QED
+
+Theorem intcall_args_place_type_scope_action[local]:
+  (!id path. p <> MemoryPlace id path) ==>
+  !cx s sc. place_type_value cx p (s with scopes := sc) =
+    (FST (place_type_value cx p s),SND (place_type_value cx p s) with scopes := sc)
+Proof
+  Cases_on `p` >> simp[place_type_value_def, return_def] >>
+  rpt strip_tac >>
+  simp[get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, lift_option_type_def, return_def, raise_def])
+QED
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
