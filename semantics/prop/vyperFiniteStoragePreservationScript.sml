@@ -2672,8 +2672,8 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
   Cases_on `ar` >> simp_tac(srw_ss())[]
   >- (Cases_on `evaluate_builtin cx ast.accounts ty bt (MAP expr_type es) x` >>
       simp_tac(srw_ss())[return_def, raise_def]
-      >- (Cases_on `precompile_call_success bt ast` >>
-          rename1 `precompile_call_success bt ast = (pr,pst)` >>
+      >- (Cases_on `precompile_call_success bt x ast` >>
+          rename1 `precompile_call_success bt x ast = (pr,pst)` >>
           drule vyperStatePreservationTheory.precompile_call_success_state >>
           strip_tac >> BasicProvers.VAR_EQ_TAC >>
           Cases_on `pr` >> simp_tac(srw_ss())[] >>
