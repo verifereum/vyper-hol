@@ -12,11 +12,149 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand typedMemoryCopy
+  logStoreDataOriginPtr annassignRelayoutSource bodyFullPathHistory
   exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
 
 val _ = Parse.hide "body";
+
+(* The allocation made between the two unwrap ownership intervals cannot
+   own the source.  A local source is separated by the allocation's local
+   frame instead.  Both alternatives describe this very same state. *)
+Theorem intcall_args_aggregate_source_disjoint[local]:
+  ~is_bytestring_type sty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  read_result cx raw es = (INL v,es) /\
+  type_memory_size stv <> 0 /\
+  eval_operand op s = SOME sw /\
+  (vv_at ce cx sty sa sm es raw (LocatedValue sty (mk_ptr op LocMemory)) s \/
+   vv_at ce cx sty sb sc es raw (LocatedValue sty (mk_ptr op LocMemory)) s) /\
+  sm.cs_next_id <= did /\ did < sb.cs_next_id /\
+  alloca_inv s /\ FLOOKUP s.vs_allocas did = SOME (w2n dw,cap) /\
+  n <= cap /\
+  (!name b sz. local_region ce es.scopes s name b sz ==>
+    w2n dw + cap <= b \/ b + sz <= w2n dw) ==>
+  w2n sw + type_memory_size stv <= w2n dw \/
+  w2n dw + n <= w2n sw
+Proof
+  rpt strip_tac >>
+  `val_footprint stv v = type_memory_size stv` by
+    metis_tac[nonbytes_evaluated_val_footprint] >>
+  gvs[loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def] >>
+  `w2n sw + type_memory_size stv <= w2n dw \/
+   w2n dw + cap <= w2n sw` suffices_by (strip_tac >> decide_tac) >>
+  FIRST [
+    (qpat_x_assum `!name b sz. local_region ce es.scopes s name b sz ==> _` drule >>
+     strip_tac >> decide_tac),
+    (rename1 `FLOOKUP s.vs_allocas sid = SOME (b,sz)` >>
+     `sid <> did` by decide_tac >>
+     `b + sz <= w2n dw \/ w2n dw + cap <= b` by
+       (fs[venomMemDefsTheory.alloca_inv_def,
+           venomMemDefsTheory.allocas_non_overlapping_def] >>
+        metis_tac[arithmeticTheory.ADD_COMM]) >>
+     decide_tac)]
+QED
+
+
+(* A nonzero aggregate store uses the same unwrap landing for ownership,
+   representation and ghosts, and chooses its endpoint before the horizon. *)
+Theorem intcall_args_aggregate_store_nonzero:
+  compile_store_memory cenv (Var src) (Var dst) dty sty cu = ((),cs) /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\ ~is_bytestring_type sty /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+       sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  type_memory_size stv <> 0 /\
+  not_fresh_at cu src /\ not_fresh_at cu dst /\
+  lookup_var src z = SOME sw /\ lookup_var dst z = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem z.vs_memory mem ==>
+     val_in_memory stv v (w2n sw) mem) /\
+  w2n sw + type_memory_size stv <= z.vs_alloca_next /\
+  w2n dw + MAX 32 (type_memory_bytes cenv dty) <= z.vs_alloca_next /\
+  z.vs_alloca_next < dimword (:256) /\
+  ptr_covers G tn src z (type_memory_size stv) /\
+  ptr_covers G tn dst z (MAX 32 (type_memory_bytes cenv dty)) /\
+  read_result cx raw es = (INL v,es) /\
+  (vv_at cenv cx sty sa sm es raw
+     (LocatedValue sty (mk_ptr (Var src) LocMemory)) z \/
+   vv_at cenv cx sty sb cu es raw
+     (LocatedValue sty (mk_ptr (Var src) LocMemory)) z) /\
+  sm.cs_next_id <= did /\ did < sb.cs_next_id /\
+  FLOOKUP z.vs_allocas did = SOME (w2n dw,MAX 32 (type_memory_bytes cenv dty)) /\
+  (!name b sz. local_region cenv es.scopes z name b sz ==>
+     w2n dw + MAX 32 (type_memory_bytes cenv dty) <= b \/ b + sz <= w2n dw) /\
+  alloca_inv z /\ alloca_history func z /\
+  allocas_from lo z /\ lo <= z.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code cu cs func /\ fn_inst_ids_distinct func /\
+  ~z.vs_halted /\ z.vs_current_bb = cu.cs_current_bb /\
+  z.vs_inst_idx = LENGTH cu.cs_current_insts /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+       (t,G1,tn1) [] (OK z,G,tn)) ==>
+  ?wt wG wtn nw.
+    nw <= MAX 32 (type_memory_bytes cenv dty) /\
+    typed_copy_state_frame cu (w2n dw) nw z wt /\
+    ~wt.vs_halted /\ wt.vs_current_bb = cs.cs_current_bb /\
+    wt.vs_inst_idx = LENGTH cs.cs_current_insts /\ alloca_history func wt /\
+    wtn.t_stor = tn.t_stor /\ wtn.t_trans = tn.t_trans /\ wtn.t_imm = tn.t_imm /\
+    (!p. not_fresh_at cu p ==> FLOOKUP wG p = FLOOKUP G p /\
+      op_taint wtn (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + nw) ==>
+      (i IN wtn.t_mem <=> i IN tn.t_mem)) /\
+    (!rt. evaluate_type (get_tenv cx) dty = SOME rt ==>
+      value_has_type rt v /\ val_wf rt v /\
+      type_memory_size rt <= MAX 32 (type_memory_bytes cenv dty) /\
+      (!mem. mem_agree_outside wtn.t_mem wt.vs_memory mem ==>
+        val_in_memory rt v (w2n dw) mem)) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (t,G1,tn1) [] (OK wt,wG,wtn))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `type_memory_size dtv <= MAX 32 (type_memory_bytes cenv dty)` by simp[] >>
+  `eval_operand (Var src) z = SOME sw` by simp[venomStateTheory.eval_operand_def] >>
+  `w2n sw + type_memory_size stv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw` by
+    (drule_all intcall_args_aggregate_source_disjoint >> simp[]) >>
+  `ptr_covers G tn dst z (type_memory_size dtv)` by
+    (qpat_x_assum `ptr_covers G tn dst z (MAX 32 _)` mp_tac >>
+     simp[bodyPtrDefsTheory.ptr_covers_def] >> rpt strip_tac >>
+     goal_assum (drule_at Any) >> simp[] >>
+     gvs[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `w2n sw + type_memory_size stv < dimword (:256) /\
+   w2n dw + type_memory_size dtv < dimword (:256) /\
+   w2n dw + type_memory_size dtv <= z.vs_alloca_next` by decide_tac >>
+  drule compile_store_memory_origin_ptr_path >>
+  disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
+  disch_then (drule_at (Pat `lookup_var src _ = _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ src _ _`)) >>
+  disch_then (qspecl_then [`v`,`sw`,`stv`] mp_tac) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  `alloca_history func t'` by
+    (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
+       (qspec_then `ARB` assume_tac) >>
+     irule body_full_path_alloca_history >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl [`t'`,`Gf`,`tnf`,`type_memory_size dtv`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
+  disch_then (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  simp[]
+QED
 
 (* Empty local typing maps can be weakened without changing static maps. *)
 Theorem intcall_args_defaults_typing_mutual[local]:
