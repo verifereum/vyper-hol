@@ -278,6 +278,8 @@ Theorem concretize_ext_call_observation:
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
   qabbrev_tac `rq = venom_call_request s addr value off sz is_static with
     cr_gas := SOME (w2n gas)` >>
   qabbrev_tac `rqT = venom_call_request t addr value offT sz is_static with
