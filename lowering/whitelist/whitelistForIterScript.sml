@@ -219,7 +219,7 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem memory_iterator_source_classify[local]:
+Theorem memory_iterator_source_classify:
   !e cx es rv ee.
     ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
     expr_writes_ok (\_. F) e /\
