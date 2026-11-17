@@ -234,9 +234,6 @@ Proof
            fs[stmt_state_rel_def,state_rel_def] >>
          `stor_taint_ok_at (DF H) tn1 t` by fs[ghost_inv_at_def] >>
          `stor_taint_ok_at (DF H) tm z` by fs[stor_taint_ok_at_def] >>
-         `!i. i < lo /\ i IN tm.t_mem ==> i IN tn1.t_mem` by
-           (qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t HG tm`
-             (ACCEPT_TAC o last o CONJUNCTS o REWRITE_RULE[ghost_kept_at_def])) >>
          (fn (asl,w) =>
            let val actualD = hd (snd (strip_comb w))
                val provider = ghost_inv_at_local_window_transport

@@ -72,7 +72,7 @@ Proof
   simp[materialize_internal_params_def] >> preserve []
 QED
 
-Theorem register_positional_args_defaults[local]:
+Theorem register_positional_args_defaults:
   !args ce off st.
     (FST (compile_register_positional_args ce args off st)).ce_func_defaults =
       ce.ce_func_defaults
@@ -85,7 +85,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> simp[]
 QED
 
-Theorem materialize_internal_params_defaults[local]:
+Theorem materialize_internal_params_defaults:
   !params ce st.
     (FST (materialize_internal_params ce params st)).ce_func_defaults =
       ce.ce_func_defaults
