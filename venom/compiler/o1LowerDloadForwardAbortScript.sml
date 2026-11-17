@@ -309,7 +309,7 @@ QED
    not a target memory invariant, at its terminal instruction. *)
 Theorem ld_forward_terminal_size:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ld_env_agree sites fn H tn s t /\ s.vs_labels = t.vs_labels /\
   inst.inst_opcode = REVERT /\ inst.inst_operands = [addr;sz] ==>
@@ -330,7 +330,7 @@ Proof
   `ptr_use_ok P (fn_pv P fn) inst` by
     (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
   `op_prov G sz = NONE` by metis_tac[ptr_terminal_length_prov] >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok fl B (a::MAP (\u. u.of_owner) U) H G` by
     fs[occurrence_annotation_ok_def] >>
   `op_prov H sz = NONE` by
     (drule occurrence_op_erasure >> disch_then (qspec_then `sz` mp_tac) >>
@@ -393,9 +393,9 @@ Proof
 QED
 
 Theorem ld_available_suffix_revert_empty:
-  !d s t bb bb' ri fuel C C' s1 vs stk PG G tn fn cur n a U B HP H sites lo.
+  !d s t bb bb' ri fuel C C' s1 vs stk PG G tn fn cur n a U B HP H sites lo fl.
   occ_frame_reachable vs C stk PG G tn fn cur s n a U B HP H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok fl n a U B HP H stk PG G s /\
   ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn cur s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME cur /\
@@ -467,7 +467,7 @@ Resume ld_available_suffix_revert_empty[assign]:
         (drule occ_frame_reachable_next >>
          simp[is_terminator_def, occurrence_sites_step_def] >>
          disch_then irule >> metis_tac[]) >>
-      `occurrence_annotation_ok n a U B HP (occurrence_step a HP H cur s'')
+      `occurrence_annotation_ok fl n a U B HP (occurrence_step a HP H cur s'')
          stk PG (step_prov PG G cur s'')
          (s'' with vs_inst_idx := SUC s.vs_inst_idx)` by
         (drule occurrence_annotation_next >>
@@ -489,9 +489,9 @@ Resume ld_available_suffix_revert_empty[assign]:
           qpat_x_assum `!k. k <= SUC d ==> _` (qspec_then `SUC k` mp_tac) >>
           simp[arithmeticTheory.ADD_CLAUSES] >>
           gvs[venomStateTheory.update_var_def, arithmeticTheory.ADD_CLAUSES, NoAsms])
-      >- metis_tac[] >>
-      qexists_tac `sites` >>
-      gvs[ld_env_agree_def]) >>
+      >- metis_tac[]
+      >- (qexists_tac `sites` >> gvs[ld_env_agree_def]) >>
+      qexists_tac `fl` >> gvs[]) >>
   gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
@@ -603,7 +603,7 @@ Resume ld_joint_forward_revert_empty[copy_success]:
     (drule occ_frame_reachable_next >>
      simp[is_terminator_def, occurrence_sites_step_def] >>
      disch_then irule >> metis_tac[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s'')
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s'')
      stk PG (step_prov PG G inst s'')
      (s'' with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
@@ -627,8 +627,9 @@ Resume ld_joint_forward_revert_empty[copy_success]:
       `SUC k <= j - s.vs_inst_idx` by decide_tac >>
       qpat_x_assum `!k. k <= _ ==> _` (qspec_then `SUC k` mp_tac) >>
       gvs[arithmeticTheory.ADD_CLAUSES, NoAsms])
-  >- metis_tac[] >>
-  qexists_tac `sites` >> gvs[ld_env_agree_def]
+  >- metis_tac[]
+  >- (qexists_tac `sites` >> gvs[ld_env_agree_def]) >>
+  qexists_tac `dyn_floor C vs` >> simp[]
 QED
 
 Finalise ld_joint_forward_revert_empty
