@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage
+  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage placeStore valueEncodingProps venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
 
 val _ = Parse.hide "body";
 
@@ -1736,4 +1736,61 @@ Theorem body_assign_other_full:
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   cheat
+QED
+
+Theorem restored_header_witness[local]:
+  !a n old mem. ?mix.
+    mem_bytes_at a n mix = mem_bytes_at a n old /\
+    (!i. i < a \/ a+n <= i ==>
+         mem_bytes_at i 1 mix = mem_bytes_at i 1 mem)
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `s = (ARB:venom_state) with vs_memory := mem` >>
+  qexists_tac `(write_memory_with_expansion a (mem_bytes_at a n old) s).vs_memory` >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`a`, `mem_bytes_at a n old`, `s`]
+               write_memory_mem_bytes_at_same) >> simp[]) >>
+  gen_tac >> disch_tac >>
+  irule EQ_TRANS >> qexists_tac `mem_bytes_at i 1 s.vs_memory` >>
+  conj_tac
+  >- (irule write_memory_mem_bytes_at_disjoint >> simp[] >> decide_tac) >>
+  simp[Abbr `s`]
+QED
+
+Theorem body_assign_empty_nested_robust:
+  mem_path_offset entry.type path = SOME (k,tv) /\
+  value_has_type entry.type entry.value /\
+  has_length_word ty /\ evaluate_type tenv ty = SOME tv /\
+  replace_memory_entry entry path (default_value tv) = INL entry' /\
+  (!mem. mem_agree_outside old_taint old_memory mem ==>
+         val_in_memory entry.type entry.value b mem) /\
+  mem_word_at (b+k) new_memory = 0w /\
+  (!i. b+k <= i /\ i < b+k+32 ==> i NOTIN new_taint) /\
+  (!i. ~(b+k <= i /\ i < b+k+32) ==>
+       mem_bytes_at i 1 new_memory = mem_bytes_at i 1 old_memory /\
+       (i IN new_taint <=> i IN old_taint)) ==>
+  !mem. mem_agree_outside new_taint new_memory mem ==>
+        val_in_memory entry'.type entry'.value b mem
+Proof
+  rpt strip_tac >>
+  qspecl_then [`b+k`, `32`, `old_memory`, `mem`]
+    (qx_choose_then `mix` strip_assume_tac) restored_header_witness >>
+  `mem_agree_outside old_taint old_memory mix` by
+    (simp[mem_agree_outside_def] >> rpt strip_tac >>
+     Cases_on `b+k <= i /\ i < b+k+32`
+     >- (sym_tac >> irule representationCleanPtrTheory.mem_bytes_at_eq_byte >>
+         goal_assum (drule_at Any) >> simp[]) >>
+     `i < b+k \/ b+k+32 <= i` by decide_tac >>
+     `i NOTIN new_taint` by metis_tac[] >>
+     metis_tac[mem_agree_outside_def]) >>
+  `val_in_memory entry.type entry.value b mix` by metis_tac[] >>
+  `mem_word_at (b+k) mem = 0w` by
+    metis_tac[clean_word_mem_agree] >>
+  drule_all place_store_empty_representation >> strip_tac >>
+  `value_has_type tv (default_value tv)` by
+    metis_tac[default_value_has_type_thm] >>
+  `!q. q < b+k \/ b+k+type_memory_size tv <= q ==>
+       mem_bytes_at q 1 mix = mem_bytes_at q 1 mem` by
+    (rpt gen_tac >> disch_tac >> first_x_assum irule >> decide_tac) >>
+  drule_all place_store_replace_memory_entry >> simp[]
 QED
