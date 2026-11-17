@@ -29,6 +29,7 @@ Ancestors
   dftPacketPreterminalOracle
   dftPacketPseudoAdvance
   dftPacketRefinementBoundary
+  dftPacketRetainedOracle
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
