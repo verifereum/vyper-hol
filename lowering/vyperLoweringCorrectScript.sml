@@ -129,7 +129,7 @@ End
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
-    vs.vs_prev_hashes = tx.block_hashes /\
+    tx.block_hashes = TAKE 256 vs.vs_prev_hashes /\
     vs.vs_code = tx.code
 End
 
