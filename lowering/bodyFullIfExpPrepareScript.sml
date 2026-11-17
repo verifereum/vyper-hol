@@ -1559,7 +1559,8 @@ Proof
        (mid with gas_obs := gs) = (INL v,ee) ==>
        value_has_type rty v /\
        !ptv. evaluate_type (get_tenv cx) (post_value_type cenv (if sel then a else b)) = SOME ptv ==>
-         value_has_type ptv v)` by (Cases_on `sel` >> simp[] >> metis_tac[]) >>
+         value_has_type ptv v)` by (Cases_on `sel` >> simp[] >> (qpat_assum `!gs v es1. _ ==> expr_vv_sim_full _ _ _ _ _ es1`
+      (fn th => drule_all th >> disch_then ACCEPT_TAC))) >>
   `gas_admissible (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
       expr_vv_res_ok mid` by
     (drule_all exprSimIfExpTheory.ifexp_root_branch_admissible >>

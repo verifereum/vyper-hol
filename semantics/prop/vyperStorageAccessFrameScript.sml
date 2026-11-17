@@ -1829,7 +1829,7 @@ Resume evaluate_finite_frame[assert_bare]:
   simp[Once evaluate_def, switch_BoolV_def, bind_def, raise_def,
        return_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >>
-  FIRST [gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def]] >>
+  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
     >- first_assum ACCEPT_TAC >> simp[])) >>
