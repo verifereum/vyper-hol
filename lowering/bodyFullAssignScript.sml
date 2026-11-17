@@ -54,7 +54,7 @@ Ancestors
   ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
   bodyFullUnwrapWord exprSimCopy exprSafeOperand exprReasonOperand bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
-  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics representationCleanPtr typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist
+  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics representationCleanPtr typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist immutableCopyExecution immutableBytestringRuntime fragGasCopyLoop
 Libs
   monadsyntax
 
@@ -3095,4 +3095,71 @@ Proof
      disch_then (qspec_then `j MOD type_memory_size tv` mp_tac) >>
      qpat_assum `a + _ + _ = a+j` (fn th => rewrite_tac[th]) >> simp[]) >>
   simp[mem_dead_bytes_def] >> metis_tac[MULT_COMM]
+QED
+
+val _ = Parse.hide "count";
+
+Theorem body_assign_immutable_bytes_loop_shape:
+  compile_word_copy_loop_base src dst count LocMemory LocCode T imm sm = (u,sb) /\
+  fn_has_code sm sb func ==>
+  ?hdr loop_body exit ie ih ib cv test sx sp value dx dp ip nc bbE bbH bbB.
+    ALL_DISTINCT [hdr;loop_body;exit] /\
+    ALL_DISTINCT ([cv;test;sx;sp;value;dx;dp;nc] ++
+      (case imm of NONE => [] | SOME region => [ip])) /\
+    (!x. MEM x ([cv;test;sx;sp;value;dx;dp;nc] ++
+      (case imm of NONE => [] | SOME region => [ip])) ==> ~not_fresh_at sm x) /\
+    lookup_block sm.cs_current_bb func.fn_blocks = SOME bbE /\
+    isPREFIX [mk_inst ie ASSIGN [Lit 0w] [cv];
+      mk_inst (ie+1) JMP [Label hdr] []]
+      (DROP (LENGTH sm.cs_current_insts) bbE.bb_instructions) /\
+    lookup_block hdr func.fn_blocks = SOME bbH /\
+    isPREFIX [mk_inst ih EQ [Var cv;count] [test];
+      mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []]
+      bbH.bb_instructions /\
+    lookup_block loop_body func.fn_blocks = SOME bbB /\
+    isPREFIX ([mk_inst ib MUL [Var cv;Lit 32w] [sx];
+      mk_inst (ib+1) ADD [src;Var sx] [sp];
+      mk_inst (ib+2) MLOAD [Var sp] [value];
+      mk_inst (ib+3) MUL [Var cv;Lit 32w] [dx];
+      mk_inst (ib+4) ADD [dst;Var dx] [dp]] ++
+      (case imm of NONE =>
+        [mk_inst (ib+5) ISTORE [Var dp;Var value] [];
+         mk_inst (ib+6) ADD [Var cv;Lit 1w] [nc];
+         mk_inst (ib+7) ASSIGN [Var nc] [cv];
+         mk_inst (ib+8) JMP [Label hdr] []]
+       | SOME region =>
+        [mk_inst (ib+5) ADD [region;Var dp] [ip];
+         mk_inst (ib+6) ISTORE [Var ip;Var value] [];
+         mk_inst (ib+7) ADD [Var cv;Lit 1w] [nc];
+         mk_inst (ib+8) ASSIGN [Var nc] [cv];
+         mk_inst (ib+9) JMP [Label hdr] []])) bbB.bb_instructions /\
+    sb.cs_current_bb = exit /\ sb.cs_current_insts = [] /\
+    ie = sm.cs_next_id /\ ih = ie+2 /\ ib = ie+4 /\
+    cv = STRING #"%" (toString sm.cs_next_var) /\
+    test = STRING #"%" (toString (sm.cs_next_var+1)) /\
+    sx = STRING #"%" (toString (sm.cs_next_var+2)) /\
+    sp = STRING #"%" (toString (sm.cs_next_var+3)) /\
+    value = STRING #"%" (toString (sm.cs_next_var+4)) /\
+    dx = STRING #"%" (toString (sm.cs_next_var+5)) /\
+    dp = STRING #"%" (toString (sm.cs_next_var+6)) /\
+    (case imm of NONE => nc = STRING #"%" (toString (sm.cs_next_var+7)) /\
+                         sb.cs_next_var = sm.cs_next_var+8
+     | SOME region => ip = STRING #"%" (toString (sm.cs_next_var+7)) /\
+                      nc = STRING #"%" (toString (sm.cs_next_var+8)) /\
+                      sb.cs_next_var = sm.cs_next_var+9)
+Proof
+  Cases_on `imm` >> strip_tac >>
+  gvs[compile_word_copy_loop_base_def, word_scale_def,
+      compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,
+      emit_void_def, fresh_id_def, emit_def, new_block_def,
+      not_fresh_at_def, fn_has_code_def, emitted_blocks_def,
+      Excl "isPREFIX"] >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM, ADD1, Excl "isPREFIX"] >>
+  qexistsl_tac [`fresh_label_output "wcopy_cond" sm.cs_next_label`,
+    `fresh_label_output "wcopy_body" (sm.cs_next_label+1)`] >>
+  rpt (goal_assum (drule_at Any)) >>
+  once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, Excl "isPREFIX", fresh_label_output_def]
 QED
