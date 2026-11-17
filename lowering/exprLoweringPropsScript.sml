@@ -2349,13 +2349,13 @@ QED
 
 (* ===== Kernel audit for changed place helpers ===== *)
 
-Theorem ci_mono_as_stack_val[local]:
+Theorem ci_mono_as_stack_val:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
 Proof
   rpt gen_tac >> Cases_on `p` >> simp[as_stack_val_def]
 QED
 
-Theorem ci_mono_as_ptr_val[local]:
+Theorem ci_mono_as_ptr_val:
   ∀ ty loc p sa. SND (as_ptr_val ty loc p) = SND p
 Proof
   rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
