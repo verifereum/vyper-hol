@@ -7,8 +7,8 @@ Ancestors
   stmtLowering exprLowering compileEnv supportedStmts supportedExprs list
 
 Theorem entry_code_annassign[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (AnnAssign id vty e))
 Proof
@@ -28,11 +28,11 @@ Proof
 QED
 
 Theorem entry_code_assign_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
-  (!ix ce' et. MEM ix (target_indices bt) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
+  (!ix et. MEM ix (target_indices bt) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et ix)) ==>
+      (compile_expr ce et ix)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Assign (BaseTarget bt) e))
 Proof
@@ -53,11 +53,11 @@ Proof
 QED
 
 Theorem entry_code_augassign[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
-  (!ix ce' et. MEM ix (target_indices bt) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
+  (!ix et. MEM ix (target_indices bt) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et ix)) ==>
+      (compile_expr ce et ix)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (AugAssign target_ty bt bop e))
 Proof
@@ -80,11 +80,13 @@ Proof
 QED
 
 Theorem entry_code_if_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
-  (!ce' lc' rt'. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
+  (!ce' lc' rt'.
+     ce'.ce_func_defaults = ce.ce_func_defaults ==> entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stmts ce' lc' rt' yes)) /\
-  (!ce' lc' rt'. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  (!ce' lc' rt'.
+     ce'.ce_func_defaults = ce.ce_func_defaults ==> entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stmts ce' lc' rt' no)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (If e yes no))
@@ -100,11 +102,11 @@ Proof
 QED
 
 Theorem entry_code_append_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
-  (!ix ce' et. MEM ix (target_indices target) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
+  (!ix et. MEM ix (target_indices target) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et ix)) ==>
+      (compile_expr ce et ix)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Append target e))
 Proof
@@ -126,8 +128,9 @@ Proof
 QED
 
 Theorem entry_code_assert_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults /\
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
   (!reason. why = AssertReason reason ==> supported_string_reason tops reason) /\
   ~(?err. why = AssertCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
@@ -144,6 +147,7 @@ Proof
 QED
 
 Theorem entry_code_raise_stmt[local]:
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults /\
   (!reason. why = RaiseReason reason ==> supported_string_reason tops reason) /\
   ~(?err. why = RaiseCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
@@ -186,8 +190,8 @@ val external_return_value_tac =
   simp[entry_code_external_return];
 
 Theorem entry_code_return_some_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Return (SOME e)))
 Proof
@@ -228,9 +232,9 @@ Proof
 QED
 
 Theorem entry_code_log_stmt[local]:
-  (!e ce' et. MEM e es ==>
+  (!e et. MEM e es ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et e)) ==>
+      (compile_expr ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Log ev_id es))
 Proof
@@ -272,11 +276,11 @@ Proof
 QED
 
 Theorem entry_code_tuple_assign_stmt[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) /\
-  (!bt ix ce' et. MEM (BaseTarget bt) targets /\ MEM ix (target_indices bt) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et e)) /\
+  (!bt ix et. MEM (BaseTarget bt) targets /\ MEM ix (target_indices bt) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_expr ce' et ix)) ==>
+      (compile_expr ce et ix)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Assign (TupleTarget targets) e))
 Proof
@@ -289,10 +293,12 @@ QED
 
 Theorem entry_code_supported_statements[local]:
   (!tops bindings s. supported_stmt tops bindings s ==>
-    !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmt ce lc rt s)) /\
   (!tops bindings ss. supported_stmts tops bindings ss ==>
-    !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmts ce lc rt ss))
 Proof
   ho_match_mp_tac supported_stmt_ind >> rpt conj_tac >> rpt gen_tac
@@ -325,12 +331,12 @@ Proof
 QED
 
 Resume entry_code_supported_statements[break]:
-  strip_tac >> rpt gen_tac >> Cases_on `lc` >>
+  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `lc` >>
   simp[compile_stmt_def, entry_code_emit_inst, comp_ignore_bind_def] >>
   irule entry_code_bind >> simp[entry_code_emit_inst, entry_code_return]
 QED
 Resume entry_code_supported_statements[continue]:
-  strip_tac >> rpt gen_tac >> Cases_on `lc` >>
+  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `lc` >>
   simp[compile_stmt_def, entry_code_emit_inst, comp_ignore_bind_def] >>
   irule entry_code_bind >> simp[entry_code_emit_inst, entry_code_return]
 QED
@@ -340,7 +346,7 @@ Resume entry_code_supported_statements[expr]:
   metis_tac[entry_code_supported_expr]
 QED
 Resume entry_code_supported_statements[assign]:
-  strip_tac >> rpt gen_tac >> Cases_on `target`
+  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `target`
   >- (irule entry_code_assign_stmt >>
       gvs[supported_stmt_def] >>
       metis_tac[entry_code_supported_expr, supported_assignment_base_index,
@@ -367,27 +373,34 @@ Resume entry_code_supported_statements[log]:
   simp[supported_stmt_def, supported_log_def] >> rpt strip_tac >>
   irule entry_code_log_stmt >>
   gvs[supported_pure_exprs_every, EVERY_MEM] >>
-  metis_tac[entry_code_supported_pure_expr]
+  rpt strip_tac >> irule entry_code_supported_pure_expr >>
+  qexists_tac `tops` >> fs[EVERY_MEM] >> metis_tac[]
 QED
 Resume entry_code_supported_statements[cons]:
   simp[supported_stmt_def] >> rpt strip_tac >>
   simp[Once compile_stmt_def, comp_ignore_bind_def] >>
   irule entry_code_bind >> simp[entry_code_get] >> gen_tac >>
   IF_CASES_TAC >> simp[entry_code_return] >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_declare_stmt_local] >> rpt gen_tac >> BETA_TAC) >> simp[]
+  match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
+    (Q.GEN `Q` entry_code_bind_result)) >>
+  conj_tac >- simp[declare_stmt_local_defaults] >>
+  conj_tac >- simp[entry_code_declare_stmt_local] >>
+  gen_tac >> strip_tac >> fs[] >> BETA_TAC >>
+  irule entry_code_bind >> simp[]
 QED
 Finalise entry_code_supported_statements
 
 Theorem entry_code_supported_stmt:
-  supported_stmt tops bindings s ==>
+  supported_stmt tops bindings s /\
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_stmt ce lc rt s)
 Proof
   metis_tac[entry_code_supported_statements]
 QED
 
 Theorem entry_code_supported_stmts:
-  supported_stmts tops bindings ss ==>
+  supported_stmts tops bindings ss /\
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_stmts ce lc rt ss)
 Proof
   metis_tac[entry_code_supported_statements]

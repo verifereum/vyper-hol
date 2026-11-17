@@ -2,6 +2,7 @@
    traverse the target, then store the captured value. *)
 Theory bodyMemAssignPlaceSnapshot
 Ancestors
+  bodySimStmtFacts
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   bodyMemAssignSnapshot
   bodyAssignPlace exprSimMemDefs exprSimHypsDefs exprSimHyps
@@ -240,7 +241,7 @@ Resume body_assign_place_snapshot_mem[capture]:
   disch_then (qx_choose_then `snap` strip_assume_tac) >>
   `!J. valid_horizon cx st0 J mid.storage_trace ==>
     vv_post J ctx func cenv cx e es sa ss s0
-      (mid with gas_obs := []) raw vv snap` by
+      (mid with gas_obs := []) (Value v) vv snap` by
     (qx_gen_tac `Hx` >> disch_tac >>
      qpat_assum `!J. vv_post J ctx func cenv cx e es sa sr s0 _ raw vv0 rs ==> _`
        (qspec_then `Hx` mp_tac) >>
@@ -274,7 +275,7 @@ Resume body_assign_place_snapshot_mem[target_prefix]:
     storage_well_formed_on cx (mid with gas_obs := []) (FST J)` by
     (rpt strip_tac >>
      qpat_assum `!J. valid_horizon cx st0 J mid.storage_trace ==>
-       vv_post J ctx func cenv cx e es sa ss s0 _ raw vv snap`
+       vv_post J ctx func cenv cx e es sa ss s0 _ (Value v) vv snap`
        (qspec_then `J` (mp_tac o REWRITE_RULE [vv_post_def])) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> simp[stmt_state_rel_gas_obs]) >>
   `stmt_state_rel H1 ctx func cenv cx mid snap` by

@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyFacts
 Ancestors
   supportedExprTraverse allocLimits allocLimitsProps
-  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtCases exprSimHyps
+  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtFacts exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
   bodySim bodyExprPreFacts exprSimHypsDefs stmtSimDefs bodyStorageMetadata

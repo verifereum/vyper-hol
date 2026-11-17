@@ -1,0 +1,93 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5256
+Status: merged (9e00f3db24772d4b143618ea5e5265c7789e39f0)
+Scope: the Venom codegen changes; the tests are not ported.
+
+Adapted to VYPER_PIN 577d2534: the pin's `ensure_memory_layout` has no unbounded-sequence branch (added by #5240), so its typed-store fallback is replaced by `materialize_value` in place; the `stmt.py` import line keeps the pin's `Constancy`.
+
+diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
+index 2de5a884..c3c5a1c5 100644
+--- a/vyper/codegen_venom/context.py
++++ b/vyper/codegen_venom/context.py
+@@ -46,6 +46,22 @@ class Constancy(Enum):
+     Constant = 1
+ 
+ 
++def same_memory_layout(src_typ: VyperType, dst_typ: VyperType) -> bool:
++    """Return True if `dst_typ.memory_bytes_required` bytes copied from memory
++    laid out as `src_typ` form a valid `dst_typ` value.
++
++    `punnable` accepts a wider top-level DynArray capacity or bytestring
++    bound in `dst_typ` (the data present has the same layout), but a flat
++    copy of the destination size would then read past the source.
++
++    Not `src_typ != dst_typ`: `TupleT` compares by its never-populated
++    `members` dict, so any two tuple types are equal.
++    """
++    if not punnable(src_typ, dst_typ):
++        return False
++    return src_typ.memory_bytes_required == dst_typ.memory_bytes_required
++
++
+ @dataclass
+ class LocalVariable:
+     """Tracks a variable during Venom codegen."""
+@@ -618,12 +634,7 @@ class VenomCodegenContext:
+         if punnable(vv.typ, typ):
+             return vv
+ 
+-        ret = self.new_temporary_value(typ, annotation=annotation)
+-        assert isinstance(ret.operand, IRVariable)
+-        # not store_vyper_value: its `src_typ != typ` check is always False for
+-        # tuples (TupleT.__eq__ compares the empty `members` dict).
+-        self._store_memory_typed(ret.operand, typ, self.unwrap(vv), vv.typ)
+-        return ret
++        return self.materialize_value(vv, typ, annotation=annotation)
+ 
+     def snapshot_value_for_delayed_use(
+         self,
+@@ -871,7 +882,7 @@ class VenomCodegenContext:
+             else:
+                 copy_len = self.unchecked_bytestring_runtime_size(val)
+             self.copy_memory_dynamic(ptr, val, copy_len, self.memory_size_bound(src_typ))
+-        elif src_typ != typ:
++        elif not same_memory_layout(src_typ, typ):
+             # Layout-aware copy for assignments between compatible but not
+             # identical memory layouts (e.g. DynArray[Bytes[540]] -> DynArray[Bytes[704]]).
+             self._store_memory_typed(dst=ptr, dst_typ=typ, src=val, src_typ=src_typ)
+diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
+index 0910bc17..5b72eb5d 100644
+--- a/vyper/codegen_venom/stmt.py
++++ b/vyper/codegen_venom/stmt.py
+@@ -45,7 +45,7 @@ from vyper.venom.basicblock import IRLiteral, IROperand, IRVariable
+ from .buffer import Ptr
+ from .builtins.simple import get_empty_type
+ from .calling_convention import returns_dynamic_count, returns_stack_count
+-from .context import Constancy, LocalVariable, VenomCodegenContext
++from .context import Constancy, LocalVariable, VenomCodegenContext, same_memory_layout
+ from .eval_order import later_expressions_can_mutate_memory_or_storage
+ from .expr import Expr, get_referenced_variables
+ from .value import VyperValue
+@@ -237,7 +237,7 @@ class Stmt:
+         Only called from `_copy_complex_type` which handles staging when needed.
+         """
+         if (
+-            src_typ != typ
++            not same_memory_layout(src_typ, typ)
+             and dst_ptr.location is not DataLocation.MEMORY
+             and not (isinstance(src_typ, _BytestringT) and isinstance(typ, _BytestringT))
+         ):
+@@ -1245,10 +1245,12 @@ class Stmt:
+                 continue
+ 
+             assert member_ptr is not None
++            # INF members have no memory size: keep the unbounded checks
++            # ahead of `same_memory_layout`
+             if (
+-                dst_member_t != src_member_t
+-                and not type_contains_unbounded_sequence(dst_member_t)
++                not type_contains_unbounded_sequence(dst_member_t)
+                 and not type_contains_unbounded_sequence(src_member_t)
++                and not same_memory_layout(src_member_t, dst_member_t)
+             ):
+                 normalized = self.ctx.new_temporary_value(dst_member_t)
+                 assert isinstance(normalized.operand, IRVariable)

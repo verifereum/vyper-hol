@@ -498,3 +498,29 @@ Theorem slice_struct_field_copies_memory:
 Proof
   EVAL_TAC
 QED
+
+(* Internal defaults share the constant substitution used by function bodies. *)
+Theorem internal_default_constant_substitution:
+  build_func_defaults
+    [VariableDecl Private
+       (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
+       "C" (BaseT (UintT 256)) NONE;
+     FunctionDecl Internal Pure F F "f" [("x", BaseT (UintT 256))]
+       [TopLevelName (BaseT (UintT 256)) (NONE, "C")]
+       (BaseT (UintT 256))
+       [Return (SOME (Name (BaseT (UintT 256)) "x"))]] =
+    [("f", [Literal (BaseT (UintT 256)) (IntL 7)])] /\
+  omitted_defaults
+    (build_compile_env
+      [VariableDecl Private
+         (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
+         "C" (BaseT (UintT 256)) NONE;
+       FunctionDecl Internal Pure F F "f" [("x", BaseT (UintT 256))]
+         [TopLevelName (BaseT (UintT 256)) (NONE, "C")]
+         (BaseT (UintT 256))
+         [Return (SOME (Name (BaseT (UintT 256)) "x"))]]
+      Internal Pure "caller" [] (BaseT (UintT 256)) [] F) "f" 0 =
+    [Literal (BaseT (UintT 256)) (IntL 7)]
+Proof
+  EVAL_TAC
+QED

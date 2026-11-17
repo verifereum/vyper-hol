@@ -131,7 +131,7 @@ Theorem dalloca_relocate_exec:
     OK (update_var out s_raw.vs_fmp
       (s_raw with vs_fmp := n2w (w2n s_raw.vs_fmp + ceil32 (w2n sz)))) /\
   run_insts fuel ctx
-    [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+    [mk_inst ai ADD [size_op;Lit 31w] [plus31];
      mk_inst ni NOT [Lit 31w] [mask];
      mk_inst mi AND [Var plus31;Var mask] [aligned];
      mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s_low =
@@ -352,7 +352,7 @@ Theorem fmp_lower_inst_dalloca_shape:
   fmp_lower_inst infos c runner sp inst = SOME (head,sp1) ==>
   ?size_op out plus31 mask aligned ai ni mi bi.
     inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
-    head = [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+    head = [mk_inst ai ADD [size_op;Lit 31w] [plus31];
             mk_inst ni NOT [Lit 31w] [mask];
             mk_inst mi AND [Var plus31;Var mask] [aligned];
             mk_inst bi BUMP [Var runner;Var aligned] [out;runner]]
@@ -455,7 +455,7 @@ Theorem fmp_lower_block_ledger:
      (EL j bb.bb_instructions).inst_operands = [size_op] /\
      (EL j bb.bb_instructions).inst_outputs = [out] /\
      fmp_lower_inst infos ctx runner sp0 (EL j bb.bb_instructions) =
-       SOME ([mk_inst ai ADD [Lit 31w;size_op] [plus31];
+       SOME ([mk_inst ai ADD [size_op;Lit 31w] [plus31];
               mk_inst ni NOT [Lit 31w] [mask];
               mk_inst mi AND [Var plus31;Var mask] [aligned];
               mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],sp1) ==>

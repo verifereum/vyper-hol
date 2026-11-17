@@ -12,7 +12,7 @@ Ancestors
 
 Theorem lower_value_child_open:
   !bound cfn cenv aty e sa v sb.
-    expr_size e < bound /\
+    expr_size e + cenv_defaults_size cenv < bound /\
     (!vv st. cfn cenv aty e sa = (vv,st) ==> ~block_is_terminated st) /\
     lower_value (expr_child_callback bound cfn) cenv aty e sa = (v,sb) ==>
     ~block_is_terminated sb

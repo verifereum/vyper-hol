@@ -1,0 +1,2 @@
+# Sources the pinned compiler rejects; their oracles come from 0.5.0a4.
+dom06_blueprint_rawargs_b32

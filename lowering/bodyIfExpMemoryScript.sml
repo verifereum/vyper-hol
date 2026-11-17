@@ -646,6 +646,9 @@ Theorem ifexp_root_guarded_post_mem[local]:
   (~is_word_type t ==>
    vv_at cenv cx t sc sd (ee with gas_obs := []) tv
      (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~is_word_type t ==>
+   vv_place_ptr cenv cx (ee with gas_obs := []) u tv
+     (LocatedValue t (mk_ptr op LocMemory))) /\
   eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -1261,6 +1264,8 @@ Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
      (jump_to se.cs_current_bb u).vs_alloca_next <= u1.vs_alloca_next /\
      vv_at cenv cx (expr_type a) se sx (ee with gas_obs := []) tv
        (LocatedValue (expr_type a) (mk_ptr aop LocMemory)) u1 /\
+     vv_place_ptr cenv cx (ee with gas_obs := []) u1 tv
+       (LocatedValue (expr_type a) (mk_ptr aop LocMemory)) /\
      u1.vs_accounts = s.vs_accounts /\ u1.vs_transient = s.vs_transient /\
      u1.vs_requests = s.vs_requests /\ u1.vs_call_ctx = s.vs_call_ctx` by
     (HZ_TAC `H1` >> HZX_TAC `H1` >> gvs[] >>
@@ -1277,7 +1282,7 @@ Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
      strip_tac >>
      `?w. eval_operand aop u' = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
      `alloca_inv u'` by fs[expr_post_def, stmt_state_rel_def] >>
-     metis_tac[]) >>
+     qexistsl_tac [`tv`,`v`,`u'`,`w`] >> fs[vv_place_ptr_gas_obs]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
      storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
