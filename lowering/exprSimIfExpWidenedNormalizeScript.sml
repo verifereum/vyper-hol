@@ -91,10 +91,22 @@ Resume compile_bytes_ifexp_post_frag[allocation]:
      qexistsl [`s`, `sa`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
   `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl [`s`, `sa`] >> simp[] >>
-     conj_tac >- metis_tac[not_fresh_at_mono] >>
      conj_tac
-     >- (Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
-     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     >- (map_every qx_gen_tac [`id`, `local_var`, `sz`, `old_word`] >> strip_tac >>
+         `not_fresh_at sa local_var` by
+           (qpat_x_assum `local_ptrs_reserved ce sa` mp_tac >>
+            simp[local_ptrs_reserved_def] >> strip_tac >>
+            first_x_assum drule >> simp[]) >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> _`
+           (qspec_then `local_var` mp_tac) >> simp[]) >>
+     conj_tac
+     >- (qx_gen_tac `old_var` >> strip_tac >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+         irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `origin` >> simp[]) >>
+     Cases_on `vv_operand vv` >> simp[eval_operand_def] >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     qpat_x_assum `!z. vv_operand vv = Var z ==> _` irule >> simp[]) >>
   `val_wf tvt v` by metis_tac[cj 1 value_has_type_val_wf] >>
   irule frag_exec_seq >>
   qexistsl [`\r. expr_post H ctx func ce cx e ee
