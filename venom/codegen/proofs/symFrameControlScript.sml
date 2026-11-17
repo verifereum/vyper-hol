@@ -4096,7 +4096,9 @@ Theorem terminal_arranged_word_stack:
 Proof
   strip_tac >>
   `!x. MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x` by
-    metis_tac[terminal_operands_not_retpc] >>
+    (gen_tac >> disch_tac >> irule frameViewFactsTheory.ordinary_operand_not_retpc >>
+     conj_tac >- gvs[listTheory.MEM] >>
+     qexists `inst` >> gvs[compute_operands_def, listTheory.MEM]) >>
   `eval_operands (REVERSE (compute_operands inst))
       (frame_view fn ra vs with vs_memory := m) = SOME values` by
     metis_tac[frameViewFactsTheory.eval_operands_frame_view, listTheory.MEM_REVERSE] >>
@@ -4111,7 +4113,13 @@ Proof
      `op <> dead_stack_marker` by
        (qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
         disch_then (qspec_then `op` mp_tac) >> simp[]) >>
-     drule_all terminal_operand_word_kind >> simp[]) >>
+     `MEM op inst.inst_operands /\ ~is_label_operand op /\
+      inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+      inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+      inst.inst_opcode <> DRET /\ inst.inst_opcode <> CODECOPY` by
+       (gvs[listTheory.MEM, compute_operands_def] >>
+        gvs[label_positions_ok_def, listTheory.EVERY_MEM]) >>
+     drule_all ordinary_noncopy_operand_word_kind >> simp[]) >>
   drule_all arranged_word_prepared_symbolic_stack >> strip_tac >>
   `LENGTH values = LENGTH (compute_operands inst)` by
     metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
@@ -4210,7 +4218,7 @@ Proof
   `EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
    MEM inst.inst_opcode
      [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
-      INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
+      INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL]` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   drule_all terminal_arranged_word_stack >> simp[]
 QED
@@ -6280,7 +6288,7 @@ Theorem sym_halt_prepared_step:
     prog 1 mid = AsmHalt out ==>
   sym_terminal (sym_steps prog env 1 ss_mid)
 Proof
-  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qx_gen_tac `cplan` >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
     (AsmOp name) mid = AsmHalt out` by
     (qpat_x_assum `asm_steps _ _ _ 1 _ = _` mp_tac >>
@@ -6293,10 +6301,13 @@ Proof
   disch_then (qspec_then `name` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; INVALID;
-    CREATE; CREATE2; RETURNDATACOPY]` by (simp[] >> metis_tac[]) >>
+    CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL]` by
+    (simp[] >> metis_tac[]) >>
+  `context_source_memory_writes_disjoint cplan inst vs` by
+    (gvs[context_source_memory_writes_disjoint_def, source_memory_write_ranges_def]) >>
   drule_all terminal_source_memory_reads_safe >> disch_tac >>
   `MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-    "CREATE"; "CREATE2"; "RETURNDATACOPY"]` by
+    "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"]` by
     gvs[asmIRTheory.venom_to_evm_name_def] >>
   metis_tac[sym_terminal_opcode_transfer]
 QED
@@ -7105,6 +7116,10 @@ Proof
      gvs[compute_operands_def, python_stack_operands_def,
          ir_specific_operand_order_def, eval_operands_def]) >>
   drule_then (map_every assume_tac o CONJUNCTS) (iffLR sym_frame_inv_def) >>
+  `MEM inst.inst_opcode
+    [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
+     INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL]` by
+    (fs[listTheory.MEM] >> metis_tac[]) >>
   drule_all terminal_arranged_word_stack >> simp[]
 QED
 
