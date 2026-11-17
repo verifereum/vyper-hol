@@ -104,21 +104,16 @@ Theorem call_and_staticcall_exhaustion:
   s.as_outcomes = [] ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <|
-    as_stack := [0w]; as_requests := s.as_requests ++
-      [asm_call_request s 8w 0w 0 0 F with cr_gas := SOME (w2n gas)]; as_returndata := [] |>)) /\
+  AsmFault (s with <|
+    as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]; as_returndata := [] |>) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <|
-    as_stack := [0w]; as_requests := s.as_requests ++
-      [asm_call_request s 8w 0w 0 0 T with cr_gas := SOME (w2n gas)]; as_returndata := [] |>))
+  AsmFault (s with <|
+    as_stack := [gas; 8w; 0w; 0w; 0w; 0w]; as_returndata := [] |>)
 Proof
   strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
-       asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
-       computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, adopt_outcome_deletions_def,
-       failed_outcome_def, asm_next_def,
+       asm_consume_call_outcome_exhausted, asm_call_memory_def,
        asm_state_component_equality]
 QED
 
