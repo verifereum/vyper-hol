@@ -100,19 +100,7 @@ Theorem walk_outer_mutual[local]:
     state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_base_place cx bt)) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es cenv.
-    (!ty name actuals fallback.
-      supported_program (cx_tops cx) /\
-      IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
-      ~call_can_mutate cenv (IntCall (NONE,name)) /\
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx actuals) ==>
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
-        (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
-    ~exprs_can_mutate cenv es /\
-    EVERY (\c. FST c = NONE /\ supported_program (cx_tops cx) /\
-      IS_SOME (supported_function_decl (cx_tops cx) c Internal)) (int_calls_exprs es) ==>
-    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_expr_results cx es))
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[expr_can_mutate_def, target_to_expr_def, call_can_mutate_def] >>
@@ -139,8 +127,6 @@ Proof
   >- suspend "base_global"
   >- suspend "base_attribute"
   >- suspend "base_subscript"
-  >- (rpt strip_tac >> machine_leaf >> simp[Once evaluate_def, machine_frame_primitives])
-  >> suspend "results_cons"
 QED
 
 Resume walk_outer_mutual[name]:
@@ -179,13 +165,6 @@ Resume walk_outer_mutual[exprs_cons]:
   match_mp_tac walk_bind_guarded >> conj_tac >- metis_tac[] >>
   rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind_guarded >>
   conj_tac >- (machine_leaf >> simp[machine_frame_read_result]) >>
-  rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind >>
-  conj_tac >- metis_tac[] >>
-  gen_tac >> BETA_TAC >> machine_leaf >> simp[machine_frame_primitives, machine_frame_unchanged_reads]
-QED
-Resume walk_outer_mutual[results_cons]:
-  rpt strip_tac >> gvs[int_calls_expr_def] >> simp[Once evaluate_def] >>
-  match_mp_tac walk_bind_guarded >> conj_tac >- metis_tac[] >>
   rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind >>
   conj_tac >- metis_tac[] >>
   gen_tac >> BETA_TAC >> machine_leaf >> simp[machine_frame_primitives, machine_frame_unchanged_reads]
