@@ -530,7 +530,7 @@ Resume prefix_complete_child_iteration_mode[backedge]:
   eval_operand (Var slot_var) actual = SOME (n2w slot)` by
    (simp[eval_operand_def] >> metis_tac[eval_operand_def]) >>
  `B UNION B' SUBSET {a | d <= a /\ a < d+32+SUC j*type_memory_size tv}` by
-   gvs[range_bytes_def] >>
+   FIRST [gvs[range_bytes_def]] >>
  `lookup_block actual.vs_current_bb func.fn_blocks = SOME bb /\
   actual.vs_inst_idx = LENGTH prefix` by metis_tac[] >>
  qpat_assum `_ k ctx func site ids D N d outsz next limit_st tv vs slot_id slot initial (SUC j) j actual`

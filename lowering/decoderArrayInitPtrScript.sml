@@ -295,7 +295,7 @@ Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_origin]:
    s1.vs_current_bb = c1.cs_current_bb /\ s2.vs_current_bb = c2.cs_current_bb /\
    s3.vs_current_bb = c3.cs_current_bb` by
     (gvs[allocas_from_def] >> metis_tac[]) >>
-  gvs[] >> metis_tac[gas_origin_ptr_path_append, APPEND]
+  gvs[] >> FIRST [metis_tac[gas_origin_ptr_path_append, APPEND]]
 QED
 
 Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_checks]:

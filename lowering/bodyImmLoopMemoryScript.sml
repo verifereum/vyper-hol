@@ -168,7 +168,7 @@ Proof
   `st1.cs_next_var <= cut.cs_next_var /\ cut.cs_next_var <= sb0.cs_next_var /\
    not_fresh_at cut idx /\ not_fresh_at cut p /\
    (!x. not_fresh_at cut x ==> not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep)` by
-    (Cases_on `dyn` >> gvs[Abbr `cut`, Abbr `tot`, not_fresh_at_def]) >>
+    (Cases_on `dyn` >> FIRST [gvs[Abbr `cut`, Abbr `tot`, not_fresh_at_def]]) >>
   `!l. lvo <> Label l` by
     (qpat_x_assum `(if dyn then _ else _) st = (lvo,st1)` mp_tac >>
      rpt (pop_assum kall_tac) >>

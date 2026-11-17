@@ -893,7 +893,7 @@ Proof
   conj_tac >- metis_tac[SUBSET_TRANS] >>
   conj_tac >- (fs[] >> NO_TAC) >>
   conj_tac >- (fs[] >> NO_TAC) >>
-  rpt strip_tac >> fs[abi_decode_frame_def] >> metis_tac[]
+  rpt strip_tac >> FIRST [fs[abi_decode_frame_def]] >> metis_tac[]
 QED
 
 

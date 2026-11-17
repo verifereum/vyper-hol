@@ -1496,7 +1496,7 @@ Resume compile_append_storage_aggregate_stmt_frag[rhs]:
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`st0`, `sa`, `sB`, `raw`, `s0`] mp_tac) >>
       impl_tac
-      >- (simp[] >> rpt strip_tac >>
+      >- (asm_rewrite_tac[] >> rpt strip_tac >>
           `valid_horizon cx st0 H es.storage_trace` by
             fs[Abbr `es_rhs`, valid_horizon_def] >>
           `stmt_state_rel H ctx func cenv cx es s0 /\

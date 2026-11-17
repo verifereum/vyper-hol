@@ -476,7 +476,7 @@ Proof
                     bodyPtrDefsTheory.ptr_val_ok_def,
                     exprSimMemDefsTheory.expr_store_bound_word]
                >~ [`expr_post _ _ _ _ _ (Builtin _ PowMod256 _) _ _ _ _ _ _ _ _`]
-               >- (`stmt_state_rel H ctx func cenv cx mid' u` by metis_tac[] >>
+               >- (`stmt_state_rel H ctx func cenv cx mid' u` by FIRST [first_assum ACCEPT_TAC, metis_tac[]] >>
                    `storage_well_formed_on cx mid' (FST H)` by
                      (qpat_assum `expr_post H ctx func cenv cx x0' mid s1 s2 t mid' v' y t'`
                         (strip_assume_tac o PURE_REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>

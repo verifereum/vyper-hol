@@ -644,7 +644,7 @@ Proof
       emit_inst JMP [Label exit_lbl] [] sb = ((), sj))` by
     (qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
      simp[deploy_ctor_code_def, comp_return_def, new_block_def] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> FIRST [gvs[]]) >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb /\
    SND (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa) =
      shadow_sb` by fs[compile_stmts_env] >>

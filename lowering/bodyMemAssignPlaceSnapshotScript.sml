@@ -482,7 +482,7 @@ Resume body_assign_place_snapshot_mem[transport]:
   `res = INL ()` by suspend "normal_write" >>
   qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
   `loc = LocMemory ==> w2n w + type_memory_size dtv <= target.vs_alloca_next` by
-    (strip_tac >> gvs[] >> drule_all memory_place_live_region >> strip_tac >>
+    (strip_tac >> FIRST [gvs[]] >> drule_all memory_place_live_region >> strip_tac >>
      drule_all body_local_region_frontier >> decide_tac) >>
   `?z. gas_marked_path T ctx func target 0 (OK z) /\
     stmt_state_rel H2 ctx func cenv cx ff z /\
@@ -607,7 +607,7 @@ Resume body_assign_place_snapshot_mem[normal_write]:
   >- (gvs[place_ptr_rel_def] >>
       rename1 `write_place cx (StoragePlace tr slot dtv) v after = _` >>
       `~cx.txn.is_static` by
-        (Cases_on `tr` >> fs[slot_loc_def]) >>
+        (Cases_on `tr` >> FIRST [fs[slot_loc_def]]) >>
       mp_tac (Q.SPECL [`cx`,`tr`,`slot`,`dtv`,`v`,`after`]
         write_storage_slot_succeeds) >> simp[] >>
       qpat_x_assum `write_place _ _ _ _ = _`

@@ -3187,7 +3187,7 @@ Resume compile_log_frag_full[packing_all_h]:
   disch_then (qx_choosel_then [`ltv`,`ptv`] strip_assume_tac) >>
   first_assum ACCEPT_TAC) >>
 `dtys <> []` by
- (strip_tac >> `data_ops=[]` by fs[] >>
+ (strip_tac >> `data_ops=[]` by (qpat_assum `LENGTH data_ops = LENGTH dtys` mp_tac >> simp[]) >>
   fs[Abbr `data_ops`,Abbr `flags`]) >>
 `abi_enc_plan (get_tenv cx) (TupleT dtys)
  (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT dtys))` by

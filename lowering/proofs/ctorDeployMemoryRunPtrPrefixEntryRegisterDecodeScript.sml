@@ -205,7 +205,7 @@ Proof
     qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (initial,_,_) _ _` mp_tac >>
     qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (prepared,_,_) _ _` mp_tac >>
     rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_trans]) >>
- metis_tac[abi_decode_sim_trans]
+ FIRST [first_assum ACCEPT_TAC, metis_tac[abi_decode_sim_trans]]
 QED
 
 Resume prefix_entry_register_address_decode_paired_mode[effect]:

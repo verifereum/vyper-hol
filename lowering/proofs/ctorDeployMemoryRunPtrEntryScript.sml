@@ -547,7 +547,7 @@ Proof
      `ALL_DISTINCT (MAP FST fargs)` by
        metis_tac[ctorDeployMemoryRunMemEntryTaskInputsTheory.ctor_task_source_params] >>
      `FLOOKUP scope name = SOME entry` by
-       fs[lookup_scopes_def, AllCaseEqs()] >>
+       FIRST [fs[lookup_scopes_def, AllCaseEqs()]] >>
      drule_all decoded_arguments_scope_lookup >> strip_tac >>
      qpat_x_assum `!j. j < LENGTH fargs ==> _` drule >> strip_tac >>
      gvs[local_region_def] >>

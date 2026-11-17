@@ -219,7 +219,8 @@ Theorem initial_ctx_rel_fresh_nonvacuity:
 Proof
   simp[initial_ctx_rel_def, frame_probe_fn_def, mk_venom_context_def,
        frame_probe_vs_def, frame_probe_es_def, make_asm_call_state_def,
-       asm_oracle_initial_def, frame_probe_encoding, frame_probe_trace,
+       asm_oracle_initial_def, frame_probe_encoding, frame_probe_trace] >>
+  simp[
        initial_state_rel_def, initial_codegen_state_rel_def,
        stack_params_rel_def, mk_raw_function_def, get_params_def,
        is_param_opcode_def, mk_inst_def, init_venom_state_def,

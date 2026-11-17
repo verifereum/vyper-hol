@@ -61,7 +61,7 @@ Proof
        bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
        vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
        vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
-  metis_tac[]
+  FIRST [metis_tac[]]
 QED
 Theorem saved_value_region_bytes:
   vv_at ce cx ty origin endpoint es raw (LocatedValue ann p) s /\

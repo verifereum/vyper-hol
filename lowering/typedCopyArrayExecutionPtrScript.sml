@@ -709,7 +709,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[code_containment]:
     (irule compileEnvTheory.cs_extends_trans >> qexists_tac `si` >> asm_rewrite_tac[]) >>
   `fn_has_code sb' sb fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
   `fn_has_code si sb fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  metis_tac[fragExecTheory.fn_has_code_split]
+  (mp_tac (Q.SPECL [`sa`, `sb'`, `sb`, `fn`] fragExecTheory.fn_has_code_split) >>
+   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >> first_assum ACCEPT_TAC)
 QED
 
 Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:

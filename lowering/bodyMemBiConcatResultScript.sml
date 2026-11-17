@@ -366,7 +366,7 @@ QED
 
 Resume concat_result_vv_sim_mem[suffix_conditions]:
   conj_tac
-  >- (rpt strip_tac >> fs[not_fresh_at_def] >>
+  >- (rpt strip_tac >> FIRST [fs[not_fresh_at_def]] >>
       first_x_assum irule >> decide_tac) >>
   `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (B,bsz)` by metis_tac[] >>
   conj_tac

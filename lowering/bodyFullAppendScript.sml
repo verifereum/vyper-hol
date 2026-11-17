@@ -1837,8 +1837,8 @@ Resume append_nested_after_target_full[suffix]:
       accounts_well_typed (es with gas_obs := gs).accounts /\
       functions_well_typed cx /\ env.type_defs = get_tenv cx` by
        (fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
-        gvs[vyperTypeInvariantsTheory.env_consistent_def,
-            vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+        FIRST [gvs[vyperTypeInvariantsTheory.env_consistent_def,
+            vyperTypeInvariantsTheory.env_context_consistent_def]]) >>
      drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>
      strip_tac >>
      `evaluate_type (get_tenv cx) (ArrayT (expr_type e) (Dynamic cap)) =

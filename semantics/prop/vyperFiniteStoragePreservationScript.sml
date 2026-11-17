@@ -1968,7 +1968,7 @@ Resume eval_storage_well_formed_on_mutual[Append]:
       disch_then (mp_tac o CONJUNCT1) >> simp[]) >>
   qpat_assum `read_result cx pv st2 = (INL _,_)`
     (fn th => pure_rewrite_tac[th]) >>
-  simp_tac(srw_ss())[] >> strip_tac >> gvs[AllCaseEqs()] >>
+  simp_tac(srw_ss())[] >> strip_tac >> FIRST [gvs[AllCaseEqs()]] >>
   drule read_result_state >> strip_tac >> gvs[] >>
   `?xs. st'.storage_trace = read_st.storage_trace ++ xs` by
     metis_tac[storage_trace_frame_prefix, storage_trace_frame_append_place] >>
