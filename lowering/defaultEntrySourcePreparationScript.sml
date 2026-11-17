@@ -4,7 +4,7 @@ Ancestors
   defaultDispatchFacts defaultGetterArguments entryParameterAdmissibility
     vyperTypeContractContext
   vyperLoweringCorrect entryStateRel list
-  immutableLocationProps immutableRelation
+  immutableLocationProps immutableRelation compileVyper
 
 Theorem targeted_external_package_layout:
   set_external_package_target target

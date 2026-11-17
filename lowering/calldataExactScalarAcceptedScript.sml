@@ -5,6 +5,7 @@ Ancestors
    abiDecoderFrameCompose ptrDiscipline bodyPtrDefs
   abiCallerAllocation
   abiDecoderReentry abiDecoderVarSequence abiDecoderFrame fragGasOriginPtr fragExecMem
+  fragGasSeqPtr
   abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv
   loweringStateRelDefs venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map pred_set

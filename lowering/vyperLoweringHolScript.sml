@@ -3,7 +3,7 @@ Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
   calldataArrayIterationProbe calldataArrayLiveMemory calldataArrayModularSetup
-  calldataBulkOperationalCertificate calldataCoherentOwnedEndpoint calldataExactBulkJoint
+  calldataBulkOperationalCertificate calldataCoherentOwnedEndpoint
   calldataExactBytesJoint calldataExactMemberValues calldataExactMembersJoint
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
   calldataNoneMetadata calldataRegistrationRawAddress calldataRegistrationSingletonProbe
@@ -11,7 +11,7 @@ Ancestors
   dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
   dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
-  loweringCalldataCorrect registrationGuardRejectOrigin runtimeEntryBodyFrame
+  loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eCodeFrame
   (* definitions *)
