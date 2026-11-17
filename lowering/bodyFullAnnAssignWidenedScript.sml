@@ -391,7 +391,35 @@ Resume annassign_widened_full_execution[prefix]:
 QED
 
 Resume annassign_widened_full_execution[rhs]:
-  FAIL_TAC "rhs mapping"
+  markerLib.RESUME_TAC >>
+  drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
+    annassign_widened_full_rhs_source >>
+  simp[] >>
+  disch_then (qspecl_then [`type_memory_bytes old typ`,`stv`,`p`,`op`,`w`,`tyv`,
+    `ce`,`b`,`sa.cs_next_id`,`a`] mp_tac) >>
+  (impl_tac >- (asm_x "dispatch" kall_tac >> asm_x "install" kall_tac >>
+    simp[] >> rpt strip_tac >> gvs[] >>
+    first_x_assum drule >> simp[])) >>
+  strip_tac >> suspend "source"
+QED
+
+Resume annassign_widened_full_execution[source]:
+  markerLib.RESUME_TAC >>
+  irule gas_outcome_full_zero_prefix >> qexistsl_tac [`Ga`,`entry`,`tna`] >>
+  conj_tac >- simp[] >>
+  drule eval_annassign_action >> disch_then (qspecl_then [`id`,`e`] SUBST1_TAC) >>
+  irule gas_outcome_full_bind_all >> rpt conj_tac
+  >~ [`!v. storage_trace_frame (new_variable _ _ v)`]
+  >- simp[storage_trace_frame_new_variable]
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+      qexistsl_tac [`mid`,`t`,`v`] >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
+  FAIL_TAC "bind post"
 QED
 
 Finalise annassign_widened_full_execution
