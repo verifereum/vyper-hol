@@ -324,6 +324,12 @@ Definition evaluate_binop_def:
            else if i2 < 0 then INR (RuntimeError "ShL0")
            else INL $ BytesV $ word_to_bytes_be
              ((word_of_bytes_be bs : bytes32) << Num i2)
+           | BytesV amount =>
+             if LENGTH bs = 32 /\ LENGTH amount = 32 then
+               INL $ BytesV $ word_to_bytes_be
+                 ((word_of_bytes_be bs : bytes32) <<
+                  w2n (word_of_bytes_be amount : bytes32))
+             else INR (TypeError "binop")
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
@@ -337,6 +343,12 @@ Definition evaluate_binop_def:
            else if i2 < 0 then INR (RuntimeError "ShR0")
            else INL $ BytesV $ word_to_bytes_be
              ((word_of_bytes_be bs : bytes32) >>> Num i2)
+           | BytesV amount =>
+             if LENGTH bs = 32 /\ LENGTH amount = 32 then
+               INL $ BytesV $ word_to_bytes_be
+                 ((word_of_bytes_be bs : bytes32) >>>
+                  w2n (word_of_bytes_be amount : bytes32))
+             else INR (TypeError "binop")
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | And => (case v1 of

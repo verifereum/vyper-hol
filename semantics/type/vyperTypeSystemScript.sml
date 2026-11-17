@@ -129,16 +129,18 @@ Definition well_typed_binop_def:
   well_typed_binop ty UnsafeSub t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeMul t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty UnsafeDiv t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
-  (* Vyper shifts only int256 and uint256 values; >> stays admitted on narrower
-     types, where SHR/SAR of an in-range value stays in range. *)
+  (* Fixed-byte shifts require bytes32. Ordinary expressions and augmented
+     assignments have different RHS domains, checked by their operand guards. *)
   well_typed_binop ty ShL t1 t2 =
     (t1 = ty /\
      ((is_int_type ty /\ is_int_type t2 /\
        (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256))) \/
-      (ty = BaseT (BytesT (Fixed 32)) /\ is_int_type t2))) /\
+      (ty = BaseT (BytesT (Fixed 32)) /\
+       (is_int_type t2 \/ t2 = BaseT (BytesT (Fixed 32)))))) /\
   well_typed_binop ty ShR t1 t2 =
     (t1 = ty /\ ((is_int_type ty /\ is_int_type t2) \/
-                (ty = BaseT (BytesT (Fixed 32)) /\ is_int_type t2))) /\
+                (ty = BaseT (BytesT (Fixed 32)) /\
+                 (is_int_type t2 \/ t2 = BaseT (BytesT (Fixed 32)))))) /\
   well_typed_binop ty And t1 t2 =
     (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty \/
                               ?m. ty = BaseT (BytesT (Fixed m)))) /\
@@ -252,13 +254,18 @@ Proof
   simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
 QED
 
-(* A shift amount must be nonnegative. Stricter than Vyper, which accepts
-   <<= and >>= by a signed amount: its code shifts by the amount's word where
-   the semantics raises on a negative amount. *)
+(* The pin checks a bytes32 augmented shift's RHS at the target type.
+   Integer augmented shifts retain the model's nonnegative amount domain. *)
+Definition augassign_shift_amount_ok_def:
+  augassign_shift_amount_ok ty rhs <=>
+    if ty = BaseT (BytesT (Fixed 32)) then expr_type rhs = ty
+    else shift_amount_ok rhs
+End
+
 Definition augassign_operand_ok_def:
   augassign_operand_ok ty (bop : binop) rhs =
     ((bop <> Exp \/ power_exponent_ok ty rhs) /\
-     (bop = ShL \/ bop = ShR ==> shift_amount_ok rhs))
+     (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty rhs))
 End
 
 Definition env_item_type_def:
