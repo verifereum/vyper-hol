@@ -22,13 +22,17 @@ val focus_producer_goal : term = ``
   unit.cu_context.ctx_entry = SOME nm /\
   lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
   fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
   (!gs. ?D f extra.
     dead_wf D /\
     o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with vs_gas_readings := gs) /\
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
     MAP project
       (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_prev_bb := NONE;
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
                     vs_current_bb := lbl; vs_inst_idx := 0|>)) =
       markf gs ++ extra) /\
   run_call es0 = SOME (result,final) /\
@@ -41,14 +45,14 @@ val focus_producer_goal : term = ``
       (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
       !D.
         (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
         dead_wf D /\
         o1_pre_walk_inv D unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) ==>
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) ==>
         ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         o1_lowered_inv out.po_unit.cu_context vs0
 ``;
 
@@ -62,6 +66,17 @@ Theorem focus_producer_finalizer:
   generate_context_plan out.po_unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy out.po_unit = SOME prog /\
   fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==>
+     label_flow_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
   vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
   codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
   asm_frame_rel_tail [] prog' vs0.vs_data_section es0
@@ -70,13 +85,24 @@ Theorem focus_producer_finalizer:
   unit.cu_context.ctx_entry = SOME nm /\
   lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
   fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
   (!gs. ?D f extra.
     dead_wf D /\
+    (fin = asm_opt_finalizer ==>
+       !fn inst s.
+         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
+           unit.cu_context fn inst s /\
+         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
+           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
+         inst_dload_in_section inst s) /\
     o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with vs_gas_readings := gs) /\
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
     MAP project
       (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_prev_bb := NONE;
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
                     vs_current_bb := lbl; vs_inst_idx := 0|>)) =
       markf gs ++ extra) /\
   run_call es0 = SOME (result,final) /\
@@ -89,14 +115,20 @@ Theorem focus_producer_finalizer:
       (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
       !D.
         (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
         dead_wf D /\
         o1_pre_walk_inv D unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) ==>
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+        (fin = asm_opt_finalizer ==>
+           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
         ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        (fin = asm_opt_finalizer ==>
+           code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
         o1_lowered_inv out.po_unit.cu_context vs0
 Proof
   cheat
@@ -113,13 +145,17 @@ Theorem focus_producer:
   unit.cu_context.ctx_entry = SOME nm /\
   lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
   fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
   (!gs. ?D f extra.
     dead_wf D /\
     o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with vs_gas_readings := gs) /\
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
     MAP project
       (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_prev_bb := NONE;
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
                     vs_current_bb := lbl; vs_inst_idx := 0|>)) =
       markf gs ++ extra) /\
   run_call es0 = SOME (result,final) /\
@@ -132,14 +168,14 @@ Theorem focus_producer:
       (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
       !D.
         (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
         dead_wf D /\
         o1_pre_walk_inv D unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) ==>
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) ==>
         ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         o1_lowered_inv out.po_unit.cu_context vs0
 Proof
   cheat
@@ -400,7 +436,7 @@ val focus_s7_guard : term = ``
    this check rather than silently becoming a universally bound predicate. *)
 val producer_parameters =
   ["rpolicy", "unit", "out", "vs0", "cpl", "prog", "es0", "nm",
-   "entryfn", "lbl", "lo", "markf", "project", "result", "final"];
+   "entryfn", "lbl", "lo", "markf", "project", "result", "final", "fmp"];
 
 val _ =
   if type_of focus_producer_goal = type_of ``T`` andalso
