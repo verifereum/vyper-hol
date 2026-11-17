@@ -13,7 +13,7 @@ Ancestors
   dftPacketCallLocalPreservation
   dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure
   dftPacketCalleeInitialization
-  dftPacketCallReplayPreservation dftPacketCallPathGeometry dftPacketCalleeAlignment
+  dftPacketCallReplayPreservation dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry
   dftPacketClosedRowNative
   dftPacketClosedRows
