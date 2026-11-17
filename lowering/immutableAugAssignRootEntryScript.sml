@@ -24,7 +24,7 @@ Theorem immutable_augassign_root_metadata:
     evaluate_type (get_tenv cx) ty = SOME tv /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+    (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e)
 Proof
   strip_tac >>
   drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>

@@ -385,12 +385,14 @@ Theorem augassign_storage_binop_ready:
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
-  value_has_type tvt v0 /\ word_value v0 /\ expr_sim_inv cenv cx env ee /\
+  value_has_type tvt v0 /\ expr_sim_inv cenv cx env ee /\
   (!w. bop_result cx ty bop [ty; expr_type e] v0 v est = INL w ==>
        value_has_type tvt w) /\
-  binop_frag ctx func cenv cx bop ty ty NONE
+  ?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
+  binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty; expr_type e] v0 v est
+    [ty; expr_type e] v0 v
+    (typed_val_to_w256 tvt v0) (typed_val_to_w256 tv2 v) est
 Proof
   strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by

@@ -56,10 +56,12 @@ Theorem aug_place_rhs_typed_memory_source:
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
   value_has_type dtv cur /\
   bind (eval_expr cx e) (read_result cx) (st with gas_obs := gs) = (INL rhs,ee) ==>
-  word_value rhs /\ expr_sim_inv cenv cx env ee /\
-  binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+  expr_sim_inv cenv cx env ee /\
+  ?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  binop_frag_mem_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty;expr_type e] cur rhs ee /\
+    [ty;expr_type e] cur rhs
+    (typed_val_to_w256 dtv cur) (typed_val_to_w256 tvrhs rhs) ee /\
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
     value_has_type dtv v)
 Proof
@@ -135,10 +137,12 @@ Theorem aug_place_storage_rhs_callback:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
     (stmt_res_ok lctx) st ==>
-  word_value rhs /\ expr_sim_inv cenv cx env ee /\
-  binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+  expr_sim_inv cenv cx env ee /\
+  ?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  binop_frag_mem_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty;expr_type e] cur rhs ee /\
+    [ty;expr_type e] cur rhs
+    (typed_val_to_w256 tv cur) (typed_val_to_w256 tvrhs rhs) ee /\
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs ee) /\
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
     value_has_type tv v /\

@@ -52,7 +52,7 @@ Theorem aug_place_rhs_ready:
   expr_sim ctx func cenv cx ty e st /\ expr_res_ok r1 /\
   expr_sim_inv cenv cx env st1 /\
   (!rhs. r1 = INL rhs ==>
-    word_value rhs /\ is_word_type (expr_type e) /\
+    is_word_type (expr_type e) /\
     ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
          value_has_type tv rhs)
 Proof
@@ -767,9 +767,11 @@ Theorem aug_place_rhs_suffix_ready:
   value_has_type dtv cur /\
   bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) ==>
   expr_sim_inv cenv cx env ee /\
-  binop_frag ctx func cenv cx bop ty ty NONE
+  ?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty;expr_type e] cur rhs ee /\
+    [ty;expr_type e] cur rhs
+    (typed_val_to_w256 dtv cur) (typed_val_to_w256 tvrhs rhs) ee /\
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
        value_has_type dtv v)
 Proof

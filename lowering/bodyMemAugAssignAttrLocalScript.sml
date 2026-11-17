@@ -579,7 +579,7 @@ Theorem augassign_attr_typing_mem_src[local]:
   well_typed_expr env e /\ well_typed_binop ty bop ty (expr_type e) /\
   bop <> In /\ bop <> NotIn /\
   (bop = Exp ==> nonneg_int_literal e) /\
-  (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+  (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e)
 Proof
   simp[type_stmt_def, AllCaseEqs()] >>
   metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]
@@ -907,7 +907,8 @@ QED
 Theorem well_typed_binop_augassign_word_mem_src[local]:
   !ty bop t2.
     well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
-    word_value_type ty /\ word_value_type t2
+    (word_value_type ty /\ word_value_type t2) \/
+    ((?m. ty = BaseT (BytesT (Fixed m))) /\ MEM bop [And;Or;XOr;ShL;ShR])
 Proof
   rpt gen_tac >> Cases_on `bop` >>
   SIMP_TAC std_ss [well_typed_binop_def, word_value_type_def,

@@ -10,9 +10,11 @@ Theorem aug_place_rhs_suffix_ready_mem:
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
   value_has_type dtv cur /\
   bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) ==>
-  binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+  ?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  binop_frag_mem_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty;expr_type e] cur rhs ee
+    [ty;expr_type e] cur rhs
+    (typed_val_to_w256 dtv cur) (typed_val_to_w256 tvrhs rhs) ee
 Proof
   strip_tac >> drule aug_place_typing >> strip_tac >>
   drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>

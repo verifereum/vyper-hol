@@ -764,9 +764,11 @@ Theorem augassign_attr_binop_ready:
   expr_sim_inv cenv cx env ee /\
   (!w. bop_result cx ty bop [ty; expr_type e] fv v est = INL w ==>
        value_has_type ftv w) /\
-  binop_frag ctx func cenv cx bop ty ty NONE
+  ?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
+  binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
-    [ty; expr_type e] fv v est
+    [ty; expr_type e] fv v
+    (typed_val_to_w256 ftv fv) (typed_val_to_w256 tv2 v) est
 Proof
   strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
@@ -840,16 +842,15 @@ Theorem augassign_attr_operator_counted:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] fv v (ee with gas_obs := [])) /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ safe_operand sa dst /\ safe_operand sa cur /\
-  eval_operand dst sm = SOME addr /\ eval_operand cur sm = SOME (val_to_w256 fv) /\
+  eval_operand dst sm = SOME addr /\ eval_operand cur sm = SOME (typed_val_to_w256 ftv fv) /\
   t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?r. gas_marked_path F ctx func t 0 r /\
     ((?u result. r = OK u /\
        bop_result cx ty bop [ty;expr_type e] fv v (ee with gas_obs := []) = INL result /\
-       word_value result /\
        (!H. valid_horizon cx st0 H ee.storage_trace ==>
             stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) u /\
             storage_well_formed_on cx (ee with gas_obs := []) (FST H)) /\
-       eval_operand out u = SOME (val_to_w256 result) /\ eval_operand dst u = SOME addr /\
+       expr_val_rel cx ty result out u /\ eval_operand dst u = SOME addr /\
        (!x w. not_fresh_at sb x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
        (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
        u.vs_memory = t.vs_memory /\ ~u.vs_halted /\
@@ -1156,7 +1157,7 @@ Theorem augassign_attr_normal_summary[local]:
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
   eval_operand dst t = SOME (w0 + n2w (struct_field_offset
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) /\
-  eval_operand cur t = SOME (val_to_w256 fv) /\
+  eval_operand cur t = SOME (typed_val_to_w256 ftv fv) /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK t') /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>

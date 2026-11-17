@@ -208,7 +208,7 @@ Theorem augassign_toplevel_metadata:
     cenv.ce_hashmap_info (src,id) = NONE /\
     cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
 Proof
   rpt strip_tac >>

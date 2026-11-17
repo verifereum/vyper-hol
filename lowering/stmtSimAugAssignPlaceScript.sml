@@ -70,8 +70,10 @@ Theorem aug_place_typing:
     assignable_type env.type_defs (expr_type e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-    word_value_type ty /\ word_value_type (expr_type e) /\ env' = env
+    (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e) /\
+    ( (word_value_type ty /\ word_value_type (expr_type e)) \/
+      ((?m. ty = BaseT (BytesT (Fixed m))) /\
+       MEM bop [And;Or;XOr;ShL;ShR]) ) /\ env' = env
 Proof
   rpt gen_tac >> simp[type_stmt_def, well_typed_target_def] >>
   strip_tac >> gvs[] >>
@@ -193,8 +195,9 @@ Theorem aug_place_binop_ready:
   value_has_type tvrhs rhs /\
   (bop = Exp ==> el = expr_int_literal e) /\
   (do tv <- eval_expr cx e; read_result cx tv od) st0 = (INL rhs,st1) ==>
-  binop_frag ctx func cenv cx bop ty ty NONE el
-    [ty;expr_type e] cur rhs st1
+  binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE el
+    [ty;expr_type e] cur rhs
+    (typed_val_to_w256 tvcur cur) (typed_val_to_w256 tvrhs rhs) st1
 Proof
   strip_tac >> drule aug_place_typing >> strip_tac >>
   drule eval_expr_read_INL >> strip_tac >>
