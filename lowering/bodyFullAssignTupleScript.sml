@@ -296,6 +296,96 @@ Proof
   simp[typed_copy_origin_ptr_binop_ghost_frame,GSYM update_var_def]
 QED
 
+(* Storage-field slots are word sums of literals, never memory pointers. *)
+Theorem body_assign_tuple_field_add_path:
+  emit_op ADD [Lit slot; Lit (n2w off)] sa = (dst,sb) /\
+  local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out t Gf tf.
+    dst = Var out /\ not_fresh_at sb out /\
+    t = (update_var out (slot+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    Gf = step_prov PG G (mk_inst sa.cs_next_id ADD [Lit slot;Lit (n2w off)] [out])
+      (update_var out (slot+n2w off) s) /\
+    tf = step_taint (mk_inst sa.cs_next_id ADD [Lit slot;Lit (n2w off)] [out]) s
+      (update_var out (slot+n2w off) s) tn /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    lookup_var out t = SOME (slot+n2w off) /\
+    op_taint tf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+      ghost_inv_at D lo d cenv cx es Gf tf t) /\
+    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==>
+      ptr_covers Gf tf x t cap)
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `dst = Var out` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (gvs[not_fresh_at_def,Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
+  `!D. ?t Gf tf.
+     t = (update_var out (slot+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+     Gf = step_prov PG G (mk_inst sa.cs_next_id ADD [Lit slot;Lit (n2w off)] [out])
+       (update_var out (slot+n2w off) s) /\
+     tf = step_taint (mk_inst sa.cs_next_id ADD [Lit slot;Lit (n2w off)] [out]) s
+       (update_var out (slot+n2w off) s) tn /\
+     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf) /\
+     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (gen_tac >>
+     `eval_operand (Lit slot) s = SOME slot /\
+      eval_operand (Lit (n2w off)) s = SOME (n2w off) /\
+      op_taint tn (Lit slot) = {} /\ op_taint tn (Lit (n2w off)) = {}` by
+       simp[eval_operand_def,op_taint_def] >>
+     drule_all (typed_copy_origin_ptr_binop_path |> Q.INST
+       [`opc` |-> `ADD`, `w` |-> `x+y`] |> SRULE []) >>
+     disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`D`] mp_tac) >>
+     gvs[] >> metis_tac[]) >>
+  gnvs[] >>
+  conj_tac >- metis_tac[typed_copy_emit_op_fresh] >>
+  conj_tac >- simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame] >>
+  conj_tac >-
+    simp[op_prov_def,step_prov_def,out_prov_def,first_prov_def,set_prov_def,
+         venomInstTheory.mk_inst_def,FLOOKUP_DRESTRICT] >>
+  conj_tac >- simp[state_frame_def,update_var_def] >>
+  simp[update_var_def] >>
+  conj_asm1_tac >-
+    (rpt strip_tac >> `x <> out` by metis_tac[] >>
+     simp[lookup_var_def,FLOOKUP_UPDATE,GSYM update_var_def,
+          typed_copy_origin_ptr_binop_ghost_frame]) >>
+  conj_tac >- (rpt strip_tac >>
+    irule stmt_state_rel_old_vars_frame_ptr >>
+    goal_assum (drule_at Any) >> qexists `sa` >>
+    simp[state_frame_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    irule ghost_inv_at_exterior_frame >>
+    goal_assum (drule_at Any) >> qexists `sa` >>
+    simp[GSYM update_var_def,typed_copy_origin_ptr_binop_ghost_frame] >>
+    metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _`
+    (qspec_then `x` mp_tac) >> simp[lookup_var_def] >> strip_tac >>
+  irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+  qexistsl_tac [`G`,`s`,`tn`] >> simp[lookup_var_def]
+QED
+
 (* Clean tuple words use the same deterministic MLOAD endpoint for all D. *)
 Theorem body_assign_tuple_mload_path:
   emit_op MLOAD [Var root] sa = (op,sb) /\
