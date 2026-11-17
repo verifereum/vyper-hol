@@ -3,7 +3,7 @@ Theory symS7OwnHol
 Ancestors
   asmOwnCodeInvariant asmSymExceptionalOwn asmSymForwardOwn
   asmSymModeInterfaceOwn asmSymModeOwn asmSymOwnStep asmSymRelocLabelsOwn
-  codegenEntrySymbolicOwn codegenSymbolicTerminalOwn
+  codegenEntrySymbolicOwn codegenSymbolicTerminalOwn fnFramePairedPrefixOwn
   symBodyAlgebra symBumpOwn symBumpRunOwn symControlPrefixOwn symFrameControlOwn symFrameControlDischargeOwn
   symControlReplayOwn symEmitCodeEndOwn symEmitCodecopyOwn symEmitDischargeOwn symEmitFrameOwn
   symEmitNamedOwn symEmitOwn symEmitSourceOwn symEmitStoreOwn
