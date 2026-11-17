@@ -3,8 +3,7 @@
  * call_storage_ok, tx_block_fields_rel,
  * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
- * call_external_transaction_pending_deletions,
- * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
+ * valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
  * effects_agree, exception_outcome_rel, call_result_rel, logs_correspond.
@@ -325,7 +324,6 @@ Definition call_state_rel_def:
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
-      am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx.created_in_tx =
@@ -472,33 +470,6 @@ Definition next_source_machine_def:
                 logs := [];
                 pending_deletions := [] |>
 End
-
-(* call_state_rel's am.pending_deletions = [] holds of every machine that
-   deployments and transactions reach from one with none: a successful
-   deployment or call commits its deletions (finalize_pending_deletions),
-   and a failed call returns the machine it was given. *)
-Theorem call_external_transaction_pending_deletions:
-  !orc gobs am tx r am' rqs.
-    call_external_transaction orc gobs am tx = (r, am', rqs) /\
-    am.pending_deletions = [] ==>
-    am'.pending_deletions = []
-Proof
-  rw[call_external_transaction_def] >> Cases_on `r`
-  >- (fs[call_external_def, call_external_trace_def, AllCaseEqs()] >> gvs[]) >>
-  rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
-  reverse (Cases_on `exn = HaltException`)
-  >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
-  gvs[call_external_def, call_external_trace_def, AllCaseEqs()]
-QED
-
-Theorem load_contract_pending_deletions:
-  !orc gobs am tx mods exps am' rqs.
-    load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
-    am'.pending_deletions = []
-Proof
-  rw[load_contract_def, load_contract_trace_def] >>
-  BasicProvers.every_case_tac >> gvs[]
-QED
 
 (* Exact PLAN lookup: the source lookup_function API, no invented additional
    MEM/selector-uniqueness premise. Supported-program restrictions are separate. *)
