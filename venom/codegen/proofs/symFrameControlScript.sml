@@ -26,9 +26,10 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
-  symEmitSim symInstPieces symControlPrefixOwn
+  symEmitSim symInstPieces symControlPrefixOwn symFrameControlFacts symControlScratchOwn symControlReorderOwn symControlReplayOwn symControlJumpOwn symControlRetOwn symControlGasOwn symControlTerminalOwn symControlHaltOwn symControlAbortRegularOwn symControlAbortStaticOwn symControlAbortConditionalOwn symControlTerminalPrepareOwn symControlTerminalSafetyOwn symControlForwardPrepareOwn symControlForwardCopyOwn symControlForwardCopyExecutionOwn symControlForwardRunOwn symControlForwardContinuationOwn symControlForwardSourceFacts
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
+
 Theorem list_rel_op_kind_transport:
   !xs vals ys fn ret.
     LIST_REL (op_kind_ok fn ret) xs vals /\
@@ -36,8 +37,7 @@ Theorem list_rel_op_kind_transport:
                           op_kind_ok fn ret y sv) xs ys ==>
     LIST_REL (op_kind_ok fn ret) ys vals
 Proof
-  Induct >> Cases_on `vals` >> Cases_on `ys` >> simp[] >>
-  metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.list_rel_op_kind_transport
 QED
 
 Theorem stack_poke_op_kind_equiv:
@@ -47,9 +47,7 @@ Theorem stack_poke_op_kind_equiv:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=>
                        op_kind_ok fn ret y sv) xs (stack_poke d op xs)
 Proof
-  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def,
-     listTheory.EL_LUPDATE] >>
-  gvs[stackModelTheory.stack_peek_def] >> metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.stack_poke_op_kind_equiv
 QED
 
 Theorem stack_exchange_op_kind_equiv:
@@ -61,10 +59,7 @@ Theorem stack_exchange_op_kind_equiv:
                        op_kind_ok fn ret y sv)
     xs (stack_poke f op (stack_poke d (stack_peek f xs) xs))
 Proof
-  strip_tac >> drule_all symPlannerBaseTheory.op_kind_ok_operand_equiv >> strip_tac >>
-  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def,
-     listTheory.EL_LUPDATE] >>
-  gvs[stackModelTheory.stack_peek_def] >> metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.stack_exchange_op_kind_equiv
 QED
 
 Theorem sym_kinds_ok_stack_transport:
@@ -74,10 +69,7 @@ Theorem sym_kinds_ok_stack_transport:
                        op_kind_ok fn ret y sv) ps.ps_stack xs ==>
   sym_kinds_ok cp fn ret srest (ps with ps_stack := xs) ss
 Proof
-  rw[sym_kinds_ok_def] >>
-  qexists_tac `top` >> simp[] >>
-  irule list_rel_op_kind_transport >> goal_assum (drule_at Any) >>
-  simp[]
+  ACCEPT_TAC symFrameControlFactsTheory.sym_kinds_ok_stack_transport
 QED
 
 Theorem sym_kinds_ok_reorder_relabel:
@@ -91,12 +83,11 @@ Theorem sym_kinds_ok_reorder_relabel:
     (ps with ps_stack := stack_poke f op
       (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack)) ss
 Proof
-  rpt gen_tac >> strip_tac >> irule sym_kinds_ok_stack_transport >>
-  goal_assum (drule_at Any) >> irule stack_exchange_op_kind_equiv >>
-  goal_assum (drule_at Any) >> gvs[]
+  ACCEPT_TAC symFrameControlFactsTheory.sym_kinds_ok_reorder_relabel
 QED
 
 (* Restore interpretation agrees on the fields observed by symbolic kinds. *)
+
 Theorem restore_spilled_plan_ss_align:
   !targets ps ops ps'.
     restore_spilled_plan targets ps = (ops, ps') /\
@@ -104,18 +95,7 @@ Theorem restore_spilled_plan_ss_align:
     !lo. (apply_prefix_ops initial_fmp lo ops ps).ps_stack = ps'.ps_stack /\
          (apply_prefix_ops initial_fmp lo ops ps).ps_spilled = ps'.ps_spilled
 Proof
-  Induct >> simp[stackPlanOpsTheory.restore_spilled_plan_def,
-                 planAlignTheory.apply_prefix_ops_nil] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >> strip_tac >>
-  drule_all spillPlanSimTheory.do_restore_layout_wf >> strip_tac >>
-  drule_all planAlignTheory.do_restore_ss_align >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[] >> gen_tac >>
-  simp[planAlignTheory.apply_prefix_ops_append] >>
-  qspecl_then [`ops2`, `lo`] mp_tac
-    mixedPrefixSimTheory.apply_prefix_ops_ext_stack_spilled >>
-  metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.restore_spilled_plan_ss_align
 QED
 
 (* Projection and exact-stack extraction use sym_kinds_ok_def directly:
@@ -134,6 +114,7 @@ Proof
 QED
 
 (* The symbolic prefix and the concrete endpoint share an explicit count. *)
+
 Theorem sym_selected_prefix_frame_sim_marked:
   !opc operands nl ps iops prepared dfg selected rops arranged spillbase
     fn r cp p env ret srest labs0 ctx cs ss initial_fmp.
@@ -165,24 +146,20 @@ Theorem sym_selected_prefix_frame_sim_marked:
     sym_frame_inv p env ctx cp fn ret srest labs0 arranged cs' ss' /\
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops))
 Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `MEM r cplan.cp_regions` >>
-  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
-    fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc
-     (execute_plan initial_fmp (iops ++ rops))` by simp[] >>
-  drule_all sym_selected_prefix_sim_marked >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac
-  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
-      metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`]
+      (SPEC_ALL sym_selected_prefix_frame_sim_marked_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 (* Region-local shuffles expose the same frame boundary as input preparation. *)
+
 Theorem sym_prefix_ops_frame_sim:
   !ops initial_fmp p env cp fn ret srest ps ss ctx labs0 cs r.
   prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) ops /\
@@ -205,22 +182,15 @@ Theorem sym_prefix_ops_frame_sim:
       cs' ss' /\
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
-  rename1 `MEM r cplan.cp_regions` >>
-  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
-  drule_all (BETA_RULE (Q.INST
-    [`R` |-> `\b. r.sr_spill_base <= b /\ b < r.sr_spill_end`]
-    (SPEC_ALL sym_prefix_ops_sim))) >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac
-  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
-      metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+      (SPEC_ALL sym_prefix_ops_frame_sim_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 Theorem sym_spill_free_prefix_frame_sim:
@@ -243,21 +213,15 @@ Theorem sym_spill_free_prefix_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops) /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
-  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
-  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
-  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
-    F /\ context_spill_byte cplan b` by simp[] >>
-  drule_all (BETA_RULE (Q.INST [`R` |-> `\b:num. F`]
-    (SPEC_ALL sym_prefix_ops_sim))) >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
-  conj_tac >- (fs[sym_frame_inv_def] >> metis_tac[]) >>
-  drule_all asm_sym_rel_pc >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+      (SPEC_ALL sym_spill_free_prefix_frame_sim_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 Theorem do_restore_symbolic_prefix_facts:
@@ -501,8 +465,7 @@ Theorem mem_label_at_from_bytes:
   (!i. i < 32 ==> FLOOKUP labs (off+i) = SOME (l,d,i)) ==>
   mem_label_at labs off = SOME (l,d)
 Proof
-  strip_tac >> first_assum (qspec_then `0` assume_tac) >>
-  gvs[mem_label_at_def, listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+  ACCEPT_TAC symControlScratchOwnTheory.mem_label_at_from_bytes
 QED
 
 Theorem sym_mstore_word_cell:
@@ -512,16 +475,7 @@ Theorem sym_mstore_word_cell:
     (!b. ~in_mem_range (w2n off) 32 b ==>
       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
-       sval_val_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
-       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
-       asmSemTheory.asm_step_memory_def,
-       asm_op_arity_table_def, log_table_def,
-       asm_mstore_def, mem_sval_at_def, mem_labels_clear_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, asm_next_def,
-       finite_mapTheory.FDOM_DRESTRICT]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mstore_word_cell
 QED
 
 Theorem sym_mstore_label_cell:
@@ -531,12 +485,7 @@ Theorem sym_mstore_label_cell:
     (!b. ~in_mem_range (w2n off) 32 b ==>
       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  qspecl_then [`ss.sym_mem_labels`, `w2n off`, `l`, `d`] assume_tac
-    (Q.GENL [`labs`, `off`, `l`, `d`] (SPEC_ALL mem_sval_at_store_label)) >>
-  qspecl_then [`w2n off`, `ss.sym_mem_labels`, `l`, `d`] mp_tac
-    (Q.GENL [`off`, `labs`, `l`, `d`, `i`] (SPEC_ALL store_label_lookup_outside)) >>
-  strip_tac >> gvs[sym_mstore_def, sym_lift_def, asm_mstore_def, asm_next_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mstore_label_cell
 QED
 
 Theorem sym_mload_label_cell:
@@ -545,7 +494,7 @@ Theorem sym_mload_label_cell:
   ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Lab l d :: tail /\
         ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  simp[mem_sval_at_def] >> strip_tac >> simp[sym_mload_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mload_label_cell
 QED
 
 Theorem scratch_store_preserves_disjoint_cell:
@@ -554,7 +503,7 @@ Theorem scratch_store_preserves_disjoint_cell:
   (!b. ~in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
   mem_sval_at labs' cell sv
 Proof
-  metis_tac[mem_sval_at_cong]
+  ACCEPT_TAC symControlScratchOwnTheory.scratch_store_preserves_disjoint_cell
 QED
 
 Theorem sym_mload_word_cell:
@@ -565,21 +514,7 @@ Theorem sym_mload_word_cell:
   ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val w :: tail /\
         ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >>
-  `FLOOKUP ss.sym_mem_labels (w2n off) = NONE` by
-    (gvs[mem_sval_at_def] >> simp[finite_mapTheory.FLOOKUP_DEF] >>
-     first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
-       asm_op_arity_def, asm_op_arity_table_def, sval_val_def,
-       asm_op_mem_reads_def, mem_labels_hit_def,
-       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
-       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
-       asmSemTheory.asm_step_memory_def, sym_lift_def] >>
-  `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i` by
-    metis_tac[mem_sval_at_def] >>
-  simp[asm_op_mem_writes_def, mem_labels_clear_def,
-       GSYM pred_setTheory.IN_UNIV, finite_mapTheory.DRESTRICT_UNIV] >>
-  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mload_word_cell
 QED
 
 Theorem sym_scratch_store_step:
@@ -592,18 +527,7 @@ Theorem sym_scratch_store_step:
     (!b. b IN FDOM ss'.sym_mem_labels ==>
       b IN FDOM ss.sym_mem_labels \/ in_mem_range (w2n off) 32 b)
 Proof
-  strip_tac >>
-  `?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
-    mem_sval_at ss'.sym_mem_labels (w2n off) sv /\
-    (!b. ~in_mem_range (w2n off) 32 b ==>
-      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
-    (Cases_on `sv` >- metis_tac[sym_mstore_word_cell] >>
-     metis_tac[sym_mstore_label_cell]) >>
-  qexists_tac `ss'` >> simp[] >> conj_tac
-  >- (irule sym_step_pc_next >>
-      qexistsl_tac [`env`, `AsmOp "MSTORE"`, `p`] >>
-      simp[sym_step_def, sym_step_op_def]) >>
-  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_store_step
 QED
 
 Theorem sym_scratch_spill_steps:
@@ -618,18 +542,7 @@ Theorem sym_scratch_spill_steps:
     (!b. b IN FDOM ss'.sym_mem_labels ==>
       b IN FDOM ss.sym_mem_labels \/ in_mem_range off 32 b)
 Proof
-  strip_tac >>
-  qabbrev_tac `pushed = ss with
-    <|sym_base := asm_next (ss.sym_base with as_stack := []);
-      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
-  `pushed.sym_stack = Val (n2w off) :: sv :: tail` by simp[Abbr `pushed`] >>
-  drule sym_scratch_store_step >> strip_tac >> qexists_tac `ss'` >>
-  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def,
-      wordsTheory.w2n_n2w] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_scratch_push, asm_next_def] >>
-  gvs[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_spill_steps
 QED
 
 Theorem sym_scratch_load_word_step:
@@ -638,11 +551,7 @@ Theorem sym_scratch_load_word_step:
   ?ss' v. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val v :: tail /\
           ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >>
-  `?loaded v. asm_mload (ss.sym_base with as_stack := [off]) = AsmOK loaded /\
-              loaded.as_stack = [v]` by simp[asm_mload_def, asm_next_def] >>
-  `mem_sval_at ss.sym_mem_labels (w2n off) (Val v)` by gvs[mem_sval_at_def] >>
-  drule_all sym_mload_word_cell >> metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_load_word_step
 QED
 
 Theorem sym_scratch_load_step:
@@ -652,16 +561,7 @@ Theorem sym_scratch_load_step:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
-  strip_tac >>
-  `?ss' sv'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = sv' :: tail /\
-    (case sv of Val w => ?v. sv' = Val v | Lab l d => sv' = sv) /\
-    ss'.sym_mem_labels = ss.sym_mem_labels` by
-    (Cases_on `sv`
-     >- (simp[] >> metis_tac[sym_scratch_load_word_step]) >>
-     simp[] >> metis_tac[sym_mload_label_cell]) >>
-  qexistsl_tac [`ss'`, `sv'`] >> simp[] >>
-  irule sym_step_pc_next >> qexistsl_tac [`env`, `AsmOp "MLOAD"`, `p`] >>
-  simp[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_load_step
 QED
 
 Theorem sym_scratch_restore_steps:
@@ -674,20 +574,7 @@ Theorem sym_scratch_restore_steps:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  strip_tac >>
-  qabbrev_tac `pushed = ss with
-    <|sym_base := asm_next (ss.sym_base with as_stack := []);
-      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
-  `pushed.sym_stack = Val (n2w off) :: ss.sym_stack /\
-   mem_sval_at pushed.sym_mem_labels (w2n (n2w off : bytes32)) sv` by
-    simp[Abbr `pushed`, wordsTheory.w2n_n2w] >>
-  drule_all sym_scratch_load_step >> strip_tac >>
-  qexistsl_tac [`ss'`, `sv'`] >>
-  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_scratch_push, asm_next_def] >>
-  gvs[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_restore_steps
 QED
 Theorem sym_scratch_spill_sim:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
@@ -760,22 +647,7 @@ Theorem sym_scratch_repeated_value_probe:
     mem_sval_at ss'.sym_mem_labels 0 sv /\ mem_sval_at ss'.sym_mem_labels 32 sv /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 4
 Proof
-  strip_tac >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill 0]) /\
-   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp [SOSpill 32])` by
-    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
-  `0 < dimword(:256) /\ 32 < dimword(:256)` by
-    simp[wordsTheory.dimword_def] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOSpill 32])` by simp[] >>
-  `ss'.sym_stack = sv :: tail` by simp[] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  `mem_sval_at ss''.sym_mem_labels 0 sv` by
-    (irule scratch_store_preserves_disjoint_cell >>
-     qexistsl_tac [`ss'.sym_mem_labels`, `32`] >> simp[in_mem_range_def]) >>
-  qexists_tac `ss''` >>
-  gvs[execute_plan_def, exec_stack_op_def] >>
-  mp_tac (Q.SPECL [`2`, `2`, `ss`] sym_steps_add) >> simp[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_repeated_value_probe
 QED
 
 Theorem scratch_disjoint_bulk_cell:
@@ -785,12 +657,7 @@ Theorem scratch_disjoint_bulk_cell:
   mem_sval_at labs h sv ==>
   mem_sval_at labs' h sv
 Proof
-  strip_tac >>
-  `!b. in_mem_range h 32 b ==> FLOOKUP labs' b = FLOOKUP labs b`
-    suffices_by metis_tac[mem_sval_at_cong] >> rpt strip_tac >>
-  first_x_assum irule >>
-  fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
-  first_x_assum drule >> decide_tac
+  ACCEPT_TAC symControlScratchOwnTheory.scratch_disjoint_bulk_cell
 QED
 
 Theorem sym_scratch_spill_bulk_steps:
@@ -811,30 +678,7 @@ Theorem sym_scratch_spill_bulk_steps:
         b IN FDOM ss.sym_mem_labels \/
         EXISTS (\off. in_mem_range off 32 b) offsets)
 Proof
-  Induct >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
-  rpt strip_tac >>
-  `(!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
-      EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
-   EVERY (\off. h + 32 <= off \/ off + 32 <= h) offsets` by
-    (conj_tac
-     >- (rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
-     simp[listTheory.EVERY_EL] >> rpt strip_tac >>
-     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
-  Cases_on `ss.sym_stack` >> gvs[] >>
-  rename1 `ss.sym_stack = sv :: tail` >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill h]) /\
-   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp (MAP SOSpill offsets))` by
-    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  first_x_assum (qspec_then `ss'` mp_tac) >> simp[] >>
-  strip_tac >> qexists_tac `ss''` >> simp[] >>
-  conj_tac
-  >- (gvs[execute_plan_def, exec_stack_op_def] >>
-      mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >>
-      simp[arithmeticTheory.MULT_SUC]) >>
-  conj_tac
-  >- (Cases >> simp[] >> metis_tac[scratch_disjoint_bulk_cell]) >>
-  metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_spill_bulk_steps
 QED
 
 Theorem sym_scratch_restore_bulk_sim:
@@ -991,14 +835,7 @@ Theorem list_rel_reversed_index_schedule:
   LIST_REL R (REVERSE (MAP (\i. EL i items) ids))
     (MAP (\i. EL i vals) ids)
 Proof
-  strip_tac >>
-  `REVERSE (MAP (\i. EL i items) ids) =
-     MAP (\i. EL i (REVERSE items)) ids` by
-    (qpat_x_assum `ids = _` SUBST1_TAC >>
-     irule doSwapSimTheory.reverse_desired_values >> simp[]) >>
-  qpat_x_assum `REVERSE (MAP _ _) = _`
-    (fn th => pure_rewrite_tac[th]) >>
-  irule LIST_REL_select_indices >> gvs[]
+  ACCEPT_TAC symControlScratchOwnTheory.list_rel_reversed_index_schedule
 QED
 
 Theorem do_swap_deep_symbolic_resources:
@@ -1022,28 +859,7 @@ Theorem do_swap_deep_symbolic_resources:
   ps'.ps_stack = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
     MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids
 Proof
-  strip_tac >>
-  `LENGTH (top_n (d + 1) ps.ps_stack) = d + 1` by
-    simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
-  `ops = MAP SOSpill offsets ++
-     MAP SORestore (MAP (\i. EL i offsets) (REVERSE ids)) /\
-   ps' = ps with <|
-     ps_stack := TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
-       MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids;
-     ps_alloc := FOLDL (\a off. free_spill_slot off a)
-       (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets |>` by
-    (mp_tac (Q.SPECL [`d`, `ps`] doSwapSimTheory.do_swap_big_decompose) >>
-     simp[LET_THM] >> metis_tac[]) >>
-  `ps'.ps_alloc = FOLDL (\a off. free_spill_slot off a)
-    (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets` by simp[] >>
-  drule_all doSwapSimTheory.spill_alloc_n_temporary_layout >> strip_tac >>
-  `EVERY (\off. off < dimword(:256)) offsets` by
-    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[listTheory.EVERY_MAP]) >>
-  `EVERY (\i. i < LENGTH offsets) ids` by
-    simp[listTheory.EVERY_GENLIST] >>
-  simp[] >>
-  conj_tac >- gvs[listTheory.EVERY_MEM] >>
-  metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.do_swap_deep_symbolic_resources
 QED
 
 Theorem list_rel_deep_swap_schedule:
@@ -1055,14 +871,7 @@ Theorem list_rel_deep_swap_schedule:
       MAP (\i. EL i (top_n (d + 1) xs)) ids))
     (MAP (\i. EL i (TAKE (d + 1) vals)) ids ++ DROP (d + 1) vals)
 Proof
-  strip_tac >> pure_rewrite_tac[listTheory.REVERSE_APPEND] >>
-  irule rich_listTheory.EVERY2_APPEND_suff >> conj_tac
-  >- (irule list_rel_reversed_index_schedule >>
-      simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
-      gvs[rich_listTheory.EVERY2_TAKE]) >>
-  `REVERSE (TAKE (LENGTH xs - (d + 1)) xs) = DROP (d + 1) (REVERSE xs)` by
-    simp[rich_listTheory.DROP_REVERSE, rich_listTheory.BUTLASTN_TAKE_UNCOND] >>
-  simp[] >> metis_tac[rich_listTheory.EVERY2_DROP]
+  ACCEPT_TAC symControlScratchOwnTheory.list_rel_deep_swap_schedule
 QED
 
 Theorem sym_scratch_frame_transfer:
@@ -2606,19 +2415,7 @@ Theorem do_dup_read_only_shallow:
   do_dup d ps = (ops, ps') /\ d < LENGTH ps.ps_stack /\
   (!off. ~MEM (SOSpill off) ops) ==> d <= 15
 Proof
-  Cases_on `d <= 15` >- simp[] >> strip_tac >>
-  `d > 15` by decide_tac >>
-  drule_all doSwapSimTheory.do_dup_big_decompose >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP] >>
-  qmatch_asmsub_abbrev_tac `FST (spill_alloc_n [] ps.ps_alloc items)` >>
-  `FST (spill_alloc_n [] ps.ps_alloc items) = []` by
-    (Cases_on `FST (spill_alloc_n [] ps.ps_alloc items)` >> gvs[] >>
-     metis_tac[listTheory.MEM]) >>
-  pop_assum (mp_tac o AP_TERM ``LENGTH:num list -> num``) >>
-  simp[doSwapSimTheory.spill_alloc_n_offsets_length, Abbr`items`,
-       stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE_EQ] >>
-  rw[] >> decide_tac
+  ACCEPT_TAC symControlReplayOwnTheory.do_dup_read_only_shallow
 QED
 
 Theorem do_restore_read_only_replay:
@@ -2633,14 +2430,7 @@ Theorem do_restore_read_only_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
-  gvs[stackPlanOpsTheory.do_restore_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, mixedPrefixSimTheory.prefix_spill_wf_def,
-      mixedPrefixSimTheory.spill_op_wf_def] >>
-  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
-  `spill_lookup off ps.ps_spilled = op` by
-    (simp[mixedPrefixSimTheory.spill_lookup_def] >>
-     metis_tac[planAlignTheory.spill_hilbert_unique]) >> simp[] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.do_restore_read_only_replay
 QED
 
 Theorem do_dup_read_only_replay:
@@ -2651,11 +2441,7 @@ Theorem do_dup_read_only_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >> drule_all do_dup_read_only_shallow >> strip_tac >>
-  gvs[stackPlanOpsTheory.do_dup_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
-      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def,
-      stackModelTheory.stack_dup_def, stackModelTheory.stack_peek_def]
+  ACCEPT_TAC symControlReplayOwnTheory.do_dup_read_only_replay
 QED
 
 Theorem emit_var_input_unspilled_read_only_replay:
@@ -2667,14 +2453,7 @@ Theorem emit_var_input_unspilled_read_only_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
-  strip_tac >> Cases_on `MEM v nl` >>
-  gvs[mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.prefix_spill_wf_def] >>
-  Cases_on `stack_get_depth (Var v) ps.ps_stack` >>
-  gvs[mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.prefix_spill_wf_def] >>
-  rename1 `stack_get_depth _ _ = SOME dist` >>
-  Cases_on `do_dup dist ps` >> gvs[] >>
-  metis_tac[do_dup_read_only_replay, planAlignTheory.stack_get_depth_bound]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_var_input_unspilled_read_only_replay
 QED
 
 Theorem emit_var_input_spilled_read_only_replay:
@@ -2690,20 +2469,7 @@ Theorem emit_var_input_spilled_read_only_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >>
-  `spill_lookup off ps.ps_spilled = Var v` by
-    (simp[mixedPrefixSimTheory.spill_lookup_def] >>
-     metis_tac[planAlignTheory.spill_hilbert_unique]) >>
-  Cases_on `MEM v nl` >>
-  gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-      stackPlanOpsTheory.do_restore_def, stackPlanOpsTheory.do_dup_def,
-      stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def,
-      stackModelTheory.stack_push_def, stackModelTheory.stack_dup_def,
-      stackModelTheory.stack_peek_def, listTheory.REVERSE_SNOC, listTheory.EL_SNOC,
-      mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
-      strongPrefixSimTheory.apply_simple_op_def,
-      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def] >>
-  metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_var_input_spilled_read_only_replay
 QED
 
 Theorem emit_one_input_read_only_replay:
@@ -2719,20 +2485,7 @@ Theorem emit_one_input_read_only_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  Cases_on `op`
-  >- (rpt strip_tac >>
-      gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-          mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
-          strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def,
-          mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def])
-  >- (strip_tac >> rename1 `Var v` >> Cases_on `FLOOKUP ps.ps_spilled (Var v)`
-      >- (irule emit_var_input_unspilled_read_only_replay >> simp[] >> metis_tac[]) >>
-      irule emit_var_input_spilled_read_only_replay >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >>
-  gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-      mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
-      strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def,
-      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_one_input_read_only_replay
 QED
 
 Theorem emit_input_plan_read_only_replay:
@@ -2749,22 +2502,7 @@ Theorem emit_input_plan_read_only_replay:
   (apply_prefix_ops fmp lo ins qs).ps_stack = ps1.ps_stack /\
   (apply_prefix_ops fmp lo ins qs).ps_spilled = ps1.ps_spilled
 Proof
-  Induct >> simp[emit_input_plan_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-                mixedPrefixSimTheory.prefix_spill_wf_def] >> rpt gen_tac >>
-  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
-  Cases_on `emit_input_plan opc inputs nl r` >> simp[] >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
-  drule_all emit_one_input_read_only_replay >>
-  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
-  `!op1 off1 op2 off2.
-    FLOOKUP r.ps_spilled op1 = SOME off1 /\
-    FLOOKUP r.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
-    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
-    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
-     simp[] >> disch_then assume_tac >> rpt strip_tac >>
-     first_x_assum irule >> simp[] >> metis_tac[]) >>
-  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
-  first_x_assum drule >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC
+  ACCEPT_TAC symControlReplayOwnTheory.emit_input_plan_read_only_replay
 QED
 
 Theorem do_dup_spill_free_stack_replay:
@@ -2772,10 +2510,7 @@ Theorem do_dup_spill_free_stack_replay:
   (!off. ~MEM (SORestore off) ops) ==>
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
 Proof
-  strip_tac >> drule do_dup_no_restore_shallow >> simp[] >> strip_tac >>
-  gvs[stackPlanOpsTheory.do_dup_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
-      stackModelTheory.stack_dup_def, stackModelTheory.stack_peek_def]
+  ACCEPT_TAC symControlReplayOwnTheory.do_dup_spill_free_stack_replay
 QED
 
 Theorem emit_var_input_unspilled_stack_replay:
@@ -2784,14 +2519,7 @@ Theorem emit_var_input_unspilled_stack_replay:
   qs.ps_stack = ps.ps_stack /\ (!off. ~MEM (SORestore off) ops) ==>
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
 Proof
-  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
-  strip_tac >> Cases_on `MEM v nl` >>
-  gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  Cases_on `stack_get_depth (Var v) ps.ps_stack` >>
-  gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  rename1 `stack_get_depth _ _ = SOME dist` >>
-  Cases_on `do_dup dist ps` >> gvs[] >>
-  metis_tac[do_dup_spill_free_stack_replay]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_var_input_unspilled_stack_replay
 QED
 
 Theorem emit_var_input_spilled_has_restore:
@@ -2799,11 +2527,7 @@ Theorem emit_var_input_spilled_has_restore:
   emit_one_input opc nl (Var v) ps = (ops, ps') ==>
   MEM (SORestore off) ops
 Proof
-  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-       stackPlanOpsTheory.do_restore_def] >>
-  strip_tac >> Cases_on `MEM v nl` >> gvs[] >>
-  Cases_on `stack_get_depth (Var v) (stack_push (Var v) ps.ps_stack)` >> gvs[] >>
-  pairarg_tac >> gvs[]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_var_input_spilled_has_restore
 QED
 
 Theorem emit_one_input_spill_free_stack_replay:
@@ -2812,15 +2536,7 @@ Theorem emit_one_input_spill_free_stack_replay:
   (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
   (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
 Proof
-  Cases_on `op`
-  >- (rpt strip_tac >> gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-           mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
-           strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def])
-  >- (rpt strip_tac >> Cases_on `FLOOKUP ps.ps_spilled (Var s)` >>
-      metis_tac[emit_var_input_unspilled_stack_replay, emit_var_input_spilled_has_restore]) >>
-  rpt strip_tac >> gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
-       mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
-       strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_one_input_spill_free_stack_replay
 QED
 
 Theorem emit_input_plan_spill_free_stack_replay:
@@ -2830,13 +2546,7 @@ Theorem emit_input_plan_spill_free_stack_replay:
   (!off. ~MEM (SOSpill off) ins /\ ~MEM (SORestore off) ins) ==>
   (apply_prefix_ops fmp lo ins qs).ps_stack = ps1.ps_stack
 Proof
-  Induct >> simp[emit_input_plan_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  rpt gen_tac >>
-  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
-  Cases_on `emit_input_plan opc inputs nl r` >> simp[] >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
-  first_x_assum irule >> simp[] >>
-  metis_tac[emit_one_input_spill_free_stack_replay]
+  ACCEPT_TAC symControlReplayOwnTheory.emit_input_plan_spill_free_stack_replay
 QED
 
 Theorem do_restore_read_only_kind_replay:
@@ -2853,54 +2563,27 @@ Theorem do_restore_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
-  gvs[stackPlanOpsTheory.do_restore_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, mixedPrefixSimTheory.prefix_spill_wf_def,
-      mixedPrefixSimTheory.spill_op_wf_def] >>
-  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
-  `spill_lookup off ps.ps_spilled = op` by
-    (simp[mixedPrefixSimTheory.spill_lookup_def] >>
-     metis_tac[planAlignTheory.spill_hilbert_unique]) >>
-  simp[stackModelTheory.stack_push_def, listTheory.LIST_REL_SNOC] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.do_restore_read_only_kind_replay
 QED
 
 Theorem do_swap_read_only_shallow:
   do_swap d ps = (ops, ps') /\ ps.ps_stack <> [] /\
   (!off. ~MEM (SOSpill off) ops) ==> d <= 16
 Proof
-  Cases_on `d <= 16` >- simp[] >>
-  simp[stackPlanOpsTheory.do_swap_def] >> strip_tac >>
-  pairarg_tac >> gvs[listTheory.MEM_APPEND] >>
-  spose_not_then strip_assume_tac >>
-  qspecl_then [`top_n (d + 1) ps.ps_stack`, `[]`, `[]`, `ps.ps_alloc`]
-    mp_tac doSwapSimTheory.spill_foldl_ops_eq_map >> simp[] >> strip_tac >>
-  `FST (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack)) = []` by
-    (Cases_on `FST (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))` >>
-     gvs[] >> metis_tac[listTheory.MEM]) >>
-  pop_assum (mp_tac o AP_TERM ``LENGTH:num list -> num``) >>
-  simp[doSwapSimTheory.spill_alloc_n_offsets_length, stackPlanOpsTheory.top_n_def] >>
-  Cases_on `ps.ps_stack` >> gvs[]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_read_only_shallow
 QED
 
 Theorem do_swap_no_restore_shallow:
   do_swap d ps = (ops, ps') /\
   (!off. ~MEM (SORestore off) ops) ==> d <= 16
 Proof
-  Cases_on `d <= 16` >- simp[] >>
-  simp[stackPlanOpsTheory.do_swap_def] >> rpt strip_tac >>
-  pairarg_tac >> gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP] >>
-  metis_tac[listTheory.MEM, listTheory.MEM_REVERSE, listTheory.MEM_APPEND]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_no_restore_shallow
 QED
 
 Theorem list_rel_stack_swap:
   LIST_REL R xs ys ==> LIST_REL R (stack_swap d xs) (stack_swap d ys)
 Proof
-  strip_tac >> Cases_on `xs = []`
-  >- gvs[stackModelTheory.stack_swap_def, listTheory.LUPDATE_def] >>
-  fs[listTheory.LIST_REL_EL_EQN] >>
-  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_swap_def,
-     listTheory.EL_LUPDATE] >>
-  rpt IF_CASES_TAC >> simp[] >> first_x_assum irule >> decide_tac
+  ACCEPT_TAC symControlReplayOwnTheory.list_rel_stack_swap
 QED
 
 Theorem do_swap_spill_free_kind_replay:
@@ -2911,12 +2594,7 @@ Theorem do_swap_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  strip_tac >> drule do_swap_no_restore_shallow >> simp[] >> strip_tac >>
-  Cases_on `d = 0`
-  >- gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def] >>
-  irule list_rel_stack_swap >> simp[]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_spill_free_kind_replay
 QED
 
 Theorem do_swap_read_only_kind_replay:
@@ -2930,15 +2608,7 @@ Theorem do_swap_read_only_kind_replay:
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled /\
   ps'.ps_stack <> []
 Proof
-  strip_tac >> drule_all do_swap_read_only_shallow >> strip_tac >>
-  Cases_on `d = 0`
-  >- gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-         mixedPrefixSimTheory.prefix_spill_wf_def] >>
-  gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
-      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def] >>
-  conj_tac >- (irule list_rel_stack_swap >> simp[]) >>
-  simp[stackModelTheory.stack_swap_def, listTheory.LUPDATE_NIL]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_read_only_kind_replay
 QED
 
 Theorem do_swap_pair_read_only_kind_replay:
@@ -2952,12 +2622,7 @@ Theorem do_swap_pair_read_only_kind_replay:
     (apply_prefix_ops fmp lo (ops1 ++ ops2) qs).ps_stack ps2.ps_stack /\
   (apply_prefix_ops fmp lo (ops1 ++ ops2) qs).ps_spilled = ps2.ps_spilled
 Proof
-  simp[listTheory.MEM_APPEND, FORALL_AND_THM] >> strip_tac >>
-  drule_all do_swap_read_only_kind_replay >>
-  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
-  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
-  drule_all do_swap_read_only_kind_replay >>
-  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >> simp[]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_pair_read_only_kind_replay
 QED
 
 Theorem list_rel_op_kind_equiv_trans:
@@ -2965,7 +2630,7 @@ Theorem list_rel_op_kind_equiv_trans:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv) ys zs ==>
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv) xs zs
 Proof
-  rw[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.list_rel_op_kind_equiv_trans
 QED
 
 Theorem reorder_restore_no_restore_identity:
@@ -2975,9 +2640,7 @@ Theorem reorder_restore_no_restore_identity:
    | SOME d => ([],ps)) = (ops,ps1) /\
   (!off. ~MEM (SORestore off) ops) ==> ops = [] /\ ps1 = ps
 Proof
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
-  Cases_on `FLOOKUP ps.ps_spilled op` >>
-  simp[stackPlanOpsTheory.do_restore_def] >> metis_tac[listTheory.MEM]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_restore_no_restore_identity
 QED
 
 Theorem do_swap_pair_spill_free_kind_replay:
@@ -2988,8 +2651,7 @@ Theorem do_swap_pair_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo (ops1 ++ ops2) qs).ps_stack ps2.ps_stack
 Proof
-  simp[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
-  metis_tac[do_swap_spill_free_kind_replay]
+  ACCEPT_TAC symControlReplayOwnTheory.do_swap_pair_spill_free_kind_replay
 QED
 
 Theorem stack_exchange_kind_replay:
@@ -3002,8 +2664,7 @@ Theorem stack_exchange_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     qs.ps_stack (stack_poke f op (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
 Proof
-  strip_tac >> drule stackModelTheory.stack_get_unfixed_depth_props >> strip_tac >>
-  metis_tac[stack_exchange_op_kind_equiv, list_rel_op_kind_equiv_trans]
+  ACCEPT_TAC symControlReplayOwnTheory.stack_exchange_kind_replay
 QED
 
 Theorem reorder_swap_pair_case_kind_replay:
@@ -3015,9 +2676,7 @@ Theorem reorder_swap_pair_case_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  strip_tac >> gvs[AllCaseEqs()] >>
-  irule do_swap_pair_spill_free_kind_replay >>
-  simp[listTheory.MEM_APPEND] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_swap_pair_case_kind_replay
 QED
 
 Theorem reorder_swap_pair_case_read_only_kind_replay:
@@ -3032,9 +2691,7 @@ Theorem reorder_swap_pair_case_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >> gvs[AllCaseEqs()] >>
-  irule do_swap_pair_read_only_kind_replay >>
-  simp[listTheory.MEM_APPEND] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_swap_pair_case_read_only_kind_replay
 QED
 
 Theorem control_reorder_place_read_only_kind_replay:
@@ -3048,21 +2705,8 @@ Theorem control_reorder_place_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  simp[control_reorder_place_def] >>
-  Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
-  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
-                           mixedPrefixSimTheory.prefix_spill_wf_def]) >>
-  rename1 `_ = SOME d` >> Cases_on `d = f` >> simp[]
-  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
-                           mixedPrefixSimTheory.prefix_spill_wf_def]) >>
-  Cases_on `f < LENGTH ps.ps_stack /\ operand_equiv dfg op (stack_peek f ps.ps_stack)` >> simp[]
-  >- (strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
-                       mixedPrefixSimTheory.prefix_spill_wf_def] >>
-      metis_tac[stack_exchange_kind_replay]) >>
-  strip_tac >> irule reorder_swap_pair_case_read_only_kind_replay >> simp[] >>
-  qexistsl [`d`, `f`, `ps`] >> simp[] >>
-  drule stackModelTheory.stack_get_unfixed_depth_props >> strip_tac >>
-  Cases_on `ps.ps_stack` >> gvs[]
+  rewrite_tac[control_reorder_place_def] >>
+  ACCEPT_TAC symControlReplayOwnTheory.control_reorder_place_read_only_kind_replay_expr
 QED
 
 Theorem control_reorder_place_spill_free_kind_replay:
@@ -3074,15 +2718,8 @@ Theorem control_reorder_place_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  simp[control_reorder_place_def] >>
-  Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
-  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def]) >>
-  rename1 `_ = SOME d` >> Cases_on `d = f` >> simp[]
-  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def]) >>
-  Cases_on `f < LENGTH ps.ps_stack /\ operand_equiv dfg op (stack_peek f ps.ps_stack)` >> simp[]
-  >- (strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
-      metis_tac[stack_exchange_kind_replay]) >>
-  metis_tac[reorder_swap_pair_case_kind_replay]
+  rewrite_tac[control_reorder_place_def] >>
+  ACCEPT_TAC symControlReplayOwnTheory.control_reorder_place_spill_free_kind_replay_expr
 QED
 
 Theorem reorder_reduce_no_spill_identity:
@@ -3090,8 +2727,7 @@ Theorem reorder_reduce_no_spill_identity:
    else ([],ps)) = (ops,ps1) /\
   (!off. ~MEM (SOSpill off) ops) ==> ops = [] /\ ps1 = ps
 Proof
-  Cases_on `dist > 16` >> simp[] >>
-  metis_tac[fnFrameStepsRevertForwardTheory.rf_reduce_spill_free]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_reduce_no_spill_identity
 QED
 
 Theorem reorder_restore_read_only_kind_replay:
@@ -3111,13 +2747,7 @@ Theorem reorder_restore_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[]
-  >- (Cases_on `FLOOKUP ps.ps_spilled op` >> simp[]
-      >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
-                              mixedPrefixSimTheory.prefix_spill_wf_def]) >>
-      metis_tac[do_restore_read_only_kind_replay]) >>
-  rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
-                       mixedPrefixSimTheory.prefix_spill_wf_def]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_restore_read_only_kind_replay
 QED
 
 Theorem reorder_one_read_only_decompose:
@@ -3132,13 +2762,8 @@ Theorem reorder_one_read_only_decompose:
     ops = restore_ops ++ suffix /\
     control_reorder_place dfg pending op (LENGTH pending - (idx + 1)) ps1 = (suffix,ps')
 Proof
-  strip_tac >> drule control_reorder_one_decompose >> strip_tac
-  >- (qexistsl [`restore_ops`, `ps1`, `[]`] >>
-      simp[control_reorder_place_def]) >>
-  `reduce_ops = [] /\ ps2 = ps1` by
-    (irule reorder_reduce_no_spill_identity >>
-     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
-  gvs[] >> metis_tac[]
+  rewrite_tac[control_reorder_place_def] >>
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_one_read_only_decompose_expr
 QED
 
 Theorem reorder_one_read_only_kind_replay:
@@ -3157,12 +2782,7 @@ Theorem reorder_one_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  strip_tac >> drule_all reorder_one_read_only_decompose >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
-  drule_all reorder_restore_read_only_kind_replay >>
-  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
-  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
-  metis_tac[control_reorder_place_read_only_kind_replay]
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_one_read_only_kind_replay
 QED
 
 Theorem reorder_steps_read_only_kind_replay:
@@ -3182,27 +2802,7 @@ Theorem reorder_steps_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  Induct
-  >- simp[foldlSimTheory.plan_steps_def, mixedPrefixSimTheory.apply_prefix_ops_def,
-          mixedPrefixSimTheory.prefix_spill_wf_def] >>
-  Cases_on `h` >> rpt gen_tac >> simp[foldlSimTheory.plan_steps_def] >>
-  Cases_on `reorder_one dfg pending q r ps` >>
-  rename1 `reorder_one _ _ _ _ _ = (step_ops,mid)` >>
-  Cases_on `plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items mid` >>
-  simp[] >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
-  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
-    reorder_one_read_only_kind_replay)) >>
-  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
-  `!op1 off1 op2 off2.
-    FLOOKUP mid.ps_spilled op1 = SOME off1 /\
-    FLOOKUP mid.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
-    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
-    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
-     simp[] >> disch_then assume_tac >> rpt strip_tac >>
-     first_x_assum irule >> simp[] >> metis_tac[]) >>
-  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
-  first_x_assum drule >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_steps_read_only_kind_replay
 QED
 
 Theorem reorder_plan_read_only_kind_replay:
@@ -3221,8 +2821,7 @@ Theorem reorder_plan_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
-  MATCH_ACCEPT_TAC reorder_steps_read_only_kind_replay
+  ACCEPT_TAC symControlReplayOwnTheory.reorder_plan_read_only_kind_replay
 QED
 
 Theorem sym_frame_inv_kind_transport:
@@ -3232,9 +2831,7 @@ Theorem sym_frame_inv_kind_transport:
     ps.ps_stack qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
   sym_frame_inv p env ctx cp fn ret srest labs0 qs cs ss
 Proof
-  rpt gen_tac >> simp[sym_frame_inv_def, sym_kinds_ok_def] >> strip_tac >>
-  qexists `top` >> simp[] >> irule list_rel_op_kind_transport >>
-  goal_assum (drule_at Any) >> simp[]
+  ACCEPT_TAC symControlReplayOwnTheory.sym_frame_inv_kind_transport
 QED
 
 Theorem selected_prefix_read_only_kind_replay:
@@ -3253,22 +2850,7 @@ Theorem selected_prefix_read_only_kind_replay:
     (apply_prefix_ops fmp lo (iops ++ rops) ps).ps_stack ps2.ps_stack /\
   (apply_prefix_ops fmp lo (iops ++ rops) ps).ps_spilled = ps2.ps_spilled
 Proof
-  rpt gen_tac >>
-  simp[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
-  `prefix_spill_wf fmp lo iops ps /\
-   (apply_prefix_ops fmp lo iops ps).ps_stack = ps1.ps_stack /\
-   (apply_prefix_ops fmp lo iops ps).ps_spilled = ps1.ps_spilled` by
-    (irule emit_input_plan_read_only_replay >> simp[] >> metis_tac[]) >>
-  `!op1 off1 op2 off2.
-    FLOOKUP ps1.ps_spilled op1 = SOME off1 /\
-    FLOOKUP ps1.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
-    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
-    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
-     simp[] >> disch_then assume_tac >> rpt strip_tac >>
-     first_x_assum irule >> simp[] >> metis_tac[]) >>
-  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
-  irule reorder_plan_read_only_kind_replay >> simp[] >>
-  qexistsl [`inputs`, `ps1`] >> simp[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+  ACCEPT_TAC symControlReplayOwnTheory.selected_prefix_read_only_kind_replay
 QED
 
 Theorem sym_read_only_selected_prefix_frame_sim:
@@ -3295,12 +2877,16 @@ Theorem sym_read_only_selected_prefix_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan fmp (iops ++ rops)) /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all selected_prefix_read_only_kind_replay >>
-  disch_then (qspecl_then [`ret`, `fmp`, `SND (compute_label_offsets p)`] strip_assume_tac) >>
-  drule_all sym_spill_free_prefix_frame_sim >> strip_tac >>
-  qexistsl [`cs'`, `ss'`] >> simp[] >>
-  irule sym_frame_inv_kind_transport >> goal_assum (drule_at Any) >> simp[]
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel p env cs ss /\ sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      asm_sym_rel p env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`]
+      (SPEC_ALL symControlReplayOwnTheory.sym_read_only_selected_prefix_frame_sim_mode_conditional))) >>
+  strip_tac >> qexistsl [`cs'`, `ss'`] >> simp[]
 QED
 
 Theorem sym_ret_prepare_frame_sim:
@@ -3325,19 +2911,16 @@ Theorem sym_ret_prepare_frame_sim:
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   rpt gen_tac >> strip_tac >>
-  `prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) (iops ++ rops)` by
-    (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
-     qexistsl [`dfg`, `inputs`, `nl`, `RET`, `prepared`, `arranged`] >> simp[]) >>
-  `EVERY is_prefix_op (iops ++ rops)` by
-    metis_tac[planWfTheory.prefix_wf_every_prefix_op] >>
-  `EVERY (\op. !l d. op <> SOPushOfst l d) (iops ++ rops)` by
-    (simp[listTheory.EVERY_MEM, listTheory.MEM_APPEND] >>
-     metis_tac[codegenEncodingWfTheory.emit_input_plan_no_push_ofst,
-               codegenEncodingWfTheory.reorder_plan_no_push_ofst]) >>
-  irule sym_read_only_selected_prefix_frame_sim >> simp[] >>
-  qexistsl [`inputs`, `nl`, `RET`, `ps`, `prepared`] >> simp[] >>
-  fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
-  metis_tac[doSwapSimTheory.spill_alloc_layout_wf_spilled_separated]
+  irule
+    (PURE_REWRITE_RULE [asm_sym_rel_core_canonical, sym_steps_mode_def,
+                       COND_CLAUSES, GSYM sym_frame_inv_def]
+      (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+               `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+        (SPEC_ALL symControlRetOwnTheory.sym_ret_prepare_frame_sim_mode_conditional))) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule sym_read_only_selected_prefix_frame_sim >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem sym_ret_generated_prepare_frame_sim:
@@ -3368,27 +2951,16 @@ Theorem sym_ret_generated_prepare_frame_sim:
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all_then strip_assume_tac fnFrameBoundaryGenRetTheory.ret_plan_decompose >>
-  `!off. ~MEM (SOSpill off) ops` by
-    (irule fnFrameBoundaryGenRetTheory.ret_plan_no_spill >> metis_tac[]) >>
-  `MEM inst (fn_insts fn)` by
-    (irule reachable_fn_insts_nonphi >> simp[]) >>
-  `label_positions_ok inst /\ ssa_form fn` by
-    (fs[fn_shape_ok_def, stackPlanGenTheory.codegen_ready_fn_def, listTheory.EVERY_MEM] >>
-     metis_tac[inst_shape_ok_def]) >>
-  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (metis_tac[deepInstSimTheory.marked_operand_owned]) >>
-  `!l. ~MEM (Label l) (compute_operands inst)` by
-    (gvs[label_positions_ok_def, compute_operands_def, python_stack_operands_def,
-         ir_specific_operand_order_def, listTheory.EVERY_MEM] >>
-     metis_tac[is_label_operand_def]) >>
-  `asm_block_at p cs.as_pc (execute_plan fmp (iops ++ rops))` by
-    fs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
-  qexistsl [`iops`, `prepared`, `rops`, `arranged`] >> asm_rewrite_tac[] >>
-  irule sym_ret_prepare_frame_sim >> simp[] >>
-  conj_tac >- gvs[listTheory.MEM_APPEND] >>
-  qexistsl [`base'`, `compute_operands inst`, `nl`, `prepared`, `ps`] >> simp[]
+  irule
+    (PURE_REWRITE_RULE [asm_sym_rel_core_canonical, sym_steps_mode_def,
+                       COND_CLAUSES, GSYM sym_frame_inv_def]
+      (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+               `code_ok` |-> `asm_data_env_ok p env`, `own` |-> `[]`]
+        (SPEC_ALL symControlRetOwnTheory.sym_ret_generated_prepare_frame_sim_mode_conditional))) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule sym_read_only_selected_prefix_frame_sim >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem reorder_one_spill_free_placement:
@@ -3396,18 +2968,19 @@ Theorem reorder_one_spill_free_placement:
   (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
   control_reorder_place dfg pending op (LENGTH pending - (idx + 1)) ps = (ops,ps')
 Proof
-  strip_tac >> drule control_reorder_one_decompose >> strip_tac
-  >- (`restore_ops = [] /\ ps1 = ps` by
-        metis_tac[reorder_restore_no_restore_identity] >>
-      gvs[control_reorder_place_def]) >>
-  `restore_ops = [] /\ ps1 = ps` by
-    (irule reorder_restore_no_restore_identity >>
-     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
-  gvs[] >>
-  `reduce_ops = [] /\ ps2 = ps` by
-    (irule reorder_reduce_no_spill_identity >>
-     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
-  gvs[]
+  rewrite_tac[control_reorder_place_def] >>
+  match_mp_tac symControlForwardPrepareOwnTheory.reorder_one_spill_free_placement_conditional >>
+  simp_tac bool_ss [GSYM control_reorder_place_def] >> rpt conj_tac
+  >- ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- ACCEPT_TAC list_rel_op_kind_transport
+  >- MATCH_ACCEPT_TAC (SRULE [listTheory.APPEND_ASSOC] control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SRULE []
+        (Q.INST [`dfg` |-> `dfg_build_function fn`]
+          (SPEC_ALL control_reorder_place_spill_free_kind_replay))))
+  >- MATCH_ACCEPT_TAC reorder_restore_no_restore_identity
+  >- MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity
+  >- MATCH_ACCEPT_TAC do_swap_no_restore_shallow
+  >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 Theorem reorder_one_spill_free_kind_replay:
@@ -3419,7 +2992,18 @@ Theorem reorder_one_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  metis_tac[reorder_one_spill_free_placement, control_reorder_place_spill_free_kind_replay]
+  match_mp_tac symControlForwardPrepareOwnTheory.reorder_one_spill_free_kind_replay_conditional >>
+  simp_tac bool_ss [GSYM control_reorder_place_def] >> rpt conj_tac
+  >- ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- ACCEPT_TAC list_rel_op_kind_transport
+  >- MATCH_ACCEPT_TAC (SRULE [listTheory.APPEND_ASSOC] control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SRULE []
+        (Q.INST [`dfg` |-> `dfg_build_function fn`]
+          (SPEC_ALL control_reorder_place_spill_free_kind_replay))))
+  >- MATCH_ACCEPT_TAC reorder_restore_no_restore_identity
+  >- MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity
+  >- MATCH_ACCEPT_TAC do_swap_no_restore_shallow
+  >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 Theorem reorder_steps_spill_free_kind_replay:
@@ -3432,17 +3016,18 @@ Theorem reorder_steps_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  Induct
-  >- simp[foldlSimTheory.plan_steps_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  Cases_on `h` >> rpt gen_tac >>
-  simp[foldlSimTheory.plan_steps_def] >>
-  Cases_on `reorder_one dfg pending q r ps` >>
-  rename1 `reorder_one _ _ _ _ _ = (step_ops,mid)` >>
-  Cases_on `plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items mid` >>
-  simp[] >> strip_tac >>
-  gvs[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
-  first_x_assum irule >> simp[] >>
-  metis_tac[reorder_one_spill_free_kind_replay]
+  match_mp_tac symControlForwardPrepareOwnTheory.reorder_steps_spill_free_kind_replay_conditional >>
+  simp_tac bool_ss [GSYM control_reorder_place_def] >> rpt conj_tac
+  >- ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- ACCEPT_TAC list_rel_op_kind_transport
+  >- MATCH_ACCEPT_TAC (SRULE [listTheory.APPEND_ASSOC] control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SRULE []
+        (Q.INST [`dfg` |-> `dfg_build_function fn`]
+          (SPEC_ALL control_reorder_place_spill_free_kind_replay))))
+  >- MATCH_ACCEPT_TAC reorder_restore_no_restore_identity
+  >- MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity
+  >- MATCH_ACCEPT_TAC do_swap_no_restore_shallow
+  >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 Theorem reorder_plan_spill_free_kind_replay:
@@ -3454,8 +3039,18 @@ Theorem reorder_plan_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
-  metis_tac[reorder_steps_spill_free_kind_replay]
+  match_mp_tac symControlForwardPrepareOwnTheory.reorder_plan_spill_free_kind_replay_conditional >>
+  simp_tac bool_ss [GSYM control_reorder_place_def] >> rpt conj_tac
+  >- ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- ACCEPT_TAC list_rel_op_kind_transport
+  >- MATCH_ACCEPT_TAC (SRULE [listTheory.APPEND_ASSOC] control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SRULE []
+        (Q.INST [`dfg` |-> `dfg_build_function fn`]
+          (SPEC_ALL control_reorder_place_spill_free_kind_replay))))
+  >- MATCH_ACCEPT_TAC reorder_restore_no_restore_identity
+  >- MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity
+  >- MATCH_ACCEPT_TAC do_swap_no_restore_shallow
+  >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 (* Diagnostic: the spill-free prefix contract needs no spill kinds or budget. *)
@@ -3472,24 +3067,7 @@ Theorem sym_spill_free_stack_only_prefix_sim:
       (apply_prefix_ops fmp lo ops (ps with ps_spilled := FEMPTY)) ss' /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >> rename1 `!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cplan b` >>
-  `sym_kinds_ok cplan fn ret srest (ps with ps_spilled := FEMPTY) ss` by
-    (simp[sym_kinds_ok_def] >> metis_tac[]) >>
-  `prefix_spill_wf fmp lo ops (ps with ps_spilled := FEMPTY)` by
-    metis_tac[singleInputSimTheory.simple_prefix_spill_wf] >>
-  `!op. is_simple_stack_op op ==> is_prefix_op op /\
-     (!l d. op <> SOPushOfst l d) /\ (!off. op <> SOSpill off)` by
-    (Cases >> simp[strongPrefixSimTheory.is_simple_stack_op_def,
-                  prefixSimTheory.is_prefix_op_def] >>
-     Cases_on `o'` >> simp[strongPrefixSimTheory.is_simple_stack_op_def]) >>
-  `EVERY is_prefix_op ops /\ EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
-   (!off. ~MEM (SOSpill off) ops)` by
-    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `prefix_wf lo (LENGTH (ps with ps_spilled := FEMPTY).ps_stack) ops` by simp[] >>
-  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
-     (\b:num. F) b /\ context_spill_byte cplan b` by simp[] >>
-  drule_all (Q.INST [`R` |-> `\b:num. F`] (SPEC_ALL sym_prefix_ops_sim)) >>
-  simp[] >> metis_tac[]
+  ACCEPT_TAC symControlForwardPrepareOwnTheory.sym_spill_free_stack_only_prefix_sim
 QED
 
 Theorem sym_rf_preparation_stack_sim:
