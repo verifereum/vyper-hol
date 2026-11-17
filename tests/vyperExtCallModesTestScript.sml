@@ -66,17 +66,19 @@ Proof
 QED
 
 (* A computed precompile takes its success from the next outcome and
-   records no request. *)
-Theorem activated_precompile_consumes_without_recording:
+   records the request. *)
+Theorem activated_precompile_records_request:
   let rq = call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state in
   SND (eval_expr empty_evaluation_context sha256_expr counter_state) =
     counter_state with <|outcomes := SOME [];
+      requests := counter_state.requests ++ [rq];
       storage_trace := [StorageOutcome rq (failed_outcome rq)]|> /\
   ~ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state)) /\
   SND (eval_expr empty_evaluation_context sha256_expr
          (counter_state with outcomes :=
             SOME [counter_outcome with co_success := T])) =
     counter_state with <|outcomes := SOME [];
+      requests := counter_state.requests ++ [rq];
       storage_trace := [StorageOutcome rq (failed_outcome rq with
         <|co_success := T;
           co_returnData := word_to_bytes (SHA_256_bytes [38w;18w;31w;240w]) T|>)]|> /\
