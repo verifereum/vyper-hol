@@ -5,7 +5,7 @@ Ancestors
   decoderGhostFramePtr
   msgGasSim msgGasPost fragGasPathPtr fragGasSeqPtr gasSummary
   ptrDiscipline ptrSafeRun emitHelper emitHelperProps exprLoweringProps
-  compileEnv loweringStateRelDefs exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
+  compileEnv loweringStateRelDefs exprLowering exprPtrUnwrap exprStackPtr exprSimProps stmtFragPtr
   venomInst venomState venomExecSemantics finite_map pred_set list rich_list
   vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel exprSimHypsDefs
   gasStorage vyperStorageTrace vyperStorageFootprint bodyFullGhostFrame
@@ -236,7 +236,7 @@ Theorem compile_msg_gas_vv_sim_ptr:
   expr_vv_sim_ptr d ctx PG fn cenv cx ty
     (Builtin (env_item_type MsgGas) (Env MsgGas) []) es
 Proof
-  irule expr_vv_sim_ptr_stack >> conj_tac
+  irule expr_vv_sim_stack_ptr >> conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
       Cases_on `compile_env_var MsgGas sa` >> simp[as_stack_val_def]) >>
   conj_tac >- metis_tac[eval_expr_builtin_value] >>

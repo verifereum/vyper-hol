@@ -242,7 +242,7 @@ Proof
 QED
 
 Theorem occurrence_annotation_fresh_arguments:
-  occurrence_annotation_ok n a U B HP H stk PG G s ==>
+  occurrence_annotation_ok fl n a U B HP H stk PG G s ==>
   !aid. ~MEM (SOME (n,aid)) (MAP (op_prov H) ops)
 Proof
   simp[occurrence_annotation_ok_def] >> strip_tac >> gen_tac >>
@@ -280,7 +280,7 @@ QED
 
 Resume occ_frame_reachable_origin_certificate[call]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> simp[] >> strip_tac >>
   drule occurrence_annotation_fresh_arguments >> strip_tac >>
   simp[occurrence_origin_certificate_push]
 QED

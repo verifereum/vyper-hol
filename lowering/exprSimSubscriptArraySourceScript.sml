@@ -6,7 +6,8 @@ Ancestors
   vyperTypeInvariants vyperTypeSystem vyperPlaceTyping vyperArray
   vyperAST placeTypingProps allocLimits supportedExprTraverse
   vyperTypeCallGraph vyperTypeCallStackSoundness
-  integer option list rich_list finite_map exprSimAttributeFields
+  vyperBareGlobalName vyperStoragePlaceProvenance vyperCallFrame vyperCreateFrame
+  integer option pair list rich_list finite_map exprSimAttributeFields
 
 Theorem read_result_nonstorage_frame:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -281,6 +282,97 @@ Proof
         env_context_consistent_def] >>
   gvs[eval_result_typed_def]
 QED
+
+Theorem eval_expr_immutable_root_nonconstant:
+  !e cx es src id path t.
+    ~supported_expr_exists (const_name_root cx) e /\
+    eval_expr cx e es = (INL (PlaceR (ImmutablePlace src id path)),t) ==>
+    ~cx_const_name cx (src,id)
+Proof
+  measureInduct_on `expr_size e` >> Cases_on `e` >> rpt gen_tac
+  >- simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+  >- (rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
+      simp[Once evaluate_def, supported_expr_exists_def, const_name_root_def] >>
+      metis_tac[lookup_global_immutable_root])
+  >- (rename1 `FlagMember ann nsid mid` >> PairCases_on `nsid` >>
+      simp[Once evaluate_def, lookup_flag_mem_def, bind_def,
+           vyperMiscTheory.option_CASE_rator, lift_option_type_def,
+           return_def, raise_def, AllCaseEqs()])
+  >- suspend "ifexp"
+  >- simp[Once evaluate_def, return_def]
+  >- (rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()])
+  >- suspend "subscript"
+  >- suspend "attribute"
+  >- simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+  >- simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+  >- suspend "pop"
+  >> suspend "call"
+QED
+Resume eval_expr_immutable_root_nonconstant[ifexp]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  qpat_x_assum `conditional_result _ _ _ = _` mp_tac >>
+  rename1 `conditional_result cx raw mid = _` >>
+  Cases_on `raw` >> simp[conditional_result_def, return_def, raise_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >>
+  simp[conditional_result_def, bind_def, return_def, AllCaseEqs()] >>
+  simp[COND_RATOR, bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_root_nonconstant[subscript]:
+  rename1 `Subscript ann obj idx` >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), supported_expr_exists_def] >>
+  rpt strip_tac >> rename1 `select_result cx _ raw _ _ = _` >>
+  Cases_on `raw` >>
+  gvs[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  drule extend_place_immutable_root >> strip_tac >> gvs[] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+  first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
+QED
+Resume eval_expr_immutable_root_nonconstant[attribute]:
+  rename1 `Attribute ann obj attr_id` >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), supported_expr_exists_def] >>
+  rpt strip_tac >> rename1 `select_result cx _ raw _ _ = _` >>
+  Cases_on `raw` >>
+  gvs[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  drule extend_place_immutable_root >> strip_tac >> gvs[] >>
+  first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
+QED
+Resume eval_expr_immutable_root_nonconstant[pop]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  rename1 `pop_place cx bp _ = _` >> Cases_on `bp`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rename1 `ArrayTV et bd` >> Cases_on `bd` >>
+      gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
+  gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+      UNCURRY, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_root_nonconstant[call]:
+  rename1 `Call ann call_target call_args call_default` >> Cases_on `call_target` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac
+  >~ [`IntCall nsid`]
+  >- (PairCases_on `nsid` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          raise_def, UNCURRY, AllCaseEqs()])
+  >~ [`eval_send`]
+  >- (drule eval_send_success_value >> simp[])
+  >~ [`eval_ext_call`]
+  >- (drule eval_ext_call_success_value >> simp[])
+  >~ [`eval_raw_call`]
+  >- (drule eval_raw_call_success_value >> simp[])
+  >~ [`eval_raw_call`]
+  >- (drule eval_raw_call_success_value >> simp[])
+  >~ [`CreateTarget`]
+  >- (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()] >>
+      drule eval_create_success_value >> simp[])
+QED
+Finalise eval_expr_immutable_root_nonconstant
 
 Theorem expr_body_pre_popped_keys_indexed:
   expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res,es') ==>

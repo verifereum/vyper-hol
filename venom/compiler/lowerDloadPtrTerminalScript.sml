@@ -177,7 +177,7 @@ Theorem dload_copy_boundary_scalar_origin:
   i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
   FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
@@ -202,7 +202,7 @@ Proof
    op_taint tn dst = {} /\ op_taint tn off = {} /\ op_taint tn sz = {}` by
     (drule_at (Pat `MEM _ (fn_insts _)`) external_copy_scalar_clean >>
      simp[] >> disch_then drule_all >> simp[]) >>
-  `dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  `dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
      G H tn un s t` by metis_tac[dload_boundary_vars] >>
   simp[] >>
   `eval_operand dst s = NONE <=> eval_operand dst t = NONE` by metis_tac[MEM] >>
@@ -215,7 +215,7 @@ Theorem dload_copy_boundary_terminal_fields:
   i.inst_outputs = [] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
   FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
@@ -229,7 +229,7 @@ Theorem dload_copy_boundary_terminal_fields:
       (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
     (!v. op_taint (step_taint i s s' tn) (Var v) = op_taint tn (Var v)) /\
     (!v. op_taint (step_taint i t t' un) (Var v) = op_taint un (Var v)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t'
 Proof
@@ -246,7 +246,7 @@ Proof
   qexists `write_memory_with_expansion (w2n d)
     (TAKE (w2n z) (DROP (w2n a) s.vs_returndata)) s` >>
   `s.vs_labels = t.vs_labels /\
-   dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+   dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
      G H tn un s t` by
     (conj_tac
      >- (drule dload_boundary_environment >>
@@ -274,7 +274,7 @@ Theorem dload_actual_copy_terminal_fields:
   dload_control_match q f g s t i [i] 0 /\
   i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
   FDOM G SUBSET fn_pv P f /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
@@ -288,7 +288,7 @@ Theorem dload_actual_copy_terminal_fields:
       (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
     (!v. op_taint (step_taint i s s' tn) (Var v) = op_taint tn (Var v)) /\
     (!v. op_taint (step_taint i t t' un) (Var v) = op_taint un (Var v)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t'
 Proof
@@ -345,9 +345,9 @@ Theorem dload_terminal_assign_vars_match:
   i.inst_operands = [op] /\ i.inst_outputs = [out] /\
   eval_operand op s = SOME a /\ eval_operand op t = SOME b /\
   s.vs_labels = t.vs_labels /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t ==>
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (step_prov PG G i (update_var out a s))
     (step_prov PH H i (update_var out b t))
     (step_taint i s (update_var out a s) tn)
@@ -357,7 +357,7 @@ Proof
   strip_tac >>
   `out IN set (fn_ir_vars f) DIFF {v | retpc_var f v} ==>
     op_taint tn op = op_taint un op /\
-    dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
+    dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
     (strip_tac >>
      `!v. op = Var v ==> v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
        (simp[] >> gen_tac >> strip_tac >> conj_tac
@@ -383,7 +383,7 @@ Theorem dload_terminal_assign_fields:
   s.vs_labels = t.vs_labels /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t /\ step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel C i s = OK s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
@@ -391,7 +391,7 @@ Theorem dload_terminal_assign_fields:
     s'.vs_labels = t'.vs_labels /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t'
 Proof
@@ -411,7 +411,7 @@ QED
 Theorem dload_terminal_revert_taint:
   i.inst_opcode = REVERT /\ taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
-  dload_vars_match fs V G H tn un s t ==>
+  dload_vars_match fl fs V G H tn un s t ==>
   taint_ok g un i t
 Proof
   strip_tac >>
@@ -467,7 +467,7 @@ Theorem dload_terminal_revert_length:
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
   FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
   s.vs_labels = t.vs_labels /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t ==>
   eval_operand sz s = eval_operand sz t
 Proof
@@ -480,7 +480,7 @@ Proof
      gvs[dload_vars_match_def] >> metis_tac[]) >>
   irule scalar_operand_equal >> simp[] >>
   qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
-            `fs`,`tn`,`un`] >> simp[]
+            `fl`,`fs`,`tn`,`un`] >> simp[]
 QED
 
 Theorem dload_terminal_revert_access_values:
@@ -489,7 +489,7 @@ Theorem dload_terminal_revert_access_values:
   eval_operand sz s = SOME z /\ eval_operand sz t = SOME z /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G dst) (op_prov H dst) x y ==>
+  dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) x y ==>
   access_ok lo H g i t
 Proof
   strip_tac >>
@@ -502,7 +502,12 @@ Proof
       `x = y` by (simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
       Cases_on `dst` >> gvs[op_prov_def] >> metis_tac[]) >>
   PairCases_on `x'` >>
-  Cases_on `op_prov H dst` >> gvs[dload_value_word_def] >>
+  Cases_on `op_prov H dst` >> gvs[dload_value_word_def]
+  >~ [`word_agree_except _ _ _`]
+  >- (`x = y` by
+        (gvs[word_agree_except_bits] >> simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
+      rpt strip_tac >> qpat_x_assum `z <> 0w ==> _` drule >> strip_tac >>
+      gvs[op_prov_def]) >>
   PairCases_on `x'` >> rpt strip_tac >>
   qpat_x_assum `z <> 0w ==> _` drule >> strip_tac >>
   gvs[op_prov_def] >>
@@ -519,7 +524,7 @@ Theorem dload_terminal_revert_access:
   access_ok lo G f i s /\
   (in_revert_forward f s ==> in_revert_forward g t) /\
   s.vs_labels = t.vs_labels /\ dload_live_layout lo sf tf fs /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t ==>
   access_ok lo H g i t
 Proof
@@ -542,7 +547,7 @@ Proof
           source_memory_read_ranges_def, memory_range_of_operands_def] >>
   Cases_on `eval_operand dst s` >- gvs[] >>
   `op_taint tn dst = {}` by metis_tac[dload_revert_scalar_clean] >>
-  `dload_value_word fs {} (op_prov G dst) (op_prov H dst) x'' x` by
+  `dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) x'' x` by
     (qpat_assum `op_taint tn dst = {}` (fn th => once_rewrite_tac[GSYM th]) >>
      irule dload_matched_operand >>
      qexistsl [`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
@@ -587,7 +592,7 @@ Theorem dload_actual_terminal_revert_safety:
     (before,is) /\ t.vs_inst_idx = LENGTH before /\
   FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t ==>
   access_ok lo H g i t /\ taint_ok g un i t
 Proof
@@ -693,7 +698,7 @@ Theorem dload_actual_copy_terminal_next:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
   i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
   FDOM G SUBSET fn_pv P f /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
@@ -714,7 +719,7 @@ Theorem dload_actual_copy_terminal_next:
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)
@@ -866,7 +871,7 @@ Theorem dload_actual_copy_terminal_entry:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
   i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
   FDOM G SUBSET fn_pv P f /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
@@ -884,7 +889,7 @@ Theorem dload_actual_copy_terminal_entry:
     ss.vs_labels = tt.vs_labels /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v ss = NONE <=> lookup_var v tt = NONE)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) ss tt /\
     dload_live_layout lo ss.vs_alloca_next tt.vs_alloca_next fs /\
@@ -1035,7 +1040,7 @@ Theorem dload_terminal_assign_next:
   s.vs_labels = t.vs_labels /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t /\
   dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
   dload_table_stack fs (s::MAP (\c. c.cf_state) cs)
@@ -1055,7 +1060,7 @@ Theorem dload_terminal_assign_next:
     ss.vs_labels = tt.vs_labels /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v ss = NONE <=> lookup_var v tt = NONE)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (step_prov PG G (EL k mid) s') (step_prov PH H (EL k mid) t')
       (step_taint (EL k mid) s s' tn) (step_taint (EL k mid) t t' un) ss tt /\
     dload_live_layout lo ss.vs_alloca_next tt.vs_alloca_next fs /\
@@ -1132,7 +1137,7 @@ Theorem dload_indexed_terminal_safety:
     LENGTH pre = b+h) /\
   FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
-  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H tn un s t ==>
   access_ok lo H g (EL k mid) t /\ taint_ok g un (EL k mid) t
 Proof
@@ -1172,7 +1177,7 @@ Resume dload_indexed_terminal_safety[malformed]:
      simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
   irule dload_terminal_revert_taint >> simp[] >>
   qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
-             `f`,`fs`,`s`,`tn`] >>
+             `f`,`fl`,`fs`,`s`,`tn`] >>
   conj_tac
   >- (rpt strip_tac >>
       `MEM (EL k mid).inst_opcode [REVERT; RETURNDATACOPY]` by simp[] >>

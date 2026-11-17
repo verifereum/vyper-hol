@@ -11,6 +11,7 @@
 
 Theory codegenEntryBounded
 Ancestors
+  codegenEntryFacts
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
   passSimulationDefs frameRel venomInst codegenRel venomRunBounded

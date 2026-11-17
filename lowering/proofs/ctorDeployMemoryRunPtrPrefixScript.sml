@@ -150,8 +150,7 @@ Proof
      simp[deploy_entry_state_def, entry_venom_state_def,
           init_venom_state_def]) >>
   `~ctx_has_dalloca dunit.cu_context` by
-    (drule_all deploy_unit_shape_ok >> strip_tac >>
-     simp[o1_source_unit_ok_no_dalloca]) >>
+    (drule_all deploy_unit_shape_ok >> simp[]) >>
   `?bb rest j0 j1 j2 v0 v1.
      lookup_block "__deploy" fn.fn_blocks = SOME bb /\
      bb.bb_instructions =

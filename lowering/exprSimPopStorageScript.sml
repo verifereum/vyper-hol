@@ -541,7 +541,8 @@ QED
 
 (* Postcondition packaging stays independent of the header-write proof. *)
 Theorem pop_storage_vv_post:
-  (!id path. tv <> PlaceR (MemoryPlace id path)) /\
+  vv_place_ptr cenv cx es' u tv
+    (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) /\
   es'.scopes = es.scopes /\
   stmt_state_rel H ctx func cenv cx es' u /\
   storage_well_formed_on cx es' (FST H) /\
@@ -554,7 +555,9 @@ Theorem pop_storage_vv_post:
 Proof
   strip_tac >>
   `locals_kept cenv es es' s0 u` by (irule locals_kept_mem >> simp[]) >>
-  Cases_on `tr` >>
+  Cases_on `tr` >> fs[contextTheory.mk_ptr_def] >>
+  `!id path. tv <> PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >> gvs[loweringPostsTheory.vv_place_ptr_def]) >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
        loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
        expr_type_def]
@@ -588,27 +591,6 @@ Theorem pop_declared_array_slots:
   slots_in_range (get_storage cx es tr) (w2n w) (ArrayTV tv (Dynamic n))
 Proof
   metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_def]
-QED
-
-Theorem pop_declared_header_load:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,w,ArrayTV tv (Dynamic n)) (FST H) ==>
-  (if tr then tload w s else sload w s) =
-    lookup_storage w (get_storage cx es tr)
-Proof
-  strip_tac >>
-  `storage_read_live H tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
-    (irule observed_storage_region_read_live >> first_assum ACCEPT_TAC) >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
-    (get_storage cx es tr)
-    (if tr then contract_transient s else contract_storage s)` by
-    (Cases_on `tr` >>
-     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
-         transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
-    simp[vyperValueTheory.type_slot_size_def] >>
-  drule_all storage_agree_read_head >>
-  Cases_on `tr` >> simp[sload_def, tload_def]
 QED
 
 Theorem pop_array_length_bound:
@@ -893,7 +875,12 @@ Proof
        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
      pop_assum (strip_assume_tac o MATCH_MP pop_storage_root_horizon) >>
      `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
-     conj_tac >- (irule pop_declared_header_load >> metis_tac[]) >>
+     conj_tac >-
+       (qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _`
+          (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+        `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
+          simp[vyperValueTheory.type_slot_size_def] >>
+        drule_all accountsRelPropsTheory.observed_storage_head_agree >> strip_tac >> pop_assum ACCEPT_TAC) >>
      qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
@@ -1002,6 +989,19 @@ Resume compile_pop_storage_normalized_sim[positive]:
      Cases_on `tr` >> simp[sstore_def, tstore_def]) >>
   `well_formed_type_value (ArrayTV tv (Dynamic n))` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `!es1. vv_place_ptr cenv cx es1 u
+      (PlaceR (StoragePlace tr
+        (n2w slot + n2w (1 + (w2n (lookup_storage (n2w slot)
+           (get_storage cx es tr)) - 1) * type_slot_size tv)) tv))
+      (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))` by
+    (`lookup_var x6 u = SOME (n2w slot + n2w (1 + (w2n (lookup_storage (n2w slot)
+           (get_storage cx es tr)) - 1) * type_slot_size tv))` by
+       (PURE_ASM_REWRITE_TAC [] >>
+        pure_rewrite_tac[wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
+          arithmeticTheory.ADD_ASSOC] >> REFL_TAC) >>
+     Cases_on `tr` >>
+     simp[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
+          loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
   (* The target run is fixed; the post holds in every horizon of the trace. *)
   `!H. valid_horizon cx st0 H
          (es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) ==>

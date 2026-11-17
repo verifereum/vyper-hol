@@ -210,19 +210,17 @@ Resume raw_log_fixed_alloc_full[kept]:
       `off + sz <= s.vs_alloca_next` by
         (gvs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
       `i < s.vs_alloca_next` by decide_tac >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[] >>
-      `b + sz <= s.vs_alloca_next` by
-        (`local_ptrs_rel func cenv ee.scopes s` by
-           (qpat_x_assum `!H'. valid_horizon _ _ _ _ ==> _`
-              (qspec_then `H0` mp_tac) >>
-            simp[stmt_state_rel_def, state_rel_def] >> strip_tac >> simp[]) >>
-         qpat_x_assum `local_ptrs_rel _ _ _ s` mp_tac >>
-         qpat_x_assum `local_region _ _ s _ _ _` mp_tac >>
-         simp[local_region_def, local_ptrs_rel_def] >>
-         rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]) >>
-      `i < s.vs_alloca_next` by decide_tac >> metis_tac[]) >>
-  rpt strip_tac >> gvs[] >> `i < s.vs_alloca_next` by decide_tac >> metis_tac[]
+  rpt strip_tac >> gvs[] >>
+  `b + sz <= s.vs_alloca_next` by
+    (`local_ptrs_rel func cenv ee.scopes s` by
+       (qpat_x_assum `!H'. valid_horizon _ _ _ _ ==> _`
+          (qspec_then `H0` mp_tac) >>
+        simp[stmt_state_rel_def, state_rel_def] >> strip_tac >> simp[]) >>
+     qpat_x_assum `local_ptrs_rel _ _ _ s` mp_tac >>
+     qpat_x_assum `local_region _ _ s _ _ _` mp_tac >>
+     simp[local_region_def, local_ptrs_rel_def] >>
+     rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `i < s.vs_alloca_next` by decide_tac >> metis_tac[]
 QED
 
 Resume raw_log_fixed_alloc_full[ghost_fields]:

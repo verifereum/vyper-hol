@@ -1,0 +1,36 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
+  "python_version": "3.11.11",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "uf5236_ifexp_nested_narrow.vy": "17d41b8484d773199a40509c69d7c31d070eafb00aa385f0056675f517cdd508",
+    "uf5256_tuple_widen_bytes.vy": "b67ce340714e504c3163a1badcf0bd39c0677e2854eb57ca602bf76d6253088f",
+    "uf5298_int_to_decimal_bound.vy": "b5debc29c48e0eb2cb1c2e63d1b0fed9976fbb25e303902b3bb99ca6d5e392bb",
+    "uf5331_ifexp_narrow_string.vy": "a2da4e279ecced745f1d1de0a17600efe51800ee161a683bae2f1c1a5eca0a4d"
+  },
+  "outputs": {
+    "uf5236_ifexp_nested_narrow.hex": "9ac4e5fc588940c2d8f9a115415dc192b437cb0127a0c0b093f336081f47f8d8",
+    "uf5236_ifexp_nested_narrow.json": "1f91c36cca861b2cda781c6a82608a4b9e8d700c1f469653db5c706daba9d509",
+    "uf5256_tuple_widen_bytes.hex": "380eab005457a0772e9c75c879a6621fb5e7cd11e917ffd94d49fb21a5abcf71",
+    "uf5256_tuple_widen_bytes.json": "c30c245a48117dfd0ab0c57305c4b730911b7898908a052efeac2e521a763798",
+    "uf5298_int_to_decimal_bound.hex": "ec1dcbfc5778a98b00599e26451537c57641769b54eb20a12e022ba16005537a",
+    "uf5298_int_to_decimal_bound.json": "e643d2dbfc69e2c8d599252dcf8f92b0492570632e585e0268cd010bc9cca315",
+    "uf5331_ifexp_narrow_string.hex": "b179e725c192c94ca2764a1e3c8775bc67ab0ef4d6e83ad5222c12ca4c53fb7e",
+    "uf5331_ifexp_narrow_string.json": "75c814e5d044255fee2df12fcdb97c948197f86988375b36700feda834e3179c"
+  }
+}
