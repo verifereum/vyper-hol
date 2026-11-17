@@ -44,7 +44,7 @@ Ancestors
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
-  dftPacketReturnRowSupply dftPacketRootedAlignment
+  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
