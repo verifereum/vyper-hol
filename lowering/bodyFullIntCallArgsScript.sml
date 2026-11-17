@@ -9,6 +9,7 @@ Theory bodyFullIntCallArgs
 Ancestors ptrDiscipline[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
+  exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand typedMemoryCopy
   exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
@@ -665,7 +666,7 @@ Proof
                 vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
          qpat_x_assum `gas_admissible _ P esi` mp_tac >>
          pop_assum SUBST1_TAC >> strip_tac >>
-         irule gas_admissible_bind_head >>
+         irule exprSimSliceComposeTheory.slice_gas_admissible_bind_head >>
          conj_tac >- simp[exprSimDefsTheory.expr_res_ok_def] >>
          qexistsl_tac [`P`, `\v. bind (eval_exprs cx es) (\xs. f (v::xs))`] >>
          simp[] >>
@@ -1527,7 +1528,7 @@ Proof
        (qpat_assum `!h. stmt_state_rel h ctx func cenv cx mid t ==> stmt_state_rel h ctx func cenv cx mid at` irule >>
         qpat_assum `vv_post H ctx func cenv cx e esi si ci s mid tv vv t` mp_tac >>
         simp[loweringPostsTheory.vv_post_def, NoAsms]) >>
-     irule exprSimVVFrameTheory.vv_post_alloc_mono_frame >>
+     irule exprSimIfExpWidenedAdapterTheory.vv_post_alloc_mono_frame >>
      simp[] >> qexistsl_tac [`t`,`ci`] >>
      simp[venomStateTheory.contract_storage_def,
           venomStateTheory.contract_transient_def,
