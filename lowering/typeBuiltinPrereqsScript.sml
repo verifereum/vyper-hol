@@ -929,7 +929,8 @@ Proof
        Once exprLoweringTheory.compile_expr_def,
        exprLoweringTheory.compile_type_builtin_dispatch_body_def] >>
   `!e aty. MEM e [src;off] ==>
-     lower_value (expr_child_callback (expr_size off + (expr_size src + 2)) compile_expr)
+     lower_value (expr_child_callback
+       (cenv_defaults_size cenv + (expr_size off + (expr_size src + 2))) compile_expr)
        cenv aty e = lower_value compile_expr cenv aty e` by
     (rpt strip_tac >> irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[] >> gvs[] >> simp[]) >>
