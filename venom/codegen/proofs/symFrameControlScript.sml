@@ -4410,19 +4410,13 @@ Theorem sym_jnz_arranged_word:
   ?stk. ss.sym_stack = Val w :: stk
 Proof
   strip_tac >>
-  `mid.as_stack = [w] ++ DROP 1 mid.as_stack` by
-    (fs[venom_asm_rel_def, plan_stack_rel_def] >>
-     first_x_assum (qspec_then `0` mp_tac) >>
-     Cases_on `mid.as_stack` >> gvs[listTheory.REVERSE_APPEND]) >>
+  `eval_operand cond v = SOME w` by metis_tac[emitSimTheory.operand_val_eq_eval] >>
   `!op sv. MEM op [cond] /\ op_kind_ok fn ret op sv ==> ?u. sv = Val u` by
     (simp[] >> rpt strip_tac >> drule_all sym_jnz_condition_kind >> simp[]) >>
-  `?suffix. ss.sym_stack = MAP Val [w] ++ suffix` by
-    (irule word_prepared_symbolic_stack >>
-     conj_tac
-     >- (qexistsl [`mid with as_stack := mid.as_stack ++ rest`, `env`, `p`,
-          `DROP 1 mid.as_stack ++ rest`] >> gvs[]) >>
-     qexistsl [`cplan`, `fn`, `[cond]`, `ps`, `ret`, `srest`, `tail`] >>
-     gvs[]) >> gvs[]
+  mp_tac (Q.INST [`operands` |-> `[cond]`, `values` |-> `[w]`, `vs` |-> `v`]
+    (SPEC_ALL arranged_word_prepared_symbolic_stack)) >>
+  simp[eval_operands_def, GSYM emitSimTheory.operand_val_eq_eval] >>
+  disch_then drule_all >> simp[]
 QED
 
 Theorem sym_jnz_suffix_steps:
