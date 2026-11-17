@@ -53,7 +53,8 @@ Theorem bytes_bitwise_checker_pairs:
     (well_typed_binop ann bop (BaseT (BytesT (Fixed m))) rhs <=>
        m = 32 /\ ann = BaseT (BytesT (Fixed 32)) /\ is_int_type rhs))
 Proof
-  simp[] >> rpt strip_tac >> gvs[well_typed_binop_def]
+  simp[] >> rpt strip_tac >> gvs[well_typed_binop_def] >>
+  eq_tac >> strip_tac >> gvs[]
 QED
 
 (* The pin annotates the literal in a << 4 as int8, but rejects a signed

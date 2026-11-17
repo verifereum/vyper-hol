@@ -21,8 +21,12 @@ Theorem binop_frag_post_mono:
   (!v op s. p v op s ==> q v op s) ==>
   binop_frag_post q ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
 Proof
-  rw[binop_frag_post_def] >> first_x_assum drule >>
-  strip_tac >> qexists_tac `r` >> simp[] >> metis_tac[]
+  pure_rewrite_tac[binop_frag_post_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!st0 sa sb x y op s0. _`
+    (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `r` >> simp[] >> metis_tac[]
 QED
 
 Theorem binop_frag_words_rel:
@@ -409,7 +413,8 @@ Theorem expr_post_bop:
       v op ss
 Proof
   rpt gen_tac >> strip_tac >> irule expr_post_bop_rel >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[expr_val_rel_def, typed_val_to_w256_word_value]
 QED
 
@@ -782,8 +787,12 @@ Theorem bop_normal_prefix_summary:
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
       expr_exit res r)
 Proof
-  strip_tac >> irule bop_normal_prefix_summary_rel >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  strip_tac >> irule bop_normal_prefix_summary_rel >> simp[] >>
+  qexistsl_tac [`bl`, `el`, `fin`, `mid`, `s1`, `s2`, `t`,
+                `u`, `v1`, `v2`, `x`, `y`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`?H. valid_horizon cx st0 H fin.storage_trace`]
+  >- (qexists_tac `H` >> simp[]) >>
   irule binop_frag_words_rel >> simp[]
 QED
 
