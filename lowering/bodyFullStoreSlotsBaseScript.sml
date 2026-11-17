@@ -2,6 +2,7 @@ Theory bodyFullStoreSlotsBase
 Ancestors arithmetic[qualified,ignore_grammar]
   bodyFullStoreSlotsOperandLoop bodyFullStoreSlotsTaintStore
   bodyFullStoreSlotsTaintFold bodyFullStoreSlotsOffset fullStoreDense
+  bodyFullStoreSlotsFrame
   bodyFullStoreSlotsAddresses fragGasOriginPtrDead augAssignPtrScalarProbe
   typedCopyOriginPtrDynArray bodyPtrSignedConvertScalarOps bytestringCopyExecution
   fragGasSeqPtr fragGasOriginPtr fragExecMem venomExecSemantics
@@ -33,8 +34,12 @@ Proof
       wordsTheory.dimword_def] >>
   `ptr_inst_ok D 0 0 ctx func G tn
     (mk_inst id SHR [Lit 5w;sum] [out]) s` by
-    (irule convert_scalar_ptr_inst_ok >> simp[op_prov_def, op_taint_def] >>
-     goal_assum (drule_at Any)) >>
+    (simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       allocas_from_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+     rpt strip_tac >> gvs[op_prov_def, op_taint_def, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
   `run_inst_seq_mem_ok [mk_inst id SHR [Lit 5w;sum] [out]] s` by
     (simp[run_inst_seq_mem_ok_last, inst_dload_in_section_def, mk_inst_def] >>
      irule below_frontier_no_ranges >> simp[]) >>
@@ -165,6 +170,9 @@ Proof
     simp[Abbr `s1`, update_var_def] >>
   `allocas_from lo s1` by
     simp[Abbr `s1`,update_var_def,ptrDisciplineTheory.allocas_from_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
+    (simp[Abbr `s1`,allocas_below_fmp_def,update_var_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   drule_all store_cnt_shr_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -237,6 +245,8 @@ Proof
        stmtSimStoreCopyTheory.store_copy_normalize_def, allocas_from_def] >>
      metis_tac[]) >>
   `op_prov Gu (Var lv) = NONE` by simp[op_prov_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    metis_tac[typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp] >>
   drule_all store_cnt_round_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`out`,`t`,`Gf`,`tf`] >> simp[] >>
@@ -630,6 +640,8 @@ Resume compile_store_slots_base_origin_ptr_path[bytes_produced]:
     gvs[] >>
   `(!y. cnt = Var y ==> not_fresh_at sm y) /\ ~t.vs_call_ctx.cc_static` by
     simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   drule_all store_slots_operand_loop >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   suspend "bytes_loop")
