@@ -72,6 +72,57 @@ Proof
   gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
+(* The compiler table selects exactly the source's omitted-default suffix. *)
+Theorem intcall_args_omitted_defaults:
+  body_inv tops ctx cenv cx /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  LENGTH args - LENGTH dflts <= LENGTH es /\
+  LENGTH es <= LENGTH args /\ ~MEM (NONE,name) cx.stk ==>
+  omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) =
+    DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+  LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) =
+    LENGTH args - LENGTH es /\
+  cenv.ce_func_param_types name =
+    TAKE (LENGTH es) (MAP SND args) ++ DROP (LENGTH es) (MAP SND args) /\
+  LENGTH (TAKE (LENGTH es) (cenv.ce_func_param_types name)) = LENGTH es /\
+  LENGTH (DROP (LENGTH es) (cenv.ce_func_param_types name)) =
+    LENGTH args - LENGTH es
+Proof
+  strip_tac >>
+  `supported_program tops /\
+   cenv.ce_func_param_types = build_func_param_types tops /\
+   ALOOKUP cenv.ce_func_defaults name = ALOOKUP (build_func_defaults tops) name`
+    by gvs[bodySimTheory.body_inv_def] >>
+  `ALL_DISTINCT (supported_function_names tops) /\
+   EVERY (supported_declaration_header tops) tops` by
+    gvs[supportedProgramTheory.supported_program_def,
+        supportedNamesTheory.supported_declaration_names_def,
+        supportedDeclsTheory.supported_declaration_headers_def] >>
+  `module_consts_env tops [] = []` by
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
+     qexists_tac `tops` >> simp[]) >>
+  `cenv.ce_func_param_types name = MAP SND args` by
+    (gvs[] >> irule intCallLookupTheory.build_func_param_types_distinct >>
+     conj_tac >- simp[] >>
+     first_assum (irule_at Any) >> simp[]) >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+      (FST (SND (classify_functions tops)))` by
+    (simp[loweringShapePropsTheory.MEM_classify_internal] >>
+     qexistsl [`dflts`,`ss`] >> simp[]) >>
+  `ALOOKUP (build_func_defaults tops) name = SOME dflts` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     conj_tac
+     >- (drule loweringShapeSourceTheory.supported_names_internal_names_distinct >>
+         simp[compileVyperTheory.build_func_defaults_def, MAP_MAP_o,
+              combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
+     simp[compileVyperTheory.build_func_defaults_def, MEM_MAP,
+          pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  gvs[omitted_defaults_def, nsid_to_string_def, TAKE_DROP] >>
+  decide_tac
+QED
+
 (* Empty local typing maps can be weakened without changing static maps. *)
 Theorem intcall_args_defaults_typing_mutual[local]:
   (!env e. well_typed_expr env e ==>
