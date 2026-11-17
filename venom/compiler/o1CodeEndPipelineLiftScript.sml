@@ -35,7 +35,8 @@ Theorem o1_code_end_pipeline_from_walk:
        code_end_offset_ok (raw_reachable vs_out) (stage (LENGTH o1_fn_passes)))) ==>
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  unit_entry_no_params unit /\
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit ==>
   !D fmp vs_out. dead_wf D /\ o1_run_state_ok vs_out /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
@@ -59,10 +60,7 @@ Proof
     simp[irSupplyTheory.init_ir_supply_inst_ok] >>
   drule_all o1_pre_walk_rows >> strip_tac >>
   `EVERY no_raw_fmp_ops pre.cu_context.ctx_functions` by
-    (first_assum irule >>
-     `is_raw_fmp_opcode DALLOCA` by simp[venomInstTheory.is_raw_fmp_opcode_def] >>
-     rewrite_tac[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-     metis_tac[source_no_raw_fmp_ops, venomInstTheory.no_raw_fmp_ops_def]) >>
+    (qpat_x_assum `~ctx_has_dalloca _ ==> _` irule >> first_assum ACCEPT_TAC) >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   mp_tac (Q.INST [`unit` |-> `pre`,
     `fcg` |-> `fcg_analyze pre.cu_context`] o1_ctx_shape_prune) >>

@@ -182,7 +182,19 @@ Theorem lower_vyper_deploy_unit_source_unit_ok:
     o1_source_unit_ok unit
 Proof
   rpt strip_tac >> drule_all lower_vyper_deploy_unit_run >> strip_tac >>
-  drule run_deploy_lowering_source_unit_ok >> simp[]
+  drule run_deploy_lowering_source_unit_ok >> impl_tac >- simp[] >> simp[]
+QED
+
+(* The lowered deploy unit has no DALLOCA. *)
+Theorem lower_vyper_deploy_unit_no_dalloca:
+  !tops rpolicy runtime_bc unit.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
+    supported_program tops /\ supported_program_deploy tops ==>
+    ~ctx_has_dalloca unit.cu_context
+Proof
+  rpt gen_tac >> strip_tac >> irule every_no_dalloca >>
+  drule_all lower_vyper_deploy_unit_run >> strip_tac >>
+  drule run_deploy_lowering_source_unit_ok >> impl_tac >- simp[] >> simp[]
 QED
 
 Theorem run_deploy_lowering_raw_defaults[local]:
@@ -311,8 +323,8 @@ Theorem deploy_unit_shape_ok:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx
     ==>
-    o1_source_unit_ok dunit /\ unit_entry_no_params dunit /\
-    unit_fmp_unsealed dunit /\
+    o1_source_unit_ok dunit /\ ~ctx_has_dalloca dunit.cu_context /\
+    unit_entry_no_params dunit /\ unit_fmp_unsealed dunit /\
     EVERY (\fn. fn.fn_eom = NONE) dunit.cu_context.ctx_functions /\
     fixed_region_reserved (imm_len tops) dunit.cu_context /\
     reserved_intervals_wf dunit.cu_context.ctx_global_reserved
@@ -320,6 +332,7 @@ Proof
   rpt gen_tac >> simp[deploy_phases_def, deploy_source_ok_def] >>
   strip_tac >>
   drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_deploy_unit_no_dalloca >> strip_tac >>
   drule_all lower_vyper_deploy_unit_o1_shape_extras >> strip_tac >>
   drule lower_vyper_deploy_unit_eom_none >> strip_tac >>
   `fixed_region_reserved (imm_len tops) dunit.cu_context` by

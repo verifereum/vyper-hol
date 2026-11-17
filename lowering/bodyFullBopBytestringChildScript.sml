@@ -66,7 +66,7 @@ Proof
   qpat_x_assum `!m cb. _` drule_all >> strip_tac >>
   `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
     (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
-     strip_tac >> fs[unitMemInvTheory.dalloca_no_wrap_def,
+     strip_tac >> fs[unitTransformDefsTheory.dalloca_no_wrap_def,
        ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
      metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
