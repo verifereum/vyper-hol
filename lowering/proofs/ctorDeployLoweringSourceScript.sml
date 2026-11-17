@@ -265,9 +265,9 @@ Proof
       simp[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
            abstract_machine_from_state_storage_trace]) >>
   rename1 `INR ex` >> Cases_on `ex` >>
-  FIRST [gvs[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
+  gvs[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
       abstract_machine_from_state_storage_trace,
-      vyperValueOperationTheory.safe_cast_def]]
+      vyperValueOperationTheory.safe_cast_def]
 QED
 
 Theorem deploy_ctor_finish_outcomes:

@@ -203,9 +203,9 @@ Proof
   rename1 `compile_store_slots cenv ms ds ty tr b = (u,sc)` >>
   Cases_on `u` >> gvs[] >>
   `ci_mono sa a /\ ci_mono a b /\ ci_mono b sc /\ ci_mono sc sb` by
-    (rpt conj_tac >> FIRST [metis_tac[ci_mono_compile_lit_byte_offset,
-       cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
-       cj 2 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND]]) >>
+    metis_tac[ci_mono_compile_lit_byte_offset,
+      cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
+      cj 2 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
   `fn_has_code sa sc func /\ fn_has_code sc sb func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   gvs[Once val_in_memory_def, type_memory_size_def, type_slot_size_def,

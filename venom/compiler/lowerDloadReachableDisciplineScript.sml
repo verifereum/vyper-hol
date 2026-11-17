@@ -22,7 +22,7 @@ Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
-  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  FIRST [simp[exec_pure2_def, AllCaseEqs()]] >> rpt strip_tac >> gvs[]
 QED
 
 (* A DALLOCA output's frame site starts at the free memory pointer, which

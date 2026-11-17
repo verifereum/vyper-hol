@@ -333,7 +333,9 @@ Resume custom_error_store_args_sim_mem_using_head[bind]:
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
     (qexists_tac `storage_trace_horizon mid.storage_trace` >>
-      simp[valid_horizon_def, vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+      qpat_assum `storage_trace_domain cx st0 mid.storage_trace`
+        (ACCEPT_TAC o PURE_REWRITE_RULE
+          [vyperStorageFootprintTheory.storage_trace_domain_def])) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==>
     _ /\ _ /\ t.vs_current_bb = sm.cs_current_bb /\ _`
     (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>

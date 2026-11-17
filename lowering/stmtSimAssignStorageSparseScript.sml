@@ -268,7 +268,7 @@ Proof
           EVERY (\(fname,fty,sz). !tv.
             evaluate_type (get_tenv cx) fty = SOME tv ==>
             sz = type_memory_size tv) fields)` by
-        (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+        (FIRST [fs[exprSimHypsDefsTheory.expr_sim_inv_def]] >> metis_tac[]) >>
       `?r. gas_marked_path F ctx func t 0 r /\ exit_result r /\
            stmt_exit (RetQ H1) ee
              (INR (Error (RuntimeError "write in static context"))) r` by

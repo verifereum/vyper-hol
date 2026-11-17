@@ -206,7 +206,12 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
   `well_formed_type_value (ArrayTV tv (Dynamic n))` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
   `storage_well_formed_on cx (set_storage cx es tr (apply_writes (n2w slot) [(0,n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))] (get_storage cx es tr))) (FST H)` by
-    (irule pop_storage_end_storage_wf >> simp[] >> metis_tac[]) >>
+    (irule pop_storage_end_storage_wf >> simp[] >>
+      qexistsl_tac [`n`, `tv`] >>
+      qpat_assum `storage_observations_ok cx H (es.storage_trace ++ _)`
+        (strip_assume_tac o PURE_REWRITE_RULE
+          [vyperStorageFootprintTheory.storage_observations_ok_append]) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `storage_well_formed_on cx
      ((set_storage cx es tr (apply_writes (n2w slot) [(0,n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))] (get_storage cx es tr)) with storage_trace := es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) with gas_obs := []) (FST H)` by
     (`((set_storage cx es tr (apply_writes (n2w slot) [(0,n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))] (get_storage cx es tr)) with storage_trace := es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) with gas_obs := []).accounts =

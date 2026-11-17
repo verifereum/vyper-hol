@@ -5157,7 +5157,7 @@ Resume store_slots_rank_static_outcome_mem_local[dynelements]:
   >- (disj1_tac >> qexists_tac `r` >> simp[] >>
       metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
   `eval_operand slot t = SOME dw /\ eval_operand cnt t = SOME (mload (w2n sw) s)` by
-    (conj_tac >- (Cases_on `slot` >> FIRST [gvs[eval_operand_def]] >> metis_tac[]) >>
+    (conj_tac >- (Cases_on `slot` >> gvs[eval_operand_def] >> metis_tac[]) >>
      Cases_on `cnt` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `t.vs_call_ctx.cc_static` by metis_tac[] >>
   drule_all place_slots_emit_static_exit_mem_local >>

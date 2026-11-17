@@ -719,7 +719,7 @@ Resume append_nested_memory_cont_full[success]:
              `tv0 = entry.type` by
                metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees,
                          optionTheory.SOME_11] >>
-             gvs[]) >>
+             FIRST [gvs[]]) >>
          conj_tac
          >- metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees] >>
          irule (cj 1 stmtSimDeclStoreTheory.typed_word_store) >>
@@ -1733,8 +1733,8 @@ Resume append_nested_after_target_full[rhs_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
   rename1 `INR exc` >> Cases_on `exc` >>
-  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
-      exprSimDefsTheory.halt_exit_def] >>
+  FIRST [gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
+      exprSimDefsTheory.halt_exit_def]] >>
   rename1 `Error err` >> Cases_on `err` >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
@@ -1837,8 +1837,8 @@ Resume append_nested_after_target_full[suffix]:
       accounts_well_typed (es with gas_obs := gs).accounts /\
       functions_well_typed cx /\ env.type_defs = get_tenv cx` by
        (fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
-        FIRST [gvs[vyperTypeInvariantsTheory.env_consistent_def,
-            vyperTypeInvariantsTheory.env_context_consistent_def]]) >>
+        gvs[vyperTypeInvariantsTheory.env_consistent_def,
+            vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>
      strip_tac >>
      `evaluate_type (get_tenv cx) (ArrayT (expr_type e) (Dynamic cap)) =

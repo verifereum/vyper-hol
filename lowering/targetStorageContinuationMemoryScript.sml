@@ -155,7 +155,7 @@ Proof
   `!l. ix <> Label l` by
     (irule lower_compile_expr_not_label >>
      goal_assum (drule_at (Pat `lower_value`)) >>
-     qexists `env` >> FIRST [fs[expr_body_pre_def, expr_sim_inv_def]]) >>
+     qexists `env` >> (FIRST [fs[expr_body_pre_def]] >> FIRST [fs[expr_sim_inv_def]])) >>
   gvs[] >>
   irule target_storage_typed_summary_mem >> simp[] >> metis_tac[]
 QED
