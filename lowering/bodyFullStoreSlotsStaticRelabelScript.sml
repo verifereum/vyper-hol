@@ -226,3 +226,59 @@ Resume store_slots_relabel_checked_edge[jump]:
 QED
 
 Finalise store_slots_relabel_checked_edge
+
+
+Theorem store_slots_relabel_checked_prefix:
+  !xs v.
+  xs <> [] /\ frag_relabel_state L entry (FST (HD xs)) v /\
+  (!lbl bb. lbl <> L /\ lookup_block lbl canon.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  (!i. SUC i < LENGTH xs ==>
+    gas_origin_ptr_edge (D,lo,explicit,ctx,canon,PG) (EL i xs) []
+      (OK (FST (EL (SUC i) xs)), SND (EL (SUC i) xs))) /\
+  (!i u. SUC i < LENGTH xs /\
+     frag_relabel_state L entry (FST (EL i xs)) u ==>
+    ?cb ab inst.
+      lookup_block (FST (EL i xs)).vs_current_bb canon.fn_blocks = SOME cb /\
+      get_instruction cb (FST (EL i xs)).vs_inst_idx = SOME inst /\
+      lookup_block u.vs_current_bb func.fn_blocks = SOME ab /\
+      get_instruction ab u.vs_inst_idx = SOME inst /\
+      MEM inst.inst_opcode
+        [ASSIGN;ADD;MUL;EQ;LT;ISZERO;SHR;MLOAD;JMP;JNZ;SSTORE;TSTORE] /\
+      (MEM inst.inst_opcode [JMP;JNZ] ==> ~MEM (Label L) inst.inst_operands)) ==>
+  ?ys. LENGTH ys = LENGTH xs /\ FST (HD ys) = v /\
+    (!i. i < LENGTH xs ==>
+      frag_relabel_state L entry (FST (EL i xs)) (FST (EL i ys)) /\
+      SND (EL i ys) = SND (EL i xs)) /\
+    (!i. SUC i < LENGTH ys ==>
+      gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (EL i ys) []
+        (OK (FST (EL (SUC i) ys)), SND (EL (SUC i) ys)))
+Proof
+  Induct_on `xs` >- simp[] >>
+  qx_gen_tac `h` >> qx_gen_tac `v` >> strip_tac >>
+  Cases_on `xs`
+  >- (qexists_tac `[(v,SND h)]` >> gvs[]) >>
+  rename1 `h::k::tail` >>
+  PairCases_on `h` >> PairCases_on `k` >>
+  qpat_assum `!i u. _` (qspecl_then [`0`,`v`] (mp_tac o SRULE [])) >>
+  (impl_tac >- gvs[]) >>
+  disch_then (qx_choose_then `cb` (qx_choose_then `ab`
+    (qx_choose_then `inst` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,canon,PG) (h0,h1,h2) []
+      (OK k0,k1,k2)` by
+    (qpat_x_assum `!i. SUC i < _ ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `?w. frag_relabel_state L entry k0 w /\
+       gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (v,h1,h2) []
+         (OK w,k1,k2)` by
+    (irule store_slots_relabel_checked_edge >>
+     goal_assum (drule_at Any) >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `!v. _` (qspec_then `w` mp_tac) >>
+  (impl_tac >- suspend "tail_inputs") >>
+  disch_then (qx_choose_then `ys` strip_assume_tac) >>
+  qexists_tac `(v,h1,h2)::ys` >> simp[] >>
+  conj_tac
+  >- (Cases >> gvs[] >> metis_tac[]) >>
+  Cases
+  >- suspend "head_edge" >>
+  gvs[]
+QED
