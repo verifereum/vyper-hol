@@ -3,8 +3,8 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendShape
-  dftGasPrefixProvider
+  dftPacketBlockAppendNative
+  dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
@@ -51,8 +51,5 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
-  dftPacketBlockTableSplice
-  dftPacketTerminalPhi
-  dftPacketSuccessorObservation
-  dftPacketExistingPathRows
-  dftPacketCallInsertionConservation
+  dftPacketBlockTableSplice dftPacketTerminalPhi
+  dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
