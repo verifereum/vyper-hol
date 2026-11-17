@@ -1447,15 +1447,15 @@ Proof
   `~is_alloca_op inst.inst_opcode /\
    ~is_ext_call_op inst.inst_opcode /\
    inst.inst_opcode <> INVOKE /\
-   Eff_FMP NOTIN write_effects inst.inst_opcode` by
+   inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DALLOCA` by
     (Cases_on `inst.inst_opcode` >>
-     gvs[is_effect_free_op_def, is_alloca_op_def, is_ext_call_op_def,
-         write_effects_def, empty_effects_def]) >>
+     gvs[is_effect_free_op_def, is_alloca_op_def, is_ext_call_op_def]) >>
   `step_inst_base inst s = OK s'` by
     metis_tac[effect_free_step_eq_base] >>
+  (* Not via the effects table: BUMP is effect-free but declares Eff_FMP. *)
   `s'.vs_fmp = s.vs_fmp` by (
     qspecl_then [`inst`, `s`, `s'`] mp_tac
-      step_inst_base_preserves_fmp_no_write >>
+      venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
     simp[]) >>
   `s'.vs_call_entry_fmp = s.vs_call_entry_fmp /\
    s'.vs_initial_fmp = s.vs_initial_fmp /\
