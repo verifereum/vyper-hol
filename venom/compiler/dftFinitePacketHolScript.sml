@@ -41,5 +41,6 @@ Ancestors
   dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketTableSplice
+  dftPacketBlockTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
