@@ -213,6 +213,7 @@ Definition deploy_result_rel_def:
              deposited *)
           frame_outcome es r es' NONE [] am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = [] /\
+          MEM tx.target es'.rollback.toDelete /\
           accounts_agree H tx.target am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
