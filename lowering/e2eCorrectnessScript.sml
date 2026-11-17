@@ -984,6 +984,7 @@ QED
 (* ADMISSION: statement only.  Waits for the exceptional-arm composition proof (ctx_sim transport plus the coarse S7 abort observation). *)
 Theorem call_at_horizon_static_abort_composition:
   run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' /\
+  external_return_type tops tx.function_name = ret /\
   external_call_result_rel
     (storage_trace_horizon
       (source_storage_trace am tx (MAP SND (call_trace es)) gs))
@@ -1001,7 +1002,7 @@ Theorem call_at_horizon_static_abort_composition:
     ?r' es''. run_call es = SOME (r',es'') /\
       (frame_resource_starved es r' es'' \/
        ?exc out lgs. frame_outcome es r' es'' (SOME exc) out lgs)) ==>
-  call_result_rel_at gs tops ret am tx es r es'
+  call_result_rel_at gs tops am tx es r es'
 Proof
   cheat
 QED
