@@ -55,26 +55,35 @@ Theorem dload_delegate_exec_success:
     dload_equal_environment s' t' /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s' = lookup_var out t')
 Proof
-  strip_tac >> drule_all dload_delegate_full_stores >> strip_tac >>
+  strip_tac >>
   `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes /\
    s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[dload_equal_environment_def, venom_state_component_equality] >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
                       cr_kind := DelegateMessageCall` >>
-  `venom_call_request t addr 0w bo az F with
-     cr_kind := DelegateMessageCall = rq` by
-    simp[Abbr `rq`, venom_call_request_def] >>
+  qabbrev_tac `rr = venom_call_request t addr 0w bo az F with
+                      cr_kind := DelegateMessageCall` >>
+  `rq.cr_kind = rr.cr_kind /\ rq.cr_value = rr.cr_value /\
+   rq.cr_target = rr.cr_target /\ rq.cr_data = rr.cr_data` by
+    simp[Abbr `rq`, Abbr `rr`, venom_call_request_def] >>
+  drule_all dload_take_outcome_observations >>
+  disch_then (qspec_then `s.vs_outcomes` strip_assume_tac) >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
-  rename1 `consume_call_outcome rq _ _ s = (w1,r1)` >>
-  `?out. i.inst_outputs = [out] /\ s' = update_var out w1 r1` by
+  rename1 `consume_call_outcome rq _ _ s = (w,ss)` >>
+  Cases_on `consume_call_outcome rr (w2n tr) (w2n rz) t` >>
+  rename1 `consume_call_outcome rr _ _ t = (v,tt)` >>
+  `w = v /\ dload_equal_environment ss tt` by
+    (Cases_on `t.vs_call_ctx.cc_static` >>
+     gvs[consume_call_outcome_eq] >>
+     gvs[dload_equal_environment_def, venom_state_component_equality,
+         adopt_outcome_def, adopt_outcome_deletions_def,
+         Abbr `rq`, Abbr `rr`, venom_call_request_def]) >>
+  `?out. i.inst_outputs = [out] /\ s' = update_var out w ss` by
     (fs[Abbr `rq`, exec_delegatecall_def,
         Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  drule_at (Pat `consume_call_outcome _ _ _ _ = _`)
-    consume_call_outcome_state_transport >>
-  disch_then (qspec_then `t` mp_tac) >> simp[Excl "consume_call_outcome_eq"] >>
-  disch_then (qspec_then `w2n tr` strip_assume_tac) >>
-  qexistsl [`w1`,`r1`,`rq`] >>
-  asm_simp_tac (srw_ss()) [exec_delegatecall_def,
-                           Excl "consume_call_outcome_eq"] >>
-  simp[venom_state_component_equality]
+  qexists_tac `update_var out v tt` >>
+  gvs[exec_delegatecall_def, Abbr `rq`, Abbr `rr`,
+      Excl "consume_call_outcome_eq", update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE, dload_equal_environment_def,
+      venom_state_component_equality]
 QED
