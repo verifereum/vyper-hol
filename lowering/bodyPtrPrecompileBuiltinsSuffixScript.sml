@@ -212,8 +212,9 @@ Proof
      gvs[step_GAS, allocas_from_def, update_var_def, mk_inst_def,
        op_taint_def, FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
      metis_tac[]) >>
+  gvs[mk_inst_def, Abbr `G1`, Abbr `tn1`, is_terminator_def] >>
   simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
-       mk_inst_def, is_terminator_def, Abbr `G1`, Abbr `tn1`]
+       is_terminator_def]
 QED
 
 
