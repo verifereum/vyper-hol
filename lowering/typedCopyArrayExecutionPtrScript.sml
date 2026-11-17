@@ -276,7 +276,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
       disj2_tac >> qexists_tac `f1` >> asm_rewrite_tac[] >>
       first_x_assum irule >> asm_rewrite_tac[]) >>
   `C gh1 th1 sh1 ga1 ta1 u1` by
-    (simp_tac (srw_ss()) [Abbr `C`] >> metis_tac[]) >>
+    (simp_tac (srw_ss()) [Abbr `C`] >>
+     qpat_assum `!fuel. (!e. run_from fuel ctx fn u1 <> Error e) ==> _` ACCEPT_TAC) >>
   `C G tn s ga1 ta1 u1` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gh1`, `th1`, `sh1`] >> asm_rewrite_tac[]) >>
