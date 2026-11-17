@@ -339,6 +339,7 @@ Proof
   `s.vs_outcomes = t.vs_outcomes` by
     fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
        taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `((computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) /\
     computed_precompile (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)) /\
     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_target =
