@@ -4,7 +4,7 @@ Ancestors
   asmOwnCodeInvariant asmSymExceptionalOwn asmSymForwardOwn
   asmSymModeInterfaceOwn asmSymModeOwn asmSymOwnStep asmSymRelocLabelsOwn
   codegenEntrySymbolicOwn codegenSymbolicTerminalOwn
-  symBodyAlgebra symBumpOwn symBumpRunOwn symControlPrefixOwn
+  symBodyAlgebra symBumpOwn symBumpRunOwn symControlPrefixOwn symControlReplayOwn
   symEmitCodeEndOwn symEmitCodecopyOwn symEmitDischargeOwn symEmitFrameOwn
   symEmitNamedOwn symEmitOwn symEmitSourceOwn symEmitStoreOwn
   symFrameBoundaryEntryPackaging symFrameBoundaryNumeric symFrameBoundaryOwn
