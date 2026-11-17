@@ -15,6 +15,7 @@ Ancestors
   bodyFullMemoryCopy bodyFullMemoryFrames context loweringPosts loweringStateRelDefs
   venomState typedCopyOriginPtrBase decoderSetupStepPtr exprPtrCtorImmStore
   stateFrame ghostPcTransportPtr emitHelperProps arithmetic bodyPtrDefs ptrDiscipline
+  tupleLoadProps fragExec fragGasOriginPtrLoop
 
 val _ = Parse.hide "body";
 
@@ -366,6 +367,208 @@ Proof
   rpt strip_tac >> `x <> out` by metis_tac[] >>
   simp[decoderGhostFramePtrTheory.step_prov_other_output,
     decoderGhostFramePtrTheory.step_taint_other_output,venomInstTheory.mk_inst_def]
+QED
+
+(* Joint load recursion; semantic value recovery is done at this endpoint. *)
+Theorem body_assign_tuple_load_all_core:
+  !tys cenv root off sa elems sb s w G tn capacity lo ctx func explicit PG.
+    compile_tuple_load_all cenv (Var root) tys off sa = (elems,sb) /\
+    not_fresh_at sa root /\ lookup_var root s = SOME w /\
+    ptr_covers G tn root s capacity /\
+    off + SUM (MAP (type_memory_bytes cenv) tys) <= capacity /\
+    w2n w + capacity < dimword (:256) /\
+    w2n w + capacity <= s.vs_alloca_next /\
+    EVERY (\ty. is_word_type ty ==> type_memory_bytes cenv ty = 32) tys /\
+    (!i j. i < LENGTH tys /\ is_word_type (EL i tys) /\
+      w2n w + off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) <= j /\
+      j < w2n w + off + SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) + 32 ==>
+      j NOTIN tn.t_mem) /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    fn_has_code sa sb func /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    LENGTH elems = LENGTH tys /\ sa.cs_next_var <= sb.cs_next_var /\
+    ?t Gf tf.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK t,Gf,tf)) /\
+      run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\
+      tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+      tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x)) /\
+      (!i. i < LENGTH tys ==>
+        ?x. EL i elems = Var x /\ not_fresh_at sb x /\ op_taint tf (Var x) = {} /\
+          (if is_word_type (EL i tys) then op_prov Gf (Var x) = NONE
+           else ptr_covers Gf tf x t (type_memory_bytes cenv (EL i tys))))
+Proof
+  Induct
+  >- (rpt gen_tac >> simp[compile_tuple_load_all_def,comp_return_def] >>
+      strip_tac >> gvs[] >> qexistsl_tac [`s`,`G`,`tn`] >>
+      simp[exprLoweringPropsTheory.emitted_insts_def,exprLoweringPropsTheory.run_inst_seq_def] >>
+      conj_tac >- metis_tac[cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules] >>
+      simp[venom_state_component_equality]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_tuple_load_all_def,comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD _ sa = (pv,sm)` >>
+  rename1 `compile_load_memory _ _ sm = (v,sh)` >>
+  rename1 `compile_tuple_load_all _ _ _ _ sh = (rest,sb)` >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
+  `cs_extends sm sh /\ sm.cs_next_var <= sh.cs_next_var` by
+    (Cases_on `is_word_type h` >>
+     gvs[compile_load_memory_def,comp_return_def] >>
+     metis_tac[exprSimAccountsTheory.emit_op_extends_next_var,cs_extends_refl]) >>
+  `cs_extends sh sb /\ sh.cs_next_var <= sb.cs_next_var` by
+    metis_tac[stmtSimReturnTheory.compile_tuple_load_all_grows] >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sh func /\ fn_has_code sh sb func` by
+    metis_tac[fn_has_code_split] >>
+  `off + type_memory_bytes cenv h <= capacity` by decide_tac >>
+  `w2n w + capacity < dimword (:256)` by decide_tac >>
+  drule_all body_assign_tuple_offset_add_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts sa sm) s =
+     OK (t with vs_inst_idx := s.vs_inst_idx)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     `out = STRING #"%" (toString sa.cs_next_var)` by metis_tac[operand_11] >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomInstTheory.mk_inst_def,eval_operand_def] >>
+     simp[venom_state_component_equality,update_var_def]) >>
+  `?x u GH th.
+     v = Var x /\ not_fresh_at sh x /\
+     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (s,G,tn) [] (OK u,GH,th)) /\
+     run_inst_seq (emitted_insts sa sh) s =
+       OK (u with vs_inst_idx := s.vs_inst_idx) /\
+     ~u.vs_halted /\ u.vs_current_bb = sh.cs_current_bb /\
+     u.vs_inst_idx = LENGTH sh.cs_current_insts /\
+     state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+     u.vs_alloca_next = s.vs_alloca_next /\
+     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
+     (!y. not_fresh_at sa y ==>
+       lookup_var y u = lookup_var y s /\ FLOOKUP GH y = FLOOKUP G y /\
+       op_taint th (Var y) = op_taint tn (Var y)) /\
+     op_taint th (Var x) = {} /\
+     (if is_word_type h then op_prov GH (Var x) = NONE
+      else ptr_covers GH th x u (type_memory_bytes cenv h))` by
+    (Cases_on `is_word_type h`
+     >- (qpat_x_assum `compile_load_memory _ _ _ = _` mp_tac >>
+         simp[compile_load_memory_def] >> strip_tac >>
+         `type_memory_bytes cenv h = 32` by metis_tac[] >>
+         `ptr_covers Gf tf out t 32` by metis_tac[] >>
+         `off < dimword (:256) /\ w2n w + off < dimword (:256)` by decide_tac >>
+         `w2n (w+n2w off) = w2n w+off` by
+           simp[wordsTheory.word_add_def,wordsTheory.w2n_n2w] >>
+         `w2n (w+n2w off)+32 <= t.vs_alloca_next` by decide_tac >>
+         `!j. w2n (w+n2w off) <= j /\ j < w2n (w+n2w off)+32 ==>
+           j NOTIN tf.t_mem` by
+           (rpt strip_tac >>
+            qpat_x_assum `!i j. _ ==> j NOTIN tn.t_mem`
+              (qspecl_then [`0`,`j`] mp_tac) >> simp[] >> metis_tac[]) >>
+         `allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+           (simp[allocas_from_def,allocas_below_fmp_def,update_var_def] >>
+            fs[allocas_from_def,allocas_below_fmp_def] >> metis_tac[]) >>
+         drule_all body_assign_tuple_mload_path >>
+         disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+         `run_inst_seq (emitted_insts sm sh) (t with vs_inst_idx := s.vs_inst_idx) =
+            OK (t' with vs_inst_idx := s.vs_inst_idx)` by
+           (qpat_assum `emit_op MLOAD _ _ = _`
+              (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+            `out' = STRING #"%" (toString sm.cs_next_var)` by metis_tac[operand_11] >>
+            simp[exprLoweringPropsTheory.run_inst_seq_def,
+              venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+              venomExecSemanticsTheory.exec_read1_def,
+              venomInstTheory.mk_inst_def,eval_operand_def,lookup_var_def,mload_def,FLOOKUP_UPDATE] >>
+            simp[venom_state_component_equality,update_var_def]) >>
+         map_every (fn q => qpat_x_assum q kall_tac)
+           [`t = _`,`t' = _`,`Gf = _`,`Gf' = _`,`tf = _`,`tf' = _`] >>
+         qexistsl_tac [`out'`,`t'`,`Gf'`,`tf'`] >>
+         simp[] >>
+         conj_tac >- (gen_tac >>
+           qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ (OK t,Gf,tf)`
+             (qspec_then `D` (mp_then Any (irule o SRULE [])
+               fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >> simp[]) >>
+         conj_tac >- (irule emitHelperPropsTheory.run_inst_seq_compose_ok >>
+           qexistsl_tac [`t with vs_inst_idx := s.vs_inst_idx`,`sm`] >>
+           simp[] >> metis_tac[emitHelperPropsTheory.inst_extends_emit_op]) >>
+         conj_tac >- (fs[state_frame_def] >> metis_tac[]) >>
+         metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+     qpat_x_assum `compile_load_memory _ _ _ = _` mp_tac >>
+     simp[compile_load_memory_def,comp_return_def] >> strip_tac >>
+     map_every (fn q => qpat_x_assum q kall_tac) [`t = _`,`Gf = _`,`tf = _`] >>
+     gvs[] >> qexistsl_tac [`t`,`Gf`,`tf`] >>
+     simp[] >> fs[state_frame_def]) >>
+  `not_fresh_at sh root` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `lookup_var root u = SOME w` by metis_tac[] >>
+  `ptr_covers GH th root u capacity` by
+    (irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
+  `off + type_memory_bytes cenv h + SUM (MAP (type_memory_bytes cenv) tys) <= capacity` by
+    decide_tac >>
+  `allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    ((fs[allocas_from_def,allocas_below_fmp_def,state_frame_def]) >> (metis_tac[allocas_from_def, allocas_below_fmp_def, state_frame_def])) >>
+  `!i j. i < LENGTH tys /\ is_word_type (EL i tys) /\
+    off + type_memory_bytes cenv h +
+      (SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) + w2n w) <= j /\
+    j < off + type_memory_bytes cenv h +
+      (SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) + (w2n w+32)) ==>
+    j NOTIN th.t_mem` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i j. _ ==> j NOTIN tn.t_mem`
+       (qspecl_then [`SUC i`,`j`] mp_tac) >> simp[] >> metis_tac[]) >>
+  `capacity + w2n w <= u.vs_alloca_next` by simp[] >>
+  qpat_x_assum `!cenv' root' off' sa' elems' sb' s'' w' G' tn' capacity' lo' ctx' func' explicit PG. _`
+    (fn thm => drule_all thm) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  map_every (fn q => qpat_x_assum q kall_tac) [`t = _`,`Gf = _`,`tf = _`] >>
+  rename1 `run_inst_seq (emitted_insts sh sb) u = OK (z with vs_inst_idx := _)` >>
+  `(!x. Var root = Var x ==> not_fresh_at sh x) /\
+   eval_operand (Var root) u = SOME w` by simp[eval_operand_def] >>
+  `inst_extends sh sb` by
+    (drule_all (cj 1 tupleLoadPropsTheory.compile_tuple_load_all_values) >>
+     simp[emitHelperPropsTheory.inst_extends_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sh sb)` by
+    (drule_all (cj 4 tupleLoadPropsTheory.compile_tuple_load_all_values) >>
+     simp[EVERY_MEM]) >>
+  `run_inst_seq (emitted_insts sh sb) (u with vs_inst_idx := s.vs_inst_idx) =
+     OK (z with vs_inst_idx := s.vs_inst_idx)` by
+    simp[fragExecTheory.run_inst_seq_inst_idx,instIdxIndepTheory.exec_result_map_def] >>
+  `inst_extends sa sh` by
+    (Cases_on `is_word_type h` >>
+     gvs[compile_load_memory_def,comp_return_def] >>
+     metis_tac[emitHelperPropsTheory.inst_extends_emit_op,
+       emitHelperPropsTheory.inst_extends_trans,emitHelperPropsTheory.inst_extends_refl]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- decide_tac >>
+  qexistsl_tac [`z`,`Gf'`,`tf'`] >> simp[] >>
+  conj_tac >- (gen_tac >>
+    qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ (OK u,GH,th)`
+      (qspec_then `D` (mp_then Any (irule o SRULE [])
+        fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >> simp[]) >>
+  conj_tac >- (irule emitHelperPropsTheory.run_inst_seq_compose_ok >>
+    qexistsl_tac [`u with vs_inst_idx := s.vs_inst_idx`,`sh`] >> simp[]) >>
+  fs[state_frame_def] >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  qx_gen_tac `i` >> strip_tac >> Cases_on `i`
+  >- (simp[] >>
+      conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+      `op_taint tf' (Var x) = op_taint th (Var x) /\
+       FLOOKUP Gf' x = FLOOKUP GH x /\
+       lookup_var x z = lookup_var x u` by metis_tac[] >>
+      Cases_on `is_word_type h` >> gvs[op_prov_def] >>
+      irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
+  simp[] >> metis_tac[]
 QED
 
 (* A source that is a widened aggregate call. *)
