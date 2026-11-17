@@ -127,6 +127,21 @@ Definition alloca_prefix_def:
     !aid b n. FLOOKUP s.vs_allocas aid = SOME (b,n) ==> cap <= b
 End
 
+(* An internal callee's frame sits above its caller's return buffer
+   [bw, bw + cap): setup_callee starts it with no allocations at the
+   caller's frontier, which the caller moved past the buffer and past the
+   staging buffers of memory-passed arguments (compile_call's IntCall case).
+   So every allocation of the frame, and every live local's region (an
+   ALLOCA or a memory-passed argument's staging buffer), starts at or above
+   bw + cap. *)
+Definition ret_buf_frontier_def:
+  (ret_buf_frontier NONE (cenv : compile_env) (s : venom_state) <=> T) /\
+  (ret_buf_frontier (SOME (bw : bytes32, cap)) cenv s <=>
+    alloca_prefix (w2n bw + cap) s /\
+    !n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+             ?w. lookup_var p s = SOME w /\ w2n bw + cap <= w2n w)
+End
+
 Theorem stmt_exit_loop_ctl:
   !RetQ es rr.
     ~stmt_exit RetQ es (INL ()) rr /\

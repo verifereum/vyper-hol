@@ -217,7 +217,7 @@ Definition stmt_frag_full_def:
               not_fresh_at sa x) /\
       ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
-      return_buf_frame d cenv sa s0 /\
+      return_buf_frame d cenv sa s0 /\ ret_buf_frontier d cenv s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
       (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
@@ -236,7 +236,8 @@ Definition stmt_frag_full_def:
           cenv_top_ext cenv cenv'' ee.scopes /\
           stmt_state_rel H ctx func cenv'' cx ee t /\
           storage_well_formed_on cx ee (FST H) /\
-          return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+          return_buf_frame d cenv'' sb t /\ ret_buf_frontier d cenv'' t /\
+          alloca_history func t /\
           (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
           s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
