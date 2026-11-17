@@ -224,11 +224,14 @@ Definition expr_sim_pre_def:
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 End
 
+(* The S1 body precondition. Of the evm-run roots it admits the ones that
+   lower to a dynamic allocation (expr_dalloca_root). *)
 Definition expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
     ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     EVERY (\c. FST c = NONE /\

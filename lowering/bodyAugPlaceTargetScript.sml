@@ -133,7 +133,7 @@ QED
 
 Theorem aug_place_target_indices_pre:
   !t.
-    ~supported_target_exists expr_evm_run_root t /\
+    ~supported_target_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) t /\
     ~supported_target_exists call_operands_effect_root t /\
     ~supported_target_exists (const_name_root cx) t /\
     EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\

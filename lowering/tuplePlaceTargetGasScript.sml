@@ -9,7 +9,7 @@ Ancestors
    target: no evm-run root and every internal call supported. *)
 Theorem target_indices_pre_static:
   !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
-  ~supported_target_exists expr_evm_run_root bt /\
+  ~supported_target_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) bt /\
   EVERY (\c. FST c = NONE /\
              ?tops. supported_program tops /\
                     get_module_code cx NONE = SOME tops /\

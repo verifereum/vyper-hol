@@ -683,32 +683,34 @@ Proof
 QED
 
 (* Evaluation never halts (SELFDESTRUCT is the only source of HaltException)
-   when no evm-run root occurs and every internal call selects a supported
+   when no evm-run root occurs other than a dynamic-allocation one
+   (expr_dalloca_root: creates and a non-delegate raw_call, which run on the
+   EVM but don't halt the caller) and every internal call selects a supported
    Internal declaration in the current module. *)
 Theorem eval_no_halt:
   (!cx e st st'.
-     ~supported_expr_exists expr_evm_run_root e /\
+     ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
      (int_calls_expr e = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) ==>
      eval_expr cx e st <> (INR HaltException, st')) /\
   (!cx es st st'.
-     ~supported_exprs_exists expr_evm_run_root es /\
+     ~supported_exprs_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) es /\
      (int_calls_exprs es = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) ==>
      eval_exprs cx es st <> (INR HaltException, st')) /\
   (!cx s st st'.
-     ~supported_stmt_expr_exists expr_evm_run_root s /\
+     ~supported_stmt_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) s /\
      (int_calls_stmt s = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) ==>
      eval_stmt cx s st <> (INR HaltException, st')) /\
   (!cx ss st st'.
-     ~supported_stmts_expr_exists expr_evm_run_root ss /\
+     ~supported_stmts_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) ss /\
      (int_calls_stmts ss = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\

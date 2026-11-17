@@ -114,7 +114,8 @@ Theorem tuple_body_pre_contract:
     expr_sim_inv ce cx env es /\ well_typed_expr env tuple_abi /\
     byte_widths_expr tuple_abi /\ alloc_limits_expr ce tuple_abi /\
     call_evaluation_safe cx [(NONE,"f")] /\
-    ~expr_has_evm_run tuple_abi /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e)
+      tuple_abi /\
     ~supported_expr_exists call_operands_effect_root tuple_abi /\
     (?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
        IS_SOME (supported_function_decl tops (NONE,"f") Internal)) /\

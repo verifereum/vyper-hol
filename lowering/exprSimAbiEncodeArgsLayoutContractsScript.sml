@@ -49,7 +49,8 @@ Theorem layout_body_pre_contract:
     expr_sim_inv ce cx env es /\ well_typed_expr env layout_abi /\
     byte_widths_expr layout_abi /\ alloc_limits_expr ce layout_abi /\
     call_evaluation_safe cx [(NONE,"f")] /\
-    ~expr_has_evm_run layout_abi /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e)
+      layout_abi /\
     ~supported_expr_exists call_operands_effect_root layout_abi /\
     (?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
        IS_SOME (supported_function_decl tops (NONE,"f") Internal)) /\

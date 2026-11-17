@@ -1,7 +1,8 @@
 (*
- * raw_call with calldata over the finite-horizon joint judgment: vacuous.
- * Its lowering emits a DALLOCA into the function, whereas body_inv implies
- * that the context has none (body_inv_no_dalloca).
+ * raw_call with calldata over the finite-horizon joint judgment.
+ * Its lowering emits a DALLOCA into the function; expr_body_pre admits the
+ * non-delegate form (expr_dalloca_root) and body_inv admits a context with
+ * dynamic allocations, so the case is proved for real.
  *
  * TOP-LEVEL:
  *   raw_call_calldata_expr_full_ok -- the raw_call-with-calldata case

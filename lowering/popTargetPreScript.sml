@@ -23,7 +23,7 @@ Theorem target_indices_pre_of_body:
     type_place_target env bt = SOME vt /\ byte_widths_target bt /\
     alloc_limits_target cenv bt /\
     call_evaluation_safe cx (int_calls_target bt) /\
-    ~supported_target_exists expr_evm_run_root bt /\
+    ~supported_target_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) bt /\
     ~supported_target_exists call_operands_effect_root bt /\
     ~supported_target_exists (const_name_root cx) bt /\
     EVERY (\c. FST c = NONE /\

@@ -107,7 +107,7 @@ QED
 (* The same for a reason, which may also be a string literal. *)
 Theorem supported_string_reason_body_calls:
   !tops e. supported_string_reason tops e ==>
-    ~expr_has_evm_run e /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
     ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
@@ -137,7 +137,8 @@ Theorem stmt_expr_body_pre:
     ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
             EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
@@ -171,7 +172,8 @@ Theorem stmt_expr_body_pre_alloc:
     ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
             EVERY (\c. IS_SOME (supported_function_decl tops c Internal))

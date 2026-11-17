@@ -370,7 +370,7 @@ Proof
 QED
 
 Theorem eval_expr_calls_no_halt:
-  ~expr_has_evm_run e /\
+  ~supported_expr_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) e /\
   EVERY (\c. FST c = NONE /\
              ?tops. supported_program tops /\
                     get_module_code cx NONE = SOME tops /\

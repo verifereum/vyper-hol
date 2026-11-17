@@ -105,6 +105,18 @@ Definition expr_evm_run_root_def:
   expr_evm_run_root _ = F
 End
 
+(* The evm-run roots that lower to a dynamic allocation: a non-delegate
+   raw_call forwarding msg.data, create_copy_of and create_from_blueprint.
+   The body preconditions exclude only the evm-run roots outside these. *)
+Definition expr_dalloca_root_def:
+  expr_dalloca_root (Call ty (RawCallCalldataTarget flags) args dflt) =
+    ~flags.rcf_is_delegate /\
+  expr_dalloca_root (Call ty (CreateTarget CreateCopyOf salted rof order) args dflt) = T /\
+  expr_dalloca_root
+    (Call ty (CreateTarget (CreateFromBlueprint raw) salted rof order) args dflt) = T /\
+  expr_dalloca_root _ = F
+End
+
 Definition call_operands_effect_root_def:
   call_operands_effect_root (Call ty (ExtCall s k sig opts) args d) =
     EXISTS expr_has_effect (DROP 1 args) /\

@@ -452,7 +452,9 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
 
-(* Vacuous: expr_body_pre excludes create (expr_evm_run_root). *)
+(* expr_body_pre admits create_copy_of and create_from_blueprint
+   (expr_dalloca_root); it still excludes a minimal proxy and a raw create,
+   so their premises are unused here. *)
 Theorem body_create_case_full:
   !cx ty kind has_salt rof v26 es v27.
     (!raw_args s'' prefix t s'3' code_size t'.

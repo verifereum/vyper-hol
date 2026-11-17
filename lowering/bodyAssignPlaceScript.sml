@@ -182,7 +182,7 @@ Theorem target_indices_body_pre[local]:
       (\e. ~is_extcode e /\
            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
-    ~supported_target_exists expr_evm_run_root t /\
+    ~supported_target_exists (\e. expr_evm_run_root e /\ ~expr_dalloca_root e) t /\
     EVERY (\c. FST c = NONE) (int_calls_target t) /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
