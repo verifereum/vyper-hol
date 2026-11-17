@@ -1,6 +1,6 @@
 Theory symFrameInvokeReturnSource
 Ancestors
-  symFrameInvoke frameRel list planExec
+  symFrameInvokeSupport symFrameInvokePrefixOwn frameRel list planExec
 
 (* Only the installed callee's internal-return contract is used here. *)
 Theorem sym_invoke_source_ok_local:

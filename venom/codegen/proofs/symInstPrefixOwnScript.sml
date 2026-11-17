@@ -4,6 +4,7 @@ Theory symInstPrefixOwn
 Ancestors symInstKinds[qualified,ignore_grammar] asmSymBridge[qualified,ignore_grammar]
   symPlannerSim stackPlanGen stackPlanOps stackModel asmSplice
   planExec codegenSymRel asmSymSem doSwapSim genBlockSim symEmitSim fnFrameDeepInst
+  symInstLocalizeCore
 
 (* Parser abbreviation for the existing closed structural bridge relation. *)
 val prefix_bridge_core_tm = let
@@ -46,17 +47,7 @@ Theorem sym_prepared_emit_localize_core:
 Proof
   disch_then assume_tac >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
-  `?top. ss.sym_stack = top ++ srest /\ LENGTH top = LENGTH cs.as_stack` by
-    (gvs[sym_kinds_ok_def, codegenRelTheory.venom_asm_rel_def,
-         codegenRelTheory.plan_stack_rel_def] >>
-     metis_tac[listTheory.LIST_REL_LENGTH, listTheory.LENGTH_REVERSE]) >>
-  drule asm_sym_rel_localize_stack_core >>
-  disch_then (qspecl_then [`rest`, `cs.as_stack`, `top`, `srest`] mp_tac) >>
-  simp[] >> disch_then (qspec_then `code_ok` mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
-  `sym_kinds_ok cplan fn ret [] ps (ss with sym_stack := top)` by
-    (irule sym_kinds_ok_localize_stack >> simp[]) >>
-  gvs[] >> metis_tac[]
+  drule_all sym_prepared_emit_localize_maps_core >> simp[]
 QED
 
 Theorem sym_selected_prefix_paired_mode_conditional:
