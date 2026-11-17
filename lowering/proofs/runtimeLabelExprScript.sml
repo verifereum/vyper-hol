@@ -509,7 +509,7 @@ Proof
   >~ [`compile_name_vv`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_name_vv])
   >~ [`compile_subscript`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_subscript])
   >~ [`compile_attribute`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_attribute])
-  >~ [`compile_call`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> irule rb_compile_call >> simp[rb_abi_encode, rb_abi_decode])
+  >~ [`compile_call`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> irule rb_compile_call >> simp[rb_abi_encode, rb_abi_decode, rb_env_ok_without_defaults])
   >~ [`rb_step rb_value_ok (\st. tfn _ _ _ _ _ _ st)`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[])
   >~ [`compile_struct_lit`] >- suspend "struct"
   >~ [`compile_dynarray_pop`] >- suspend "pop"
@@ -624,25 +624,25 @@ Proof
 QED
 
 Resume rb_compile_expr_raw[expr]:
-  `rb_expr_callback (expr_size e) compile_expr` by
+  `rb_expr_callback (expr_size e + cenv_defaults_size ce) compile_expr` by
     (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
      first_x_assum drule >> disch_then drule_all >>
      disch_then (qspec_then `ty` mp_tac) >> simp[]) >>
-  `rb_builtin_callback (expr_size e) compile_builtin_dispatch` by
+  `rb_builtin_callback (expr_size e + cenv_defaults_size ce) compile_builtin_dispatch` by
     (rw[rb_builtin_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
      qpat_x_assum `!args ce rt ty bi st. _ ==> _ ==> rb_state_ok (SND (compile_builtin_dispatch ce rt ty bi args st)) /\ _` drule >>
      disch_then drule_all >>
      disch_then (qspecl_then [`ret_ty`, `ty`, `bi`] mp_tac) >> simp[]) >>
-  `rb_type_callback (expr_size e) compile_type_builtin_dispatch` by
+  `rb_type_callback (expr_size e + cenv_defaults_size ce) compile_type_builtin_dispatch` by
     (rw[rb_type_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
      qpat_x_assum `!args ce vt ty tb rt st. _ ==> _ ==> rb_state_ok (SND (compile_type_builtin_dispatch ce vt ty tb rt args st)) /\ _` drule >>
      disch_then drule_all >>
      disch_then (qspecl_then [`vv_ty`, `ty`, `tb`, `ret_ty`] mp_tac) >> simp[]) >>
   strip_tac >>
   `rb_step rb_value_ok
-    (compile_expr_body (expr_child_callback (expr_size e) compile_expr)
-      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
-      (type_child_callback (expr_size e) compile_type_builtin_dispatch) ce ty e)` by
+    (compile_expr_body (expr_child_callback (expr_size e + cenv_defaults_size ce) compile_expr)
+      (builtin_child_callback (expr_size e + cenv_defaults_size ce) compile_builtin_dispatch)
+      (type_child_callback (expr_size e + cenv_defaults_size ce) compile_type_builtin_dispatch) ce ty e)` by
     (irule rb_compile_expr_body >> simp[rb_expr_child_callback,
       rb_builtin_child_callback, rb_type_child_callback]) >>
   ONCE_REWRITE_TAC[compile_expr_raw_def] >>
@@ -652,14 +652,14 @@ Resume rb_compile_expr_raw[expr]:
 QED
 
 Resume rb_compile_expr_raw[builtin]:
-  `rb_expr_callback (list_size expr_size args) compile_expr` by
+  `rb_expr_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr` by
     (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
      first_x_assum drule >> disch_then drule_all >>
      disch_then (qspec_then `ty` mp_tac) >> simp[]) >>
   strip_tac >>
   `rb_step rb_value_ok
     (compile_builtin_dispatch_body
-      (expr_child_callback (list_size expr_size args) compile_expr)
+      (expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr)
       ce rt ty bi args)` by
     (irule rb_compile_builtin_dispatch_body >> simp[rb_expr_child_callback]) >>
   ONCE_REWRITE_TAC[compile_expr_raw_def] >>
@@ -668,14 +668,14 @@ Resume rb_compile_expr_raw[builtin]:
 QED
 
 Resume rb_compile_expr_raw[type]:
-  `rb_expr_callback (list_size expr_size args) compile_expr` by
+  `rb_expr_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr` by
     (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
      first_x_assum drule >> disch_then drule_all >>
      disch_then (qspec_then `ty'` mp_tac) >> simp[]) >>
   strip_tac >>
   `rb_step rb_value_ok
     (compile_type_builtin_dispatch_body
-      (expr_child_callback (list_size expr_size args) compile_expr)
+      (expr_child_callback (list_size expr_size args + cenv_defaults_size ce) compile_expr)
       ce vt ty tb rt args)` by
     (irule rb_compile_type_builtin_dispatch_body >> simp[rb_expr_child_callback]) >>
   ONCE_REWRITE_TAC[compile_expr_raw_def] >>

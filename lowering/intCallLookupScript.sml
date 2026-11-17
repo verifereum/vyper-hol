@@ -294,7 +294,7 @@ Proof
          drule_all run_grouped_lowering_internal_lookup] >> simp[]
 QED
 
-Theorem build_func_param_types_distinct[local]:
+Theorem build_func_param_types_distinct:
   !tops vis mut nr rr name args dflts ret stmts.
     ALL_DISTINCT (supported_function_names tops) /\ vis <> External /\
     MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops ==>

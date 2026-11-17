@@ -138,12 +138,8 @@ Proof
      compile_call compile_expr cenv ann ty target args dflt st` by
     (rpt gen_tac >>
      simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-          expr_type_def] >>
-     CONV_TAC (DEPTH_CONV ETA_CONV) >>
-     irule compile_call_callback_contract >>
-     irule expr_child_callback_agrees >>
-     rpt strip_tac >> drule call_callback_child_bound >>
-     simp[expr_size_def]) >>
+          expr_type_def, compile_call_child_calls] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
   strip_tac >> Cases_on `args` >> gvs[] >>
   drule compile_raw_call_calldata_dalloca >> strip_tac >>
   simp[EXISTS_MEM] >> qexists_tac `i` >> simp[] >>
