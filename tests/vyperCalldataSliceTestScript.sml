@@ -9,7 +9,8 @@ Libs
   vyperCheckContractFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["fixtures/check_contract/calldata_slice.json"];
+val () = holbuild_extra_deps ["fixtures/check_contract/calldata_slice.json",
+  "fixtures/check_contract/calldata_slice_wider.json"];
 
 Theorem calldata_slice_compile_time_length_test:
   calldata_slice_length (Literal (BaseT (UintT 256)) (IntL 4)) = SOME 4 /\
@@ -78,6 +79,19 @@ val expected_slice = ``Builtin (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
 val () = if length functions = 3 andalso
     List.all (fn func => not (null (find_terms (aconv expected_slice) func))) functions
   then () else raise Fail "pinned literal/folded calldata slices were not preserved";
+
+(* Vyper types the slice at its target, Bytes[100], and sizes its buffer by
+   that type; the copy length stays 4. *)
+val wider_fixture = vyperCheckContractFrontendLib.check_contract_result
+  {in_deploy = false, address = ``0w : address``,
+   annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
+     "fixtures/check_contract/calldata_slice_wider.json",
+   storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
+     "fixtures/check_contract/calldata_slice_wider.json"};
+val wider_slice = ``Builtin (BaseT (BytesT (Dynamic 100))) (CalldataSlice 4)
+  [Name (BaseT (UintT 256)) "start"]``;
+val () = if not (null (find_terms (aconv wider_slice) (#modules wider_fixture)))
+  then () else raise Fail "calldata slice not typed at its target bound";
 
 val data_expr = ``JE_Attribute
   (JE_Name "msg" NONE JMissingSource JT_None)

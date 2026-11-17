@@ -341,8 +341,8 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty CalldataLen ts =
     (ts = [] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty (CalldataSlice n) ts =
-    (0 < n /\ n < 2 ** 256 /\ ts = [BaseT (UintT 256)] /\
-     ty = BaseT (BytesT (Dynamic n))) /\
+    (?m. ts = [BaseT (UintT 256)] /\ 0 < n /\ n <= m /\ m < 2 ** 256 /\
+         ty = BaseT (BytesT (Dynamic m))) /\
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
