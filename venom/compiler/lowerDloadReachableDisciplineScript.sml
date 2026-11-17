@@ -21,7 +21,7 @@ Theorem ld_step_arith_operands[local]:
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 

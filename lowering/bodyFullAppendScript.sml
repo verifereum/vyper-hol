@@ -1708,7 +1708,7 @@ Proof
        POP_ASSUM_LIST (K all_tac) >>
        simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
        metis_tac[]) >>
-    simp[unitMemInvTheory.dalloca_no_wrap_def])) >>
+    simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 R1` >>
   irule gas_outcome_full_bind_all >>
