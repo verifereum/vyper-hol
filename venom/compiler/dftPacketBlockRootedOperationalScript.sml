@@ -199,7 +199,7 @@ Resume dft_packet_block_rooted_operational[complete]:
         (impl_tac >- simp[]) >> pure_asm_rewrite_tac[] >> rewrite_tac[] >> strip_tac >>
         qpat_assum `!i b e z. _ ==> e = _`
           (qspecl_then [`i`,`b`,`e`,`z`] mp_tac) >> simp[])) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rpt conj_tac >> (simp[])) >>
   qexists_tac `K'` >> simp[APPEND_ASSOC]
 QED
 
