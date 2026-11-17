@@ -374,12 +374,16 @@ Proof
     (mload (w2n w) s0) s0) with vs_inst_idx := SUC s0.vs_inst_idx` >>
   conj_tac
   >- (simp[gas_marked_exec_def, gas_explicit_def] >>
-      gen_tac >> irule (cj 1 eval_target_place_local) >> simp[]) >>
+      conj_tac
+      >- (gen_tac >> irule (cj 1 eval_target_place_local) >> simp[]) >>
+      qpat_x_assum `!ctx. gas_marked_path _ _ _ _ _ _`
+        (qspec_then `ctx` mp_tac) >> simp[]) >>
   conj_tac >- (rpt strip_tac >> suspend "post") >>
   simp[update_var_def] >>
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
-      metis_tac[cs_appends_emit_helpers, cs_appends_def]) >>
+      gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_var_def, fresh_id_def, emit_def]) >>
   conj_tac
   >- (rpt strip_tac >>
       gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -399,7 +403,7 @@ Resume augassign_local_load_typed[post]:
       (typed_val_to_w256 entry.type entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (gvs[] >> irule augassign_name_post_typed >> simp[] >> metis_tac[]) >>
-  fs[update_var_def]
+  gvs[update_var_def]
 QED
 
 Finalise augassign_local_load_typed
@@ -413,10 +417,12 @@ Theorem well_typed_binop_augassign_is_word:
 Proof
   strip_tac >> drule_all well_typed_binop_augassign_word >> strip_tac
   >- metis_tac[word_value_type_word] >>
-  gvs[] >> Cases_on `bop` >>
+  Cases_on `bop` >>
   gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def,
       is_word_type_def, optionTheory.IF_EQUALS_OPTION] >>
-  metis_tac[word_value_type_word, word_value_type_def]
+  Cases_on `t2` >> gvs[is_int_type_def, is_word_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_int_type_def, is_word_type_def]
 QED
 
 (* The shared operator contract keeps the source type's word encoding. *)
@@ -446,16 +452,16 @@ Proof
       >- metis_tac[word_value_type_word] >>
       rewrite_tac[GSYM binop_frag_def] >>
       irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
-  gvs[] >>
+  qpat_x_assum `ty = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
   `(bop = ShL \/ bop = ShR ==>
       (?i. v2 = IntV i /\ 0 <= i) \/
       t2 = BaseT (BytesT (Fixed 32)))` by
-    (rpt strip_tac >> Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+    (rpt strip_tac >> (Cases_on `t2 = BaseT (BytesT (Fixed 32))`
      >- simp[] >>
      `is_int_type t2` by gvs[well_typed_binop_def] >>
-     drule_all int_type_value >> strip_tac >> gvs[]) >>
+     drule_all int_type_value >> strip_tac >> gvs[])) >>
   irule binop_frag_bytes_typed >> simp[] >>
-  qexistsl_tac [`t2`, `get_tenv cx`, `tv1`, `tv2`] >> simp[]
+  qexistsl_tac [`t2`, `get_tenv cx`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem word_value_not_bytes:
@@ -798,7 +804,7 @@ Theorem augassign_shift_operand:
   (ty = BaseT (BytesT (Fixed 32)) /\
    ?bs. v = BytesV bs /\ LENGTH bs = 32)
 Proof
-  strip_tac >> Cases_on `shift_amount_ok e`
+  disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `shift_amount_ok e`
   >- metis_tac[eval_expr_shift_amount] >>
   gvs[augassign_shift_amount_ok_def] >>
   gvs[vyperValueTheory.evaluate_type_def] >>
@@ -851,12 +857,11 @@ Proof
       irule well_typed_binop_success_type >>
       goal_assum (drule_at Any) >> simp[] >>
       qexistsl_tac [`ty`, `expr_type e`, `get_tenv cx`, `entry.type`, `tv2`, `ty`] >> simp[]) >>
-  qexists_tac `tv2` >> simp[] >>
   irule augassign_binop_frag_typed >> simp[] >> conj_tac
   >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
       Cases_on `expr_int_literal e` >> gvs[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`expr_type e`, `entry.type`, `tv2`] >> simp[]
+  qexists_tac `expr_type e` >> simp[]
 QED
 
 Theorem augassign_binop_ready_word:
