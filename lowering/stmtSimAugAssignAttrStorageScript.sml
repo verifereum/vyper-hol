@@ -689,22 +689,6 @@ Resume compile_augassign_attr_storage_case_typed[store]:
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        ftv bop fv v` >> gvs[]) >>
   qpat_x_assum `INL result = _` kall_tac >>
-  `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
-  `expr_body_pre cenv cx env e
-     (es with storage_trace :=
-        es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])` by
-    simp[] >>
-  drule_all augassign_attr_binop_ready >>
-  disch_then (qspecl_then [`func`, `es_end with gas_obs := []`, `ctx`]
-    strip_assume_tac) >>
-  `value_has_type ftv result` by
-    (first_x_assum irule >> irule EQ_TRANS >>
-     qexists_tac `case evaluate_binop
-       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` >>
-     conj_tac >- (irule bop_result_augassign >>
-     metis_tac[augassign_compare_not_bytes]) >>
-     simp[]) >>
   `encode_value ftv result = SOME [(0, typed_val_to_w256 ftv result)]` by
     metis_tac[encode_value_word_typed] >>
   `type_slot_size ftv = 1` by
@@ -872,5 +856,5 @@ Theorem compile_augassign_attr_storage_case:
             bop e)) es
 Proof
   rpt strip_tac >> irule compile_augassign_attr_storage_case_typed >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[] >> metis_tac[]
 QED
