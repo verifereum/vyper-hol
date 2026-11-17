@@ -30,8 +30,9 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState stateRelProj stateRelProjStorage
-  memoryPlaceStorePost stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
+  targetPlaceSim
+  sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
+  stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
   vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
   exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline placeStore valueEncodingProps venomMemProofs
@@ -2057,6 +2058,50 @@ QED
 
 Finalise body_assign_snapshot_memory_copy_joint
 
+Theorem body_assign_widened_layout_ready:
+  !cx id ty e tops bindings ctx cenv env env' ret_ty es.
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    ~is_word_type ty /\
+    0 < type_memory_bytes cenv ty /\
+    ~(lowered_value_type cenv e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type cenv e) /\
+      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    post_value_type cenv e = lowered_value_type cenv e /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty /\
+    ?stv dtv.
+      evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+      evaluate_type (get_tenv cx) ty = SOME dtv /\
+      type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+      type_memory_bytes cenv ty = type_memory_size dtv /\
+      0 < type_memory_size stv /\
+      type_memory_size stv <= type_memory_size dtv /\
+      type_memory_size dtv < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `0 < type_memory_size stv` by
+    (drule_all widening_zero_memory_size >> simp[] >> decide_tac) >>
+  simp[] >> gvs[dimword_def] >> decide_tac
+QED
+
 Theorem body_assign_field_prefix_joint:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   is_word_type (expr_type e) /\
@@ -3215,6 +3260,27 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_memory_place_lower_bound:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  dead_lo_ok H D lo cenv cx /\
+  place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  0 < type_memory_size dtv /\
+  write_place cx p v ee = (INL (),ff) /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type) ==>
+  lo <= w2n dw
+Proof
+  strip_tac >>
+  drule_all memory_place_live_region >> strip_tac >>
+  `0 < len` by decide_tac >>
+  `lo <= b` by (irule body_full_local_region_lower_bound >> metis_tac[]) >>
+  decide_tac
 QED
 
 Theorem body_assign_immutable_bytes_source_live_clean:
