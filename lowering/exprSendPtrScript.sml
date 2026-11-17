@@ -123,6 +123,7 @@ Proof
      simp[step_inst_base_opcode_eqs, eval_operand_def,
           Excl "consume_call_outcome_eq"]) >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  Cases_on `s.vs_outcomes = []` >>
   simp[step_inst_base_opcode_eqs, eval_operand_def, exec_ext_call_def,
        Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"]
@@ -348,7 +349,8 @@ Theorem send_read_call_step:
                       vs_logs := s'.vs_logs;
                       vs_pending_deletions := s'.vs_pending_deletions;
                       vs_returndata := s'.vs_returndata |> /\
-    ((res = INR (Error (RuntimeError "write in static context")) /\
+    (((res = INR (Error (RuntimeError "write in static context")) \/
+       res = INR (Error (RuntimeError "take_call_outcome"))) /\
       step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
      (res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
       state_rel H fn cenv cx es' s') \/
@@ -361,6 +363,7 @@ Proof
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[]
+  >- (qexists_tac `s` >> simp[])
   >- (qexists_tac `s` >> simp[]) >>
   metis_tac[]
 QED
@@ -383,7 +386,8 @@ Theorem send_read_checked_tail:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
      (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
   ?t u w.
@@ -409,7 +413,9 @@ Proof
   `IS_SOME (eval_operand gas s)` by simp[] >>
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
     simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  drule_all send_read_call_step >> strip_tac
+  drule_all send_read_call_step >>
+  disch_then (qx_choose_then `s'` (CONJUNCTS_THEN2 assume_tac
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac)))
   >- (disj1_tac >> simp[] >>
       drule_at (Pat `step_inst_base _ _ = _`) gas_path_ptr_abort >>
       simp[is_terminator_def])
@@ -469,7 +475,8 @@ Theorem send_read_checked_tail_uniform[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    !H. valid_horizon cx st0 H es'.storage_trace ==>
      gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
        (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
@@ -497,7 +504,8 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_all send_read_checked_tail >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac))
   >- (disj1_tac >> simp[] >> qx_gen_tac `H1` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `H1` mp_tac) >>
@@ -636,9 +644,11 @@ Proof
        stmt_state_rel H ctx fn cenv cx es1 s /\ stor_taint_ok H cx tn s` by
     (rpt strip_tac >> res_tac >> fs[bodyPtrDefsTheory.ghost_inv_def]) >>
   drule_all send_read_checked_tail_uniform >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac))
   >- (qexistsl_tac [`G`, `tn`,
          `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
       simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>

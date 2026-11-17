@@ -299,6 +299,14 @@ Proof
   `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
     (gvs[Abbr `rq1`, Abbr `kind`, exec_ext_call_def, exec_delegatecall_def,
          venom_call_request_def, Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
+  `s.vs_outcomes <> []` by
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_ext_call_def, exec_delegatecall_def,
+         Excl "consume_call_outcome_eq", AllCaseEqs()] >>
+     pairarg_tac >> gvs[Excl "consume_call_outcome_eq"]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`gas`,`addr`,`value`,`off`,`off'`,`sz`,
                 `ro`,`ro'`,`rs`,`static`,`kind`,`rq1`,`rq2`] >>
   simp[Excl "consume_call_outcome_eq", Abbr `rq1`, Abbr `rq2`] >>
@@ -463,14 +471,17 @@ QED
 Theorem fmp_mem_call_exception[local]:
   MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   step_inst k C inst s = r /\ terminates r /\ ~(?s1. r = OK s1) ==>
-  inst.inst_opcode = CALL /\
-  ?gop adop vop offop szop rop rsop gas addr value off sz ro rs.
-    inst.inst_operands = [gop;adop;vop;offop;szop;rop;rsop] /\
+  ?gop adop vop offop szop rop rsop gas addr value off sz ro rs prefix.
     eval_operand gop s = SOME gas /\ eval_operand adop s = SOME addr /\
-    eval_operand vop s = SOME value /\ eval_operand offop s = SOME off /\
-    eval_operand szop s = SOME sz /\ eval_operand rop s = SOME ro /\
-    eval_operand rsop s = SOME rs /\
-    s.vs_call_ctx.cc_static /\ value <> 0w /\
+    eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz /\
+    eval_operand rop s = SOME ro /\ eval_operand rsop s = SOME rs /\
+    ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop] /\
+      eval_operand vop s = SOME value) \/
+     (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\ prefix = [gop;adop] /\
+      value = 0w)) /\
+    inst.inst_operands = prefix ++ [offop;szop;rop;rsop] /\
+    ((inst.inst_opcode = CALL /\ s.vs_call_ctx.cc_static /\ value <> 0w) \/
+     ((?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [])) /\
     r = Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[MEM] >>
@@ -490,7 +501,9 @@ Theorem fmp_mem_calls_dead[local]:
   r = Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> drule_all fmp_mem_call_exception >> strip_tac >>
-  `(!op x. MEM op ([gop;adop;vop] ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
+  `!op. MEM op prefix ==> ?w. eval_operand op s = SOME w` by
+    (gvs[] >> metis_tac[]) >>
+  `(!op x. MEM op (prefix ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
      eval_operand op t = SOME x) /\
    ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -498,18 +511,22 @@ Proof
      (?id b c z j. FLOOKUP (fmp_ld_sites sm) id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
     (irule fmp_mem_call_operands >> simp[] >>
-     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
      fs[] >> metis_tac[]) >>
   `eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\
-   eval_operand vop t = SOME value /\ eval_operand szop t = SOME sz /\
-   eval_operand rsop t = SOME rs` by (fs[] >> metis_tac[]) >>
+   eval_operand szop t = SOME sz /\ eval_operand rsop t = SOME rs /\
+   (inst.inst_opcode = CALL ==> eval_operand vop t = SOME value)` by
+    (irule fmp_mem_call_scalar_values >> metis_tac[]) >>
   qpat_x_assum `!op x. _` kall_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
-  gvs[Excl "consume_call_outcome_eq"] >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs]
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+  gvs[MEM, Excl "consume_call_outcome_eq"] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+  IF_CASES_TAC >> simp[exec_ext_call_abort_iff]
 QED
 
 (* The external message-call part of the frozen call simulation. *)
