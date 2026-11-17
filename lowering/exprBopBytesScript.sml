@@ -118,13 +118,46 @@ Proof
   rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
 QED
 
+Theorem bop_result_bytes_augshift:
+  (bop = ShL \/ bop = ShR) /\ LENGTH bs = 32 /\ LENGTH amount = 32 ==>
+  ?out. bop_result cx (BaseT (BytesT (Fixed 32))) bop tys
+          (BytesV bs) (BytesV amount) es = INL (BytesV out) /\
+    word_of_bytes_be out =
+      (if bop = ShL then word_lsl else word_lsr)
+        (word_of_bytes_be bs : bytes32) (w2n (word_of_bytes_be amount : bytes32))
+Proof
+  strip_tac >>
+  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def] >>
+  simp[word_of_bytes_be_def, word_to_bytes_be_def,
+       word_of_bytes_word_to_bytes, dividesTheory.compute_divides]
+QED
+
+Theorem binop_frag_bytes_augshift:
+  (bop = ShL \/ bop = ShR) /\ LENGTH bs = 32 /\ LENGTH amount = 32 ==>
+  binop_frag_post (expr_val_rel cx (BaseT (BytesT (Fixed 32))))
+    ctx func cenv cx bop (BaseT (BytesT (Fixed 32)))
+    (BaseT (BytesT (Fixed 32))) bl el tys
+    (BytesV bs) (BytesV amount) (word_of_bytes_be bs) (word_of_bytes_be amount) es
+Proof
+  strip_tac >> drule_all bop_result_bytes_augshift >> strip_tac >>
+  irule (Q.INST [`v` |-> `BytesV out`, `w` |-> `word_of_bytes_be out`]
+    binop_frag_post_success) >>
+  rpt conj_tac
+  >- metis_tac[straight_fresh_compile_shift]
+  >- first_assum ACCEPT_TAC
+  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+          is_word_type_def, typed_bytes_word] >>
+  rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
+QED
+
 Theorem binop_frag_bytes_typed:
   MEM bop [And;Or;XOr;ShL;ShR] /\
   well_typed_binop ann bop (BaseT (BytesT (Fixed m))) t2 /\
   evaluate_type tenv (BaseT (BytesT (Fixed m))) = SOME tv1 /\
   evaluate_type tenv t2 = SOME tv2 /\
   value_has_type tv1 v1 /\ value_has_type tv2 v2 /\
-  (bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i) ==>
+  (bop = ShL \/ bop = ShR ==>
+    (?i. v2 = IntV i /\ 0 <= i) \/ t2 = BaseT (BytesT (Fixed 32))) ==>
   binop_frag_post (expr_val_rel cx ann)
     ctx func cenv cx bop (BaseT (BytesT (Fixed m))) ann bl el tys
     v1 v2 (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es
@@ -136,6 +169,10 @@ Proof
       Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
       simp[typed_bytes_word] >> irule binop_frag_bytes_bitwise >> simp[]) >>
   `bop = ShL \/ bop = ShR` by gvs[] >>
+  Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
+      simp[typed_bytes_word] >> irule binop_frag_bytes_augshift >> simp[]) >>
   `ann = BaseT (BytesT (Fixed 32)) /\ m = 32 /\ is_int_type t2` by
     gvs[well_typed_binop_def] >>
   gvs[] >>
@@ -156,7 +193,8 @@ Theorem compile_bytes_binop_run:
   evaluate_type tenv (BaseT (BytesT (Fixed m))) = SOME tv1 /\
   evaluate_type tenv t2 = SOME tv2 /\
   value_has_type tv1 v1 /\ value_has_type tv2 v2 /\
-  (bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i) /\
+  (bop = ShL \/ bop = ShR ==>
+    (?i. v2 = IntV i /\ 0 <= i) \/ t2 = BaseT (BytesT (Fixed 32))) /\
   compile_binop bop x y (BaseT (BytesT (Fixed m))) bl el sa = (op,sb) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
   (!z. y = Var z ==> not_fresh_at sa z) /\
@@ -178,6 +216,15 @@ Proof
       gvs[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
           is_word_type_def, typed_bytes_word]) >>
   `bop = ShL \/ bop = ShR` by gvs[] >>
+  Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
+      fs[typed_bytes_word] >>
+      drule_all bop_result_bytes_augshift >> strip_tac >>
+      drule_all compile_bytes_word_run >> strip_tac >>
+      qexistsl_tac [`BytesV out`, `t`] >>
+      gvs[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+          is_word_type_def, typed_bytes_word]) >>
   `ann = BaseT (BytesT (Fixed 32)) /\ m = 32 /\ is_int_type t2` by
     gvs[well_typed_binop_def] >> gvs[] >>
   drule_all int_type_value >> strip_tac >> gvs[] >>
