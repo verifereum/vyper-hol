@@ -238,33 +238,144 @@ QED
 
 Resume dft_packet_call_replay_preservation[U]:
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  rename1 `FLOOKUP blocks' (a,e) =
+    SOME(rb,rt,rp,rx,ry,rr,ri,rh,SOME(rbe,rbh),rcount,rf,rclosed,rest)` >>
   Cases_on `(a,e) = (b,SUC d)`
   >- (`a = b /\ e = SUC d` by gvs[] >>
+      `has_body` by
+        (qpat_x_assum `FLOOKUP blocks' (a,e) = _` mp_tac >>
+         Cases_on `has_body` >> simp[FLOOKUP_UPDATE]) >>
+      `s1.vs_inst_idx = LENGTH cps` by metis_tac[] >>
+      qpat_x_assum `cm = _` mp_tac >> simp[] >> disch_tac >>
+      qpat_x_assum `ce = _` mp_tac >> simp[] >> disch_tac >>
+      qpat_x_assum `ck = _` mp_tac >> simp[] >> disch_tac >>
+      qpat_x_assum `!a e cid cq ch cb done child ret rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm. _` kall_tac >>
+      qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest owner target incoming ent ord res nrest rm re rk. _` kall_tac >>
+      qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm re rk owner target incoming ent ord res nrest. _` kall_tac >>
+      qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest. _` kall_tac >>
+      qpat_x_assum `!a e cid cq ch cb done child ret. _` kall_tac >>
+      qpat_assum `cbb.bb_instructions = _`
+        (mp_then Any mp_tac dft_packet_call_fresh_child_U) >>
+      disch_then assume_tac >>
       gvs[FLOOKUP_UPDATE] >>
-      qpat_assum `rbe.vs_inst_idx = LENGTH cps` (fn th =>
-        qpat_assum `cbb.bb_instructions = cps ++ cxs` (fn bh =>
-          irule (SRULE [th,bh] (Q.INST [`be` |-> `rbe`, `bb` |-> `cbb`]
-            dft_packet_call_fresh_child_U)))) >> simp[]) >>
+      rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
+      metis_tac[LESS_EQ_REFL]) >>
   `FLOOKUP blocks (a,e) =
-    SOME(rb,rt,rp,rx,ry,rr,ri,rh,SOME(rbe,rbh),rc,rf,rclosed,rest)` by
-    fs[FLOOKUP_UPDATE] >>
+    SOME(rb,rt,rp,rx,ry,rr,ri,rh,SOME(rbe,rbh),rcount,rf,rclosed,rest)` by
+    (qpat_x_assum `FLOOKUP blocks' (a,e) = _` mp_tac >>
+     qpat_assum `blocks' = _` (fn th => pure_rewrite_tac[th,FLOOKUP_UPDATE]) >>
+     IF_CASES_TAC >- metis_tac[] >> simp[]) >>
   `?old_owner old_target old_inc old_ent old_ord old_res old_rest old_m old_e old_k.
     FLOOKUP acts a = SOME(old_owner,old_target,old_inc,old_ent,old_ord,old_res,old_rest) /\
     FLOOKUP ms_tab (a,e) = SOME old_m /\ FLOOKUP es_tab (a,e) = SOME old_e /\
-    FLOOKUP ks_tab (a,e) = SOME old_k` by metis_tac[] >>
+    FLOOKUP ks_tab (a,e) = SOME old_k` by
+    (qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest. _` irule >>
+     goal_assum (drule_at Any)) >>
   `a <> b` by (strip_tac >> gvs[]) >>
   `FLOOKUP acts a = SOME(owner,target,incoming,ent,ord,res,nrest)` by
-    fs[FLOOKUP_UPDATE] >>
-  irule dft_packet_call_old_U_transport >>
+    (qpat_x_assum `FLOOKUP acts' a = _` mp_tac >>
+     qpat_assum `acts' = _` (fn th => pure_rewrite_tac[th,FLOOKUP_UPDATE]) >>
+     IF_CASES_TAC >- metis_tac[] >> simp[]) >>
+  match_mp_tac dft_packet_call_old_U_transport >>
   goal_assum (drule_at (Pat `FLOOKUP ms_tab' (a,e) = SOME rm`)) >>
   goal_assum (drule_at (Pat `FLOOKUP es_tab' (a,e) = SOME re`)) >>
   goal_assum (drule_at (Pat `FLOOKUP ks_tab' (a,e) = SOME rk`)) >>
-  qexistsl [`calls`, `p`, `old_m`, `old_e`, `old_k`] >>
-  FAIL_TAC "old U inputs"
+  qexistsl [`p`, `old_m`, `old_e`, `old_k`, `calls`] >>
+  conj_tac
+  >- (qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest owner target incoming ent ord res nrest rm re rk. _` irule >>
+      simp[] >> conj_tac >> goal_assum (drule_at Any)) >>
+  qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm re rk owner target incoming ent ord res nrest. _` match_mp_tac >>
+  goal_assum (drule_at (Pat `FLOOKUP blocks (a,e) = _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP acts a = SOME(owner,target,incoming,ent,ord,res,nrest)`)) >>
+  simp[]
 QED
 
 Resume dft_packet_call_replay_preservation[Q]:
-  FAIL_TAC "Q join"
+  qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm re rk owner target incoming ent ord res nrest. _ ==> !F k kgss tail. _`
+    (fn th => drule th) >> disch_then (mk_asm "current_U") >>
+  `!F kgss tail u.
+    N <= F /\
+    LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) kgss /\
+    FOLDR (dft_exec_cons (F-d) C7) OK (TAKE q xs)
+      (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+    (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op s) /\
+    (!callee args. setup_callee callee args (u with vs_gas_readings := s.vs_gas_readings) =
+      setup_callee callee args s)` by
+    (match_mp_tac dft_packet_call_fresh_Q >>
+     goal_assum (drule_at (Pat `EL j _ = _`)) >>
+     goal_assum (drule_at (Pat `EL hbe _ = _`)) >>
+     goal_assum (drule_at (Pat `FOLDR _ _ _ _ = OK s`)) >>
+     goal_assum (drule_at (Pat `dft_remaining_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `get_instruction _ _ = SOME inst`)) >>
+     qexistsl [`hbe`, `ps`, `obs`, `ks`] >> simp[] >>
+     rpt gen_tac >> strip_tac >>
+     asm "current_U" drule_all >> simp[]) >>
+  pop_assum (mk_asm "fresh_Q") >>
+  `EL q xs = inst` by
+    (`inv_memory_observation inst.inst_opcode` by
+       simp[dftGasInvCrossingProbeTheory.inv_memory_observation_def] >> metis_tac[]) >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  rename1 `FLOOKUP blocks' (a,e) =
+    SOME(rb,rt,rp,rx,ry,rr,ri,rh,SOME(rbe,rbh),rcount,rf,rclosed,rest)` >>
+  Cases_on `(a,e,cid) = (p,d,inst.inst_id)`
+  >- suspend "fresh_call" >>
+  suspend "old_call"
+QED
+
+Resume dft_packet_call_replay_preservation[fresh_call]:
+  qpat_x_assum `!a e cid cq ch cb done child ret rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm. _` kall_tac >>
+  qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest owner target incoming ent ord res nrest rm re rk. _` kall_tac >>
+  qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm re rk owner target incoming ent ord res nrest. _` kall_tac >>
+  qpat_x_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest. _` kall_tac >>
+  qpat_x_assum `!a e cid cq ch cb done child ret. _` kall_tac >>
+  asm_x "current_U" kall_tac >>
+  `p <> b` by (strip_tac >> gvs[]) >>
+  gvs[FLOOKUP_UPDATE] >>
+  asm "fresh_Q" ACCEPT_TAC
+QED
+
+Resume dft_packet_call_replay_preservation[old_call]:
+  `FLOOKUP calls (a,e,cid) = SOME(cq,ch,cb,done,child,ret)` by
+    (qpat_x_assum `FLOOKUP calls' (a,e,cid) = _` mp_tac >>
+     qpat_assum `calls' = _` (fn th => pure_rewrite_tac[th,FLOOKUP_UPDATE]) >>
+     IF_CASES_TAC >- metis_tac[] >> simp[]) >>
+  qpat_assum `!a e cid cq ch cb done child ret.
+    FLOOKUP calls (a,e,cid) = _ ==> ?rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest. _`
+    drule >> strip_tac >>
+  `?old_owner old_target old_inc old_ent old_ord old_res old_rest old_m old_e old_k.
+    FLOOKUP acts a = SOME(old_owner,old_target,old_inc,old_ent,old_ord,old_res,old_rest) /\
+    FLOOKUP ms_tab (a,e) = SOME old_m /\ FLOOKUP es_tab (a,e) = SOME old_e /\
+    FLOOKUP ks_tab (a,e) = SOME old_k` by
+    (qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest.
+       FLOOKUP blocks (a,e) = _ ==> ?owner target incoming ent ord res nrest rm re rk. _`
+       irule >> goal_assum (drule_at Any)) >>
+  `a <> b` by (strip_tac >> gvs[]) >>
+  qpat_x_assum `FLOOKUP blocks (a,e) = _` kall_tac >>
+  `FLOOKUP blocks (a,e) =
+    SOME(rb,rt,rp,rx,ry,rr,ri,rh,SOME(rbe,rbh),rcount,rf,rclosed,rest)` by
+    (qpat_x_assum `FLOOKUP blocks' (a,e) = _` mp_tac >>
+     qpat_assum `blocks' = _` (fn th => pure_rewrite_tac[th,FLOOKUP_UPDATE]) >>
+     IF_CASES_TAC >- gvs[] >> simp[]) >>
+  qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest owner target incoming ent ord res nrest rm re rk. _`
+    (qspecl_then [`a`,`e`] (fn th => drule_all th)) >> disch_then (mk_asm "row_update") >>
+  match_mp_tac dft_packet_call_old_Q_transport >>
+  goal_assum (drule_at (Pat `FLOOKUP ms_tab' (a,e) = SOME rm`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP calls (a,e,cid) = _`)) >>
+  qexistsl [`old_owner`, `p`, `rb`, `rp`, `rcount`, `rr`, `old_m`] >>
+  conj_tac
+  >- (asm_x "row_update" mp_tac >>
+      disch_then (DISJ_CASES_THEN2 strip_assume_tac
+        (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)))
+      >- simp[] >>
+      disj2_tac >> goal_assum (drule_at Any) >>
+      qexistsl [`b0`, `tf`, `bt0`, `ys0`] >> simp[] >>
+      rpt gen_tac >> disch_tac >>
+      qpat_assum `!cid q h b0 done child ret. FLOOKUP calls (a,e,cid) = _ ==> _`
+        drule >> simp[]) >>
+  qpat_assum `!a e cid cq ch cb done child ret rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm. _`
+    match_mp_tac >>
+  goal_assum (drule_at (Pat `FLOOKUP blocks (a,e) = _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP calls (a,e,cid) = _`)) >> simp[]
 QED
 
 Finalise dft_packet_call_replay_preservation
