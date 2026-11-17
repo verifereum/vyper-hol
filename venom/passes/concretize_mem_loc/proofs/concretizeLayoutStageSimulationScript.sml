@@ -1,14 +1,14 @@
 Theory concretizeLayoutStageSimulation
-Ancestors concretizeLayoutCutSafe frameGasEvents gasEvents concretizeLayoutCanonicalContract concretizeLayoutStageEntry
-  frameSelectedSimulation frameDecorationComplete frameResolvedCoherent
-  frameFiniteJointDecoration frameJointTrace frameSelectedDecoration list
-  concretizePtrParamShape unitTransformDefs o1PassContract ptrDiscipline
-  venomExecSemantics passSimulationDefs frameFiniteExecution frameFiniteJointTrace
-  frameJointTransition venomWf contextCodegenRel o1ContractSimplifyCfg
-  concretizeStepStructure concretizeLayoutCanonicalDriver
-  concretizeLayoutStagePairing concretizeMemLocDefs
-  concretizeLayoutCanonicalPrefix frameSelectedPrefix frameDecoratedPrefix
-  frameFinitePrefix o1SafeUpto rich_list
+Ancestors
+  concretizeLayoutCutSafe frameGasEvents gasEvents concretizeLayoutCanonicalContract concretizeLayoutStageEntry
+  frameSelectedSimulation frameDecorationComplete frameResolvedCoherent frameFiniteJointDecoration frameJointTrace
+  frameSelectedDecoration list concretizePtrParamShape unitTransformDefs o1PassContract
+  ptrDiscipline venomExecSemantics passSimulationDefs frameFiniteExecution frameFiniteJointTrace
+  frameJointTransition venomWf contextCodegenRel o1ContractSimplifyCfg concretizeStepStructure
+  concretizeLayoutCanonicalDriver concretizeLayoutStagePairing concretizeMemLocDefs concretizeLayoutCanonicalPrefix frameSelectedPrefix
+  frameDecoratedPrefix frameFinitePrefix o1SafeUpto rich_list concretizeLayoutCanonicalBaseTerminalExit
+  passSharedFrame passSharedDefs concretizeLayoutCanonicalCallEntry concretizeLayoutSelectedBaseInterface concretizeLayoutCanonicalBlock
+  concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalRunNext
 
 (* The generic selected driver is the only recursive simulation used here. *)
 Theorem layout_stage_selected_run_fuel_headroom_static:
@@ -122,6 +122,101 @@ Proof
   `?fuel. run_blocks fuel C fn s = r` by
     (fs[finite_run_iff] >> metis_tac[]) >>
   drule_all layout_stage_selected_run_fuel >> metis_tac[]
+QED
+
+(* Empty-revert observation on the prescribed selected executions. *)
+Theorem layout_selected_empty_induction[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend ==>
+  (!K i s r q n w qe d. decorated_step K i s r q n w qe d ==>
+    !fuel j t g fin tfin. K = C /\
+      selected_segment C q0 path n q w qe /\
+      layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+        q n i s j t (INL g) /\
+      step_inst fuel C i s = r /\ step_inst fuel C' j t = Abort Revert_abort tfin /\
+      r = Abort Revert_abort fin /\ fin.vs_returndata = [] ==>
+      tfin.vs_returndata = []) /\
+  (!K bb s r q n w qe d. decorated_block K bb s r q n w qe d ==>
+    !fuel bb' t g fin tfin. K = C /\
+      selected_segment C q0 path n q w qe /\
+      layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+        q n bb s bb' t (INL g) /\ layout_paired_prefix_alias bb s bb' t /\
+      exec_block fuel C bb s = r /\ exec_block fuel C' bb' t = Abort Revert_abort tfin /\
+      r = Abort Revert_abort fin /\ fin.vs_returndata = [] ==>
+      tfin.vs_returndata = []) /\
+  (!K fn s r q n w qe d. decorated_run K fn s r q n w qe d ==>
+    !fuel fn' t fin tfin. K = C /\
+      selected_segment C q0 path n q w qe /\
+      layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+      run_blocks fuel C fn s = r /\ run_blocks fuel C' fn' t = Abort Revert_abort tfin /\
+      r = Abort Revert_abort fin /\ fin.vs_returndata = [] ==>
+      tfin.vs_returndata = [])
+Proof
+  strip_tac >> ho_match_mp_tac decorated_step_strongind >> rpt conj_tac
+  >- suspend "base"
+  >- (rpt strip_tac >> gvs[])
+  >- suspend "invoke_exit"
+  >- (rpt strip_tac >> gvs[AllCaseEqs()])
+  >- suspend "block_next"
+  >- suspend "block_exit"
+  >- suspend "run_next"
+  >- (rpt strip_tac >> gvs[])
+  >> suspend "run_exit"
+QED
+
+Theorem layout_stage_selected_run_fuel_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend /\
+  decorated_run C fn s r q n w qe d /\
+  selected_segment C q0 path n q w qe /\
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+  run_blocks fuel C fn s = r ==>
+  ?r'. run_blocks fuel C' fn' t = r' /\ finite_run C' fn' t r' /\
+    layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend
+      q n qe (n + LENGTH w) fn s fn' t r r' /\
+    (!post tpost. r = Abort Revert_abort post /\ r' = Abort Revert_abort tpost /\
+      post.vs_returndata = [] ==> tpost.vs_returndata = [])
+Proof
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    metis_tac[layout_cut_safe_whole_run] >>
+  drule_all layout_stage_selected_run_fuel >> strip_tac >>
+  qexists `r'` >> simp[] >> rpt strip_tac >>
+  irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
 QED
 
 Theorem layout_segment_chain[local]:
@@ -592,6 +687,88 @@ Proof
   rpt gen_tac >> mp_tac (SPEC_ALL layout_stage_terminating_context_fuel_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
+QED
+
+Theorem layout_stage_context_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  run_context fuel C vs = Abort Revert_abort post /\ post.vs_returndata = [] /\
+  run_context fuel C' vs = Abort Revert_abort tpost ==>
+  tpost.vs_returndata = []
+Proof
+  strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  drule o1_ctx_shape_instructions_wf >> strip_tac >>
+  `EVERY wf_function C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
+  qpat_assum `ptr_discipline lo C vs` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
+  Cases_on `C.ctx_entry` >> gvs[run_context_def] >>
+  rename1 `C.ctx_entry = SOME name` >>
+  Cases_on `lookup_function name C.ctx_functions` >> gvs[] >>
+  rename1 `lookup_function name C.ctx_functions = SOME fn` >>
+  Cases_on `fn_entry_label fn` >> gvs[run_function_def] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  qpat_x_assum `run_blocks fuel C fn _ = _`
+    (fn th => assume_tac th) >>
+  qmatch_asmsub_abbrev_tac `run_blocks fuel C fn s` >>
+  `finite_run C fn s (run_blocks fuel C fn s)` by
+    (irule (cj 3 finite_execution_complete) >> simp[]) >>
+  drule finite_run_entry_active >> strip_tac >>
+  qabbrev_tac `q0 = JointConfig [] [] FEMPTY entry_taint fn inst' p [] FEMPTY []
+    [OriginInitial s; OriginObserve (OriginSnapshot fn [] FEMPTY FEMPTY inst' p)]` >>
+  `joint_initial vs C q0` by
+    (simp[Abbr `q0`, Abbr `s`] >> metis_tac[joint_initial_entry]) >>
+  `decoration_entry fn p q0` by
+    (simp[decoration_entry_def, decoration_at_def, Abbr `q0`] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `wf_function fn /\ fn.fn_eom = NONE` by fs[EVERY_MEM] >>
+  `ALL_DISTINCT (fn_labels fn) /\
+    EVERY (\f. ALL_DISTINCT (fn_labels f)) C.ctx_functions` by
+    fs[wf_function_def, EVERY_MEM] >>
+  drule_all layout_stage_source_decoration >> strip_tac >>
+  `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
+  `s.vs_allocas = FEMPTY` by simp[Abbr `s`] >>
+  `?fn' positions.
+     lookup_function name C'.ctx_functions = SOME fn' /\
+     layout_driver_row C' fn fn' positions /\
+     layout_canonical_run D lo vs C C' q0 (MAP FST path) (MAP SND path)
+       ass qe q0 0 fn s fn' s` by
+    (irule layout_stage_entry_initial >>
+     goal_assum (drule_at Any) >> simp[Abbr `q0`] >> metis_tac[]) >>
+  `activation_depth q0 = 0` by simp[Abbr `q0`, frameActivationCacheTheory.activation_depth_def] >>
+  `?r'. run_blocks fuel C' fn' s = r' /\ finite_run C' fn' s r' /\
+    layout_canonical_OutR D lo vs C C' q0 (MAP FST path) (MAP SND path)
+      ass qe q0 0 qe (0+LENGTH path) fn s fn' s (run_blocks fuel C fn s) r' /\
+    (!a b. run_blocks fuel C fn s = Abort Revert_abort a /\
+      r' = Abort Revert_abort b /\ a.vs_returndata = [] ==> b.vs_returndata = [])` by
+    (irule layout_stage_selected_run_fuel_revert_empty >> simp[] >>
+     rpt conj_tac
+     >- (qexists `P` >> simp[])
+     >- (qexists `names` >> simp[])
+     >- (qexists `rpolicy` >> simp[])
+     >- (qexists `path` >> gvs[])
+     >> qexists `d` >> gvs[]) >>
+  `C'.ctx_entry = SOME name` by fs[ctx_pass_stage_def] >>
+  `fn_entry_label fn' = SOME lbl` by
+    (fs[layout_driver_row_def, layout_stage_row_def,
+        apply_context_concretize_layout_def, apply_concretize_layout_def,
+        venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
+     qspecl_then [`layout.cl_positions`, `fn`] mp_tac
+       (GEN_ALL concretize_positions_entry_label) >>
+     simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def]) >>
+  gvs[run_function_def, Abbr `s`] >> metis_tac[]
 QED
 
 val _ = export_theory();

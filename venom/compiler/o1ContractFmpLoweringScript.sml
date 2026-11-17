@@ -217,6 +217,28 @@ Proof
   fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
 QED
 
+Theorem fmp_lowering_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+    C.ctx_functions /\
+  callee_first names C.ctx_functions /\
+  mem_inv (static_mem_ok eom) C vs /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
+  `ctx_seal_eq C C'`
+    by (fs[ctx_seal_eq_def, ctx_pass_stage_def] >>
+        irule LIST_REL_mono >> first_x_assum (irule_at Any) >>
+        simp[fn_seal_eq_def]) >>
+  `run_context fuel C' vs = run_context fuel C vs` by
+    metis_tac[run_context_seal_eq] >>
+  simp[]
+QED
+
 Theorem o1_static_stage_fmp_lowering:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
