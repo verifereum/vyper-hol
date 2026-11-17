@@ -1177,7 +1177,7 @@ Resume compile_augassign_attr_local_mem_typed[operator_normal]:
         simp[]) >>
      fs[eval_operand_def] >> metis_tac[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 ftv result)` by
-    (irule expr_val_rel_typed >> simp[]) >>
+    (irule expr_val_rel_typed >> qexistsl_tac [`cx`, `ty`] >> simp[]) >>
   suspend "store"
 QED
 
@@ -1321,10 +1321,16 @@ QED
 
 
 Resume compile_augassign_attr_local_mem_typed[typed_dispatch]:
-  irule (Q.INST [`t2` |-> `expr_type e`, `tv1` |-> `ftv`, `tv2` |-> `etv`]
-    augassign_binop_frag_typed_mem) >> simp[] >>
-  strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
-  Cases_on `expr_int_literal e` >> gvs[]
+  mp_tac (Q.INST [`t2` |-> `expr_type e`, `tv1` |-> `ftv`, `tv2` |-> `etv`,
+    `v1` |-> `fv`, `v2` |-> `v`, `bl` |-> `NONE`,
+    `el` |-> `if bop = Exp then expr_int_literal e else NONE`,
+    `tys` |-> `[ty; expr_type e]`, `es` |-> `ee with gas_obs := []`]
+    augassign_binop_frag_typed_mem) >>
+  impl_tac
+  >- (asm_rewrite_tac[] >> strip_tac >>
+      gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+      Cases_on `expr_int_literal e` >> gvs[]) >>
+  disch_then ACCEPT_TAC
 QED
 
 Finalise compile_augassign_attr_local_mem_typed[local]
@@ -1342,7 +1348,9 @@ Theorem compile_augassign_attr_local_mem:
     (stmt_env cenv lctx ty0 (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
-  strip_tac >> irule compile_augassign_attr_local_mem_typed >> simp[]
+  strip_tac >> irule compile_augassign_attr_local_mem_typed >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
 
 Theorem body_augassign_attr_local_mem:
