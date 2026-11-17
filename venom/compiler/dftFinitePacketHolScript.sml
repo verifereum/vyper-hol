@@ -3,16 +3,15 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendNative
-  dftPacketBlockAppendShape dftGasPrefixProvider
+  dftPacketBlockAppendSemantics
+  dftPacketBlockAppendNative dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCalleeAlignment
-  dftPacketCallFreshEntry
-  dftPacketClosedRowNative
+  dftPacketCallFreshEntry dftPacketClosedRowNative
   dftPacketClosedRows
   dftPacketCommonOracle
   dftPacketCutExtension
@@ -21,8 +20,7 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshChildStop
   dftPacketFreshRow
-  dftPacketBlockFreshEntry
-  dftPacketKeyMap
+  dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
   dftPacketNativeContinuation
@@ -37,15 +35,18 @@ Ancestors
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
+  dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
+  dftPacketPseudoHistory
+  dftPacketPseudoPrefixFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
+  dftPacketRootedOperational dftPacketCompletePlanOperational
   dftPacketRootedPlainStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
