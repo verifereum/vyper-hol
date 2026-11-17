@@ -12,7 +12,7 @@ Theorem store_slots_dyn_header_read_uniform[local]:
   w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      mem_word_at (w2n sw) mem = n2w N) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
@@ -111,7 +111,7 @@ Theorem store_slots_dyn_data_uniform[local]:
   fn_has_code a b func /\ cs_extends a b /\ not_fresh_at a x /\
   eval_operand (Var x) s = SOME sw /\ op_taint tn (Var x) = {} /\
   ptr_covers G tn x s (32+B) /\ w2n sw+32+B < dimword(:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?d q H u.
@@ -159,7 +159,7 @@ Theorem store_slots_dyn_addresses_uniform[local]:
   eval_operand (Var x) s = SOME sw /\ eval_operand dst s = SOME dw /\
   op_taint tn (Var x) = {} /\ op_taint tn dst = {} /\
   ptr_covers G tn x s (32+B) /\ w2n sw+32+B < dimword(:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?d q H u.
@@ -237,7 +237,7 @@ Theorem store_slots_dyn_prefix_uniform[local]:
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      mem_word_at (w2n sw) mem = n2w N) /\
   fn_inst_ids_distinct func /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?d q H u.
@@ -328,7 +328,7 @@ val dyn_child = ``
    w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   encode_value tv v = SOME writes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -378,7 +378,7 @@ Theorem compile_store_slots_dynarray_origin_ptr_path:
    w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   encode_value tv v = SOME writes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

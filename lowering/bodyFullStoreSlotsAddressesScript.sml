@@ -11,7 +11,7 @@ Theorem store_address_binop_uniform:
   (opc = MUL /\ w = x*y \/ opc = ADD /\ w = x+y) /\
   eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?out t Gf tf.
@@ -64,7 +64,7 @@ Theorem store_scaled_address_uniform[local]:
   not_fresh_at a counter /\ (!x. bop = Var x ==> not_fresh_at a x) /\
   lookup_var counter s = SOME (n2w i) /\ eval_operand bop s = SOME w /\
   op_taint tn (Var counter) = {} /\ op_taint tn bop = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?out t Gf tf.
@@ -154,7 +154,7 @@ Theorem store_slots_addresses_origin_ptr_path:
   w2n sw + N*ss < dimword(:256) /\
   w2n dw + N*ds <= dimword(:256) /\
   (ss <> 0 ==> ?x. src = Var x /\ ptr_covers G tn x s (N*ss)) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

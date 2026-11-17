@@ -8,7 +8,7 @@ Ancestors
 
 Theorem storage_tainted_singleton[local]:
   eval_operand addr s = SOME slot /\ eval_operand op s = SOME w /\
-  op_taint tn addr = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn addr = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_call_ctx.cc_static ==>
   run_inst_seq [mk_inst id (if tr then TSTORE else SSTORE) [addr;op] []] s =
     OK (if tr then tstore slot w s else sstore slot w s) /\
@@ -35,7 +35,7 @@ QED
 Theorem storage_tainted_word_store_origin_ptr:
  !tr addr op sa sb func s ctx slot w tn lo explicit PG G.
   emit_void (if tr then TSTORE else SSTORE) [addr;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\

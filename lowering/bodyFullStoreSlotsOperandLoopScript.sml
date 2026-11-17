@@ -20,7 +20,7 @@ Theorem copy_scalar_eq_origin_ptr[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (update_var tv (bool_to_word (a = b)) s with
            vs_inst_idx := s.vs_inst_idx + 1),
@@ -70,7 +70,7 @@ Theorem copy_operand_header_origin_ptr[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (jump_to (if a = b then exit else body_lbl)
           (update_var tv (bool_to_word (a = b)) s with
@@ -171,7 +171,7 @@ Theorem memory_copy_loop_zero_origin_ptr_uniform:
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand count s = SOME 0w /\ op_taint tn count = {} /\
   op_prov G count = NONE /\ (!y. count = Var y ==> not_fresh_at sa y) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gf tnf.
@@ -244,7 +244,7 @@ Theorem copy_operand_header_frame[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   ?t Gf tnf.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     t = jump_to (if a = b then exit else body_lbl)
@@ -280,7 +280,7 @@ Theorem copy_operand_body_runtime[local]:
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
   ~sbase.vs_call_ctx.cc_static /\ w2n b + 32*(i+1) <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (code ++ [mk_inst (id+7) JMP [Label hdr] []])
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -323,7 +323,7 @@ Theorem copy_operand_body_step[local]:
     mk_inst (id+3) ADD [dst;Var cv] [dv];
     mk_inst (id+4) (if loc = LocStorage then SSTORE else TSTORE) [Var dv;Var vv] [];
     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv]; mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\ ~MEM x [cv;mv;sv;vv;dv;nv] /\
   (!y. dst = Var y ==> ~MEM y [cv;mv;sv;vv;dv;nv]) /\
   store_copy_frame sa loc b k sbase i s /\
@@ -369,7 +369,7 @@ Theorem memory_copy_loop_operand_origin_ptr_uniform:
  !x dst n count F sa u sb func loc ctx lo s G tn b k explicit PG.
   compile_word_copy_loop_op (Var x) dst count LocMemory loc F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
   not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
   lookup_var x s = SOME b /\ ptr_covers G tn x s (32*n) /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\

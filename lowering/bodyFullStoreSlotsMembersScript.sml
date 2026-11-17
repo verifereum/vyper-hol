@@ -32,7 +32,7 @@ val members_child = ``
   (type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   encode_value tv v = SOME writes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -107,7 +107,7 @@ val members_case = ``
   (type_memory_size_list tvs = 0 \/
     w2n sw+mo+type_memory_size_list tvs <= s.vs_alloca_next) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -299,7 +299,7 @@ Theorem members_tail_run[local]:
  so+(type_slot_size_list (tv::tvs)+w2n dw) <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
    32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= s.vs_alloca_next) /\
- fn_has_code sc sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sc sb func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
  sa.cs_next_var <= sc.cs_next_var /\
  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
@@ -392,7 +392,7 @@ Theorem members_head_run[local]:
  w2n (dw+n2w so)+type_slot_size tv <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
   32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= u.vs_alloca_next) /\
- fn_has_code b sc func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_has_code b sc func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  allocas_from lo u /\ lo <= u.vs_alloca_next /\ ~u.vs_call_ctx.cc_static /\ ~u.vs_halted /\
  u.vs_current_bb = b.cs_current_bb /\ u.vs_inst_idx = LENGTH b.cs_current_insts ==>
  ?t ks Gf tf writes. ^members_head_post
@@ -426,7 +426,7 @@ Theorem members_offsets_run[local]:
  (type_memory_size_list (tv::tvs) <> 0 ==> ?x. src = Var x /\
    ptr_covers G tn x s (32*so+type_memory_size_list (tv::tvs))) /\
  32*so+(type_memory_size_list (tv::tvs)+w2n sw) < dimword(:256) /\
- ~ctx_has_dalloca ctx /\ fn_has_code sa a func /\ fn_has_code a b func /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa a func /\ fn_has_code a b func /\
  ~s.vs_halted /\ allocas_from lo s /\
  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
  ?u2 Gf' tf'.
@@ -557,7 +557,7 @@ val members_cons_entry = ``
  so+(type_slot_size_list (tv::tvs)+w2n dw) <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
    32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= s.vs_alloca_next) /\
- fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\

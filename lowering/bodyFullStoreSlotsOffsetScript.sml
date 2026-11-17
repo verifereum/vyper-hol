@@ -9,7 +9,7 @@ Ancestors
 
 Theorem offset_add_joint[local]:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ADD [op;Lit off] [out]]
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -47,7 +47,7 @@ Theorem compile_lit_byte_offset_origin_ptr_path:
  !op off sa r sb s a tn ctx func lo explicit PG G.
   compile_lit_byte_offset op off sa = (r,sb) /\
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

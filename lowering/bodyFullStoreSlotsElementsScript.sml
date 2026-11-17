@@ -13,7 +13,7 @@ Theorem store_slots_counter_init_uniform[local]:
   fn_has_code a c func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?t Gf tf.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
@@ -74,7 +74,7 @@ Theorem store_slots_header_uniform[local]:
   fn_has_code a d func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?x y t Gf tf.
     lt = Var x /\ done = Var y /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -133,7 +133,7 @@ Theorem store_slots_backedge_uniform[local]:
   fn_has_code a d func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?out t Gf tf.
     inc = Var out /\ out <> counter /\ k+1 < dimword(:256) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -262,7 +262,7 @@ val elements_contract = ``
     w2n sw + N*ss < dimword(:256) /\
     w2n dw + N*ds <= dimword(:256) /\
     (ss <> 0 ==> ?x. src = Var x /\ ptr_covers G tn x s (N*ss)) /\
-    fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+    fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     allocas_from lo s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -312,7 +312,7 @@ val elements_contract = ``
       w2n sw + type_memory_size etv <= s.vs_alloca_next) /\
     encode_value etv v = SOME writes /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
     ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -364,7 +364,7 @@ val elements_contract = ``
     (type_memory_size etv = 0 \/
       w2n sw + N*type_memory_size etv <= s.vs_alloca_next) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
     ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -396,22 +396,6 @@ val (elements_AM, elements_rest) = boolSyntax.dest_imp elements_contract;
 val (elements_A, elements_M) = boolSyntax.dest_conj elements_AM;
 val (_, elements_inner) = boolSyntax.strip_forall elements_rest;
 val (elements_H, elements_goal) = boolSyntax.dest_imp elements_inner;
-
-(* Compiler-only projection: package the four emitted address operations in
-   the exact shape consumed by the conditional address interface. *)
-Theorem store_slots_element_address_layout[local]:
-  emit_op MUL [Var cv; Lit (n2w ss)] a = (so,b1) /\
-  emit_op ADD [src; so] b1 = (sp,b2) /\
-  emit_op MUL [Var cv; Lit (n2w ds)] b2 = (doff,b3) /\
-  emit_op ADD [dst; doff] b3 = (dp,b) ==>
-  (do so <- emit_op MUL [Var cv; Lit (n2w ss)];
-      sp <- emit_op ADD [src; so];
-      doff <- emit_op MUL [Var cv; Lit (n2w ds)];
-      dp <- emit_op ADD [dst; doff]; comp_return (sp,dp)
-   od) a = ((sp,dp),b)
-Proof
-  simp[comp_bind_def, comp_return_def]
-QED
 
 Theorem store_slots_element_body_conditional[local]:
   ^elements_A ==> ^elements_H ==>
@@ -445,7 +429,7 @@ Theorem store_slots_element_body_conditional[local]:
     w2n sw + N * type_memory_size etv <= a.vs_alloca_next) /\
   fn_has_code body_start child_start func /\
   fn_has_code child_start child_end func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo a /\ lo <= a.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\ allocas_from lo a /\ lo <= a.vs_alloca_next /\
   ~a.vs_call_ctx.cc_static /\ ~a.vs_halted /\
   a.vs_current_bb = body_start.cs_current_bb /\
   a.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
@@ -583,7 +567,7 @@ Theorem store_slots_elements_round_conditional[local]:
     ?x. src = Var x /\ ptr_covers G tn x s (N*type_memory_size etv)) /\
   (type_memory_size etv = 0 \/
     w2n sw+N*type_memory_size etv <= s.vs_alloca_next) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static ==>
   !i u ks Gu tu.
