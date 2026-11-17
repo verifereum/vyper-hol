@@ -1,6 +1,7 @@
 (* A pure Extract32 suffix can raise Error, but cannot halt. *)
 Theory bodyFullExtract32SuffixExit
 Ancestors
+  haltExitProj
   gasOutcomeFull exprSimDefs vyperInterpreter vyperState
 
 Theorem extract32_lift_sum_value_exit_full:
@@ -20,6 +21,6 @@ Proof
          simp[NoAsms, lift_sum_def, bind_def, return_def, raise_def] >>
          strip_tac >> gvs[]) >>
       qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
-      simp[halt_exit_def])
+      simp[halt_exit_not_halt])
   >> metis_tac[]
 QED

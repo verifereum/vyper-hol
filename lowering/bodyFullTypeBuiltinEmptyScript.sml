@@ -117,7 +117,25 @@ Resume empty_expr_full_ok[vv]:
       pop_assum mp_tac >>
       simp[NoAsms, bodyPtrDefsTheory.ghost_inv_at_def] >>
       strip_tac >> simp[]) >>
-  conj_tac >- metis_tac[] >> metis_tac[]
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac
+  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ ghost_kept_at _ _ _ _ _ _ _ _ _` drule >>
+      simp[]) >>
+  strip_tac >>
+  simp[loweringPostsTheory.vv_own_def, read_result_def, return_def,
+       venomStateTheory.eval_operand_def] >>
+  rpt strip_tac >> gvs[] >>
+  disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n w`, `type_memory_bytes cenv typ`] >>
+  simp[] >> conj_tac
+  >- (drule_all expr_sim_inv_memory_size >> strip_tac >>
+      simp[exprSimPropsTheory.val_footprint_le,
+           valueEncodingProofsTheory.val_wf_default_value_proof]) >>
+  rpt strip_tac >>
+  `local_region cenv es'.scopes s0 n lb lsz` by
+    (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >>
+     disch_then (qspecl_then [`es'.scopes`, `n`, `lb`, `lsz`] mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` drule >> simp[]
 QED
 Resume empty_expr_full_ok[value]:
   irule expr_sim_full_of_vv >> simp[] >>

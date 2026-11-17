@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarJoint
 Ancestors
+  haltExitProj
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertScalarSuffix bodyFullConvertScalarFrame bodyFullPathHistory
   bodyFullConvertEndpointPosts
@@ -105,9 +106,9 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> Cases_on `res` >> simp[Abbr `childR`] >>
   Cases_on `y` >> Cases_on `r` >>
-  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt] >>
   rename1 `Error err` >> Cases_on `err` >>
-  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
+  simp[exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
 QED
 
 Resume convert_scalar_vv_sim_full[continuation]:
@@ -211,6 +212,6 @@ Resume convert_scalar_vv_sim_full[continuation]:
   reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR (Error (RuntimeError msg))`,`tnf`] >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-       exprSimDefsTheory.halt_exit_def]
+       halt_exit_not_halt]
 QED
 Finalise convert_scalar_vv_sim_full
