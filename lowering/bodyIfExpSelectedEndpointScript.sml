@@ -74,6 +74,9 @@ Theorem ifexp_selected_marked_endpoint_mem:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
     vv_at ce cx t sa sb (ee with gas_obs := []) tv (LocatedValue t (mk_ptr op LocMemory)) u /\
+    (~is_word_type t ==>
+     vv_place_ptr ce cx (ee with gas_obs := []) u tv
+       (LocatedValue t (mk_ptr op LocMemory))) /\
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
@@ -87,6 +90,8 @@ Proof
     (qpat_x_assum `!gs v st. _` irule >>
      qexistsl_tac [`gas_explicit marks s0.vs_gas_readings`,`ee with gas_obs := []`] >>
      simp[bind_def]) >>
+  Cases_on `?id path. raw = PlaceR (MemoryPlace id path)`
+  >- suspend "memory_place" >>
   drule ifexp_selected_arm_path_mem >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
@@ -112,6 +117,77 @@ Proof
     (qpat_x_assum `expr_type e = t` (SUBST_ALL_TAC o SYM) >>
      qpat_x_assum `!tv. _ ==> vv_at _ _ _ _ _ _ _ _ _` irule >>
      qpat_x_assum `tv = _` (fn th => rewrite_tac[th])) >>
+  `conditional_result cx raw (ee with gas_obs := []) =
+     (INL tv,ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `vv_place_ptr ce cx (ee with gas_obs := []) u tv
+     (LocatedValue t (mk_ptr op LocMemory))` by
+    (drule ifexp_conditional_result_place >> strip_tac >> gvs[]) >>
   qexistsl_tac [`tv`,`v`,`u`] >> simp[] >>
   fs[vv_store_bound_def] >> metis_tac[]
 QED
+
+Resume ifexp_selected_marked_endpoint_mem[memory_place]:
+  qpat_x_assum `?id path. raw = PlaceR (MemoryPlace id path)`
+    (qx_choosel_then [`id`,`path`] strip_assume_tac) >>
+  qpat_x_assum `raw = _` SUBST_ALL_TAC >>
+  `same_memory_layout ce (lowered_value_type ce e) t` by
+    metis_tac[ifexp_raw_place_layout] >>
+  `vv_place_ptr ce cx (ee with gas_obs := []) s
+     (PlaceR (MemoryPlace id path)) vv` by fs[vv_post_def] >>
+  Cases_on `vv`
+  >- (fs[vv_post_def, vv_at_def] >> metis_tac[]) >>
+  rename1 `LocatedValue vt p` >>
+  `p.ptr_location = LocMemory` by fs[vv_place_ptr_def] >>
+  `~is_word_type vt` by
+    (fs[vv_post_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  fs[compile_ifexp_arm_def, unwrap_value_def, comp_return_def] >>
+  `vv_post H ctx func ce cx e es sa sb s0 (ee with gas_obs := []) (Value v)
+     (LocatedValue vt p) s` by
+    metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result] >>
+  `expr_post H ctx func ce cx e es sa sb s0 (ee with gas_obs := [])
+     v p.ptr_operand s` by
+    (irule exprSimUnwrapPropsTheory.expr_post_of_vv_post_memory >> simp[] >>
+     qexists_tac `vt` >> simp[]) >>
+  `vv_store_bound cx t t (ee with gas_obs := []) (PlaceR (MemoryPlace id path))
+     (LocatedValue t (mk_ptr p.ptr_operand LocMemory)) s` by
+    (`vv_store_bound cx t t (ee with gas_obs := []) (PlaceR (MemoryPlace id path))
+       (LocatedValue vt p) s` by
+       (irule bodyIfExpSelectedMemoryTheory.ifexp_arm_store_bound >>
+        qexists_tac `lowered_value_type ce e` >> simp[]) >>
+     fs[vv_store_bound_def, contextTheory.mk_ptr_def]) >>
+  `gas_marked_exec T (ctx,func) (read_result cx (PlaceR (MemoryPlace id path)))
+     (ee with gas_obs := [],s) [] (INL v) (ee with gas_obs := []) (OK s)` by
+    (simp[gas_marked_exec_def, gas_marked_path_def, cj 1 gas_path_mem_rules] >>
+     drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
+  drule_all ifexp_marked_conditional_of_read_mem >> strip_tac >>
+  `tv = PlaceR (MemoryPlace id path) \/ tv = Value v` by
+    (`conditional_result cx (PlaceR (MemoryPlace id path)) (ee with gas_obs := []) =
+       (INL tv,ee with gas_obs := [])` by
+      (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
+       simp[gas_marked_exec_def] >> strip_tac >>
+       first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+     drule ifexp_conditional_result_shape >> strip_tac >>
+     gvs[read_result_def, return_def]) >>
+  `vv_store_bound cx t t (ee with gas_obs := []) tv
+     (LocatedValue t (mk_ptr op LocMemory)) s` by
+    (fs[vv_store_bound_def, read_result_def, return_def] >> metis_tac[]) >>
+  `vv_at ce cx t sa sb (ee with gas_obs := []) tv
+     (LocatedValue t (mk_ptr op LocMemory)) s` by
+    (irule ifexp_vv_at_conditional >>
+     qexistsl_tac [`PlaceR (MemoryPlace id path)`,`v`] >> simp[] >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` mp_tac >>
+     simp_tac bool_ss [vv_post_def] >> strip_tac >>
+     qpat_x_assum `vv_at _ _ _ _ _ _ (PlaceR _) _ _` mp_tac >>
+     asm_simp_tac (srw_ss()) [vv_at_def, contextTheory.mk_ptr_def]) >>
+  `vv_place_ptr ce cx (ee with gas_obs := []) s tv
+     (LocatedValue t (mk_ptr op LocMemory))` by
+    (gvs[] >> irule ifexp_place_ptr_mem_ptr >> simp[] >>
+     qexists_tac `vt` >> simp[]) >>
+  qexistsl_tac [`tv`,`v`,`s`] >> fs[] >> metis_tac[]
+QED
+
+Finalise ifexp_selected_marked_endpoint_mem
