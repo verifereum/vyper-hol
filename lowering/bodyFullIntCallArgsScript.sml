@@ -8,10 +8,9 @@
 Theory bodyFullIntCallArgs
 Ancestors ptrDiscipline[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
-  bodyFullIntCallArgsCharge bodyFullIntCallArgsEntry
   gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
-  exprReasonOperand bodyPtrIfExpRepresentationCases typedMemoryCopy
+  exprReasonOperand typedMemoryCopy
   exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
 
@@ -86,7 +85,27 @@ Proof
     metis_tac[expr_body_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_result_type_options >> strip_tac >>
   Cases_on `lowered_value_type cenv e = expr_type e` >- gvs[] >>
-  drule lowered_value_type_exceptions >> strip_tac >> gvs[expr_type_def]
+  `(?n s. e = Literal (BaseT (StringT n)) (StringL s)) \/
+   (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+   (?ty n args. e = Builtin ty (Concat n) args) \/
+   (?ann ensure method_id tys args.
+      e = TypeBuiltin ann (AbiEncode ensure method_id) tys args) \/
+   (?ann fid args dret. e = Call ann (IntCall fid) args dret)` by
+    (qpat_x_assum `lowered_value_type cenv e <> expr_type e` mp_tac >>
+     Cases_on `e` >> simp[lowered_value_type_def]
+     >~ [`Literal t l`]
+     >- (Cases_on `t` >> simp[lowered_value_type_def] >>
+         rename1 `BaseT bt` >> Cases_on `bt` >>
+         Cases_on `l` >> simp[lowered_value_type_def] >>
+         rename1 `BytesT bound` >> Cases_on `bound` >>
+         simp[lowered_value_type_def])
+     >~ [`Builtin t b l`]
+     >- (Cases_on `b` >> simp[lowered_value_type_def])
+     >~ [`TypeBuiltin ann tb tys args`]
+     >- (Cases_on `tb` >> simp[lowered_value_type_def]) >>
+     rename1 `Call ann target args dret` >> Cases_on `target` >>
+     simp[lowered_value_type_def]) >>
+  pop_assum mp_tac >> strip_tac >> gvs[expr_type_def]
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
