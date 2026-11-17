@@ -421,23 +421,9 @@ Proof
   disch_then strip_assume_tac >>
   `eval_operand (Var qi) sbuf = SOME wi /\
    eval_operand (Var qo) sbuf = SOME wo` by simp[eval_operand_def] >>
-  `?vcall. run_inst_seq [gi;ci] sbuf = OK vcall` by
-    (qunabbrev_tac `gi` >> qunabbrev_tac `ci` >>
-     MATCH_MP_TAC (Q.INST [`src` |-> `qi`,`dst` |-> `qo`,`gv` |-> `gv`,
-       `cv` |-> `cv`,`id` |-> `cz.cs_next_id`,`addr` |-> `1w`,
-       `an` |-> `128w`,`rn` |-> `32w`,`s` |-> `sbuf`,
-       `wi` |-> `wi`,`wo` |-> `wo`] computed_call_prefix) >> simp[]) >>
   qabbrev_tac `u = update_var gv (HD (sbuf.vs_gas_readings ++ [0w]))
     (sbuf with vs_gas_readings := DROP 1 sbuf.vs_gas_readings)` >>
   `step_inst_base gi sbuf = OK u` by simp[Abbr `gi`,Abbr `u`,step_GAS] >>
-  `step_inst_base ci u = OK vcall` by
-    (qpat_assum `run_inst_seq [gi;ci] sbuf = OK vcall`
-       (fn run => qpat_assum `step_inst_base gi sbuf = OK u`
-         (fn gas => POP_ASSUM_LIST (K all_tac) >> mp_tac run >>
-           simp[run_inst_seq_def,gas] >>
-           Cases_on `step_inst_base ci u` >> simp[run_inst_seq_def])) ) >>
-  qabbrev_tac `Gcall = step_prov PG (step_prov PG Gbuf gi u) ci vcall` >>
-  qabbrev_tac `tncall = step_taint ci u vcall (step_taint gi sbuf u tnbuf)` >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      ghost_inv_at (DF H) lo d cenv cx mid Gbuf tnbuf sbuf /\
      stmt_state_rel H ctx func cenv cx mid sbuf /\
@@ -473,6 +459,94 @@ Proof
     (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ sbuf`
        (fn state => POP_ASSUM_LIST (K all_tac) >> mp_tac state) >>
      simp[stmt_state_rel_def,state_rel_def]) >>
+  Cases_on `sbuf.vs_outcomes = []`
+  >- (`step_inst_base ci u = Abort ExHalt_abort (halt_state (set_returndata [] u))` by
+        (simp[Abbr `ci`, mk_inst_def, step_inst_base_def, exec_ext_call_def,
+           eval_operand_def, lookup_var_def, Abbr `u`, update_var_def,
+           FLOOKUP_UPDATE] >> gvs[eval_operand_def, lookup_var_def]) >>
+      `isPREFIX [gi;ci] (DROP sbuf.vs_inst_idx bb.bb_instructions)` by
+        metis_tac[IS_PREFIX_APPEND, APPEND] >>
+      qabbrev_tac `tabort = halt_state (set_returndata [] u)
+        with vs_inst_idx := SUC sbuf.vs_inst_idx` >>
+      qabbrev_tac `Ga = step_prov PG Gbuf gi u` >>
+      qabbrev_tac `tna = step_taint gi sbuf u tnbuf` >>
+      `!H. valid_horizon cx st0 H mid.storage_trace ==>
+         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+           (sbuf,Gbuf,tnbuf) [F] (Abort ExHalt_abort tabort,Ga,tna)` by
+        (simp[Abbr `tabort`, Abbr `Ga`, Abbr `tna`] >>
+         irule precompile_suffix_call_abort_full_family >>
+         simp[Abbr `gi`, Abbr `ci`, wordsTheory.dimword_def] >>
+         gen_tac >> strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+           ghost_inv_at _ _ _ _ _ _ Gbuf tnbuf sbuf /\ _`
+           (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
+             (strip_assume_tac o MATCH_MP th)) >> simp[]) >>
+      `!H. valid_horizon cx st0 H mid.storage_trace ==>
+         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+           (sarg,G1,tn1) [F] (Abort ExHalt_abort tabort,Ga,tna)` by
+        (gen_tac >> strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+           gas_origin_ptr_path _ (sbuf,Gbuf,tnbuf) [F] _`
+           (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
+             (assume_tac o MATCH_MP th)) >>
+         qpat_assum `!D. gas_origin_ptr_path _ (sarg,G1,tn1) [] _`
+           (fn prefix => qpat_assum
+             `gas_origin_ptr_path (DF H,_,_,_,_,_) (sbuf,Gbuf,tnbuf) [F] _`
+             (fn call => let
+                val args = snd (strip_comb (concl call));
+                val actualD = fst (pairSyntax.dest_pair (hd args));
+                val left = SPEC actualD prefix;
+                val st = pairSyntax.strip_pair (List.nth (args,1));
+                val out = pairSyntax.strip_pair (List.nth (args,3));
+                val th = SPECL (st @ [List.nth (args,2)] @ out)
+                  (MATCH_MP gas_origin_ptr_path_append left);
+                val endpoint = List.nth (snd (strip_comb (concl left)),3);
+                val total = MATCH_MP th (CONJ (REFL endpoint) call);
+              in ACCEPT_TAC (SIMP_RULE (srw_ss()) [APPEND] total) end))) >>
+      (fn (asl,goal) => let
+         val actualSource = List.nth (snd (strip_comb goal),4);
+         val th = gas_outcome_full_intro;
+         val sv = valOf (List.find (fn v => fst (dest_var v) = "source") (free_vars (concl th)));
+         val typed = INST_TYPE (match_type (type_of sv) (type_of actualSource)) th;
+         val sv = valOf (List.find (fn v => fst (dest_var v) = "source") (free_vars (concl typed)));
+         val provider = INST [sv |-> actualSource] typed;
+       in MATCH_MP_TAC (Q.INST [`marks` |-> `[F]`,
+         `res` |-> `INR (Error (RuntimeError "precompile failed"))`, `ee` |-> `mid`,
+         `r` |-> `Abort ExHalt_abort tabort`, `G'` |-> `Ga`, `tn'` |-> `tna`]
+         provider) (asl,goal) end) >>
+      conj_tac
+      >- (gen_tac >>
+          qpat_assum `builtin_result cx mid.accounts _ _ _ vals = _`
+            (fn result => qpat_assum `mid.outcomes = SOME sbuf.vs_outcomes`
+              (fn outcomes => qpat_assum `sbuf.vs_outcomes = []`
+                (fn empty => POP_ASSUM_LIST (K all_tac) >>
+                  MAP_EVERY assume_tac [result,outcomes,empty]))) >>
+          Cases_on `sarg.vs_gas_readings` >>
+          simp[gas_explicit_def,
+            SIMP_RULE (srw_ss()) [] (Q.INST [`n` |-> `0`] gasOracleReplayTheory.gas_prefix_suc),
+            ZIP, MAP, FILTER, ignore_bind_def, bind_def, return_def,
+            ecrecover_source_outcome_step, evaluation_state_component_equality]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      gen_tac >> strip_tac >> conj_tac
+      >- (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+            gas_origin_ptr_path _ (sarg,G1,tn1) [F] _`
+            (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
+              (ACCEPT_TAC o MATCH_MP th))) >>
+      simp[NoAsms, exit_result_def, expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+  `?vcall. run_inst_seq [gi;ci] sbuf = OK vcall` by
+    (qunabbrev_tac `gi` >> qunabbrev_tac `ci` >>
+     MATCH_MP_TAC (Q.INST [`src` |-> `qi`,`dst` |-> `qo`,`gv` |-> `gv`,
+       `cv` |-> `cv`,`id` |-> `cz.cs_next_id`,`addr` |-> `1w`,
+       `an` |-> `128w`,`rn` |-> `32w`,`s` |-> `sbuf`,
+       `wi` |-> `wi`,`wo` |-> `wo`] computed_call_prefix) >> simp[]) >>
+  `step_inst_base ci u = OK vcall` by
+    (qpat_assum `run_inst_seq [gi;ci] sbuf = OK vcall`
+       (fn run => qpat_assum `step_inst_base gi sbuf = OK u`
+         (fn gas => POP_ASSUM_LIST (K all_tac) >> mp_tac run >>
+           simp[run_inst_seq_def,gas] >>
+           Cases_on `step_inst_base ci u` >> simp[run_inst_seq_def])) ) >>
+  qabbrev_tac `Gcall = step_prov PG (step_prov PG Gbuf gi u) ci vcall` >>
+  qabbrev_tac `tncall = step_taint ci u vcall (step_taint gi sbuf u tnbuf)` >>
   Cases_on `?co rest. sbuf.vs_outcomes = co::rest /\ co.co_success`
   >- (pop_assum (qx_choose_then `co` (qx_choose_then `rest` strip_assume_tac)) >>
       `?q. run_inst_seq [gi;ci;ai] sbuf = OK q` by
