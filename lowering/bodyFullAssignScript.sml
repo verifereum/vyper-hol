@@ -2267,3 +2267,44 @@ Proof
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
 QED
+
+Theorem body_assign_immutable_word_dead_frame:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\ is_word_type ty /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec2 = LENGTH sec1 /\
+  (!j. j < LENGTH sec1 /\ ~(off <= j /\ j < off + 32) ==> EL j sec2 = EL j sec1) ==>
+  imm_section_dead tops sec2 = imm_section_dead tops sec1
+Proof
+  strip_tac >>
+  `!sec off j. ~mem_dead_bytes sec off tv j` by
+    (Cases_on `ty` >> gvs[is_word_type_def,evaluate_type_def,AllCaseEqs(),mem_dead_bytes_def]) >>
+  simp[FUN_EQ_THM] >> gen_tac >>
+  rewrite_tac[imm_section_dead_def] >>
+  `!pre' vis' name' ty' slot' post' tv'.
+     tops = pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post' /\
+     evaluate_type (type_env tops) ty' = SOME tv' ==>
+     mem_dead_bytes sec2
+       (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv' =
+     mem_dead_bytes sec1
+       (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv'`
+    by (rpt strip_tac >>
+        `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty = 32`
+          by metis_tac[imm_frame_size,word_tv_memory_size] >>
+        `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' =
+          type_memory_size tv'` by metis_tac[imm_frame_size] >>
+        `pre ++ VariableDecl vis Immutable name ty slot :: post =
+         pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post'`
+          by metis_tac[] >>
+        drule imm_frame_occurrence_separation >>
+        disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
+        strip_tac
+        >- (fs[] >> gvs[FUN_EQ_THM]) >>
+        irule mem_dead_bytes_frame >> reverse conj_tac >- simp[] >>
+        ntac 2 (qpat_x_assum `tops = _` kall_tac) >>
+        qpat_x_assum `_ ++ _ = _ ++ _` kall_tac >>
+        rpt strip_tac >>
+        simp[]) >>
+  metis_tac[]
+QED
