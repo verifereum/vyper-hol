@@ -9,58 +9,6 @@ Ancestors
   loweringHalt bodyPtrDefs loweringStateRelDefs ptrDiscipline venomMemDefs
   venomExecSemantics venomState venomInst finite_map pred_set
 
-(* Only the exact raw ALLOCA calculation is repeated here: the public
-   allocation producer does not expose its raw execution witness. *)
-Theorem copy_alloca_exact[local]:
-  !id n out s t tn.
-    stmt_state_rel H ctx func cenv cx es s /\
-    MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
-    n < dimword (:256) /\
-    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
-    ?b. FLOOKUP t.vs_allocas id = SOME (b,n) /\
-        lookup_var out t = SOME (n2w b) /\ b + n < dimword (:256) /\
-        t with <| vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
-                  vs_alloca_next := s.vs_alloca_next |> = s /\
-        s.vs_alloca_next <= t.vs_alloca_next /\
-        b + n <= t.vs_alloca_next /\
-        (!lo. allocas_from lo s /\ lo <= s.vs_alloca_next ==>
-              allocas_from lo t) /\
-        (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn).t_stor =
-          tn.t_stor /\
-        (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn).t_trans =
-          tn.t_trans /\
-        (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn).t_imm =
-          tn.t_imm /\
-        (!i. i IN (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out])
-                     s t tn).t_mem <=>
-             i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < b + n))
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `FLOOKUP s.vs_allocas id`
-  >- (drule_all stmt_state_rel_alloca_fresh_bound >> strip_tac >>
-      drule_all fresh_alloca_ghost >>
-      disch_then (qspecl_then [`[]`, `FEMPTY`, `tn`] strip_assume_tac) >>
-      drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
-      simp[] >> disch_then (qspec_then `out` assume_tac) >> gvs[] >>
-      qexists_tac `s.vs_alloca_next` >>
-      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-           venom_state_component_equality] >>
-      simp[allocas_from_def, FLOOKUP_UPDATE] >>
-      rpt strip_tac >> gvs[AllCaseEqs()] >> res_tac) >>
-  rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
-  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >> gvs[] >>
-  `site0 + n <= s.vs_alloca_next` by
-    (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
-     res_tac >> decide_tac) >>
-  drule reused_alloca_ghost >>
-  disch_then (qspecl_then [`out`, `[]`, `FEMPTY`, `tn`] strip_assume_tac) >>
-  drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >>
-  gvs[] >>
-  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-       venom_state_component_equality, allocas_from_def] >>
-  rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[]
-QED
-
 Theorem copy_alloc_packet[local]:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -116,7 +64,7 @@ Proof
   qabbrev_tac `dst = STRING #"%" (toString sa.cs_next_var)` >>
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [dst]) s = OK r` by
     (gvs[run_inst_seq_def, AllCaseEqs()]) >>
-  drule_all copy_alloca_exact >>
+  drule_all bodyFullAllocaFreshTheory.alloca_step_exact >>
   disch_then (qspec_then `tn` strip_assume_tac) >>
   drule_all alloca_step_ptr_covers >>
   disch_then (qspecl_then [`PG`, `G`, `tn`] assume_tac) >>

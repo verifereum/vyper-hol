@@ -21,7 +21,7 @@ Ancestors
   venomExecSemantics venomState venomInst finite_map pred_set
 
 (* Helper: the ALLOCA step itself, new or reused site. *)
-Theorem alloca_step_exact[local]:
+Theorem alloca_step_exact:
   !id n out s t tn.
     stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\

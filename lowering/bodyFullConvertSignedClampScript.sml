@@ -1,6 +1,7 @@
 (* Uniform clean-operand signed continuation certificates. *)
 Theory bodyFullConvertSignedClamp
 Ancestors
+  bodyFullAllocGeneric
   bodyPtrSignedConvertClamp exprSimConvertFromBytes instSeqComposePtr
   bodyFullConvertScalarCertificate fragExecMem memSafeRun
   fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragExec instIdxIndep
@@ -221,7 +222,7 @@ Proof
     simp[mk_inst_def, is_terminator_def] >>
   `!D q. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := q) H th` by
-    (rpt gen_tac >> irule scalar_seq_lower_bound >>
+    (rpt gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >>
      simp[allocas_from_def] >>
      conj_tac >- (fs[EVERY_MEM, allocas_from_def] >> metis_tac[]) >>
      qexists `0` >> simp[] >> metis_tac[]) >>

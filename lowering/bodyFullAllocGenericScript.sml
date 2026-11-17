@@ -181,7 +181,7 @@ Proof
   gvs[ghost_kept_def]
 QED
 
-Theorem inst_seq_ptr_lower_bound_transport[local]:
+Theorem inst_seq_ptr_lower_bound_transport:
   !code s G tn Gf tnf.
     inst_seq_ptr D lo0 ctx fn PG G tn code s Gf tnf /\
     lo0 <= lo /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\

@@ -26,13 +26,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_alloc_ghost_kept >>
   disch_then (qspecl_then [`PG`, `G`, `tn`] assume_tac) >>
-  fs[ghost_kept_def] >> rewrite_tac[ghost_kept_at_def] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  `i < s.vs_alloca_next` by decide_tac >>
-  drule_all bodyPtrIfExpAllocKeptTheory.alloca_step_taint_below_frontier >> metis_tac[]
+  fs[ghost_kept_def] >> rewrite_tac[ghost_kept_at_def] >> metis_tac[]
 QED
 
 

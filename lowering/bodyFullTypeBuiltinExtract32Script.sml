@@ -173,7 +173,7 @@ Resume extract32_vv_full[offset_entry]:
     (`expr_body_pre cenv cx env
        (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
-     drule_all bodyMemTbExtract32ActionTheory.extract32_offset_body_pre >> simp[]) >>
+     drule_all typeBuiltinPrereqsTheory.extract32_offset_body_pre >> simp[]) >>
   `body_expr_full_ok cx off` by
     (qpat_x_assum `body_exprs_full_ok cx [src;off]` mp_tac >>
      simp[body_exprs_full_ok_def] >> strip_tac >>

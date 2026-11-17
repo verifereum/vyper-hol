@@ -1,6 +1,7 @@
 (* Shared proof facts for the joint TypeBuiltin constructor ports. *)
 Theory typeBuiltinPrereqs
 Ancestors
+  exprOpenFirstOperand vyperTypeCallStackSoundness supportedExprTraverse
   bodyMemAssignTopCopyIndex fragExecMem instMemFrontier bodyMemAssignTopCopyFacts fragGasSeqMem
   memSafeRun exprSimWordBuiltins bodyUnopFragMemory exprSimConvertFromBytes fragGasPathMem
   bodyLiteralBufferMemory abiEmptyAllocate allocaFootprint venomMemDefs venomMemProps
@@ -979,4 +980,20 @@ Proof
   `fn_has_code s2 s3 func /\ fn_has_code s3 sb func` by
     metis_tac[fn_has_code_split] >>
   metis_tac[fn_has_code_split]
+QED
+
+Theorem extract32_offset_body_pre:
+  expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
+  bind (eval_expr cx src) (read_result cx) es = (INL v,ee) ==>
+  expr_body_pre cenv cx env off ee
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env src es` by
+    (irule expr_body_pre_type_builtin_head >> metis_tac[]) >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_eval) >> strip_tac >>
+  gvs[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+      alloc_limits_expr_def, int_calls_expr_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  metis_tac[call_evaluation_safe_append_right]
 QED

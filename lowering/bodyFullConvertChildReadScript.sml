@@ -94,7 +94,7 @@ Proof
     (simp[] >> rpt strip_tac >>
      drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[])) >> strip_tac >>
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   suspend "bind"
 QED

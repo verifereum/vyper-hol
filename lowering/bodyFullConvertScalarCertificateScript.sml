@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarCertificate
 Ancestors
+  bodyFullAllocGeneric
   bodyUnopFragMemory
   bodyPtrTypeBuiltinsScalarRawOutcome exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
   bodyPtrTypeBuiltinsCheckedArithmetic bodyPtrSignedConvertBool
@@ -169,25 +170,6 @@ Proof
   metis_tac[writes_fresh_mem_ok]
 QED
 
-Theorem scalar_seq_lower_bound:
-  !code s G tn Gf tnf.
-    inst_seq_ptr D lo0 ctx fn PG G tn code s Gf tnf /\
-    lo0 <= lo /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-    EVERY (\i. i.inst_opcode <> INVOKE) code ==>
-    inst_seq_ptr D lo ctx fn PG G tn code s Gf tnf
-Proof
-  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >> strip_tac >>
-  conj_tac
-  >- (irule ptr_inst_ok_lower_bound_transport >> metis_tac[]) >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  rename1 `step_inst_base h s = OK u` >>
-  `step_inst 0 ctx h s = OK u` by
-    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  drule_all step_inst_allocas_from >> strip_tac >>
-  first_x_assum irule >>
-  gvs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
-QED
-
 Theorem scalar_convert_run_origin:
   valid_conversion src dst /\ ~is_bytestring_type src /\
   compile_type_convert x (case dst of FlagT name =>
@@ -223,7 +205,7 @@ Proof
       qexistsl [`H`,`th`] >>
       simp[exec_result_map_def] >> gen_tac >>
       `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-        (irule scalar_seq_lower_bound >> simp[] >> qexists `0` >> simp[]) >>
+        (irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >> qexists `0` >> simp[]) >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts sa sb)` by fs[EVERY_MEM] >>
       `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
@@ -234,7 +216,7 @@ Proof
   drule_all scalar_convert_uniform_abort >>
   disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-    (gen_tac >> irule scalar_seq_lower_bound >> simp[] >> qexists `0` >> simp[]) >>
+    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >> qexists `0` >> simp[]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>

@@ -209,13 +209,10 @@ Resume convert_widen_copy_endpoint_ghosts[kept]:
       `regions_disjoint (w2n dw) cap off sz` by metis_tac[] >>
       `~(w2n dw <= i /\ i < w2n dw+k)` by
         (fs[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `regions_disjoint (w2n dw) cap b sz` by metis_tac[] >>
-      `~(w2n dw <= i /\ i < w2n dw+k)` by
-        (fs[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
   rpt strip_tac >>
-  `~(w2n dw <= i /\ i < w2n dw+k)` by decide_tac >> metis_tac[]
+  `regions_disjoint (w2n dw) cap b sz` by metis_tac[] >>
+  `~(w2n dw <= i /\ i < w2n dw+k)` by
+    (fs[regions_disjoint_def] >> decide_tac) >> metis_tac[]
 QED
 Resume convert_widen_copy_endpoint_ghosts[bounds]:
   simp[vv_store_bound_def, vyperStateTheory.read_result_def,
