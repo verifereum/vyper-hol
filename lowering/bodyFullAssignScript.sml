@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState
+  sum venomState stateRelProj
 
 val _ = Parse.hide "body";
 
@@ -76,8 +76,8 @@ Proof
     (fs[expr_post_def,expr_val_rel_def] >> metis_tac[]) >>
   `op_taint tn op = {}` by fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
   `local_ptrs_rel func cenv mid.scopes t` by
-    (fs[expr_post_def,exprLoweringPropsTheory.stmt_state_rel_def,
-        loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]) >>
+    (fs[expr_post_def] >>
+     metis_tac[stmt_state_rel_local_ptrs_alloca]) >>
   `?dst. lookup_var p t = SOME dst` by
     metis_tac[allocaFootprintTheory.local_ptr_below_frontier] >>
   rename1 `find_containing_scope _ _ = SOME (_,sc,_,_)` >>
@@ -1004,7 +1004,7 @@ Proof
   `?H. valid_horizon cx st0 H es.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
-    (res_tac >> fs[stmt_state_rel_def,state_rel_def]) >>
+    metis_tac[stmt_state_rel_vars_rels] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
   drule_all body_assign_toplevel_word_full_code >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
