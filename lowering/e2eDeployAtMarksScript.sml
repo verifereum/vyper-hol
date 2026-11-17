@@ -119,35 +119,50 @@ QED
 (* At one tail of gas readings past the marked ones, where the constructor
    run's storage guard holds. *)
 Theorem deploy_correct_at_tail[local]:
-  compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  deploy_phases policy tops (deploy_bc, runtime_bc)
+  fin IN accepted_finalizers /\
+  fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+  compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+  deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
-  deploy_source_ok tops am tx /\
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_state_rel tops (assemble prog') am tx es /\
+  vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+  txp = tx with code := vs_out.vs_code /\
+  deploy_source_ok tops am txp /\
   ~(?t. runtime_bc = 0xEFw :: t) /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
-  (!D. dead_wf D ==>
+  w2n vs_out.vs_initial_fmp <= w2n fmp /\
+  w2n fmp < 2 ** 254 /\
+  unit_alloca_budget dunit.cu_context +
+    32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+  raw_variant fmp vs vs_out /\
+  (~deploy_source_exempt tops
+     (load_contract (SOME vs.vs_outcomes)
+       (gas_explicit marks vs.vs_gas_readings ++ tail)
+       am txp [(NONE, tops)] []) ==>
+   !D. dead_wf D ==>
      raw_unit_memory_ok dunit.cu_context vs /\
      ptr_discipline (imm_len tops) dunit.cu_context vs /\
      taint_within D dunit.cu_context vs /\
      mem_inv dload_offset_ok dunit.cu_context vs /\
      mem_inv dload_headroom_ok dunit.cu_context vs ==>
      ctx_sim D dunit.cu_context dout.po_unit.cu_context vs
-       (deploy_entry_state prog cplan tops es) /\
+       vs_out /\
+     (fin = asm_opt_finalizer ==>
+        code_end_offset_ok (raw_reachable vs_out) dout.po_unit.cu_context) /\
      o1_lowered_inv dout.po_unit.cu_context
-       (deploy_entry_state prog cplan tops es)) /\
-  deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs /\
+       vs_out) /\
+  deploy_unit_execution_correct_at marks tops runtime_bc am txp dunit vs /\
   run_call es = SOME (r, es') /\
-  deploy_storage_ok tops am tx vs.vs_outcomes
+  deploy_storage_ok tops am txp vs.vs_outcomes
     (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
   creation_resource_starved es r es' \/
   deploy_result_rel
     (storage_trace_horizon
        (deploy_storage_trace (SOME vs.vs_outcomes)
-          (gas_explicit marks vs.vs_gas_readings ++ tail) am tx tops))
-    tops runtime_bc tx es r es'
+          (gas_explicit marks vs.vs_gas_readings ++ tail) am txp tops))
+    tops runtime_bc txp es r es'
     (load_contract (SOME vs.vs_outcomes)
-       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx [(NONE, tops)] [])
+       (gas_explicit marks vs.vs_gas_readings ++ tail) am txp [(NONE, tops)] [])
 Proof
   strip_tac >>
   drule compile_vyper_runtime_nonempty >> strip_tac >>
@@ -227,34 +242,50 @@ QED
    selected-run certificate at its marks; then the deploy result relation
    holds at every filling. *)
 Theorem e2e_deploy_correct_from_gas_link:
-  !policy tops deploy_bc runtime_bc am tx es r es' rpolicy dunit dout prog cplan.
-    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+  !fin policy tops deploy_bc runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx txp es vs_out fmp r es'.
+    fin IN accepted_finalizers /\
+    fin rpolicy prog = SOME prog' /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    txp = tx with code := vs_out.vs_code /\
+    deploy_source_ok tops am txp /\
     ~(?t. runtime_bc = 0xEFw :: t) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     run_call es = SOME (r, es') /\
     (creation_resource_starved es r es' \/
      gas_readings_rel (gas_readings es)
-       (\gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs ==>
+       (\gs. deploy_storage_ok tops am txp (MAP SND (call_trace es)) gs ==>
              ?vs marks tail.
                gs = gas_explicit marks vs.vs_gas_readings ++ tail /\
-               gas_variant vs (deploy_entry_state prog cplan tops es) /\
-               (!D. dead_wf D ==>
+               raw_variant fmp vs vs_out /\
+               (~deploy_source_exempt tops
+                  (load_contract (SOME vs.vs_outcomes)
+                    (gas_explicit marks vs.vs_gas_readings ++ tail)
+                    am txp [(NONE, tops)] []) ==>
+                !D. dead_wf D ==>
                   raw_unit_memory_ok dunit.cu_context vs /\
                   ptr_discipline (imm_len tops) dunit.cu_context vs /\
                   taint_within D dunit.cu_context vs /\
                   mem_inv dload_offset_ok dunit.cu_context vs /\
                   mem_inv dload_headroom_ok dunit.cu_context vs ==>
                   ctx_sim D dunit.cu_context dout.po_unit.cu_context vs
-                    (deploy_entry_state prog cplan tops es) /\
+                    vs_out /\
+                  (fin = asm_opt_finalizer ==>
+                     code_end_offset_ok (raw_reachable vs_out) dout.po_unit.cu_context) /\
                   o1_lowered_inv dout.po_unit.cu_context
-                    (deploy_entry_state prog cplan tops es)) /\
-               deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs) T)
+                    vs_out) /\
+               deploy_unit_execution_correct_at marks tops runtime_bc am txp dunit vs))
     ==>
     creation_resource_starved es r es' \/
-    deploy_call_result_rel tops runtime_bc am tx es r es'
+    deploy_call_result_rel tops runtime_bc am txp es r es'
 Proof
   rpt strip_tac >>
   Cases_on `creation_resource_starved es r es'` >> fs[] >>
