@@ -589,6 +589,26 @@ Resume intcall_args_defaults_scope_mutual_from_actions[place_rest]:
 QED
 Finalise intcall_args_defaults_scope_mutual_from_actions
 
+Theorem intcall_args_defaults_scope_action:
+  supported_pure_exprs tops ds /\ well_typed_exprs (defaults_env tenv) ds ==>
+  !cx s scopes. eval_exprs cx ds (s with scopes := scopes) =
+    (let (res,t) = eval_exprs cx ds s in (res,t with scopes := scopes))
+Proof
+  strip_tac >> mp_tac (cj 2 intcall_args_defaults_scope_mutual_from_actions) >>
+  simp[intcall_args_conditional_result_scope_action,
+       intcall_args_conditional_result_nonlocal,
+       intcall_args_result_array_length_scope_action,
+       intcall_args_select_result_scope_action,
+       intcall_args_select_result_nonlocal] >>
+  (impl_tac >- (conj_tac
+    >- metis_tac[intcall_args_conditional_result_nonlocal] >>
+    metis_tac[intcall_args_select_result_nonlocal])) >>
+  disch_then (qspecl_then [`tops`,`ds`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!tenv. well_typed_exprs _ _ ==> _`
+    (drule_all_then assume_tac) >>
+  rpt gen_tac >> pairarg_tac >> gvs[]
+QED
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
