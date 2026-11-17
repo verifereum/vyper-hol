@@ -11,8 +11,79 @@ Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
 
 val _ = Parse.hide "body";
+
+(* A local copy preserves the disjoint snapshot used by later tuple targets. *)
+Theorem body_assign_tuple_local_copy_snapshot_post:
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t,Gf,tf) /\
+  typed_copy_state_frame sa (w2n dst) (type_memory_size entry.type) s t /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+  lookup_var p s = SOME dst /\ local_ptrs_reserved cenv sa /\
+  local_region cenv es.scopes s id (w2n dst) cap /\
+  type_memory_size entry.type <= cap /\ lo <= w2n dst /\
+  val_wf entry.type v /\ value_has_type entry.type v /\
+  val_in_memory entry.type v (w2n dst) t.vs_memory /\
+  (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+    val_in_memory entry.type v (w2n dst) mem) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tf (Var x) = op_taint tn (Var x)) /\
+  tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+  (!i. ~(w2n dst <= i /\ i < w2n dst + type_memory_size entry.type) ==>
+    (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+  val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  (b + type_memory_size (TupleTV tvs) <= w2n dst \/
+   w2n dst + type_memory_size entry.type <= b) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b mem) ==>
+  stmt_state_rel H ctx func cenv cx
+    (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t /\
+  ghost_inv_at D lo d cenv cx
+    (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
+    Gf tf t /\
+  (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b mem) /\
+  (!aid off sz i.
+    FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+    (!n a len. local_region cenv es.scopes s n a len ==>
+      off + sz <= a \/ a + len <= off) /\
+    off <= i /\ i < off + sz /\ i IN tf.t_mem ==>
+    i IN tn.t_mem)
+Proof
+  strip_tac >> (drule_all body_full_local_copy_post >> strip_tac >> simp[] >>
+  conj_tac
+  >- (drule val_footprint_le >> strip_tac >>
+      `!i. b <= i /\ i < b + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) ==>
+        ~(w2n dst <= i /\ i < w2n dst + type_memory_size entry.type)` by
+        (rpt strip_tac >> decide_tac) >>
+      `!i. ~(w2n dst <= i /\ i < w2n dst + type_memory_size entry.type) ==>
+        mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+        (rpt strip_tac >>
+         qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
+         simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+      drule_at (Pos (el 5)) robust_val_in_memory_exterior_frame >>
+      disch_then (qspecl_then [`tf.t_mem`, `t.vs_memory`,
+        `{i | w2n dst <= i /\ i < w2n dst + type_memory_size entry.type}`] mp_tac) >>
+      simp[]) >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`id`, `w2n dst`, `cap`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `~(w2n dst <= i /\ i < w2n dst + type_memory_size entry.type)` by decide_tac >>
+  metis_tac[])
+QED
 
 (* A source that is a widened aggregate call. *)
 Theorem body_assign_tuple_widened_full:
