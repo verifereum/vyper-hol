@@ -26,9 +26,10 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
-  symEmitSim symInstPieces symControlPrefixOwn
+  symEmitSim symInstPieces symControlPrefixOwn symFrameControlFacts symControlScratchOwn symControlReorderOwn symControlReplayOwn symControlJumpOwn symControlRetOwn symControlGasOwn symControlTerminalOwn symControlHaltOwn symControlAbortRegularOwn symControlAbortStaticOwn symControlAbortConditionalOwn symControlTerminalPrepareOwn symControlTerminalSafetyOwn symControlForwardPrepareOwn symControlForwardCopyOwn symControlForwardCopyExecutionOwn symControlForwardRunOwn symControlForwardContinuationOwn symControlForwardSourceFacts
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
+
 Theorem list_rel_op_kind_transport:
   !xs vals ys fn ret.
     LIST_REL (op_kind_ok fn ret) xs vals /\
@@ -36,8 +37,7 @@ Theorem list_rel_op_kind_transport:
                           op_kind_ok fn ret y sv) xs ys ==>
     LIST_REL (op_kind_ok fn ret) ys vals
 Proof
-  Induct >> Cases_on `vals` >> Cases_on `ys` >> simp[] >>
-  metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.list_rel_op_kind_transport
 QED
 
 Theorem stack_poke_op_kind_equiv:
@@ -47,9 +47,7 @@ Theorem stack_poke_op_kind_equiv:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=>
                        op_kind_ok fn ret y sv) xs (stack_poke d op xs)
 Proof
-  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def,
-     listTheory.EL_LUPDATE] >>
-  gvs[stackModelTheory.stack_peek_def] >> metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.stack_poke_op_kind_equiv
 QED
 
 Theorem stack_exchange_op_kind_equiv:
@@ -61,10 +59,7 @@ Theorem stack_exchange_op_kind_equiv:
                        op_kind_ok fn ret y sv)
     xs (stack_poke f op (stack_poke d (stack_peek f xs) xs))
 Proof
-  strip_tac >> drule_all symPlannerBaseTheory.op_kind_ok_operand_equiv >> strip_tac >>
-  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def,
-     listTheory.EL_LUPDATE] >>
-  gvs[stackModelTheory.stack_peek_def] >> metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.stack_exchange_op_kind_equiv
 QED
 
 Theorem sym_kinds_ok_stack_transport:
@@ -74,10 +69,7 @@ Theorem sym_kinds_ok_stack_transport:
                        op_kind_ok fn ret y sv) ps.ps_stack xs ==>
   sym_kinds_ok cp fn ret srest (ps with ps_stack := xs) ss
 Proof
-  rw[sym_kinds_ok_def] >>
-  qexists_tac `top` >> simp[] >>
-  irule list_rel_op_kind_transport >> goal_assum (drule_at Any) >>
-  simp[]
+  ACCEPT_TAC symFrameControlFactsTheory.sym_kinds_ok_stack_transport
 QED
 
 Theorem sym_kinds_ok_reorder_relabel:
@@ -91,12 +83,11 @@ Theorem sym_kinds_ok_reorder_relabel:
     (ps with ps_stack := stack_poke f op
       (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack)) ss
 Proof
-  rpt gen_tac >> strip_tac >> irule sym_kinds_ok_stack_transport >>
-  goal_assum (drule_at Any) >> irule stack_exchange_op_kind_equiv >>
-  goal_assum (drule_at Any) >> gvs[]
+  ACCEPT_TAC symFrameControlFactsTheory.sym_kinds_ok_reorder_relabel
 QED
 
 (* Restore interpretation agrees on the fields observed by symbolic kinds. *)
+
 Theorem restore_spilled_plan_ss_align:
   !targets ps ops ps'.
     restore_spilled_plan targets ps = (ops, ps') /\
@@ -104,18 +95,7 @@ Theorem restore_spilled_plan_ss_align:
     !lo. (apply_prefix_ops initial_fmp lo ops ps).ps_stack = ps'.ps_stack /\
          (apply_prefix_ops initial_fmp lo ops ps).ps_spilled = ps'.ps_spilled
 Proof
-  Induct >> simp[stackPlanOpsTheory.restore_spilled_plan_def,
-                 planAlignTheory.apply_prefix_ops_nil] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >> strip_tac >>
-  drule_all spillPlanSimTheory.do_restore_layout_wf >> strip_tac >>
-  drule_all planAlignTheory.do_restore_ss_align >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[] >> gen_tac >>
-  simp[planAlignTheory.apply_prefix_ops_append] >>
-  qspecl_then [`ops2`, `lo`] mp_tac
-    mixedPrefixSimTheory.apply_prefix_ops_ext_stack_spilled >>
-  metis_tac[]
+  ACCEPT_TAC symFrameControlFactsTheory.restore_spilled_plan_ss_align
 QED
 
 (* Projection and exact-stack extraction use sym_kinds_ok_def directly:
@@ -485,8 +465,7 @@ Theorem mem_label_at_from_bytes:
   (!i. i < 32 ==> FLOOKUP labs (off+i) = SOME (l,d,i)) ==>
   mem_label_at labs off = SOME (l,d)
 Proof
-  strip_tac >> first_assum (qspec_then `0` assume_tac) >>
-  gvs[mem_label_at_def, listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+  ACCEPT_TAC symControlScratchOwnTheory.mem_label_at_from_bytes
 QED
 
 Theorem sym_mstore_word_cell:
@@ -496,16 +475,7 @@ Theorem sym_mstore_word_cell:
     (!b. ~in_mem_range (w2n off) 32 b ==>
       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
-       sval_val_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
-       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
-       asmSemTheory.asm_step_memory_def,
-       asm_op_arity_table_def, log_table_def,
-       asm_mstore_def, mem_sval_at_def, mem_labels_clear_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, asm_next_def,
-       finite_mapTheory.FDOM_DRESTRICT]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mstore_word_cell
 QED
 
 Theorem sym_mstore_label_cell:
@@ -515,12 +485,7 @@ Theorem sym_mstore_label_cell:
     (!b. ~in_mem_range (w2n off) 32 b ==>
       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  qspecl_then [`ss.sym_mem_labels`, `w2n off`, `l`, `d`] assume_tac
-    (Q.GENL [`labs`, `off`, `l`, `d`] (SPEC_ALL mem_sval_at_store_label)) >>
-  qspecl_then [`w2n off`, `ss.sym_mem_labels`, `l`, `d`] mp_tac
-    (Q.GENL [`off`, `labs`, `l`, `d`, `i`] (SPEC_ALL store_label_lookup_outside)) >>
-  strip_tac >> gvs[sym_mstore_def, sym_lift_def, asm_mstore_def, asm_next_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mstore_label_cell
 QED
 
 Theorem sym_mload_label_cell:
@@ -529,7 +494,7 @@ Theorem sym_mload_label_cell:
   ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Lab l d :: tail /\
         ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  simp[mem_sval_at_def] >> strip_tac >> simp[sym_mload_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mload_label_cell
 QED
 
 Theorem scratch_store_preserves_disjoint_cell:
@@ -538,7 +503,7 @@ Theorem scratch_store_preserves_disjoint_cell:
   (!b. ~in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
   mem_sval_at labs' cell sv
 Proof
-  metis_tac[mem_sval_at_cong]
+  ACCEPT_TAC symControlScratchOwnTheory.scratch_store_preserves_disjoint_cell
 QED
 
 Theorem sym_mload_word_cell:
@@ -549,21 +514,7 @@ Theorem sym_mload_word_cell:
   ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val w :: tail /\
         ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >>
-  `FLOOKUP ss.sym_mem_labels (w2n off) = NONE` by
-    (gvs[mem_sval_at_def] >> simp[finite_mapTheory.FLOOKUP_DEF] >>
-     first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
-       asm_op_arity_def, asm_op_arity_table_def, sval_val_def,
-       asm_op_mem_reads_def, mem_labels_hit_def,
-       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
-       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
-       asmSemTheory.asm_step_memory_def, sym_lift_def] >>
-  `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i` by
-    metis_tac[mem_sval_at_def] >>
-  simp[asm_op_mem_writes_def, mem_labels_clear_def,
-       GSYM pred_setTheory.IN_UNIV, finite_mapTheory.DRESTRICT_UNIV] >>
-  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_mload_word_cell
 QED
 
 Theorem sym_scratch_store_step:
@@ -576,18 +527,7 @@ Theorem sym_scratch_store_step:
     (!b. b IN FDOM ss'.sym_mem_labels ==>
       b IN FDOM ss.sym_mem_labels \/ in_mem_range (w2n off) 32 b)
 Proof
-  strip_tac >>
-  `?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
-    mem_sval_at ss'.sym_mem_labels (w2n off) sv /\
-    (!b. ~in_mem_range (w2n off) 32 b ==>
-      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
-    (Cases_on `sv` >- metis_tac[sym_mstore_word_cell] >>
-     metis_tac[sym_mstore_label_cell]) >>
-  qexists_tac `ss'` >> simp[] >> conj_tac
-  >- (irule sym_step_pc_next >>
-      qexistsl_tac [`env`, `AsmOp "MSTORE"`, `p`] >>
-      simp[sym_step_def, sym_step_op_def]) >>
-  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_store_step
 QED
 
 Theorem sym_scratch_spill_steps:
@@ -602,18 +542,7 @@ Theorem sym_scratch_spill_steps:
     (!b. b IN FDOM ss'.sym_mem_labels ==>
       b IN FDOM ss.sym_mem_labels \/ in_mem_range off 32 b)
 Proof
-  strip_tac >>
-  qabbrev_tac `pushed = ss with
-    <|sym_base := asm_next (ss.sym_base with as_stack := []);
-      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
-  `pushed.sym_stack = Val (n2w off) :: sv :: tail` by simp[Abbr `pushed`] >>
-  drule sym_scratch_store_step >> strip_tac >> qexists_tac `ss'` >>
-  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def,
-      wordsTheory.w2n_n2w] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_scratch_push, asm_next_def] >>
-  gvs[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_spill_steps
 QED
 
 Theorem sym_scratch_load_word_step:
@@ -622,11 +551,7 @@ Theorem sym_scratch_load_word_step:
   ?ss' v. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val v :: tail /\
           ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >>
-  `?loaded v. asm_mload (ss.sym_base with as_stack := [off]) = AsmOK loaded /\
-              loaded.as_stack = [v]` by simp[asm_mload_def, asm_next_def] >>
-  `mem_sval_at ss.sym_mem_labels (w2n off) (Val v)` by gvs[mem_sval_at_def] >>
-  drule_all sym_mload_word_cell >> metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_load_word_step
 QED
 
 Theorem sym_scratch_load_step:
@@ -636,16 +561,7 @@ Theorem sym_scratch_load_step:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
-  strip_tac >>
-  `?ss' sv'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = sv' :: tail /\
-    (case sv of Val w => ?v. sv' = Val v | Lab l d => sv' = sv) /\
-    ss'.sym_mem_labels = ss.sym_mem_labels` by
-    (Cases_on `sv`
-     >- (simp[] >> metis_tac[sym_scratch_load_word_step]) >>
-     simp[] >> metis_tac[sym_mload_label_cell]) >>
-  qexistsl_tac [`ss'`, `sv'`] >> simp[] >>
-  irule sym_step_pc_next >> qexistsl_tac [`env`, `AsmOp "MLOAD"`, `p`] >>
-  simp[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_load_step
 QED
 
 Theorem sym_scratch_restore_steps:
@@ -658,20 +574,7 @@ Theorem sym_scratch_restore_steps:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  strip_tac >>
-  qabbrev_tac `pushed = ss with
-    <|sym_base := asm_next (ss.sym_base with as_stack := []);
-      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
-  `pushed.sym_stack = Val (n2w off) :: ss.sym_stack /\
-   mem_sval_at pushed.sym_mem_labels (w2n (n2w off : bytes32)) sv` by
-    simp[Abbr `pushed`, wordsTheory.w2n_n2w] >>
-  drule_all sym_scratch_load_step >> strip_tac >>
-  qexistsl_tac [`ss'`, `sv'`] >>
-  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_scratch_push, asm_next_def] >>
-  gvs[sym_step_def, sym_step_op_def]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_restore_steps
 QED
 Theorem sym_scratch_spill_sim:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
@@ -744,22 +647,7 @@ Theorem sym_scratch_repeated_value_probe:
     mem_sval_at ss'.sym_mem_labels 0 sv /\ mem_sval_at ss'.sym_mem_labels 32 sv /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 4
 Proof
-  strip_tac >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill 0]) /\
-   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp [SOSpill 32])` by
-    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
-  `0 < dimword(:256) /\ 32 < dimword(:256)` by
-    simp[wordsTheory.dimword_def] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOSpill 32])` by simp[] >>
-  `ss'.sym_stack = sv :: tail` by simp[] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  `mem_sval_at ss''.sym_mem_labels 0 sv` by
-    (irule scratch_store_preserves_disjoint_cell >>
-     qexistsl_tac [`ss'.sym_mem_labels`, `32`] >> simp[in_mem_range_def]) >>
-  qexists_tac `ss''` >>
-  gvs[execute_plan_def, exec_stack_op_def] >>
-  mp_tac (Q.SPECL [`2`, `2`, `ss`] sym_steps_add) >> simp[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_repeated_value_probe
 QED
 
 Theorem scratch_disjoint_bulk_cell:
@@ -769,12 +657,7 @@ Theorem scratch_disjoint_bulk_cell:
   mem_sval_at labs h sv ==>
   mem_sval_at labs' h sv
 Proof
-  strip_tac >>
-  `!b. in_mem_range h 32 b ==> FLOOKUP labs' b = FLOOKUP labs b`
-    suffices_by metis_tac[mem_sval_at_cong] >> rpt strip_tac >>
-  first_x_assum irule >>
-  fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
-  first_x_assum drule >> decide_tac
+  ACCEPT_TAC symControlScratchOwnTheory.scratch_disjoint_bulk_cell
 QED
 
 Theorem sym_scratch_spill_bulk_steps:
@@ -795,30 +678,7 @@ Theorem sym_scratch_spill_bulk_steps:
         b IN FDOM ss.sym_mem_labels \/
         EXISTS (\off. in_mem_range off 32 b) offsets)
 Proof
-  Induct >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
-  rpt strip_tac >>
-  `(!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
-      EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
-   EVERY (\off. h + 32 <= off \/ off + 32 <= h) offsets` by
-    (conj_tac
-     >- (rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
-     simp[listTheory.EVERY_EL] >> rpt strip_tac >>
-     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
-  Cases_on `ss.sym_stack` >> gvs[] >>
-  rename1 `ss.sym_stack = sv :: tail` >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill h]) /\
-   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp (MAP SOSpill offsets))` by
-    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
-  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
-  first_x_assum (qspec_then `ss'` mp_tac) >> simp[] >>
-  strip_tac >> qexists_tac `ss''` >> simp[] >>
-  conj_tac
-  >- (gvs[execute_plan_def, exec_stack_op_def] >>
-      mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >>
-      simp[arithmeticTheory.MULT_SUC]) >>
-  conj_tac
-  >- (Cases >> simp[] >> metis_tac[scratch_disjoint_bulk_cell]) >>
-  metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.sym_scratch_spill_bulk_steps
 QED
 
 Theorem sym_scratch_restore_bulk_sim:
@@ -975,14 +835,7 @@ Theorem list_rel_reversed_index_schedule:
   LIST_REL R (REVERSE (MAP (\i. EL i items) ids))
     (MAP (\i. EL i vals) ids)
 Proof
-  strip_tac >>
-  `REVERSE (MAP (\i. EL i items) ids) =
-     MAP (\i. EL i (REVERSE items)) ids` by
-    (qpat_x_assum `ids = _` SUBST1_TAC >>
-     irule doSwapSimTheory.reverse_desired_values >> simp[]) >>
-  qpat_x_assum `REVERSE (MAP _ _) = _`
-    (fn th => pure_rewrite_tac[th]) >>
-  irule LIST_REL_select_indices >> gvs[]
+  ACCEPT_TAC symControlScratchOwnTheory.list_rel_reversed_index_schedule
 QED
 
 Theorem do_swap_deep_symbolic_resources:
@@ -1006,28 +859,7 @@ Theorem do_swap_deep_symbolic_resources:
   ps'.ps_stack = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
     MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids
 Proof
-  strip_tac >>
-  `LENGTH (top_n (d + 1) ps.ps_stack) = d + 1` by
-    simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
-  `ops = MAP SOSpill offsets ++
-     MAP SORestore (MAP (\i. EL i offsets) (REVERSE ids)) /\
-   ps' = ps with <|
-     ps_stack := TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
-       MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids;
-     ps_alloc := FOLDL (\a off. free_spill_slot off a)
-       (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets |>` by
-    (mp_tac (Q.SPECL [`d`, `ps`] doSwapSimTheory.do_swap_big_decompose) >>
-     simp[LET_THM] >> metis_tac[]) >>
-  `ps'.ps_alloc = FOLDL (\a off. free_spill_slot off a)
-    (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets` by simp[] >>
-  drule_all doSwapSimTheory.spill_alloc_n_temporary_layout >> strip_tac >>
-  `EVERY (\off. off < dimword(:256)) offsets` by
-    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[listTheory.EVERY_MAP]) >>
-  `EVERY (\i. i < LENGTH offsets) ids` by
-    simp[listTheory.EVERY_GENLIST] >>
-  simp[] >>
-  conj_tac >- gvs[listTheory.EVERY_MEM] >>
-  metis_tac[]
+  ACCEPT_TAC symControlScratchOwnTheory.do_swap_deep_symbolic_resources
 QED
 
 Theorem list_rel_deep_swap_schedule:
@@ -1039,14 +871,7 @@ Theorem list_rel_deep_swap_schedule:
       MAP (\i. EL i (top_n (d + 1) xs)) ids))
     (MAP (\i. EL i (TAKE (d + 1) vals)) ids ++ DROP (d + 1) vals)
 Proof
-  strip_tac >> pure_rewrite_tac[listTheory.REVERSE_APPEND] >>
-  irule rich_listTheory.EVERY2_APPEND_suff >> conj_tac
-  >- (irule list_rel_reversed_index_schedule >>
-      simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
-      gvs[rich_listTheory.EVERY2_TAKE]) >>
-  `REVERSE (TAKE (LENGTH xs - (d + 1)) xs) = DROP (d + 1) (REVERSE xs)` by
-    simp[rich_listTheory.DROP_REVERSE, rich_listTheory.BUTLASTN_TAKE_UNCOND] >>
-  simp[] >> metis_tac[rich_listTheory.EVERY2_DROP]
+  ACCEPT_TAC symControlScratchOwnTheory.list_rel_deep_swap_schedule
 QED
 
 Theorem sym_scratch_frame_transfer:
