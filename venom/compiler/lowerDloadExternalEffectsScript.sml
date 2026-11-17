@@ -14,12 +14,14 @@ Theorem ld_call_consume_adoption_test:
   consume_call_outcome rq roS rs s = (wS,s') /\
   consume_call_outcome rt roT rs t = (wT,t') ==>
   ((~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
     s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t'.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t'.vs_requests) /\
     t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
 Proof
   strip_tac >> drule_all ld_computed_precompile_cong >> strip_tac >>
-  gvs[consume_call_outcome_eq, take_outcome_rest, ld_record_request_growth]
+  gvs[consume_call_outcome_eq, take_outcome_rest, record_request_changed, record_request_def]
 QED
 
 (* Record the unchanged frame fields at the primitive consumer boundary. *)
@@ -50,11 +52,13 @@ Theorem ld_external_taint_projections:
   (step_taint i s r tn).t_imm = tn.t_imm /\
   (step_taint i s r tn).t_stor =
     adopt_reset i (~s.vs_call_ctx.cc_static /\
-      r.vs_requests <> s.vs_requests /\ r.vs_outcomes <> s.vs_outcomes /\
+      r.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
       (HD s.vs_outcomes).co_success) tn.t_stor /\
   (step_taint i s r tn).t_trans =
     adopt_reset i (~s.vs_call_ctx.cc_static /\
-      r.vs_requests <> s.vs_requests /\ r.vs_outcomes <> s.vs_outcomes /\
+      r.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
       (HD s.vs_outcomes).co_success) tn.t_trans
 Proof
   simp[MEM] >> strip_tac >>
@@ -72,13 +76,14 @@ Theorem ld_call_consume_reset_maps:
   consume_call_outcome rq roS rs s = (wS,s') /\
   consume_call_outcome rt roT rs t = (wT,t') /\
   s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
   s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success ==>
   s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient
 Proof
   strip_tac >>
   `rq.cr_kind = rt.cr_kind` by simp[] >>
   drule_all ld_computed_precompile_cong >> strip_tac >>
-  gvs[consume_call_outcome_eq, ld_record_request_growth, take_outcome_rest] >>
+  gvs[consume_call_outcome_eq, record_request_changed, record_request_def, take_outcome_rest] >>
   Cases_on `t.vs_outcomes` >> gvs[take_outcome_def, adopt_outcome_def]
 QED
 
@@ -86,10 +91,12 @@ Theorem ld_external_shared_taint:
   MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
   ld_shared_state tn un s' t' /\
   (adopted <=> (~s.vs_call_ctx.cc_static /\
-    s'.vs_requests <> s.vs_requests /\ s'.vs_outcomes <> s.vs_outcomes /\
+    s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
     (HD s.vs_outcomes).co_success)) /\
   (adopted <=> (~t.vs_call_ctx.cc_static /\
-    t'.vs_requests <> t.vs_requests /\ t'.vs_outcomes <> t.vs_outcomes /\
+    t'.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t'.vs_requests) /\ t'.vs_outcomes <> t.vs_outcomes /\
     (HD t.vs_outcomes).co_success)) /\
   (i.inst_opcode = CALL /\ adopted ==>
     s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient) ==>
@@ -156,18 +163,22 @@ Proof
   `ld_shared_state tn un s' t'` by
     (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
   `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t'.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t'.vs_requests) /\
      t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
     (drule_all ld_call_consume_adoption_test >> simp[Excl "consume_call_outcome_eq"]) >>
   irule ld_external_shared_taint >>
   goal_assum (drule_at (Pat `ld_shared_state _ _ s' t'`)) >>
   reverse conj_tac >- gvs[MEM] >>
   qexists_tac `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)` >>
   simp[] >> strip_tac >>
   `~rq.cr_static /\ ~rt.cr_static` by gvs[MEM] >>
-  `s'.vs_requests <> s.vs_requests /\ s'.vs_outcomes <> s.vs_outcomes /\
+  `s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
     (HD s.vs_outcomes).co_success` by metis_tac[] >>
   drule_all ld_call_consume_reset_maps >> simp[]
 QED
@@ -191,8 +202,10 @@ Proof
     (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
   `s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by simp[] >>
   `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t'.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t'.vs_requests) /\
      t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
     (drule_all ld_call_consume_adoption_test >> simp[Excl "consume_call_outcome_eq"]) >>
   irule ld_external_shared_taint >>
