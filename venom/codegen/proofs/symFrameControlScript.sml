@@ -108,8 +108,11 @@ Theorem sym_frame_inv_release_dead_spills:
   sym_frame_inv p env ctx cp fn ret srest labs0
     (release_dead_spills nl ps) cs ss
 Proof
-  simp[sym_frame_inv_def] >>
-  metis_tac[symPostfixSimTheory.sym_kinds_ok_release_dead_spills]
+  rpt gen_tac >> rewrite_tac[sym_frame_inv_def] >> strip_tac >>
+  metis_tac[SRULE [asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets p)`,
+             `code_ok` |-> `asm_data_env_ok p env`]
+      (SPEC_ALL sym_frame_inv_release_dead_spills_mode))]
 QED
 
 (* The symbolic prefix and the concrete endpoint share an explicit count. *)
