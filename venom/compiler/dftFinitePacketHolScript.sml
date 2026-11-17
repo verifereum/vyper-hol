@@ -3,6 +3,7 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
+  dftPacketBlockAppendNative
   dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
