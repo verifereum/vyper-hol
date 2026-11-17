@@ -36,6 +36,10 @@ Proof
     (irule vv_holds_vars_frame >> qexists_tac `u` >> fs[vv_post_def]) >>
   `vv_at cenv cx (post_value_type cenv e) sa sm ee tv vv t` by
     (irule vv_at_vars_frame >> qexistsl_tac [`u`,`sm`] >> fs[vv_post_def]) >>
+  `vv_place_ptr cenv cx ee t tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `u` >>
+     fs[vv_post_def, local_ptrs_reserved_def, membership_loop_frame_def] >>
+     metis_tac[]) >>
   `post_value_type cenv e <> expr_type e ==>
    vv_own cenv cx (post_value_type cenv e) sa sm ee tv vv t` by
     (strip_tac >> irule vv_own_vars_frame >> qexistsl_tac [`u`,`sm`] >>
