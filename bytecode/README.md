@@ -41,6 +41,11 @@ current series contains:
   layout differs for nested bounded types.
 - `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
   unused return-PC parameter to zero instead of the removed callee's label.
+- `5274-base-ptr-all-uses.patch`, vyperlang/vyper#5274: the base pointer
+  analysis sweeps every block until nothing changes, so a pointer that reaches
+  a join through a later-visited predecessor is seen at all its uses. Before
+  it, memory allocation could give a ternary arm's buffer the slot of a
+  temporary still live, e.g. an aggregate ternary iterated by a `for` loop.
 - `5280-target-subscript-overlap.patch`, vyperlang/vyper#5280: the array of an
   `append` or `pop` is lowered as a target, so it is rejected
   (`CompilerPanic("risky overlap")`) when one of its subscripts has a base that
