@@ -20,7 +20,7 @@ Ancestors
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
   tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr
   assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
-  tupleTargetStoreProps vyperLookup
+  tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice
 
 val _ = Parse.hide "body";
 
@@ -1477,4 +1477,74 @@ Theorem body_assign_tuple_other_full:
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   cheat
+QED
+
+Theorem body_assign_tuple_static_head_full_exit:
+  !ctx func cenv cx s g ty tv v op st sf RetQ RetP ee lo explicit PG G tn.
+    compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
+    tuple_target_aligned cenv cx g ty tv /\
+    (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    op_taint tn op = {} /\
+    local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
+    (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
+    (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code st sf func /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\ cx.txn.is_static ==>
+    ?r Gf tf.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf)) /\
+      exit_result r /\
+      (!H tail. stmt_exit (RetQ H) (ee with gas_obs := tail)
+        (INR (Error (RuntimeError "write in static context"))) r) /\
+      (!H tail. stmt_exit_ptr (RetP H) (ee with gas_obs := tail)
+        (INR (Error (RuntimeError "write in static context"))) (Gf,tf) r)
+Proof
+  rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
+  >- (drule_all compile_get_target_ptr_toplevel >>
+      disch_then (qspec_then `st` assume_tac) >> gvs[] >>
+      drule_all tuple_store_word_step >> strip_tac >>
+      qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+      gvs[compile_tuple_store_all_def, comp_return_def] >>
+      `s.vs_call_ctx.cc_static` by metis_tac[] >>
+      `emit_void (if tr then TSTORE else SSTORE) [Lit (n2w k); op] st = ((),sf)` by
+        (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
+      `eval_operand (Lit (n2w k)) s = SOME (n2w k) /\
+       op_taint tn (Lit (n2w k)) = {}` by simp[eval_operand_def,op_taint_def] >>
+      qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] s))`,`G`,`tn`] >>
+      simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
+      gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
+  Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] st` >>
+  rename1 `emit_op ADD _ st = (dst,sp)` >>
+  drule_all tuple_target_field_pointer >> strip_tac >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def, comp_return_def] >>
+  `cs_extends st sp /\ cs_extends sp sf` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def] >>
+     metis_tac[ci_mono_emit_op,ci_mono_emit_void,ci_mono_def,pairTheory.SND]) >>
+  `fn_has_code st sp func /\ fn_has_code sp sf func` by
+    metis_tac[fn_has_code_split] >>
+  drule_all body_assign_tuple_field_add_path >>
+  disch_then (qspecl_then [`tn`,`explicit`,`ee`,`cx`,`PG`,`G`] mp_tac) >>
+  disch_then (qx_choosel_then [`out`,`mid`,`Gm`,`tm`] strip_assume_tac) >>
+  `eval_operand op mid = SOME (typed_val_to_w256 tv v) /\
+   op_taint tm op = {}` by
+    (Cases_on `op` >> gvs[eval_operand_def,op_taint_def]) >>
+  `mid.vs_call_ctx.cc_static /\ allocas_from lo mid /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp mid)` by
+    (simp[update_var_def,allocas_from_def,allocas_below_fmp_def] >>
+     metis_tac[allocas_from_def,allocas_below_fmp_def]) >>
+  `emit_void (if tr then TSTORE else SSTORE) [dst; op] sp = ((),sf)` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
+  `?addr. eval_operand dst mid = SOME addr` by
+    metis_tac[eval_operand_def] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (mid,Gm,tm) []
+    (Abort ExHalt_abort (halt_state (set_returndata [] mid)),Gm,tm)` by
+    (gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
+  qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] mid))`,`Gm`,`tm`] >>
+  simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
+  gen_tac >> metis_tac[gas_origin_ptr_path_append,APPEND]
 QED
