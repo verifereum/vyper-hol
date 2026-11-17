@@ -398,7 +398,69 @@ Resume annassign_other_typed_full_execution[success]:
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`ctx`,`es`,`func`] >>
       qexistsl_tac [`inst`,`p`,`entry`,`type_memory_size dtv`] >> fs[]) >>
-   FAIL_TAC "rhs adapter")
+   `?u Gf tf.
+      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK u,Gf,tf)) /\
+      !H. valid_horizon cx st0 H out.storage_trace ==>
+        stmt_lands lctx sb (INL ()) u /\ ~u.vs_halted /\ ~block_is_terminated sb /\
+        cenv_top_ext cenv cenv' out.scopes /\
+        stmt_state_rel H ctx func cenv' cx out u /\
+        storage_well_formed_on cx out (FST H) /\
+        return_buf_frame d cenv' sb u /\ alloca_history func u /\
+        (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+        s0.vs_alloca_next <= u.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv' cx out Gf tf u /\
+        (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x u = SOME z) /\
+        (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP u.vs_allocas aid = SOME ent) /\
+        (!x. not_fresh_at sa x ==>
+          FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+        alloca_frame cenv es sa s0 cenv' out u /\
+        (!aid off len i.
+          FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+          (!name a cap. local_region cenv es.scopes s0 name a cap ==>
+            off+len <= a \/ a+cap <= off) /\
+          off <= i /\ i < off+len /\ i IN tf.t_mem ==> i IN tn0.t_mem)` by
+     (irule annassign_memory_full_suffix_post >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (asm "install" ACCEPT_TAC) >> TRY (asm "dispatch" ACCEPT_TAC) >>
+      TRY (qpat_assum `body_inv tops ctx cenv' cx`
+        (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
+        first_assum ACCEPT_TAC) >>
+      TRY (qpat_assum `expr_body_pre cenv' cx env e es`
+        (strip_assume_tac o PURE_REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+        first_assum ACCEPT_TAC)
+      >- (qpat_assum `!aid off len i. _ ==> i IN tn0.t_mem`
+        (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+        disch_tac >> rpt gen_tac >> strip_tac >>
+        first_x_assum (qspecl_then [`aid`,`off`,`len`,`i`] mp_tac) >>
+        simp[arithmeticTheory.ADD_SYM] >> disch_then irule >>
+        rpt strip_tac >> first_x_assum drule >>
+        simp[arithmeticTheory.ADD_SYM])
+      >- (irule compile_assign_value_typed_open >>
+          qpat_assum `compile_assign_value cenv' _ _ _ _ _ _ _ _ b = ((),sb)`
+            (irule_at Any) >> fs[]) >>
+      TRY (qpat_assum `ghost_inv_at _ lo d cenv' cx mid G1 tn1 t`
+        (strip_assume_tac o PURE_REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
+        first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`b`,`dtv`,`typ`,`w`] >>
+      qexistsl_tac [`id`,`inst`,`mid`,`type_memory_size stv`,`p`,`rest`,`sc`] >>
+      qexistsl_tac [`vv_location vv`,`a`,`stv`,`expr_type e`,`sw`,`type_memory_size dtv`,`v`,`xs`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (simp[NoAsms])
+      >- (gen_tac >> disch_tac >>
+          qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+            (qspec_then `H` mp_tac) >>
+          (impl_tac >- fs[Abbr `out`]) >>
+          POP_ASSUM_LIST (K all_tac) >> simp[NoAsms,expr_post_def]) >>
+      TRY decide_tac
+      >- (qpat_assum `op = Var xs` (fn eq =>
+            qpat_assum `!ty. type_memory_bytes cenv' ty = type_memory_bytes cenv ty` (fn decl =>
+            qpat_assum `type_memory_bytes cenv typ = type_memory_size dtv` (fn sz =>
+              qpat_assum `compile_assign_value cenv' _ _ op _ _ _ _ _ b = ((),sb)` mp_tac >>
+              simp[NoAsms,eq,decl,sz])))) >>
+      TRY (strip_tac >> decide_tac) >>
+      FAIL_TAC "suffix witnesses") >>
+   FAIL_TAC "suffix obtained")
 QED
 
 Finalise annassign_other_typed_full_execution
