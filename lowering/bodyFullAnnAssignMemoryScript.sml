@@ -10,6 +10,7 @@ Ancestors
   logStoreDataOriginPtr stmtSimDeclMem exprSimProps
   context emitHelper venomState bodyPtrDefs typedMemoryCopy
   valueEncodingDefs valueEncodingProps valueEncoding vyperTyping ptrDiscipline
+  gasOutcomeFullCompose
   compileEnv exprLowering stmtLowering loweringPosts
   vyperTypeSystem vyperTypeArgFits vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -83,4 +84,42 @@ Proof
   qexistsl_tac [`t`, `Gf`, `tnf`] >>
   gvs[val_in_memory_def, val_to_w256_def] >>
   metis_tac[memory_length_word_layout]
+QED
+
+(* Package the actual empty suffix against a horizon-indexed installation
+   continuation.  The machine endpoint is chosen before that quantifier. *)
+Theorem annassign_memory_full_empty_continuation[local]:
+  has_length_word typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
+  emit_void MSTORE [Var p; Lit 0w] b = ((),sf) /\
+  lookup_var p s = SOME w /\ w2n w + 32 < dimword (:256) /\
+  w2n w + 32 <= s.vs_alloca_next /\ ptr_covers G tn p s 32 /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code b sf func /\ ~s.vs_halted /\
+  s.vs_current_bb = b.cs_current_bb /\
+  s.vs_inst_idx = LENGTH b.cs_current_insts /\
+  (!tail. new_variable id tyv (default_value tyv) (mid with gas_obs := tail) =
+    (INL (),out with gas_obs := tail)) /\
+  (!H Gf tf t.
+    valid_horizon cx st0 H out.storage_trace /\
+    val_in_memory tyv (default_value tyv) (w2n w) t.vs_memory /\
+    val_wf tyv (default_value tyv) /\ 32 <= type_memory_size tyv /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory tyv (default_value tyv) (w2n w) mem) /\
+    typed_copy_state_frame b (w2n w) 32 s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+    tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!i. ~(w2n w <= i /\ i < w2n w + 32) ==>
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!q. FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tf (Var q) = op_taint tn (Var q)) ==>
+    Q H (INL ()) (out with gas_obs := []) Gf tf t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (new_variable id tyv (default_value tyv)) (mid,s,G,tn) Q R
+Proof
+  strip_tac >> drule_all annassign_memory_full_empty_store_path >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gf`, `out`, `INL ()`, `t`, `tf`] >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED
