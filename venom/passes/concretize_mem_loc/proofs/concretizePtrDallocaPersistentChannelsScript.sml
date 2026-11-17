@@ -17,8 +17,8 @@ Ancestors
    relocated input bytes.  Thus adoption does not require a copy-read IH. *)
 Theorem ptr_dalloca_completion_adoption:
   s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes /\
-  consume_call_outcome (venom_call_request s addr value ao az st) ro rz s = (w,u) /\
-  consume_call_outcome (venom_call_request t addr value at azt stt) rt rzt t = (v,z) ==>
+  consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := gas_cap) ro rz s = (w,u) /\
+  consume_call_outcome (venom_call_request t addr value at azt stt with cr_gas := gas_capt) rt rzt t = (v,z) ==>
   (ptr_call_adopted s u = ptr_call_adopted t z)
 Proof
   strip_tac >> drule ptr_call_completion_adopted >>
@@ -34,9 +34,9 @@ Theorem ptr_dalloca_ext_call_adoption[local]:
 Proof
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
   rpt strip_tac >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rz) s` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value at azt stt)
+  Cases_on `consume_call_outcome (venom_call_request t addr value at azt stt with cr_gas := SOME (w2n gast))
     (w2n rt) (w2n rzt) t` >>
   gvs[Excl "consume_call_outcome_eq", AllCaseEqs()] >>
   drule_all ptr_dalloca_completion_adoption >>

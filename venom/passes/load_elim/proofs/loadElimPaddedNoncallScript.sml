@@ -847,7 +847,8 @@ Proof
   simp[exec_ext_call_def] >> rpt (pairarg_tac >> simp[]) >>
   drule le_padded_consume_call >>
   disch_then (qspecl_then [`w2n rz`,
-                         `venom_call_request t addr value ao az static`, `w2n ro`] mp_tac) >>
+                         `venom_call_request t addr value ao az static with
+                           cr_gas := SOME (w2n gas)`, `w2n ro`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var]
@@ -931,7 +932,8 @@ Proof
   simp[exec_delegatecall_def] >> rpt (pairarg_tac >> simp[]) >>
   drule le_padded_consume_call >>
   disch_then (qspecl_then [`w2n rz`,
-    `venom_call_request t addr 0w ao az F with cr_kind := DelegateMessageCall`,
+    `venom_call_request t addr 0w ao az F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>`,
     `w2n ro`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>

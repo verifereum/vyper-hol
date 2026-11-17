@@ -92,9 +92,9 @@ Proof
    s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[dload_equal_environment_def, venom_state_component_equality] >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
-                      cr_kind := DelegateMessageCall` >>
+                      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   `venom_call_request t addr 0w bo az F with
-     cr_kind := DelegateMessageCall = rq` by
+     <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|> = rq` by
     simp[Abbr `rq`, venom_call_request_def] >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome rq _ _ s = (w1,r1)` >>

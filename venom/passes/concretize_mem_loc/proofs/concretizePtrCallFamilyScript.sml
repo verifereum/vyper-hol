@@ -162,7 +162,7 @@ Theorem ptr_call_history_execution:
    (inst.inst_opcode = STATICCALL /\ st)) /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
-  exec_ext_call inst t (gt:256 word) addr value at az (rt:256 word) (rz:256 word) st = OK target ==>
+  exec_ext_call inst t (gas:256 word) addr value at az (rt:256 word) (rz:256 word) st = OK target ==>
   ?w u v.
     target = update_var out w v /\
     exec_ext_call inst s (gas:256 word) addr value ao az (ro:256 word) rz st = OK (update_var out w u) /\
@@ -173,9 +173,11 @@ Theorem ptr_call_history_execution:
       read_byte (w2n ro+i) u.vs_memory = read_byte (w2n rt+i) v.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with
+    cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rz) s` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value at az st)
+  Cases_on `consume_call_outcome (venom_call_request t addr value at az st with
+    cr_gas := SOME (w2n gas))
     (w2n rt) (w2n rz) t` >>
   drule_all ptr_history_call_completion >> strip_tac >>
   `target = update_var out q r'` by
@@ -361,7 +363,7 @@ Proof
   drule_at (Pos last) ptr_call_history_execution >>
   disch_then drule >> simp[] >>
   disch_then (drule_at (Pos last)) >> simp[] >>
-  disch_then (qspecl_then [`sr`,`gas`] strip_assume_tac) >>
+  disch_then (qspec_then `sr` strip_assume_tac) >>
   `ptr_history_content (step_taint a.po_inst a.po_state (update_var out w u) a.po_taint)
     (update_var out w u) zt.po_state` by
     (simp[] >>

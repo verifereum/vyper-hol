@@ -308,10 +308,10 @@ Theorem ricf_cert_exec_ext_call:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static) \/
+  (computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) \/
    (accounts_agree_except D s.vs_accounts t.vs_accounts /\
     transient_agree_except D s.vs_transient t.vs_transient)) /\
-  consume_call_outcome (venom_call_request s addr value ao az static)
+  consume_call_outcome (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) s = (w,r) /\
   (!gam db sb sz k.
     (gam = ricf_site_triples sites \/ MEM gam (MAP ricf_site_triples maps) \/
@@ -323,33 +323,45 @@ Theorem ricf_cert_exec_ext_call:
     ricf_cert_core D ids stk PG
       (ricf_effective_prov fn (update_var out w r) (set_prov H [out] NONE))
       (ricf_effective_taint fn (update_var out w r)
-        (ricf_call_taint un (venom_call_request s addr value ao az static) s r
+        (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r
           (w2n ro) (w2n rs) with t_var := set_var_taint un.t_var [out] {})) fn
       sites maps targets (set_prov H [out] NONE)
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r
         (w2n ro) (w2n rs) with t_var := set_var_taint un.t_var [out] {}) cur curs
       (update_var out w r) (update_var out w u)
 Proof
   strip_tac >> (
-  `((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))` by
-    (irule ricf_call_request_compatible >>
-     fs[ricf_cert_core_def, ricf_live_boundary_core_def, Excl "consume_call_outcome_eq"] >>
+  `((computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) /\
+    computed_precompile (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)) /\
+    (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_target =
+      (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)).cr_target /\
+    (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_data =
+      (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)).cr_data) \/
+   request_agree_except D (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
+     (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)))` by
+    (`((computed_precompile (venom_call_request s addr value ao az static) /\
+        computed_precompile (venom_call_request t addr value ao' az static) /\
+        (venom_call_request s addr value ao az static).cr_target =
+          (venom_call_request t addr value ao' az static).cr_target /\
+        (venom_call_request s addr value ao az static).cr_data =
+          (venom_call_request t addr value ao' az static).cr_data) \/
+       request_agree_except D (venom_call_request s addr value ao az static)
+         (venom_call_request t addr value ao' az static))` suffices_by
+       simp[venom_call_request_def, extCallOracleTheory.computed_precompile_def,
+            request_agree_except_def] >>
+     irule ricf_call_request_compatible >>
+     fs[ricf_cert_core_def, ricf_live_boundary_core_def,
+        venom_call_request_def, extCallOracleTheory.computed_precompile_def,
+        Excl "consume_call_outcome_eq"] >>
      metis_tac[]) >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value ao' az static)
+  Cases_on `consume_call_outcome (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) t` >>
   `w = q /\ ricf_cert_core D ids stk PG
     (ricf_effective_prov fn r H)
     (ricf_effective_taint fn r
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r (w2n ro) (w2n rs))) fn
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r (w2n ro) (w2n rs))) fn
     sites maps targets H
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r (w2n ro) (w2n rs))
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r (w2n ro) (w2n rs))
     cur curs r r'` by
     (irule ricf_cert_consume_call >>
      qpat_assum `ricf_cert_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>

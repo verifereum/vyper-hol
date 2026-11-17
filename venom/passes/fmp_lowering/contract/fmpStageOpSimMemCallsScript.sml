@@ -203,8 +203,8 @@ Theorem fmp_mem_call_observe[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   inst.inst_opcode <> INVOKE /\ step_inst k C inst s = OK (update_var out w1 r1) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-  rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+  rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
+  rq2 = (venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
   consume_call_outcome rq1 ro rs s = (w1,r1) /\
   consume_call_outcome rq2 ro' rs t = (w2,r2) ==>
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
@@ -253,11 +253,11 @@ Theorem fmp_mem_call_execute[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   step_inst k C inst s = OK s1 ==>
-  ?out w1 w2 r1 r2 addr value off off' sz (ro:bytes32) (ro':bytes32) (rs:bytes32) static kind rq1 rq2.
+  ?out w1 w2 r1 r2 (gas:bytes32) addr value off off' sz (ro:bytes32) (ro':bytes32) (rs:bytes32) static kind rq1 rq2.
     inst.inst_outputs = [out] /\ s1 = update_var out w1 r1 /\
     step_inst k C' inst t = OK (update_var out w2 r2) /\
-    rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-    rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+    rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
+    rq2 = (venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
     consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w1,r1) /\
     consume_call_outcome rq2 (w2n ro') (w2n rs) t = (w2,r2) /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -290,8 +290,8 @@ Proof
   qpat_x_assum `!op x. _` kall_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
   qabbrev_tac `kind = if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall` >>
-  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_kind := kind` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_kind := kind` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 _ _ s = (w1,r1)` >>
   Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>
@@ -299,7 +299,7 @@ Proof
   `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
     (gvs[Abbr `rq1`, Abbr `kind`, exec_ext_call_def, exec_delegatecall_def,
          venom_call_request_def, Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`addr`,`value`,`off`,`off'`,`sz`,
+  qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`gas`,`addr`,`value`,`off`,`off'`,`sz`,
                 `ro`,`ro'`,`rs`,`static`,`kind`,`rq1`,`rq2`] >>
   simp[Excl "consume_call_outcome_eq", Abbr `rq1`, Abbr `rq2`] >>
   gvs[MEM, Abbr `kind`, Excl "consume_call_outcome_eq"] >>
@@ -357,7 +357,7 @@ Theorem fmp_mem_call_shared[local]:
   taint_ok fn tn inst s /\
   static = (if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
             else inst.inst_opcode = STATICCALL) /\
-  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
+  rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success

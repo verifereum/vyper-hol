@@ -18,7 +18,7 @@ val _ = hide "body";
    The source account check does not inspect arbitrary storage. *)
 Theorem adopted_state_is_source_typed:
   runtime_consistent env cx st /\
-  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target data value st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   state_well_typed st2 /\ env_consistent env cx st2 /\
   accounts_well_typed st2.accounts
@@ -30,7 +30,7 @@ QED
 
 Theorem Send_type_client:
   runtime_consistent env cx st /\
-  (do (rq,outcome) <- take_call_outcome target [] (SOME amount);
+  (do (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
       check outcome.co_success "send failed";
       adopt_call_outcome rq outcome;
       return (Value NoneV) od) st = (res,st') ==>
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem Send_errors_exclude_type_and_control:
-  (do (rq,outcome) <- take_call_outcome target [] (SOME amount);
+  (do (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
       check outcome.co_success "send failed";
       adopt_call_outcome rq outcome;
       return (Value NoneV) od) st = (INR exc,st') ==>
@@ -50,8 +50,8 @@ Theorem Send_errors_exclude_type_and_control:
   (!v. exc <> ReturnException v)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `take_call_outcome target [] (SOME amount) st` >>
-  rename1 `take_call_outcome target [] (SOME amount) st = (taken,mid)` >>
+  Cases_on `take_call_outcome gas_cap target [] (SOME amount) st` >>
+  rename1 `take_call_outcome gas_cap target [] (SOME amount) st = (taken,mid)` >>
   drule Send_outcome_continue >> strip_tac >> gvs[] >>
   Cases_on `taken` >> gvs[AllCaseEqs(), no_control_exc_def] >>
   drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
@@ -100,7 +100,7 @@ Theorem ExtCall_decode_errors_are_runtime:
   ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
-  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  take_call_outcome NONE target data (SOME amount) st = (INL (rq,outcome),st1) /\
   outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
   evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData = INR msg ==>
   eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
@@ -114,7 +114,7 @@ Theorem ExtCall_revert_preserves_payload:
   ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
-  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  take_call_outcome NONE target data (SOME amount) st = (INL (rq,outcome),st1) /\
   ~outcome.co_success ==>
   eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
     (INR (Error (RevertData outcome.co_returnData)),st1)
@@ -128,7 +128,7 @@ Theorem ExtCall_default_selected_after_adoption:
   ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
-  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  take_call_outcome NONE target data (SOME amount) st = (INL (rq,outcome),st1) /\
   outcome.co_success /\ outcome.co_returnData = [] /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   eval_ext_call cx F T (func_name,[],ret_type) [EKValue;EKDefault]
@@ -187,10 +187,10 @@ Proof
 QED
 
 Theorem checked_continuation_runs_after_adoption:
-  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target data value st = (INL (rq,outcome),st1) /\
   outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   (do
-    (rq,outcome) <- take_call_outcome target data value;
+    (rq,outcome) <- take_call_outcome gas_cap target data value;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData

@@ -64,8 +64,10 @@ Proof
   `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_joint_local_fields_def] >>
   `LENGTH maps = LENGTH stk` by
     fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_live_stack_agree_def] >>
-  qabbrev_tac `rq = venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall` >>
-  `venom_call_request t addr 0w ao' az F with cr_kind := DelegateMessageCall = rq` by
+  qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
+  `venom_call_request t addr 0w ao' az F with
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|> = rq` by
     simp[Abbr`rq`, venom_call_request_def] >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome rq (w2n ro) (w2n rz) s = (w,r)` >>

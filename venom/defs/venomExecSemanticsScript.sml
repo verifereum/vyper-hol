@@ -504,14 +504,15 @@ Definition extract_venom_result_def:
 End
 
 (* Execute CALL/STATICCALL using the shared outcome oracle.
-   Operand evaluation, including gas, remains in step_inst_base; only the
-   evaluated gas value is ignored. Concrete helpers remain for other opcodes.
+   Operand evaluation, including gas, remains in step_inst_base; the request
+   records the evaluated gas operand. Concrete helpers remain for other opcodes.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
    STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
-    let rq = venom_call_request s addr_w value argsOff argsSize is_static;
+    let rq = venom_call_request s addr_w value argsOff argsSize is_static with
+               cr_gas := SOME (w2n gas);
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
          [out] => OK (update_var out output s')
@@ -526,7 +527,7 @@ End
 Definition exec_delegatecall_def:
   exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
     let rq = venom_call_request s addr_w 0w argsOff argsSize F with
-               cr_kind := DelegateMessageCall;
+               <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>;
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
          [out] => OK (update_var out output s')
