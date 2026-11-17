@@ -3,7 +3,7 @@ Theory symControlTerminalPrepareOwn
 Ancestors
   asmSymBridge[qualified,ignore_grammar] symControlPrefixOwn
   codegenSymRel fnFrameDeepAbort fnFrameTerminalHalt generatedPrefixSim
-  symControlTerminalSafetyOwn
+  symControlTerminalSafetyOwn symControlTerminalWordStackOwn
   deepInstSim fnPlanPrefix deepResidualSim allocMono stackOpSim
   asmSplice frameRel contextCodegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem asmSymSem venomInst dfgDefs
@@ -306,9 +306,7 @@ Theorem terminal_operands_not_retpc:
      INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
   MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x
 Proof
-  strip_tac >> irule frameViewFactsTheory.ordinary_operand_not_retpc >>
-  conj_tac >- gvs[listTheory.MEM] >>
-  qexists `inst` >> gvs[compute_operands_def, listTheory.MEM]
+  ACCEPT_TAC symControlTerminalWordStackOwnTheory.terminal_operands_not_retpc
 QED
 
 Theorem terminal_arranged_word_stack_mode:
@@ -331,36 +329,8 @@ Theorem terminal_arranged_word_stack_mode:
      DROP (LENGTH (compute_operands inst)) (mid.as_stack ++ rest)) /\
   ?suffix. ss.sym_stack = MAP Val values ++ suffix
 Proof
-  disch_then assume_tac >>
-  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
-  `!x. MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x` by
-    metis_tac[terminal_operands_not_retpc] >>
-  `eval_operands (REVERSE (compute_operands inst))
-      (frame_view fn ra vs with vs_memory := m) = SOME values` by
-    metis_tac[frameViewFactsTheory.eval_operands_frame_view, listTheory.MEM_REVERSE] >>
-  `!op. MEM op (compute_operands inst) ==>
-    eval_operand op (frame_view fn ra vs with vs_memory := m) =
-    operand_val (frame_view fn ra vs with vs_memory := m) lo op` by
-    simp[venomMemPropsTheory.eval_operand_with_memory,
-         genFrameSimTheory.operand_val_memory_update] >>
-  `!op sv. MEM op (compute_operands inst) /\ op_kind_ok fn ret op sv ==>
-    ?w. sv = Val w` by
-    (rpt strip_tac >>
-     `op <> dead_stack_marker` by
-       (qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
-        disch_then (qspec_then `op` mp_tac) >> simp[]) >>
-     drule_all terminal_operand_word_kind_mode >> simp[]) >>
-  drule_all arranged_word_prepared_symbolic_stack_core >> strip_tac >>
-  `LENGTH values = LENGTH (compute_operands inst)` by
-    metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
-              listTheory.LENGTH_REVERSE] >>
-  `LENGTH (compute_operands inst) <= LENGTH mid.as_stack` by
-    metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.LE_ADD] >>
-  `LENGTH (compute_operands inst) - LENGTH mid.as_stack = 0` by decide_tac >>
-  simp[listTheory.DROP_APPEND] >>
-  qpat_x_assum `mid.as_stack = values ++ _`
-    (mp_tac o AP_TERM ``\xs:bytes32 list. xs ++ rest``) >>
-  simp[listTheory.APPEND_ASSOC]
+  ACCEPT_TAC (symControlTerminalWordStackOwnTheory.terminal_arranged_word_stack_mode_split_maps
+    |> Q.INST [`bridge_lo` |-> `lo`])
 QED
 
 Theorem sym_frame_terminal_prefix_setup_marked_mode_conditional:
