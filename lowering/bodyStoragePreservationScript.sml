@@ -126,16 +126,7 @@ Theorem body_oracle_storage_mutual:
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets tgts) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-    assign_tuple_target_list cx tgts vs st = (res,st') ==> contract_storage_well_formed cx st') /\
-  (!cx es. !tops env st res st'.
-    well_typed_exprs env es /\ supported_program tops /\
-    get_module_code cx NONE = SOME tops /\
-    ~supported_exprs_exists expr_evm_run_root es /\
-    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_exprs es) /\
-    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-    eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
+    assign_tuple_target_list cx tgts vs st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
   (* simp over all 63 induction goals is one timed step; split it in
      three, rightmost first so the earlier goal indices stay put. *)
@@ -235,8 +226,6 @@ Proof
     (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
   >~ [`eval_exprs _ []`] >-
     (rpt strip_tac >> gvs[Once evaluate_def, return_def, runtime_storage_consistent_def])
-  >~ [`eval_expr_results _ []`] >-
-    (rpt strip_tac >> gvs[Once evaluate_def, return_def, runtime_storage_consistent_def])
   >~ [`eval_base_place _ (NameTarget _)`] >- suspend "name_target"
   >~ [`eval_base_place _ (TopLevelNameTarget _)`] >- suspend "global_target"
   >~ [`eval_expr _ (StructLit _ _ _)`] >- suspend "struct_expr"
@@ -246,7 +235,6 @@ Proof
   >~ [`eval_base_place _ (AttributeTarget _ _)`] >- suspend "attribute_target" >>
   all_tac
   >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin_expr"
-  >~ [`eval_expr_results _ (_::_)`] >- suspend "results_cons"
   >~ [`eval_exprs _ (_::_)`] >- suspend "exprs_cons"
   >~ [`eval_base_place _ (SubscriptTarget _ _)`] >- suspend "subscript_target"
   >~ [`eval_expr _ (Call _ RawRevert _ _)`] >- suspend "raw_revert"
@@ -529,16 +517,6 @@ Resume body_oracle_storage_mutual[subscript_target]:
   drule call_evaluation_safe_append_left >> strip_tac >>
   drule call_evaluation_safe_append_right >> strip_tac >>
   irule body_eval_subscript_target_storage >>
-  rpt (goal_assum (drule_at Any)) >>
-  rpt strip_tac >> metis_tac[expr_has_evm_run_def]
-QED
-
-Resume body_oracle_storage_mutual[results_cons]:
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[supported_expr_exists_def, int_calls_expr_def, Once well_typed_expr_def] >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  irule body_eval_expr_results_cons_storage >>
   rpt (goal_assum (drule_at Any)) >>
   rpt strip_tac >> metis_tac[expr_has_evm_run_def]
 QED

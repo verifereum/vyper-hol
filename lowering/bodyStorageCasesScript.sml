@@ -355,38 +355,6 @@ QED
 
 (* List sequencing is independent of the syntactic source of the recursive
    preservation premises.  Consumers discharge these premises using their IH. *)
-Theorem body_eval_expr_results_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
-  (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr_results cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
-  IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-  eval_expr_results cx (e::es) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  strip_tac >>
-  qpat_x_assum `eval_expr_results _ (_::_) _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (head_res,head_st)` >>
-  `contract_storage_well_formed cx head_st` by metis_tac[] >>
-  `runtime_consistent env cx head_st` by
-    metis_tac[eval_expr_preserves_runtime_consistent,
-              runtime_storage_consistent_runtime] >>
-  `outcome_suffix st.outcomes head_st.outcomes` by
-    (drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
-  drule_all body_oracle_storage_entry_transfer >> strip_tac >>
-  Cases_on `head_res` >> gvs[] >> rpt strip_tac >> gvs[] >>
-  Cases_on `eval_expr_results cx es head_st` >>
-  rename1 `eval_expr_results cx es head_st = (tail_res,tail_st)` >>
-  `contract_storage_well_formed cx tail_st` by metis_tac[] >>
-  Cases_on `tail_res` >> gvs[bind_def] >> rpt strip_tac >> gvs[]
-QED
 Theorem body_eval_exprs_cons_storage:
   (!s r s'. runtime_storage_consistent env cx s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
