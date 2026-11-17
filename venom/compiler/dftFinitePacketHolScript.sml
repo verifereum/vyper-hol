@@ -3,8 +3,8 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendSemantics
-  dftPacketBlockAppendNative dftPacketBlockAppendShape dftGasPrefixProvider
+  dftPacketBlockAppendSemantics dftPacketBlockAppendNative
+  dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
@@ -13,7 +13,8 @@ Ancestors
   dftPacketCallLocalPreservation
   dftPacketCallRecords
   dftPacketCalleeAlignment
-  dftPacketCallFreshEntry dftPacketClosedRowNative
+  dftPacketCallFreshEntry
+  dftPacketClosedRowNative
   dftPacketClosedRows
   dftPacketCommonOracle
   dftPacketCutExtension
@@ -22,7 +23,8 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshChildStop
   dftPacketFreshRow
-  dftPacketBlockFreshEntry dftPacketKeyMap
+  dftPacketBlockFreshEntry
+  dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
   dftPacketNativeContinuation
@@ -36,22 +38,24 @@ Ancestors
   dftPacketLiteralRowExtend
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
-  dftPacketPreterminalAgreement
-  dftPacketPreterminalGeometry
-  dftPacketPseudoAdvance
+  dftPacketPreterminalAgreement dftPacketPreterminalGeometry dftPacketPseudoAdvance
   dftPacketPseudoCursor
-  dftPacketRefinementBoundary
+  dftPacketPseudoHistory
+  dftPacketPseudoReplayFrame
+  dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
+  dftPacketReturnActivation
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational dftPacketCompletePlanOperational
-  dftPacketRootedPlainStop
+  dftPacketRootedEntryContext dftPacketRootedOperational
+  dftPacketCompletePlanOperational dftPacketRootedPlainStop
+  dftPacketRootedSegmentStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
