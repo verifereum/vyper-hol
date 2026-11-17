@@ -376,7 +376,7 @@ Proof
   step_inst_base_opcode_tac >>
   rw[exec_create_abort_iff, exec_ext_call_abort_iff,
      exec_delegatecall_abort_iff, set_returndata_def, halt_state_def,
-     revert_state_def, AllCaseEqs(), exec_write2_def]
+     revert_state_def, AllCaseEqs(), exec_write2_def] >> gvs[]
 QED
 
 Theorem step_inst_base_abort_type[local]:
@@ -545,10 +545,13 @@ Proof
     `~is_ext_call_op inst_a.inst_opcode` by
       metis_tac[empty_write_not_ext_call] >>
     `inst_a.inst_opcode <> INVOKE` by
-      (strip_tac >> gvs[write_effects_def, all_effects_def, empty_effects_def,
-                        pred_setTheory.EXTENSION]) >>
+      (strip_tac >> gvs[EVAL ``write_effects INVOKE = {}``]) >>
+    `inst_a.inst_opcode <> CALL /\ inst_a.inst_opcode <> STATICCALL /\
+     inst_a.inst_opcode <> CREATE /\ inst_a.inst_opcode <> CREATE2 /\
+     inst_a.inst_opcode <> DELEGATECALL` by
+      (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
     `v.vs_outcomes = s.vs_outcomes` by
-      (drule step_inst_noninvoke_oracle >> gvs[is_ext_call_op_def]) >>
+      (drule_all step_inst_noninvoke_oracle >> simp[]) >>
     `v.vs_returndata = s.vs_returndata` by
       metis_tac[write_effects_sound_returndata, pred_setTheory.NOT_IN_EMPTY] >>
     drule_then (qspec_then `v` mp_tac) step_inst_base_abort_input_equiv >>
