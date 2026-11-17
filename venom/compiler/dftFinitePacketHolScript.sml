@@ -11,7 +11,7 @@ Ancestors
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCallLocalPreservation
-  dftPacketCallRecords
+  dftPacketCallRecords dftPacketCallRowStructure
   dftPacketCalleeAlignment
   dftPacketCallFreshEntry
   dftPacketClosedRowNative
