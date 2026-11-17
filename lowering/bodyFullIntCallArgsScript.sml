@@ -18,6 +18,35 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
 
+(* The concrete emitted word store preserves the execution's allocation history. *)
+Theorem intcall_args_word_store_history:
+  !cenv op aq dty sty cu cs func z w aw.
+    compile_store_memory cenv op (Var aq) dty sty cu = ((),cs) /\
+    is_word_type dty /\
+    fn_has_code cu cs func /\ fn_inst_ids_distinct func /\
+    eval_operand op z = SOME w /\ lookup_var aq z = SOME aw /\
+    alloca_history func z /\ alloca_inv z /\ ~z.vs_halted /\
+    z.vs_current_bb = cu.cs_current_bb /\
+    z.vs_inst_idx = LENGTH cu.cs_current_insts ==>
+    alloca_history func
+      ((mstore (w2n aw) w z) with vs_inst_idx := LENGTH cs.cs_current_insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `emit_inst MSTORE [Var aq;op] [] cu = ((),cs)` by
+    gvs[contextTheory.compile_store_memory_def,
+        emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def] >>
+  drule emitHelperPropsTheory.emit_inst_extends >> strip_tac >>
+  irule bodyFullUnwrapRunTheory.emitted_alloca_history >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`[mk_inst cu.cs_next_id MSTORE [Var aq;op] []]`,`z`,`cu`] >>
+  `eval_operand (Var aq) z = SOME aw` by simp[venomStateTheory.eval_operand_def] >>
+  `step_inst_base (mk_inst cu.cs_next_id MSTORE [Var aq;op] []) z =
+     OK (mstore (w2n aw) w z)` by
+    (irule emitHelperPropsTheory.step_MSTORE >> simp[]) >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
 (* Empty local typing maps can be weakened without changing static maps. *)
 Theorem intcall_args_defaults_typing_mutual[local]:
   (!env e. well_typed_expr env e ==>
