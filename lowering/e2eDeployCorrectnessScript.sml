@@ -9,6 +9,7 @@ Ancestors
   deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
+  sourceCallCount
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
 
 (* A successful compilation exposes the deployment unit's phases. *)
@@ -33,31 +34,49 @@ QED
    a raw entry state carrying the S4 facts and the selected-run certificate.
    The only admission on e2e_deploy_correctness_identity's path. *)
 Theorem deploy_pipeline_gas_link:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es r es'.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs_out fmp r es'.
+    fin IN accepted_finalizers /\
+    fin rpolicy prog = SOME prog' /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    (!vs. gas_variant vs (deploy_entry_state prog cplan tops es) ==>
-          deploy_unit_execution_correct tops runtime_bc am tx dunit vs) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
+    (!gobs. deploy_source_calls_within (2 ** 64) tops am (tx with code := vs_out.vs_code)
+      (MAP SND (call_trace es)) gobs) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    (?shadow_ctx. !vs.
+       raw_variant fmp vs vs_out ==>
+       ?marks. deploy_unit_execution_correct_with shadow_ctx marks
+         tops runtime_bc am (tx with code := vs_out.vs_code) dunit vs) /\
     run_call es = SOME (r, es') /\
-    ~frame_resource_starved es r es' ==>
+    ~creation_resource_starved es r es' ==>
     gas_readings_rel (gas_readings es)
-      (\gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs ==>
+      (\gs. deploy_storage_ok tops am (tx with code := vs_out.vs_code) (MAP SND (call_trace es)) gs ==>
             ?vs marks tail.
               gs = gas_explicit marks vs.vs_gas_readings ++ tail /\
-              gas_variant vs (deploy_entry_state prog cplan tops es) /\
-              (!D. dead_wf D ==>
+              raw_variant fmp vs vs_out /\
+              (~deploy_source_exempt tops
+                 (load_contract (SOME vs.vs_outcomes)
+                   (gas_explicit marks vs.vs_gas_readings ++ tail)
+                   am (tx with code := vs_out.vs_code) [(NONE, tops)] []) ==>
+               !D. dead_wf D ==>
                  raw_unit_memory_ok dunit.cu_context vs /\
                  ptr_discipline (imm_len tops) dunit.cu_context vs /\
                  taint_within D dunit.cu_context vs /\
                  mem_inv dload_offset_ok dunit.cu_context vs /\
                  mem_inv dload_headroom_ok dunit.cu_context vs ==>
                  ctx_sim D dunit.cu_context dout.po_unit.cu_context vs
-                   (deploy_entry_state prog cplan tops es) /\
+                   vs_out /\
+                 (fin = asm_opt_finalizer ==>
+                    code_end_offset_ok (raw_reachable vs_out) dout.po_unit.cu_context) /\
                  o1_lowered_inv dout.po_unit.cu_context
-                   (deploy_entry_state prog cplan tops es)) /\
-              deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs) T
+                   vs_out) /\
+              deploy_unit_execution_correct_at marks tops runtime_bc am (tx with code := vs_out.vs_code) dunit vs)
 Proof
   cheat
 QED
