@@ -3466,47 +3466,18 @@ Theorem sym_frame_terminal_prefix_setup_marked:
     asm_sym_rel prog env mid ss_mid /\
     (!b. b IN FDOM ss_mid.sym_mem_labels ==> context_spill_byte cp b)
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rename1 `MEM r cplan.cp_regions` >>
-  `?name. venom_to_evm_name inst.inst_opcode = SOME name /\
-    inst.inst_outputs = [] /\ ~is_commutative inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\
-    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term label ps =
-      (ops,final)` by
-    (gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
-        venomWfTheory.inst_wf_def, asmIRTheory.venom_to_evm_name_def,
-        venomEffectsTheory.is_commutative_def, compute_operands_def]) >>
-  drule_all fnFrameTerminalHaltTheory.output_free_regular_plan >> strip_tac >>
-  `ssa_form fn /\ label_positions_ok inst` by
-    metis_tac[stackPlanGenTheory.codegen_ready_fn_def,
-              unitShapeDefsTheory.fn_shape_ok_def,
-              unitShapeDefsTheory.inst_shape_ok_def, listTheory.EVERY_MEM] >>
-  `PERM (compute_operands inst) (compute_operands inst) /\
-   LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack /\
-   arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset` by gvs[] >>
-  drule_all sym_frame_entry_selected_prefix_sim_marked >>
-  strip_tac >>
-  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))`,
-    `mid with as_stack := mid.as_stack ++ rest`, `name`, `ss_mid`] >>
-  simp[] >>
-  `asm_block_at prog mid.as_pc [AsmOp name]` by
-    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
-        execute_plan_def, exec_stack_op_def] >>
-  `asm_sym_rel prog env (mid with as_stack := mid.as_stack ++ rest) ss_mid /\
-   sym_kinds_ok cplan fn ret srest arranged ss_mid /\
-   (!b. b IN FDOM ss_mid.sym_mem_labels ==> context_spill_byte cplan b)` by
-    metis_tac[sym_frame_inv_def, sym_kinds_ok_def] >>
-  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
-  simp[] >> conj_tac
-  >- (qpat_x_assum `venom_asm_rel _ _ _ mid` mp_tac >>
-      simp[venom_asm_rel_def, frame_view_def]) >>
-  gen_tac >> disch_tac >>
-  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
-   MEM inst.inst_opcode
-     [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
-      INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
-    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  drule_all terminal_arranged_word_stack >> simp[]
+  qx_gen_tac `cplan` >> qx_gen_tac `spillbase` >>
+  strip_tac >> gvs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel prog env cs ss /\ sym_steps prog env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      asm_sym_rel prog env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  mp_tac (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+             `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`, `o2pc` |-> `build_offset_to_pc prog`]
+      (SPEC_ALL (Q.SPECL [`cplan`, `spillbase`]
+        symControlTerminalPrepareOwnTheory.sym_frame_terminal_prefix_setup_marked_mode_conditional)))) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
 Theorem assert_selected_prefix_decompose:
@@ -3581,28 +3552,17 @@ Theorem sym_conditional_abort_frame_prefix_deep:
     sym_frame_inv prog env ctx cplan fn ret srest labs0 arranged
       (mid with as_stack := mid.as_stack ++ rest) ss_mid
 Proof
-  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `?iops prepared rops arranged suffix.
-    emit_input_plan inst.inst_opcode (compute_operands inst) nl ps = (iops,prepared) /\
-    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
-    ops = iops ++ rops ++ suffix /\
-    arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
-    arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
-    compute_operands inst = [cond] /\
-    ((inst.inst_opcode = ASSERT /\
-      suffix = [SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]) \/
-     (inst.inst_opcode = ASSERT_UNREACHABLE /\ ?lbl.
-      suffix = [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl]))` by
-    (Cases_on `inst.inst_opcode = ASSERT`
-     >- (drule_all assert_selected_prefix_decompose >> metis_tac[])
-     >> metis_tac[assert_unreachable_selected_prefix_decompose]) >>
-  `inst.inst_opcode <> INVOKE /\
-   PERM (compute_operands inst) (compute_operands inst) /\
-   LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by gvs[] >>
-  drule_all sym_frame_entry_selected_prefix_sim_marked >> strip_tac >>
-  qexistsl [`iops ++ rops`, `arranged`, `mid`, `ss_mid`, `suffix`] >> simp[] >>
-  qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
-  simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >> gvs[]
+  qx_gen_tac `spillbase` >> strip_tac >> gvs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel prog env cs ss /\ sym_steps prog env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      asm_sym_rel prog env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  mp_tac (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+             `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`, `o2pc` |-> `build_offset_to_pc prog`]
+      (SPEC_ALL (Q.SPEC `spillbase`
+        symControlTerminalPrepareOwnTheory.sym_conditional_abort_frame_prefix_deep_mode_conditional)))) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
 Theorem sym_regular_abort_frame_prefix_deep:
@@ -3645,25 +3605,17 @@ Theorem sym_regular_abort_frame_prefix_deep:
     sym_frame_inv prog env ctx cplan fn ret srest labs0 arranged
       (mid with as_stack := mid.as_stack ++ rest) ss_mid
 Proof
-  gen_tac >> strip_tac >>
-  drule_all generatedPrefixSimTheory.regular_plan_selected_prefix >> strip_tac >>
-  `selected = compute_operands inst` by metis_tac[] >>
-  `emitted.ps_alloc = arranged.ps_alloc` by
-    simp[generatedPrefixSimTheory.emit_output_fold_alloc] >>
-  `emitted.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
-   emitted.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset` by
-    (drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> simp[]) >>
-  `arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
-   arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
-   PERM (compute_operands inst) selected /\
-   LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack /\
-   ops = iops ++ rops ++ ([SOEmit name] ++ popops ++ optops)` by
-    gvs[listTheory.APPEND_ASSOC] >>
-  drule_all sym_frame_entry_selected_prefix_sim_marked >> strip_tac >>
-  qexistsl [`iops ++ rops`, `arranged`, `mid`, `ss_mid`] >> simp[] >>
-  qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
-  simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
-       execute_plan_def, exec_stack_op_def] >> gvs[]
+  qx_gen_tac `spillbase` >> strip_tac >> gvs[sym_frame_inv_def] >>
+  `!n cs ss ss'. asm_sym_rel prog env cs ss /\ sym_steps prog env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      asm_sym_rel prog env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  mp_tac (SRULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+             `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`,
+             `dfg` |-> `dfg_build_function fn`, `o2pc` |-> `build_offset_to_pc prog`]
+      (SPEC_ALL (Q.SPEC `spillbase`
+        symControlTerminalPrepareOwnTheory.sym_regular_abort_frame_prefix_deep_mode_conditional)))) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
 Theorem sym_rf_copy_preparation_execution:
