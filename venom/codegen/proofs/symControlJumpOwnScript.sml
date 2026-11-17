@@ -302,14 +302,20 @@ Proof
     sym_jmp_suffix_frame_sim_mode_conditional >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   drule_then (qspec_then `nl` assume_tac) sym_kinds_ok_release_dead_spills >>
+  `LENGTH (execute_plan initial_fmp ops) =
+    LENGTH (execute_plan initial_fmp (rops ++ sops)) + 2` by
+    (qpat_x_assum `ops = _` SUBST1_TAC >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp[NoAsms, stackOpSimTheory.execute_plan_append,
+          execute_plan_def, exec_stack_op_def]) >>
   qexistsl [`cs''`, `ss''`] >>
-  simp[stackOpSimTheory.execute_plan_append, arithmeticTheory.ADD_ASSOC] >>
   conj_tac
-  >- (pure_once_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC,
-        stackOpSimTheory.asm_steps_add] >> simp[]) >>
+  >- (qpat_x_assum `LENGTH (execute_plan initial_fmp ops) = _` SUBST1_TAC >>
+      pure_rewrite_tac[stackOpSimTheory.asm_steps_add] >>
+      asm_rewrite_tac[] >> simp[]) >>
   conj_tac
-  >- (pure_once_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC,
-        sym_steps_mode_add] >> simp[]) >>
-  simp[]
+  >- (qpat_x_assum `LENGTH (execute_plan initial_fmp ops) = _` SUBST1_TAC >>
+      pure_rewrite_tac[sym_steps_mode_add] >> asm_rewrite_tac[] >> simp[]) >>
+  metis_tac[]
 
 QED
