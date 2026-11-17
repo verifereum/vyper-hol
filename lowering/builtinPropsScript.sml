@@ -13,6 +13,13 @@
  *                                    reverts exactly on MIN_INT
  *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
+ *   emit_op_NUMBER_correct         — an emitted NUMBER reads the block number
+ *   emit_op_BLOCKHASH_correct      — an emitted BLOCKHASH reads the block hash
+ *   compile_blockhash_run          — compiled blockhash outputs the hash, or reverts
+ *                                    outside the 256-block window
+ *   compile_blockhash_frame        — the blockhash code changes only fresh variables
+ *   compile_prevhash_run           — compiled prevhash outputs the parent block's hash
+ *   compile_prevhash_frame         — the prevhash code changes only fresh variables
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -25,6 +32,7 @@ Ancestors
   builtinStrings builtinSystem builtinMisc builtinCreate
   builtinAbi abiBuiltinEncodeRun abiBuiltinDecodeCorrect context
   compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst venomMemProps
+  venomInstProofs1
   valueEncoding abiEncoder
   logroot
 Libs
@@ -57,60 +65,6 @@ val emitted_insts_tac =
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM listTheory.APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND];
-
-(* Unconditional eval_operand through update_var for Var operands.
-   Rewrites to if-then-else so simp can resolve name equality/inequality. *)
-Theorem eval_operand_update_var_if[local]:
-  ∀ v v' (w:bytes32) ss.
-    eval_operand (Var v) (update_var v' w ss) =
-    if v = v' then SOME w else eval_operand (Var v) ss
-Proof
-  simp[eval_operand_def, update_var_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >> rw[]
-QED
-
-(* eval_operand is preserved through mstore (NOT_NONE form for metis) *)
-Theorem eval_operand_mstore_not_none[local]:
-  ∀ op addr (val:bytes32) ss.
-    eval_operand op ss ≠ NONE ⇒
-    eval_operand op (mstore addr val ss) ≠ NONE
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, mstore_def, lookup_var_def, LET_THM]
-QED
-
-(* eval_operand ignores vs_allocas and vs_alloca_next —
-   only depends on vs_vars and vs_labels. Used after ALLOCA. *)
-Theorem eval_operand_alloca_fields[local]:
-  ∀ op ss a n.
-    eval_operand op (ss with <| vs_allocas := a;
-                                vs_alloca_next := n |>) =
-    eval_operand op ss
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, lookup_var_def]
-QED
-
-(* ALLOCA always succeeds: both FLOOKUP branches produce OK.
-   The resulting state preserves eval_operand for non-output operands,
-   and the output variable becomes defined. *)
-Theorem step_ALLOCA[local]:
-  ∀ id size out ss.
-    ∃ ss'.
-      step_inst_base (mk_inst id ALLOCA [Lit size] [out]) ss = OK ss' ∧
-      (∀ op v. eval_operand op ss = SOME v ∧ (∀ x. op = Var x ⇒ x ≠ out) ⇒
-               eval_operand op ss' = SOME v) ∧
-      eval_operand (Var out) ss' ≠ NONE
-Proof
-  rw[step_inst_base_opcode_eqs, exec_alloca_def, mk_inst_def, LET_THM] >>
-  Cases_on `FLOOKUP ss.vs_allocas id` >>
-  simp[eval_operand_alloca_fields, eval_operand_update_var] >>
-  TRY (rename1 `SOME p` >> PairCases_on `p` >>
-       simp[eval_operand_alloca_fields, eval_operand_update_var]) >>
-  rw[] >> Cases_on `op` >>
-  gvs[eval_operand_def, update_var_def, lookup_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE]
-QED
 
 (* SHA3 step lemma: given two defined operands, SHA3 computes the hash
    of the selected memory range. *)
@@ -424,73 +378,6 @@ QED
 
 (* ===== Shift ===== *)
 
-(* eval_operand_fresh_step: peel one update_var off eval_operand AND bump
-   fresh_vars_wrt. Designed for forward chaining: after one application,
-   the assumptions contain the updated eval_operand and the bumped
-   fresh_vars_wrt, enabling the next step. *)
-Theorem eval_operand_fresh_step[local]:
-  ∀ op v (w:bytes32) ss st.
-    eval_operand op ss = SOME v ∧
-    fresh_vars_wrt st ss
-    ⇒
-    eval_operand op
-      (update_var (STRING #"%" (toString st.cs_next_var)) w ss) = SOME v ∧
-    fresh_vars_wrt (st with cs_next_var := st.cs_next_var + 1)
-      (update_var (STRING #"%" (toString st.cs_next_var)) w ss)
-Proof
-  rpt strip_tac
-  >- (irule eval_operand_update_fresh >>
-      conj_tac >- simp[] >>
-      qexistsl [`st.cs_next_var`, `st`] >> simp[])
-  >> irule fresh_vars_wrt_advance >>
-  qexistsl [`st.cs_next_var`, `st`] >> simp[]
-QED
-
-(* Chain of 3 fresh update_vars: preserves operands and advances fresh_vars_wrt.
-   Uses eval_operand_fresh_step which handles one step at a time. *)
-Theorem fresh_update_chain3[local]:
-  ∀ cst ss (w0 w1 w2 : bytes32).
-    fresh_vars_wrt cst ss
-    ⇒
-    let v0 = STRING #"%" (toString cst.cs_next_var) in
-    let v1 = STRING #"%" (toString (cst.cs_next_var + 1)) in
-    let v2 = STRING #"%" (toString (cst.cs_next_var + 2)) in
-    let ss3 = update_var v2 w2
-                (update_var v1 w1
-                  (update_var v0 w0 ss)) in
-    fresh_vars_wrt (cst with cs_next_var := cst.cs_next_var + 3) ss3 ∧
-    (∀ op v. eval_operand op ss = SOME v ⇒ eval_operand op ss3 = SOME v)
-Proof
-  rpt gen_tac >> strip_tac >> simp[] >>
-  (* Rename to avoid shadowing: cst is our compile state *)
-  qabbrev_tac `n = cst.cs_next_var` >>
-  (* fresh_vars_wrt: 3 applications of fresh_vars_wrt_advance *)
-  `fresh_vars_wrt (cst with cs_next_var := n + 1)
-    (update_var (STRING #"%" (toString n)) w0 ss)` by (
-    mp_tac (Q.SPECL [`cst`,`cst with cs_next_var := n + 1`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  `fresh_vars_wrt (cst with cs_next_var := n + 2)
-    (update_var (STRING #"%" (toString (n + 1))) w1
-      (update_var (STRING #"%" (toString n)) w0 ss))` by (
-    mp_tac (Q.SPECL [`cst with cs_next_var := n + 1`,
-                      `cst with cs_next_var := n + 2`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  conj_tac >- (
-    mp_tac (Q.SPECL [`cst with cs_next_var := n + 2`,
-                      `cst with cs_next_var := n + 3`]
-            fresh_vars_wrt_advance) >>
-    simp[Abbr `n`]) >>
-  (* eval_operand: use DEP_REWRITE, then provide witnesses *)
-  rpt strip_tac >>
-  DEP_REWRITE_TAC[eval_operand_update_fresh] >>
-  rpt conj_tac
-  >- (qexistsl [`n`, `cst`] >> simp[Abbr `n`])
-  >- (qexistsl [`n + 1`, `cst with cs_next_var := n + 1`] >> simp[Abbr `n`])
-  >> qexistsl [`n + 2`, `cst with cs_next_var := n + 2`] >> simp[Abbr `n`]
-QED
-
 (* ===== Definedness-propagation framework for long pure chains ===== *)
 
 (* For pure opcodes (1-operand and 2-operand), step_inst_base produces
@@ -710,20 +597,6 @@ Definition check_chain_def:
       else NONE
 End
 
-(* Helper: extract check_chain conditions cleanly *)
-Theorem check_chain_cons[local]:
-  check_chain (i::is) known ≠ NONE ⇒
-  ∃n. pure_opc_arity i.inst_opcode = SOME n ∧
-      LENGTH i.inst_operands = n ∧
-      LENGTH i.inst_outputs = 1 ∧
-      EVERY (λop. case op of Lit _ => T | Var v => MEM v known
-                  | Label _ => T) i.inst_operands ∧
-      check_chain is (HD i.inst_outputs :: known) ≠ NONE
-Proof
-  simp[Once check_chain_def] >>
-  BasicProvers.every_case_tac >> simp[]
-QED
-
 (* Helper: label eval_operand is preserved through update_var *)
 Theorem eval_operand_label_update_var[local]:
   ∀ lbl v w ss.
@@ -755,17 +628,6 @@ Proof
   >> (strip_tac >>
       first_x_assum (qspecl_then [`known`, `ss`] mp_tac) >>
       impl_tac >- fs[] >> simp[])
-QED
-
-(* All label operands in a chain remain defined after update_var *)
-Theorem labels_preserved_by_update_var[local]:
-  ∀ ops v w ss.
-    EVERY (λop. case op of Label _ => eval_operand op ss ≠ NONE | _ => T) ops
-    ⇒
-    EVERY (λop. case op of Label _ => eval_operand op (update_var v w ss) ≠ NONE | _ => T) ops
-Proof
-  rw[listTheory.EVERY_MEM] >> res_tac >>
-  Cases_on `op` >> gvs[eval_operand_label_update_var]
 QED
 
 (* Collect all label-definedness requirements from an instruction chain *)
@@ -1666,19 +1528,6 @@ QED
 
 Finalise compile_shift_correct;
 
-(* Generic step lemma for exec_read1-based opcodes *)
-Theorem step_read1[local]:
-  ∀ f opc op1 v1 id out ss.
-    eval_operand op1 ss = SOME v1 ∧
-    (∀ inst s. inst.inst_opcode = opc ⇒
-       step_inst_base inst s = exec_read1 f inst s)
-    ⇒
-    step_inst_base (mk_inst id opc [op1] [out]) ss =
-      OK (update_var out (f v1 ss) ss)
-Proof
-  rw[exec_read1_def, mk_inst_def]
-QED
-
 Theorem step_MLOAD_result[local]:
   ∀ op1 v1 id out ss.
     eval_operand op1 ss = SOME v1 ⇒
@@ -2224,19 +2073,19 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_ADD]
 QED
 
-Theorem compile_blockhash_frame:
-  !n_op st out st' ss tt.
-    compile_blockhash n_op st = (out,st') /\
-    run_inst_seq (emitted_insts st st') ss = OK tt ==>
-    tt = ss with vs_vars := tt.vs_vars /\
-    (!x. not_fresh_at st x ==>
-         FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+(* The frame shared by the blockhash and prevhash sequences: their
+   opcodes are pure operations and the NUMBER/BLOCKHASH context reads, and
+   they write only fresh outputs. *)
+Theorem hash_read_seq_frame[local]:
+  EVERY (\i. MEM i.inst_opcode [SUB; SLT; LT; ISZERO; ASSERT; NUMBER; BLOCKHASH] /\
+             EVERY (\x. ~not_fresh_at st x) i.inst_outputs) is /\
+  run_inst_seq is ss = OK tt ==>
+  tt = ss with vs_vars := tt.vs_vars /\
+  (!x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
 Proof
-  rpt gen_tac >> disch_then strip_assume_tac >>
-  drule compile_blockhash_outputs >>
   simp_tac bool_ss [listTheory.EVERY_MEM] >> strip_tac >>
   irule run_inst_seq_protected_frame >>
-  qexists_tac `emitted_insts st st'` >>
+  qexists_tac `is` >>
   conj_tac >- (
     rpt gen_tac >> disch_then strip_assume_tac >>
     first_x_assum drule >> strip_tac >>
@@ -2251,6 +2100,36 @@ Proof
     rpt strip_tac >> first_x_assum irule >>
     metis_tac[]) >>
   asm_rewrite_tac[]
+QED
+
+Theorem compile_blockhash_frame:
+  !n_op st out st' ss tt.
+    compile_blockhash n_op st = (out,st') /\
+    run_inst_seq (emitted_insts st st') ss = OK tt ==>
+    tt = ss with vs_vars := tt.vs_vars /\
+    (!x. not_fresh_at st x ==>
+         FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac >>
+  drule compile_blockhash_outputs >> strip_tac >>
+  irule hash_read_seq_frame >> qexists_tac `emitted_insts st st'` >>
+  asm_rewrite_tac[]
+QED
+
+(* One emitted non-terminator step keeps the block context. *)
+Theorem emit_op_block_ctx[local]:
+  emit_op opc args st = (out,st') ==> ~is_terminator opc ==>
+  run_inst_seq (emitted_insts st st') ss = OK tt ==>
+  tt.vs_block_ctx = ss.vs_block_ctx
+Proof
+  ntac 3 strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  irule (SRULE [] (Q.ISPEC `\s:venom_state. s.vs_block_ctx`
+                     run_inst_seq_preserves_field)) >>
+  goal_assum (drule_at Any) >> rpt strip_tac >> gvs[] >>
+  `~is_terminator (mk_inst st.cs_next_id opc args
+                     [STRING #"%" (toString st.cs_next_var)]).inst_opcode` by
+    simp[mk_inst_def] >>
+  drule_all step_inst_base_preserves_all >> simp[]
 QED
 
 Theorem compile_blockhash_prefix_run:
@@ -2302,41 +2181,10 @@ Proof
 QED
 
 Resume compile_blockhash_prefix_run[block_context]:
-  qpat_x_assum `s2.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
-  qpat_x_assum `s3.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
-  qpat_x_assum `s4.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
-  qpat_x_assum `s1.cs_current_insts = st.cs_current_insts ++ _` kall_tac >>
-  `run_inst_seq (emitted_insts s1 s3) t1 = OK t3 /\
-   s3.cs_current_insts = s1.cs_current_insts ++ emitted_insts s1 s3`
-    by compose_ok_tac (`t2`, `s2`) >>
-  `run_inst_seq (emitted_insts s1 s4) t1 = OK t4 /\
-   s4.cs_current_insts = s1.cs_current_insts ++ emitted_insts s1 s4`
-    by compose_ok_tac (`t3`, `s3`) >>
-  `EVERY (\i. MEM i.inst_opcode [SUB; SLT; ISZERO])
-     (emitted_insts s1 s4)` by
-    (map_every (fn q => qpat_assum q mp_tac)
-       [`emit_op SUB _ _ = _`, `emit_op SLT _ _ = _`,
-        `emit_op ISZERO _ _ = _`] >>
-     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     imp_res_tac emitted_insts_emit_op >>
-     pure_rewrite_tac[emitted_insts_def] >>
-     asm_rewrite_tac[] >>
-     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
-  qspecl_then [`emitted_insts s1 s4`, `\x. F`, `t1`, `t4`]
-    mp_tac run_inst_seq_protected_frame >>
-  impl_tac >- (
-    conj_tac >- (
-      rpt gen_tac >> disch_then strip_assume_tac >>
-      qpat_x_assum `EVERY _ _` mp_tac >>
-      simp_tac bool_ss [listTheory.EVERY_MEM] >>
-      disch_then drule >> strip_tac >> simp_tac bool_ss [] >>
-      irule (cj 1 step_pure_opcode_frame) >> qexists_tac `i` >>
-      simp[] >> gvs[]) >>
-    first_assum ACCEPT_TAC) >>
-  simp_tac bool_ss [] >> strip_tac >>
-  qpat_x_assum `t4 = _ with vs_vars := _`
-    (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]
+  `~is_terminator SUB` by simp[is_terminator_def] >>
+  `~is_terminator SLT` by simp[is_terminator_def] >>
+  `~is_terminator ISZERO` by simp[is_terminator_def] >>
+  imp_res_tac emit_op_block_ctx >> simp[]
 QED
 
 Finalise compile_blockhash_prefix_run;
@@ -2415,18 +2263,8 @@ Resume compile_blockhash_run[old]:
   qexists_tac `s5` >> asm_rewrite_tac[]
 QED
 Resume compile_blockhash_run[success]:
-  `t6.vs_block_ctx = t5.vs_block_ctx` by (
-    qpat_assum `emit_op LT _ _ = _` mp_tac >>
-    qpat_assum `run_inst_seq (emitted_insts s5 s6) t5 = OK t6` mp_tac >>
-    rpt (pop_assum kall_tac) >> rpt strip_tac >>
-    drule emitted_insts_emit_op >> strip_tac >>
-    gvs[run_inst_seq_def, AllCaseEqs()] >>
-    qmatch_asmsub_abbrev_tac `step_inst_base inst t5 = OK t6` >>
-    `t6 = t5 with vs_vars := t6.vs_vars` by (
-      irule (cj 1 step_pure_opcode_frame) >>
-      qexists_tac `inst` >> simp[Abbr `inst`, mk_inst_def]) >>
-    qpat_x_assum `t6 = _ with vs_vars := _`
-      (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]) >>
+  `~is_terminator LT` by simp[is_terminator_def] >>
+  imp_res_tac emit_op_block_ctx >>
   `eval_operand n_op t6 = SOME n` by (first_assum irule >> simp[]) >>
   drule_all emit_op_BLOCKHASH_correct >>
   disch_then (qx_choose_then `tt` strip_assume_tac) >>
@@ -2481,23 +2319,11 @@ Theorem compile_prevhash_frame:
   tt = ss with vs_vars := tt.vs_vars /\
   (!x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
 Proof
-  strip_tac >> drule compile_prevhash_shape >>
-  simp_tac bool_ss [listTheory.EVERY_MEM] >> strip_tac >>
-  irule run_inst_seq_protected_frame >>
-  qexists_tac `emitted_insts st st'` >>
-  conj_tac >- (
-    rpt gen_tac >> disch_then strip_assume_tac >>
-    first_x_assum drule >> strip_tac >>
-    `t = s with vs_vars := t.vs_vars /\
-     (!x. ~MEM x i.inst_outputs ==>
-       FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)` by
-      (Cases_on `i.inst_opcode = SUB`
-       >- (irule step_pure_opcode_frame >> asm_rewrite_tac[] >> simp[]) >>
-       irule step_hash_read_frame >> asm_rewrite_tac[] >> gvs[]) >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    rpt strip_tac >> first_x_assum irule >>
-    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  asm_rewrite_tac[]
+  strip_tac >> drule compile_prevhash_shape >> strip_tac >>
+  irule hash_read_seq_frame >> qexists_tac `emitted_insts st st'` >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `EVERY _ (emitted_insts _ _)` mp_tac >>
+  match_mp_tac listTheory.EVERY_MONOTONIC >> rw[] >> gvs[]
 QED
 
 Theorem compile_prevhash_run:
@@ -2514,18 +2340,8 @@ Proof
   drule_all emit_op_NUMBER_correct >> disch_then (qx_choose_then `t1` strip_assume_tac) >>
   `eval_operand (Lit 1w) t1 = SOME 1w` by simp[eval_operand_lit] >>
   drule_all emit_op_SUB_correct >> disch_then (qx_choose_then `t2` strip_assume_tac) >>
-  `t2.vs_block_ctx = t1.vs_block_ctx` by (
-    qpat_assum `emit_op SUB _ _ = _` mp_tac >>
-    qpat_assum `run_inst_seq (emitted_insts s1 s2) t1 = OK t2` mp_tac >>
-    rpt (pop_assum kall_tac) >> rpt strip_tac >>
-    drule emitted_insts_emit_op >> strip_tac >>
-    gvs[run_inst_seq_def, AllCaseEqs()] >>
-    qmatch_asmsub_abbrev_tac `step_inst_base inst t1 = OK t2` >>
-    `t2 = t1 with vs_vars := t2.vs_vars` by (
-      irule (cj 1 step_pure_opcode_frame) >>
-      qexists_tac `inst` >> simp[Abbr `inst`, mk_inst_def]) >>
-    qpat_x_assum `t2 = _ with vs_vars := _`
-      (mp_tac o Q.AP_TERM `\s. s.vs_block_ctx`) >> simp[]) >>
+  `~is_terminator SUB` by simp[is_terminator_def] >>
+  imp_res_tac emit_op_block_ctx >>
   drule_all emit_op_BLOCKHASH_correct >> disch_then (qx_choose_then `tt` strip_assume_tac) >>
   imp_res_tac emit_op_extends >>
   `run_inst_seq (emitted_insts st s2) ss = OK t2 /\
