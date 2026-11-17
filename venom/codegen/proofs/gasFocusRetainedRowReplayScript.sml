@@ -168,11 +168,49 @@ Proof
 QED
 
 Resume focus_retained_row_replay[observations_step]:
-  cheat
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `a < LENGTH ms /\ a < LENGTH xs /\ a < LENGTH ess /\ a < LENGTH ks` by decide_tac >>
+  `TAKE (SUC a) ms = TAKE a ms ++ [EL a ms] /\
+   TAKE (SUC a) xs = TAKE a xs ++ [EL a xs] /\
+   TAKE (SUC a) ess = TAKE a ess ++ [EL a ess] /\
+   TAKE (SUC a) ks = TAKE a ks ++ [EL a ks]` by
+    simp[TAKE_SUC_BY_TAKE, SNOC_APPEND] >>
+  `?front g. kgss = front ++ [g] /\
+    LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE a ms) front /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL a ms) g` by
+    (qpat_x_assum `LIST_REL _ (TAKE (SUC a) ms) kgss` mp_tac >>
+     asm_rewrite_tac[] >> simp[LIST_REL_SNOC]) >>
+  gvs[] >> FAIL_TAC "prefix"
 QED
 
 Resume focus_retained_row_replay[replay]:
-  cheat
+  rpt gen_tac >> strip_tac >> simp[] >>
+  qpat_assum `!a. a <= k ==> _` (qspec_then `k` mp_tac) >>
+  simp[NoAsms] >> disch_then (qspecl_then [`kgss`, `tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >> strip_tac >>
+  gen_tac >> conj_asm1_tac
+  >- ((irule focus_retained_row_tail >>
+      reverse conj_tac
+      >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+      qexistsl_tac [`sf.fn_name`, `tail`] >>
+      qpat_x_assum `FLAT (TAKE k ess) = _` kall_tac >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `gas_events_block _ _ _ _ _ = _` SUBST1_TAC >>
+      `MAP LENGTH ms = MAP LENGTH ess` by
+        simp[MAP_EQ_EVERY2, LIST_REL_LENGTH] >>
+      `MAP LENGTH (TAKE k ms) = MAP LENGTH kgss` by
+        (simp[MAP_EQ_EVERY2] >>
+         conj_tac >- (drule LIST_REL_LENGTH >> simp[]) >>
+         irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+         simp[] >> metis_tac[LIST_REL_LENGTH]) >>
+      gvs[LENGTH_FLAT, MAP_TAKE])) >>
+  qpat_assum `!a. a <= k ==> _` (qspec_then `k` mp_tac) >>
+  simp[NoAsms] >> disch_then (qspecl_then [`kgss`, `tail'`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (mp_tac o CONJUNCT2) >>
+  disch_then drule >> simp[NoAsms]
 QED
 
 Finalise focus_retained_row_replay
