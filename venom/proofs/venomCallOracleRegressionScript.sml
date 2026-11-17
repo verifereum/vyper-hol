@@ -19,7 +19,8 @@ Definition call_probe_state_def:
 End
 
 Definition call_probe_request_def:
-  call_probe_request = venom_call_request call_probe_state 8w 0w 0w 1w F
+  call_probe_request =
+    venom_call_request call_probe_state 8w 0w 0w 1w F with cr_gas := SOME 7
 End
 
 Definition call_probe_outcome_def:

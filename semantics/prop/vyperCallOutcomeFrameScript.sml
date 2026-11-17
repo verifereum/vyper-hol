@@ -282,7 +282,7 @@ Theorem take_adopt_call_outcome_effects:
   ?os rest prefix.
     st.outcomes = SOME os /\ st2.outcomes = SOME rest /\
     os = prefix ++ rest /\ LENGTH prefix <= 1 /\
-    rq = call_outcome_request target calldata value_opt st /\
+    rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     st2.requests = record_request rq st.requests /\
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;

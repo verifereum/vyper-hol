@@ -28,7 +28,7 @@ QED
 
 Theorem take_call_outcome_SOME:
   st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   take_outcome rq os = (outcome, rest) ==>
   take_call_outcome gas_cap target calldata value_opt st =
     (if outcome.co_success /\ ~rq.cr_static /\
@@ -44,7 +44,7 @@ QED
 
 Theorem take_call_outcome_ordinary:
   st.outcomes = SOME (outcome::rest) /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   ~computed_precompile rq ==>
   take_call_outcome gas_cap target calldata value_opt st =
     (if outcome.co_success /\ ~rq.cr_static /\
@@ -60,7 +60,7 @@ QED
 
 Theorem take_call_outcome_exhausted:
   st.outcomes = SOME [] /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   ~computed_precompile rq ==>
   take_call_outcome gas_cap target calldata value_opt st =
     (INL (rq, failed_outcome rq),
@@ -72,7 +72,7 @@ QED
 
 Theorem take_call_outcome_computed_valid:
   st.outcomes = SOME (outcome::rest) /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   rq.cr_value = 0 /\
   precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
   take_call_outcome gas_cap target calldata value_opt st =
@@ -96,7 +96,7 @@ QED
 
 Theorem take_call_outcome_computed_invalid:
   st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_call_outcome gas_cap target calldata value_opt st =
     (INL (rq, failed_outcome rq),
@@ -122,7 +122,7 @@ QED
 
 Theorem take_call_outcome_guard_rejected:
   st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   take_outcome rq os = (outcome,rest) /\
   outcome.co_success /\ ~rq.cr_static /\
   ~accounts_runtime_well_typed outcome.co_accounts ==>
@@ -185,7 +185,7 @@ Theorem take_call_outcome_success:
   take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome), st') ==>
   ?os rest.
     st.outcomes = SOME os /\
-    rq = call_outcome_request target calldata value_opt st /\
+    rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
@@ -284,7 +284,7 @@ Theorem take_delegate_outcome_success:
   take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,outcome), st') ==>
   ?os rest.
     st.outcomes = SOME os /\
-    rq = delegate_outcome_request target calldata value_opt st /\
+    rq = (delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;

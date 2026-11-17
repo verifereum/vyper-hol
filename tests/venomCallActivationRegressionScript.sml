@@ -28,9 +28,9 @@ Theorem probe_call_dispatch:
   step_inst_base (probe_call target) s =
     OK (update_var "result"
       (FST (consume_call_outcome (venom_call_request s target 0w 0w 1w
-         s.vs_call_ctx.cc_static) 1 3 s))
+         s.vs_call_ctx.cc_static with cr_gas := SOME 7) 1 3 s))
       (SND (consume_call_outcome (venom_call_request s target 0w 0w 1w
-         s.vs_call_ctx.cc_static) 1 3 s)))
+         s.vs_call_ctx.cc_static with cr_gas := SOME 7) 1 3 s)))
 Proof
   simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
        exec_ext_call_def]
@@ -97,7 +97,7 @@ QED
 Theorem activated_inherited_static:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
     vs_call_ctx := empty_call_context with cc_static := T |>;
-    rq = venom_call_request s 8w 0w 0w 1w F
+    rq = venom_call_request s 8w 0w 0w 1w F with cr_gas := SOME 7
   in ?t. step_inst_base (probe_call 8w) s = OK t /\
     rq.cr_static /\ lookup_var "result" t = SOME 1w /\
     t.vs_outcomes = [] /\ t.vs_requests = [rq] /\
@@ -110,7 +110,7 @@ QED
 
 Theorem activated_staticcall_zero_value:
   let s = call_probe_state with vs_outcomes := [call_probe_outcome];
-    rq = venom_call_request s 8w 0w 0w 1w T;
+    rq = venom_call_request s 8w 0w 0w 1w T with cr_gas := SOME 7;
     inst = mk_inst 1 STATICCALL [Lit 7w; Lit 8w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]
       ["result"]
   in ?t. step_inst_base inst s = OK t /\
@@ -131,7 +131,7 @@ End
 
 Theorem probe_computed_dispatch[local]:
   ~s.vs_call_ctx.cc_static /\
-  consume_call_outcome (venom_call_request s target 0w 0w sz F) 1 0 s = (v,t) ==>
+  consume_call_outcome (venom_call_request s target 0w 0w sz F with cr_gas := SOME 7) 1 0 s = (v,t) ==>
   step_inst_base (probe_computed target sz) s = OK (update_var "result" v t)
 Proof
   strip_tac >>
