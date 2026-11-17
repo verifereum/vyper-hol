@@ -266,7 +266,8 @@ Theorem abi_decode_clean_exec_ext_call_iff:
   ?t. exec_ext_call inst s gas addr v ao az ro rz st = OK t /\
       u = abi_decode_clean_allocas func t
 Proof
-  Cases_on `consume_call_outcome (venom_call_request s addr v ao az st)
+  Cases_on `consume_call_outcome
+              (venom_call_request s addr v ao az st with cr_gas := SOME (w2n gas))
               (w2n ro) (w2n rz) s` >>
   simp[exec_ext_call_def, abi_decode_clean_consume_call,
        Excl "consume_call_outcome_eq", AllCaseEqs()] >>
