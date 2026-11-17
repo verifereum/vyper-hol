@@ -65,6 +65,8 @@ Ancestors
   asmOptOwnPruneUnused
   asmOptFinalizerOwn
   asmOptOwnPruneJumps
+  asmSymSemWithin
+  asmSpliceWithin
   (* reached here instead of as holproject.toml roots *)
   targetPtrFacts bodyFullTarget
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
