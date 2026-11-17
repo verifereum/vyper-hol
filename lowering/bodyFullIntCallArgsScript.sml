@@ -753,8 +753,8 @@ Proof
       `local_ptrs_rel func cenv esi.scopes s` by
         (qpat_x_assum `!H. valid_horizon cx st0 H esi.storage_trace ==> _`
            drule >>
-         simp[exprLoweringPropsTheory.stmt_state_rel_def,
-              loweringStateRelDefsTheory.state_rel_def]) >>
+         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
+              stateRelProjTheory.state_rel_local_ptrs_rel]) >>
       `!n b sz. local_region cenv esi.scopes s n b sz <=>
                   local_region cenv mid.scopes t n b sz` by
         (qpat_assum `local_ptrs_rel func cenv esi.scopes s` mp_tac >>
@@ -1380,7 +1380,7 @@ Proof
         (qpat_assum `stmt_state_rel _ ctx func cenv cx esi s` mp_tac >>
          qpat_assum `FLOOKUP s.vs_allocas aid = SOME (off,sz)` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[exprLoweringPropsTheory.stmt_state_rel_def,
+         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
               venomMemDefsTheory.alloca_inv_def,
               venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
       qpat_assum `off + sz <= s.vs_alloca_next` mp_tac >>
@@ -1408,7 +1408,7 @@ Proof
          loweringPostsTheory.expr_val_at_def] >>
      `b + sz <= t.vs_alloca_next` by
        ((drule_all bodyMemoryDefsTheory.body_local_region_frontier >> simp[]) ORELSE
-        (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        (fs[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
             venomMemDefsTheory.alloca_inv_def,
             venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[])) >>
      decide_tac) >>
@@ -1800,8 +1800,8 @@ Proof
          qpat_assum `stmt_state_rel _ ctx func cenv cx esi s` mp_tac >>
          qpat_assum `local_ptrs_reserved cenv si` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[exprLoweringPropsTheory.stmt_state_rel_def,
-              loweringStateRelDefsTheory.state_rel_def] >> rpt strip_tac >>
+         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
+              stateRelProjTheory.state_rel_local_ptrs_rel] >> rpt strip_tac >>
          eq_tac
          >- (rw[loweringStateRelDefsTheory.local_region_def] >>
              `lookup_scopes n mid.scopes <> NONE` by
@@ -2246,8 +2246,8 @@ Proof
       `local_ptrs_rel func cenv mid.scopes z` by
         (qpat_assum `stmt_state_rel H ctx func cenv cx mid z` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[exprLoweringPropsTheory.stmt_state_rel_def,
-              loweringStateRelDefsTheory.state_rel_def]) >>
+         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
+              stateRelProjTheory.state_rel_local_ptrs_rel]) >>
       `si.cs_next_var <= cu.cs_next_var` by
         (qpat_assum `ci_mono si ci` mp_tac >> qpat_assum `ci_mono ci ca` mp_tac >>
          qpat_assum `ci_mono ca cu` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
@@ -2370,7 +2370,7 @@ Proof
          qpat_assum `MEM (mk_inst ci.cs_next_id ALLOCA _ _) (fn_insts func)` mp_tac >>
          qpat_assum `FLOOKUP z.vs_allocas ci.cs_next_id = _` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[exprLoweringPropsTheory.stmt_state_rel_def,
+         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
               exprLoweringPropsTheory.immutable_alloca_sep_def] >> rpt strip_tac >>
          qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
          disch_then drule_all >> strip_tac >>
@@ -2499,7 +2499,7 @@ Proof
                   (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
                 (impl_tac >- first_assum ACCEPT_TAC) >>
                 POP_ASSUM_LIST (K all_tac) >>
-                simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def] >>
+                simp[expr_post_def, stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
                 metis_tac[]) >>
              FAIL_TAC "memory staging: remaining emitted word store history inputs") >>
          qpat_assum `typed_copy_state_frame _ _ _ z wt` mp_tac >>
@@ -2618,15 +2618,21 @@ Proof
          qpat_assum `val_store_size rty v = _` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
          `32+32*((len+31) DIV 32) <= val_store_size rty v` by simp[] >>
-         drule_all bodyPtrIfExpStoreContractTheory.ptr_val_ok_store_read_covers >>
-         strip_tac >> qexists_tac `p` >>
-         gvs[venomStateTheory.eval_operand_def]) >>
+         fs[bodyPtrDefsTheory.ptr_val_ok_def,
+            bodyPtrDefsTheory.ptr_mem_ok_def] >>
+         gvs[] >> simp[bodyPtrDefsTheory.ptr_covers_def] >>
+         qexists_tac `w` >> gvs[venomStateTheory.eval_operand_def] >>
+         decide_tac) >>
       `len+31 < dimword(:256) /\
        32+32*((len+31) DIV 32) < dimword(:256)` by
         (qpat_assum `32+32*((len+31) DIV 32) <= type_memory_size rty` mp_tac >>
          qpat_assum `type_memory_size rty < 2 ** 64` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         metis_tac[bodyPtrIfExpBytesInputsTheory.bytes_padded_word_bounds]) >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         qspec_then `32` mp_tac DIVISION >> simp[] >>
+         disch_then (qspec_then `len+31` strip_assume_tac) >>
+         qmatch_asmsub_abbrev_tac `len+31 = _ + residue` >>
+         `residue < 32` by simp[Abbr `residue`] >>
+         gvs[dimword_def] >> decide_tac) >>
       `type_memory_size rty <= type_memory_bytes cenv dty` by
         (qpat_assum `type_widens_to (get_tenv cx) (expr_type e) dty` mp_tac >>
          qpat_assum `is_bytestring_type dty` mp_tac >>
@@ -2868,7 +2874,7 @@ Proof
          `alloca_inv z` by
            (qpat_x_assum `!H. _` drule >>
             simp[loweringPostsTheory.expr_post_def,
-                 exprLoweringPropsTheory.stmt_state_rel_def]) >>
+                 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
          `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts cu cs)` by
            gvs[bytesCopyCodeTheory.bytes_copy_insts_def,
                venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
@@ -3078,7 +3084,7 @@ Proof
          (impl_tac >- first_assum ACCEPT_TAC) >>
          POP_ASSUM_LIST (K all_tac) >>
          rw[loweringPostsTheory.expr_post_def,
-            exprLoweringPropsTheory.stmt_state_rel_def] >>
+            stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
          metis_tac[exprLoweringPropsTheory.alloca_room_next_lt]) >>
       `w2n sw + type_memory_size rty <= z.vs_alloca_next` by
         (qpat_assum `~is_word_type (post_value_type cenv e) ==> !rt w. _` mp_tac >>
