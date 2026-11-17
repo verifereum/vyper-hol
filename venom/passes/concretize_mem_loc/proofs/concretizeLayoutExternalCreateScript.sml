@@ -72,6 +72,9 @@ Theorem concretize_create_observation:
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >> drule_all concretize_supplement_clean_accounts >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
   `venom_create_request s value off sz salt =
    venom_create_request t value offT sz salt` by simp[venom_create_request_def] >>
   drule create_success_envelope >> strip_tac >>

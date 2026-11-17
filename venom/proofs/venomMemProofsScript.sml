@@ -100,17 +100,6 @@ QED
    Padding lemma: if off + 32 <= LENGTH l, padding is irrelevant
    =================================================================== *)
 
-Theorem take_drop_no_pad[local]:
-  !(l : word8 list) off.
-    off + 32 <= LENGTH l ==>
-    TAKE 32 (DROP off l ++ REPLICATE 32 0w) = TAKE 32 (DROP off l)
-Proof
-  rw[] >>
-  `LENGTH (DROP off l) = LENGTH l - off` by rw[listTheory.LENGTH_DROP] >>
-  `32 <= LENGTH (DROP off l)` by fs[] >>
-  irule rich_listTheory.TAKE_APPEND1 >> fs[]
-QED
-
 (* Padding-length-insensitive TAKE: only the payload matters, not how much padding *)
 Theorem take_append_pad:
   !n (l:'a list) a b x.
@@ -239,18 +228,6 @@ QED
 (* ===================================================================
    allocas_non_overlapping + alloca_next_valid preservation
    =================================================================== *)
-
-(* Combined alloca invariant: non-overlapping + bump pointer valid *)
-(* vs_alloca_next >= base + sz for any existing alloca (conditional) *)
-Theorem alloca_next_ge[local]:
-  !s aid base sz.
-    alloca_next_valid s /\
-    FLOOKUP s.vs_allocas aid = SOME (base, sz) ==>
-    base + sz <= s.vs_alloca_next
-Proof
-  rw[alloca_next_valid_def] >>
-  res_tac >> fs[]
-QED
 
 (* exec_alloca preserves alloca_inv *)
 Theorem exec_alloca_preserves_inv[local]:
@@ -572,150 +549,6 @@ val effect_free_not_terminal_tac =
     drule opcodeClassTheory.step_inst_base_intret_opcodes
   ] >>
   strip_tac >> gvs[is_effect_free_op_def];
-
-Triviality effect_free_pure1_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = ISZERO \/ inst.inst_opcode = NOT) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_pure2_arith_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
-     inst.inst_opcode = MUL \/ inst.inst_opcode = Div \/
-     inst.inst_opcode = SDIV \/ inst.inst_opcode = Mod \/
-     inst.inst_opcode = SMOD \/ inst.inst_opcode = Exp) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_pure2_cmp_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/
-     inst.inst_opcode = GT \/ inst.inst_opcode = SLT \/
-     inst.inst_opcode = SGT) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_pure2_bits_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
-     inst.inst_opcode = XOR \/ inst.inst_opcode = SHL \/
-     inst.inst_opcode = SHR \/ inst.inst_opcode = SAR \/
-     inst.inst_opcode = SIGNEXTEND \/ inst.inst_opcode = BYTE \/
-     inst.inst_opcode = OFFSET) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_pure3_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = ADDMOD \/ inst.inst_opcode = MULMOD) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_read0_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = CALLER \/ inst.inst_opcode = ADDRESS \/
-     inst.inst_opcode = CALLVALUE \/ inst.inst_opcode = GAS \/
-     inst.inst_opcode = ORIGIN \/ inst.inst_opcode = GASPRICE \/
-     inst.inst_opcode = CHAINID \/ inst.inst_opcode = COINBASE \/
-     inst.inst_opcode = TIMESTAMP \/ inst.inst_opcode = NUMBER \/
-     inst.inst_opcode = PREVRANDAO \/ inst.inst_opcode = GASLIMIT \/
-     inst.inst_opcode = BASEFEE \/ inst.inst_opcode = BLOBBASEFEE \/
-     inst.inst_opcode = SELFBALANCE \/ inst.inst_opcode = CALLDATASIZE \/
-     inst.inst_opcode = RETURNDATASIZE \/ inst.inst_opcode = MEMTOP \/
-     inst.inst_opcode = CODESIZE) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_read1_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = MLOAD \/ inst.inst_opcode = SLOAD \/
-     inst.inst_opcode = TLOAD \/ inst.inst_opcode = ILOAD \/
-     inst.inst_opcode = DLOAD \/ inst.inst_opcode = BLOCKHASH \/
-     inst.inst_opcode = BLOBHASH \/ inst.inst_opcode = BALANCE \/
-     inst.inst_opcode = CALLDATALOAD \/
-     inst.inst_opcode = EXTCODESIZE \/
-     inst.inst_opcode = EXTCODEHASH) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_direct_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = SHA3 \/ inst.inst_opcode = PHI \/
-     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PARAM \/
-     inst.inst_opcode = NOP) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_fmp_not_terminal[local]:
-  !inst (s:venom_state).
-    (inst.inst_opcode = FMP_PARAM \/ inst.inst_opcode = RETPC_PARAM \/
-     inst.inst_opcode = GETFMP \/ inst.inst_opcode = INITIAL_FMP \/
-     inst.inst_opcode = BUMP) ==>
-    (!s'. step_inst_base inst s <> Halt s') /\
-    (!a s'. step_inst_base inst s <> Abort a s') /\
-    (!v s'. step_inst_base inst s <> IntRet v s')
-Proof
-  effect_free_not_terminal_tac
-QED
-
-Triviality effect_free_opcode_cases[local]:
-  !op. is_effect_free_op op ==>
-    (op = ISZERO \/ op = NOT) \/
-    (op = ADD \/ op = SUB \/ op = MUL \/ op = Div \/
-     op = SDIV \/ op = Mod \/ op = SMOD \/ op = Exp) \/
-    (op = EQ \/ op = LT \/ op = GT \/ op = SLT \/ op = SGT) \/
-    (op = AND \/ op = OR \/ op = XOR \/ op = SHL \/
-     op = SHR \/ op = SAR \/ op = SIGNEXTEND \/ op = BYTE \/
-     op = OFFSET) \/
-    (op = ADDMOD \/ op = MULMOD) \/
-    (op = CALLER \/ op = ADDRESS \/ op = CALLVALUE \/ op = GAS \/
-     op = ORIGIN \/ op = GASPRICE \/ op = CHAINID \/
-     op = COINBASE \/ op = TIMESTAMP \/ op = NUMBER \/
-     op = PREVRANDAO \/ op = GASLIMIT \/ op = BASEFEE \/
-     op = BLOBBASEFEE \/ op = SELFBALANCE \/ op = CALLDATASIZE \/
-     op = RETURNDATASIZE \/ op = MEMTOP \/ op = CODESIZE) \/
-    (op = MLOAD \/ op = SLOAD \/ op = TLOAD \/ op = ILOAD \/
-     op = DLOAD \/ op = BLOCKHASH \/ op = BLOBHASH \/ op = BALANCE \/
-     op = CALLDATALOAD \/ op = EXTCODESIZE \/ op = EXTCODEHASH) \/
-    (op = SHA3 \/ op = PHI \/ op = ASSIGN \/ op = PARAM \/ op = NOP) \/
-    (op = FMP_PARAM \/ op = RETPC_PARAM \/ op = GETFMP \/
-     op = INITIAL_FMP \/ op = BUMP)
-Proof
-  Cases >> EVAL_TAC
-QED
 
 Triviality effect_free_step_not_terminal[local]:
   !inst (s:venom_state).

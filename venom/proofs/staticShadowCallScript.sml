@@ -77,6 +77,12 @@ Theorem static_shadow_exec_ext_call[local]:
     (exec_ext_call inst sh gas addr value ao az ro rz j)
 Proof
   strip_tac >>
+  `(sh.vs_outcomes = [] <=> s.vs_outcomes = [])` by
+    (drule static_shadow_rel_fields >> strip_tac >> simp[static_shadow_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (namedCases_on `inst.inst_outputs` ["", "out rest"] >>
+      simp[exec_ext_call_def, static_shadow_result_rel_def] >>
+      Cases_on `rest` >> simp[exec_ext_call_def, static_shadow_result_rel_def]) >>
   qabbrev_tac `rq = venom_call_request s addr value ao az i with
     cr_gas := SOME (w2n gas)` >>
   `venom_call_request sh addr value ao az j with cr_gas := SOME (w2n gas) =
@@ -97,6 +103,12 @@ Theorem static_shadow_exec_delegatecall[local]:
     (exec_delegatecall inst sh gas addr ao az ro rz)
 Proof
   strip_tac >>
+  `(sh.vs_outcomes = [] <=> s.vs_outcomes = [])` by
+    (drule static_shadow_rel_fields >> strip_tac >> simp[static_shadow_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (namedCases_on `inst.inst_outputs` ["", "out rest"] >>
+      simp[exec_delegatecall_def, static_shadow_result_rel_def] >>
+      Cases_on `rest` >> simp[exec_delegatecall_def, static_shadow_result_rel_def]) >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
     <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>` >>
   `venom_call_request sh addr 0w ao az F with
