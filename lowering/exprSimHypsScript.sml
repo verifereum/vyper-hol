@@ -1169,6 +1169,25 @@ Proof
   drule_all eval_expr_int_literal_agrees >> strip_tac >> metis_tac[]
 QED
 
+Theorem expr_body_pre_bop:
+  !cenv cx env ann bop e1 e2 es.
+    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
+    expr_body_pre cenv cx env e1 es /\
+    !es'. expr_sim_inv cenv cx env es' ==> expr_body_pre cenv cx env e2 es'
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
+  strip_tac >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
+QED
+
 Theorem expr_body_pre_bop_operands:
   !cenv cx env ann bop e1 e2 es.
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
