@@ -103,7 +103,7 @@ Proof
   qpat_x_assum `!tops rpolicy unit am tx ret vs k. _`
     (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`,
                   `vs`, `2 ** 64`] mp_tac) >>
-  impl_tac >- simp[] >>
+  impl_tac >- simp[arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
   disch_then (qspecl_then [`D`, `lo`, `explicit`, `name`, `entry`,
     `lbl`, `entered`, `p`, `h`, `marks`, `q`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
