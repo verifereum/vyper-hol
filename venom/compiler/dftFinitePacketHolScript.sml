@@ -10,6 +10,7 @@ Ancestors
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
+  dftPacketCallRecordFrame
   dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation
   dftPacketCallFreshReplay
   dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
@@ -21,7 +22,7 @@ Ancestors
   dftPacketFillingBoundary
   dftPacketFreshCut
   dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
   dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
