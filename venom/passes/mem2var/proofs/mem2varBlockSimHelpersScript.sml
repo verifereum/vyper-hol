@@ -2406,16 +2406,6 @@ QED
 
 (* ===== ext_call helpers ===== *)
 
-(* venom_to_tx_params agrees under m2v_inv_noix *)
-Triviality venom_to_tx_params_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  venom_to_tx_params s1 = venom_to_tx_params s2
-Proof
-  simp[m2v_inv_noix_def, venom_to_tx_params_def]
-QED
-
-(* make_venom_call_state agrees under m2v_inv_noix *)
-(* make_venom_create_state agrees under m2v_inv_noix *)
 (* read_memory agrees under m2v_inv_noix when range is nonpromoted *)
 Triviality read_memory_m2v_inv:
   m2v_inv_noix fn s1 s2 /\
