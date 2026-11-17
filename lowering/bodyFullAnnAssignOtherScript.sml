@@ -365,7 +365,26 @@ Resume annassign_other_typed_full_execution[success]:
    drule_all annassign_continuation_success >>
    disch_then (qx_choosel_then [`sc`,`rest`] strip_assume_tac) >>
    qmatch_asmsub_abbrev_tac `new_variable id dtv v _ = (INL (),out)` >>
-   FAIL_TAC "success resources")
+   `mid with gas_obs := [] = mid` by
+     (qpat_assum `mid.gas_obs = []` (fn th => simp[GSYM th, NoAsms])) >>
+   qpat_x_assum `new_variable id dtv v _ = (INL (),out)`
+     (assume_tac o ASM_REWRITE_RULE []) >>
+   `mid.scopes = sc::rest` by fs[] >>
+   `out = mid with scopes :=
+      (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest`
+     by simp[Abbr `out`] >>
+   qpat_x_assum `!gs v mid. bind _ _ _ = _ ==> _` drule_all >> strip_tac >>
+   `ptr_buf_ok cenv' e op G1 t` by fs[] >>
+   `lowered_value_type cenv' e = expr_type e /\
+    type_memory_bytes cenv' (expr_type e) = type_memory_size stv` by fs[] >>
+   qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
+   `inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [p] /\
+    inst.inst_opcode = ALLOCA` by simp[Abbr `inst`, venomInstTheory.mk_inst_def, NoAsms] >>
+   `inst.inst_id < a.cs_next_id \/ b.cs_next_id <= inst.inst_id` by fs[] >>
+   `FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,type_memory_size dtv)` by fs[] >>
+   drule_all annassign_other_typed_rhs_resources >>
+   disch_then (qx_choosel_then [`xs`,`sw`] strip_assume_tac) >>
+   FAIL_TAC "rhs adapter")
 QED
 
 Finalise annassign_other_typed_full_execution
