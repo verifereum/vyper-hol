@@ -6,7 +6,7 @@ Ancestors
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
-  fragExec bodySim bodySimMain bodySimEntry bodySimStmtCases
+  fragExec bodySim bodySimLog exprSimRawRevertCore stmtSimRaise whitelistForIter bodySimEntry bodySimStmtCases
   loweringHalt stmtLoweringMono exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering exprLowering
   e2eDefs supportedProgram supportedProgramProps supportedDecls supportedNames

@@ -60,7 +60,7 @@ Ancestors
   stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   bodyAssignPlace stmtSimAssignStorageSparse
-  vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
+  vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
