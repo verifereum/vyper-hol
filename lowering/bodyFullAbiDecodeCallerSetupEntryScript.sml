@@ -4,7 +4,9 @@ Ancestors
   bodyFullAbiDecodeCallerEntry bodyInvNoDalloca exprSimAbiDecodeResources
   exprSimAbiDecodeInputBound exprSimAbiDecodeBodyEntry
   bodyPtrEnvBuiltinsHashInput abiArgsLabelBoundary abiBuiltinDecodeSetup
-  exprLoweringProps representationCleanPtr
+  exprLoweringProps representationCleanPtr exprSimAbiDecodeEntryTyping
+  exprSimHyps vyperValue compileEnv exprOperandVar exprSimAbiDecodeLiveFrame
+  exprSafeOperand exprSimHypsDefs exprOpenFirstOperand
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
@@ -13,7 +15,8 @@ val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b dat
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts /\ (?H. V H) /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (?H : (bool # bytes32 # type_value) list # num list. V H) /\
   alloca_history fn s /\ lo <= s.vs_alloca_next /\
   s0.vs_alloca_next <= s.vs_alloca_next /\
   (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
@@ -54,7 +57,7 @@ Theorem abi_decode_body_setup_entry:
   local_ptrs_reserved ce origin /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
-  (?H. V H) /\
+  (?H : (bool # bytes32 # type_value) list # num list. V H) /\
   (!H. V H ==> stmt_state_rel H ctx fn ce cx es0 s0) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -83,12 +86,27 @@ Proof
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `evaluate_type (get_tenv cx) (expr_type e) =
-    SOME (BaseTV (BytesT (Dynamic n)))` by simp[] >>
+    SOME (BaseTV (BytesT (Dynamic n)))` by
+    (`IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
+       metis_tac[expr_body_pre_type_builtin_head, expr_body_pre_type_evaluates] >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   `~is_word_type (expr_type e)` by simp[compileEnvTheory.is_word_type_def] >>
-  `?b d. eval_operand data s = SOME (n2w b) /\
-    val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV input_bytes) b s.vs_memory /\
-    abi_builtin_decode_site_resources ctx fn st final.cs_next_id
-      min_size max_size outsz (LENGTH input_bytes) b d s` by
-    (irule abi_decode_caller_resources >> goal_assum (drule_at Any) >> simp[]) >>
-  FAIL_TAC "resources"
+  qpat_x_assum `min_size = _` SUBST_ALL_TAC >>
+  qpat_x_assum `max_size = _` SUBST_ALL_TAC >>
+  qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
+  drule_all abi_decode_caller_resources >>
+  disch_then (qx_choose_then `b` (qx_choose_then `d`
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>
+  `post_value_type ce e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[compileEnvTheory.is_bytestring_type_def]) >>
+  `ptr_val_ok cx (BaseT (BytesT (Dynamic n))) (BytesV input_bytes) data G tn s` by
+    metis_tac[] >>
+  `?p. data = Var p /\ ptr_covers G tn p s (32+LENGTH input_bytes)` by
+    (irule ptr_val_ok_read_covers >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`cx`, `BaseTV (BytesT (Dynamic n))`, `expr_type e`,
+       `BytesV input_bytes`] >>
+     simp[loweringPostsTheory.val_footprint_def]) >>
+  FAIL_TAC "window"
 QED
