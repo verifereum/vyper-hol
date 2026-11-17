@@ -235,7 +235,8 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `entry_shape a b` by metis_tac[] >>
   `cs_extends a b` by metis_tac[entry_shape_extends] >>
-  qspecl_then [`b`, `a`] strip_assume_tac frag_relabel_fresh_label >>
+  mp_tac (Q.INST [`sa` |-> `a`, `sb` |-> `b`] frag_relabel_fresh_label) >>
+  disch_then (qx_choose_then `L` strip_assume_tac) >>
   qabbrev_tac `ids = MAP (\i. i.inst_id) a.cs_current_insts` >>
   `LENGTH ids = LENGTH a.cs_current_insts` by simp[Abbr `ids`] >>
   `m (start_relabel L ids a) = (x,start_swap a L ids b)` by
@@ -245,11 +246,17 @@ Proof
   >- (gvs[entry_shape_def, emitted_blocks_def, start_swap_def,
           start_relabel_def, frag_code_def, DROP_LENGTH_APPEND,
           emitted_insts_def, EVERY_MEM] >>
-      rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]) >>
+      qpat_x_assum `LENGTH ids = _` (assume_tac o SYM) >>
+      gvs[DROP_APPEND, EVERY_MEM] >>
+      rpt strip_tac >> res_tac >> gvs[] >> metis_tac[MEM]) >>
   drule_all start_relabel_frag_code >> strip_tac >>
   drule_all start_swap_emitted_blocks >> strip_tac >>
   drule_all start_swap_fields >> strip_tac >>
   gvs[EVERY_MEM] >> rpt strip_tac >>
   first_x_assum drule >> simp[MEM_APPEND, MEM] >>
-  strip_tac >> res_tac >> gvs[] >> metis_tac[]
+  strip_tac >> res_tac >> gvs[MEM] >>
+  qpat_x_assum `!i. MEM i _ ==> ~MEM _ _` drule >>
+  simp[MEM] >> strip_tac >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  metis_tac[]
 QED
