@@ -657,6 +657,8 @@ val () = cv_auto_trans evaluate_attribute_def;
 Definition evaluate_convert_def:
   evaluate_convert _ (BytesV bs) (BaseT BoolT) =
     INL $ BoolV (EXISTS (λb. b ≠ 0w) bs) ∧
+  evaluate_convert _ (StringV s) (BaseT BoolT) =
+    INL $ BoolV (EXISTS (λb:word8. b ≠ 0w) (MAP (n2w o ORD) s)) ∧
   evaluate_convert _ (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
   evaluate_convert _ (BoolV b) (BaseT (IntT n)) =
     INL $ IntV (if b then 1 else 0) ∧

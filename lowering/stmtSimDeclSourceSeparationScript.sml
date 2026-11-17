@@ -5,7 +5,7 @@ Ancestors
   abiCallerAllocation exprSimOperands localPtrsProps finite_map
 
 Theorem expr_val_at_alloca_outside_interval_separate:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty sa sb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   0 < val_footprint tv v /\ eval_operand src s = SOME p /\

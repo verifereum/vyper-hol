@@ -1,6 +1,6 @@
 (* Record migration regressions refreshed for Send/ExtCall constructors.
- * The concrete zero-value Send to an empty account remains inert; ordinary
- * SOME Send consumes/records an outcome. Original claims are retained below. *)
+ * Concrete zero-value Send preserves functional state and records its backend;
+ * SOME Send consumes/records an outcome. *)
 Theory vyperOracleStateTest
 Ancestors
   arithmetic integer words list option finite_map finite_set cv_type While
@@ -57,7 +57,8 @@ Definition oracle_state_smoke_def:
       (Call NoneT (Send F)
         [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
-      (INL (Value NoneV), st) /\
+      (INL (Value NoneV), st with storage_trace := st.storage_trace ++
+        [StorageBackend st.accounts st.tStorage]) /\
     eval_expr empty_evaluation_context
       (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) st =
       (INR (Error (TypeError "ExtCall operands")), st)
@@ -268,15 +269,16 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Only accounts/outcomes matter here. All other fields, including arbitrary
-   scopes, logs, requests and transient storage, are preserved as a record. *)
+(* Accounts/outcomes determine this fixture. The successful concrete call adds
+   one backend observation and preserves every other field as a record. *)
 Theorem oracle_zero_send_inert:
   st.outcomes = NONE /\ st.accounts = empty_accounts ==>
   eval_expr empty_evaluation_context
     (Call NoneT (Send F)
       [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
        Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
-    (INL (Value NoneV), st)
+    (INL (Value NoneV), st with storage_trace := st.storage_trace ++
+      [StorageBackend st.accounts st.tStorage])
 Proof
   strip_tac >>
   simp[evaluate_def, evaluate_literal_def, read_result_def,
@@ -290,7 +292,8 @@ Proof
   simp[lift_option_def, check_def, assert_def, bind_def, ignore_bind_def,
        get_accounts_def, get_transient_storage_def, oracle_empty_run_ext_call,
        update_accounts_def, update_transient_def, append_logs_def,
-       update_pending_deletions_def, return_def,
+       update_pending_deletions_def, record_storage_backend_def,
+       record_storage_event_def, return_def,
        evaluation_state_component_equality]
 QED
 
@@ -307,7 +310,9 @@ Theorem oracle_state_inert_eval:
   os = NONE ==> oracle_state_smoke os rqs
 Proof
   strip_tac >> gvs[oracle_state_smoke_def] >> conj_tac
-  >- (irule oracle_zero_send_inert >> simp[empty_state_def]) >>
+  >- (mp_tac (Q.INST [`st` |->
+        `empty_state with <|outcomes := NONE; requests := rqs|>`]
+        oracle_zero_send_inert) >> simp[empty_state_def]) >>
   simp[oracle_empty_extcall_inert]
 QED
 

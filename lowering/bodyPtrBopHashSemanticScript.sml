@@ -4,7 +4,7 @@ Ancestors
   bodyPtrDefs exprSimProps loweringPosts valueEncoding venomState
 
 Theorem bop_hash_semantic_ranges:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es v (Var p) s /\
   ptr_val_ok cx ty v (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -32,7 +32,7 @@ QED
 
 Theorem bop_bytes_hash_run_ptr:
   p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (BytesV bs) (Var p) s /\
   ptr_val_ok cx ty (BytesV bs) (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -75,7 +75,7 @@ QED
 
 Theorem bop_string_hash_run_ptr:
   p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (StringV str) (Var p) s /\
   ptr_val_ok cx ty (StringV str) (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\

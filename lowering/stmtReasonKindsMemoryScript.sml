@@ -46,7 +46,7 @@ Theorem reason_revert_path_mem:
       (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
+    vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
     vv_store_bound cx (expr_type se) (lowered_value_type cenv se) ee tv vv t /\
     read_result cx tv ee = (INL (StringV str), ee) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\

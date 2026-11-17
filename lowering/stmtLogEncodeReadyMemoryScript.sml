@@ -19,7 +19,7 @@ Theorem log_scalar_tuple_encode_mem_ok:
   sb+cap < dimword (:256) /\ db+outcap < dimword (:256) /\
   (sb+cap <= db \/ db+outcap <= sb) /\
   fresh_vars_wrt limit_st initial /\ end_st.cs_next_var <= limit_st.cs_next_var /\
-  stmt_state_rel ctx func ce cx es initial /\
+  stmt_state_rel H ctx func ce cx es initial /\
   ((?infos. ei = AbiComplex infos) ==>
     ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
       FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32)) /\

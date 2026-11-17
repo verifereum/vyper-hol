@@ -10,7 +10,7 @@ Ancestors
   exprSimHypsDefs exprSimProps exprOperandVar exprLowering context
   compileEnv loweringStateRelDefs loweringPosts vyperState vyperAST vyperTypeSystem exprLoweringProps fragGasPath fragGasMode
 
-Theorem compile_nocopy_ifexp_post_path:
+Theorem compile_nocopy_ifexp_post_path_fields:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tvv,ee) /\
@@ -22,16 +22,20 @@ Theorem compile_nocopy_ifexp_post_path:
   local_ptrs_reserved ce sc /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  vv_post ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
-    expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q /\
     (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    q.vs_accounts = s.vs_accounts /\
+    q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\
+    q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `unwrap_value ce vv sa = (op,sb)` by
@@ -62,8 +66,8 @@ Proof
      fs[type_widens_to_def] >> metis_tac[compatible_word_type]) >>
   Cases_on `~is_word_type (expr_type e) /\ ?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\ ~is_word_type t`
   >- suspend "memory" >>
-  drule_all unwrap_value_physical_path >> strip_tac >>
-  `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+  drule_all unwrap_value_physical_path_fields >> strip_tac >>
+  `expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
     es origin sb s0 ee v op u` by
     (irule nocopy_ifexp_post_annotated >> simp[] >> metis_tac[]) >>
   qexists_tac `u` >> simp[] >> conj_tac
@@ -71,13 +75,13 @@ Proof
   fs[gas_marked_path_def] >> metis_tac[cj 1 gas_path_normal]
 QED
 
-Resume compile_nocopy_ifexp_post_path[memory]:
+Resume compile_nocopy_ifexp_post_path_fields[memory]:
   markerLib.RESUME_TAC >> gvs[] >>
   gvs[unwrap_value_def, comp_return_def] >>
-  `expr_post ctx func ce cx e es origin sa s0 ee v p.ptr_operand s` by
+  `expr_post H ctx func ce cx e es origin sa s0 ee v p.ptr_operand s` by
     (drule_all exprSimUnwrapPropsTheory.vv_post_read_result >> strip_tac >>
      drule_all exprSimUnwrapPropsTheory.expr_post_of_vv_post_memory >> simp[]) >>
-  `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+  `expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
     es origin sa s0 ee v p.ptr_operand s` by
     (irule nocopy_ifexp_post_annotated >> simp[] >> metis_tac[]) >>
   qexists_tac `s` >>
@@ -87,22 +91,22 @@ Resume compile_nocopy_ifexp_post_path[memory]:
   suspend "layout"
 QED
 
-Resume compile_nocopy_ifexp_post_path[provenance]:
+Resume compile_nocopy_ifexp_post_path_fields[provenance]:
   markerLib.RESUME_TAC >> strip_tac >>
   `~is_word_type (post_value_type ce e)` by
     (irule post_value_type_nonword >> metis_tac[]) >>
   `!id path. tvv <> PlaceR (MemoryPlace id path)` by
-    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ tvv _ _` mp_tac >>
+    (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ tvv _ _` mp_tac >>
      Cases_on `vv` >> gvs[vv_post_def, vv_at_def, vv_holds_def] >>
      metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   irule vv_at_of_val_at_nonplace >>
   simp[] >>
-  qpat_assum `expr_post _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post H _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
   gvs[expr_type_def]
 QED
 
-Resume compile_nocopy_ifexp_post_path[layout]:
+Resume compile_nocopy_ifexp_post_path_fields[layout]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `_ ==> ~expr_has_effect e` kall_tac >>
   `~is_bytestring_type (expr_type e)` by metis_tac[post_value_type_bytestring] >>
@@ -127,7 +131,7 @@ Resume compile_nocopy_ifexp_post_path[layout]:
     (irule compatible_footprint >> metis_tac[expr_type_def]) >>
   `vv_own ce cx (lowered_value_type ce (Call ann (IntCall fid) args drv))
     origin sa ee tvv (LocatedValue t (mk_ptr p.ptr_operand LocMemory)) s` by
-    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o PURE_REWRITE_RULE[vv_post_def]) >>
      gvs[expr_type_def, vv_own_def, mk_ptr_def] >> metis_tac[]) >>
   irule vv_own_memory_transport >>
@@ -135,9 +139,37 @@ Resume compile_nocopy_ifexp_post_path[layout]:
   metis_tac[expr_type_def, value_has_type_val_wf]
 QED
 
-Finalise compile_nocopy_ifexp_post_path
+Finalise compile_nocopy_ifexp_post_path_fields
 
-Theorem changed_aggregate_post_path:
+Theorem compile_nocopy_ifexp_post_path:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
+  expr_body_pre ce cx env e es /\
+  eval_expr cx e es = (INL tvv,ee) /\
+  read_result cx tvv ee = (INL v,ee) /\
+  (is_word_type (expr_type e) \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  compile_expr ce ty e sc = (vv,sa) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sc /\ local_ptrs_reserved ce origin /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      es origin sb s0 ee v op q /\
+    (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
+      (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all compile_nocopy_ifexp_post_path_fields >>
+  strip_tac >> qexists_tac `q` >> simp[]
+QED
+
+Theorem changed_aggregate_post_path_fields:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   read_result cx tvv ee = (INL v,ee) /\
   expr_body_pre ce cx env e es /\
@@ -163,16 +195,18 @@ Theorem changed_aggregate_post_path:
     ALL_DISTINCT (MAP FST fields) /\
     EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
       sz = type_memory_size tv) fields) /\
-  expr_post ctx func ce cx e es origin sa s0 ee v src s /\
+  expr_post H ctx func ce cx e es origin sa s0 ee v src s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
-    expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v buf.buf_operand q /\
     vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr buf.buf_operand LocMemory)) q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all ifexp_changed_aggregate_source >> strip_tac >>
   `type_memory_bytes ce (expr_type e) = type_memory_size dtv /\
@@ -211,7 +245,7 @@ Proof
   `val_in_memory stv v (w2n sw) u.vs_memory` by simp[] >>
   drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)
     typed_store_counted_semantic_frame >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[mk_inst_def] >>
@@ -222,6 +256,9 @@ Proof
     qpat_x_assum `!name lb len. _` drule >> simp[arithmeticTheory.ADD_COMM])) >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    fs[typed_copy_state_frame_def, venom_state_component_equality] >>
   qexists_tac `t` >> simp[] >> (conj_tac >- suspend "post" >>
   `val_wf dtv v /\ val_footprint dtv v <= type_memory_size dtv` by
     metis_tac[cj 1 value_has_type_val_wf, val_footprint_le] >>
@@ -241,7 +278,7 @@ Proof
   gvs[] >> metis_tac[arithmeticTheory.ADD_COMM])
 QED
 
-Resume changed_aggregate_post_path[post]:
+Resume changed_aggregate_post_path_fields[post]:
   markerLib.RESUME_TAC >> (
   `val_wf dtv v` by metis_tac[cj 1 value_has_type_val_wf] >>
   `val_footprint dtv v <= type_memory_size dtv` by metis_tac[val_footprint_le] >>
@@ -261,7 +298,7 @@ Resume changed_aggregate_post_path[post]:
   conj_tac
   >- (rpt strip_tac >> irule local_region_frame_fwd >>
       qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
-      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   `eval_operand (Var p) t = SOME w` by
@@ -290,9 +327,50 @@ Resume changed_aggregate_post_path[post]:
   simp[arithmeticTheory.ADD_COMM])
 QED
 
-Finalise changed_aggregate_post_path
+Finalise changed_aggregate_post_path_fields
 
-Theorem compile_bytes_ifexp_post_path:
+Theorem changed_aggregate_post_path:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
+  read_result cx tvv ee = (INL v,ee) /\
+  expr_body_pre ce cx env e es /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
+  post_value_type ce e <> expr_type e /\
+  ~is_word_type (post_value_type ce e) /\
+  ~is_bytestring_type (post_value_type ce e) /\
+  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
+  compile_alloc_buffer (type_memory_bytes ce (expr_type e)) sa = (buf,sm) /\
+  compile_store_memory_typed ce buf.buf_operand (expr_type e) src
+    (post_value_type ce e) sm = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+    type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+    type_memory_size tv < dimword (:256)) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  expr_post H ctx func ce cx e es origin sa s0 ee v src s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      es origin sb s0 ee v buf.buf_operand q /\
+    vv_at ce cx (expr_type e) origin sb ee tvv
+      (LocatedValue (expr_type e) (mk_ptr buf.buf_operand LocMemory)) q /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all changed_aggregate_post_path_fields >>
+  strip_tac >> qexists_tac `q` >> simp[]
+QED
+
+Theorem compile_bytes_ifexp_post_path_fields:
   local_ptrs_rel func ce es.scopes s0 /\
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
@@ -306,16 +384,18 @@ Theorem compile_bytes_ifexp_post_path:
   local_ptrs_reserved ce sc /\ local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  vv_post ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
-    expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q /\
     vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[] >>
@@ -344,7 +424,7 @@ Proof
      qspecl_then [`ce`, `src`, `buf.buf_operand`, `expr_type e`, `expr_type e`, `sn`]
        mp_tac ci_mono_compile_store_memory >>
      asm_rewrite_tac[] >> simp[ci_mono_def]) >>
-  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_counted >> strip_tac >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sa x` by
@@ -358,14 +438,14 @@ Proof
          qexistsl_tac [`sa`, `ee.scopes`, `u`] >> simp[] >> metis_tac[]) >>
      strip_tac >> irule local_region_frame_fwd >>
      qexistsl_tac [`s`, `sa`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
-  `vv_post ctx func ce cx e es origin sm s0 ee tvv vv u` by
+  `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[] >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
      Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
   `origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id` by decide_tac >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  qpat_assum `vv_post _ _ _ _ _ es origin sm s0 _ _ _ u`
-    (mp_then (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac unwrap_value_physical_framed_path) >>
+  qpat_assum `vv_post H _ _ _ _ _ es origin sm s0 _ _ _ u`
+    (mp_then (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac unwrap_value_physical_framed_path_fields) >>
   simp[] >>
   strip_tac >>
   `~u'.vs_halted` by
@@ -387,7 +467,7 @@ Proof
      qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
      simp[regions_disjoint_def]) >>
   `?sw. eval_operand src u' = SOME sw /\ val_in_memory tvt v (w2n sw) u'.vs_memory` by
-    (qpat_assum `expr_post _ _ _ _ _ es origin sn s0 _ _ _ u'`
+    (qpat_assum `expr_post H _ _ _ _ _ es origin sn s0 _ _ _ u'`
        (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
      fs[expr_val_rel_def] >>
      qpat_x_assum `!tv. evaluate_type _ (post_value_type ce e) = _ ==> _`
@@ -399,11 +479,11 @@ Proof
          qexistsl_tac [`ce`, `src`, `sm`, `vv`] >> simp[] >>
          Cases_on `vv` >> gvs[vv_operand_def])
      >- (gvs[] >> irule not_fresh_at_mono >> qexists_tac `sm` >> simp[])) >>
-  `stmt_state_rel ctx func ce cx ee u'` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee u'` by fs[expr_post_def] >>
   drule_at (Pat `compile_store_bytestring _ _ _ = _`) bytestring_store_allocated_counted_frame >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP u'.vs_allocas _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u'`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ u'`)) >>
   disch_then (qspec_then `expr_type e` mp_tac) >> simp[] >>
   (impl_tac >- (conj_tac
     >- (rpt strip_tac >>
@@ -423,6 +503,10 @@ Proof
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = u'` mp_tac >>
+     simp[venom_state_component_equality]) >>
   qexists_tac `t` >> simp[] >> (conj_tac >- suspend "post" >>
   `val_wf tvt v /\ val_footprint tvt v <= type_memory_size tvt` by
     metis_tac[cj 1 value_has_type_val_wf, val_footprint_le] >>
@@ -445,7 +529,7 @@ Proof
   gvs[] >> metis_tac[arithmeticTheory.ADD_COMM])
 QED
 
-Resume compile_bytes_ifexp_post_path[post]:
+Resume compile_bytes_ifexp_post_path_fields[post]:
   markerLib.RESUME_TAC >> (
   `val_wf tvt v` by metis_tac[cj 1 value_has_type_val_wf] >>
   `val_footprint tvt v <= type_memory_size tvt` by metis_tac[val_footprint_le] >>
@@ -461,7 +545,7 @@ Resume compile_bytes_ifexp_post_path[post]:
   conj_tac
   >- (rpt strip_tac >> irule local_region_frame_fwd >>
       qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
-      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u'`
+      qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ u'`
         (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
   `eval_operand (Var p) t = SOME w` by
@@ -485,4 +569,33 @@ Resume compile_bytes_ifexp_post_path[post]:
     (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM])
 QED
 
-Finalise compile_bytes_ifexp_post_path
+Finalise compile_bytes_ifexp_post_path_fields
+
+Theorem compile_bytes_ifexp_post_path:
+  local_ptrs_rel func ce es.scopes s0 /\
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
+  expr_body_pre ce cx env e es /\
+  eval_expr cx e es = (INL tvv,ee) /\
+  read_result cx tvv ee = (INL v,ee) /\
+  is_bytestring_type (expr_type e) /\ ~is_word_type (expr_type e) /\
+  ~same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+  compile_expr ce ty e sc = (vv,sa) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sc /\ local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      es origin sb s0 ee v op q /\
+    vv_at ce cx (expr_type e) origin sb ee tvv
+      (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all compile_bytes_ifexp_post_path_fields >>
+  strip_tac >> qexists_tac `q` >> simp[]
+QED

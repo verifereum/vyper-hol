@@ -10,14 +10,14 @@ Theorem ghost_kept_readonly_transport:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ sa.cs_next_var <= sm.cs_next_var /\
   tm.t_mem = tn.t_mem /\
   (!p. not_fresh_at sm p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_kept cenv es sa G0 tn0 s0 H tm
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) ==>
+  ghost_kept cenv es sa G0 tn0 s0 HG tm
 Proof
   rw[ghost_kept_def] >> metis_tac[not_fresh_at_mono]
 QED
 
 Theorem ghost_inv_readonly_transport:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
@@ -25,9 +25,9 @@ Theorem ghost_inv_readonly_transport:
   tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
   tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   (!p. not_fresh_at sm p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d cenv cx es H tm t
+  ghost_inv H d cenv cx es HG tm t
 Proof
   simp[ghost_inv_def, local_ptrs_reserved_def] >> strip_tac >>
   conj_tac >-
@@ -101,7 +101,7 @@ QED
 Finalise ptr_val_ok_log_bytestring_window
 
 Theorem log_bytestring_arg_view_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sb es s (op,ty) v /\
   supported_scalar_type ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\

@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem mcopy_exterior_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   eval_operand dst s = SOME b /\ eval_operand src s = SOME a /\
   eval_operand count_op s = SOME n /\
   (!name entry p sz w.
@@ -38,7 +38,7 @@ Theorem mcopy_exterior_ghost_inv:
     val_wf entry.type entry.value /\
     (w2n w + val_footprint entry.type entry.value <= w2n b \/
      w2n b + w2n n <= w2n w)) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id MCOPY [dst;src;count_op] [])
       (mcopy (w2n b) (w2n a) (w2n n) s))
     (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
@@ -56,7 +56,7 @@ Proof
   `(step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
       (mcopy (w2n b) (w2n a) (w2n n) s) tn).t_imm = tn.t_imm` by
     simp[step_taint_def, imm_taint_def, mk_inst_def] >>
-  qmatch_goalsub_abbrev_tac `ghost_inv d cenv cx es _ tf _` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv H d cenv cx es _ tf _` >>
   gvs[ghost_inv_def] >> reverse conj_tac
   >- (Cases_on `d`
       >- (gvs[return_buf_ptr_def, op_taint_def, stor_taint_ok_def,

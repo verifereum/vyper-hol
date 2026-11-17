@@ -34,7 +34,7 @@ QED
 Theorem tuple_place_memory_end_bound:
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0.
     p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\

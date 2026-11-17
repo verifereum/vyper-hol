@@ -448,7 +448,7 @@ Proof
   gvs[lookup_var_def]
 QED
 
-Theorem topcopy_instruction_prefix[local]:
+Theorem topcopy_instruction_prefix:
   !code idx bb.
     (!j. j < LENGTH code ==> get_instruction bb (idx+j) = SOME (EL j code)) ==>
     isPREFIX code (DROP idx bb.bb_instructions)

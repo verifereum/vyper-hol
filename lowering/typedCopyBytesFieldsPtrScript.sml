@@ -61,7 +61,7 @@ Theorem compile_bytestring_field_frag_ptr:
       val_in_memory stv v (w2n a+soff) m) ==>
     cs_extends sa sd /\
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sd
+      frag_exec_ptr H cx ctx PG sa sd
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       (!i. ~(w2n b+doff <= i /\ i < w2n b+doff+n) ==>
@@ -139,7 +139,7 @@ Theorem compile_bytestring_fields_frag_ptr:
           (w2n a + (soff + SUM (MAP (type_memory_bytes cenv) (TAKE i sts)))) m)) ==>
     cs_extends sa sz /\
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sz
+      frag_exec_ptr H cx ctx PG sa sz
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\

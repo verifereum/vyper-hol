@@ -1,35 +1,26 @@
-(* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
+(* The selected external frame's return continuation on finite horizons,
+   for loweringRuntimeCorrect's lower_vyper_runtime_unit_body_joint. *)
 Theory externalFrameRetOk
 Ancestors
-  externalReturnNoneFrag externalReturnValuedFrag
-  externalReturnSelectedResources vyperTypeCallGraph
-  stmtSimProps
-  stmtSimDefs
-  exprSimDefs
-  loweringPosts
-  list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
-  compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
-  vyperTypeSelectedEntrySoundness vyperTypeSystem
-  vyperInterpreter vyperState vyperContext
-  venomState venomExecSemantics venomWf
+  e2eDefs bodySimFull supportedProgram compileVyper moduleLowering
+  vyperInterpreter externalReturnNoneFullFrag externalReturnValuedFull
+  externalReturnPackage exprSimHypsDefs vyperState vyperContext vyperTypeCallGraph
+  entryReachBodyFmp
 
 val _ = Parse.hide "body";
 
-(* The selected frame's two counted return fragments discharge the return
-   continuation. Valued returns retain the successful producer's physical
-   layout facts and use actual value footprints through normalization. *)
-Theorem external_frame_ret_ok:
-  !tops rpolicy unit am tx ret vs mut args fbody env lbl cenv0 pos_args
-   min_cds is_payable nkey ut' iv rt st cenv sa func.
+(* The selected frame's two Return producers, NONE and valued, discharge
+   the frame's return continuation at every valid horizon.
+   Both producers share the selected package and actual return endpoint. *)
+Theorem external_frame_ret_ok_full:
+  !DF lo d shadow_ctx PG func shadow_func tops rpolicy unit am tx ret vs
+   mut args fbody env lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
+   st cenv sa.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -41,39 +32,68 @@ Theorem external_frame_ret_ok:
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
-    frame_ret_ok unit.cu_context func
+    frame_ret_ok_full (DF, lo, d, unit.cu_context, shadow_ctx, PG, func,
+                       shadow_func)
       (initial_evaluation_context am.sources am.layouts tx NONE)
-      (\v es r. ?tv v'.
+      (\H v ee gt r. ?tv v'.
          evaluate_type (type_env tops) ret = SOME tv /\
          safe_cast tv v = SOME v' /\
-         external_call_result_rel tops ret tx
+         external_call_result_rel H tops ret tx
            (INL v', finalize_pending_deletions
                       (abstract_machine_from_state am.sources am.exports
-                         am.layouts es),
-            es.requests) r)
+                         am.layouts ee),
+            ee.requests) r)
       cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
-  `ut' = T` by
-    (drule externalReturnPackageTheory.return_package_target_inversion >>
-     strip_tac >>
-     drule externalReturnPackageTheory.return_package_metadata >> simp[]) >>
-  pop_assum SUBST_ALL_TAC >>
-  simp[frame_ret_ok_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `eo`
-  >- (irule return_selected_none_frag >>
-      qpat_assum `set_external_package_target _ _ = _` (irule_at Any) >>
-      qpat_assum `compile_register_positional_args _ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
-      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-      simp[initial_evaluation_context_def]) >>
-  irule return_selected_valued_frag >>
-  qpat_assum `set_external_package_target _ _ = _` (irule_at Any) >>
-  qpat_assum `compile_register_positional_args _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
-  qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-  drule_all return_selected_consumer_resources >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    metis_tac[entry_runtime_no_dalloca] >>
   drule source_deployment_context >> strip_tac >>
-  fs[initial_evaluation_context_def, int_calls_stmt_def, int_calls_expr_def]
+  simp_tac std_ss [frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  `ut' = T` by
+    (drule return_package_target_inversion >> strip_tac >>
+     drule return_package_metadata >> simp[]) >> gvs[] >>
+  `cenv'.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
+      tx.function_name External tops` by
+    (drule return_package_target_inversion >> strip_tac >>
+     drule return_package_metadata >> strip_tac >>
+     drule return_register_metadata >> strip_tac >>
+     drule return_same_frame_metadata >> simp[]) >>
+  Cases_on `eo` >> simp[]
+  >- (mp_tac (Q.INST [`DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`,
+      `ctx` |-> `unit.cu_context`, `shadow_ctx` |-> `shadow_ctx`,
+      `PG` |-> `PG`, `func` |-> `func`, `shadow_func` |-> `shadow_func`,
+      `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+      `target` |-> `rpolicy.rpol_target`, `ut` |-> `T`,
+      `nkey_map` |-> `K global_nonreentrant_slot`,
+      `rr` |-> `lookup_raw_return_or_F (NONE:num option)
+                  tx.function_name External tops`,
+      `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
+      `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
+      `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
+      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
+      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_none_frag_full) >>
+      impl_tac
+      >- (simp[initial_evaluation_context_def] >>
+          fs[initial_evaluation_context_def]) >> simp[]) >>
+  rename1 `stmt_exprs_ok cenv' (Return (SOME e))` >>
+  mp_tac (Q.INST [`DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`,
+      `ctx` |-> `unit.cu_context`, `shadow_ctx` |-> `shadow_ctx`,
+      `PG` |-> `PG`, `func` |-> `func`, `shadow_func` |-> `shadow_func`,
+      `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+      `target` |-> `rpolicy.rpol_target`, `ut` |-> `T`,
+      `nkey_map` |-> `K global_nonreentrant_slot`,
+      `rr` |-> `lookup_raw_return_or_F (NONE:num option)
+                  tx.function_name External tops`,
+      `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
+      `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
+      `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
+      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
+      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_valued_frag_full) >>
+  impl_tac
+  >- (simp[initial_evaluation_context_def, get_tenv_def] >>
+      fs[initial_evaluation_context_def, get_tenv_def,
+         int_calls_stmt_def, int_calls_expr_def]) >> simp[]
 QED
-

@@ -3,16 +3,17 @@ Theory exprSimAlloc
 Ancestors
   list rich_list finite_map context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
-  venomExecSemantics
+  venomExecSemantics fragGasSeq fragGasMode
 
 Theorem literal_alloca_run[local]:
+  !H.
   !func cenv cx es s inst p (n:bytes32) ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p ==>
     ?t w. exec_alloca inst s n = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\ lookup_var p t = SOME w /\
+      stmt_state_rel H ctx func cenv cx es t /\ lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w, w2n n) /\
       w2n w + w2n n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
       (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
@@ -67,14 +68,15 @@ Proof
 QED
 
 Theorem literal_alloc_buffer_run:
+  !H.
   !func cenv cx es sa sm buf sz s ctx.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -139,16 +141,17 @@ QED
 
 (* A bounded store into an allocation separated from local regions. *)
 Theorem literal_mstore_state_rel:
+  !H.
   !func cenv cx es s a (w:bytes32) inst b sz ctx.
-    stmt_state_rel ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
+    stmt_state_rel H ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel ctx func cenv cx es (mstore a w s)
+    stmt_state_rel H ctx func cenv cx es (mstore a w s)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
     (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
@@ -173,8 +176,7 @@ Proof
   >- (irule exprLoweringPropsTheory.alloca_room_fields >>
       qexists_tac `s` >> simp[mstore_def]) >>
   conj_tac
-  >- (irule exprLoweringPropsTheory.fmp_room_fields >>
-      qexists_tac `s` >> simp[mstore_def]) >>
+  >- (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
   conj_tac
   >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
       qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
@@ -217,15 +219,16 @@ Proof
 QED
 
 Theorem alloc_buffer_source_frag_labels:
+  !H.
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) ==>
     ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -269,15 +272,16 @@ Proof
 QED
 
 Theorem alloc_buffer_source_frag:
+  !H.
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) ==>
     ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -298,4 +302,101 @@ Proof
   drule_all alloc_buffer_source_frag_labels >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
+QED
+
+
+Theorem literal_alloc_buffer_counted:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  stmt_state_rel H ctx semantic_func ce cx ee s /\
+  fn_inst_ids_distinct semantic_func /\ local_ptrs_reserved ce sa /\
+  sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts semantic_func) /\
+  fn_has_code sa sm execution_func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u w. gas_marked_path F ctx execution_func s 0 (OK u) /\
+    stmt_state_rel H ctx semantic_func ce cx ee u /\
+    eval_operand buf.buf_operand u = SOME w /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+    u.vs_labels = s.vs_labels /\
+    contract_storage u = contract_storage s /\
+    contract_transient u = contract_transient s /\
+    sa.cs_next_id < sm.cs_next_id /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+      regions_disjoint (w2n w) sz b len) /\
+    (!name b len. local_region ce ee.scopes u name b len ==>
+      regions_disjoint (w2n w) sz b len) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
+    ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >> drule_all literal_alloc_buffer_run >>
+  strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+   sm.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]] /\
+   emitted_insts sa sm =
+     [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]]` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     gvs[emitHelperTheory.emit_op_def, comp_bind_def, comp_return_def,
+         fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME
+    (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]) s = OK t` by
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+  `gas_path_edge ctx execution_func s 0
+    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_at (Pat `step_inst_base _ _ = _`) tuple_straight_line_edge >>
+     simp[mk_inst_def] >> disch_then irule >>
+     simp[is_terminator_def] >> gvs[mk_inst_def]) >>
+  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+    (`step_inst 0 ctx
+       (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+         [STRING #"%" (toString sa.cs_next_var)]) s = OK t` by
+       simp[step_inst_non_invoke, mk_inst_def] >>
+     drule_at (Pat `step_inst _ _ _ _ = _`)
+       venomInstProofsTheory.step_preserves_control_flow >>
+     drule_at (Pat `step_inst _ _ _ _ = _`)
+       venomInstProofsTheory.step_preserves_halted >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `gas_marked_path F ctx execution_func s 0
+    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (simp[gas_marked_path_def] >>
+     drule (cj 2 fragGasPathTheory.gas_path_rules) >>
+     disch_then (qspecl_then
+       [`0`, `OK (t with vs_inst_idx := SUC s.vs_inst_idx)`] mp_tac) >>
+     simp[] >> disch_then irule >>
+     irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
+  `t.vs_labels = s.vs_labels /\
+   contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `step_inst_base _ _ = OK t` mp_tac >>
+     simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
+       eval_operand_def, venomExecSemanticsTheory.exec_alloca_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
+     simp[AllCaseEqs(), update_var_def, contract_storage_def, contract_transient_def] >>
+     rpt strip_tac >> gvs[]) >>
+  qexistsl_tac [`t with vs_inst_idx := SUC s.vs_inst_idx`, `w`] >>
+  gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
+      local_region_def, contract_storage_def, contract_transient_def] >>
+  conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

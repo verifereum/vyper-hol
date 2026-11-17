@@ -6,7 +6,7 @@ Ancestors
 
 Theorem alloca_counted_edge_covers:
   !D ctx func cenv cx es s id n out u PG G tn bb.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\

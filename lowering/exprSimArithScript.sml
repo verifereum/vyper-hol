@@ -800,7 +800,7 @@ Theorem binop_frag_decimal_transfer:
 Proof
   rpt gen_tac >> simp[binop_frag_def, binop_frag_words_def] >> strip_tac >> rpt gen_tac >>
   strip_tac >>
-  first_x_assum (qspecl_then [`sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
+  first_x_assum (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
   (impl_tac >- gvs[expr_res_ok_def, val_to_w256_def]) >>
   strip_tac >> qexists_tac `r` >> asm_rewrite_tac[] >>
   gvs[val_to_w256_def, word_value_def] >>

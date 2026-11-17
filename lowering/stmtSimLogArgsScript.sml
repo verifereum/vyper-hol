@@ -187,7 +187,7 @@ Proof
 QED
 
 Theorem log_frame_local_region:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   wb_frame cenv es ee sb s t ==>
@@ -206,7 +206,7 @@ Proof
 QED
 
 Theorem log_frame_placement:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
@@ -247,7 +247,7 @@ Proof
 QED
 
 Theorem log_arg_rel_frame:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
@@ -264,35 +264,37 @@ Proof
 QED
 
 Definition log_args_post_def:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s <=>
+    stmt_state_rel H ctx func cenv cx es' s /\
+    storage_well_formed_on cx es' (FST H) /\
     LIST_REL (log_arg_rel cenv cx sa sb es' s) xs vs /\
     wb_frame cenv es es' sa s0 s
 End
 
 Theorem log_args_post_nil:
-  stmt_state_rel ctx func cenv cx es s ==>
-  log_args_post ctx func cenv cx es sa sa s es [] [] s
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) ==>
+  log_args_post H ctx func cenv cx es sa sa s es [] [] s
 Proof
   simp[log_args_post_def, wb_frame_refl]
 QED
 
 Theorem log_args_post_state:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
-  stmt_state_rel ctx func cenv cx es' s
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  stmt_state_rel H ctx func cenv cx es' s
 Proof
   simp[log_args_post_def]
 QED
 
 Theorem log_args_post_frame:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   wb_frame cenv es es' sa s0 s
 Proof
   simp[log_args_post_def]
 QED
 
 Theorem log_args_post_values:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) s) xs vs
 Proof
   simp[log_args_post_def] >> strip_tac >>
@@ -301,7 +303,7 @@ Proof
 QED
 
 Theorem log_args_post_placements:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   LIST_REL (\arg v. expr_val_at cenv cx (SND arg) sa sb es' v (FST arg) s) xs vs
 Proof
   simp[log_args_post_def] >> strip_tac >>
@@ -310,7 +312,7 @@ Proof
 QED
 
 Theorem log_args_post_cons:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
@@ -319,13 +321,13 @@ Theorem log_args_post_cons:
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
-  log_args_post ctx func cenv cx es1 sm sb t es' ys vs u ==>
-  log_args_post ctx func cenv cx es sa sb s0 es'
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x t /\
+  log_args_post H ctx func cenv cx es1 sm sb t es' ys vs u ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es'
     ((x,expr_type e)::ys) (v::vs) u
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es1 t` by
+  `stmt_state_rel H ctx func cenv cx es1 t` by
     (drule_all expr_post_state >> simp[]) >>
   `wb_frame cenv es es1 sa s0 t` by (drule_all expr_post_frame >> simp[]) >>
   `wb_frame cenv es1 es' sm t u` by (drule_all log_args_post_frame >> simp[]) >>
@@ -334,9 +336,10 @@ Proof
      irule log_arg_clear_base >> metis_tac[]) >>
   `log_arg_rel cenv cx sa sb es' u (x,expr_type e) v` by
     (irule log_arg_rel_frame >> simp[] >>
-     qexistsl_tac [`ctx`, `es'`, `es1`, `func`, `t`, `sm`] >> gvs[]) >>
+     qexistsl_tac [`H`, `ctx`, `es'`, `es1`, `func`, `t`, `sm`] >> gvs[]) >>
   simp[log_args_post_def] >> conj_tac
   >- (drule_all log_args_post_state >> simp[]) >>
+  conj_tac >- fs[log_args_post_def] >>
   conj_tac
   >- (gvs[log_args_post_def] >> irule listTheory.LIST_REL_mono >>
       goal_assum (drule_at Any) >> rpt strip_tac >>

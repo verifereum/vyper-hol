@@ -5,7 +5,8 @@ Ancestors
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace stmtSimAugAssign
   tupleTargetStoreProps gasContext vyperState bodyMemoryPreds
   augAssignPlaceSuffixAdmissibility augAssignPlaceSourcePrefix
-  exprSimSource exprSimHyps exprSimHypsDefs
+  exprSimSource exprSimHyps exprSimHypsDefs vyperFiniteStoragePreservation
+  vyperStoragePlaceObserved vyperStorageFootprint vyperStorageTrace
 
 Theorem aug_place_memory_suffix_source[local]:
   bop <> In /\ bop <> NotIn /\ word_value cur /\

@@ -66,6 +66,40 @@ Proof
   gen_tac >> irule shadow_root_frame_outcome_exc >> metis_tac[]
 QED
 
+Theorem deploy_shadow_not_starved:
+  es.contexts = [(ctxt, rb)] /\
+  run_call es = SOME (r, es') /\
+  ~creation_resource_starved es r es' /\
+  run_call (shadow_root es) = SOME (sr, sg) ==>
+  ~frame_resource_starved (shadow_root es) sr sg
+Proof
+  strip_tac >> strip_tac >>
+  gvs[frame_resource_starved_def] >>
+  drule_all deploy_frame_exception >> strip_tac >> gvs[] >>
+  fs[creation_resource_starved_def] >> metis_tac[]
+QED
+
+Theorem deploy_shadow_run_not_starved:
+  es.contexts = [(ctxt, rb)] /\
+  run_call es = SOME (r, es') /\
+  ~creation_resource_starved es r es' ==>
+  ?sr sg.
+    run_call (shadow_root es) = SOME (sr, sg) /\
+    ~frame_resource_starved (shadow_root es) sr sg
+Proof
+  strip_tac >>
+  `LENGTH es.contexts = 1` by simp[] >>
+  `run es = SOME (r, es')` by
+    metis_tac[run_call_eq_run_single_context] >>
+  `es.contexts <> []` by simp[] >>
+  drule_all shadow_root_run_exists >> strip_tac >>
+  `LENGTH (shadow_root es).contexts = 1` by
+    simp[shadow_root_def, shadow_root_contexts_def] >>
+  `run_call (shadow_root es) = SOME (sr, sg)` by
+    metis_tac[run_call_eq_run_single_context] >>
+  metis_tac[deploy_shadow_not_starved]
+QED
+
 (* A halting shadow run is the real run up to the root's halt handler. *)
 Theorem deploy_frame_halt_mid[local]:
   es.contexts = [(c0,rb0)] /\
@@ -110,22 +144,27 @@ Proof
 QED
 
 Theorem deploy_venom_frame:
-  !tops runtime_bc deploy_bc am tx es src res.
+  !H tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
     runtime_bc <> [] /\ ~(?t. runtime_bc = 0xEFw :: t) /\
-    deploy_venom_result_rel tops runtime_bc tx src res /\
+    deploy_venom_result_rel H tops runtime_bc tx src res /\
     (?r g. run_call (shadow_root es) = SOME (r, g) /\
            (frame_resource_starved (shadow_root es) r g \/
             venom_frame_rel (shadow_root es) r g res))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (creation_resource_starved es r es' \/
-       deploy_result_rel tops runtime_bc tx es r es' src)
+       deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
+    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_def] >>
   `?c0 rb0. es.contexts = [(c0,rb0)] /\
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
+  `call_requests (shadow_root es) = call_requests es` by
+    simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def,
+         shadow_root_frame_obs] >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` kall_tac
   >- (gvs[frame_resource_starved_def] >>
       drule_all deploy_frame_exception >> strip_tac >>
@@ -137,7 +176,9 @@ Proof
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def] >>
+          >- (gvs[deploy_venom_result_rel_def,
+                  e2eDefsTheory.logs_correspond_def,
+                  e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
@@ -145,7 +186,6 @@ Proof
               >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
                   metis_tac[]) >>
               disj2_tac >> simp[deploy_result_rel_def] >>
-              qexists_tac `ss.vs_logs` >>
               simp[lookup_account_def, update_account_def,
                    combinTheory.APPLY_UPDATE_THM] >>
               conj_tac
@@ -157,7 +197,9 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def] >>
+          gvs[deploy_venom_result_rel_def,
+              e2eDefsTheory.logs_correspond_def,
+              e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
@@ -165,7 +207,7 @@ Proof
           >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
               metis_tac[]) >>
           disj2_tac >> simp[deploy_result_rel_def] >>
-          qexistsl [`section`,`ss.vs_logs`] >>
+          qexists_tac `section` >>
           gvs[lookup_account_def, update_account_def,
               combinTheory.APPLY_UPDATE_THM] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
@@ -244,7 +286,7 @@ QED
    run's relation to the Venom result (codegen_correct or an optimised twin)
    can use it. *)
 Theorem deploy_frame_gas_tail:
-  !es ctxt rb tx tops runtime_bc src res r es'.
+  !H es ctxt rb tx tops runtime_bc src res r es'.
     es.contexts = [(ctxt, rb)] /\ ctxt.msgParams.outputTo = Code tx.target /\
     wf_state es /\
     (!s op r s'. frame_inst_at (shadow_root es) s op /\ step_inst op s = (r, s') /\
@@ -254,7 +296,7 @@ Theorem deploy_frame_gas_tail:
     run_call (shadow_root es) = SOME (r, es') /\
     (frame_resource_starved (shadow_root es) r es' \/
      venom_frame_rel (shadow_root es) r es' res) /\
-    ~deploy_source_exempt tops src /\ deploy_venom_result_rel tops runtime_bc tx src res
+    ~deploy_source_exempt tops src /\ deploy_venom_result_rel H tops runtime_bc tx src res
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH runtime_bc + imm_len tops)
@@ -389,9 +431,9 @@ Theorem deploy_frame_gas_sufficient:
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
       venom_run_bounded fuel M dout.po_unit.cu_context
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
-      (?src vfuel.
+      (?H src vfuel.
          ~deploy_source_exempt tops src /\
-         deploy_venom_result_rel tops runtime_bc tx src
+         deploy_venom_result_rel H tops runtime_bc tx src
            (run_context vfuel dout.po_unit.cu_context
               (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
       ==>
@@ -457,7 +499,7 @@ Proof
   disch_then (qx_choosel_then [`r`, `es'`]
                 (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qpat_x_assum `sh = add_frame_gas _ _` kall_tac >>
-  qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx`, `tops`, `runtime_bc`,
+  qspecl_then [`H`, `add_frame_gas g' es`, `ctxt`, `rb`, `tx`, `tops`, `runtime_bc`,
                `src`, `run_context vfuel dout.po_unit.cu_context vs`,
                `r`, `es'`] mp_tac deploy_frame_gas_tail >>
   impl_tac >- (fs[Abbr `sh`] >> first_assum ACCEPT_TAC) >> simp[]

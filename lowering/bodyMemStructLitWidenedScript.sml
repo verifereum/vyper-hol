@@ -3,6 +3,7 @@
    every field is flat against its declared type; a nested widening is held. *)
 Theory bodyMemStructLitWidened
 Ancestors
+  gasOutcome
   bodyMemoryPreds typedCopyRankPathMem bodyMemStructFieldsBody
   bodyMemAggregateAlloc bodyMemAggregateAssembly bodyExprForceMemory
   exprSimAggregates exprSimAggregateLayout exprSimHyps exprSimMemDefs
@@ -31,6 +32,13 @@ Proof
       first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
       rpt strip_tac >> drule compile_struct_literal_inv >> simp[]) >>
   rw[expr_vv_sim_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
@@ -49,7 +57,15 @@ Proof
     (gvs[expr_body_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
-  drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `H0`]
+    (INST_TYPE [alpha |-> ``:256``]
+      aggregate_buffer_alloc_counted_mem_any_block)) >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es t /\
+     storage_well_formed_on cx es (FST H)` by
+    (rpt strip_tac >> res_tac >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
   suspend "fields"
 QED
 
@@ -63,10 +79,13 @@ Resume body_struct_lit_widened_flat_mem[fields]:
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
-  disch_then (qspecl_then [`env`, `es`, `ctx`, `tops`] mp_tac) >>
+  disch_then (qspecl_then [`env`, `es`, `ctx`, `tops`, `st0`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt strip_tac >>
-    irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+      drule >> strip_tac >>
+    irule (Q.INST [`H` |-> `H0`]
+      (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel H0 ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -74,6 +93,10 @@ Resume body_struct_lit_widened_flat_mem[fields]:
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
+  MATCH_MP_TAC (SRULE [] (Q.INST
+    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
+  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
+    fs[expr_body_pre_def]) >>
   rewrite_tac[aggregate_struct_action_mem] >>
   drule aggregate_outcome_source_run_mem >> strip_tac >>
   irule aggregate_outcome_map_mem >>
@@ -87,7 +110,7 @@ Resume body_struct_lit_widened_flat_mem[value_post]:
   `eval_expr cx (StructLit v7 (src_id_opt,id) kes) (es with gas_obs := gs) =
     (INL (Value (StructV (ZIP (MAP FST kes,vs)))),ee)` by
     (drule aggregate_eval_struct >> simp[]) >>
-  rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac) >>
   `expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) (es with gas_obs := gs)` by simp[] >>
   `v7 = StructT (src_id_opt,id)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -109,7 +132,11 @@ Resume body_struct_lit_widened_flat_mem[value_post]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes t' nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
-    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+       drule >> strip_tac >>
+     drule_all (Q.INST [`H` |-> `H0`]
+       (INST_TYPE [alpha |-> ``:256``] aggregate_buffer_clearance)) >> simp[]) >>
   `~expr_has_effect (StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes) ==>
      pure_frame cenv func es sa s0 t'` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
@@ -154,12 +181,12 @@ Resume body_struct_lit_widened_flat_mem[buffer_post]:
       qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
       metis_tac[arithmeticTheory.ADD_COMM]) >>
-  irule aggregate_allocated_result_store_bound_mem >>
+  irule (INST_TYPE [alpha |-> ``:256``] aggregate_allocated_result_store_bound_mem) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def,
        contextTheory.base_ptr_def] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   reverse conj_tac >-
-    (qexistsl [`ctx`, `es`, `func`, `s0`, `sa`, `sb`] >>
+    (qexistsl [`H`, `ctx`, `es`, `func`, `s0`, `sa`, `sb`] >>
      gvs[expr_type_def, contextTheory.base_ptr_def]) >>
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[] >>

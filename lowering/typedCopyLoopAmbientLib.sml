@@ -36,14 +36,14 @@ fun address_fragment mul_fragment =
     [mk_inst id MUL [Var ctr;Lit (n2w ss)] [so];
      mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff];
      mk_inst (id+2) ADD [Var sr;Var so] [sp]]` >>
-  `frag_exec_ptr cx ctx PG sb c1
+  `frag_exec_ptr H cx ctx PG sb c1
      (\g t v. g=G /\ t=tn /\ v=s)
      (\g t v. g=g1 /\ t=tn1 /\ v=s1) R` by
     (irule mul_fragment >>
      simp[Abbr `c1`, Abbr `g1`, Abbr `tn1`, Abbr `s1`] >>
      qexistsl_tac [`id`, `Var ctr`, `so`, `Lit (n2w ss)`] >>
      simp[eval_operand_def, word_mul_n2w, op_taint_def]) >>
-  `frag_exec_ptr cx ctx PG c1 c2
+  `frag_exec_ptr H cx ctx PG c1 c2
      (\g t v. g=g1 /\ t=tn1 /\ v=s1)
      (\g t v. g=g2 /\ t=tn2 /\ v=s2) R` by
     (irule mul_fragment >>
@@ -54,7 +54,7 @@ fun address_fragment mul_fragment =
           op_taint_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `op_taint tn (Var sr) = {} /\ op_taint tn (Var dr) = {}` by
     gvs[ptr_covers_def] >>
-  `frag_exec_ptr cx ctx PG c2 c3
+  `frag_exec_ptr H cx ctx PG c2 c3
      (\g t v. g=g2 /\ t=tn2 /\ v=s2)
      (\g t v. g=g3 /\ t=tn3 /\ v=s3) R` by
     (irule copy_len_binop_frag_ptr >>
@@ -62,7 +62,7 @@ fun address_fragment mul_fragment =
      simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`, mk_inst_def] >>
      gvs[Abbr `s2`, Abbr `s1`, Abbr `tn2`, Abbr `tn1`,
          eval_operand_def, op_taint_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
-  `frag_exec_ptr cx ctx PG c3 si
+  `frag_exec_ptr H cx ctx PG c3 si
      (\g t v. g=g3 /\ t=tn3 /\ v=s3)
      (\g t v. g=g4 /\ t=tn4 /\ v=s4) R` by
     (irule copy_len_binop_frag_ptr >>

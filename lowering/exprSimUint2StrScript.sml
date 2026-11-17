@@ -15,13 +15,16 @@
 Theory exprSimUint2Str
 Ancestors
   exprSimHashBoundary
+  exprLowering exprLoweringProps exprBopLowering vyperAST vyperContext valueEncoding
+  vyperValue vfmConstants exprSimSource exprWordOperand vyperTyping integer
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
   exprSimHyps allocLimits vyperTypeSystem compileEnv loweringStateRelDefs
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words
   builtinStrings emitHelper fragExec exprSimLiteralBuffer immutableMemoryFrame
-   exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
+   exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc exprSimMemDefs
+  vyperStorageTrace vyperStorageFootprint
   exprSimHypsDefs gasOutcome gasSummary gasContext fragGasMode fragGasPath
   storageCopyGasPath
 Libs
@@ -492,8 +495,8 @@ Proof
 QED
 
 Definition u2s_safe_def:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s <=>
-    u2s_frame a b sz s0 s /\ stmt_state_rel ctx fn cenv cx es s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s <=>
+    u2s_frame a b sz s0 s /\ stmt_state_rel H ctx fn cenv cx es s /\
     eval_operand buf s = SOME (n2w b) /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
@@ -501,26 +504,26 @@ Definition u2s_safe_def:
 End
 
 Theorem u2s_safe_initial:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   eval_operand buf s = SOME (n2w b) /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
      b + sz <= lb \/ lb + lsz <= b) ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s s
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s s
 Proof
   simp[u2s_safe_def, u2s_frame_refl] >> metis_tac[]
 QED
 
 Theorem u2s_safe_mstore:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   (?p. buf = Var p) /\ b <= at /\ at + 32 <= b + sz /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 (mstore at w s)
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 (mstore at w s)
 Proof
   strip_tac >>
   `u2s_frame a b sz s0 (mstore at w s)` by
     (irule u2s_frame_mstore >> gvs[u2s_safe_def]) >>
-  `stmt_state_rel ctx fn cenv cx es (mstore at w s)` by
+  `stmt_state_rel H ctx fn cenv cx es (mstore at w s)` by
     (irule literal_mstore_state_rel >>
      gvs[u2s_safe_def] >> metis_tac[]) >>
   gvs[u2s_safe_def, venomStateTheory.eval_operand_def, venomStateTheory.mstore_def,
@@ -538,16 +541,16 @@ Proof
 QED
 
 Theorem u2s_safe_update:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0
     (update_var (u2s_var a k) w s)
 Proof
   strip_tac >>
   `not_local_ptr cenv es.scopes (u2s_var a k)` by
     (irule u2s_var_not_local >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es (update_var (u2s_var a k) w s)` by
+  `stmt_state_rel H ctx fn cenv cx es (update_var (u2s_var a k) w s)` by
     (irule exprLoweringPropsTheory.stmt_state_rel_update_var >>
      gvs[u2s_safe_def]) >>
   `u2s_frame a b sz s0 (update_var (u2s_var a k) w s)` by
@@ -648,10 +651,10 @@ Proof
 QED
 
 Theorem u2s_setup_safe:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0
     (update_var (u2s_var a 2) v
       (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) w s)))
 Proof
@@ -674,8 +677,8 @@ Proof
 QED
 
 Theorem u2s_safe_jump:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 (jump_to lbl s)
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 (jump_to lbl s)
 Proof
   simp[u2s_safe_def, u2s_frame_jump,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
@@ -1012,7 +1015,7 @@ Proof
 QED
 
 Theorem u2s_body_safe:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   b <= at /\ at+32 <= b+sz /\
@@ -1023,18 +1026,18 @@ Theorem u2s_body_safe:
   s2 = mstore at w s1 /\
   s3 = update_var (u2s_var a 0) q (update_var (u2s_var a 9) q s2) /\
   t = update_var (u2s_var a 1) i (update_var (u2s_var a 10) i s3) ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 t
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t
 Proof
   strip_tac >> qpat_x_assum `buf = Var p` SUBST_ALL_TAC >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
     (qpat_x_assum `s1 = _` SUBST1_TAC >>
      rpt (irule u2s_safe_update >> simp[])) >>
   qpat_x_assum `s1 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
     (qpat_x_assum `s2 = _` SUBST1_TAC >> irule u2s_safe_mstore >>
      simp[] >> metis_tac[]) >>
   qpat_x_assum `s2 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
     (qpat_x_assum `s3 = _` SUBST1_TAC >>
      rpt (irule u2s_safe_update >> simp[])) >>
   qpat_x_assum `s3 = _` kall_tac >>
@@ -1061,13 +1064,13 @@ Proof
 QED
 
 Theorem u2s_body_iteration:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. run_inst_seq (TAKE 9 (u2s_body a buf n)) s = OK t /\
-      u2s_safe ctx fn cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
       t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
       t.vs_prev_bb = s.vs_prev_bb /\ t.vs_halted = s.vs_halted
@@ -1098,7 +1101,7 @@ Proof
   `b <= b+n-LENGTH str /\ b+n-LENGTH str+32 <= b+sz` by decide_tac >>
   `?p. buf = Var p /\ not_fresh_at a p` by metis_tac[] >>
   rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `u2s_safe ctx fn cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t` by
     (metis_tac[u2s_body_safe]) >>
   `u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t` by
     (drule_all u2s_body_digits >> simp[]) >>
@@ -1162,7 +1165,7 @@ Proof
 QED
 
 Theorem u2s_final_safe:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   b <= at /\ at+32 <= b+sz /\
@@ -1170,29 +1173,29 @@ Theorem u2s_final_safe:
   s2 = update_var (u2s_var a 15) (n2w at) s1 /\
   s3 = mstore at w s2 /\
   t = update_var (u2s_var a 2) (n2w at) s3 ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 t
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t
 Proof
   strip_tac >> qpat_x_assum `buf = Var p` SUBST_ALL_TAC >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
     (qpat_x_assum `s1 = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]) >>
   qpat_x_assum `s1 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
     (qpat_x_assum `s2 = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]) >>
   qpat_x_assum `s2 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
     (qpat_x_assum `s3 = _` SUBST1_TAC >> irule u2s_safe_mstore >> simp[]) >>
   qpat_x_assum `s3 = _` kall_tac >>
   qpat_x_assum `t = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]
 QED
 
 Theorem u2s_final_result:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X 0 str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. run_inst_seq (TAKE 4 (u2s_final a buf n)) s = OK t /\
-      u2s_safe ctx fn cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
@@ -1216,7 +1219,7 @@ Proof
       simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `t`] >>
       gvs[u2s_safe_def, u2s_digits_def, venomStateTheory.eval_operand_def]) >>
   rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `u2s_safe ctx fn cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t` by
     metis_tac[u2s_final_safe] >>
   `val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
    eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str))` by
@@ -1288,7 +1291,7 @@ Proof
 QED
 
 Theorem u2s_zero_safe:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   1 <= n /\ n+32 <= sz /\
@@ -1298,34 +1301,34 @@ Theorem u2s_zero_safe:
   s4 = update_var (u2s_var a 13) (n2w (b+n-1)) s3 /\
   s5 = mstore (b+n-1) 1w s4 /\
   t = update_var (u2s_var a 2) (n2w (b+n-1)) s5 ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 t
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t
 Proof
   strip_tac >> qpat_x_assum `buf = Var p` SUBST_ALL_TAC >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s1` by
     (qpat_x_assum `s1 = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]) >>
   qpat_x_assum `s1 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s2` by
     (qpat_x_assum `s2 = _` SUBST1_TAC >> irule u2s_safe_mstore >> simp[]) >>
   qpat_x_assum `s2 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s3` by
     (qpat_x_assum `s3 = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]) >>
   qpat_x_assum `s3 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s4` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s4` by
     (qpat_x_assum `s4 = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]) >>
   qpat_x_assum `s4 = _` kall_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst s0 s5` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst s0 s5` by
     (qpat_x_assum `s5 = _` SUBST1_TAC >> irule u2s_safe_mstore >> simp[] >> decide_tac) >>
   qpat_x_assum `s5 = _` kall_tac >>
   qpat_x_assum `t = _` SUBST1_TAC >> irule u2s_safe_update >> simp[]
 QED
 
 Theorem u2s_zero_result:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   1 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. run_inst_seq (TAKE 6 (u2s_zero a buf n)) s = OK t /\
-      u2s_safe ctx fn cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
       val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
       b <= b+n-1 /\ b+n-1+33 <= b+sz /\
@@ -1349,7 +1352,7 @@ Proof
       simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `s4`, Abbr `s5`, Abbr `t`] >>
       gvs[u2s_safe_def]) >>
   rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `u2s_safe ctx fn cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t` by
     metis_tac[u2s_zero_safe] >>
   `val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
    eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1))` by
@@ -1539,14 +1542,16 @@ QED
 
 Theorem u2s_alloc_safe:
   compile_alloc_buffer sz sa = (buf,a) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)] /\ MEM inst (fn_insts fn) ==>
   ?t (w:256 word). run_inst_seq (emitted_insts sa a) s = OK t /\
-    u2s_safe ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t /\
+    u2s_safe H ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t /\
     w2n w + sz < dimword (:256) /\ sa.cs_next_id < a.cs_next_id /\
     wb_frame cenv es es sa s t /\ t.vs_memory = s.vs_memory /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid off len. aid < sa.cs_next_id /\
        FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
@@ -1559,11 +1564,28 @@ Proof
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn)` by metis_tac[] >>
   drule_all alloc_buffer_frame_run >> strip_tac >>
+  `emitted_insts sa a =
+     [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]]` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def,
+          compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `emitted_insts _ _ = _`
+       (fn h => qpat_x_assum `run_inst_seq _ _ = OK t` (mp_tac o REWRITE_RULE [h])) >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
+          venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
+          venomStateTheory.eval_operand_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
+     simp[venomStateTheory.update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `!name off len. local_region cenv es.scopes t name off len ==>
      w2n w + sz <= off \/ off + len <= w2n w` by
     (rpt strip_tac >> first_x_assum drule >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `u2s_safe ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t` by
+  `u2s_safe H ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t` by
     (irule u2s_safe_initial >> gvs[venomInstTheory.mk_inst_def] >>
      metis_tac[ADD_COMM]) >>
   qexistsl_tac [`t`, `w`] >> simp[] >>
@@ -1644,8 +1666,8 @@ Proof
 QED
 
 Theorem u2s_safe_index:
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s ==>
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 (s with vs_inst_idx := idx)
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 (s with vs_inst_idx := idx)
 Proof
   strip_tac >> Cases_on `buf` >>
   gvs[u2s_safe_def, u2s_frame_index, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
@@ -1675,8 +1697,8 @@ Theorem u2s_safe_wb_tail:
     b+sz <= lb \/ lb+len <= b) /\
   (!aid off len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
     off+len <= b \/ b+sz <= off) ==>
-  !out. u2s_safe ctx fn cenv cx es a buf b sz inst s0 out ==>
-    stmt_state_rel ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
+  !out. u2s_safe H ctx fn cenv cx es a buf b sz inst s0 out ==>
+    stmt_state_rel H ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
     FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz)
 Proof
   rpt strip_tac >> gvs[u2s_safe_def] >>
@@ -1692,11 +1714,11 @@ Theorem u2s_safe_pure_tail:
     b+sz <= lb \/ lb+len <= b) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_id = sa.cs_next_id /\
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 out ==>
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 out ==>
   pure_frame cenv fn es sa s out
 Proof
   strip_tac >>
-  qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [u2s_safe_def, u2s_frame_def]) >>
   rewrite_tac[pure_frame_def] >> conj_tac
   >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
@@ -1725,10 +1747,10 @@ Theorem u2s_cond_transition:
   lookup_block (u2s_label a 1) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X x str t /\
       t.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\
@@ -1737,7 +1759,7 @@ Theorem u2s_cond_transition:
 Proof
   strip_tac >>
   qabbrev_tac `t = update_var (u2s_var a 4) (bool_to_word (x = 0)) s` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
   `u2s_digits a b n X x str t` by simp[Abbr `t`, u2s_digits_update] >>
   `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
@@ -1753,12 +1775,12 @@ Theorem u2s_body_transition:
   lookup_block (u2s_label a 2) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
   s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
       t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
       (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
@@ -1780,12 +1802,12 @@ Theorem u2s_final_exit:
   lookup_block (u2s_label a 4) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|> /\
   s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X 0 str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
@@ -1811,12 +1833,12 @@ Theorem u2s_loop:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -1827,7 +1849,7 @@ Theorem u2s_loop:
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
-  `?c. u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+  `?c. u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        u2s_digits a b n X x str c /\
        c.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
        c.vs_inst_idx = 0 /\ ~c.vs_halted /\
@@ -1845,7 +1867,7 @@ QED
 Resume u2s_loop[zero_quotient]:
   gvs[] >>
   `str = num_to_dec_string X` by gvs[u2s_digits_def] >>
-  `?t. u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 t /\
+  `?t. u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
@@ -1864,7 +1886,7 @@ Resume u2s_loop[positive_quotient]:
   gvs[] >>
   `0 < x /\ x DIV 10 < x` by simp[DIV_LESS] >>
   `LENGTH str < n` by (irule u2s_digits_room >> metis_tac[]) >>
-  `?d. u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 d /\
+  `?d. u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 d /\
        u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) d /\
        d.vs_current_bb = u2s_label a 1 /\ d.vs_inst_idx = 0 /\ ~d.vs_halted /\
        (!fuel r. run_from fuel ctx fn d = r /\ (!e. r <> Error e) ==>
@@ -1885,11 +1907,11 @@ Theorem u2s_zero_exit:
   lookup_block (u2s_label a 3) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|> /\
   s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   1 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
       val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
       b <= b+n-1 /\ b+n-1+33 <= b+sz /\
@@ -1912,10 +1934,10 @@ Theorem u2s_check_transition:
   lookup_block (u2s_label a 0) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X x str t /\
       t.vs_current_bb = u2s_label a (if x = 0 then 3 else 1) /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\
@@ -1924,7 +1946,7 @@ Theorem u2s_check_transition:
 Proof
   strip_tac >>
   qabbrev_tac `t = update_var (u2s_var a 3) (bool_to_word (x = 0)) s` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
   `u2s_digits a b n X x str t` by simp[Abbr `t`, u2s_digits_update] >>
   `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
@@ -1939,17 +1961,17 @@ Theorem u2s_check_zero_transition:
   lookup_block (u2s_label a 0) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   lookup_var (u2s_var a 0) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       t.vs_current_bb = u2s_label a 3 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
       (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
   strip_tac >>
   qabbrev_tac `t = update_var (u2s_var a 3) 1w s` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
   `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
   qexists_tac `jump_to (u2s_label a 3) t` >>
@@ -1963,13 +1985,13 @@ Theorem u2s_check_exit:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   lookup_var (u2s_var a 0) s = SOME (n2w X) /\
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -1982,7 +2004,7 @@ Proof
   strip_tac >> Cases_on `X = 0`
   >- suspend "zero_input" >>
   `u2s_digits a b n X X [] s` by (irule u2s_digits_initial >> simp[]) >>
-  `?c. u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+  `?c. u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        u2s_digits a b n X X [] c /\
        c.vs_current_bb = u2s_label a (if X = 0 then 3 else 1) /\
        c.vs_inst_idx = 0 /\ ~c.vs_halted /\
@@ -1997,7 +2019,7 @@ QED
 
 Resume u2s_check_exit[positive_input]:
   gvs[] >>
-  `?t. u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 t /\
+  `?t. u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2014,7 +2036,7 @@ QED
 
 Resume u2s_check_exit[zero_input]:
   gvs[] >>
-  `?c. u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 c /\
+  `?c. u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 c /\
        c.vs_current_bb = u2s_label a 3 /\ c.vs_inst_idx = 0 /\ ~c.vs_halted /\
        (!fuel r. run_from fuel ctx fn c = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx fn s = r)` by
@@ -2022,7 +2044,7 @@ Resume u2s_check_exit[zero_input]:
      first_x_assum (qspec_then
        `<|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>` mp_tac) >>
      simp[u2s_blocks_def]) >>
-  `?t. u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 t /\
+  `?t. u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
       val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
       b <= b+n-1 /\ b+n-1+33 <= b+sz /\
@@ -2044,9 +2066,9 @@ Theorem u2s_setup_transition:
   bb.bb_instructions = pre ++ u2s_setup a op buf /\
   s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
   eval_operand op s = SOME (n2w X) /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       lookup_var (u2s_var a 0) t = SOME (n2w X) /\
       lookup_var (u2s_var a 1) t = SOME 0w /\
       t.vs_current_bb = u2s_label a 0 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
@@ -2056,7 +2078,7 @@ Proof
   strip_tac >>
   qabbrev_tac `t = update_var (u2s_var a 2) (n2w b)
     (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_setup_safe >> gvs[]) >>
   `lookup_var (u2s_var a 0) t = SOME (n2w X) /\
    lookup_var (u2s_var a 1) t = SOME 0w /\ ~t.vs_halted` by
@@ -2078,11 +2100,11 @@ Theorem u2s_setup_exit:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   eval_operand op s = SOME (n2w X) /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2093,9 +2115,9 @@ Theorem u2s_setup_exit:
                 ?fuel'. run_from fuel' ctx fn s = r)
 Proof
   strip_tac >>
-  drule_at (Pat `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _`) u2s_setup_transition >>
+  drule_at (Pat `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ _`) u2s_setup_transition >>
   disch_then (qspecl_then [`pre`, `op`, `fn`, `bb`, `X`] mp_tac) >> simp[] >> strip_tac >>
-  drule_at (Pat `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _`) u2s_check_exit >>
+  drule_at (Pat `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ _`) u2s_check_exit >>
   disch_then (qspecl_then [`ty`, `op`, `n`, `fn`, `X`] mp_tac) >> gvs[] >> strip_tac >>
   rename1 `val_in_memory ty _ _ out.vs_memory` >>
   qexists_tac `out` >> simp[] >> metis_tac[]
@@ -2110,11 +2132,11 @@ Theorem u2s_setup_entry_exit:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   eval_operand op s = SOME (n2w X) /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
-  ?t. u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+  ?t. u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2191,11 +2213,11 @@ Theorem u2s_cond_path:
   lookup_block (u2s_label a 1) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X x str t /\
       t.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted
@@ -2204,7 +2226,7 @@ Proof
   `lookup_var (u2s_var a 0) s = SOME (n2w x) /\ x < dimword (:256)` by
     fs[u2s_digits_def] >>
   qabbrev_tac `t = update_var (u2s_var a 4) (bool_to_word (x = 0)) s` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
   `u2s_digits a b n X x str t` by simp[Abbr `t`, u2s_digits_update] >>
   `~t.vs_halted` by simp[Abbr `t`, u2s_update_control] >>
@@ -2240,18 +2262,18 @@ Theorem u2s_check_path:
   lookup_block (u2s_label a 0) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   lookup_var (u2s_var a 0) s = SOME (n2w x) /\ x < dimword (:256) /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       (!y str. u2s_digits a b n X y str t <=> u2s_digits a b n X y str s) /\
       t.vs_current_bb = u2s_label a (if x = 0 then 3 else 1) /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
   qabbrev_tac `t = update_var (u2s_var a 3) (bool_to_word (x = 0)) s` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_safe_update >> gvs[]) >>
   `!y str. u2s_digits a b n X y str t <=> u2s_digits a b n X y str s` by
     simp[Abbr `t`, u2s_digits_update] >>
@@ -2288,13 +2310,13 @@ Theorem u2s_body_path:
   lookup_block (u2s_label a 2) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
   s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
       t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
@@ -2321,13 +2343,13 @@ Theorem u2s_final_path:
   lookup_block (u2s_label a 4) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|> /\
   s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X 0 str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
@@ -2358,12 +2380,12 @@ Theorem u2s_zero_path:
   lookup_block (u2s_label a 3) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|> /\
   s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   1 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
       val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
       b <= b+n-1 /\ b+n-1+33 <= b+sz /\
@@ -2393,13 +2415,13 @@ Theorem u2s_loop_path:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2409,7 +2431,7 @@ Theorem u2s_loop_path:
 Proof
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
   `?c. gas_marked_path F ctx fn s 0 (OK c) /\
-       u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+       u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        u2s_digits a b n X x str c /\
        c.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
        c.vs_inst_idx = 0 /\ ~c.vs_halted` by
@@ -2426,7 +2448,7 @@ Resume u2s_loop_path[zero_quotient]:
   gvs[] >>
   `str = num_to_dec_string X` by gvs[u2s_digits_def] >>
   `?t. gas_marked_path F ctx fn c 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b <= b+n-LENGTH str /\ b+n-LENGTH str+32+LENGTH str <= b+sz /\
@@ -2445,7 +2467,7 @@ Resume u2s_loop_path[positive_quotient]:
   `0 < x /\ x DIV 10 < x` by simp[DIV_LESS] >>
   `LENGTH str < n` by (irule u2s_digits_room >> metis_tac[]) >>
   `?d. gas_marked_path F ctx fn c 0 (OK d) /\
-       u2s_safe ctx func cenv cx es a (Var p) b sz inst s0 d /\
+       u2s_safe H ctx func cenv cx es a (Var p) b sz inst s0 d /\
        u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) d /\
        d.vs_current_bb = u2s_label a 1 /\ d.vs_inst_idx = 0 /\ ~d.vs_halted` by
     (irule u2s_body_path >> simp[] >>
@@ -2466,14 +2488,14 @@ Theorem u2s_check_exit_path:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   lookup_var (u2s_var a 0) s = SOME (n2w X) /\
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2483,7 +2505,7 @@ Theorem u2s_check_exit_path:
 Proof
   strip_tac >>
   `?c. gas_marked_path F ctx fn s 0 (OK c) /\
-       u2s_safe ctx func cenv cx es a buf b sz inst s0 c /\
+       u2s_safe H ctx func cenv cx es a buf b sz inst s0 c /\
        (!y str. u2s_digits a b n X y str c <=> u2s_digits a b n X y str s) /\
        c.vs_current_bb = u2s_label a (if X = 0 then 3 else 1) /\
        c.vs_inst_idx = 0 /\ ~c.vs_halted` by
@@ -2492,7 +2514,7 @@ Proof
        `<|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>` mp_tac) >>
      simp[u2s_blocks_def]) >>
   `?t. gas_marked_path F ctx fn c 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2522,12 +2544,12 @@ Theorem u2s_setup_entry_path:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   eval_operand op s = SOME (n2w X) /\
-  u2s_safe ctx func cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx func cenv cx es a buf b sz inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ b+sz < dimword (:256) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -2539,7 +2561,7 @@ Proof
   `eval_operand buf s = SOME (n2w b)` by gvs[u2s_safe_def] >>
   qabbrev_tac `t = update_var (u2s_var a 2) (n2w b)
     (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
-  `u2s_safe ctx func cenv cx es a buf b sz inst s0 t` by
+  `u2s_safe H ctx func cenv cx es a buf b sz inst s0 t` by
     (simp[Abbr `t`] >> irule u2s_setup_safe >> gvs[]) >>
   `lookup_var (u2s_var a 0) t = SOME (n2w X) /\
    lookup_var (u2s_var a 1) t = SOME 0w /\ ~t.vs_halted` by
@@ -2559,7 +2581,7 @@ Proof
             venomStateTheory.jump_to_def]) >>
      simp[]) >>
   `?u. gas_marked_path F ctx fn (jump_to (u2s_label a 0) t) 0 (OK u) /\
-      u2s_safe ctx func cenv cx es a buf b sz inst s0 u /\
+      u2s_safe H ctx func cenv cx es a buf b sz inst s0 u /\
       eval_operand (Var (u2s_var a 2)) u = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) u.vs_memory /\
@@ -2594,17 +2616,26 @@ Proof
       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
+Theorem u2s_safe_fields:
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
+  s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+  s.vs_requests = s0.vs_requests /\ s.vs_call_ctx = s0.vs_call_ctx
+Proof
+  strip_tac >>
+  gvs[u2s_safe_def, u2s_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem u2s_alloc_ready_path:
   compile_alloc_buffer sz sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\ sz < dimword (:256) ==>
   ?b s0 ready inst.
-    u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 ready /\
+    u2s_safe H ctx func cenv cx es a ba.buf_operand b sz inst s0 ready /\
     ready.vs_current_bb = a.cs_current_bb /\
     ready.vs_inst_idx = LENGTH a.cs_current_insts /\ ~ready.vs_halted /\
     eval_operand op ready = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
@@ -2617,8 +2648,10 @@ Theorem u2s_alloc_ready_path:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ b+sz < dimword (:256) /\
     (!fuel. run_from fuel ctx fn s = run_from fuel ctx fn ready) /\
     gas_marked_path F ctx fn s 0 (OK ready) /\
-    (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
-      stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
+    s0.vs_accounts = s.vs_accounts /\ s0.vs_transient = s.vs_transient /\
+    s0.vs_requests = s.vs_requests /\ s0.vs_call_ctx = s.vs_call_ctx /\
+    (!out. u2s_safe H ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
+      stmt_state_rel H ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
       pure_frame cenv func es sa s out)
 Proof
@@ -2643,12 +2676,12 @@ Proof
     (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sa`, `s`] >> simp[]) >>
   drule_all u2s_alloc_control >> strip_tac >>
   drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
-  `!out. u2s_safe ctx func cenv cx es a ba.buf_operand (w2n w) sz inst t out ==>
-      stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
+  `!out. u2s_safe H ctx func cenv cx es a ba.buf_operand (w2n w) sz inst t out ==>
+      stmt_state_rel H ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (w2n w,sz)` by
     (match_mp_tac u2s_safe_wb_tail >> simp[Abbr `inst`, venomInstTheory.mk_inst_def] >>
      metis_tac[ADD_COMM]) >>
-  `!out. u2s_safe ctx func cenv cx es a ba.buf_operand (w2n w) sz inst t out ==>
+  `!out. u2s_safe H ctx func cenv cx es a ba.buf_operand (w2n w) sz inst t out ==>
       pure_frame cenv func es sa s out` by
     (rpt strip_tac >>
      match_mp_tac (Q.INST [`buf` |-> `ba.buf_operand`,
@@ -2688,13 +2721,13 @@ Theorem u2s_alloc_ready:
   compile_alloc_buffer sz sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\ sz < dimword (:256) ==>
   ?b s0 ready inst.
-    u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 ready /\
+    u2s_safe H ctx func cenv cx es a ba.buf_operand b sz inst s0 ready /\
     ready.vs_current_bb = a.cs_current_bb /\
     ready.vs_inst_idx = LENGTH a.cs_current_insts /\ ~ready.vs_halted /\
     eval_operand op ready = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
@@ -2706,8 +2739,8 @@ Theorem u2s_alloc_ready:
       lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ b+sz < dimword (:256) /\
     (!fuel. run_from fuel ctx fn s = run_from fuel ctx fn ready) /\
-    (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
-      stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
+    (!out. u2s_safe H ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
+      stmt_state_rel H ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
       pure_frame cenv func es sa s out)
 Proof
@@ -2718,7 +2751,8 @@ Theorem u2s_alloc_vv_path:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -2729,10 +2763,12 @@ Theorem u2s_alloc_vv_path:
   val_wf tv (StringV (num_to_dec_string X)) /\
   val_footprint tv (StringV (num_to_dec_string X)) <= 32+LENGTH (num_to_dec_string X) ==>
   ?t. gas_marked_path F ctx fn s 0 (OK t) /\
-      vv_post ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
+      vv_post H ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
         (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ~t.vs_halted
+      ~t.vs_halted /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule compile_uint2str_layout >> strip_tac >>
   drule_all u2s_alloc_ready_path >> strip_tac >>
@@ -2741,7 +2777,7 @@ Proof
     u2s_setup_entry_path) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   rename1 `val_in_memory tv _ _ t.vs_memory` >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+  `stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz + n) /\
     pure_frame cenv func es sa s t` by metis_tac[] >>
   `w2n (n2w (b+n-LENGTH (num_to_dec_string X)):bytes32) =
@@ -2751,12 +2787,16 @@ Proof
     (mp_tac (Q.SPECL [`sz + n`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
      simp[exprLoweringPropsTheory.ci_mono_def] >> strip_tac >>
      gvs[u2s_layout_def, u2s_end_def]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (mp_tac o MATCH_MP u2s_safe_fields) >> strip_tac >> metis_tac[]) >>
   qexists_tac `t` >>
   conj_tac >- (irule u2s_path_then >> qexists_tac `ready` >> simp[]) >>
   reverse conj_tac >- gvs[u2s_layout_def, u2s_end_def] >>
   irule vv_post_allocated_memory_intro >> simp[] >>
   qexistsl_tac [`sa.cs_next_id`, `b`, `sz + n`] >> simp[] >>
-  qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  qpat_x_assum `u2s_safe H _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
   simp_tac (srw_ss()) [u2s_safe_def] >> rpt strip_tac >>
   first_x_assum drule >> decide_tac
 QED
@@ -2765,7 +2805,8 @@ Theorem u2s_alloc_vv_exit:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -2775,7 +2816,7 @@ Theorem u2s_alloc_vv_exit:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv (StringV (num_to_dec_string X)) /\
   val_footprint tv (StringV (num_to_dec_string X)) <= 32+LENGTH (num_to_dec_string X) ==>
-  ?t. vv_post ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
+  ?t. vv_post H ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
         (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ~t.vs_halted /\
@@ -2790,7 +2831,8 @@ QED
 Theorem u2s_alloc_vv_frag:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
@@ -2800,7 +2842,7 @@ Theorem u2s_alloc_vv_frag:
   val_wf tv (StringV (num_to_dec_string X)) /\
   val_footprint tv (StringV (num_to_dec_string X)) <= 32+LENGTH (num_to_dec_string X) ==>
   frag_exec ctx sa sb (\t. t = s)
-    (\t. vv_post ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
+    (\t. vv_post H ctx func cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
         (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t) R
 Proof
   strip_tac >> simp[frag_exec_def] >> rpt strip_tac >>
@@ -2850,7 +2892,7 @@ Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
     ?x sm. lower_value compile_expr cenv ty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v gs es' s.
+  (!st0 sa sm sb x vv s0 v gs es' s.
     lower_value compile_expr cenv ty e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2859,15 +2901,20 @@ Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
       (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
-    stmt_state_rel ctx func cenv cx es s0 /\
-    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sm s0 es' v x s) /\
+    (?H. valid_horizon cx st0 H es'.storage_trace) /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\
           builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
-          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
-            (Value rv) vv t /\
+          (!H. valid_horizon cx st0 H es'.storage_trace ==>
+             vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+               (Value rv) vv t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\
@@ -2896,9 +2943,10 @@ Proof
   irule expr_sim_suffix >>
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- (irule expr_exit_INR_cast >> first_assum ACCEPT_TAC) >>
+      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >> simp[halt_exit_def]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
@@ -2908,7 +2956,8 @@ Proof
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[vyperStateTheory.bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
      gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
-  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  qpat_x_assum `!st0 sa sm sb x vv s0 v gs es' s. _`
+    (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   qexists_tac `REPLICATE n F` >>
@@ -2916,19 +2965,22 @@ Proof
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  `builtin_result cx ee.accounts ann bt [expr_type e] [v] <> INR HaltException` by
+    (simp[builtin_result_def] >> CASE_TAC >> simp[]) >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+  gvs[halt_exit_def]
 QED
 
 Theorem vv_post_prefix_frag:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es1 sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   frag_exec ctx sm sb P
-    (\u. vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u) R ==>
+    (\u. vv_post H ctx func cenv cx e es1 sm sb t es2 tv vv u) R ==>
   frag_exec ctx sm sb P
-    (\u. vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u) R
+    (\u. vv_post H ctx func cenv cx e es sa sb s0 es2 tv vv u) R
 Proof
   strip_tac >> irule frag_exec_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> metis_tac[vv_post_prefix_frame]
@@ -2949,8 +3001,8 @@ Proof
 QED
 
 Theorem vv_post_located_mk_ptr:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv
     (LocatedValue ty (mk_ptr p.ptr_operand p.ptr_location)) s
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, contextTheory.mk_ptr_def]
@@ -2961,19 +3013,20 @@ Theorem uint2str_numeric_suffix:
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   compile_uint2str x n sz sm = (out,sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   frag_exec ctx sm sb (\t. t = s)
-    (\t. vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+    (\t. vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
       (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t) R
 Proof
   strip_tac >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `eval_operand x s = SOME (n2w X)` by
@@ -3009,13 +3062,13 @@ Theorem uint2str_typed_suffix:
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
   value_has_type (BaseTV (UintT k)) v /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s ==>
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s ==>
   frag_exec ctx sm sb (\t. t = s)
     (\t. ?r. builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n) [expr_type e] [v] = INL r /\
-      vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+      vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
         es sa sb s0 es' (Value r) vv t)
     (expr_exit (builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n) [expr_type e] [v]))
 Proof
@@ -3049,23 +3102,26 @@ Theorem uint2str_numeric_path:
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   compile_uint2str x n sz sm = (out,sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz + n < dimword (:256) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+      vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
         es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
         (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `eval_operand x s = SOME (n2w X)` by
@@ -3089,7 +3145,7 @@ Proof
    pure_frame cenv func es sa s0 s` by
     (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   irule vv_post_prefix_frame >>
-  first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[expr_post_frame]
 QED
 
@@ -3101,20 +3157,22 @@ Theorem uint2str_typed_path:
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,es') /\
   value_has_type (BaseTV (UintT k)) v /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?m r. gas_marked_path F ctx func s m r /\
     ((?t rv. r = OK t /\
         builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
           [expr_type e] [v] = INL rv /\
-        vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+        vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
           es sa sb s0 es' (Value rv) vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+        t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx) \/
      (exit_result r /\
       expr_exit (builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
         [expr_type e] [v]) r))
@@ -3165,15 +3223,148 @@ Proof
   simp[vyperContextTheory.builtin_args_length_ok_def] >>
   conj_tac
   >- (rpt strip_tac >>
-      qpat_assum `expr_type e = _`
-        (fn th => irule (REWRITE_RULE [th] uint2str_typed_path)) >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
       gvs[compile_uint2str_singleton] >> pairarg_tac >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >-   (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `valid_horizon cx st0 H0 es'.storage_trace` >>
+      qmatch_asmsub_rename_tac `bind _ _ (es with gas_obs := gs0) = (INL v0, es1)` >>
+      `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+        simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+             vyperStorageTraceTheory.storage_trace_frame_read_result,
+             vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+      `valid_horizon cx st0 H0 (es with gas_obs := gs0).storage_trace` by
+        (irule (INST_TYPE [alpha |-> ``:value``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+         qexistsl_tac [`bind (eval_expr cx e) (read_result cx)`, `INL v0`, `es1`] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      `valid_horizon cx st0 H0 es.storage_trace` by fs[] >>
+      qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      `?out. vv = LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)` by
+        (qpat_x_assum `as_ptr_val _ _ _ = (vv,_)` mp_tac >>
+         Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
+         simp[exprLoweringTheory.as_ptr_val_def] >> metis_tac[]) >>
+      `?m r. gas_marked_path F ctx func s m r /\
+         ((?t rv. r = OK t /\
+             builtin_result cx es1.accounts (BaseT (StringT n)) (Uint2Str n)
+               [BaseT (UintT k)] [v0] = INL rv /\
+             vv_post H0 ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+               es sa sb s0 es1 (Value rv) vv t /\
+             t.vs_current_bb = sb.cs_current_bb /\
+             t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+             t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+             t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx) \/
+          (exit_result r /\
+           expr_exit (builtin_result cx es1.accounts (BaseT (StringT n)) (Uint2Str n)
+             [BaseT (UintT k)] [v0]) r))` by
+        (qpat_assum `expr_type e = _`
+           (fn th => irule (REWRITE_RULE [th] uint2str_typed_path)) >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      pop_assum strip_assume_tac
+      >- (qexistsl_tac [`m`, `r`] >> simp[] >>
+          qx_gen_tac `H` >> strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+            (qspec_then `H` mp_tac) >>
+          impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+          `stmt_state_rel H ctx func cenv cx es1 s` by metis_tac[expr_post_state] >>
+          `storage_well_formed_on cx es1 (FST H)` by fs[expr_post_def] >>
+          mp_tac (Q.SPECL [`H0`, `H`] vv_post_fields_transport) >>
+          disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`,
+            `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`, `es`, `sa`, `sb`,
+            `s0`, `es1`, `Value rv`, `vv`, `t`, `s`] mp_tac) >>
+          impl_tac >-
+            (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+             strip_tac >> gvs[vv_storage_live_def, contextTheory.mk_ptr_def]) >>
+          simp[])
+      >- (qexistsl_tac [`m`, `r`] >> simp[])) >>
   rpt strip_tac >> simp[cs_appends_def] >> rpt strip_tac >>
   Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
   gvs[exprLoweringTheory.as_ptr_val_def] >>
   irule (SRULE [cs_appends_def] uint2str_suffix_appends) >>
   goal_assum (drule_at Any)
+QED
+
+Theorem uint2str_compile_cut:
+  compile_expr cenv ty (Builtin ann (Uint2Str n) [e]) sa = (vv,sb) ==>
+  ?op sm. lower_value compile_expr cenv ty e sa = (op,sm) /\
+    as_ptr_val ann LocMemory
+      (compile_uint2str op n (type_memory_bytes cenv ann) sm) = (vv,sb)
+Proof
+  `!bt args. names_builtin bt args ==> bt <> Uint2Str n` by
+    (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+  `~names_builtin (Uint2Str n) [e]` by metis_tac[] >>
+  simp[compile_expr_builtin_dispatch] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem uint2str_code_appends:
+  cs_appends (\sm. as_ptr_val ann LocMemory
+    (compile_uint2str x n N sm))
+Proof
+  rw[cs_appends_def] >>
+  Cases_on `compile_uint2str x n N sm` >> gvs[as_ptr_val_def] >>
+  mp_tac (Q.INST [`op` |-> `x`, `sz` |-> `N`] uint2str_suffix_appends) >>
+  simp[cs_appends_def] >> metis_tac[]
+QED
+
+Theorem u2s_builtin_result_requirements:
+  expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) args) es /\
+  X < dimword(:256) /\ 78 <= n /\
+  sz = type_memory_bytes cenv (BaseT (StringT n)) ==>
+  ~is_word_type (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) /\
+  evaluate_type (get_tenv cx)
+    (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
+      SOME (BaseTV (StringT n)) /\
+  type_memory_bytes cenv
+    (lowered_value_type cenv (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
+      type_memory_size (BaseTV (StringT n)) /\
+  type_memory_size (BaseTV (StringT n)) = sz /\ 32 <= sz /\
+  sz+n < dimword(:256) /\
+  val_wf (BaseTV (StringT n)) (StringV (num_to_dec_string X)) /\
+  LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT n)) /\
+  val_footprint (BaseTV (StringT n)) (StringV (num_to_dec_string X)) <= sz
+Proof
+  strip_tac >> drule_all uint2str_result_memory_bounds >> strip_tac >>
+  drule uint2str_body_capacity >> strip_tac >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >>
+     fs[dimword_def] >> decide_tac) >>
+  simp[expr_type_def, is_word_type_def, evaluate_type_def,
+       type_slot_size_def, lowered_value_type_def, type_memory_size_def, type_memory_bytes_def,
+       word_size_def] >>
+  gvs[type_memory_bytes_def, word_size_def, dimword_def] >> decide_tac
+QED
+
+Theorem uint2str_operand_endpoint:
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  ?a. v = IntV (&a) /\ a < dimword(:256) /\
+    eval_operand op t = SOME (n2w a) /\ expr_sim_inv cenv cx env ee
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all operand_eval_evidence_semantics >> strip_tac >>
+  `?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** k /\
+       k <= 256 /\ 0 < k /\ k MOD 8 = 0` by
+    (fs[is_word_type_def, evaluate_type_def] >> Cases_on `v` >>
+     gvs[is_word_type_def, evaluate_type_def, value_has_type_def]) >>
+  gvs[] >> qexists_tac `Num i` >> simp[] >>
+  conj_tac
+  >- (rewrite_tac[dimword_def] >>
+      irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** k` >>
+      simp[EXP_BASE_LE_MONO]) >>
+  `~(i < 0)` by intLib.ARITH_TAC >>
+  drule expr_post_word_operand >>
+  simp[is_word_type_def, evaluate_type_def, loweringSliceTheory.word_value_def, val_to_w256_def,
+    integer_wordTheory.i2w_def]
 QED

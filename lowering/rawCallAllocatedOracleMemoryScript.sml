@@ -11,10 +11,10 @@ Theorem raw_call_allocated_oracle_mem:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sm = (ok,sc) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
   ci_mono initial sa /\ wb_frame cenv initial_es es initial s0 s /\
-  stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
+  stmt_state_rel H ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
   MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
   eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
@@ -23,7 +23,7 @@ Theorem raw_call_allocated_oracle_mem:
   safe_operand sa gas_op /\ safe_operand sa val_op /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
@@ -37,7 +37,10 @@ Theorem raw_call_allocated_oracle_mem:
     u.vs_current_bb = sc.cs_current_bb /\
     u.vs_inst_idx = LENGTH sc.cs_current_insts /\
     alloca_history func u /\ ~u.vs_halted /\
-    stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    (!(H' : (bool # 256 word # type_value) list # num list).
+      stmt_state_rel H' ctx func cenv cx es s ==>
+      stmt_state_rel H' ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u) /\
     wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u /\
     eval_operand ok u = SOME (bool_to_word outcome.co_success) /\
     eval_operand ov u = SOME w /\ safe_operand sc ov /\ safe_operand sc ok /\
@@ -69,7 +72,8 @@ Proof
      irule wb_frame_vars >> qexistsl_tac [`cenv`,`es`,`es`,`s`,`sa`] >> simp[]) >>
   `wb_frame cenv initial_es es initial s0 t` by
     (mp_tac (Q.SPECL [`func`,`cenv`,`cx`,`initial_es`,`s0`,`initial`,`es`,`es`,
-                      `sa`,`s`,`t`,`ctx`] wb_frame_trans) >>
+                      `sa`,`s`,`t`,`ctx`]
+                     (INST_TYPE [alpha |-> ``:256``] wb_frame_trans)) >>
      impl_tac >- (qpat_assum `ci_mono initial sa`
                     (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
      simp[]) >>
@@ -88,10 +92,12 @@ Resume raw_call_allocated_oracle_mem[separation]:
     regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz` by
     (rpt strip_tac >>
      `aid <> sa.cs_next_id` by decide_tac >>
-     fs[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def] >>
-     first_x_assum (qspecl_then [`sa.cs_next_id`,`aid`,`w2n w`,
+     `allocas_non_overlapping t` by fs[stmt_state_rel_def, alloca_inv_def] >>
+     qpat_x_assum `allocas_non_overlapping t`
+       (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
+     disch_then (qspecl_then [`sa.cs_next_id`,`aid`,`w2n w`,
        `if cap=0 then 0 else ((cap+31) DIV 32)*32+32`,`b`,`sz`] mp_tac) >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+     simp[arithmeticTheory.MULT_COMM, loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
     regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz` by
     (rpt strip_tac >>
@@ -110,7 +116,7 @@ Resume raw_call_allocated_oracle_mem[oracle_pre]:
        (drule_all raw_call_outbuf_no_gas >> simp[EVERY_MEM] >> metis_tac[]) >>
      drule_all run_inst_seq_preserves_entry_control >> simp[]) >>
   qabbrev_tac `a = t with vs_inst_idx := LENGTH sm.cs_current_insts` >>
-  `stmt_state_rel ctx func cenv cx es a /\ wb_frame cenv initial_es es initial s0 a /\
+  `stmt_state_rel H ctx func cenv cx es a /\ wb_frame cenv initial_es es initial s0 a /\
    alloca_history func a /\ a.vs_current_bb = sm.cs_current_bb /\
    a.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~a.vs_halted` by
     (simp[Abbr `a`, stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx] >>
@@ -177,7 +183,7 @@ Resume raw_call_allocated_oracle_mem[call]:
   markerLib.RESUME_TAC >>
   qpat_assum `emit_op _ _ sm = _`
     (mp_then Any mp_tac raw_call_oracle_run_mem) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ es a`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ es a`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ initial_es es initial s0 a`)) >>
   disch_then (qspecl_then [`val_word`,`if cap=0 then w else w+32w`,`gas`,`aw`] mp_tac) >>
@@ -209,6 +215,11 @@ Resume raw_call_allocated_oracle_mem[endpoint]:
   qpat_x_assum `r.vs_memory = _` kall_tac >>
   qpat_x_assum `u.vs_memory = r.vs_memory` kall_tac >>
   qpat_x_assum `u = update_var _ _ r` kall_tac >>
+  `!(H' : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx (SND (adopt_call_outcome rq outcome es1))
+       (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
+    (rpt strip_tac >> fs[Abbr `a`, stmt_state_rel_inst_idx] >> metis_tac[]) >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sc.cs_current_insts`,`w`] >>
   simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx, eval_op_inst_idx] >>
   fs[Abbr `a`] >>

@@ -33,12 +33,12 @@ QED
 
 (* --- Pass: no-op --- *)
 Theorem compile_pass_correct:
-  ∀ func cenv cx lctx ty es ss st.
-    state_rel func cenv cx es ss ∧
+  ∀ H func cenv cx lctx ty es ss st.
+    state_rel H func cenv cx es ss ∧
     compile_stmt cenv lctx ty Pass st = ((), st')
     ⇒
     st' = st ∧
-    state_rel func cenv cx es ss
+    state_rel H func cenv cx es ss
 Proof
   rw[compile_stmt_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED

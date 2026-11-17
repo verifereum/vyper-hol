@@ -497,6 +497,9 @@ Proof
   drule abi_array_element_setup_straight >> strip_tac >>
   drule abi_array_element_setup_static_opcodes >> strip_tac >>
   drule_all abi_decode_array_setup_sequence_static >> strip_tac >>
+  `u.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx func u` by
     (irule decode_site_resources_fields >> qexists_tac `s` >>
      fs[abi_decoder_address_frame_def, venom_state_component_equality]) >>

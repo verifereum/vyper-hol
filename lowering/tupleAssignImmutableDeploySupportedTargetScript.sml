@@ -1,13 +1,13 @@
 (* Supported mutable tuple heads reuse the shared marked place step. *)
 Theory tupleAssignImmutableDeploySupportedTarget
 Ancestors
-  tuplePlaceHeadGas tuplePlaceOpen supportedStmts targetPlaceLive
+  tuplePlaceHeadOpen stmtSimForRounds tuplePlaceHeadGas tuplePlaceOpen supportedStmts targetPlaceLive
   targetPlaceSimCases exprSimDefs stmtSimDefs stmtSimProps
   gasSummary gasOutcome fragGasMode fragGasPath freshWrites
   vyperState vyperInterpreter
 
 Theorem tuple_immutable_mutable_head_outcome:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   supported_target tops bindings bt /\
   ~block_is_terminated sp /\ target_pre cenv cx env bt es /\
   target_sim ctx func cenv cx env bt es /\
@@ -36,16 +36,18 @@ Theorem tuple_immutable_mutable_head_outcome:
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (assign_tuple_targets cx (BaseTarget bt) (EL i vs)) (es,s0)
-    (\res ff t. res = INL () /\ ~block_is_terminated sb /\
+    (\H res ff t. res = INL () /\ ~block_is_terminated sb /\
       expr_sim_inv cenv cx env ff /\
-      tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+      tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
+        storage_well_formed_on cx ff (FST H) /\
       (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
       (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
         FLOOKUP t.vs_allocas id = SOME entry) /\
       alloca_frame cenv es sp s0 cenv ff t)
-    (\res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (supported_expr tops) (target_indices bt)` by
@@ -55,66 +57,34 @@ Proof
      >- (Cases_on `root` >> gvs[targetPlaceLiveTheory.target_indices_def]) >>
      rename1 `AttributeTarget root fld` >>
      Cases_on `root` >> gvs[targetPlaceLiveTheory.target_indices_def]) >>
-  `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
-  `target_indices_pre cenv cx env bt` by fs[targetPlaceSimTheory.target_pre_def] >>
-  `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
-    (drule_all tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >> simp[]) >>
-  `type_place_target env bt = SOME (Type (EL i tys))` by
-    fs[vyperTypeSystemTheory.well_typed_target_def] >>
-  `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
-    (\res ee t. ?p. res = INL p /\
-      target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
-      t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
-    (irule target_place_sim >> simp[] >>
-     fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
-  simp[Once evaluate_def] >>
-  irule tuple_place_gas_outcome_bind_exec >>
-  goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (rpt strip_tac >> Cases_on `res` >>
-    gvs[exprSimDefsTheory.expr_exit_def] >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  rpt strip_tac >> gvs[] >>
-  rename1 `gas_marked_exec _ _ _ _ marks (INL p) mid (OK s)` >>
-  `~s.vs_halted` by
-    (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
-     strip_tac >> metis_tac[gas_path_normal]) >>
-  mp_tac (SRULE [LET_THM] tuple_place_marked_head_step) >>
-  impl_tac >- simp[] >>
-  disch_then (DISJ_CASES_THEN strip_assume_tac)
-  >- (
-  `arg_type_fits (EL i ltys) (EL i tys)` by
-    (drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> simp[]) >>
-  `~block_is_terminated sb` by
-    (irule (SRULE [LET_THM] tuple_place_success_store_open) >>
-     qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
-     simp[] >> qexistsl [`EL i ltys`, `EL i elems`] >>
-     gvs[SRULE [LET_THM] tuple_place_success_store_open]) >>
-  `!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==>
-     lookup_var x t = SOME v` by
-    (rpt strip_tac >>
-     `not_fresh_at sa x` by
-       (irule not_fresh_at_mono >> qexists `sp` >> simp[]) >>
-     fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
-  `!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
-     FLOOKUP t.vs_allocas id = SOME entry` by
-    (rpt strip_tac >> fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
-  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
-  rewrite_tac[gas_summary_at_def] >> qexistsl [`INL ()`,`ff`,`OK t`] >>
-  conj_tac
-  >- (simp[gas_marked_exec_def] >> rpt strip_tac >>
-      drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[]) >>
-  simp[]) >>
-  rename1 `expr_exit (INR (Error (RuntimeError "write in static context"))) rr` >>
-  `exit_result rr` by
-    (Cases_on `rr` >>
-     gvs[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
-  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
-  rewrite_tac[gas_summary_at_def] >>
-  qexistsl [`INR (Error (RuntimeError "write in static context"))`,`ff`,`rr`] >>
-  conj_tac
-  >- (simp[gas_marked_exec_def] >> rpt strip_tac >>
-      drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[]) >>
-  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def]
+  `!p. ignore_bind (write_place cx p (EL i vs)) (return ()) =
+       write_place cx p (EL i vs)` by
+    (gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+     Cases_on `write_place cx p (EL i vs) x` >>
+     rename1 `_ = (rr,ss)` >> Cases_on `rr` >>
+     simp[ignore_bind_def, bind_def, return_def]) >>
+  `assign_tuple_targets cx (BaseTarget bt) (EL i vs) =
+   bind (eval_target_place cx bt)
+     (\p. ignore_bind (write_place cx p (EL i vs)) (return ()))` by
+    simp[Once evaluate_def] >>
+  pop_assum (once_rewrite_tac o single) >>
+  irule (Q.INST [`sb` |-> `sb`, `env` |-> `env`, `tops` |-> `tops`,
+    `tvs` |-> `tvs`] (SRULE [LET_THM] tuple_place_head_gas_continuation_open)) >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_return] >>
+  qexistsl [`tops`,`env`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule gas_outcome_return_path >> qexists `t` >> conj_tac
+  >~ [`gas_marked_path _ _ _ _ _ _`]
+  >- (simp[gas_marked_path_def] >> irule (cj 1 gas_path_rules) >>
+      fs[tuplePlaceHeadTheory.tuple_place_head_def]) >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ff t /\
+   storage_well_formed_on cx ff (FST H)` by
+    (fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx (ff with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx ff (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+  simp[]
 QED

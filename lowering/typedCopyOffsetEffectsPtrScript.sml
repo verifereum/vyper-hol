@@ -14,7 +14,7 @@ Theorem compile_with_byte_offset_effects_frag_ptr:
     ?p Gf tnf sf.
       op = Var p /\ lookup_var p sf = SOME (n2w (w2n a+off)) /\
       ptr_covers Gf tnf p sf n /\ not_fresh_at sb p /\
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\

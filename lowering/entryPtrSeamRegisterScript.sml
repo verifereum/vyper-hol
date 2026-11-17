@@ -7,7 +7,7 @@
  *   - the S1 relation there (stmt_state_rel, as loweringRuntimeCorrect's
  *     admitted external_entry_reaches_body states it, here at the state the
  *     run actually reaches), and
- *   - a ghost (G0, tn0) in ghost_inv NONE: each parameter's pointer covered
+ *   - a ghost (G0, tn0) in ghost_inv H NONE: each parameter's pointer covered
  *     by its ALLOCA and its value robust to the tainted bytes,
  * with safety of the run from s0 giving safety from the registration's
  * start, for any dead-byte bound D.
@@ -16,7 +16,9 @@
  * entryPtrSeamPrefix's external_entry_reaches_registration_ptr provides.
  *)
 Theory entryPtrSeamRegister
-Ancestors
+Ancestors fragGasPathFrameMem
+  memSafeRun unitTransformDefs codegenRel venomInstProofs
+  fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier ptrSafetyTransport decoderNavigationPtr decoderMemberPrefixPtr
   sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr actualAllocaReplayPtr
   actualAllocSitesCredit acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
   sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourcePrimitiveComplexPtr sourceRecursiveComplexPtr
@@ -25,7 +27,7 @@ Ancestors
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
   vyperContext venomExecSemantics venomState compileEnv loweringStateRelDefs supportedProgram
   fragExec venomInst ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
@@ -58,7 +60,8 @@ Theorem registration_fmp_room_necessary:
 Proof
   simp[fmp_room_def] >> rpt strip_tac >>
   qpat_x_assum `_ ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >> strip_tac >> decide_tac
+  (impl_tac >- (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[])) >>
+  strip_tac >> simp[wordsTheory.dimword_def] >> decide_tac
 QED
 
 Theorem registration_noop_or_open:
@@ -151,12 +154,15 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def, allocas_from_def]
 QED
 
-(* The logical entry relations do not constrain the code-generator's
-   initial free-memory-pointer field. *)
+(* Without dynamic allocation, the logical entry relation does not constrain
+   the code-generator's initial free-memory-pointer field. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel ctx func cenv cx es s
+  ~(ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+  (stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+   stmt_state_rel H ctx func cenv cx es s)
 Proof
+  strip_tac >>
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,
        local_ptrs_rel_def, local_region_def,
@@ -170,8 +176,8 @@ Proof
 QED
 
 Theorem registration_ghost_initial_fmp:
-  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
     ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>
@@ -348,13 +354,13 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem registration_source_parameter_inputs:
+Theorem registration_source_parameter_inputs_nr:
   supported_program tops /\ source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) /\
+    SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
   ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
   dec_cenv_agrees ce (type_env tops) /\
@@ -395,12 +401,12 @@ Proof
     (qspec_then `i` mp_tac) >> simp[EL_MAP]
 QED
 
-Resume registration_source_parameter_inputs[params]:
+Resume registration_source_parameter_inputs_nr[params]:
   `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all source_typing_ok_params_ok >> simp[]
 QED
 
-Resume registration_source_parameter_inputs[coherent]:
+Resume registration_source_parameter_inputs_nr[coherent]:
   fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
   `evaluate_type (type_env tops) (EL n (MAP SND args)) = SOME (EL n tvs)` by
     (first_x_assum irule >> simp[]) >>
@@ -412,7 +418,101 @@ Resume registration_source_parameter_inputs[coherent]:
   drule_all registration_package_coherent >> simp[]
 QED
 
-Finalise registration_source_parameter_inputs
+Finalise registration_source_parameter_inputs_nr
+
+Theorem registration_source_parameter_inputs:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs))))
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_source_parameter_inputs_nr)
+QED
+
+Theorem registration_owned_entry_inputs_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+    vs_inst_idx := 0 |>) s /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\ s.vs_memory = [] /\
+  alloca_inv s /\ allocas_from 0 s /\ s.vs_call_ctx = vs.vs_call_ctx /\
+  alloca_frontier_inv unit.cu_context fn site s /\
+  unit_alloca_budget unit.cu_context < dimword (:256) /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
+  LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs)))) /\
+    (!i. i < LENGTH args ==>
+      type_memory_size (EL i tvs) < dimword (:256))
+Proof
+  strip_tac >>
+  drule_all registration_source_parameter_inputs_nr >> strip_tac >>
+  drule_all registration_initial_ptr_resources >>
+  disch_then (qspec_then `site` strip_assume_tac) >>
+  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+     tx.args vs.vs_call_ctx.cc_calldata` by
+    gvs[e2eDefsTheory.valid_vyper_call_def] >>
+  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
+        e2eDefsTheory.source_typing_ok_def,
+        vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
+     gvs[wordsTheory.dimword_def]) >>
+  asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
+  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
+  drule_all registration_external_allocs_ok >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  rpt strip_tac >>
+  `evaluate_type (type_env tops) (SND (EL i args)) = SOME (EL i tvs)` by
+    (fs[LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
+  `type_memory_size (EL i tvs) < 2 ** 64` by
+    (irule registration_parameter_memory_limit >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `FST (EL i args)` >> simp[EL_MEM]) >>
+  `2 ** 64 < dimword (:256)` by
+    (rewrite_tac[wordsTheory.dimword_def, fcpTheory.index_bit0,
+       fcpTheory.finite_bit0, fcpTheory.index_one, fcpTheory.finite_one] >>
+     EVAL_TAC) >> decide_tac
+QED
 
 Theorem registration_owned_entry_inputs:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -453,35 +553,7 @@ Theorem registration_owned_entry_inputs:
     (!i. i < LENGTH args ==>
       type_memory_size (EL i tvs) < dimword (:256))
 Proof
-  strip_tac >>
-  drule_all registration_source_parameter_inputs >> strip_tac >>
-  drule_all registration_initial_ptr_resources >>
-  disch_then (qspec_then `site` strip_assume_tac) >>
-  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-     tx.args vs.vs_call_ctx.cc_calldata` by
-    gvs[e2eDefsTheory.valid_vyper_call_def] >>
-  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
-        e2eDefsTheory.source_typing_ok_def,
-        vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
-     gvs[wordsTheory.dimword_def]) >>
-  asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
-  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
-  drule_all registration_external_allocs_ok >> strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
-    metis_tac[source_typing_ok_type_def_keys_distinct] >>
-  rpt strip_tac >>
-  `evaluate_type (type_env tops) (SND (EL i args)) = SOME (EL i tvs)` by
-    (fs[LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
-  `type_memory_size (EL i tvs) < 2 ** 64` by
-    (irule registration_parameter_memory_limit >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexists_tac `FST (EL i args)` >> simp[EL_MEM]) >>
-  `2 ** 64 < dimword (:256)` by
-    (rewrite_tac[wordsTheory.dimword_def, fcpTheory.index_bit0,
-       fcpTheory.finite_bit0, fcpTheory.index_one, fcpTheory.finite_one] >>
-     EVAL_TAC) >> decide_tac
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_entry_inputs_nr)
 QED
 
 (* A selected argument occupies its canonical tuple window, including dynamic
@@ -1006,7 +1078,44 @@ Proof
 QED
 
 (* One owner's allocation followed by static or dynamic calldata navigation. *)
-Theorem registration_argument_prepare_forward_robust_resources:
+Theorem registration_alloc_buffer_origin[local]:
+  emit_op ALLOCA [Lit (n2w n)] sa = (Var q,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),
+     step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) t,
+     step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) s t tn)
+Proof
+  strip_tac >> drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `q = STRING #"%" (toString sa.cs_next_var)` by fs[] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  qabbrev_tac `ins = mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]` >>
+  `step_inst_base ins s = OK t` by gvs[run_inst_seq_def, Abbr `ins`, AllCaseEqs()] >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME ins` by
+    (drule_all fn_has_code_same_block >> strip_tac >>
+     qexists_tac `bb` >> simp[] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `ins`]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn ins s` by
+    (irule ptr_inst_ok_lower_bound_transport >>
+     simp[] >> qexists_tac `0` >> simp[Abbr `ins`, fragExecPtrTheory.ptr_inst_ok_alloca]) >>
+  `inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+    simp[Abbr `ins`, inst_mem_below_frontier_def, inst_dload_in_section_def,
+      contextCodegenRelTheory.source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
+  `ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+    ~is_terminator ins.inst_opcode` by simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
+    (fn th => pure_rewrite_tac [th]) >>
+  irule straight_line_step_origin >>
+  simp[Abbr `ins`] >> metis_tac[]
+QED
+
+Theorem registration_argument_prepare_joint[local]:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
     a = (src,first) /\
@@ -1023,6 +1132,8 @@ Theorem registration_argument_prepare_forward_robust_resources:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u q p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
     buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
     ptr_covers H u q t n /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
@@ -1122,8 +1233,14 @@ Proof
        bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier >>
      disch_then (qspecl_then [`tn`, `tv0`, `v0`, `p0`] mp_tac) >> simp[]) >>
   `allocated.vs_current_bb = a.cs_current_bb` by simp[] >>
-  drule_all decoderMemberPrefixPtrTheory.member_navigation_source_endpoint_uniform >>
+  `~allocated.vs_halted` by metis_tac[] >>
+  drule_all decoderMemberPrefixPtrTheory.member_navigation_source_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (allocated with vs_inst_idx := LENGTH a.cs_current_insts,H,u) []
+    (OK (ready with vs_inst_idx := LENGTH first.cs_current_insts),H',u')` by
+    (qpat_x_assum `~allocated.vs_halted ==> !D explicit. gas_origin_ptr_path _ _ _ _`
+       mp_tac >> simp[]) >>
   `dyn ==> abi_decode_source_opcode CALLDATALOAD` by simp[] >>
   drule_all abiDecoderReservationTheory.abi_decode_member_pointer_allocation_shape >>
   strip_tac >>
@@ -1178,8 +1295,22 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `!v k. ptr_covers H u v allocated k ==> _` irule >>
      qpat_x_assum `!v k. ptr_covers G tn v s k ==> _` irule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK (allocated with vs_inst_idx := LENGTH a.cs_current_insts),H,u)` by
+    (rpt gen_tac >>
+     qpat_assum `H = step_prov _ _ _ _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `u = step_taint _ _ _ _` (fn th => pure_rewrite_tac[th]) >>
+     irule registration_alloc_buffer_origin >>
+     goal_assum $ drule_at Any >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK (ready with vs_inst_idx := LENGTH first.cs_current_insts),H',u')` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (_,H,u) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`ready with vs_inst_idx := LENGTH first.cs_current_insts`,
                 `H'`, `u'`, `q`, `p`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   simp[instIdxIndepTheory.eval_op_inst_idx, lookup_var_def] >>
   `alloca_inv ready /\ alloca_frontier_inv ctx fn site ready` by
     (drule_all calldataDynOwnedTheory.calldata_alloca_invariants_fields >>
@@ -1193,8 +1324,272 @@ Proof
   gvs[]
 QED
 
+Theorem registration_argument_prepare_forward_robust_resources:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,first) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+off) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  fn_has_code st a fn /\ fn_has_code a first fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
+    ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\ fresh_vars_wrt first t /\
+    eval_operand src t = SOME (n2w (4 + if dyn then delta else off)) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    abi_decoder_operand_live first.cs_next_var (Var q) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!id. id <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!tv0 v0 p0. val_wf tv0 v0 /\
+      (!i. p0 <= i /\ i < p0 + val_footprint tv0 v0 ==> i < s.vs_alloca_next) /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      !mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  rpt strip_tac >> drule_all registration_argument_prepare_joint >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
+QED
+
 (* The same through the calldata pointer guard of a dynamic argument,
    which passes since the pointer is 4 + delta. *)
+Theorem registration_argument_prepare_guarded_joint:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,mid) /\
+  (if dyn then compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) mid = ((),first)
+   else first = mid) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+off) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  fn_has_code st a fn /\ fn_has_code a first fn /\ fn_inst_ids_distinct fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
+    buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
+    ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\ fresh_vars_wrt first t /\
+    eval_operand src t = SOME (n2w (4 + if dyn then delta else off)) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    abi_decoder_operand_live first.cs_next_var (Var q) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!id. id <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!tv0 v0 p0. val_wf tv0 v0 /\
+      (!i. p0 <= i /\ i < p0 + val_footprint tv0 v0 ==> i < s.vs_alloca_next) /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      !mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `cs_extends a mid` by
+    metis_tac[abiDecoderAppendTheory.cs_appends_abi_member_pointer,
+      fragExecTheory.cs_appends_def] >>
+  `cs_extends mid first` by
+    (Cases_on `dyn` >> fs[compileEnvTheory.cs_extends_refl] >>
+     metis_tac[calldataRegistrationExecTheory.registration_ptr_guard_extends]) >>
+  `fn_has_code a mid fn /\ fn_has_code mid first fn` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `st.cs_next_var <= mid.cs_next_var` by
+    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_abi_alloc_buffer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_abi_member_pointer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND,
+      arithmeticTheory.LESS_EQ_TRANS] >>
+  qpat_x_assum `fn_has_code a first fn` kall_tac >>
+  drule_all registration_argument_prepare_joint >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  reverse (Cases_on `dyn`) >> fs[]
+  >- (qexistsl_tac [`t`, `H`, `u`, `p`] >> gvs[]) >>
+  suspend "guard"
+QED
+
+Resume registration_argument_prepare_guarded_joint[guard]:
+  `w2n (n2w (delta + 4) : bytes32) = delta + 4` by
+    (rewrite_tac[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >>
+     first_assum ACCEPT_TAC) >>
+  `~(n2w (delta + 4) <+ (4w:bytes32))` by
+    (rewrite_tac[wordsTheory.WORD_LO] >>
+     qpat_x_assum `w2n _ = delta + 4` (fn th => rewrite_tac[th]) >>
+     `w2n (4w:bytes32) <= 4` by
+       (rewrite_tac[wordsTheory.w2n_n2w] >>
+        irule arithmeticTheory.MOD_LESS_EQ >> simp[wordsTheory.ZERO_LT_dimword]) >>
+     decide_tac) >>
+  `!x. src = Var x ==> not_fresh_at mid x` by
+    (rpt strip_tac >> gvs[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  drule_all registrationGuardPtrTheory.registration_ptr_guard_origin_frame >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule calldataRegistrationExecTheory.registration_ptr_guard_code >> strip_tac >>
+  qabbrev_tac `t' = t with <|vs_vars := vars;
+    vs_inst_idx := LENGTH first.cs_current_insts|>` >>
+  `!x. not_fresh_at mid x ==> lookup_var x t' = lookup_var x t` by
+    (rpt strip_tac >> fs[Abbr `t'`, lookup_var_def]) >>
+  `!op. abi_decoder_operand_live mid.cs_next_var op ==>
+     eval_operand op t' = eval_operand op t` by
+    (Cases >> simp[eval_operand_def] >>
+     simp[Abbr `t'`] >>
+     simp[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+     strip_tac >> fs[]) >>
+  `!v k. ptr_covers H u v t k ==> ptr_covers G' tn' v t' k` by
+    (rpt gen_tac >> simp[ptr_covers_def] >> strip_tac >>
+     `not_fresh_at mid v` by
+       (qpat_x_assum `fresh_vars_wrt mid t` mp_tac >>
+        qpat_x_assum `lookup_var v t = SOME _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[calldataClampPtrTheory.evaluated_operand_not_fresh,
+                  eval_operand_def]) >>
+     qpat_x_assum `!x. not_fresh_at mid x ==> lookup_var x t' = _`
+       (drule_then (fn th => rewrite_tac[th])) >>
+     qpat_x_assum `!x. not_fresh_at mid x ==> FLOOKUP vars x = _ /\ _`
+       (drule_then (fn th => rewrite_tac[th])) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`w`, `b`, `sz'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `not_fresh_at mid q` by
+    (qpat_x_assum `abi_decoder_operand_live mid.cs_next_var (Var q)` mp_tac >>
+     rewrite_tac[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  `lookup_var q t' = SOME (n2w p)` by
+    (qpat_assum `!x. not_fresh_at mid x ==> lookup_var x t' = _`
+       (qspec_then `q` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `ptr_covers G' tn' q t' n` by
+    (qpat_assum `!v k. ptr_covers H u v t k ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `eval_operand src t' = SOME (n2w (delta + 4))` by
+    (qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
+       (qspec_then `src` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `op_taint tn' src = {} /\ op_prov G' src = NONE` by
+    (Cases_on `src` >> simp[op_taint_def, op_prov_def] >>
+     rename1 `Var x0` >>
+     `not_fresh_at mid x0` by
+       (qpat_x_assum `!x. Var _ = Var x ==> _` (qspec_then `x0` mp_tac) >>
+        simp[]) >>
+     qpat_x_assum `!x. not_fresh_at mid x ==> FLOOKUP vars x = _ /\ _` drule >>
+     qpat_x_assum `op_taint u (Var _) = {}` mp_tac >>
+     qpat_x_assum `op_prov H (Var _) = NONE` mp_tac >>
+     simp[op_taint_def, op_prov_def]) >>
+  `mid.cs_next_var <= first.cs_next_var` by
+    (qpat_assum `first.cs_next_var = _` (fn th => rewrite_tac[th]) >>
+     decide_tac) >>
+  `abi_decoder_operand_live first.cs_next_var src /\
+   abi_decoder_operand_live first.cs_next_var (Var q)` by
+    (conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `mid.cs_next_var` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+     eval_operand op t' = eval_operand op s` by
+    (rpt strip_tac >>
+     `abi_decoder_operand_live mid.cs_next_var op` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+        qexists_tac `st.cs_next_var` >> conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => rewrite_tac[th]) >>
+     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => rewrite_tac[th])) >>
+  `!v k. ptr_covers G tn v s k ==> ptr_covers G' tn' v t' k` by
+    (rpt strip_tac >>
+     qpat_assum `!v k. ptr_covers H u v t k ==> _` irule >>
+     qpat_assum `!p k. ptr_covers G tn p s k ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
+    (gen_tac >>
+     qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==> _`
+       (qspec_then `D` (fn i2 =>
+     qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' _) ==> _`
+       (qspec_then `D` (fn i1 =>
+     disch_then (fn a => ACCEPT_TAC (MP i2 (MP i1 a)))))))) >>
+  `alloca_inv t' /\ alloca_frontier_inv ctx fn site t'` by
+    (`t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next` by
+       simp[Abbr `t'`] >>
+     drule_all calldataDynOwnedTheory.calldata_alloca_invariants_fields >>
+     disch_then (fn th => rewrite_tac[th]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `fresh_vars_wrt first t'` by
+    (qpat_x_assum `fresh_vars_wrt first (t with vs_vars := vars)` mp_tac >>
+     simp[Abbr `t'`, fresh_vars_wrt_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK t',G',tn')` by
+    (simp[Abbr `t'`] >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,u) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append,APPEND_NIL]) >>
+  qexistsl_tac [`t'`, `G'`, `tn'`, `p`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `tn'.t_mem = _`
+    (fn th => full_simp_tac (srw_ss()) [Abbr `t'`, th, allocas_from_def]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise registration_argument_prepare_guarded_joint[local]
+
 Theorem registration_argument_prepare_guarded_robust_resources:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -1251,148 +1646,11 @@ Theorem registration_argument_prepare_guarded_robust_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >>
-  `cs_extends a mid` by
-    metis_tac[abiDecoderAppendTheory.cs_appends_abi_member_pointer,
-      fragExecTheory.cs_appends_def] >>
-  `cs_extends mid first` by
-    (Cases_on `dyn` >> fs[compileEnvTheory.cs_extends_refl] >>
-     metis_tac[calldataRegistrationExecTheory.registration_ptr_guard_extends]) >>
-  `fn_has_code a mid fn /\ fn_has_code mid first fn` by
-    metis_tac[fragExecTheory.fn_has_code_split] >>
-  `st.cs_next_var <= mid.cs_next_var` by
-    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_abi_alloc_buffer,
-      abiDecoderCountersTheory.abi_decoder_vars_mono_abi_member_pointer,
-      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND,
-      arithmeticTheory.LESS_EQ_TRANS] >>
-  qpat_x_assum `fn_has_code a first fn` kall_tac >>
-  drule_all registration_argument_prepare_forward_robust_resources >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
-  reverse (Cases_on `dyn`) >> fs[]
-  >- (qexistsl_tac [`t`, `H`, `u`, `p`] >> gvs[]) >>
-  suspend "guard"
+  rpt strip_tac >> drule_all registration_argument_prepare_guarded_joint >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >> simp[]
 QED
 
-Resume registration_argument_prepare_guarded_robust_resources[guard]:
-  `w2n (n2w (delta + 4) : bytes32) = delta + 4` by
-    (rewrite_tac[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >>
-     first_assum ACCEPT_TAC) >>
-  `~(n2w (delta + 4) <+ (4w:bytes32))` by
-    (rewrite_tac[wordsTheory.WORD_LO] >>
-     qpat_x_assum `w2n _ = delta + 4` (fn th => rewrite_tac[th]) >>
-     `w2n (4w:bytes32) <= 4` by
-       (rewrite_tac[wordsTheory.w2n_n2w] >>
-        irule arithmeticTheory.MOD_LESS_EQ >> simp[wordsTheory.ZERO_LT_dimword]) >>
-     decide_tac) >>
-  `!x. src = Var x ==> not_fresh_at mid x` by
-    (rpt strip_tac >> gvs[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
-  drule_all registrationGuardPtrTheory.registration_ptr_guard_ptr_frame >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  drule calldataRegistrationExecTheory.registration_ptr_guard_code >> strip_tac >>
-  qabbrev_tac `t' = t with <|vs_vars := vars;
-    vs_inst_idx := LENGTH first.cs_current_insts|>` >>
-  `!x. not_fresh_at mid x ==> lookup_var x t' = lookup_var x t` by
-    (rpt strip_tac >> fs[Abbr `t'`, lookup_var_def]) >>
-  `!op. abi_decoder_operand_live mid.cs_next_var op ==>
-     eval_operand op t' = eval_operand op t` by
-    (Cases >> simp[eval_operand_def] >>
-     TRY (simp[Abbr `t'`] >> NO_TAC) >>
-     simp[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
-     strip_tac >> fs[]) >>
-  `!v k. ptr_covers H u v t k ==> ptr_covers G' tn' v t' k` by
-    (rpt gen_tac >> simp[ptr_covers_def] >> strip_tac >>
-     `not_fresh_at mid v` by
-       (qpat_x_assum `fresh_vars_wrt mid t` mp_tac >>
-        qpat_x_assum `lookup_var v t = SOME _` mp_tac >>
-        rpt (pop_assum kall_tac) >>
-        metis_tac[calldataClampPtrTheory.evaluated_operand_not_fresh,
-                  eval_operand_def]) >>
-     qpat_x_assum `!x. not_fresh_at mid x ==> lookup_var x t' = _`
-       (drule_then (fn th => rewrite_tac[th])) >>
-     qpat_x_assum `!x. not_fresh_at mid x ==> FLOOKUP vars x = _ /\ _`
-       (drule_then (fn th => rewrite_tac[th])) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`w`, `b`, `sz'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `not_fresh_at mid q` by
-    (qpat_x_assum `abi_decoder_operand_live mid.cs_next_var (Var q)` mp_tac >>
-     rewrite_tac[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
-  `lookup_var q t' = SOME (n2w p)` by
-    (qpat_assum `!x. not_fresh_at mid x ==> lookup_var x t' = _`
-       (qspec_then `q` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-  `ptr_covers G' tn' q t' n` by
-    (qpat_assum `!v k. ptr_covers H u v t k ==> _` irule >>
-     first_assum ACCEPT_TAC) >>
-  `eval_operand src t' = SOME (n2w (delta + 4))` by
-    (qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
-       (qspec_then `src` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-  `op_taint tn' src = {} /\ op_prov G' src = NONE` by
-    (Cases_on `src` >> TRY (simp[op_taint_def, op_prov_def] >> NO_TAC) >>
-     rename1 `Var x0` >>
-     `not_fresh_at mid x0` by
-       (qpat_x_assum `!x. Var _ = Var x ==> _` (qspec_then `x0` mp_tac) >>
-        simp[]) >>
-     qpat_x_assum `!x. not_fresh_at mid x ==> FLOOKUP vars x = _ /\ _` drule >>
-     qpat_x_assum `op_taint u (Var _) = {}` mp_tac >>
-     qpat_x_assum `op_prov H (Var _) = NONE` mp_tac >>
-     simp[op_taint_def, op_prov_def]) >>
-  `mid.cs_next_var <= first.cs_next_var` by
-    (qpat_assum `first.cs_next_var = _` (fn th => rewrite_tac[th]) >>
-     decide_tac) >>
-  `abi_decoder_operand_live first.cs_next_var src /\
-   abi_decoder_operand_live first.cs_next_var (Var q)` by
-    (conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
-     qexists_tac `mid.cs_next_var` >> conj_tac >> first_assum ACCEPT_TAC) >>
-  `!op. abi_decoder_operand_live st.cs_next_var op ==>
-     eval_operand op t' = eval_operand op s` by
-    (rpt strip_tac >>
-     `abi_decoder_operand_live mid.cs_next_var op` by
-       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
-        qexists_tac `st.cs_next_var` >> conj_tac >> first_assum ACCEPT_TAC) >>
-     qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
-       (qspec_then `op` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (fn th => rewrite_tac[th]) >>
-     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
-       (qspec_then `op` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (fn th => rewrite_tac[th])) >>
-  `!v k. ptr_covers G tn v s k ==> ptr_covers G' tn' v t' k` by
-    (rpt strip_tac >>
-     qpat_assum `!v k. ptr_covers H u v t k ==> _` irule >>
-     qpat_assum `!p k. ptr_covers G tn p s k ==> _` irule >>
-     first_assum ACCEPT_TAC) >>
-  `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t') ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
-    (gen_tac >>
-     qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==> _`
-       (qspec_then `D` (fn i2 =>
-     qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' _) ==> _`
-       (qspec_then `D` (fn i1 =>
-     disch_then (fn a => ACCEPT_TAC (MP i2 (MP i1 a)))))))) >>
-  `alloca_inv t' /\ alloca_frontier_inv ctx fn site t'` by
-    (`t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next` by
-       simp[Abbr `t'`] >>
-     drule_all calldataDynOwnedTheory.calldata_alloca_invariants_fields >>
-     disch_then (fn th => rewrite_tac[th]) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `fresh_vars_wrt first t'` by
-    (qpat_x_assum `fresh_vars_wrt first (t with vs_vars := vars)` mp_tac >>
-     simp[Abbr `t'`, fresh_vars_wrt_def]) >>
-  qexistsl_tac [`t'`, `G'`, `tn'`, `p`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qpat_assum `tn'.t_mem = _`
-    (fn th => simp_tac (srw_ss()) [Abbr `t'`, th, allocas_from_def]) >>
-  TRY (first_assum ACCEPT_TAC) >>
-  TRY (qpat_x_assum `allocas_from lo t` mp_tac >>
-       simp_tac (srw_ss()) [allocas_from_def] >> NO_TAC) >>
-  simp[]
-QED
-
-Finalise registration_argument_prepare_guarded_robust_resources
 
 Theorem registration_argument_prepare_forward_robust_ptr:
   compile_alloc_buffer n st = (buf,a) /\
@@ -1643,6 +1901,301 @@ Proof
   Induct >> simp[venomInstTheory.fn_insts_blocks_def]
 QED
 
+Theorem registration_aggregate_singleton_joint:
+  compile_register_positional_args ce
+    [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME (type_memory_size tv) /\
+  abi_decoder_coherent ce env sf ty tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env ty) av))
+    s.vs_call_ctx.cc_calldata = enc (vyper_to_abi_type env ty) av /\
+  srcpos + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+  srcpos = 4 + (if dyn then delta else h) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+h) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  type_memory_size tv < dimword (:256) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
+    t.vs_data_section = s.vs_data_section /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+     (!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w)) /\
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar (Var q) (type_memory_size tv))) /\
+    lookup_var q t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size tv) /\
+    ptr_covers H u q t (type_memory_size tv) /\
+    val_in_memory tv v p t.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv v p mem) /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!old q0 p0 n0 tv0 v0.
+      old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem)) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all registration_aggregate_phases >> strip_tac >>
+  `cs_extends st a /\ cs_extends a mid /\ cs_extends first last` by
+    metis_tac[abiDecoderAppendTheory.cs_appends_abi_alloc_buffer,
+      abiDecoderAppendTheory.cs_appends_abi_member_pointer,
+      abiDecoderAppendTheory.cs_appends_abi_decode_mutual,
+      fragExecTheory.cs_appends_def] >>
+  `cs_extends mid first /\ mid.cs_next_var <= first.cs_next_var` by
+    (Cases_on `dyn` >> fs[compileEnvTheory.cs_extends_refl] >>
+     drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
+     strip_tac >>
+     metis_tac[calldataRegistrationExecTheory.registration_ptr_guard_extends,
+       arithmeticTheory.LESS_EQ_ADD]) >>
+  `cs_extends a first` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `fn_has_code st a fn /\ fn_has_code a first fn /\ fn_has_code first last fn` by
+    metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,type_memory_size tv) /\ p+type_memory_size tv < dimword (:256)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+    gvs[fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def,
+        registration_fn_insts_blocks_inst_ids] >>
+  drule_all registration_argument_prepare_guarded_joint >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `lookup_var q ready = SOME (n2w p)` >>
+  drule_all registration_preparation_forward_slots >> strip_tac >>
+  `mid.cs_next_id <= first.cs_next_id` by
+    (Cases_on `dyn` >> fs[] >>
+     drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
+     simp[]) >>
+  `st.cs_next_id < first.cs_next_id` by
+    (`st.cs_next_id < mid.cs_next_id` by
+       (qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==>
+                        id < mid.cs_next_id` irule >>
+        qexists_tac `(p,type_memory_size tv)` >> first_assum ACCEPT_TAC) >>
+     decide_tac) >>
+  `first.cs_next_var <= last.cs_next_var` by
+    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_mutual,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND] >>
+  `fresh_vars_wrt last ready` by
+    (irule emitHelperPropsTheory.fresh_vars_wrt_mono >>
+     qexists_tac `first` >> simp[]) >>
+  `lo <= ready.vs_alloca_next` by decide_tac >>
+  `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
+  drule sourceOwnedCoherentPtrTheory.source_owned_coherent_decoder_ptr >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt`)) >>
+  disch_then (drule_at (Pat `alloca_frontier_inv`)) >>
+  disch_then (drule_at (Pat `value_has_type`)) >>
+  disch_then (drule_at (Pat `vyper_to_abi`)) >>
+  disch_then (drule_at (Pat `lookup_var`)) >>
+  disch_then (drule_at (Pat `lookup_var`)) >>
+  disch_then (drule_at (Pat `allocas_from`)) >>
+  disch_then (qspecl_then [`srcpos`, `PG`] mp_tac) >>
+  (impl_tac >-
+    (gvs[Excl "enc_def"] >> rpt strip_tac >>
+     qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==> _`
+       drule >> simp[] >> rpt strip_tac >> decide_tac)) >>
+  strip_tac >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK t,H',u')` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (ready,H,u) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `CALLDATALOAD <> ALLOCA` by simp[] >>
+  `first.cs_next_id <= last.cs_next_id` by
+    metis_tac[abiDecoderCodeTheory.abi_decoder_code_mutual,
+      abiDecoderCodeTheory.abi_decoder_code_def, pairTheory.SND] >>
+  `st.cs_next_id <= last.cs_next_id` by decide_tac >>
+  `st.cs_next_var <= first.cs_next_var` by
+    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_abi_alloc_buffer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_abi_member_pointer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND,
+      arithmeticTheory.LESS_EQ_TRANS] >>
+  `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id` by
+       (qpat_x_assum `!id. _ \/ _ ==> FLOOKUP t.vs_allocas id = _`
+          (qspec_then `id` mp_tac) >> simp[]) >>
+     `first.cs_next_id <= id` by decide_tac >>
+     qpat_x_assum `!id. mid.cs_next_id <= id ==> FLOOKUP ready.vs_allocas id = NONE`
+       (qspec_then `id` mp_tac) >>
+     impl_tac >- decide_tac >>
+     qpat_x_assum `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id`
+       (fn th => rewrite_tac[GSYM th]) >>
+     qpat_x_assum `FLOOKUP t.vs_allocas id = SOME _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[optionTheory.NOT_SOME_NONE]) >>
+  `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section` by
+    (qpat_x_assum `abi_decode_footprint_frame _ ready t`
+       (strip_assume_tac o REWRITE_RULE [abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
+     metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "slot_classification" >>
+  asm_rewrite_tac [] >>
+  (conj_tac >-
+    (qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `Var q` mp_tac) >>
+     asm_rewrite_tac [abiDecoderReentryTheory.abi_decoder_operand_live_def,
+       venomStateTheory.eval_operand_def])) >>
+  (conj_tac >- decide_tac) >>
+  (conj_tac >- suspend "old_local") >>
+  (conj_tac >-
+    (rpt strip_tac >>
+     `abi_decoder_operand_live first.cs_next_var op` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+        qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
+     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >> asm_rewrite_tac [] >>
+     rpt strip_tac >> metis_tac[])) >>
+  (conj_tac >-
+    (rpt strip_tac >> PairCases_on `entry` >> metis_tac[])) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s`
+    (qspec_then `D` irule) >>
+  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG H u ready`
+    (qspec_then `D` irule) >> first_assum ACCEPT_TAC
+QED
+
+Resume registration_aggregate_singleton_joint[old_local]:
+  rpt gen_tac >> strip_tac >>
+  `old < first.cs_next_id /\ old < last.cs_next_id /\ old <> st.cs_next_id` by
+    decide_tac >>
+  `FLOOKUP ready.vs_allocas old = SOME (p0,n0) /\
+   FLOOKUP t.vs_allocas old = SOME (p0,n0)` by metis_tac[] >>
+  `ptr_covers H u q0 ready n0` by metis_tac[] >>
+  `p0 + n0 <= s.vs_alloca_next` by
+    (qpat_x_assum `alloca_inv s` mp_tac >>
+     rewrite_tac [venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
+  `!mem. mem_agree_outside u.t_mem ready.vs_memory mem ==>
+    val_in_memory tv0 v0 p0 mem` by
+    (first_assum (qspecl_then [`tv0`, `v0`, `p0`] mp_tac) >>
+     (impl_tac >-
+       (asm_rewrite_tac [] >> rpt strip_tac >> decide_tac)) >>
+     disch_then ACCEPT_TAC) >>
+  `not_fresh_at st q0` by
+    (rewrite_tac [not_fresh_at_def] >> rpt strip_tac >>
+     qpat_x_assum `fresh_vars_wrt st s` mp_tac >>
+     rewrite_tac [fresh_vars_wrt_def] >>
+     disch_then (qspec_then `n` mp_tac) >>
+     (impl_tac >- decide_tac) >> strip_tac >>
+     qpat_x_assum `lookup_var q0 s = SOME _` mp_tac >>
+     asm_rewrite_tac [venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+     simp[NoAsms]) >>
+  `abi_decoder_operand_live st.cs_next_var (Var q0)` by
+    asm_rewrite_tac [calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+  `abi_decoder_operand_live first.cs_next_var (Var q0)` by
+    (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
+  `not_fresh_at first q0` by
+    metis_tac[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+  `lookup_var q0 ready = SOME (n2w p0) /\ lookup_var q0 t = SOME (n2w p0)` by
+    (qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `Var q0` mp_tac) >>
+     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `Var q0` mp_tac) >>
+     asm_rewrite_tac [venomStateTheory.eval_operand_def] >>
+     rpt strip_tac >> asm_rewrite_tac []) >>
+  `FLOOKUP H' q0 = FLOOKUP H q0 /\
+   op_taint u' (Var q0) = op_taint u (Var q0)` by metis_tac[] >>
+  `lookup_var q0 t = lookup_var q0 ready` by asm_rewrite_tac [] >>
+  drule_at (Pat `abi_decode_footprint_frame`) registration_owned_local_frame >>
+  disch_then (drule_at (Pat `val_wf`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+  disch_then (drule_at (Pat `op_taint _ _ = op_taint _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = FLOOKUP _ _`)) >>
+  disch_then (drule_at (Pat `!mem. mem_agree_outside tm memory mem ==> val_in_memory tv v p mem`)) >>
+  disch_then (qspec_then `st.cs_next_id` mp_tac) >>
+  disch_then (qspecl_then
+    [`last.cs_next_id`, `type_memory_size tv`, `first.cs_next_id`, `p`] mp_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac [] >> decide_tac)) >> strip_tac >>
+  asm_rewrite_tac []
+QED
+
+Resume registration_aggregate_singleton_joint[slot_classification]:
+  rpt strip_tac >>
+  Cases_on `first.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id`
+  >- (qpat_x_assum `!id p k. first.cs_next_id <= id /\ _ ==> _`
+        (qspecl_then [`inst.inst_id`, `b`, `n`] mp_tac) >>
+      simp[] >> strip_tac >>
+      `inst = ins` by metis_tac[localPtrsPropsTheory.fn_inst_ids_distinct_inj] >>
+      `[Lit w] = [Lit 32w]` by metis_tac[] >>
+      qpat_x_assum `[Lit w] = _` mp_tac >> simp[wordsTheory.dimword_def]) >>
+  `FLOOKUP ready.vs_allocas inst.inst_id = SOME (b,n)` by
+    (qpat_x_assum `!id. id < first.cs_next_id \/ _ ==> _`
+      (qspec_then `inst.inst_id` mp_tac) >>
+     (impl_tac >- decide_tac) >> disch_tac >> metis_tac[]) >>
+  Cases_on `inst.inst_id = st.cs_next_id`
+  >- (drule_all actualAllocExecTheory.actual_alloc_buffer_site >> disch_tac >>
+      `inst = mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
+          [STRING #"%" (toString st.cs_next_var)]` by
+        (irule localPtrsPropsTheory.fn_inst_ids_distinct_inj >>
+         asm_rewrite_tac [] >> simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >>
+         qexists_tac `fn` >> asm_rewrite_tac [] >>
+         qpat_x_assum `MEM (mk_inst _ _ _ _) _` mp_tac >>
+         simp_tac (srw_ss()) [venomInstTheory.mk_inst_def]) >>
+      `inst.inst_operands = [Lit (n2w (type_memory_size tv))]` by
+        (qpat_x_assum `inst = mk_inst _ _ _ _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >> strip_tac >> simp[]) >>
+      `n = type_memory_size tv` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+      qpat_x_assum `inst.inst_operands = [Lit (n2w _)]` mp_tac >>
+      asm_rewrite_tac [] >>
+      qpat_x_assum `type_memory_size tv < _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)` by metis_tac[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Finalise registration_aggregate_singleton_joint[local]
+
 Theorem registration_aggregate_singleton_ptr_resources:
   compile_register_positional_args ce
     [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
@@ -1714,220 +2267,11 @@ Theorem registration_aggregate_singleton_ptr_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all registration_aggregate_phases >> strip_tac >>
-  `cs_extends st a /\ cs_extends a mid /\ cs_extends first last` by
-    metis_tac[abiDecoderAppendTheory.cs_appends_abi_alloc_buffer,
-      abiDecoderAppendTheory.cs_appends_abi_member_pointer,
-      abiDecoderAppendTheory.cs_appends_abi_decode_mutual,
-      fragExecTheory.cs_appends_def] >>
-  `cs_extends mid first /\ mid.cs_next_var <= first.cs_next_var` by
-    (Cases_on `dyn` >> fs[compileEnvTheory.cs_extends_refl] >>
-     drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
-     strip_tac >>
-     metis_tac[calldataRegistrationExecTheory.registration_ptr_guard_extends,
-       arithmeticTheory.LESS_EQ_ADD]) >>
-  `cs_extends a first` by metis_tac[compileEnvTheory.cs_extends_trans] >>
-  `fn_has_code st a fn /\ fn_has_code a first fn /\ fn_has_code first last fn` by
-    metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
-  `!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
-    ?p. entry = (p,type_memory_size tv) /\ p+type_memory_size tv < dimword (:256)` by
-    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
-    gvs[fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def,
-        registration_fn_insts_blocks_inst_ids] >>
-  drule_all registration_argument_prepare_guarded_robust_resources >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
-  rename1 `lookup_var q ready = SOME (n2w p)` >>
-  drule_all registration_preparation_forward_slots >> strip_tac >>
-  `mid.cs_next_id <= first.cs_next_id` by
-    (Cases_on `dyn` >> fs[] >>
-     drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
-     simp[]) >>
-  `st.cs_next_id < first.cs_next_id` by
-    (`st.cs_next_id < mid.cs_next_id` by
-       (qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==>
-                        id < mid.cs_next_id` irule >>
-        qexists_tac `(p,type_memory_size tv)` >> first_assum ACCEPT_TAC) >>
-     decide_tac) >>
-  `first.cs_next_var <= last.cs_next_var` by
-    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_mutual,
-      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND] >>
-  `fresh_vars_wrt last ready` by
-    (irule emitHelperPropsTheory.fresh_vars_wrt_mono >>
-     qexists_tac `first` >> simp[]) >>
-  `lo <= ready.vs_alloca_next` by decide_tac >>
-  `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
-    (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
-  drule sourceOwnedCoherentPtrTheory.source_owned_coherent_decoder_ptr >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf`)) >>
-  disch_then (drule_at (Pat `ptr_covers`)) >>
-  disch_then (drule_at (Pat `ptr_covers`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt`)) >>
-  disch_then (drule_at (Pat `alloca_frontier_inv`)) >>
-  disch_then (drule_at (Pat `value_has_type`)) >>
-  disch_then (drule_at (Pat `vyper_to_abi`)) >>
-  disch_then (drule_at (Pat `lookup_var`)) >>
-  disch_then (drule_at (Pat `lookup_var`)) >>
-  disch_then (drule_at (Pat `allocas_from`)) >>
-  disch_then (qspecl_then [`srcpos`, `PG`] mp_tac) >>
-  (impl_tac >-
-    (gvs[Excl "enc_def"] >> rpt strip_tac >>
-     qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==> _`
-       drule >> simp[] >> rpt strip_tac >> decide_tac)) >>
-  strip_tac >>
-  qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
-  `CALLDATALOAD <> ALLOCA` by simp[] >>
-  `first.cs_next_id <= last.cs_next_id` by
-    metis_tac[abiDecoderCodeTheory.abi_decoder_code_mutual,
-      abiDecoderCodeTheory.abi_decoder_code_def, pairTheory.SND] >>
-  `st.cs_next_id <= last.cs_next_id` by decide_tac >>
-  `st.cs_next_var <= first.cs_next_var` by
-    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_abi_alloc_buffer,
-      abiDecoderCountersTheory.abi_decoder_vars_mono_abi_member_pointer,
-      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND,
-      arithmeticTheory.LESS_EQ_TRANS] >>
-  `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id` by
-    (rpt strip_tac >> spose_not_then assume_tac >>
-     `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id` by
-       (qpat_x_assum `!id. _ \/ _ ==> FLOOKUP t.vs_allocas id = _`
-          (qspec_then `id` mp_tac) >> simp[]) >>
-     `first.cs_next_id <= id` by decide_tac >>
-     qpat_x_assum `!id. mid.cs_next_id <= id ==> FLOOKUP ready.vs_allocas id = NONE`
-       (qspec_then `id` mp_tac) >>
-     impl_tac >- decide_tac >>
-     qpat_x_assum `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id`
-       (fn th => rewrite_tac[GSYM th]) >>
-     qpat_x_assum `FLOOKUP t.vs_allocas id = SOME _` (fn th => rewrite_tac[th]) >>
-     rewrite_tac[optionTheory.NOT_SOME_NONE]) >>
-  `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section` by
-    (qpat_x_assum `abi_decode_footprint_frame _ ready t`
-       (strip_assume_tac o REWRITE_RULE [abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
-     metis_tac[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- suspend "slot_classification" >>
-  asm_rewrite_tac [] >>
-  (conj_tac >-
-    (qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
-       (qspec_then `Var q` mp_tac) >>
-     asm_rewrite_tac [abiDecoderReentryTheory.abi_decoder_operand_live_def,
-       venomStateTheory.eval_operand_def])) >>
-  (conj_tac >- decide_tac) >>
-  (conj_tac >- suspend "old_local") >>
-  (conj_tac >-
-    (rpt strip_tac >>
-     `abi_decoder_operand_live first.cs_next_var op` by
-       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
-        qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
-     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
-       (qspec_then `op` mp_tac) >>
-     qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
-       (qspec_then `op` mp_tac) >> asm_rewrite_tac [] >>
-     rpt strip_tac >> metis_tac[])) >>
-  (conj_tac >-
-    (rpt strip_tac >> PairCases_on `entry` >> metis_tac[])) >>
-  gen_tac >> strip_tac >>
-  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s`
-    (qspec_then `D` irule) >>
-  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG H u ready`
-    (qspec_then `D` irule) >> first_assum ACCEPT_TAC
+  rpt strip_tac >> drule_all registration_aggregate_singleton_joint >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume registration_aggregate_singleton_ptr_resources[old_local]:
-  rpt gen_tac >> strip_tac >>
-  `old < first.cs_next_id /\ old < last.cs_next_id /\ old <> st.cs_next_id` by
-    decide_tac >>
-  `FLOOKUP ready.vs_allocas old = SOME (p0,n0) /\
-   FLOOKUP t.vs_allocas old = SOME (p0,n0)` by metis_tac[] >>
-  `ptr_covers H u q0 ready n0` by metis_tac[] >>
-  `p0 + n0 <= s.vs_alloca_next` by
-    (qpat_x_assum `alloca_inv s` mp_tac >>
-     rewrite_tac [venomMemDefsTheory.alloca_inv_def,
-       venomMemDefsTheory.alloca_next_valid_def] >>
-     metis_tac[]) >>
-  `!mem. mem_agree_outside u.t_mem ready.vs_memory mem ==>
-    val_in_memory tv0 v0 p0 mem` by
-    (first_assum (qspecl_then [`tv0`, `v0`, `p0`] mp_tac) >>
-     (impl_tac >-
-       (asm_rewrite_tac [] >> rpt strip_tac >> decide_tac)) >>
-     disch_then ACCEPT_TAC) >>
-  `not_fresh_at st q0` by
-    (rewrite_tac [not_fresh_at_def] >> rpt strip_tac >>
-     qpat_x_assum `fresh_vars_wrt st s` mp_tac >>
-     rewrite_tac [fresh_vars_wrt_def] >>
-     disch_then (qspec_then `n` mp_tac) >>
-     (impl_tac >- decide_tac) >> strip_tac >>
-     qpat_x_assum `lookup_var q0 s = SOME _` mp_tac >>
-     asm_rewrite_tac [venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
-     simp[NoAsms]) >>
-  `abi_decoder_operand_live st.cs_next_var (Var q0)` by
-    asm_rewrite_tac [calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
-  `abi_decoder_operand_live first.cs_next_var (Var q0)` by
-    (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
-     qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
-  `not_fresh_at first q0` by
-    metis_tac[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
-  `lookup_var q0 ready = SOME (n2w p0) /\ lookup_var q0 t = SOME (n2w p0)` by
-    (qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
-       (qspec_then `Var q0` mp_tac) >>
-     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
-       (qspec_then `Var q0` mp_tac) >>
-     asm_rewrite_tac [venomStateTheory.eval_operand_def] >>
-     rpt strip_tac >> asm_rewrite_tac []) >>
-  `FLOOKUP H' q0 = FLOOKUP H q0 /\
-   op_taint u' (Var q0) = op_taint u (Var q0)` by metis_tac[] >>
-  `lookup_var q0 t = lookup_var q0 ready` by asm_rewrite_tac [] >>
-  drule_at (Pat `abi_decode_footprint_frame`) registration_owned_local_frame >>
-  disch_then (drule_at (Pat `val_wf`)) >>
-  disch_then (drule_at (Pat `ptr_covers`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
-  disch_then (drule_at (Pat `op_taint _ _ = op_taint _ _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _ _ = FLOOKUP _ _`)) >>
-  disch_then (drule_at (Pat `!mem. mem_agree_outside tm memory mem ==> val_in_memory tv v p mem`)) >>
-  disch_then (qspec_then `st.cs_next_id` mp_tac) >>
-  disch_then (qspecl_then
-    [`last.cs_next_id`, `type_memory_size tv`, `first.cs_next_id`, `p`] mp_tac) >>
-  (impl_tac >-
-    (asm_rewrite_tac [] >> decide_tac)) >> strip_tac >>
-  asm_rewrite_tac []
-QED
-
-Resume registration_aggregate_singleton_ptr_resources[slot_classification]:
-  rpt strip_tac >>
-  Cases_on `first.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id`
-  >- (qpat_x_assum `!id p k. first.cs_next_id <= id /\ _ ==> _`
-        (qspecl_then [`inst.inst_id`, `b`, `n`] mp_tac) >>
-      simp[] >> strip_tac >>
-      `inst = ins` by metis_tac[localPtrsPropsTheory.fn_inst_ids_distinct_inj] >>
-      `[Lit w] = [Lit 32w]` by metis_tac[] >>
-      qpat_x_assum `[Lit w] = _` mp_tac >> simp[wordsTheory.dimword_def]) >>
-  `FLOOKUP ready.vs_allocas inst.inst_id = SOME (b,n)` by
-    (qpat_x_assum `!id. id < first.cs_next_id \/ _ ==> _`
-      (qspec_then `inst.inst_id` mp_tac) >>
-     (impl_tac >- decide_tac) >> disch_tac >> metis_tac[]) >>
-  Cases_on `inst.inst_id = st.cs_next_id`
-  >- (drule_all actualAllocExecTheory.actual_alloc_buffer_site >> disch_tac >>
-      `inst = mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
-          [STRING #"%" (toString st.cs_next_var)]` by
-        (irule localPtrsPropsTheory.fn_inst_ids_distinct_inj >>
-         asm_rewrite_tac [] >> simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >>
-         qexists_tac `fn` >> asm_rewrite_tac [] >>
-         qpat_x_assum `MEM (mk_inst _ _ _ _) _` mp_tac >>
-         simp_tac (srw_ss()) [venomInstTheory.mk_inst_def]) >>
-      `inst.inst_operands = [Lit (n2w (type_memory_size tv))]` by
-        (qpat_x_assum `inst = mk_inst _ _ _ _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >> strip_tac >> simp[]) >>
-      `n = type_memory_size tv` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
-      qpat_x_assum `inst.inst_operands = [Lit (n2w _)]` mp_tac >>
-      asm_rewrite_tac [] >>
-      qpat_x_assum `type_memory_size tv < _` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
-  `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)` by metis_tac[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Finalise registration_aggregate_singleton_ptr_resources
 
 Theorem registration_aggregate_singleton_ptr_framed:
   compile_register_positional_args ce
@@ -1996,6 +2340,88 @@ Proof
   strip_tac >> drule_all registration_aggregate_singleton_ptr_resources >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> asm_rewrite_tac []
+QED
+
+Theorem registration_singleton_joint[local]:
+  compile_register_positional_args ce
+    [(name,prim,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
+  (prim ==> ~dyn /\ ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME (type_memory_size tv) /\
+  abi_decoder_coherent ce env sf ty tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env ty) av))
+    s.vs_call_ctx.cc_calldata = enc (vyper_to_abi_type env ty) av /\
+  srcpos + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+  srcpos = 4 + (if dyn then delta else h) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+h) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  type_memory_size tv < dimword (:256) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
+    t.vs_data_section = s.vs_data_section /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+     (!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w)) /\
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar (Var q) (type_memory_size tv))) /\
+    lookup_var q t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size tv) /\
+    ptr_covers H u q t (type_memory_size tv) /\
+    val_in_memory tv v p t.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv v p mem) /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!old q0 p0 n0 tv0 v0.
+      old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem)) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `compile_register_positional_args ce
+    [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last)` by
+    (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
+  drule_all registration_aggregate_singleton_joint >>
+  simp[]
 QED
 
 Theorem registration_singleton_ptr_resources:
@@ -2070,12 +2496,10 @@ Theorem registration_singleton_ptr_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >>
-  `compile_register_positional_args ce
-    [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last)` by
-    (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
-  drule_all registration_aggregate_singleton_ptr_resources >>
-  simp[]
+  rpt strip_tac >> drule_all registration_singleton_joint >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_singleton_ptr_framed:
@@ -2288,6 +2712,253 @@ QED
 
 (* Caller readiness is quantified over the unchanged decoder metadata and
    calldata; no package or source-interpreter facts enter this induction. *)
+Theorem registration_owned_suffix_joint[local]:
+  !R ce0 args tvs vals env sf cd ctx fn site lo PG.
+  (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
+    compile_register_positional_args ce2 [(name,prim,dyn,sz,di)] (4+h) st2 = (ce3,last2) /\
+    (prim ==> ~dyn /\ ?clamp. di = DecPrimWord clamp) /\
+    FLOOKUP ce2.ce_vars name = SOME loc /\ var_location_memory_size loc = SOME n /\
+    ce3 = ce2 with ce_vars updated_by (\m. m |+ (name,PtrVar (Var q) n)) /\
+    fn_has_code st2 last2 fn ==> R st2.cs_next_id q n) ==>
+  !i ce st s G tn cf last.
+  ALL_DISTINCT (MAP FST args) /\
+  (!j. j < LENGTH args ==> ?loc.
+    FLOOKUP ce0.ce_vars (FST (EL j args)) = SOME loc /\
+    var_location_memory_size loc = SOME (type_memory_size (EL j tvs))) /\
+  (!j ce1 s1. j < LENGTH args /\
+    ce1 = ce0 with ce_vars := ce1.ce_vars /\ s1.vs_call_ctx = cd ==>
+    ?prim dyn sz av delta srcpos.
+    build_positional_arg ce0 (EL j args) =
+      (FST (EL j args),prim,dyn,sz,type_to_abi_dec_info sf ce1 (SND (EL j args))) /\
+    sz = abi_member_head_size (vyper_to_abi_type env (SND (EL j args))) /\
+    (prim ==> ~dyn /\ ?clamp.
+      type_to_abi_dec_info sf ce1 (SND (EL j args)) = DecPrimWord clamp) /\
+    abi_decoder_coherent ce1 env sf (SND (EL j args)) (EL j tvs) /\
+    value_has_type (EL j tvs) (EL j vals) /\
+    vyper_to_abi env (SND (EL j args)) (EL j vals) = SOME av /\
+    mem_bytes_at srcpos
+      (LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av)) cd.cc_calldata =
+      enc (vyper_to_abi_type env (SND (EL j args))) av /\
+    srcpos + LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av) <
+      dimword (:256) /\
+    srcpos = 4 + (if dyn then delta else
+      SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE j args))) /\
+    (dyn ==> abi_decode_load CALLDATALOAD
+      (n2w (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+        (TAKE j args))) : bytes32) s1 = n2w delta /\
+      4+delta < dimword (:256)) /\
+    type_memory_size (EL j tvs) < dimword (:256)) /\
+  i <= LENGTH args /\ ce = ce0 with ce_vars := ce.ce_vars /\
+  s.vs_call_ctx = cd /\
+  compile_register_positional_args ce (build_positional_args ce0 (DROP i args))
+    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+      (TAKE i args))) st = (cf,last) /\
+  (!j. i <= j /\ j < LENGTH args ==>
+    FLOOKUP ce.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))) /\
+  (!j. j < i ==> ?aid q p n.
+    R aid q n /\ aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers G tn q s n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
+    t.vs_data_section = s.vs_data_section /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+     (!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w)) /\
+    (!j. j < LENGTH args ==> ?aid q p n.
+      R aid q n /\ aid < last.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cf.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q t = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers H u q t n /\ val_wf (EL j tvs) (EL j vals) /\
+      val_footprint (EL j tvs) (EL j vals) <= n /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+    cf = ce0 with ce_vars := cf.ce_vars /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  ntac 13 gen_tac >> disch_tac >> gen_tac >> measureInduct_on `LENGTH args - i` >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `i = LENGTH args`
+  >- (gvs[build_positional_args_def, register_positional_args_nil] >>
+      qexistsl_tac [`s`, `G`, `tn`] >> simp[cj 1 gas_origin_ptr_path_rules]) >>
+  `i < LENGTH args` by decide_tac >>
+  qpat_assum `!j ce1 s1. _`
+    (qspecl_then [`i`, `ce`, `s`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `DROP i args = EL i args :: DROP (SUC i) args` by
+    metis_tac[DROP_CONS_EL] >>
+  `build_positional_args ce0 (DROP i args) =
+    [build_positional_arg ce0 (EL i args)] ++
+    build_positional_args ce0 (DROP (SUC i) args)` by
+    simp[build_positional_args_def] >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `build_positional_args ce0 (DROP i args) = _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  qpat_assum `build_positional_arg ce0 (EL i args) = _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  rewrite_tac[register_positional_args_append] >>
+  simp_tac (srw_ss()) [MAP, SUM, pairTheory.pair_case_thm, arithmeticTheory.ADD_0] >>
+  strip_tac >>
+  rename1 `compile_register_positional_args ce [_] _ st = (ce1,mid)` >>
+  `cs_extends st mid /\ cs_extends mid last` by
+    metis_tac[register_positional_args_suffix_extends] >>
+  `fn_has_code st mid fn /\ fn_has_code mid last fn` by
+    metis_tac[fn_has_code_split] >>
+  qpat_assum `!j. j < LENGTH args ==> ?loc. _` (qspec_then `i` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc` by
+    (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
+     simp[]) >>
+  `!bb. lookup_block mid.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+  qpat_x_assum `mem_bytes_at _ _ cd.cc_calldata = _` mp_tac >>
+  qpat_assum `s.vs_call_ctx = cd`
+    (fn th => pure_once_rewrite_tac[GSYM th]) >> disch_tac >>
+  drule_all registration_singleton_joint >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `ptr_covers H1 u1 q a (type_memory_size (EL i tvs))` >>
+  `val_wf (EL i tvs) (EL i vals)` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs)` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  `st.cs_next_id < mid.cs_next_id` by
+    (qpat_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` drule >>
+     simp[]) >>
+  `R st.cs_next_id q (type_memory_size (EL i tvs))` by
+    (qpat_assum `!ce2 st2 ce3 last2 name prim dyn sz di h loc n q. _`
+       drule_all >> simp[]) >>
+  `!j. j < SUC i ==> ?aid q p n.
+    R aid q n /\ aid < mid.cs_next_id /\ FLOOKUP a.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce1.ce_vars (EL j (MAP FST args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q a = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers H1 u1 q a n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside u1.t_mem a.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)` by
+    (match_mp_tac registration_owned_prefix_invariant_update >>
+     qpat_x_assum `!y. LENGTH args - y < _ ==> _` kall_tac >>
+     qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
+     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
+     gvs[EL_MAP] >>
+     qpat_x_assum `!old q0 p0 n0 tv0 v0. _` mp_tac >>
+     qpat_x_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` mp_tac >>
+     qpat_x_assum `FLOOKUP a.vs_allocas st.cs_next_id = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> ntac 3 strip_tac >>
+     `st.cs_next_id < mid.cs_next_id` by
+       (qpat_x_assum `!id entry. _` drule >> simp[]) >>
+     rpt gen_tac >> strip_tac >> conj_tac >- decide_tac >>
+     first_x_assum irule >> simp[] >> qexists_tac `old` >> simp[]) >>
+  `ce1 = ce0 with ce_vars := ce1.ce_vars` by
+    (qpat_assum `ce1 = ce with ce_vars updated_by _`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` mp_tac >>
+     simp_tac (srw_ss()) [compileEnvTheory.compile_env_component_equality]) >>
+  `!j. SUC i <= j /\ j < LENGTH args ==>
+    FLOOKUP ce1.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))` by
+    (rpt gen_tac >> strip_tac >>
+     `FST (EL i args) <> FST (EL j args)` by
+       (qspecl_then [`MAP FST args`, `i`, `j`] mp_tac ALL_DISTINCT_EL_IMP >>
+        simp[EL_MAP]) >>
+     qpat_assum `ce1 = ce with ce_vars updated_by _`
+       (fn th => pure_rewrite_tac[th]) >>
+     simp[finite_mapTheory.FLOOKUP_UPDATE,
+       IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`]) >>
+  `TAKE (SUC i) args = TAKE i args ++ [EL i args]` by
+    metis_tac[TAKE_EL_SNOC, arithmeticTheory.ADD1, SNOC_APPEND] >>
+  `SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE (SUC i) args)) =
+    SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE i args)) + sz` by
+    (qpat_assum `TAKE (SUC i) args = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`,
+       IgnAsm `ce1 = ce0 with ce_vars := ce1.ce_vars`, SUM_APPEND]) >>
+  `compile_register_positional_args ce1 (build_positional_args ce0 (DROP (SUC i) args))
+    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+      (TAKE (SUC i) args))) mid = (cf,last)` by
+    (qpat_assum `SUM (MAP _ (TAKE (SUC i) args)) = _`
+       (fn th => pure_once_rewrite_tac[th]) >>
+     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`H1`, `u1`] mp_tac) >>
+  impl_tac >-
+    (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >- decide_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `a.vs_call_ctx = s.vs_call_ctx`
+          (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (rpt gen_tac >> strip_tac >>
+        `j < LENGTH args` by decide_tac >>
+        qpat_x_assum `!j. j < SUC i ==> _` (qspec_then `j` mp_tac) >>
+        qpat_x_assum `j < LENGTH args` mp_tac >>
+        qpat_x_assum `j < SUC i` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >>
+        simp[EL_MAP]) >>
+     `lo <= a.vs_alloca_next` by decide_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK t,H,u)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (a,H1,u1) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  qexistsl_tac [`t`, `H`, `u`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
+     qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> tautLib.TAUT_TAC) >>
+  conj_tac >-
+    (qpat_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+       (ACCEPT_TAC o SRULE [])) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
+  qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
+  qpat_x_assum `ce1 = ce0 with ce_vars := ce1.ce_vars` kall_tac >>
+  qpat_x_assum `cf = ce0 with ce_vars := cf.ce_vars` kall_tac >>
+  simp[] >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ t) ==> _` mp_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ a) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
 Theorem registration_owned_suffix_invariant_resources:
   !R ce0 args tvs vals env sf cd ctx fn site lo PG.
   (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
@@ -2382,152 +3053,10 @@ Theorem registration_owned_suffix_invariant_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  ntac 13 gen_tac >> disch_tac >> gen_tac >> measureInduct_on `LENGTH args - i` >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `i = LENGTH args`
-  >- (gvs[build_positional_args_def, register_positional_args_nil] >>
-      qexistsl_tac [`s`, `G`, `tn`] >> simp[]) >>
-  `i < LENGTH args` by decide_tac >>
-  qpat_assum `!j ce1 s1. _`
-    (qspecl_then [`i`, `ce`, `s`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `DROP i args = EL i args :: DROP (SUC i) args` by
-    metis_tac[DROP_CONS_EL] >>
-  `build_positional_args ce0 (DROP i args) =
-    [build_positional_arg ce0 (EL i args)] ++
-    build_positional_args ce0 (DROP (SUC i) args)` by
-    simp[build_positional_args_def] >>
-  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `build_positional_args ce0 (DROP i args) = _`
-    (fn th => pure_once_rewrite_tac[th]) >>
-  qpat_assum `build_positional_arg ce0 (EL i args) = _`
-    (fn th => pure_once_rewrite_tac[th]) >>
-  rewrite_tac[register_positional_args_append] >>
-  simp_tac (srw_ss()) [MAP, SUM, pairTheory.pair_case_thm, arithmeticTheory.ADD_0] >>
-  strip_tac >>
-  rename1 `compile_register_positional_args ce [_] _ st = (ce1,mid)` >>
-  `cs_extends st mid /\ cs_extends mid last` by
-    metis_tac[register_positional_args_suffix_extends] >>
-  `fn_has_code st mid fn /\ fn_has_code mid last fn` by
-    metis_tac[fn_has_code_split] >>
-  qpat_assum `!j. j < LENGTH args ==> ?loc. _` (qspec_then `i` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc` by
-    (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
-     simp[]) >>
-  `!bb. lookup_block mid.cs_current_bb fn.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
-  qpat_x_assum `mem_bytes_at _ _ cd.cc_calldata = _` mp_tac >>
-  qpat_assum `s.vs_call_ctx = cd`
-    (fn th => pure_once_rewrite_tac[GSYM th]) >> disch_tac >>
-  drule_all registration_singleton_ptr_resources >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
-  rename1 `ptr_covers H1 u1 q a (type_memory_size (EL i tvs))` >>
-  `val_wf (EL i tvs) (EL i vals)` by
-    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-  `val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs)` by
-    metis_tac[exprSimPropsTheory.val_footprint_le] >>
-  `st.cs_next_id < mid.cs_next_id` by
-    (qpat_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` drule >>
-     simp[]) >>
-  `R st.cs_next_id q (type_memory_size (EL i tvs))` by
-    (qpat_assum `!ce2 st2 ce3 last2 name prim dyn sz di h loc n q. _`
-       drule_all >> simp[]) >>
-  `!j. j < SUC i ==> ?aid q p n.
-    R aid q n /\ aid < mid.cs_next_id /\ FLOOKUP a.vs_allocas aid = SOME (p,n) /\
-    FLOOKUP ce1.ce_vars (EL j (MAP FST args)) = SOME (PtrVar (Var q) n) /\
-    lookup_var q a = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
-    ptr_covers H1 u1 q a n /\ val_wf (EL j tvs) (EL j vals) /\
-    val_footprint (EL j tvs) (EL j vals) <= n /\
-    (!mem. mem_agree_outside u1.t_mem a.vs_memory mem ==>
-      val_in_memory (EL j tvs) (EL j vals) p mem)` by
-    (match_mp_tac registration_owned_prefix_invariant_update >>
-     pure_rewrite_tac [LENGTH_MAP] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >-
-       (qpat_assum `i < LENGTH args`
-          (fn bound => simp_tac bool_ss [EL_MAP, bound]) >>
-        first_assum ACCEPT_TAC) >>
-     conj_tac >-
-       (qx_gen_tac `j` >> disch_tac >>
-        `j < LENGTH args` by decide_tac >>
-        qpat_assum `j < LENGTH args`
-          (fn bound => simp_tac bool_ss [EL_MAP, bound]) >>
-        qpat_x_assum `!j. j < i ==> _`
-          (qspec_then `j` (fn th =>
-            qpat_assum `j < i`
-              (ACCEPT_TAC o SIMP_RULE bool_ss [] o MATCH_MP th)))) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `ce1 = ce0 with ce_vars := ce1.ce_vars` by
-    (qpat_assum `ce1 = ce with ce_vars updated_by _`
-       (fn th => pure_rewrite_tac[th]) >>
-     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` mp_tac >>
-     simp_tac (srw_ss()) [compileEnvTheory.compile_env_component_equality]) >>
-  `!j. SUC i <= j /\ j < LENGTH args ==>
-    FLOOKUP ce1.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))` by
-    (rpt gen_tac >> strip_tac >>
-     `FST (EL i args) <> FST (EL j args)` by
-       (qspecl_then [`MAP FST args`, `i`, `j`] mp_tac ALL_DISTINCT_EL_IMP >>
-        simp[EL_MAP]) >>
-     qpat_assum `ce1 = ce with ce_vars updated_by _`
-       (fn th => pure_rewrite_tac[th]) >>
-     simp[finite_mapTheory.FLOOKUP_UPDATE,
-       IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`]) >>
-  `TAKE (SUC i) args = TAKE i args ++ [EL i args]` by
-    metis_tac[TAKE_EL_SNOC, arithmeticTheory.ADD1, SNOC_APPEND] >>
-  `SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE (SUC i) args)) =
-    SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE i args)) + sz` by
-    (qpat_assum `TAKE (SUC i) args = _` (fn th => pure_rewrite_tac[th]) >>
-     simp[IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`,
-       IgnAsm `ce1 = ce0 with ce_vars := ce1.ce_vars`, SUM_APPEND]) >>
-  `compile_register_positional_args ce1 (build_positional_args ce0 (DROP (SUC i) args))
-    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
-      (TAKE (SUC i) args))) mid = (cf,last)` by
-    (qpat_assum `SUM (MAP _ (TAKE (SUC i) args)) = _`
-       (fn th => pure_once_rewrite_tac[th]) >>
-     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
-  (impl_tac >- decide_tac) >>
-  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
-  disch_then (qspecl_then [`H1`, `u1`] mp_tac) >>
-  impl_tac >-
-    (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
-     conj_tac >- decide_tac >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >-
-       (qpat_assum `a.vs_call_ctx = s.vs_call_ctx`
-          (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >-
-       (rpt gen_tac >> strip_tac >>
-        `j < LENGTH args` by decide_tac >>
-        qpat_x_assum `!j. j < SUC i ==> _` (qspec_then `j` mp_tac) >>
-        qpat_x_assum `j < LENGTH args` mp_tac >>
-        qpat_x_assum `j < SUC i` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >>
-        simp[EL_MAP]) >>
-     `lo <= a.vs_alloca_next` by decide_tac >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> qexistsl_tac [`t`, `H`, `u`] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >-
-    (qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
-     qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> tautLib.TAUT_TAC) >>
-  conj_tac >-
-    (qpat_assum `!j. j < LENGTH args ==> ?aid q p n. _`
-       (ACCEPT_TAC o SRULE [])) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
-  qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
-  qpat_x_assum `ce1 = ce0 with ce_vars := ce1.ce_vars` kall_tac >>
-  qpat_x_assum `cf = ce0 with ce_vars := cf.ce_vars` kall_tac >>
-  simp[] >>
-  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ t) ==> _` mp_tac >>
-  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ a) ==> _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+  rpt strip_tac >> drule_all registration_owned_suffix_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_owned_suffix_invariant_ptr:
@@ -2807,16 +3336,16 @@ Proof
     exprLoweringPropsTheory.fmp_room_def, EXISTS_MEM] >> metis_tac[]
 QED
 
-Theorem registration_owned_locals_endpoint_resources:
+Theorem registration_owned_locals_joint_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   initial_venom_state_rel tops am tx vs /\
-  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   set_external_package_target target
-    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
   fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
@@ -2825,6 +3354,8 @@ Theorem registration_owned_locals_endpoint_resources:
   s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
   ~ctx_has_dalloca unit.cu_context ==>
   ?tvs s0 G0 tn0.
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
     LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
     local_ptrs_rel efn cenv [env] s0 /\
     (!j. j < LENGTH args ==> ?aid q p n inst.
@@ -2856,14 +3387,14 @@ Theorem registration_owned_locals_endpoint_resources:
     (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
       !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
 Proof
-  strip_tac >> drule_all registration_owned_entry_inputs >>
+  strip_tac >> drule_all registration_owned_entry_inputs_nr >>
   disch_then (qspec_then `site` strip_assume_tac) >>
   drule_at (Pat `LIST_REL (abi_decoder_coherent _ _ _) _ _`)
     registration_owned_source_ready >>
   disch_then (drule_at (Pat `calldata_encodes _ _ _ _ _`)) >>
   simp[] >> disch_tac >>
   drule_at (Pat `fresh_vars_wrt _ _`)
-    (registration_owned_suffix_invariant_resources |> Q.SPEC
+    (registration_owned_suffix_joint |> Q.SPEC
       `\aid q n. ?inst. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
         inst.inst_outputs = [q] /\ inst.inst_id = aid`) >>
   disch_then (qspec_then `efn` mp_tac) >>
@@ -2890,6 +3421,7 @@ Proof
     first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`s0`, `G0`, `tn0`] strip_assume_tac) >>
   qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   simp_tac (srw_ss()) [] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "endpoint_locals" >>
@@ -2902,7 +3434,7 @@ Proof
   gvs[] >> first_assum ACCEPT_TAC
 QED
 
-Resume registration_owned_locals_endpoint_resources[endpoint_locals]:
+Resume registration_owned_locals_joint_nr[endpoint_locals]:
   rewrite_tac[local_ptrs_rel_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
     `FLOOKUP env name = SOME entry` by gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
@@ -2981,7 +3513,7 @@ Resume registration_owned_locals_endpoint_resources[endpoint_locals]:
   metis_tac[regions_disjoint_def]
 QED
 
-Resume registration_owned_locals_endpoint_resources[endpoint_domain]:
+Resume registration_owned_locals_joint_nr[endpoint_domain]:
   drule compile_register_positional_args_cenv >> strip_tac >>
   rpt strip_tac >>
   qpat_x_assum `!n. ~MEM n (MAP FST pos_args) ==> _`
@@ -2989,7 +3521,116 @@ Resume registration_owned_locals_endpoint_resources[endpoint_domain]:
   simp[build_positional_args_FST]
 QED
 
-Finalise registration_owned_locals_endpoint_resources
+Finalise registration_owned_locals_joint_nr
+
+Theorem registration_owned_locals_joint[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+  s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ?tvs s0 G0 tn0.
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+    local_ptrs_rel efn cenv [env] s0 /\
+    (!j. j < LENGTH args ==> ?aid q p n inst.
+      MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [q] /\ inst.inst_id = aid /\
+      aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q s0 = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers G0 tn0 q s0 n /\ val_wf (EL j tvs) (EL j tx.args) /\
+      val_footprint (EL j tvs) (EL j tx.args) <= n /\
+      (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+    cenv = cenv0 with ce_vars := cenv.ce_vars /\
+    (!k. ~MEM k (MAP FST args) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\ allocas_from 0 s0 /\
+    fresh_vars_wrt sa s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    tn0.t_stor = tn1.t_stor /\ tn0.t_trans = tn1.t_trans /\ tn0.t_imm = tn1.t_imm /\
+    s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+    s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+    s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+    s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+    s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
+    s0.vs_gas_readings = s1.vs_gas_readings /\
+    s0.vs_data_section = s1.vs_data_section /\
+    (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_operands = [Lit w] /\
+      FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_locals_joint_nr)
+QED
+
+Theorem registration_owned_locals_endpoint_resources:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+  s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ?tvs s0 G0 tn0.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+    local_ptrs_rel efn cenv [env] s0 /\
+    (!j. j < LENGTH args ==> ?aid q p n inst.
+      MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [q] /\ inst.inst_id = aid /\
+      aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q s0 = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers G0 tn0 q s0 n /\ val_wf (EL j tvs) (EL j tx.args) /\
+      val_footprint (EL j tvs) (EL j tx.args) <= n /\
+      (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+    cenv = cenv0 with ce_vars := cenv.ce_vars /\
+    (!k. ~MEM k (MAP FST args) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\ allocas_from 0 s0 /\
+    fresh_vars_wrt sa s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    tn0.t_stor = tn1.t_stor /\ tn0.t_trans = tn1.t_trans /\ tn0.t_imm = tn1.t_imm /\
+    s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+    s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+    s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+    s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+    s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
+    s0.vs_gas_readings = s1.vs_gas_readings /\
+    s0.vs_data_section = s1.vs_data_section /\
+    (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_operands = [Lit w] /\
+      FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
+Proof
+  rpt strip_tac >> drule_all registration_owned_locals_joint >>
+  disch_then (qspecl_then [`tn1`,`site`,`G1`] strip_assume_tac) >>
+  qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 Theorem registration_owned_locals_endpoint:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -3050,14 +3691,6 @@ Proof
   rpt strip_tac >> decide_tac
 QED
 
-(* This numerical obstruction is not an accepted-program counterexample. *)
-Theorem registration_budget_margin_probe[local]:
-  dimword (:256) - 32 + 32 * 0 < dimword (:256) /\
-  ~(dimword (:256) - 32 + 2 ** 65 < dimword (:256))
-Proof
-  simp[wordsTheory.dimword_def]
-QED
-
 Theorem registration_indexed_locals_ghost:
   bind_arguments tenv args vals = SOME env /\
   ALL_DISTINCT (MAP FST args) /\
@@ -3072,7 +3705,7 @@ Theorem registration_indexed_locals_ghost:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     op_taint tn (Var x) = {}) /\
   tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {} ==>
-  ghost_inv NONE cenv cx es G tn s
+  ghost_inv H NONE cenv cx es G tn s
 Proof
   strip_tac >>
   simp[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.return_buf_ptr_def,
@@ -3106,12 +3739,205 @@ Proof
   rpt strip_tac >> simp[storage_vars_rel_def, transient_vars_rel_def]
 QED
 
+Theorem registration_actual_endpoint_relations_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,nr,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+    (INL (),es0) /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr,key,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  ~ctx_has_dalloca unit.cu_context /\
+  LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+  local_ptrs_rel efn cenv [env] s0 /\
+  (!j. j < LENGTH args ==> ?aid q p n.
+    FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
+    (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+  cenv = cenv0 with ce_vars := cenv.ce_vars /\
+  alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\
+  tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {} /\
+  s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+  s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+  s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+  s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+  s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_data_section = s1.vs_data_section /\
+  s0.vs_code = s1.vs_code /\
+  (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit w] /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+  stmt_state_rel H unit.cu_context efn cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+  ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
+    es0 G0 tn0 s0
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all registration_source_parameter_inputs_nr >> simp[]) >>
+  drule send_call_value_accounts >> strip_tac >>
+  `es0.scopes = [env]` by simp[initial_state_def] >>
+  `unit_alloca_budget unit.cu_context < dimword (:256)` by
+    (drule_all registration_initial_ptr_resources >>
+     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
+  conj_tac >- suspend "actual_stmt" >>
+  irule registration_indexed_locals_ghost >>
+  conj_tac >- suspend "actual_return_pc" >> simp[] >>
+  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
+  suspend "actual_ghost_locals"
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_ghost_locals]:
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`q`, `p`, `n`] >> simp[] >>
+  `p + n <= s0.vs_alloca_next` by
+    metis_tac[venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.alloca_next_valid_def] >>
+  qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
+  simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_return_pc]:
+  `cenv.ce_return_pc = cenv0.ce_return_pc` by
+    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `cenv0.ce_return_pc = NONE` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+     gvs[update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+     rpt (pairarg_tac >> gvs[])) >> simp[]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_stmt]:
+  `cenv0.ce_module = NONE /\ ~cenv0.ce_is_ctor /\
+   cenv0.ce_imm_alloca = NONE /\
+   cenv0.ce_module_vars = add_immutable_locations
+     (get_struct_fields (make_struct_fields_map tops)) tops 0
+     (add_module_var_locations tops FEMPTY)` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+     gvs[update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+     rpt (pairarg_tac >> gvs[])) >>
+  `cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
+   cenv.ce_imm_alloca = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
+    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `alloca_room unit.cu_context efn s0` by
+    (drule_all registration_frontier_alloca_room >> simp[]) >>
+  `fmp_room unit.cu_context efn s0` by
+    (irule registration_no_dalloca_fmp_room >> simp[] >>
+     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
+  conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_state]:
+  `storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
+   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    suspend "actual_module_locations" >>
+  `immutable_section_layout cenv tops` by
+    (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`, `ret`,
+       `fbody`, `F`] mp_tac
+       immutableLocationPropsTheory.immutable_build_compile_env_layout >>
+     qpat_x_assum `cenv.ce_module_vars = cenv0.ce_module_vars` mp_tac >>
+     qpat_x_assum `cenv0.ce_module_vars = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[immutableRelationTheory.immutable_section_layout_def,
+       build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
+  `immutables_rel cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target
+    cenv.ce_module cenv.ce_is_ctor es0 s0` by suspend "actual_immutables" >>
+  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
+  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
+  gvs[initial_venom_state_rel_def, venom_env_rel_def, state_rel_def,
+      initial_state_def, initial_evaluation_context_def] >>
+  `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
+  simp[storage_rel_def, transient_rel_def, contract_storage_def,
+       contract_transient_def, logs_rel_def, accounts_rel_def]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_immutables]:
+  simp[] >> irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
+  qexistsl_tac [`vs.vs_data_section`, `tops`] >> simp[] >>
+  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
+  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
+  gvs[initial_venom_state_rel_def, initial_state_def, e2eDefsTheory.account_immutables_def,
+      initial_evaluation_context_def]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_module_locations]:
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
+  `storage_vars_rel
+     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
+     (initial_evaluation_context am.sources am.layouts tx NONE) /\
+   transient_vars_rel
+     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    (irule entry_storage_vars_rel >> simp[initial_evaluation_context_def] >>
+     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
+  `(!key slot.
+     (FLOOKUP (add_immutable_locations
+       (get_struct_fields (make_struct_fields_map tops)) tops 0
+       (add_module_var_locations tops FEMPTY)) key = SOME (StorageLoc slot) <=>
+      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (StorageLoc slot))) /\
+   (!key slot.
+     (FLOOKUP (add_immutable_locations
+       (get_struct_fields (make_struct_fields_map tops)) tops 0
+       (add_module_var_locations tops FEMPTY)) key = SOME (TransientLoc slot) <=>
+      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot)))` by
+    (conj_tac >> rpt gen_tac >> eq_tac
+     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[])
+     >- (strip_tac >> suspend "actual_insert")
+     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[]) >>
+     strip_tac >> suspend "actual_insert") >>
+  mp_tac (module_location_relations_cong |> Q.SPECL
+    [`cenv`, `cenv with ce_module_vars := add_module_var_locations tops FEMPTY`,
+     `initial_evaluation_context am.sources am.layouts tx NONE`]) >>
+  simp[]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_insert]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  rename1 `FLOOKUP (add_module_var_locations tops FEMPTY) ky = SOME _` >>
+  `!vis name ty sl.
+    MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> ky` by
+    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     drule_then (qspecl_then
+       [`FEMPTY`, `VariableDecl vis Immutable name ty sl`, `name`] mp_tac)
+       add_module_var_locations_mem >>
+     simp[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def] >>
+     Cases_on `sl` >> simp[add_module_var_locations_def]) >>
+  drule add_immutable_locations_lookup_unchanged >> simp[]
+QED
+
+Finalise registration_actual_endpoint_relations_nr
+
 Theorem registration_actual_endpoint_relations:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+  source_deployment_rel tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-  initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+  initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
   send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -3146,167 +3972,99 @@ Theorem registration_actual_endpoint_relations:
   (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit w] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
-  stmt_state_rel unit.cu_context efn cenv
+  stmt_state_rel H unit.cu_context efn cenv
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-  ghost_inv NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
+  ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
-  strip_tac >>
-  `ALL_DISTINCT (MAP FST args)` by
-    (drule_all registration_source_parameter_inputs >> simp[]) >>
-  drule send_call_value_accounts >> strip_tac >>
-  `es0.scopes = [env]` by simp[initial_state_def] >>
-  `unit_alloca_budget unit.cu_context < dimword (:256)` by
-    (drule_all registration_initial_ptr_resources >>
-     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
-  conj_tac >- suspend "actual_stmt" >>
-  irule registration_indexed_locals_ghost >>
-  conj_tac >- suspend "actual_return_pc" >> simp[] >>
-  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
-  suspend "actual_ghost_locals"
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_actual_endpoint_relations_nr)
 QED
 
-Resume registration_actual_endpoint_relations[actual_ghost_locals]:
-  rpt strip_tac >>
-  qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
-    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
-  qexistsl_tac [`q`, `p`, `n`] >> simp[] >>
-  `p + n <= s0.vs_alloca_next` by
-    metis_tac[venomMemDefsTheory.alloca_inv_def,
-      venomMemDefsTheory.alloca_next_valid_def] >>
-  qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
-  simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac
+Theorem registration_positional_args_joint_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody, rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
+    ~ctx_has_dalloca unit.cu_context ==>
+    ?s0 G0 tn0.
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      fresh_vars_wrt sa s0 /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all registration_owned_locals_joint_nr >>
+  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (`!j. j < LENGTH args ==> ?aid q p n.
+       FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+       FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+       lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
+       (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+         val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
+       (rpt strip_tac >>
+        qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n inst. _`
+          (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+        qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
+     `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
+     `s0.vs_code = s1.vs_code` by
+       (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+          (qspecl_then [`ARB`,`ARB`] mp_tac) >> strip_tac >>
+        drule gas_origin_ptr_path_projections >> strip_tac >>
+        drule gas_origin_path_erase >>
+        simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
+        drule fragGasPathMemTheory.gas_path_mem_exec >>
+        metis_tac[gas_path_code_labels]) >>
+     gen_tac >> drule_all registration_actual_endpoint_relations_nr >>
+     disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
 QED
 
-Resume registration_actual_endpoint_relations[actual_return_pc]:
-  `cenv.ce_return_pc = cenv0.ce_return_pc` by
-    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
-      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
-  `cenv0.ce_return_pc = NONE` by
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
-     gvs[update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
-     rpt (pairarg_tac >> gvs[])) >> simp[]
-QED
-
-Resume registration_actual_endpoint_relations[actual_stmt]:
-  `cenv0.ce_module = NONE /\ ~cenv0.ce_is_ctor /\
-   cenv0.ce_imm_alloca = NONE /\
-   cenv0.ce_module_vars = add_immutable_locations
-     (get_struct_fields (make_struct_fields_map tops)) tops 0
-     (add_module_var_locations tops FEMPTY)` by
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
-     gvs[update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
-     rpt (pairarg_tac >> gvs[])) >>
-  `cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
-   cenv.ce_imm_alloca = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
-    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
-      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
-  `alloca_room unit.cu_context efn s0` by
-    (drule_all registration_frontier_alloca_room >> simp[]) >>
-  `fmp_room unit.cu_context efn s0` by
-    (irule registration_no_dalloca_fmp_room >> simp[] >>
-     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
-       immutable_base_zero_def] >>
-  conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
-QED
-
-Resume registration_actual_endpoint_relations[actual_state]:
-  `storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
-   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    suspend "actual_module_locations" >>
-  `immutable_section_layout cenv tops` by
-    (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`, `ret`,
-       `fbody`, `F`] mp_tac
-       immutableLocationPropsTheory.immutable_build_compile_env_layout >>
-     qpat_x_assum `cenv.ce_module_vars = cenv0.ce_module_vars` mp_tac >>
-     qpat_x_assum `cenv0.ce_module_vars = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[immutableRelationTheory.immutable_section_layout_def,
-       build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
-  `immutables_rel cenv
-    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target
-    cenv.ce_module cenv.ce_is_ctor es0 s0` by suspend "actual_immutables" >>
-  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
-  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  gvs[initial_venom_state_rel_def, venom_env_rel_def, state_rel_def,
-      initial_state_def, initial_evaluation_context_def] >>
-  `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
-  simp[storage_rel_def, transient_rel_def, contract_storage_def,
-       contract_transient_def, logs_rel_def, accounts_rel_def]
-QED
-
-Resume registration_actual_endpoint_relations[actual_immutables]:
-  simp[] >> irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
-  qexistsl_tac [`vs.vs_data_section`, `tops`] >> simp[] >>
-  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
-  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  gvs[initial_venom_state_rel_def, initial_state_def, e2eDefsTheory.account_immutables_def,
-      initial_evaluation_context_def]
-QED
-
-Resume registration_actual_endpoint_relations[actual_module_locations]:
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
-  `storage_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE) /\
-   transient_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    (irule entry_storage_vars_rel >> simp[initial_evaluation_context_def] >>
-     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
-  `(!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (StorageLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (StorageLoc slot))) /\
-   (!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (TransientLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot)))` by
-    (conj_tac >> rpt gen_tac >> eq_tac
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[])
-     >- (strip_tac >> suspend "actual_insert")
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[]) >>
-     strip_tac >> suspend "actual_insert") >>
-  mp_tac (module_location_relations_cong |> Q.SPECL
-    [`cenv`, `cenv with ce_module_vars := add_module_var_locations tops FEMPTY`,
-     `initial_evaluation_context am.sources am.layouts tx NONE`]) >>
-  simp[]
-QED
-
-Resume registration_actual_endpoint_relations[actual_insert]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
-  rename1 `FLOOKUP (add_module_var_locations tops FEMPTY) ky = SOME _` >>
-  `!vis name ty sl.
-    MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> ky` by
-    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-     drule_then (qspecl_then
-       [`FEMPTY`, `VariableDecl vis Immutable name ty sl`, `name`] mp_tac)
-       add_module_var_locations_mem >>
-     simp[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def] >>
-     Cases_on `sl` >> simp[add_module_var_locations_def]) >>
-  drule add_immutable_locations_lookup_unchanged >> simp[]
-QED
-
-Finalise registration_actual_endpoint_relations
-
-Theorem registration_positional_args_ptr_no_dalloca:
+Theorem registration_positional_args_joint[local]:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+    source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+    initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -3333,10 +4091,13 @@ Theorem registration_positional_args_ptr_no_dalloca:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
     ~ctx_has_dalloca unit.cu_context ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0 /\
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\
@@ -3344,31 +4105,9 @@ Theorem registration_positional_args_ptr_no_dalloca:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all registration_owned_locals_endpoint_resources >>
-  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
-  qexistsl_tac [`s0`, `G0`, `tn0`] >>
-  `stmt_state_rel unit.cu_context efn cenv
-     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-   ghost_inv NONE cenv
-     (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0` by
-    (`!j. j < LENGTH args ==> ?aid q p n.
-       FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
-       FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
-       lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
-       (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
-         val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
-       (rpt strip_tac >>
-        qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n inst. _`
-          (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
-        qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
-     `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
-     `s0.vs_code = s1.vs_code` by
-       (* PORT_ADMISSION: SEQ-4195, bot/opus/seq-4166-train-16, train 16 freeze.
-          The registration code never writes vs_code; the endpoint-resources
-          frame (registration_owned_locals_endpoint_resources) does not state
-          it yet since the vs_code field was added. *)
-       cheat >>
-     drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
+  drule_all registration_positional_args_joint_nr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
 QED
 
 (* Registration seam, proved at the shared owned endpoint:
@@ -3390,17 +4129,144 @@ QED
    - A natural split, if one run cannot close it: one registration step
      (one parameter) against an invariant over the decoded prefix, then
      the induction over pos_args. *)
+Theorem registration_positional_args_ptr_no_dalloca:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
+    ~ctx_has_dalloca unit.cu_context ==>
+    ?s0 G0 tn0.
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt strip_tac >> drule_all registration_positional_args_joint >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem register_positional_args_ptr_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
+    tn1.t_imm = {} ==>
+    ?s0 G0 tn0.
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (s1, G1, tn1) [] (OK s0, G0, tn0)) /\
+      fresh_vars_wrt sa s0 /\
+      cenv.ce_return_pc = NONE /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (drule_all registration_supported_no_dalloca >> simp[]) >>
+  drule_all registration_positional_args_joint_nr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  `gas_path_mem unit.cu_context efn s1 0 (OK s0)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+      (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+     strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
+     drule gas_origin_path_erase >> simp[fragGasModeTheory.gas_marked_path_def]) >>
+  `cenv.ce_return_pc = NONE` by
+    (drule compile_register_positional_args_cenv >> strip_tac >>
+     `cenv0.ce_return_pc = NONE` by
+       (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+        gvs[update_cenv_nonreentrant_def] >>
+        rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+        rpt (pairarg_tac >> gvs[])) >>
+     qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
+QED
+
 Theorem register_positional_args_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -3429,11 +4295,15 @@ Theorem register_positional_args_ptr:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
     tn1.t_imm = {} ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0
-        G0 tn0 s0 /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (s1, G1, tn1) [] (OK s0, G0, tn0)) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\
@@ -3441,7 +4311,7 @@ Theorem register_positional_args_ptr:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (drule_all registration_supported_no_dalloca >> simp[]) >>
-  drule_all registration_positional_args_ptr_no_dalloca >> simp[]
+  drule_all register_positional_args_ptr_nr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
 QED

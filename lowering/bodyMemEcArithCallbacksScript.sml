@@ -18,7 +18,7 @@ Theorem ecmul_payload_callback:
   (!x. MEM (Var x) [p;ib;scalar] ==> not_fresh_at sa x) /\
   w2n point + 64 < dimword (:256) /\ w2n bw + 96 < dimword (:256) /\
   regions_disjoint (w2n bw) 96 (w2n point) 64 /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     regions_disjoint (w2n bw) 96 b sz) /\
@@ -31,7 +31,7 @@ Theorem ecmul_payload_callback:
     regions_disjoint (w2n bw) 96 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,96) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     FLOOKUP t.vs_allocas sc.cs_next_id = SOME (w2n bw,96) /\
     t.vs_alloca_next = s.vs_alloca_next /\
@@ -74,7 +74,7 @@ Theorem ecadd_payload_callback:
   w2n point2 + 64 < dimword (:256) /\ w2n bw + 128 < dimword (:256) /\
   regions_disjoint (w2n bw) 128 (w2n point) 64 /\
   regions_disjoint (w2n bw) 128 (w2n point2) 64 /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     regions_disjoint (w2n bw) 128 b sz) /\
@@ -87,7 +87,7 @@ Theorem ecadd_payload_callback:
     regions_disjoint (w2n bw) 128 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,128) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     FLOOKUP t.vs_allocas sc.cs_next_id = SOME (w2n bw,128) /\
     t.vs_alloca_next = s.vs_alloca_next /\

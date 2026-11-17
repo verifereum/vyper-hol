@@ -258,7 +258,7 @@ Theorem calldata_slice_seq_mem:
   !func cenv cx es n start_op sa sb buf_op s ctx wa.
     compile_slice_calldata start_op (Lit (n2w n))
       (32 + 32 * word_size n) sa = (buf_op,sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size n < dimword (:256) /\ 0 < n /\
     eval_operand start_op s = SOME wa /\
@@ -303,7 +303,7 @@ Proof
        (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
         simp[]) >>
      metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es pre` by
+  `stmt_state_rel H ctx func cenv cx es pre` by
     (`pre = s with vs_vars := pre.vs_vars` by
        fs[venom_state_component_equality] >>
      pop_assum SUBST1_TAC >>
@@ -326,7 +326,7 @@ Proof
      [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func)` by
     (qpat_assum `s2.cs_next_id = _` SUBST1_TAC >>
      qpat_assum `s2.cs_next_var = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s2`, `s3`, `buf`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s2`, `s3`, `buf`,
                `32 + 32 * word_size n`, `pre`, `ctx`] mp_tac
     literal_alloc_buffer_run >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

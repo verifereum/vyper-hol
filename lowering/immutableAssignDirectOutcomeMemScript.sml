@@ -13,7 +13,8 @@ Theorem immutable_assign_direct_stmt_post_mem:
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts /\
-  stmt_state_rel ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  stmt_state_rel H ctx func ce cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\ expr_sim_inv ce cx env ee /\
   local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -34,7 +35,11 @@ Theorem immutable_assign_direct_stmt_post_mem:
   (!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at su x) /\
   eval_operand op s = SOME (n2w a) ==>
   ?q. gas_marked_path T ctx func s 0 (OK q) /\
-    stmt_post ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q /\
+    q.vs_accounts = s.vs_accounts /\
+   q.vs_transient = s.vs_transient /\
+   q.vs_requests = s.vs_requests /\
+   q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w` by
@@ -74,6 +79,12 @@ Resume immutable_assign_direct_stmt_post_mem[outcome]:
   markerLib.RESUME_TAC >> (
   `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
     metis_tac[immutable_assign_store_words_memory_length] >>
+  `u.vs_accounts = s.vs_accounts /\
+   u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\
+   u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\

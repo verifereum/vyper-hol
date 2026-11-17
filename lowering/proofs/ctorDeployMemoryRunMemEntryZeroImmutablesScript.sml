@@ -1,9 +1,10 @@
 Theory ctorDeployMemoryRunMemEntryZeroImmutables
 Ancestors
   loweringStateRelDefs
+  immSectionDead
   ctorDeployMemoryRunMemEntrySourceDefaults
   ctorDeployLoweringEntryImmutableMemory immutableRelation compileVyper
-  ctorDeployDefs e2eDeployDefs compileEnv immSectionDead
+  ctorDeployDefs immSectionDead e2eDeployDefs compileEnv
 
 Theorem ctor_source_zero_memory_immutables:
   deploy_source_ok tops am tx /\

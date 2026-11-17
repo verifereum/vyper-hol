@@ -483,16 +483,30 @@ Proof
   qid_spec_tac `id` >>
   qid_spec_tac `cenv` >>
   qid_spec_tac `acc` >>
-  qid_spec_tac `ts` >>
-  qid_spec_tac `src` >>
-  qid_spec_tac `addr` >>
-  qid_spec_tac `am` >>
-  qid_spec_tac `cx` >>
-  recInduct constants_env_ind >>
-  rw[constants_env_def] >>
-  gvs[AllCaseEqs(), finite_mapTheory.FLOOKUP_UPDATE] >>
+  Induct_on `ts` >- simp[constants_env_def, constants_env_trace_def] >>
+  Cases_on `h` >>
+  simp[constants_env_def, constants_env_trace_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), constants_env_def]
+  >>~- ([`constants_env_trace cx am addr src (VariableDecl vis mut name ty slot::ts) acc`],
+       Cases_on `mut` >>
+       Cases_on `evaluate_type (get_tenv cx) ty` >>
+       gvs[constants_env_trace_def, AllCaseEqs()] >>
+       rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+       IF (qpat_assum `FST (case res of INL v => _ | INR err => _) = _` (K all_tac))
+         (Cases_on `res` >> gvs[] >>
+          pairarg_tac >> gvs[] >> suspend "constant_tail")
+         (metis_tac[])) >>
   metis_tac[]
 QED
+
+Resume constants_env_lookup_origin[constant_tail]:
+  qmatch_asmsub_abbrev_tac `constants_env_trace cx am addr src ts acc1` >>
+  qpat_x_assum `!acc' cenv' id' x'. _`
+    (qspecl_then [`acc1`, `cenv`, `id`, `x`] mp_tac) >>
+  simp[Abbr `acc1`, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `id = name` >> gvs[] >> metis_tac[]
+QED
+Finalise constants_env_lookup_origin
 
 Theorem constants_env_no_bare_global_lookup_MEM:
   constants_do_not_clobber_bare_globals mods bare_globals /\
@@ -586,10 +600,19 @@ Theorem evaluate_module_constants_preserves_bare_global_lookup_MEM[local]:
 Proof
   qid_spec_tac `am_c` >>
   qid_spec_tac `am` >>
-  Induct_on `mods` >- (rw[evaluate_module_constants_def] >> gvs[]) >>
+  Induct_on `mods`
+  >- (rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >> gvs[]) >>
   rw[evaluate_module_constants_def] >>
   PairCases_on `h` >>
-  gvs[evaluate_module_constants_def, AllCaseEqs()] >>
+  gvs[evaluate_module_constants_trace_def] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `result` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `constants_env_trace _ am addr h0 h1 FEMPTY = (SOME cenv,_)` >>
+  `constants_env (set_current_module cx h0) am addr h0 h1 FEMPTY = SOME cenv`
+    by simp[constants_env_def] >>
+  `evaluate_module_constants cx (merge_constants addr h0 cenv am) addr mods = SOME am_c`
+    by simp[evaluate_module_constants_def] >>
   first_x_assum irule >>
   conj_tac
   >- (qexists `merge_constants addr h0 cenv am` >>

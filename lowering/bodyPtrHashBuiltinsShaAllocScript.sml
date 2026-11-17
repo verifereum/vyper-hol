@@ -1,7 +1,7 @@
 (* Allocation/cursor glue for the counted SHA suffix. *)
 Theory bodyPtrHashBuiltinsShaAlloc
 Ancestors bodyPtrHashBuiltinsShaAllocPath bodyPtrHashBuiltinsShaEmit
-  ghostPcTransportPtr arithmetic arithmeticProps exprSimAlloc rich_list list
+  instSeqComposePtr ghostPcTransportPtr arithmetic arithmeticProps exprSimAlloc rich_list list
   venomExecSemantics emitHelper context compileEnv loweringStateRelDefs exprLoweringProps
   emitHelperProps venomInst venomState loweringHalt exprSimHash
   fragExec instIdxIndep fragGasPathPtr words bodyPtrHashBuiltinsShaAllocInput
@@ -80,6 +80,7 @@ Theorem hash_alloc_sha256_abort_from_input:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (Abort Revert_abort (t with vs_inst_idx := j))
 Proof
@@ -91,11 +92,14 @@ Proof
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
+   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all hash_literal_alloc_counted_path >> simp[]) >>
   `?t j Gf tf. run_inst_seq (emitted_insts sn sb)
       (a with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort t /\
+    inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts sn sb)
+      (a with vs_inst_idx := SUC s.vs_inst_idx) Gf tf /\
     gas_path_ptr D 0 ctx fn PG G1 tn1
       (a with vs_inst_idx := SUC s.vs_inst_idx) 1 Gf tf
       (Abort Revert_abort (t with vs_inst_idx := j))` by
@@ -103,6 +107,16 @@ Proof
        hash_emit_sha256_tail_abort_path) >>
      simp[ptr_covers_inst_idx, hash_eval_operand_inst_idx] >>
      gvs[] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sn)` by
+    (qpat_x_assum `compile_alloc_buffer 32 sa = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[emitted_insts_def, DROP_LENGTH_APPEND, mk_inst_def,
+       is_terminator_def]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
+    (qpat_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+     irule inst_seq_ptr_append_ok >> simp[] >>
+     qexistsl_tac [`G1`, `tn1`] >> gvs[ADD1]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
     (drule_all emitted_insts_sha256_tail >>
      simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
@@ -114,7 +128,7 @@ Proof
      simp[exec_result_map_def]) >>
   qexistsl_tac [`u`, `j`, `Gf`, `tf`] >> conj_tac
   >- (drule run_inst_seq_append >> disch_then (qspec_then `emitted_insts sn sb` mp_tac) >> simp[]) >>
-  drule_all gas_path_ptr_then >> simp[]
+  simp[] >> drule_all gas_path_ptr_then >> simp[]
 QED
 
 
@@ -124,11 +138,11 @@ Theorem hash_alloc_sha256_abort_path:
   emit_op STATICCALL [gas_op;Lit 2w;Var p;len;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
   emit_void ASSERT [success_op] sc = ((),sh) /\
   emit_op MLOAD [buf.buf_operand] sh = (op,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
@@ -145,6 +159,7 @@ Theorem hash_alloc_sha256_abort_path:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (Abort Revert_abort (t with vs_inst_idx := j))
 Proof
@@ -180,6 +195,7 @@ Theorem hash_alloc_sha256_success_from_input:
   mem_bytes_at (w2n w) (w2n n) a.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     run_inst_seq (emitted_insts sn sb) a = OK t /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+5)) /\
@@ -200,11 +216,14 @@ Proof
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
+   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all hash_literal_alloc_counted_path >> simp[]) >>
   `?t Gf tf. run_inst_seq (emitted_insts sn sb)
       (a with vs_inst_idx := SUC s.vs_inst_idx) = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts sn sb)
+      (a with vs_inst_idx := SUC s.vs_inst_idx) Gf tf /\
     gas_path_ptr D 0 ctx fn PG G1 tn1
       (a with vs_inst_idx := SUC s.vs_inst_idx) 1 Gf tf
       (OK (t with vs_inst_idx := (a with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx+4)) /\
@@ -219,6 +238,16 @@ Proof
     (irule hash_emit_sha256_tail_success_path >>
      simp[ptr_covers_inst_idx, hash_eval_operand_inst_idx] >>
      gvs[] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sn)` by
+    (qpat_x_assum `compile_alloc_buffer 32 sa = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[emitted_insts_def, DROP_LENGTH_APPEND, mk_inst_def,
+       is_terminator_def]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
+    (qpat_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+     irule inst_seq_ptr_append_ok >> simp[] >>
+     qexistsl_tac [`G1`, `tn1`] >> gvs[ADD1]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
     (drule_all emitted_insts_sha256_tail >>
      simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
@@ -243,11 +272,11 @@ Theorem hash_alloc_sha256_success_path:
   emit_op STATICCALL [gas_op;Lit 2w;Var p;len;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
   emit_void ASSERT [success_op] sc = ((),sh) /\
   emit_op MLOAD [buf.buf_operand] sh = (op,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
@@ -265,10 +294,11 @@ Theorem hash_alloc_sha256_success_path:
   mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+5)) /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+5) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE
@@ -305,7 +335,7 @@ Proof
          qpat_assum `!y. not_fresh_at sa y ==> not_fresh_at sn y` mp_tac >>
          rpt (pop_assum kall_tac) >> simp[ghost_kept_def] >> metis_tac[]) >>
      qpat_assum `tf = _` SUBST1_TAC >> simp[]) >>
-  qpat_x_assum `ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf _`
+  qpat_x_assum `ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf _`
     (assume_tac o PURE_REWRITE_RULE [hash_ghost_inv_inst_idx]) >>
   qexistsl_tac [`t'`, `Gf`, `tf`] >> simp[hash_ghost_inv_inst_idx]
 QED

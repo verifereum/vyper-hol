@@ -43,20 +43,20 @@ Proof
 QED
 
 Theorem compile_internal_void_return_intret_mem:
-  cenv.ce_returns_count = 0 /\
+  ~cx.txn.is_static /\ cenv.ce_returns_count = 0 /\
   cenv.ce_return_pc = SOME (PtrVar rpc byte_size) /\
   compile_stmt cenv lctx ty (Return NONE) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand rpc s = SOME pc /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s ==>
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s ==>
   ?n r. gas_path_mem ctx func s n r /\
-    intret_q func cenv cx tv NoneV (es with scopes := []) r
+    intret_q H func cenv cx tv NoneV (es with scopes := []) r
 Proof
   strip_tac >>
   `~s.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all compile_internal_void_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >> irule intret_q_intro >> simp[] >>

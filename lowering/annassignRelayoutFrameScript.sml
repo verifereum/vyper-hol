@@ -6,8 +6,8 @@ Ancestors
   memoryValueEncoding
 
 Theorem stmt_state_rel_declare_copy_effect:
-  !func cenv cx es s t id p sz w inst v tyv sc rest a ctx sa sb.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !H func cenv cx es s t id p sz w inst v tyv sc rest a ctx sa sb.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -18,7 +18,7 @@ Theorem stmt_state_rel_declare_copy_effect:
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> not_fresh_at sa q) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof

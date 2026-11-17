@@ -7,7 +7,7 @@ Ancestors
   exprSimAlloc bodyIfExpArmMemory valueEncodingTyping
 
 Theorem ifexp_adapter_source_operand[local]:
-  vv_post ctx func ce cx e es origin sa s0 ee raw vv s ==>
+  vv_post H ctx func ce cx e es origin sa s0 ee raw vv s ==>
   ?a. eval_operand (vv_operand vv) s = SOME a
 Proof
   Cases_on `vv` >> simp[loweringPostsTheory.vv_post_def,
@@ -16,7 +16,8 @@ Proof
 QED
 
 Theorem ifexp_copy_frame[local]:
-  wb_frame ce es ee origin s0 s /\ stmt_state_rel ctx func ce cx ee s /\
+  wb_frame ce es ee origin s0 s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   local_ptrs_reserved ce origin /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   FLOOKUP s.vs_allocas aid = SOME (dst,cap) /\ origin.cs_next_id <= aid /\
   len <= cap /\
@@ -35,10 +36,13 @@ Proof
   >- simp[venomStateTheory.lookup_var_def,
           venomExecSemanticsTheory.mcopy_def,
           venomStateTheory.write_memory_with_expansion_def] >>
-  rpt strip_tac >>
+  rpt strip_tac >> rename1 `old_aid < origin.cs_next_id` >>
   `regions_disjoint b sz dst cap` by
-    (irule state_allocations_disjoint >> goal_assum (drule_at Any) >>
-     qexists_tac `aid` >> simp[] >> goal_assum (drule_at Any)) >>
+    (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) state_allocations_disjoint >>
+     disch_then (mp_tac o
+       Q.INST [`a` |-> `old_aid`, `p` |-> `b`, `n` |-> `sz`,
+               `b` |-> `aid`, `q` |-> `dst`, `m` |-> `cap`] o SPEC_ALL) >>
+     simp[] >> decide_tac) >>
   irule mem_bytes_at_mcopy_disjoint >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
@@ -50,28 +54,31 @@ Theorem ifexp_bytestring_adapter_path_mem:
   read_result cx raw ee = (INL v,ee) /\
   evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v /\
   type_memory_bytes ce t = type_memory_size tvt /\ type_memory_size tvt < 2 ** 64 /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
+  stmt_state_rel H1 ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
-  vv_post ctx func ce cx e es origin sa s0 ee raw vv s /\
+  vv_post H ctx func ce cx e es origin sa s0 ee raw vv s /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u. gas_path_mem ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es origin sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es origin sb s0 ee v op u /\
     vv_store_bound cx t t ee raw (LocatedValue t (mk_ptr op LocMemory)) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
-    !tv'. read_result cx tv' ee = (INL v,ee) ==>
-      vv_at ce cx t origin sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) u
+    (!tv'. read_result cx tv' ee = (INL v,ee) ==>
+      vv_at ce cx t origin sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) u) /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_bytestring] >>
+  `storage_well_formed_on cx ee (FST H)` by fs[vv_post_def] >>
   drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
     metis_tac[ci_mono_compile_alloc_buffer, ci_mono_unwrap_value,
@@ -80,15 +87,15 @@ Proof
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `local_ptrs_reserved ce sa` by metis_tac[local_ptrs_reserved_next_var] >>
   drule ifexp_adapter_source_operand >> strip_tac >>
-  drule_at (Pat `compile_alloc_buffer _ _ = _`) ifexp_allocate_unwrap_path >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_allocate_unwrap_path >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   disch_then (qspecl_then [`v`,`src`,`sn`,`a`] mp_tac) >>
   impl_tac >- (gvs[ci_mono_def] >> simp[wordsTheory.dimword_def] >> decide_tac) >>
   strip_tac >> suspend "copy"
 QED
 
 Resume ifexp_bytestring_adapter_path_mem[copy]:
-  `expr_val_rel cx t v src u /\ stmt_state_rel ctx func ce cx ee u` by
+  `expr_val_rel cx t v src u /\ stmt_state_rel H ctx func ce cx ee u` by
     (qpat_assum `post_value_type ce e = _` (fn th => fs[expr_post_def, th]) >>
      metis_tac[]) >>
   drule_all ifexp_copy_source_bounds >> strip_tac >>
@@ -123,20 +130,26 @@ Resume ifexp_bytestring_adapter_path_mem[copy]:
 QED
 
 Resume ifexp_bytestring_adapter_path_mem[endpoint]:
-  `local_ptrs_rel func ce es.scopes s0` by fs[stmt_state_rel_def, state_rel_def] >>
+  `local_ptrs_rel func ce es.scopes s0` by
+    (qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _` mp_tac >> simp[stmt_state_rel_def, state_rel_def]) >>
   `origin.cs_next_var <= sm.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
-  `expr_post ctx func ce cx e es origin sn s0 ee v src u` by
+  `expr_post H ctx func ce cx e es origin sn s0 ee v src u` by
     (irule expr_post_rebased_compose_mem_src >> goal_assum (drule_at Any) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
   `wb_frame ce es ee origin s0 u` by metis_tac[expr_post_frame] >>
   `wb_frame ce es ee origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
-    (irule ifexp_copy_frame >> goal_assum (drule_at Any) >>
-     simp[] >> reverse conj_tac
-     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexists_tac `sa.cs_next_id` >> simp[]) >>
+    (drule_at (Pat `stmt_state_rel _ _ _ _ _ ee u`) ifexp_copy_frame >>
+     disch_then (mp_tac o
+       Q.INST [`src` |-> `w2n (w:bytes32)`, `dst` |-> `w2n (d:bytes32)`,
+               `len` |-> `32 + 32 * word_size len`,
+               `cap` |-> `type_memory_bytes ce t`, `aid` |-> `sa.cs_next_id`] o
+       SPEC_ALL) >>
+     impl_tac
+     >- (simp[] >>
+         qpat_assum `!name b len. local_region ce ee.scopes u name b len ==> _`
+           mp_tac >> simp[]) >>
+     simp[]) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce t))]
      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
     (irule buffer_alloc_code >> goal_assum (drule_at Any) >> simp[]) >>
@@ -188,7 +201,7 @@ Resume ifexp_bytestring_adapter_path_mem[canonical]:
      >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
      fs[regions_disjoint_def] >> decide_tac) >>
-  drule_at (Pat `wb_frame _ _ _ _ _ _`) ifexp_copy_endpoint >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) ifexp_copy_endpoint >>
   disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
@@ -196,7 +209,7 @@ Resume ifexp_bytestring_adapter_path_mem[canonical]:
   disch_then (mp_tac o SRULE[venomInstTheory.mk_inst_def]) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
   disch_then (drule_at (Pat `not_local_ptr _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sb`,`op`,`t`] mp_tac) >>
   impl_tac
   >- (simp[] >>
@@ -220,7 +233,7 @@ Resume ifexp_bytestring_adapter_path_mem[canonical]:
 QED
 
 Resume ifexp_bytestring_adapter_path_mem[transport]:
-  qmatch_asmsub_abbrev_tac `expr_post ctx func ce cx e es origin sb s0 ee v op m` >>
+  qmatch_asmsub_abbrev_tac `expr_post H ctx func ce cx e es origin sb s0 ee v op m` >>
   `q with <|vs_vars := m.vs_vars; vs_inst_idx := m.vs_inst_idx|> = m` by
     (qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = u`
        mp_tac >>
@@ -234,13 +247,20 @@ Resume ifexp_bytestring_adapter_path_mem[transport]:
   `!tv'. read_result cx tv' ee = (INL v,ee) ==>
      vv_at ce cx t origin sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) q` by
     suspend "dest" >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_copy_post_transport >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_copy_post_transport >>
   disch_then (drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`q`,`sn`] mp_tac) >>
   impl_tac
   >- simp[Abbr `m`, venomStateTheory.lookup_var_def,
           venomExecSemanticsTheory.mcopy_def, venomStateTheory.write_memory_with_expansion_def] >>
-  strip_tac >> qexists_tac `q` >> simp[] >>
+  strip_tac >>
+  `q.vs_accounts = u.vs_accounts /\ q.vs_transient = u.vs_transient /\
+   q.vs_requests = u.vs_requests /\ q.vs_call_ctx = u.vs_call_ctx` by
+    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = u`
+       (mp_tac o AP_TERM
+          ``\x. (x.vs_accounts,x.vs_transient,x.vs_requests,x.vs_call_ctx)``) >>
+     simp[]) >>
+  qexists_tac `q` >> simp[] >>
   conj_tac >- metis_tac[fragGasPathMemTheory.gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
   gvs[]
 QED

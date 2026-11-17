@@ -27,7 +27,7 @@ Ancestors
    stmtSimReturnWiden's compile_internal_return_memory_widen_frag. *)
 Theorem internal_return_direct_mem:
   !tops ctx func cx cenv ret_ty ret_tv rb rpc rsz cenv' env lctx eo es.
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     cenv.ce_module = NONE /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
@@ -62,9 +62,9 @@ Theorem internal_return_direct_mem:
              (expr_type e = ret_ty \/ is_word_type ret_ty \/
               is_bytestring_type ret_ty)) ==>
     stmt_frag_mem rb ctx func cx lctx
-        (case rb of
-           NONE => intret_q func cenv cx ret_tv
-         | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
+        (\H. case rb of
+              NONE => intret_q H func cenv cx ret_tv
+            | SOME (bw,cap) => intret_mem_q H func cenv cx ret_tv bw)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 Proof
   rpt gen_tac >> strip_tac >>

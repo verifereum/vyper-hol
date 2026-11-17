@@ -6,7 +6,7 @@ Ancestors
   vyperInterpreter vyperState exprSimHypsDefs stmtSimDefs compileEnv
 
 Theorem tuple_immutable_head_outcome:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\ body_inv tops ctx cenv cx /\ cx.in_deploy /\
   expr_sim_inv cenv cx env es /\
   supported_immutable_type tops (src,id) = SOME ity /\
@@ -34,17 +34,19 @@ Theorem tuple_immutable_head_outcome:
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (src,id))) (EL i vs))
     (es,s0)
-    (\res ff t. res = INL () /\ ~block_is_terminated sb /\
+    (\H res ff t. res = INL () /\ ~block_is_terminated sb /\
       expr_sim_inv cenv cx env ff /\
-      tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+      tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
+        storage_well_formed_on cx ff (FST H) /\
       (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv es sp s0 cenv ff t)
-    (\res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   strip_tac >>
   `!p. ignore_bind (write_place cx p (EL i vs)) (return ()) =
@@ -60,12 +62,21 @@ Proof
   pop_assum (once_rewrite_tac o single) >>
   irule (Q.INST [`sb` |-> `sb`, `env` |-> `env`, `tops` |-> `tops`,
     `ity` |-> `ity`, `tvs` |-> `tvs`] tuple_immutable_head_gas_continuation_open) >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
   simp[LET_THM] >>
   qexistsl [`tops`,`ity`,`env`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  irule gas_outcome_return_path >> qexists `t` >> simp[] >>
-  simp[gas_marked_path_def] >> irule (cj 1 gas_path_rules) >>
-  fs[tuple_place_head_def]
+  irule gas_outcome_return_path >> qexists `t` >> conj_tac
+  >~ [`gas_marked_path _ _ _ _ _ _`]
+  >- (simp[gas_marked_path_def] >> irule (cj 1 gas_path_rules) >>
+      fs[tuplePlaceHeadTheory.tuple_place_head_def]) >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ff t /\
+   storage_well_formed_on cx ff (FST H)` by
+    (fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx (ff with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx ff (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+  simp[]
 QED

@@ -7,7 +7,7 @@ Ancestors
    current allocation frontier. *)
 Theorem unwrap_alloc_site_bound:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) ==>
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) ==>
   buffer_allocation_base s sm.cs_next_id + nb < dimword (:256)
 Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
@@ -22,14 +22,14 @@ QED
 
 Theorem unwrap_alloc_old_entry_separation:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  vv_post ctx func cenv cx e es sa sm s0 es' result vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' result vv s /\
   nb < dimword (:256) /\ sa.cs_next_id <= sm.cs_next_id /\
   FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id ==>
   buffer_allocation_base s sm.cs_next_id + nb <= off \/
   off + len <= buffer_allocation_base s sm.cs_next_id
 Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   `FLOOKUP s.vs_allocas aid = SOME (off,len)` by
     (fs[vv_post_def] >> metis_tac[]) >>
   `sm.cs_next_id <> aid` by decide_tac >>
@@ -41,7 +41,7 @@ QED
 
 Theorem unwrap_alloc_typed_loop_bound:
   compile_alloc_buffer (type_memory_bytes cenv t) sm = (buf,mid) /\
-  fn_has_code sm mid func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sm mid func /\ stmt_state_rel H ctx func cenv cx es s /\
   type_memory_bytes cenv t = type_memory_size tv /\
   type_memory_size tv < 2**64 ==>
   buffer_allocation_base s sm.cs_next_id + 32 * type_slot_size tv < 2**256

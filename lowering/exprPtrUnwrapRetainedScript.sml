@@ -31,7 +31,7 @@ QED
 
 Theorem unwrap_alloc_local_separation:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ nb < dimword (:256) /\
   local_region cenv es.scopes s name off len ==>
   buffer_allocation_base s sm.cs_next_id + nb <= off \/
@@ -57,7 +57,7 @@ QED
 
 Theorem unwrap_alloc_entry_local_separation:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  vv_post ctx func cenv cx e es sa sm s0 es' result vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' result vv s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   nb < dimword (:256) /\ local_region cenv es.scopes s0 name off len ==>
@@ -73,20 +73,20 @@ QED
 
 Theorem unwrap_copy_ghost_kept:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  vv_post ctx func cenv cx e es sa sm s0 es' result vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' result vv s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   nb < dimword (:256) /\ sa.cs_next_id <= sm.cs_next_id /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==>
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
   (!i. i < buffer_allocation_base s sm.cs_next_id \/
        buffer_allocation_base s sm.cs_next_id + nb <= i ==>
        (i IN tm.t_mem <=> i IN tn.t_mem)) /\
   (!i. i < buffer_allocation_base s sm.cs_next_id \/
        buffer_allocation_base s sm.cs_next_id + nb <= i ==>
        (i IN tf.t_mem <=> i IN tm.t_mem)) ==>
-  ghost_kept cenv es sa G0 tn0 s0 H tf
+  ghost_kept cenv es sa G0 tn0 s0 HG tf
 Proof
   strip_tac >> irule copy_ghost_kept_transport >>
   qexistsl [`G`, `tn`] >> simp[] >> reverse conj_tac
@@ -114,9 +114,9 @@ Proof
 QED
 
 Theorem copy_framed_stor_taint:
-  stor_taint_ok cx tn0 r /\ slot_copy_runtime_frame cs d i r s /\
+  stor_taint_ok H cx tn0 r /\ slot_copy_runtime_frame cs d i r s /\
   slot_copy_ghost_inv cs load p d root n G0 tn0 i G tn s ==>
-  stor_taint_ok cx tn s
+  stor_taint_ok H cx tn s
 Proof
   strip_tac >> fs[slot_copy_runtime_frame_def] >>
   irule copy_stor_taint_frame >>

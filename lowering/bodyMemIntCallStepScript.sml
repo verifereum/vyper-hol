@@ -13,7 +13,7 @@ Ancestors
    on this base.  The memory twin is cut along those seams once they are. *)
 Theorem intcall_mem_call_step:
   (!tops ctx func cx cenv ret_ty ret_tv rb rpc rsz.
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     cenv.ce_module = NONE /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
@@ -37,9 +37,9 @@ Theorem intcall_mem_call_step:
           evaluate_type (get_tenv cx) ity = SOME itv ==>
           regions_disjoint io (type_memory_size itv) (w2n bw) cap)) ==>
     frame_ret_ok_mem rb ctx func cx
-      (case rb of
-         NONE => intret_q func cenv cx ret_tv
-       | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
+      (\H. case rb of
+            NONE => intret_q H func cenv cx ret_tv
+          | SOME (bw,cap) => intret_mem_q H func cenv cx ret_tv bw)
       cenv ret_ty) ==>
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2

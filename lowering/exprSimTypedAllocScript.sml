@@ -38,7 +38,7 @@ Theorem compile_return_normalize_framed_frag:
        EVERY (\(fname, fty, sz). !tv.
          evaluate_type (get_tenv cx) fty = SOME tv ==>
          sz = type_memory_size tv) fields) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     eval_operand val_op s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory /\
     w2n sw + type_memory_size stv < dimword (:256) /\
@@ -48,7 +48,7 @@ Theorem compile_return_normalize_framed_frag:
      (?n b len. local_region cenv es.scopes s n b len /\
                 b <= w2n sw /\ w2n sw + type_memory_size stv <= b + len)) ==>
     frag_exec ctx sa sb (\z. z = s)
-      (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
+      (\u. ?w. stmt_state_rel H ctx func cenv cx es u /\
                eval_operand buf.buf_operand u = SOME w /\
                w2n w + type_memory_size dtv < dimword (:256) /\
                val_in_memory dtv v (w2n w) u.vs_memory /\
@@ -105,7 +105,7 @@ Proof
     disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
     disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
     disch_then (qspecl_then [`dtv`, `ctx`, `R`,
-      `\t. stmt_state_rel ctx func cenv cx es t /\
+      `\t. stmt_state_rel H ctx func cenv cx es t /\
         (!off len. off + len <= w2n w \/ w2n w + type_memory_size dtv <= off ==>
           mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)`] mp_tac) >>
     impl_tac
@@ -188,7 +188,7 @@ Theorem compile_return_normalize_frag:
        EVERY (\(fname, fty, sz). !tv.
          evaluate_type (get_tenv cx) fty = SOME tv ==>
          sz = type_memory_size tv) fields) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     eval_operand val_op s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory /\
     w2n sw + type_memory_size stv < dimword (:256) /\
@@ -198,7 +198,7 @@ Theorem compile_return_normalize_frag:
      (?n b len. local_region cenv es.scopes s n b len /\
                 b <= w2n sw /\ w2n sw + type_memory_size stv <= b + len)) ==>
     frag_exec ctx sa sb (\z. z = s)
-      (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
+      (\u. ?w. stmt_state_rel H ctx func cenv cx es u /\
                eval_operand buf.buf_operand u = SOME w /\
                w2n w + type_memory_size dtv < dimword (:256) /\
                val_in_memory dtv v (w2n w) u.vs_memory /\
@@ -217,7 +217,7 @@ QED
 (* Shared bound on owned expression memory, also used by Return. *)
 Theorem expr_val_at_bound:
   !func cenv cx t sa sb es v op s tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w ==>

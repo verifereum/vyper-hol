@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem log_encode_state_frame[local]:
-  state_rel func ce cx es s /\ log_encode_external t = log_encode_external s /\
+  state_rel H func ce cx es s /\ log_encode_external t = log_encode_external s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     lookup_var p t = lookup_var p s) /\
@@ -99,7 +99,7 @@ Theorem log_encode_state_frame[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) fp) ==>
-  state_rel func ce cx es t
+  state_rel H func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `local_ptrs_rel func ce es.scopes s /\
@@ -160,7 +160,7 @@ Proof
 QED
 
 Theorem log_encode_allocate_sizes[local]:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) ==>
   !i v b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
@@ -179,14 +179,16 @@ Proof
 QED
 
 Theorem log_encode_allocation_frame[local]:
-  stmt_state_rel ctx func ce cx es s /\ state_rel func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ state_rel H func ce cx es t /\
   immutable_alloca_sep func ce cx es t /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
   t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
   t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t ==>
-  stmt_state_rel ctx func ce cx es t
+  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t /\
+  t.vs_initial_fmp = s.vs_initial_fmp /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory ==>
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `alloca_inv s /\ alloca_room ctx func s /\ fmp_room ctx func s` by
@@ -208,12 +210,13 @@ Proof
       `(abi_builtin_allocate_state inst.inst_id n s).vs_fmp = s.vs_fmp` by
         rw[abi_builtin_allocate_state_def] >>
       irule fmp_room_fields >>
-      qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >> gvs[]) >>
+      qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >>
+      gvs[abi_builtin_allocate_state_def] >> IF_CASES_TAC >> gvs[]) >>
   rpt strip_tac >> drule_all log_encode_allocate_sizes >> simp[]
 QED
 
 Theorem log_encode_continuation:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   log_encode_external t = log_encode_external s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -232,7 +235,7 @@ Theorem log_encode_continuation:
   (dyn ==> fn_inst_ids_distinct func /\
     ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
       inst.inst_operands = [Lit (n2w n)] /\ inst.inst_id = site /\ n < dimword (:256)) ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `(!aid r. FLOOKUP s.vs_allocas aid = SOME r ==> FLOOKUP t.vs_allocas aid = SOME r) /\
@@ -242,9 +245,9 @@ Proof
     (Cases_on `dyn` >> gvs[] >>
      qspecl_then [`inst.inst_id`,`n`,`s`] mp_tac (GEN_ALL log_encode_allocate_metadata) >>
      simp[] >> metis_tac[]) >>
-  `state_rel func ce cx es s /\ immutable_alloca_sep func ce cx es s` by
+  `state_rel H func ce cx es s /\ immutable_alloca_sep func ce cx es s` by
     fs[stmt_state_rel_def] >>
-  `state_rel func ce cx es t` by
+  `state_rel H func ce cx es t` by
     (qpat_x_assum `t.vs_allocas = _` kall_tac >>
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      irule log_encode_state_frame >> qexistsl_tac [`fp`,`s`] >>
@@ -264,6 +267,10 @@ Proof
      qpat_x_assum `log_encode_external t = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_labels`) >>
      simp[log_encode_external_def]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_x_assum `log_encode_external t = _`
+       (mp_tac o Q.AP_TERM `\x. x.vs_initial_fmp`) >>
+     simp[log_encode_external_def]) >>
   Cases_on `dyn` >> gvs[]
   >- (irule log_encode_allocation_frame >> asm_simp_tac bool_ss [] >>
       qexistsl_tac [`inst`,`n`,`s`] >> simp[] >>
@@ -278,7 +285,7 @@ Proof
 QED
 
 Theorem log_encode_local_operands[local]:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     abi_decoder_operand_live nv (Var p)) /\
@@ -315,7 +322,7 @@ Theorem log_scalar_tuple_continue:
       FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32)) /\
     p < dimword (:256) /\ (sb+cap <= p \/ p+32 <= sb) /\
     (db+outcap <= p \/ p+32 <= db)) /\
-  stmt_state_rel ctx func ce cx es initial /\
+  stmt_state_rel H ctx func ce cx es initial /\
   (!name entry v sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var v) sz) ==>
     abi_decoder_operand_live st.cs_next_var (Var v)) /\
@@ -340,7 +347,7 @@ Theorem log_scalar_tuple_continue:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     abi_decode_footprint_frame
       ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])) initial actual /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)
 Proof

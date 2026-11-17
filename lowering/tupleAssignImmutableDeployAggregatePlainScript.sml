@@ -22,8 +22,8 @@ Theorem tuple_immutable_direct_aggregate_store:
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\
   val_in_memory stv v a s.vs_memory /\ val_footprint stv v <= k /\
-  stmt_state_rel ctx func cenv cx es s ==>
-  ?r q. r = s /\ stmt_state_rel ctx func cenv cx es r /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  ?r q. r = s /\ stmt_state_rel H ctx func cenv cx es r /\
     gas_marked_path F ctx func s 0 (OK q) /\
     val_in_memory dtv v b q.vs_memory /\
     immutable_value_bytes_rel dtv v
@@ -80,8 +80,8 @@ Theorem tuple_immutable_bytestring_aggregate_store:
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s ==>
-  ?r q. r = s /\ stmt_state_rel ctx func cenv cx es r /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  ?r q. r = s /\ stmt_state_rel H ctx func cenv cx es r /\
     gas_marked_path F ctx func s 0 (OK q) /\
     val_in_memory dtv v b q.vs_memory /\
     immutable_value_bytes_rel dtv v

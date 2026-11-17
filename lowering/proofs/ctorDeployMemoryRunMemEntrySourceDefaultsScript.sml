@@ -45,7 +45,7 @@ Proof
   strip_tac >>
   drule_all ctor_source_start_immutables >> strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    gvs[deploy_source_ok_def, deploy_typing_ok_def] >>
+    gvs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   gvs[deploy_ctor_start_def] >>
   drule_all no_ctor_checked_initial_lookup >> strip_tac >>

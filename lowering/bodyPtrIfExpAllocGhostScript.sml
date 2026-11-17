@@ -16,7 +16,7 @@ QED
 
 Theorem alloca_step_return_buf_ptr:
   !ctx fn cenv cx es s d G tn PG id n out u.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     return_buf_ptr d cenv G tn s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
@@ -38,20 +38,20 @@ QED
 
 Theorem alloca_step_ghost_inv_separated:
   !ctx fn cenv cx es s d G tn PG id n out u.
-    stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
     not_local_ptr cenv es.scopes out /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) u
 Proof
   rpt gen_tac >> strip_tac >>
-  `state_rel fn cenv cx es s` by gvs[stmt_state_rel_def] >>
-  qpat_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  `state_rel H fn cenv cx es s` by gvs[stmt_state_rel_def] >>
+  qpat_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_def] >> strip_tac >>
   rewrite_tac[ghost_inv_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>

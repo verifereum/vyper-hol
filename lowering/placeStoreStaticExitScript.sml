@@ -2,6 +2,7 @@
 Theory placeStoreStaticExit
 Ancestors
   placeStoreSlots placeStaticStoreExit storageStoreFrame
+  vyperStoragePlaceObserved vyperStorageFootprint
   placeStaticCopyExit bytestringCopyExecution
   stmtLoweringMono vyperTypeSystem
   placeStoreStorage stmtSimDefs exprSimDefs exprSimHyps exprSimHypsDefs
@@ -22,7 +23,8 @@ Theorem place_store_value_static_exit:
   expr_val_rel cx sty v op s /\ cenv.ce_target CapMcopy /\
   expr_sim_inv cenv cx env ee /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
+  regions_consistent (FST H) /\
   (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
     (!tv. evaluate_type (get_tenv cx) sty = SOME tv ==>
       type_memory_size tv < dimword (:256)) /\
@@ -41,7 +43,7 @@ Theorem place_store_value_static_exit:
   (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
   (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
     type_alloc_ok cenv dty) /\
-  stmt_state_rel ctx func cenv cx ee s /\ cx.txn.is_static /\
+  stmt_state_rel H ctx func cenv cx ee s /\ cx.txn.is_static /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

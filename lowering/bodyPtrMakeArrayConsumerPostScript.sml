@@ -10,12 +10,12 @@ Theorem make_array_located_consumer_post:
   compile_expr cenv (expr_type e) e sa = (LocatedValue ty p,sm) /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [buf; Lit (n2w off)] sm = (Var out,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv (LocatedValue ty p) s /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue ty p) es' G tn s /\
   (~is_word_type (expr_type e) ==>
     ptr_buf_ok cenv e (vv_operand (LocatedValue ty p)) G s) ==>
   p.ptr_location <> LocCalldata /\
-  vv_post ctx func cenv cx e es sa sn s0 es' tv (LocatedValue ty p)
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv (LocatedValue ty p)
     ((update_var out w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue ty p) es'
     (step_prov PG G (mk_inst sm.cs_next_id ADD [buf; Lit (n2w off)] [out])
@@ -46,7 +46,7 @@ QED
 (* These are projections of the actual located-value post, not additional
    source provenance or global storage-liveness assumptions. *)
 Theorem make_array_storage_consumer_read:
-  vv_post ctx fn cenv cx e es sa sb s0 es' tv (LocatedValue ty p) s /\
+  vv_post H ctx fn cenv cx e es sa sb s0 es' tv (LocatedValue ty p) s /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   post_value_type cenv e = expr_type e ==>
   ?a tvt v.

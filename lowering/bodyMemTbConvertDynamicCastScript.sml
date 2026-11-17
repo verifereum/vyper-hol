@@ -13,7 +13,7 @@ Theorem convert_dynamic_counted_cont_mem:
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
   value_has_type tv1 v /\
-  expr_post ctx func cenv cx e1 es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e1 es sa sm s0 es1 v x s /\
   compile_type_convert x (ConvBytestringCast n i) sm = (op,sb) /\
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
@@ -24,11 +24,13 @@ Theorem convert_dynamic_counted_cont_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   (?tt v'. gas_marked_path T ctx func s 0 (OK tt) /\
     convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
-    expr_post ctx func cenv cx e es sa sb s0 es1 v' op tt /\
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v' op tt /\
     tt.vs_current_bb = sb.cs_current_bb /\
     tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func tt /\ tt.vs_alloca_next = s.vs_alloca_next /\
     tt.vs_memory = s.vs_memory /\ tt.vs_allocas = s.vs_allocas /\
+    tt.vs_accounts = s.vs_accounts /\ tt.vs_transient = s.vs_transient /\
+    tt.vs_requests = s.vs_requests /\ tt.vs_call_ctx = s.vs_call_ctx /\
     (!p. eval_operand x s = SOME p ==> eval_operand op tt = SOME p)) \/
   (?tt. gas_marked_path T ctx func s 0 (Abort Revert_abort tt) /\
     expr_exit (convert_result cx (expr_type e1) (expr_type e) v)
@@ -38,7 +40,7 @@ Proof
   `post_value_type cenv e1 = expr_type e1` by
     (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s /\
-   stmt_state_rel ctx func cenv cx es1 s` by gvs[expr_post_def] >>
+   stmt_state_rel H ctx func cenv cx es1 s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>
   drule convert_cast_grows >> strip_tac >>
   `w2n p + 32 <= s.vs_alloca_next` by metis_tac[] >>

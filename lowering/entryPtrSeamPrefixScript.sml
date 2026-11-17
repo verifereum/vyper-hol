@@ -18,22 +18,37 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
-  entryStateRel selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
+  arithmetic fragGasOriginPtr fragGasPathMem entryStateRel selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
   entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
-  entryLocals actualEntryAllocationFrame
+  entryLocals actualEntryAllocationFrame runtimeBodyStartDefs
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  bodyPtrDefs moduleLowering venomWf
 
 Theorem vars_pc_only_gas_readings:
   !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
 Proof
   rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem prefix_mem_then[local]:
+  gas_path_mem ctx fn s 0 (OK u) /\ gas_path_mem ctx fn u 0 (OK t) ==>
+  gas_path_mem ctx fn s 0 (OK t)
+Proof
+  metis_tac[gas_path_mem_then, ADD_0]
+QED
+
+Theorem prefix_joint_then[local]:
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G1,tn1)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G1,tn1) [] (OK t,G2,tn2)) ==>
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G2,tn2)
+Proof
+  metis_tac[gas_origin_ptr_path_append, APPEND]
 QED
 
 (* Entry-to-registration prefix seam.
@@ -54,18 +69,16 @@ QED
      gives mut = Payable or a zero call value (the converse of
      entryValueRevertPtr's initial_entry_rejected_value); valid_vyper_call's
      calldata_encodes gives the calldata size bound. *)
-Theorem external_entry_reaches_registration_ptr:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
+Theorem external_entry_reaches_registration_ptr_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -74,21 +87,33 @@ Theorem external_entry_reaches_registration_ptr:
       (INL (), es0) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
     fn_entry_label efn = SOME elbl ==>
-    ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
+    ?pbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
      G1 tn1.
+      pbody = subst_consts_stmts (module_consts_env tops []) fbody /\
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
-           (mut, F, lookup_raw_return_or_F (NONE : num option)
+           (subst_consts_fn (module_consts_env tops []) (mut, nr, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
-            tx.function_name, args, [], ret, fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+            tx.function_name, args, [], ret, fbody))) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
          rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
+         rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
-      compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
+      compile_guarded_body cenv nr nkey ut' iv pbody rt sa = ((), st') /\
       fn_has_code st sa efn /\ fn_has_code sa st' efn /\
       fn_inst_ids_distinct efn /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       cenv.ce_return_buf = NONE /\
+      gas_path_mem unit.cu_context efn
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) 0 (OK s1) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                       vs_inst_idx := 0 |>, FEMPTY, entry_taint)
+           [] (OK s1, G1, tn1)) /\
       vars_pc_only
         (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                     vs_inst_idx := 0 |>) s1 /\
@@ -106,9 +131,7 @@ Theorem external_entry_reaches_registration_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
-  qpat_x_assum `source_storage_ok _ _ _` kall_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
-  qpat_x_assum `call_outcomes_ok _ _ _` kall_tac >>
   `o1_source_unit_ok unit` by
     (irule lower_vyper_runtime_unit_source_unit_ok_shape >>
      goal_assum (drule_at Any) >> conj_tac
@@ -118,38 +141,59 @@ Proof
   `~ctx_has_dalloca unit.cu_context` by metis_tac[o1_source_unit_ok_no_dalloca] >>
   qabbrev_tac `pkg = set_external_package_target rpolicy.rpol_target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut, F, lookup_raw_return_or_F (NONE : num option)
+      (mut, nr, lookup_raw_return_or_F (NONE : num option)
         tx.function_name External tops, tx.function_name, args, [], ret, fbody))` >>
   PairCases_on `pkg` >>
   `pkg0 = "fn_" ++ tx.function_name /\ pkg4 = (mut = Payable) /\
-   pkg5 = F /\ pkg9 = fbody` by
+   pkg5 = nr /\ pkg9 = fbody` by
     (qpat_x_assum `Abbrev _` mp_tac >>
      simp[markerTheory.Abbrev_def, set_external_package_target_def,
           package_external_fn_def] >> strip_tac >> gvs[]) >>
   fs[] >>
   `set_external_package_target rpolicy.rpol_target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
        tx.function_name,args,([] : expr list),ret,fbody)) =
-    ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,F,pkg6,pkg7,pkg8,fbody,pkg10)` by
+    ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,nr,pkg6,pkg7,pkg8,fbody,pkg10)` by
     (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
      simp[package_external_fn_def]) >>
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_external_names_distinct] >>
-  drule_all source_selected_entry_prefix_structure >> strip_tac >>
+  `set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (subst_consts_fn (module_consts_env tops [])
+        (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+         tx.function_name,args,([] : expr list),ret,fbody))) =
+    ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,nr,pkg6,pkg7,pkg8,
+     subst_consts_stmts (module_consts_env tops []) fbody,pkg10)` by
+    (rewrite_tac[GSYM entryDispatchPropsTheory.external_package_subst_consts] >> simp[]) >>
+  fs[] >>
+  drule_all source_selected_entry_prefix_structure_nr >> strip_tac >>
   suspend "dispatch"
 QED
 
-Resume external_entry_reaches_registration_ptr[dispatch]:
+Resume external_entry_reaches_registration_ptr_nr[dispatch]:
   drule_all initial_entry_dispatch_scalars >>
   disch_then (qspecl_then [`0`, `elbl`, `ds`] strip_assume_tac) >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>` >>
   qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
     assume_tac entryDispatchPropsTheory.linear_selectors_lt >>
+  `MEM efn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `!b. lookup_block b efn.fn_blocks <> NONE ==>
+       !i. MEM i (THE (lookup_block b efn.fn_blocks)).bb_instructions ==>
+           i.inst_opcode <> PHI` by
+    (rpt strip_tac >> Cases_on `lookup_block b efn.fn_blocks` >> fs[] >>
+     drule lookup_block_fn_insts >> disch_then drule >>
+     qpat_x_assum `o1_source_unit_ok unit` mp_tac >>
+     simp[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >> metis_tac[]) >>
+  `!lbl bb. lookup_block lbl efn.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> irule no_phis_phi_prefix_length_zero >> simp[EVERY_MEM] >>
+     first_x_assum (qspec_then `lbl` mp_tac) >> simp[]) >>
   drule compile_selector_dispatch_linear_ptr_endpoint >>
   disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `efn`, `unit.cu_context`,
     `[]`, `FEMPTY`] mp_tac) >>
-  (impl_tac >- simp[Abbr `ss`]) >> strip_tac >>
+  (impl_tac >- (simp[Abbr `ss`] >> metis_tac[])) >> strip_tac >>
   rename1 `vars_pc_only ss tt` >> rename1 `tn1.t_mem = entry_taint.t_mem` >>
   rename1 `ptr_safe_blocks _ _ _ _ _ _ G1 tn1 tt` >>
   drule_all source_valid_linear_dispatch_target >> strip_tac >>
@@ -161,18 +205,27 @@ Resume external_entry_reaches_registration_ptr[dispatch]:
   suspend "checks"
 QED
 
-Resume external_entry_reaches_registration_ptr[checks]:
+Resume external_entry_reaches_registration_ptr_nr[checks]:
   qabbrev_tac `raw = package_external_fn tops T (K global_nonreentrant_slot)
-    (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+    (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
      tx.function_name,args,([] : expr list),ret,fbody)` >>
   PairCases_on `raw` >>
   qpat_x_assum `Abbrev ((raw0,_) = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `raw3 = pkg3` by
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     asm_rewrite_tac[set_external_package_target_def] >> simp[]) >>
+    fs[set_external_package_target_def] >>
   `pkg3 <= LENGTH vs.vs_call_ctx.cc_calldata` by
-    (drule_all valid_vyper_call_min_calldata_size >> simp[]) >>
+    (drule source_typing_ok_type_def_keys_distinct >> strip_tac >>
+     drule_all entryDecodePlanPropsTheory.package_external_fn_dec_cenv_agrees >>
+     strip_tac >>
+     `raw3 = min_calldata_size raw1 args 0` by
+       (qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
+        simp[package_external_fn_def] >> rw[] >> simp[]) >>
+     gvs[valid_vyper_call_def, optionTheory.IS_SOME_EXISTS] >>
+     irule calldata_encodes_min_calldata_size >>
+     qexistsl_tac [`tx.function_name`, `type_env tops`, `tx.args`] >> simp[] >>
+     rpt strip_tac >>
+     drule_all entryDecodePropsTheory.bind_arguments_word_arg >> simp[]) >>
   `mut = Payable \/ tt.vs_call_ctx.cc_callvalue = 0w` by
     (drule send_call_value_success_condition >>
      simp[initial_evaluation_context_def] >> strip_tac >> simp[] >>
@@ -184,48 +237,109 @@ Resume external_entry_reaches_registration_ptr[checks]:
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only tt u` >> rename1 `tn2.t_mem = tn1.t_mem` >>
   rename1 `ptr_safe_run _ _ _ _ _ _ G2 tn2 u` >>
+  `gas_path_mem unit.cu_context efn ss 0 (OK u)` by
+    (irule prefix_mem_then >> qexists_tac `tt` >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+    (ss,FEMPTY,entry_taint) [] (OK u,G2,tn2)` by
+    (irule prefix_joint_then >> qexistsl_tac [`G1`, `tn1`, `tt`] >> simp[]) >>
+  `vars_pc_only ss u` by
+    (irule vars_pc_only_trans >> qexists_tac `tt` >> simp[]) >>
+  `u.vs_gas_readings = vs.vs_gas_readings` by
+    (qpat_assum `vars_pc_only ss u`
+       (mp_tac o MATCH_MP vars_pc_only_gas_readings) >> simp[Abbr `ss`]) >>
+  qpat_x_assum `Abbrev (ss = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
-  simp[entry_taint_def] >>
-  (conj_tac >- metis_tac[vars_pc_only_trans]) >>
-  (conj_tac >-
-    (`vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                               vs_inst_idx := 0 |>) u`
-       by metis_tac[vars_pc_only_trans] >>
-     drule vars_pc_only_gas_readings >> simp[])) >>
-  all_tac >>
+  fs[entry_taint_def, stringTheory.STRCAT_EQNS] >>
   `cs_extends opened st` by
     (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
      pure_rewrite_tac[shape_step_def] >>
      disch_then (qspecl_then [`opened`, `()`, `st`] mp_tac) >>
      simp[shape_extends_def]) >>
   drule_all fn_has_code_start >> strip_tac >>
-  `MEM efn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `!b. lookup_block b efn.fn_blocks <> NONE ==>
-       !i. MEM i (THE (lookup_block b efn.fn_blocks)).bb_instructions ==>
-           i.inst_opcode <> PHI` by
-    (rpt strip_tac >> Cases_on `lookup_block b efn.fn_blocks` >> fs[] >>
-     drule lookup_block_fn_insts >> disch_then drule >>
-     qpat_x_assum `o1_source_unit_ok unit` mp_tac >>
-     simp[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >>
-     metis_tac[]) >>
-  `phi_prefix_length bb.bb_instructions = 0` by
-    (irule no_phis_phi_prefix_length_zero >> simp[EVERY_MEM] >>
-     first_x_assum (qspec_then `opened.cs_current_bb` mp_tac) >> simp[]) >>
+
+  `phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
   gen_tac >> disch_tac >>
   drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
   rename1 `get_instruction entrybb (LENGTH ds.cs_current_insts) =
     SOME (mk_inst ds.cs_next_id CALLDATASIZE [] _)` >>
   irule ptr_safe_blocks_nonphi_run >>
   (reverse conj_tac >-
-    (simp[Abbr `ss`] >>
+    (simp[] >>
      qexistsl_tac [`entrybb`, `mk_inst ds.cs_next_id CALLDATASIZE []
        [STRING #"%" (toString ds.cs_next_var)]`] >> gvs[mk_inst_def])) >>
   rewrite_tac[GSYM entry_taint_def] >>
   `!fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] G1 tn1 tt` suffices_by
-    metis_tac[] >>
+    (qpat_x_assum `!D. (!fuel. ptr_safe_blocks _ 0 fuel _ _ [] G1 tn1 tt) ==> _`
+       (qspec_then `D` mp_tac) >> simp[entry_taint_def]) >>
   irule ptr_safe_blocks_from_phi_free_run >>
   simp[] >>
   qexists_tac `bb` >> gvs[]
 QED
 
-Finalise external_entry_reaches_registration_ptr
+Finalise external_entry_reaches_registration_ptr_nr
+
+Theorem external_entry_reaches_registration_ptr:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl ==>
+    ?pbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
+     G1 tn1.
+      pbody = subst_consts_stmts (module_consts_env tops []) fbody /\
+      set_external_package_target rpolicy.rpol_target
+        (package_external_fn tops T (K global_nonreentrant_slot)
+           (subst_consts_fn (module_consts_env tops []) (mut, F, lookup_raw_return_or_F (NONE : num option)
+                       tx.function_name External tops,
+            tx.function_name, args, [], ret, fbody))) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, pbody,
+         rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, pbody,
+         rt) st /\
+      compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+      compile_guarded_body cenv F nkey ut' iv pbody rt sa = ((), st') /\
+      fn_has_code st sa efn /\ fn_has_code sa st' efn /\
+      fn_inst_ids_distinct efn /\
+      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+      cenv.ce_return_buf = NONE /\
+      gas_path_mem unit.cu_context efn
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) 0 (OK s1) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                       vs_inst_idx := 0 |>, FEMPTY, entry_taint)
+           [] (OK s1, G1, tn1)) /\
+      vars_pc_only
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) s1 /\
+      s1.vs_gas_readings = vs.vs_gas_readings /\
+      fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+      s1.vs_current_bb = st.cs_current_bb /\
+      s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+      tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
+      tn1.t_imm = {} /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1) ==>
+          !fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] FEMPTY
+                   entry_taint
+                   (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                               vs_inst_idx := 0 |>)
+Proof
+  rpt gen_tac >>
+  MATCH_ACCEPT_TAC (SPEC_ALL
+    (Q.SPEC `F` (Q.SPECL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`]
+      external_entry_reaches_registration_ptr_nr)))
+QED

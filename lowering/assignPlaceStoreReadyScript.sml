@@ -1,7 +1,8 @@
 Theory assignPlaceStoreReady
 Ancestors
   assignPlaceMemory assignPlaceStorage
-  loweringPosts stmtSimDefs stmtLowering compileEnv
+  loweringPosts stmtSimDefs stmtLowering compileEnv vyperStorageFootprint
+  vyperStoragePlaceObserved
 Libs monadsyntax
 
 (* Store-only continuation: unwrap and target framing belong to the caller. *)
@@ -9,7 +10,11 @@ Theorem assign_place_store_from_expr_post:
   compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
     (type_memory_bytes cenv dty) su = ((),sb) /\
-  expr_post ctx func cenv cx e es sa su s0 ee v src s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa su s0 ee v src s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   expr_sim_inv cenv cx env ee /\
   type_widens_to (get_tenv cx) (post_value_type cenv e) dty /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv /\
@@ -20,7 +25,6 @@ Theorem assign_place_store_from_expr_post:
   (!x. dst = Var x ==> not_fresh_at su x) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type dty) /\
-  storage_place_region cx p /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -43,7 +47,8 @@ Theorem assign_place_store_from_expr_post:
    ~(is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)) ==>
    type_alloc_ok cenv dty) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -52,21 +57,21 @@ Theorem assign_place_store_from_expr_post:
     alloca_frame cenv ee su s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa su s0 ee v src s` by metis_tac[] >>
   Cases_on `loc = LocMemory`
   >- (qpat_x_assum `loc = LocMemory` SUBST_ALL_TAC >>
-      irule assign_place_memory_from_expr_post >> simp[] >>
-      (conj_tac >- metis_tac[]) >>
-      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-      simp[] >>
-      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >> simp[] >>
-      goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
-      metis_tac[]) >>
-  `loc = LocStorage \/ loc = LocTransient` by (Cases_on `loc` >> gvs[]) >>
-  irule assign_place_storage_from_expr_post >> simp[] >>
-  (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >>
-  goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >> simp[] >>
-  goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
-  metis_tac[]
+      `storage_place_region cx p` by
+        (Cases_on `p` >> fs[place_ptr_rel_def,
+          vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+         Cases_on `b` >> fs[slot_loc_def]) >>
+      drule_all assign_place_memory_from_expr_post >> strip_tac >>
+      qexists_tac `t` >> simp[]) >>
+  Q.SUBGOAL_THEN `loc = LocStorage \/ loc = LocTransient` assume_tac
+  >- (Cases_on `loc` >> gvs[]) >>
+  `~is_word_type dty /\ dty <> lowered_value_type cenv e /\
+   ~(is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)) ==>
+   type_alloc_ok cenv dty` by metis_tac[] >>
+  drule_all assign_place_storage_from_expr_post >> strip_tac >>
+  qexists_tac `t` >> simp[]
 QED

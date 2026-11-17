@@ -26,7 +26,7 @@ Ancestors
    returned expression's memory simulation for the memory side. *)
 Theorem internal_frame_ret_ok_mem:
   !tops ctx func cx cenv ret_ty ret_tv rb rpc rsz.
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     cenv.ce_module = NONE /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
@@ -50,9 +50,9 @@ Theorem internal_frame_ret_ok_mem:
           evaluate_type (get_tenv cx) ity = SOME itv ==>
           regions_disjoint io (type_memory_size itv) (w2n bw) cap)) ==>
     frame_ret_ok_mem rb ctx func cx
-      (case rb of
-         NONE => intret_q func cenv cx ret_tv
-       | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
+      (\H. case rb of
+            NONE => intret_q H func cenv cx ret_tv
+          | SOME (bw,cap) => intret_mem_q H func cenv cx ret_tv bw)
       cenv ret_ty
 Proof
   rpt gen_tac >> strip_tac >>

@@ -1,6 +1,7 @@
 (* Proof interfaces for declaration-order constant inlining. *)
 Theory constSubstCorrect
 Ancestors
+  vyperStoragePlaceProvenance vyperBareGlobalName
   constSubst vyperTypeConstantFold vyperAST vyperTypeContractContext
   vyperState vyperValue vyperContext vyperTypeInvariants vyperInterpreter
   vyperMisc vyperTyping vyperTypeValues targetOverlapAccess
@@ -833,22 +834,31 @@ Theorem constants_env_fold_agreement_acc:
     constants_fold_module mods (constant_machine_immutables am cx.txn.target) src ts acc = SOME A /\
     constant_fmap_declared_typed (type_env_all_modules mods) full A
 Proof
-  Induct >- simp[vyperInterpreterTheory.constants_env_def, constants_fold_module_def] >>
+  Induct >- simp[vyperInterpreterTheory.constants_env_def,
+                 vyperInterpreterTheory.constants_env_trace_def, constants_fold_module_def] >>
   rpt gen_tac >> Cases_on `h` >>
-  simp[vyperInterpreterTheory.constants_env_def, constants_fold_module_def] >>
+  simp[vyperInterpreterTheory.constants_env_def,
+       vyperInterpreterTheory.constants_env_trace_def, constants_fold_module_def] >>
   strip_tac
   >~ [`constants_fold_module _ _ _ (VariableDecl vis mut id ty slot :: ts) acc`]
   >- (Cases_on `mut` >>
-      gvs[vyperInterpreterTheory.constants_env_def, constants_fold_module_def, AllCaseEqs()]
-      >~ [`FST _ = INL v`]
-      >- (`?st'. (do pv <- eval_expr cx e; read_result cx pv od)
-             (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) = (INL v,st')` by
-            metis_tac[pairTheory.PAIR] >>
+      gvs[vyperInterpreterTheory.constants_env_def,
+          vyperInterpreterTheory.constants_env_trace_def, constants_fold_module_def, AllCaseEqs()]
+      >~ [`MEM (VariableDecl vis (Constant e) id ty slot) full`]
+      >- (Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[] >>
+          rename1 `evaluate_type (get_tenv cx) ty = SOME tv` >>
+          Cases_on `(do pv <- eval_expr cx e; read_result cx pv od)
+            (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY])` >>
+          rename1 `(do pv <- eval_expr cx e; read_result cx pv od)
+            (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) = (res,st')` >>
+          Cases_on `res` >> gvs[] >> rename1 `INL v` >>
+          Cases_on `constants_env_trace cx am cx.txn.target src ts (acc |+ (id,(tv,v)))` >>
+          gvs[] >>
           drule_all checked_const_initializer_read_fold >> strip_tac >>
           first_x_assum (qspec_then `acc |+ (id,(tv,v))` mp_tac) >> simp[] >> strip_tac >>
           drule get_tenv_sources >> strip_tac >> gvs[] >> metis_tac[]) >>
       metis_tac[]) >>
-  first_x_assum drule_all >> simp[]
+  fs[vyperInterpreterTheory.constants_env_def] >> first_x_assum drule_all >> simp[]
 QED
 
 Theorem checked_constants_env_fold:
@@ -1019,37 +1029,6 @@ Proof
     vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()]
 QED
 
-Theorem extend_place_immutable_root:
-  extend_place cx pv sb st = (INL (PlaceR (ImmutablePlace src id path)),st') ==>
-  ?p. pv = PlaceR (ImmutablePlace src id p)
-Proof
-  Cases_on `pv` >>
-  simp[vyperStateTheory.extend_place_def, vyperStateTheory.raise_def]
-  >- (Cases_on `p` >>
-      gvs[vyperStateTheory.extend_place_def, vyperStateTheory.bind_def,
-        vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
-        vyperStateTheory.extend_memory_place_def, AllCaseEqs()] >>
-      metis_tac[extend_storage_place_not_immutable]) >>
-  Cases_on `sb` >>
-  gvs[vyperStateTheory.extend_place_def, vyperStateTheory.bind_def,
-    vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
-    vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()]
-QED
-
-Theorem lookup_global_immutable_root:
-  lookup_global cx src0 id0 st = (INL (PlaceR (ImmutablePlace src id path)),st') ==>
-  src0 = src /\ id0 = id
-Proof
-  simp[vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
-    vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def,
-    vyperStateTheory.raise_def, vyperMiscTheory.option_CASE_rator,
-    vyperMiscTheory.prod_CASE_rator, vyperStateTheory.var_decl_info_CASE_rator,
-    AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
 Theorem eval_base_place_immutable_root:
   !bt cx st src id path st'.
     eval_base_place cx bt st = (INL (PlaceR (ImmutablePlace src id path)),st') ==>
@@ -1061,13 +1040,13 @@ Proof
     vyperStateTheory.get_scopes_def, vyperStateTheory.type_check_def,
     vyperStateTheory.assert_def, vyperStateTheory.return_def,
     vyperStateTheory.raise_def, AllCaseEqs()]
-  >- (drule extend_place_immutable_root >> strip_tac >> gvs[] >>
+  >- (drule vyperStoragePlaceProvenanceTheory.extend_place_immutable_root >> strip_tac >> gvs[] >>
       first_x_assum drule >> simp[])
-  >- (drule extend_place_immutable_root >> strip_tac >> gvs[] >>
+  >- (drule vyperStoragePlaceProvenanceTheory.extend_place_immutable_root >> strip_tac >> gvs[] >>
       first_x_assum drule >> simp[]) >>
   rename1 `TopLevelNameTarget root` >> PairCases_on `root` >>
   gvs[Once vyperInterpreterTheory.evaluate_def] >>
-  drule lookup_global_immutable_root >> simp[]
+  drule vyperBareGlobalNameTheory.lookup_global_immutable_root >> simp[]
 QED
 
 Theorem eval_target_place_immutable_root:
@@ -1429,7 +1408,7 @@ Theorem protected_cell_frame_reads:
   state_rel_frame (protected_cell_frame addr src id) (extend_place cx pv sb) /\
   state_rel_frame (protected_cell_frame addr src id) (resolve_array_element cx b slot ty subs)
 Proof
-  rpt conj_tac >> irule protected_cell_frame_state >> rpt strip_tac >>
+  rpt conj_tac >> irule protected_cell_frame_eq_op >> rpt strip_tac >>
   FIRST [drule_all read_result_state, drule_all read_results_state,
     drule_all select_result_state, drule_all conditional_result_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
@@ -1437,7 +1416,9 @@ Proof
     drule_all lift_sum_state, drule_all get_immutables_state,
     drule_all get_place_state, drule_all read_place_state,
     drule_all place_type_value_state, drule_all extend_place_state,
-    drule_all resolve_array_element_state] >> simp[]
+    drule_all resolve_array_element_state] >> strip_tac >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (assume_tac o AP_TERM ``evaluation_state_immutables``)) >> gvs[]
 QED
 
 Theorem protected_cell_frame_primitives:
@@ -5500,7 +5481,7 @@ Proof
       pairarg_tac >> gvs[return_def]) >>
   Cases_on `sb` >> Cases_on `v` >>
   gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
-      raise_def, AllCaseEqs()]
+      raise_def, record_storage_event_def, ignore_bind_def, AllCaseEqs()]
 QED
 
 Theorem closed_constant_no_local_place[local]:
@@ -5514,7 +5495,7 @@ Proof
   rpt strip_tac
   >- (Cases_on `src` >> gvs[] >>
       gvs[Once evaluate_def] >>
-      drule lookup_global_immutable_root >> simp[])
+      drule vyperBareGlobalNameTheory.lookup_global_immutable_root >> simp[])
   >~ [`eval_expr cx (Attribute ty e fld) st = _`]
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
           raise_def, AllCaseEqs()] >>

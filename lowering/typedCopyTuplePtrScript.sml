@@ -80,7 +80,7 @@ Theorem compile_store_memory_typed_tuple_bytes_frag_ptr:
       EL i lens+31 < dimword(:256) /\ 32+32*((EL i lens+31) DIV 32) < dimword(:256)) ==>
     cs_extends sa sz /\
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sz
+      frag_exec_ptr H cx ctx PG sa sz
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\

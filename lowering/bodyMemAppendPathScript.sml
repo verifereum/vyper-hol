@@ -1,7 +1,7 @@
 (* Counted memory paths for the storage Append suffix. *)
 Theory bodyMemAppendPath
 Ancestors
-  bodyMemAppendFacts bodyDeclMemoryCounted bodyDeclMemoryCore bodyUnopFragMemory
+  bodyMemAppendFacts bodyDeclMemoryCounted bodyDeclZeroGasPath bodyDeclMemoryCore bodyUnopFragMemory
   stmtSimAppendStorageCompose stmtSimAppendStorage appendStorageRel
   varsExt freshWrites stateFrame exprOperandVar stmtSimProps stmtSimDefs exprSimDefs
   fragGasMode fragGasPathMem fragExecMem fragExec
@@ -74,29 +74,34 @@ Proof
 QED
 
 Theorem append_storage_word_success_post_mem[local]:
+  ~cx.txn.is_static /\
   state_frame u = state_frame
     (if tr then tstore slot (n2w len+1w) (tstore (slot+1w+n2w len) w s)
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
   (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x u = SOME a) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
   encode_value tv v = SOME [(0,w)] /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') ==>
-  res = INL () /\ stmt_state_rel ctx func cenv cx es' u
+  res = INL () /\
+  !H1. stmt_state_rel H1 ctx func cenv cx es s /\
+       MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H1) ==>
+       stmt_state_rel H1 ctx func cenv cx es' u
 Proof
-  strip_tac >>
+  strip_tac >> conj_tac
+  >- (drule_all stmt_state_rel_append_storage_word >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `MEM _ (FST H)` kall_tac >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
-  `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' su` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ es' _` mp_tac >>
+  `stmt_state_rel H1 ctx func cenv cx es' su` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ es' _` mp_tac >>
      simp_tac bool_ss [Abbr `su`, GSYM wordsTheory.word_add_n2w,
                       wordsTheory.WORD_ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  asm_rewrite_tac [] >>
   irule stmt_state_rel_reserved_frame >> qexistsl_tac [`su`, `sa`] >>
   asm_simp_tac bool_ss [] >> rpt strip_tac >>
   qpat_x_assum `lookup_var _ su = SOME _` mp_tac >>
@@ -108,6 +113,7 @@ Proof
 QED
 
 Theorem append_storage_word_success_path_mem:
+  ~cx.txn.is_static /\
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
@@ -115,7 +121,9 @@ Theorem append_storage_word_success_path_mem:
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
   cap < dimword (:256) /\
   len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap /\
-  stmt_state_rel ctx func cenv cx es sbase /\ local_ptrs_reserved cenv sa /\
+  (?H. stmt_state_rel H ctx func cenv cx es sbase /\
+       MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)) /\
+  local_ptrs_reserved cenv sa /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
@@ -126,7 +134,10 @@ Theorem append_storage_word_success_path_mem:
   sbase.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_history func sbase /\ alloca_inv sbase ==>
   res = INL () /\ ?t. gas_marked_path T ctx func sbase 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es' t /\ stmt_lands lctx sf (INL ()) t /\
+    (!H. stmt_state_rel H ctx func cenv cx es sbase /\
+         MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) ==>
+         stmt_state_rel H ctx func cenv cx es' t) /\
+    stmt_lands lctx sf (INL ()) t /\
     ~t.vs_halted /\
     (!x a. not_fresh_at sa x /\ lookup_var x sbase = SOME a ==> lookup_var x t = SOME a) /\
     t.vs_allocas = sbase.vs_allocas /\ t.vs_alloca_next = sbase.vs_alloca_next /\
@@ -213,7 +224,9 @@ Theorem append_storage_word_value_path_mem:
     (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  (!H. P H ==> stmt_state_rel H ctx func cenv cx es s /\
+              MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)) /\ P H0 /\
+  local_ptrs_reserved cenv sb /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\ encode_value tv v = SOME [(0,w)] /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\
@@ -222,7 +235,8 @@ Theorem append_storage_word_value_path_mem:
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   alloca_history func s /\ alloca_inv s ==>
   ?r. gas_marked_path T ctx func s 0 r /\
-    ((?t. r = OK t /\ res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
+    ((?t. r = OK t /\ res = INL () /\
+      (!H. P H ==> stmt_state_rel H ctx func cenv cx es' t) /\
       stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
       (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -230,16 +244,73 @@ Theorem append_storage_word_value_path_mem:
      (exit_result r /\ stmt_exit RetQ es' res r))
 Proof
   strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s /\
+   MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0)` by metis_tac[] >>
   drule_all append_storage_header_agree_mem >> strip_tac >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x)` by simp[eval_operand_def] >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
-  >- (`?len. len = w2n (if tr then tload slot s else sload slot s) /\
+  >- (Cases_on `cx.txn.is_static`
+      >- (`s.vs_call_ctx.cc_static` by
+            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          `res = INR (Error (RuntimeError "write in static context")) /\ es' = es` by
+            (qpat_x_assum `append_place _ _ _ _ = _` mp_tac >>
+             simp[vyperStorageBackendTheory.append_storage_writes,
+                  vyperStorageBackendTheory.write_storage_slot_eq,
+                  ignore_bind_def, bind_def]) >>
+          `fresh_vars_wrt sb (drop_fresh sb s)` by
+            simp[fresh_vars_wrt_drop_fresh] >>
+          `eval_operand (Lit slot) (drop_fresh sb s) = SOME slot /\
+           eval_operand op (drop_fresh sb s) = SOME w` by
+            simp[eval_operand_drop_fresh] >>
+          `w2n (if tr then tload slot s else sload slot s) < cap` by
+            metis_tac[] >>
+          `(drop_fresh sb s).vs_call_ctx.cc_static /\
+           w2n (if tr then tload slot (drop_fresh sb s)
+                 else sload slot (drop_fresh sb s)) < cap` by
+            fs[drop_fresh_def, tload_def, sload_def,
+               contract_transient_def, contract_storage_def] >>
+          drule_all compile_dynarray_append_word_static >> strip_tac >>
+          `vars_ext_result
+             (run_inst_seq (emitted_insts sb sf) (drop_fresh sb s))
+             (run_inst_seq (emitted_insts sb sf) s)` by
+            (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+             drule append_storage_word_suffix_structure >> simp[EVERY_MEM]) >>
+          `?a t. run_inst_seq (emitted_insts sb sf) s = Abort a t` by
+            (qpat_x_assum `vars_ext_result _ _` mp_tac >> asm_rewrite_tac [] >>
+             Cases_on `run_inst_seq (emitted_insts sb sf) s` >>
+             simp[vars_ext_result_def]) >>
+          drule append_storage_word_suffix_footprint_mem >> strip_tac >>
+          `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode) (emitted_insts sb sf)` by
+            (qpat_x_assum `EVERY _ _` mp_tac >> rewrite_tac[EVERY_MEM] >>
+             disch_tac >> rpt strip_tac >> first_x_assum drule >>
+             simp[] >> strip_tac >> simp[is_terminator_def]) >>
+          `run_inst_seq_mem_ok (emitted_insts sb sf) s` by
+            metis_tac[append_storage_word_suffix_mem_ok] >>
+          `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+             DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sb sf ++ rest` by
+            (gvs[fn_has_code_def, same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
+                 emitted_insts_def] >> simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+          `isPREFIX (emitted_insts sb sf) (DROP s.vs_inst_idx bb.bb_instructions)` by
+            simp[IS_PREFIX_APPEND] >>
+          drule_all run_inst_seq_abort_zero_path_mem >>
+          disch_then (qspec_then `ctx` (qx_choose_then `abort_index` assume_tac)) >>
+          qexists_tac `Abort a (t with vs_inst_idx := abort_index)` >>
+          simp[stmt_exit_def, exit_result_def, expr_exit_def]) >>
+      `?len. len = w2n (if tr then tload slot s else sload slot s) /\
         len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap` by
         metis_tac[] >>
-      drule_all append_storage_word_success_path_mem >>
-      disch_then (qspec_then `lctx` strip_assume_tac) >>
-      qexists_tac `OK t` >> simp[]) >>
+      `?H. stmt_state_rel H ctx func cenv cx es s /\
+           MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` by metis_tac[] >>
+      drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
+        append_storage_word_success_path_mem >>
+      disch_then (qspecl_then
+        [`w`, `v`, `tv`, `slot`, `s`, `res`, `n`, `mid`, `len`, `lctx`,
+         `func`, `es'`, `es`, `cx`, `ctx`] mp_tac) >>
+      impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[]) >>
+      strip_tac >>
+      qexists_tac `OK t` >> simp[] >> metis_tac[]) >>
   `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
   drule append_storage_full >> strip_tac >>
   `cap <= w2n (if tr then tload slot s else sload slot s)` by metis_tac[] >>

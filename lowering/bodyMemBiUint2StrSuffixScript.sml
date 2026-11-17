@@ -8,7 +8,7 @@ Ancestors
 Theorem u2s_alloc_mem_ready[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx fn cenv cx es s /\ alloca_history fn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ alloca_history fn s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -17,7 +17,7 @@ Theorem u2s_alloc_mem_ready[local]:
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b t inst. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    u2s_safe ctx fn cenv cx es a ba.buf_operand b sz inst t t /\
+    u2s_safe H ctx fn cenv cx es a ba.buf_operand b sz inst t t /\
     MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_id = sa.cs_next_id /\ inst.inst_id < a.cs_next_id /\
     eval_operand op t = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
@@ -36,7 +36,7 @@ Proof
   drule_all buffer_alloc_code >> strip_tac >>
   qabbrev_tac `ai = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]` >>
-  `u2s_safe ctx fn cenv cx es a ba.buf_operand b sz ai t t` by
+  `u2s_safe H ctx fn cenv cx es a ba.buf_operand b sz ai t t` by
     (irule u2s_safe_initial >>
      gvs[Abbr `ai`, mk_inst_def, eval_operand_def, regions_disjoint_def] >>
      metis_tac[ADD_COMM]) >>
@@ -64,7 +64,7 @@ Theorem u2s_allocated_mem_exit:
   compile_alloc_buffer (sz+n) sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\ fn_has_code sa sb fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx fn cenv cx es s /\ alloca_history fn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ alloca_history fn s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz+n < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -74,7 +74,7 @@ Theorem u2s_allocated_mem_exit:
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b ready inst t. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst ready t /\
+    u2s_safe H ctx fn cenv cx es a ba.buf_operand b (sz+n) inst ready t /\
     eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
     val_in_memory ty (StringV (num_to_dec_string X))
       (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\

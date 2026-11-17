@@ -198,10 +198,10 @@ Proof
       s.vs_alloca_next + pending_alloca_size func s +
         CARD {g | TC (fn_directly_calls ctx) func.fn_name g} * unit_alloca_frame ctx` by
        (irule abi_encode_observer_total_charge >> metis_tac[])
-  >> gvs[fmp_room_def, EXISTS_MEM] >> strip_tac
+  >> gvs[fmp_room_def, ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >> strip_tac
   >> `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = DALLOCA` by
        metis_tac[]
   >> qpat_x_assum `_ \/ _ ==> _` mp_tac
-  >> (impl_tac >- (disj1_tac >> metis_tac[]))
-  >> strip_tac >> gvs[]
+  >> (impl_tac >- (disj2_tac >> metis_tac[]))
+  >> strip_tac >> gvs[] >> decide_tac
 QED

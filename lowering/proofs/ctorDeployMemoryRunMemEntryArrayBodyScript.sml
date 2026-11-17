@@ -48,6 +48,48 @@ Proof
   asm_simp_tac bool_ss [LET_THM] >> strip_tac >> decide_tac
 QED
 
+Theorem ctor_checked_array_setup_mem_ok_at_index:
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\ j < LENGTH vs /\
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+    (ListV avs))) s.vs_data_section =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+    (ListV avs)) <= LENGTH s.vs_data_section /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decoder_dynarray_values >> strip_tac >>
+  `j < LENGTH avs` by decide_tac >>
+  `TAKE j avs ++ EL j avs::DROP (SUC j) avs = avs` by
+    simp[TAKE_DROP_SUC,APPEND_ASSOC] >>
+  `TAKE j vs ++ EL j vs::DROP (SUC j) vs = vs` by
+    simp[TAKE_DROP_SUC,APPEND_ASSOC] >>
+  `LENGTH (TAKE j avs) = j /\ LENGTH (TAKE j vs) = j` by
+    simp[LENGTH_TAKE, MIN_DEF] >>
+  qpat_assum `TAKE j avs ++ _ = avs` (fn ae =>
+    qpat_assum `TAKE j vs ++ _ = vs` (fn ve =>
+      qpat_assum `LENGTH (TAKE j avs) = j` (fn al =>
+      qpat_assum `LENGTH (TAKE j vs) = j` (fn vl =>
+      drule_all (REWRITE_RULE [ae,ve,al,vl] (Q.INST
+        [`pre` |-> `TAKE j (avs:abi_value list)`,
+         `av` |-> `EL j (avs:abi_value list)`, `post` |-> `DROP (SUC j) (avs:abi_value list)`,
+         `vpre` |-> `TAKE j (vs:vyperValue$value list)`,
+         `v` |-> `EL j (vs:vyperValue$value list)`, `vpost` |-> `DROP (SUC j) (vs:vyperValue$value list)`]
+        ctor_checked_array_setup_mem_ok)))))) >> simp[]
+QED
+
 Theorem ctor_checked_array_setup_at_index:
   abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\

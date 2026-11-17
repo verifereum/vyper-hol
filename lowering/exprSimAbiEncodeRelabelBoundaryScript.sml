@@ -6,8 +6,8 @@ Ancestors
   abiEncoderCounters abiBuiltinEncodeContext venomState venomExecSemantics venomMemDefs fragExec list rich_list
 
 Theorem abi_encode_stmt_rel_current_bb:
-  stmt_state_rel ctx func ce cx es (s with vs_current_bb := L) <=>
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es (s with vs_current_bb := L) <=>
+  stmt_state_rel H ctx func ce cx es s
 Proof
   `fmp_room ctx func (s with vs_current_bb := L) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -20,8 +20,8 @@ Proof
 QED
 
 Theorem abi_encode_expr_post_relabel:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s ==>
-  expr_post ctx func ce cx e es origin (start_relabel L ids sa) s0 es' v op
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s ==>
+  expr_post H ctx func ce cx e es origin (start_relabel L ids sa) s0 es' v op
     (s with vs_current_bb := L)
 Proof
   Cases_on `op` >>

@@ -61,21 +61,23 @@ Theorem held_hash_counted_nofresh:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   b + 32 <= s.vs_alloca_next /\
   (LENGTH bs = 0 \/ b + 32 + LENGTH bs <= s.vs_alloca_next) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
     eval_operand op t = SOME (word_of_bytes_be (Keccak_256_w64 bs):bytes32) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
     (!p w. (!z. p = Var z ==> not_fresh_at sa z) /\
            eval_operand p s = SOME w ==> eval_operand p t = SOME w) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all compile_bytestring_hash_run_nofresh >> strip_tac >>
@@ -98,7 +100,7 @@ Proof
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     fs[EVERY_MEM] >>
   drule_all alloca_history_run_inst_seq >> simp[] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[venom_state_component_equality, stmt_state_rel_inst_idx,

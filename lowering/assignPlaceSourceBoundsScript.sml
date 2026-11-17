@@ -4,7 +4,7 @@ Ancestors
   words compileEnv
 
 Theorem nonbytes_expr_val_at_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx sty sa sb es v op s /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
   ~is_word_type sty /\ ~is_bytestring_type sty /\

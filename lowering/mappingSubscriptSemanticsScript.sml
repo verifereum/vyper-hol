@@ -20,7 +20,7 @@ Ancestors
 
 Theorem mapping_subscript_frames:
   wb_frame cenv es em sa s0 t /\ wb_frame cenv em en sm t out /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM em.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (~expr_has_effect obj ==> pure_frame cenv func es sa s0 t) /\

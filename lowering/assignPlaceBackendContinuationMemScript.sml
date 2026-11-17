@@ -11,34 +11,9 @@ Ancestors
   vfmConstants exprSimMemDefs exprSimHypsDefs exprSimHyps
   placeTypedCopyForwardMem placeMemoryCopyEffect fragGasPathMem loweringHalt
   emitHelper emitHelperProps fragExec fragGasMode venomExecSemantics
-  stmtSimStoreCopy list rich_list stmtSimAugAssignPlaceMemory
+  stmtSimStoreCopy stmtSimDefs exprSimDefs list rich_list stmtSimAugAssignPlaceMemory
   loweringStateRelDefs freshWrites allocLimits bodySim
-
-Theorem backend_storage_region[local]:
-  storage_layout_safe cx /\ storage_place_region cx (StoragePlace tr w tv) /\
-  0 < type_slot_size tv ==>
-  ?mid name keys root rtv path delta.
-    declared_storage_region cx mid name keys = SOME (tr,root,rtv) /\
-    storage_subregion rtv path delta tv /\ w = root+n2w delta /\
-    w2n root + type_slot_size rtv <= dimword (:256) /\
-    w2n root+delta < dimword (:256) /\
-    (!mid' name' keys' root' tv'.
-      declared_storage_region cx mid' name' keys' = SOME (tr,root',tv') /\
-      (root',tv') <> (root,rtv) ==>
-      ranges_disjoint (w2n root) (type_slot_size rtv)
-                      (w2n root') (type_slot_size tv'))
-Proof
-  strip_tac >> drule_all storage_place_region_numeric >> strip_tac >>
-  qexistsl_tac [`mid`,`name`,`keys`,`root`,`tv'`,`path`,`delta`] >>
-  simp[] >> conj_tac
-  >- (metis_tac[word_add_n2w, n2w_w2n]) >>
-  rpt strip_tac >>
-  irule storage_layout_safe_region_separation >>
-  goal_assum (drule_at (Pat `storage_layout_safe _`)) >>
-  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-  metis_tac[pairTheory.PAIR_EQ, optionTheory.SOME_11]
-QED
+  placeStaticStoreExit placeStaticCopyExit storageStoreFrame
 
 Theorem backend_physical_store_bound[local]:
   evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
@@ -56,11 +31,11 @@ Proof
   gvs[] >> decide_tac
 QED
 
-Theorem backend_normalization_mem[local]:
+Theorem backend_normalization_mem:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty (vv_operand vv) sty sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  stmt_state_rel ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   type_memory_size dtv < dimword (:256) /\
   vv_at ce cx sty origin sa ee raw vv s /\
@@ -84,14 +59,16 @@ Theorem backend_normalization_mem[local]:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t dw. gas_path_mem ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func ce cx ee t /\
+    stmt_state_rel H ctx func ce cx ee t /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
     eval_operand buf.buf_operand t = SOME dw /\
     w2n dw + type_memory_size dtv <= t.vs_alloca_next /\
     alloca_history func t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee s ==>
+      stmt_state_rel J ctx func ce cx ee t)
 Proof
   strip_tac >>
   `vv_store_bound cx sty sty ee raw vv s` by
@@ -113,8 +90,17 @@ Proof
      simp[] >> qexistsl_tac [`stv`,`get_tenv cx`] >>
      simp[arithmeticTheory.ADD_COMM] >>
      fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func ce cx ee t` by
-    (irule normalization_copy_state >> metis_tac[]) >>
+  `stmt_state_rel H ctx func ce cx ee t` by
+    (irule normalization_copy_state >> simp[] >>
+     qexistsl_tac [`buf`, `w2n dw`, `type_memory_size dtv`,
+                    `r`, `sa`, `sb`, `sm`] >> simp[]) >>
+  `!J : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel J ctx func ce cx ee s ==>
+    stmt_state_rel J ctx func ce cx ee t` by
+    (qx_gen_tac `J` >> disch_tac >>
+     irule normalization_copy_state >> simp[] >>
+     qexistsl_tac [`buf`, `w2n dw`, `type_memory_size dtv`,
+                    `r`, `sa`, `sb`, `sm`] >> simp[] >> metis_tac[]) >>
   `t.vs_alloca_next = r.vs_alloca_next` by
     (drule_all typed_copy_effect_record >> simp[venom_state_component_equality]) >>
   `alloca_history func t` by
@@ -143,18 +129,23 @@ Theorem backend_sparse_direct_mem[local]:
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME w /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
-  expr_sim_inv ce cx env ee /\ stmt_state_rel ctx func ce cx ee s /\
-  storage_place_region cx (StoragePlace tr w dtv) /\
+  expr_sim_inv ce cx env ee /\ stmt_state_rel H ctx func ce cx ee s /\
+  storage_place_observed H (StoragePlace tr w dtv) /\
+  regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   write_storage_slot cx tr w dtv v ee = (INL (),ff) /\
   local_ptrs_reserved ce sa /\ acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func ce cx ff t /\
+    stmt_state_rel H ctx func ce cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee s /\
+      storage_place_observed J (StoragePlace tr w dtv) /\
+      regions_consistent (FST J) /\ storage_locks_separated (FST J) (SND J) ==>
+      stmt_state_rel J ctx func ce cx ff t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~(dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty))` by
@@ -165,8 +156,9 @@ Proof
   `0 < type_slot_size dtv` by
     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type,
               assignable_type_slot_size_pos] >>
-  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-  drule_all backend_storage_region >> strip_tac >>
+  `?root rtv path delta. MEM (tr,root,rtv) (FST H) /\
+    storage_subregion rtv path delta dtv /\ w = root + n2w delta` by
+    (fs[vyperStoragePlaceObservedTheory.storage_place_observed_def] >> metis_tac[]) >>
   `write_place cx (StoragePlace tr w dtv) v ee = (INL (),ff)` by
     (pure_rewrite_tac [vyperStateTheory.write_place_def] >> first_assum ACCEPT_TAC) >>
   drule_all place_store_storage_write_inv >> strip_tac >>
@@ -194,16 +186,30 @@ Resume backend_sparse_direct_mem[run]:
     `s`, `sw`, `w`, `writes`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
-  qexists_tac `t` >> simp[] >>
-  qpat_x_assum `ff = _` SUBST1_TAC >>
-  irule (SIMP_RULE (srw_ss()) [n2w_w2n]
-    (Q.INST [`start` |-> `w2n (w:bytes32)`]
-      (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
-        store_slots_semantic_endpoint_layout)))) >>
-  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `encode_value dtv v = _`)) >>
-  qexistsl_tac [`dty`,`ks`,`s`,`sa`,`sw`] >> gvs[] >> first_assum ACCEPT_TAC
+  `!J. stmt_state_rel J ctx func ce cx ee s /\
+    storage_place_observed J (StoragePlace tr w dtv) /\
+    regions_consistent (FST J) /\ storage_locks_separated (FST J) (SND J) ==>
+    stmt_state_rel J ctx func ce cx ff t` by
+    (qx_gen_tac `J` >> strip_tac >>
+     `?root' rtv' path' delta'. MEM (tr,root',rtv') (FST J) /\
+       storage_subregion rtv' path' delta' dtv /\ w = root' + n2w delta'` by
+       (fs[vyperStoragePlaceObservedTheory.storage_place_observed_def] >> metis_tac[]) >>
+     `w2n w = w2n root' + delta' /\
+       w2n root' + type_slot_size rtv' <= dimword (:256)` by
+       (drule_all place_store_storage_leaf_bounds >>
+        fs[vyperStorageFootprintTheory.regions_consistent_def] >> metis_tac[]) >>
+     qpat_assum `ff = _` SUBST1_TAC >>
+     irule (SIMP_RULE (srw_ss()) [n2w_w2n]
+       (Q.INST [`start` |-> `w2n (w:bytes32)`]
+         (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
+           store_slots_semantic_endpoint_layout)))) >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`delta'`, `dty`, `ks`, `path'`, `rtv'`, `root'`,
+                    `s`, `sa`, `sw`, `dtv`, `v`] >> simp[]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
 Finalise backend_sparse_direct_mem[local]
@@ -228,9 +234,10 @@ Theorem assign_place_backend_continuation_mem:
   (!x. vv_operand vv = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
   place_ptr_rel ce cx s (PlaceR p) w
     (SOME (if tr then LocTransient else LocStorage)) (Type dty) /\
-  storage_place_region cx p /\ expr_sim_inv ce cx env ee /\
+  storage_place_observed H p /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\ expr_sim_inv ce cx env ee /\
   acyclic_struct_metadata ce.ce_struct_fields /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   local_ptrs_reserved ce sa /\ alloca_history func s /\
   write_place cx p v ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -239,10 +246,14 @@ Theorem assign_place_backend_continuation_mem:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func ce cx ff t /\
+    stmt_state_rel H ctx func ce cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee s /\
+      storage_place_observed J p /\ regions_consistent (FST J) /\
+      storage_locks_separated (FST J) (SND J) ==>
+      stmt_state_rel J ctx func ce cx ff t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `p = StoragePlace tr w dtv` by
@@ -287,7 +298,8 @@ Resume assign_place_backend_continuation_mem[normalize]:
   `type_memory_size dtv < dimword (:256)` by simp[] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sa x` by simp[] >>
   `w2n sw + type_memory_size stv <= s.vs_alloca_next` by simp[ADD_COMM] >>
-  drule_all backend_normalization_mem >> strip_tac >>
+  drule_all (INST_TYPE [beta |-> ``:256``] backend_normalization_mem) >>
+  strip_tac >>
   suspend "suffix"
 QED
 
@@ -310,19 +322,168 @@ Resume assign_place_backend_continuation_mem[suffix]:
   `eval_operand dst t = SOME w` by
     (Cases_on `dst` >> gvs[eval_operand_def]) >>
   `?u. gas_marked_path T ctx func t 0 (OK u) /\
-    stmt_state_rel ctx func ce cx ff u /\
+    stmt_state_rel H ctx func ce cx ff u /\
     (!x. not_fresh_at sn x ==> lookup_var x u = lookup_var x t) /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee t /\
+      storage_place_observed J (StoragePlace tr w dtv) /\
+      regions_consistent (FST J) /\ storage_locks_separated (FST J) (SND J) ==>
+      stmt_state_rel J ctx func ce cx ff u)` by
     (irule backend_sparse_direct_mem >> simp[] >>
-     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-     qexistsl_tac [`dtv`,`ee`,`env`,`w`] >> simp[ADD_COMM]
-     >- (first_assum ACCEPT_TAC)) >>
-  qexists_tac `u` >> simp[]
-  >- (gvs[gas_marked_path_def] >>
-      metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
-  metis_tac[]
+     conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`dst`, `dty`, `SOME LocMemory`, `buf.buf_operand`,
+                    `dtv`, `dty`, `dw`, `v`] >> simp[ADD_COMM] >>
+     first_assum ACCEPT_TAC) >>
+  `gas_path_mem ctx func t 0 (OK u)` by fs[gas_marked_path_def] >>
+  `gas_path_mem ctx func s 0 (OK u)` by
+    (qpat_assum `gas_path_mem ctx func s 0 (OK t)` (fn st =>
+       qpat_assum `gas_path_mem ctx func t 0 (OK u)` (fn tu =>
+         ACCEPT_TAC (SIMP_RULE (srw_ss()) []
+           (MATCH_MP gas_path_mem_then (CONJ st tu)))))) >>
+  qexists_tac `u` >> simp[gas_marked_path_def] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Finalise assign_place_backend_continuation_mem
+
+(* The static fault follows the same allocation and normalization prefix
+   as a successful aggregate store. *)
+Theorem assign_place_backend_static_exit_mem:
+  compile_assign_value ce dst (if tr then LocTransient else LocStorage)
+    (vv_operand vv) F (vv_location vv) dty sty (type_memory_bytes ce dty) sa = ((),sb) /\
+  ~is_word_type dty /\ ~is_word_type sty /\
+  type_widens_to (get_tenv cx) sty dty /\ assignable_type (get_tenv cx) sty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type stv v /\ val_wf stv v /\ value_has_type dtv v /\ val_wf dtv v /\
+  read_result cx raw ee = (INL v,ee) /\
+  vv_at ce cx sty origin sa ee raw vv s /\
+  (case vv of StackValue _ _ => T
+    | LocatedValue _ vp => vp.ptr_location = LocMemory) /\
+  eval_operand (vv_operand vv) s = SOME sw /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  eval_operand dst s = SOME w /\
+  (!x. vv_operand vv = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  place_ptr_rel ce cx s (PlaceR p) w
+    (SOME (if tr then LocTransient else LocStorage)) (Type dty) /\
+  storage_place_observed H p /\ regions_consistent (FST H) /\
+  expr_sim_inv ce cx env ee /\ acyclic_struct_metadata ce.ce_struct_fields /\
+  stmt_state_rel H ctx func ce cx ee s /\ cx.txn.is_static /\
+  local_ptrs_reserved ce sa /\ alloca_history func s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
+    type_memory_size dtv < dimword (:256)) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r. gas_marked_path T ctx func s 0 r /\
+    expr_exit (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `p = StoragePlace tr w dtv` by
+    (Cases_on `p` >> Cases_on `tr` >> gvs[place_ptr_rel_def, slot_loc_def] >>
+     rename1 `StoragePlace b slot tv` >> Cases_on `b` >> gvs[]) >>
+  `0 < type_slot_size dtv /\ 0 < type_slot_size stv` by
+    metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type,
+              assignable_type_slot_size_pos] >>
+  `?root rtv path delta. MEM (tr,root,rtv) (FST H) /\
+    storage_subregion rtv path delta dtv /\ w = root + n2w delta` by
+    (fs[vyperStoragePlaceObservedTheory.storage_place_observed_def] >> metis_tac[]) >>
+  `w2n w + type_slot_size dtv <= dimword (:256)` by
+    (drule_all place_store_storage_leaf_bounds >> simp[]) >>
+  `s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    metis_tac[alloca_room_next_lt, stmt_state_rel_def, LESS_EQ_LESS_TRANS] >>
+  Cases_on `dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty`
+  >- suspend "direct" >>
+  suspend "normalize"
+QED
+
+Resume assign_place_backend_static_exit_mem[direct]:
+  `compile_store_slots ce (vv_operand vv) dst dty tr sa = ((),sb)` by
+    (Cases_on `tr` >>
+     gvs[compile_assign_value_def, comp_bind_def, comp_return_def]) >>
+  `type_slot_size stv <= type_slot_size dtv /\
+   compile_store_slots ce (vv_operand vv) dst sty tr sa = ((),sb)` by
+    (Cases_on `dty = sty` >- gvs[] >> fs[] >>
+     metis_tac[store_slots_bytes_encoding, store_slots_bytes_compile_eq]) >>
+  `w2n w + type_slot_size stv <= dimword (:256)` by decide_tac >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+       sz = type_memory_size tv) fields)` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  drule_all place_store_slots_static_exit_mem >>
+  disch_then (qspecl_then [`ee`,`ctx`,`RetQ`] strip_assume_tac) >>
+  qexists_tac `r` >> simp[] >> Cases_on `r` >> gvs[stmt_exit_def, expr_exit_def]
+QED
+
+Resume assign_place_backend_static_exit_mem[normalize]:
+  `dty <> sty /\ ~is_bytestring_type dty /\ ~is_bytestring_type sty` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source,
+              typedMemoryCopyTheory.type_widens_from_bytestring] >>
+  `type_memory_bytes ce dty = type_memory_size dtv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `?buf sm sn.
+    compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
+    compile_store_memory_typed ce buf.buf_operand dty (vv_operand vv) sty sm = ((),sn) /\
+    compile_store_slots ce buf.buf_operand dst dty tr sn = ((),sb)` by
+    (Cases_on `compile_alloc_buffer (type_memory_size dtv) sa` >>
+     rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+     Cases_on `compile_store_memory_typed ce buf.buf_operand dty (vv_operand vv) sty sm` >>
+     rename1 `compile_store_memory_typed _ _ _ _ _ sm = (u,sn)` >>
+     Cases_on `u` >> Cases_on `tr` >>
+     gvs[compile_assign_value_def, comp_bind_def, comp_return_def,
+         AllCaseEqs()] >> gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def]) >>
+  `ci_mono sa sm` by
+    (qspec_then `type_memory_size dtv` (qspec_then `sa` mp_tac)
+       ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sm sn` by
+    metis_tac[CONJUNCT1 ci_mono_typed_memory_family, pairTheory.SND] >>
+  `ci_mono sn sb` by
+    metis_tac[CONJUNCT1 ci_mono_compile_store_slots, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
+    (gvs[ci_mono_def] >> rpt conj_tac >>
+     (irule fn_has_code_mid >> conj_tac >- simp[] >>
+      qexistsl_tac [`sb`,`sa`] >> simp[cs_extends_refl] >>
+      metis_tac[cs_extends_trans])) >>
+  `type_memory_size dtv < dimword (:256)` by simp[] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sa x` by simp[] >>
+  drule_all (INST_TYPE [beta |-> ``:256``] backend_normalization_mem) >>
+  strip_tac >>
+  suspend "suffix"
+QED
+
+Resume assign_place_backend_static_exit_mem[suffix]:
+  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     rpt strip_tac >> gvs[] >>
+     irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sm` >>
+     gvs[ci_mono_def]) >>
+  `t.vs_labels = s.vs_labels` by
+    metis_tac[aug_place_marked_path_labels, gas_marked_path_from_mem] >>
+  `eval_operand dst t = SOME w` by
+    (Cases_on `dst` >> gvs[eval_operand_def]) >>
+  `t.vs_call_ctx.cc_static` by
+    (qpat_assum `stmt_state_rel H ctx func ce cx ee t`
+       (mp_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+     simp[]) >>
+  `w2n dw + type_memory_size dtv < dimword (:256)` by
+    metis_tac[alloca_room_next_lt, stmt_state_rel_def, LESS_EQ_LESS_TRANS] >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+       sz = type_memory_size tv) fields)` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  drule_all place_store_slots_static_exit_mem >>
+  disch_then (qspecl_then [`ee`,`ctx`,`RetQ`] strip_assume_tac) >>
+  qexists_tac `r` >> conj_tac
+  >- (fs[gas_marked_path_def] >> metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
+  Cases_on `r` >> gvs[stmt_exit_def, expr_exit_def]
+QED
+
+Finalise assign_place_backend_static_exit_mem
