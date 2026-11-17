@@ -261,6 +261,9 @@ Proof
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac
   >- (qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+      qpat_x_assum `(\v op s.
+        word_value v /\ eval_operand op s = SOME (val_to_w256 v)) _ _ _`
+        (strip_assume_tac o BETA_RULE) >>
       rename1 `eval_operand op t = SOME (val_to_w256 v)` >>
       `stmt_state_rel H0 ctx func cenv cx ee s` by
         (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -494,10 +497,12 @@ Resume aug_place_rhs_operator_write_mem_typed[callback]:
   >- (conj_tac >- first_assum ACCEPT_TAC >>
       qexists_tac `gs` >> first_assum ACCEPT_TAC) >> strip_tac >>
   rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs` >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
   `eval_operand y t = SOME (typed_val_to_w256 tvrhs v)` by
     (irule exprBopSimPropsTheory.expr_val_rel_typed >>
-     qexists_tac `expr_type e` >> simp[] >>
-     fs[expr_post_def, post_value_type_word]) >>
+     qexistsl_tac [`cx`, `expr_type e`] >> simp[] >>
+     metis_tac[]) >>
   `eval_operand x t = SOME (typed_val_to_w256 dtv cur) /\ eval_operand dst t = SOME w` by
     (conj_tac >>
      (irule exprBopSimPropsTheory.eval_operand_frame >>
@@ -570,7 +575,9 @@ Resume aug_place_rhs_operator_write_mem_typed[callback]:
          impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
          first_assum ACCEPT_TAC) >>
      strip_tac >> first_assum ACCEPT_TAC) >>
-  mp_tac (Q.INST [`s` |-> `t`, `rhs` |-> `v`] aug_place_operator_write_path_mem_typed) >>
+  mp_tac (Q.INST [`s` |-> `t`, `rhs` |-> `v`,
+                 `wrhs` |-> `typed_val_to_w256 tvrhs v`]
+    aug_place_operator_write_path_mem_typed) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
   strip_tac
   >- (qexistsl_tac [`res`, `ff`, `r`] >> BETA_TAC >>
