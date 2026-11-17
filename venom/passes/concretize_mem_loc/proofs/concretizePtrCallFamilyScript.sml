@@ -173,6 +173,13 @@ Theorem ptr_call_history_execution:
       read_byte (w2n ro+i) u.vs_memory = read_byte (w2n rt+i) v.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `t.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, Excl "consume_call_outcome_eq"]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ptr_history_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_control_def,
+       ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
   Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with
     cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rz) s` >>
@@ -384,6 +391,7 @@ Proof
    (!x. x <> out ==> lookup_var x u = lookup_var x a.po_state) /\
    u.vs_return_pc_token = a.po_state.vs_return_pc_token` by
     (qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `a.po_state.vs_outcomes = []` >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
      strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
   `v.vs_current_bb = at.po_state.vs_current_bb /\
@@ -392,6 +400,7 @@ Proof
    (!x. x <> out ==> lookup_var x v = lookup_var x at.po_state) /\
    v.vs_return_pc_token = at.po_state.vs_return_pc_token` by
     (qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `at.po_state.vs_outcomes = []` >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
      strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
   gvs[Excl "MEM"] >>
