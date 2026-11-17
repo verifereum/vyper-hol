@@ -196,6 +196,7 @@ Proof
        (strip_assume_tac o MATCH_MP copy_two_instruction_prefix) >>
      gvs[Excl "isPREFIX"]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb0` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all copy_init_origin_ptr >>
   disch_then (qspecl_then [`<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`,`explicit`,`PG`,`G`,`tn`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK q,Gq,tq)` >>
@@ -353,6 +354,7 @@ Theorem copy_operand_body_step[local]:
       (k + n2w i) (mem_word_taint tn.t_mem (w2n b + 32*i))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all memory_copy_body_ptr >>
   disch_then (qspecl_then [`id`,`D`,`func`,`PG`] strip_assume_tac) >>
   `FLOOKUP Gf cv = NONE` by (drule_all copy_body_scalar_counter >> simp[]) >>
@@ -506,6 +508,7 @@ Resume memory_copy_loop_operand_origin_ptr_uniform[init]:
        (strip_assume_tac o MATCH_MP copy_two_instruction_prefix) >>
      gvs[Excl "isPREFIX"]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb0` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all copy_init_origin_ptr >>
   disch_then (qspecl_then [`D0`,`explicit`,`PG`,`G`,`tn`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK q,Gq,tq)` >>
