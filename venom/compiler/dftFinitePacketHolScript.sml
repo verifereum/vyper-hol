@@ -14,6 +14,7 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
+  dftPacketFreshChildStop
   dftPacketFreshRow
   dftPacketKeyMap
   dftPacketKeySubstitution
