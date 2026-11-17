@@ -139,10 +139,34 @@ Resume dft_packet_pseudo_segment[boundary]:
   conj_tac >- (simp[] >> metis_tac[]) >>
   reverse conj_tac
   >- (rpt gen_tac >> simp[] >> irule dft_packet_plain_prefix_no_intret >> simp[]) >>
-  rpt gen_tac >> simp[] >> strip_tac >>
+  suspend "boundary_success"
+QED
+
+Resume dft_packet_pseudo_segment[boundary_success]:
+  qpat_x_assum `segment = TAKE _ _` kall_tac >>
+  qpat_x_assum `segment = _` kall_tac >>
+  qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+  qpat_x_assum `ms = _` kall_tac >>
+  qpat_x_assum `ess = _` kall_tac >>
+  qpat_x_assum `ks = _` kall_tac >>
+  qpat_x_assum `gs = FLAT _` SUBST_ALL_TAC >>
+  rpt gen_tac >>
+  qpat_assum `!gs. H _ = _`
+    (fn th => pure_rewrite_tac[th,pairTheory.PAIR_EQ]) >> strip_tac >>
   qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >>
-  strip_tac >> simp[] >>
-  FAIL_TAC "success tail"
+  strip_tac >>
+  qpat_x_assum `gas_events_block _ _ _ _ _ = ev` (SUBST1_TAC o SYM) >>
+  qpat_assum `!gs. trace_gas _ = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `!gs. gas_events_block _ _ _ _ _ = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `E = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `K' = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `!tail'. FOLDR _ _ _ _ = _ /\ _`
+    (fn th => simp[NoAsms,th]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `trace_gas _ = ZIP _` mp_tac >>
+  simp[NoAsms,ADD_COMM]
 QED
 
 Finalise dft_packet_pseudo_segment
