@@ -92,14 +92,15 @@ Resume dft_packet_block_append_trace[body]:
   `get_instruction bb1 u.vs_inst_idx =
     SOME (EL (LENGTH z1)
       (DROP (phi_prefix_length bb1.bb_instructions) bb1.bb_instructions))` by
-    simp[get_instruction_def,EL_APPEND2] >>
-  irule dft_packet_native_next_partial_cut >>
-  goal_assum (drule_at (Pat `trace_blocks _ _ _ _ _ _ = _`)) >>
+    simp[get_instruction_def,EL_APPEND2,DROP_APPEND] >>
+  qpat_assum `trace_blocks [] 0 _ _ _ _ = _`
+    (fn th => pure_once_rewrite_tac [GSYM th]) >>
+  irule (SRULE [] (SPEC_ALL dft_packet_native_next_partial_cut)) >>
+  simp[] >>
   goal_assum (drule_at (Pat `exec_block _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `FOLDR _ _ _ _ = _`)) >>
-  simp[DROP_APPEND] >>
-  qexistsl_tac [`sp1 with vs_gas_readings := g1 ++ tail`,`first`] >>
-  gvs[]
+  simp[] >>
+  qexistsl_tac [`after`,`before`,`first`,`q1`] >>
+  gvs[DROP_APPEND,ADD_COMM]
 QED
 
 Finalise dft_packet_block_append_trace
