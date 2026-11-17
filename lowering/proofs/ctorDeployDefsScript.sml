@@ -138,6 +138,37 @@ Definition opt_deploy_entry_state_def:
     opt_entry_state prog prog' cplan es with vs_alloca_next := imm_len tops
 End
 
+(* ADMISSION: at the identity finalizer the optimized deploy entry state is
+   the deploy entry state.  Waits for its proof. *)
+Theorem opt_deploy_entry_state_identity:
+  !tops am tx prog cplan es.
+    deploy_state_rel tops (assemble prog) am tx es ==>
+    opt_deploy_entry_state prog prog cplan tops es =
+    deploy_entry_state prog cplan tops es
+Proof
+  cheat
+QED
+
+(* ADMISSION: at the identity finalizer the deploy entry state's code is the
+   transaction's.  Waits for its proof. *)
+Theorem deploy_txp_identity:
+  !tops am tx prog cplan es.
+    deploy_state_rel tops (assemble prog) am tx es ==>
+    tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx
+Proof
+  cheat
+QED
+
+(* ADMISSION: the deploy result relation does not read the transaction's code
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem deploy_call_result_rel_code_update:
+  supported_program tops /\ ~program_reads_self_code tops ==>
+  (deploy_call_result_rel tops runtime_bc am (tx with code := c) es r es' <=>
+   deploy_call_result_rel tops runtime_bc am tx es r es')
+Proof
+  cheat
+QED
+
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
    gas filling; the finite storage guard deploy_storage_ok depends on the
    filling, so the unit theorem states it per filling. *)
