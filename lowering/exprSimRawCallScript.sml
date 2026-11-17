@@ -4895,12 +4895,10 @@ Resume raw_call_tail_outcome[exhausted]:
      irule raw_call_finish_exhausted >> simp[] >>
      goal_assum (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
      rpt (goal_assum (drule_at Any)) >> simp[wordsTheory.n2w_11]) >>
-  VALID (irule (GEN_ALL raw_call_tail_path_outcome)) >>
-  qexistsl_tac [`s6`, `INR (Error (RuntimeError "take_call_outcome"))`, `esK`] >>
-  qpat_assum `!gs. eval_raw_call _ _ _ _ _ _ (esK with gas_obs := gs) = _`
-    (fn th => simp[NoAsms, th, type_check_def, assert_def, ignore_bind_def,
-      bind_def, lift_option_type_def, return_def, dest_BytesV_def]) >>
-  reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule raw_call_tail_path_outcome >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`esK`, `INR (Error (RuntimeError "take_call_outcome"))`, `s6`] >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
   rpt (pop_assum kall_tac) >>
