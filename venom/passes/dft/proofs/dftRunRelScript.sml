@@ -2640,11 +2640,10 @@ Proof
            (rpt strip_tac >> gvs[opcode_fail_class_def, write_effects_def,
                                  empty_effects_def]) >>
          metis_tac[dft_swap_guarded_nofail_total]) >>
-     gvs[] >>
+     gvs[] >> (
      `y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY /\
       ~dft_swap_runtime_error_opcode y.inst_opcode` by
        (fs[dft_gas_swap_pair_def] >>
-        qpat_x_assum `MEM _ _` (strip_assume_tac o SIMP_RULE list_ss []) >>
         simp[dft_swap_runtime_error_opcode_def] >> rpt strip_tac >>
         gvs[effects_independent_def, read_effects_def, write_effects_def,
             all_effects_def]) >>
@@ -2657,7 +2656,7 @@ Proof
        (Cases_on `y.inst_opcode` >> simp[opcode_fail_class_def] >> gvs[]) >>
      pop_assum strip_assume_tac
      >- metis_tac[dft_swap_guarded_nofail_total] >>
-     metis_tac[dft_swap_canexhalt_operand_defined])
+     metis_tac[dft_swap_canexhalt_operand_defined]))
   >- (drule_all dft_nongas_pair_sym >> strip_tac >>
       `?u. step_inst fuel C x sy = Abort a u` by metis_tac[dft_nongas_pair_abort_iff] >>
       `?u. step_inst fuel C x
@@ -2690,9 +2689,11 @@ Proof
       simp[Once dft_res_rel_def] >>
       irule dft_nongas_suffix_swap_error >> metis_tac[])
   >- metis_tac[dft_swap_nonterminator_no_intret]
-  >- (`?u. dft_exec_suffix fuel C (y::x::tail) s = Abort a u` by
-        metis_tac[dft_nongas_suffix_first_abort] >>
-      simp[dft_exec_suffix_cons, dft_exec_cons_def, dft_res_rel_def] >> metis_tac[])
+  >- (drule_at (Pat `step_inst _ _ _ _ = Abort _ _`)
+        dft_nongas_suffix_first_abort >> simp[] >>
+      disch_then (qspecl_then [`y`, `tail`] mp_tac) >> simp[] >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      simp[Once dft_res_rel_def] >> metis_tac[])
   >- (`dft_exec_suffix fuel C (y::x::tail) s = Halt v` by
         metis_tac[dft_nongas_suffix_swap_halt] >>
       simp[dft_exec_suffix_cons, dft_exec_cons_def, dft_res_rel_def]) >>
