@@ -793,8 +793,7 @@ Theorem sym_log_name_dispatch:
   ALOOKUP swap_table ("LOG" ++ num_to_dec_string n) = NONE /\
   asm_op_arity ("LOG" ++ num_to_dec_string n) = n + 2
 Proof
-  strip_tac >> `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
-  gvs[] >> EVAL_TAC
+  MATCH_ACCEPT_TAC symInstLogOwnTheory.sym_log_name_dispatch
 QED
 
 Theorem sym_log_prepared_suffix:
