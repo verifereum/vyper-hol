@@ -35,7 +35,8 @@ val _ = Parse.hide "body";
 Theorem compile_raise_abort_path:
   (rk = RaiseBare \/ rk = RaiseUnreachable) /\
   stmt_env cenv lctx ty (Raise rk) sa = (cenv', sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   ?t. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
@@ -65,7 +66,7 @@ Theorem compile_assert_cond_path:
   stmt_env cenv lctx ty (Assert e ak) sa = (cenv', sb) /\
   fn_has_code sa sb func /\
   lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ allocas_from lo t /\
   eval_operand op t = SOME (if b then 1w else 0w) /\ op_taint tn op = {} /\
   t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted ==>
@@ -112,7 +113,7 @@ QED
 
 Theorem compile_loop_jump_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty st es.
-    ~ctx_has_dalloca ctx /\ (st = Break \/ st = Continue) ==>
+    (st = Break \/ st = Continue) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty st) (stmt_env cenv lctx ty st)
@@ -170,7 +171,7 @@ QED
 
 Theorem compile_raise_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty rk es.
-    ~ctx_has_dalloca ctx /\ (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
+    (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Raise rk)) (stmt_env cenv lctx ty (Raise rk))
@@ -250,7 +251,7 @@ QED
 
 Theorem compile_assert_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty e ak es.
-    ~ctx_has_dalloca ctx /\ (ak = AssertBare \/ ak = AssertUnreachable) /\
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
     expr_type e = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) e es ==>

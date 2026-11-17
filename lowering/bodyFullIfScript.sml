@@ -352,7 +352,6 @@ Theorem if_full_post_finish[local]:
      (!x. not_fresh_at entry x ==>
           FLOOKUP G x = FLOOKUP G1 x /\
           op_taint tn (Var x) = op_taint tn1 (Var x))) /\
-  ~ctx_has_dalloca ctx /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -458,7 +457,7 @@ QED
 Theorem compile_if_stmt_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty c ss1 ss2
    es.
-    ~ctx_has_dalloca ctx /\ expr_type c = BaseT BoolT /\
+    expr_type c = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) c es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
