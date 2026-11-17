@@ -66,8 +66,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule stmtSimAugAssignTheory.bop_result_augassign >> simp[] >>
-     simp[]) >>
+    (irule stmtSimAugAssignTheory.bop_result_augassign >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def,
                           binop_frag_mem_post_def]) >>
@@ -297,9 +297,15 @@ Proof
           rename1 `bind (eval_expr cx e) (read_result cx)
             (es with gas_obs := gs) = (INL v,ee)` >>
           qexists_tac `gs` >> first_assum ACCEPT_TAC) >> strip_tac >>
+      `post_value_type cenv e = expr_type e` by
+        (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
+      qpat_assum `post_value_type cenv e = expr_type e`
+        (fn eq => qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (assume_tac o REWRITE_RULE [eq] o cj 3 o REWRITE_RULE [expr_post_def])) >>
       `eval_operand y t = SOME (typed_val_to_w256 tvrhs v)` by
         (irule exprBopSimPropsTheory.expr_val_rel_typed >>
-         simp[] >> fs[expr_post_def] >> metis_tac[]) >>
+         qexistsl_tac [`cx`,`expr_type e`] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `eval_operand x t = SOME wc /\ eval_operand dst t = SOME w` by
         (conj_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
          (conj_tac >- simp[]) >>
@@ -319,7 +325,8 @@ Proof
            (qspec_then `H` mp_tac) >>
          impl_tac >- first_assum ACCEPT_TAC >>
          pure_rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
-      mp_tac (Q.INST [`s` |-> `t`, `rhs` |-> `v`]
+      mp_tac (Q.INST [`s` |-> `t`, `rhs` |-> `v`,
+        `wx` |-> `wc`, `wy` |-> `typed_val_to_w256 tvrhs v`]
         immutable_augassign_operator_mem_typed) >>
       impl_tac
       >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]] >>
