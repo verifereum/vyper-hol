@@ -100,6 +100,9 @@ Theorem dse_exec_ext_call_ok:
     s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas
 Proof
   strip_tac >> drule_all dse_call_request >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def,
+       dse_frame_def, venom_state_component_equality] >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
   namedCases_on `consume_call_outcome
@@ -150,18 +153,23 @@ QED
 
 Theorem dse_exec_ext_call_results:
   (?s1. exec_ext_call inst s gas addr value off sz ro rs is_static = OK s1) \/
-  (?e. exec_ext_call inst s gas addr value off sz ro rs is_static = Error e)
+  (?e. exec_ext_call inst s gas addr value off sz ro rs is_static = Error e) \/
+  exec_ext_call inst s gas addr value off sz ro rs is_static =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `h::rest` >> Cases_on `rest` >> simp[]
+  rename1 `h::rest` >> Cases_on `rest` >> simp[] >>
+  Cases_on `s.vs_outcomes = []` >> simp[]
 QED
 
 Theorem dse_call_results:
   inst.inst_opcode IN {CALL; STATICCALL} /\ ~s.vs_call_ctx.cc_static ==>
   (?s1. step_inst fuel ctx inst s = OK s1) \/
-  (?e. step_inst fuel ctx inst s = Error e)
+  (?e. step_inst fuel ctx inst s = Error e) \/
+  step_inst fuel ctx inst s =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> Cases_on `step_inst fuel ctx inst s` >> simp[] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
