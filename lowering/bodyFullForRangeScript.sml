@@ -277,6 +277,22 @@ Proof
   gvs[not_fresh_at_def] >> decide_tac
 QED
 
+(* ===== Initialization: virtual allocation cut ===== *)
+
+Theorem range_alloc_buffer_code:
+  compile_alloc_buffer n st = (buf,cut) /\
+  lookup_block st.cs_current_bb func.fn_blocks =
+    SOME <|bb_label := st.cs_current_bb; bb_instructions :=
+      st.cs_current_insts ++
+      [mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString st.cs_next_var)]] ++ tail|> ==>
+  fn_has_code st cut func
+Proof
+  strip_tac >>
+  drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+  simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def]
+QED
+
 (* The counter allocation is newer than every protected original allocation. *)
 Theorem range_entry_anchor_frame:
   !c0 e0 sa0 s00 cenv e s counter w sz id bc p dv t value tn1 tn tn00 entry.
