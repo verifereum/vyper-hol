@@ -2,7 +2,7 @@
 Theory defaultDispatchPlacement
 Ancestors runtimeExternalPackageCode runtimeBodyStartDefs
   supportedProgramProps entryDispatchProps compileVyper
-  classifiedExternalLabels pair rawEntryCode entryCheckIntervals sourceEntrySelection supportedProgram supportedDecls
+  externalEntryChecks pair rawEntryCode entryCheckIntervals sourceEntrySelection supportedProgram supportedDecls
   loweringShapeSource loweringShapeRules loweringShapeProps loweringShapeDefs compileEnv supportedNames list
   vyperCompiler actualDecoderPackaging actualRegistrationCode moduleLowering
 
@@ -341,7 +341,7 @@ Proof
   `MEM (lbl,ce,pargs,mincd,pay,F,key,ut,iv,fbody,rt) extpkgs` by
     (gvs[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
   `ALL_DISTINCT (MAP FST extpkgs)` by
-    (gvs[] >> drule classifiedExternalLabelsTheory.classified_external_labels_distinct >>
+    (gvs[] >> drule externalEntryChecksTheory.classified_external_labels_distinct >>
      simp[MAP_MAP_o, combinTheory.o_DEF, LAMBDA_PROD,
        package_external_fn_def, set_external_package_target_def]) >>
   drule_all compile_external_member_interval >> strip_tac >>

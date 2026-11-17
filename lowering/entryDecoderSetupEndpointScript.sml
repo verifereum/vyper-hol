@@ -1,6 +1,7 @@
 (* Same-witness frames for actual decoder navigation sequences. *)
 Theory entryDecoderSetupEndpoint
 Ancestors
+  ctorAbiActualAlloc
   calldataDynStep calldataMembers abiDecoderArraySetupInputs loweringStateRelDefs
   abiDecoderReentry abiDecoderReentryAddress abiDecoderLoopSetup
   abiDecoderIndexedAddress abiEncoder compileEnv emitHelper emitHelperProps
@@ -28,17 +29,6 @@ Proof
   pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND] >>
   simp[abi_decoder_reentry_opcode_def, mk_inst_def]
-QED
-
-Theorem entry_sequence_nonoutput_lookup[local]:
-  !insts s t x.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ ~MEM x i.inst_outputs) insts /\
-    run_inst_seq insts s = OK t ==> lookup_var x t = lookup_var x s
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  drule_all step_inst_base_preserves_all >> strip_tac >>
-  qpat_x_assum `!s t x. _` drule_all >> simp[]
 QED
 
 Theorem entry_element_setup_outputs[local]:
@@ -84,7 +74,7 @@ Proof
     fs[EVERY_MEM] >>
   drule_all entry_sequence_nonterminator_labels >> strip_tac >>
   Cases >> simp[abi_decoder_operand_live_def, eval_operand_def] >> strip_tac >>
-  irule entry_sequence_nonoutput_lookup >>
+  irule ctor_actual_sequence_var_frame >>
   goal_assum (drule_at Any) >>
   qpat_x_assum `_ IN abi_decoder_older_vars _`
     (assume_tac o REWRITE_RULE [IN_APP]) >>

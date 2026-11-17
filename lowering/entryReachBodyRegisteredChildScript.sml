@@ -72,11 +72,3 @@ Proof
   simp_tac bool_ss [entry_loop_prefix_def] >> rpt strip_tac >>
   Cases_on `k = j` >> gvs[] >> first_x_assum irule >> decide_tac
 QED
-
-(* Memory effects alone do not supply these observable fields. Recursive
-   executions must establish fields, frontier and history at their endpoint. *)
-Theorem entry_registered_fields_trans:
-  entry_loop_fields s t /\ entry_loop_fields t u ==> entry_loop_fields s u
-Proof
-  simp[entry_loop_fields_def] >> metis_tac[]
-QED
