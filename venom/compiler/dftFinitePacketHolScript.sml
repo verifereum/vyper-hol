@@ -14,7 +14,7 @@ Ancestors
   dftPacketCallFreshReplay
   dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry dftPacketClosedRowNative
-  dftPacketClosedRows
+  dftPacketClosedRows dftPacketClosedBodyBoundary
   dftPacketCommonOracle
   dftPacketCutExtension
   dftPacketEntryReplay
