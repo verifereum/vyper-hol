@@ -1814,11 +1814,11 @@ Theorem external_halt_rel_success:
   !H cx es ss tops tx srcs exps layouts.
     halt_rel H cx es ss /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target ==>
-    accounts_agree H (initial_evaluation_context srcs layouts tx NONE)
+    accounts_agree H tx.target
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).accounts
       (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-    transient_agree H (initial_evaluation_context srcs layouts tx NONE)
+    transient_agree H tx.target
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).tStorage
       ss.vs_transient /\
@@ -1826,19 +1826,11 @@ Theorem external_halt_rel_success:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).logs
       ss.vs_logs /\
-    LIST_REL (request_agree H (initial_evaluation_context srcs layouts tx NONE))
+    LIST_REL (request_agree H tx.target)
       es.requests ss.vs_requests
 Proof
   rpt strip_tac >> gvs[] >>
-  `accounts_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     accounts_agree H cx /\
-   transient_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     transient_agree H cx /\
-   request_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     request_agree H cx` by
-    (irule agree_cx_cong >> simp[initial_evaluation_context_def]) >>
-  asm_rewrite_tac[] >>
-  `accounts_agree H cx
+  `accounts_agree H cx.txn.target
      (process_deletions es.pending_deletions es.accounts)
      (process_deletions es.pending_deletions ss.vs_accounts)` by
     (irule accounts_agree_process_deletions >>
