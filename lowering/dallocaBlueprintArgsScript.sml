@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem create_blueprint_empty_args_prefix:
-  compile_create_blueprint_args cfn ce F [] cb = ((args_ptr,args_len),sa) ==>
+  compile_create_blueprint_args cfn ce F later_es [] cb = ((args_ptr,args_len),sa) ==>
   sa = cb /\ args_ptr = Lit 0w /\ args_len = Lit 0w /\
   eval_operand args_len s = SOME 0w /\ w2n (0w:bytes32) < 2 ** 64
 Proof
@@ -31,12 +31,12 @@ QED
 
 Theorem create_blueprint_encoded_args_compile:
   args <> [] /\
-  compile_create_blueprint_args cfn ce F args cb = ((args_ptr,args_len),sa) ==>
+  compile_create_blueprint_args cfn ce F later_es args cb = ((args_ptr,args_len),sa) ==>
   ?buf c1 src c2.
+    compile_create_ctor_tuple cfn ce args cb = (src,c1) /\
     compile_alloc_buffer
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) cb =
-      (buf,c1) /\
-    compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
+      (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) c1 =
+      (buf,c2) /\
     compile_abi_encode_to_buf buf.buf_operand src
       (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
       c2 = (args_len,sa) /\ args_ptr = buf.buf_operand
@@ -176,7 +176,7 @@ Theorem create_blueprint_raw_args_prefix:
   compile_create_blueprint_check is_lit target offset ca = (code_op,cb) /\
   run_inst_seq (emitted_insts ca cb) s0 = OK s1 /\
   lower_value cfn ce (expr_type e) e cb = (raw_ptr,cm) /\
-  compile_create_blueprint_args cfn ce T [e] cb = ((args_ptr,args_len),sa) /\
+  compile_create_blueprint_args cfn ce T [] [e] cb = ((args_ptr,args_len),sa) /\
   cb.cs_next_var <= cm.cs_next_var /\
   expr_post H ctx func ce cx e es cb cm s1 es' v raw_ptr sv /\
   expr_type e = BaseT (BytesT (Dynamic maxlen)) /\
@@ -209,8 +209,18 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `w2n (n2w (LENGTH bs) : bytes32) < 2 ** 64` by
     (simp[w2n_n2w] >> decide_tac) >>
-  qpat_x_assum `compile_create_blueprint_args _ _ _ _ _ = _` mp_tac >>
-  simp[compile_create_blueprint_args_def, comp_bind_def, comp_return_def] >>
+  `!vv (k : operand -> (operand # operand) compiler).
+       comp_bind (compile_snapshot_vv ce F vv)
+       (\saved. comp_bind (unwrap_value ce saved) k) =
+       comp_bind (unwrap_value ce vv) k` by
+    (Cases >> simp[compile_snapshot_vv_def, vv_type_def, unwrap_value_def] >>
+     rpt gen_tac >> IF_CASES_TAC >>
+     simp[comp_bind_def, comp_return_def, FUN_EQ_THM] >>
+     gen_tac >> rpt (pairarg_tac >> gvs[unwrap_value_def, comp_return_def])) >>
+  qpat_x_assum `compile_create_blueprint_args _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_create_blueprint_args_def, expr_can_mutate_def] >>
+  simp[GSYM comp_bind_assoc, GSYM lower_value_def] >>
+  simp[comp_bind_def, comp_return_def] >>
   simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> gvs[] >> fs[emitted_insts_def] >>
@@ -228,7 +238,7 @@ Theorem create_blueprint_raw_size_prefix:
   compile_create_blueprint_check T target offset ca = (code_op,cb) /\
   run_inst_seq (emitted_insts ca cb) s0 = OK s1 /\
   lower_value cfn ce (expr_type e) e cb = (raw_ptr,cm) /\
-  compile_create_blueprint_args cfn ce T [e] cb = ((args_ptr,args_len),sa) /\
+  compile_create_blueprint_args cfn ce T [] [e] cb = ((args_ptr,args_len),sa) /\
   cb.cs_next_var <= cm.cs_next_var /\
   expr_post H ctx func ce cx e es cb cm s1 es' v raw_ptr sv /\
   expr_type e = BaseT (BytesT (Dynamic maxlen)) /\
@@ -250,7 +260,7 @@ QED
 Theorem create_blueprint_empty_size_prefix:
   compile_create_blueprint_check T target offset ca = (code_op,cb) /\
   run_inst_seq (emitted_insts ca cb) s0 = OK s1 /\
-  compile_create_blueprint_args cfn ce F [] cb = ((args_ptr,args_len),sa) /\
+  compile_create_blueprint_args cfn ce F later_es [] cb = ((args_ptr,args_len),sa) /\
   emit_op ADD [code_op;args_len] sa = (size_op,sb) /\
   run_inst_seq (emitted_insts sa sb) s1 = OK t ==>
   ?size.
