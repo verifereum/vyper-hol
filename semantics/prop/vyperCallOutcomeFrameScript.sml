@@ -297,8 +297,7 @@ Theorem take_adopt_call_outcome_effects:
       accounts_runtime_well_typed st2.accounts) /\
     (rq.cr_static \/ ~outcome.co_success ==>
       st2.accounts = st.accounts /\ st2.tStorage = st.tStorage /\
-      st2.logs = st.logs /\ st2.pending_deletions = st.pending_deletions) /\
-    (computed_precompile rq ==> st2.requests = st.requests)
+      st2.logs = st.logs /\ st2.pending_deletions = st.pending_deletions)
 Proof
   rpt strip_tac >> drule_all checked_call_outcome_success_frame >> strip_tac >>
   drule take_call_outcome_success >> strip_tac >>

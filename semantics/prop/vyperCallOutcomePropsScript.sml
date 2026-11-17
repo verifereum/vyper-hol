@@ -84,7 +84,7 @@ Theorem take_call_outcome_computed_valid:
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, failed_outcome rq with
                        <|co_success := T; co_returnData := bs|>),
-     st with <|outcomes := SOME rest;
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
        storage_trace := st.storage_trace ++
          [StorageOutcome rq
            (if outcome.co_success then
@@ -103,7 +103,7 @@ Theorem take_call_outcome_computed_invalid:
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_call_outcome gas_cap target calldata value_opt st =
     (INL (rq, failed_outcome rq),
-     st with <|outcomes := SOME (DROP 1 os);
+     st with <|outcomes := SOME (DROP 1 os); requests := st.requests ++ [rq];
        storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
 Proof
   rpt strip_tac >> Cases_on `os` >>
@@ -211,7 +211,7 @@ Theorem take_request_outcome_suffix:
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
-    (computed_precompile rq ==> st'.requests = st.requests)
+    st'.requests = st.requests ++ MAP (K rq) prefix
 Proof
   rpt strip_tac >> Cases_on `os`
   >- (gvs[take_request_outcome_def] >> qexists_tac `[]` >> simp[]) >>
@@ -228,8 +228,8 @@ Theorem take_call_outcome_suffix:
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
-    (computed_precompile (call_outcome_request target calldata value_opt st) ==>
-       st'.requests = st.requests)
+    st'.requests = st.requests ++ MAP
+      (K (call_outcome_request target calldata value_opt st with cr_gas := gas_cap)) prefix
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
   rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
@@ -280,7 +280,9 @@ Theorem take_delegate_outcome_suffix:
        st'.requests = st.requests)
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
-  rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
+  rpt strip_tac >> drule_all take_request_outcome_suffix >> strip_tac >>
+  simp[delegate_outcome_request_def, call_outcome_request_def, computed_precompile_def] >>
+  metis_tac[]
 QED
 
 Theorem take_delegate_outcome_error:

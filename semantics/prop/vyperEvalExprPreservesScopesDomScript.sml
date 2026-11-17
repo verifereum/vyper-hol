@@ -416,7 +416,7 @@ QED
 Theorem scope_pop_effect_array_primitives[simp]:
   scope_pop_effect (result_array_length cx tv) /\
   scope_pop_effect next_gas_reading /\
-  scope_pop_effect (precompile_call_success bt) /\
+  scope_pop_effect (precompile_call_success bt vs) /\
   scope_pop_effect (eval_raw_call cx flags target calldata amount gas)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>

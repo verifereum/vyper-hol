@@ -2391,8 +2391,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
           `value_has_type ret_tv builtin_v` by
             (drule_all well_typed_builtin_app_success_type >> simp[]) >>
           asm_rewrite_tac[] >> simp_tac(srw_ss())[return_def] >>
-          Cases_on `precompile_call_success bt args_st` >>
-          rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
+          Cases_on `precompile_call_success bt vs args_st` >>
+          rename1 `precompile_call_success bt vs args_st = (pc_res,pc_st)` >>
           drule precompile_call_success_state >> strip_tac >>
           Cases_on `pc_res`
           >- (asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
@@ -3962,8 +3962,8 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
   rename1 `option_CASE _ _ _ st = (INL vs,args_st)` >>
   Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
   simp_tac(srw_ss())[return_def, raise_def]
-  >- (Cases_on `precompile_call_success bt args_st` >>
-      rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
+  >- (Cases_on `precompile_call_success bt vs args_st` >>
+      rename1 `precompile_call_success bt vs args_st = (pc_res,pc_st)` >>
       drule precompile_call_success_state >> strip_tac >>
       Cases_on `pc_res` >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
       irule typed_scope_transition_trans >>
