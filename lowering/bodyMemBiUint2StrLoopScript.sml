@@ -148,7 +148,7 @@ Theorem u2s_loop_mem_path[local]:
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
       u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
@@ -159,6 +159,7 @@ Theorem u2s_loop_mem_path[local]:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `lookup_block (u2s_label a 1) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>` by
     (qpat_x_assum `!bb. MEM bb _ ==> _`
@@ -248,7 +249,7 @@ Theorem u2s_check_mem_exit[local]:
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
       u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
@@ -259,6 +260,7 @@ Theorem u2s_check_mem_exit[local]:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   `lookup_block s.vs_current_bb fn.fn_blocks =
     SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>` by
     (qpat_x_assum `!bb. MEM bb _ ==> _`
@@ -328,7 +330,7 @@ Theorem u2s_setup_mem_exit:
   eval_operand op s = SOME (n2w X) /\ eval_operand buf s = SOME (n2w b) /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
-  X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
       u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
@@ -339,6 +341,7 @@ Theorem u2s_setup_mem_exit:
       t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   qabbrev_tac `v = update_var (u2s_var a 2) (n2w b)
     (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
   `run_inst_seq (TAKE 3 (u2s_setup a op buf)) s = OK v` by

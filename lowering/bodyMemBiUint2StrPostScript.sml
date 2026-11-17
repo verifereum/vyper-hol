@@ -72,7 +72,7 @@ Theorem u2s_allocated_mem_exit_mem[local]:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz+n < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\ X < dimword (:256) /\
-  78 <= n /\ 32 <= sz /\
+  LENGTH (num_to_dec_string X) <= n /\ 32 <= sz /\
   wb_frame cenv es es sp spre s /\ local_ptrs_reserved cenv sp /\
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b ready inst t. gas_path_mem ctx fn s 0 (OK t) /\
@@ -94,6 +94,7 @@ Theorem u2s_allocated_mem_exit_mem[local]:
     t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   drule_all u2s_alloc_layout_code >> strip_tac >>
   drule_all u2s_alloc_mem_ready_mem >> strip_tac >>
   rename1 `gas_path_mem ctx fn s 0 (OK ready)` >>
@@ -135,7 +136,7 @@ Theorem uint2str_numeric_mem_path:
   expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz+n < dimword (:256) /\
+  X < dimword (:256) /\ LENGTH (num_to_dec_string X) <= n /\ n+32 <= sz /\ sz+n < dimword (:256) /\
   alloca_history func s ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
     vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
@@ -149,7 +150,8 @@ Theorem uint2str_numeric_mem_path:
     ?p. eval_operand out t = SOME (n2w p) /\ p < dimword (:256) /\
       p+sz <= t.vs_alloca_next
 Proof
-  strip_tac >> drule_all compile_uint2str_layout >> strip_tac >>
+  strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >> drule_all compile_uint2str_layout >> strip_tac >>
   `storage_well_formed_on cx es' (FST H)` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
