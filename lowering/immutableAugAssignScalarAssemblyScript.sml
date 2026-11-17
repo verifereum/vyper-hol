@@ -79,6 +79,7 @@ Resume immutable_augassign_scalar_assembly[suffix_preparation]:
      metis_tac[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   simp[] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- metis_tac[stmtSimDeclMemTheory.emit_void_nonterminator_open,
                         venomInstTheory.is_terminator_def]) >>
   (conj_tac >- fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
