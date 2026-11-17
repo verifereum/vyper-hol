@@ -274,5 +274,7 @@ Theorem bop_word_operands_full_cps:
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> mp_tac bop_operands_full_cps >>
-  (impl_tac >- (simp[] >> metis_tac[word_value_type_word])) >> simp[]
+  (impl_tac >-
+    (simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     metis_tac[word_value_type_word])) >> simp[]
 QED
