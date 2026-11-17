@@ -474,24 +474,6 @@ QED
 
 (* ===== Additional bound helpers for well_typed_binop_success_type ===== *)
 
-(* Int division upper bound: x / d < n implies x < n * d *)
-Theorem int_div_lt_imp[local]:
-  !x d (n:int). 0 ≤ x ∧ 0 < d ∧ x / d < n ==> x < n * d
-Proof
-  rpt strip_tac >>
-  `?xn. x = &xn` by (qexists_tac `Num x` >> fs[integerTheory.INT_OF_NUM]) >>
-  `?dn. d = &dn ∧ 0 < dn`
-    by (qexists_tac `Num d` >> fs[integerTheory.INT_OF_NUM,
-          integerTheory.INT_LT] >> intLib.ARITH_TAC) >>
-  `&dn ≠ (0:int)` by intLib.ARITH_TAC >>
-  fs[integerTheory.INT_DIV] >>
-  `0 ≤ (n:int)` by (spose_not_then assume_tac >>
-    fs[integerTheory.INT_NOT_LE] >> intLib.ARITH_TAC) >>
-  `?nn. n = &nn` by (qexists_tac `Num n` >> fs[integerTheory.INT_OF_NUM]) >>
-  fs[integerTheory.INT_LT, integerTheory.INT_MUL] >>
-  fs[arithmeticTheory.DIV_LT_X]
-QED
-
 (* TASK015: preserve the former absolute-quotient bridge and its proof text.
    The replacement below uses the signed-result test, including -2 ** 167.
 Theorem decimal_mul_word_bound[local]:
