@@ -5247,6 +5247,92 @@ Proof
     IF_CASES_TAC, pairarg_tac])
 QED
 
+Theorem ctor_create_ctor_args_first_emission[local]:
+  (!env ty e a x b. cfn env ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !args env a x b. compile_create_ctor_args cfn env args a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Induct
+  >- (gen_tac >> rewrite_tac[compile_create_ctor_args_def] >>
+      metis_tac[first_emission_return]) >>
+  ntac 2 gen_tac >> rewrite_tac[compile_create_ctor_args_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac >- metis_tac[] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[ctor_snapshot_vv_first_emission] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[] >> metis_tac[first_emission_return]
+QED
+
+Theorem ctor_create_blueprint_args_first_emission[local]:
+  (!env ty e a x b. cfn env ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !env raw later_es args a x b.
+    compile_create_blueprint_args cfn env raw later_es args a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> ntac 4 gen_tac >>
+  simp_tac (srw_ss()) [compile_create_blueprint_args_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (Cases_on `args` >> simp[]
+      >- (rewrite_tac[comp_ignore_bind_def] >>
+          ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_strong_bind >> conj_tac
+          >- (rpt gen_tac >> strip_tac >> irule (cj 1 first_emission_emit_helpers) >>
+              goal_assum $ drule_at Any >> simp[]) >>
+          simp[comp_return_def, cs_extends_refl]) >>
+      Cases_on `t` >> simp[]
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac >- metis_tac[] >>
+          gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+          >- metis_tac[ctor_snapshot_vv_first_emission] >>
+          gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+          >- metis_tac[ctor_unwrap_value_first_emission] >>
+          gen_tac >> ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_strong_bind >> conj_tac
+          >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+              goal_assum $ drule_at Any >> simp[]) >>
+          rewrite_tac[GSYM cs_appends_def] >>
+          gen_tac >> ho_match_mp_tac cs_appends_bind >>
+          simp[cs_appends_emit_helpers, cs_appends_return]) >>
+      rewrite_tac[comp_ignore_bind_def] >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt gen_tac >> strip_tac >> irule (cj 1 first_emission_emit_helpers) >>
+          goal_assum $ drule_at Any >> simp[]) >>
+      simp[comp_return_def, cs_extends_refl]) >>
+  IF_CASES_TAC >- metis_tac[first_emission_return] >>
+  simp_tac (srw_ss()) [compile_create_ctor_tuple_def, LET_THM] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          drule_at (Pos last) ctor_create_ctor_args_first_emission >>
+          disch_then irule >> asm_rewrite_tac[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[ctor_alloc_buffer_first_emission] >>
+      rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
+      gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+      simp[ctor_extcall_store_values_ci_mono, ci_mono_comp_return]) >>
+  gen_tac >> ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[ctor_alloc_buffer_first_emission] >>
+  rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >>
+  simp[cj 2 ci_mono_compile_abi_encode, ci_mono_comp_return]
+QED
+
 Theorem ctor_create_call_first_emission:
   (!env ty e a x b. cfn env ty e a = (x,b) ==>
     cs_extends a b /\
@@ -5303,6 +5389,11 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos last) ctor_create_blueprint_args_first_emission >>
+      disch_then irule >> asm_rewrite_tac[]) >>
+  Cases >> simp_tac (srw_ss()) [] >>
+  ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   simp_tac (srw_ss()) [LET_THM] >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
@@ -5313,9 +5404,7 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
-  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_create_blueprint_args] >>
-  gen_tac >> pairarg_tac >> simp[ctor_create_blueprint_append_ci_mono]
+  simp[ctor_create_blueprint_append_ci_mono]
 QED
 
 Finalise ctor_create_call_first_emission
