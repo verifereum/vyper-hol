@@ -109,6 +109,19 @@ Proof
      >- (drule_all ld_joint_ordinary_abort >> simp[dead_result_rel_def]) >>
      Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL]`
      >- (drule_all ld_joint_static_abort >> simp[dead_result_rel_def]) >>
+     Cases_on `MEM inst.inst_opcode [STATICCALL; DELEGATECALL]`
+     >- (`s.vs_outcomes = t.vs_outcomes` by
+           fs[ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+         `!op. MEM op inst.inst_operands ==>
+           (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
+           (rpt strip_tac >> drule ld_joint_operand_defined >> disch_then irule >>
+            metis_tac[o1LowerDloadJointScalarTheory.ld_active_operand_ir_var]) >>
+         qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+         gvs[MEM] >> simp[step_inst_non_invoke] >>
+         asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+         simp[AllCaseEqs(), exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+         rpt strip_tac >> gvs[dead_result_rel_def] >>
+         fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
      `inst.inst_opcode = INVALID` by
        (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
      qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
@@ -194,7 +207,11 @@ Proof
      >- (drule_all ld_joint_ordinary_abort >> metis_tac[]) >>
      Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL]`
      >- (drule_all ld_joint_static_abort >> metis_tac[]) >>
-     drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
+     drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs(), exec_ext_call_abort_iff, exec_delegatecall_abort_iff]) >>
   qexists_tac `t1` >> simp[] >>
   `step_inst_base inst t = Abort Revert_abort t1` by
     gvs[step_inst_non_invoke] >>
