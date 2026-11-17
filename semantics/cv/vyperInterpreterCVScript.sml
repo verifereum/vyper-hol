@@ -130,7 +130,15 @@ val () = cv_auto_trans next_gas_reading_def;
 
 val () = cv_auto_trans precompile_builtin_def;
 
-val () = cv_auto_trans precompile_call_success_def;
+val () = cv_auto_trans precompile_address_def;
+
+val () = cv_auto_trans precompile_input_def;
+
+val () = precompile_call_success_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            check_def, assert_def]
+  |> cv_auto_trans;
 
 val () = cv_auto_trans code_slice_source_def;
 

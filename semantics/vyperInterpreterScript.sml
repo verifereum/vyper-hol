@@ -1269,8 +1269,6 @@ Definition precompile_address_def:
   precompile_address _ = 0w
 End
 
-val () = cv_auto_trans precompile_address_def;
-
 (* The precompile's input, as the lowering lays it out from the builtin's
    arguments: sha256 hashes the bytes themselves; the others take 32-byte
    big-endian words. *)
@@ -1295,8 +1293,6 @@ Definition precompile_input_def:
      | NONE => []) ∧
   precompile_input _ _ = []
 End
-
-val () = cv_auto_trans precompile_input_def;
 
 Definition precompile_call_success_def:
   precompile_call_success bt vs st =
