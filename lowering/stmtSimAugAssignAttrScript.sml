@@ -777,7 +777,8 @@ Proof
   fs[vyperTypeExprResultTheory.expr_result_typed_def,
      vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
      value_result_typed_def] >>
-  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` >>
+  rename1 `evaluate_type env.type_defs (expr_type e) = SOME tv2` >>
+  `evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by metis_tac[] >>
   `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
   drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
@@ -800,12 +801,11 @@ Proof
       irule well_typed_binop_success_type >>
       goal_assum (drule_at Any) >> simp[] >>
       qexistsl_tac [`ty`, `expr_type e`, `get_tenv cx`, `ftv`, `tv2`, `ty`] >> simp[]) >>
-  qexists_tac `tv2` >> simp[] >>
   irule augassign_binop_frag_typed >> simp[] >> conj_tac
   >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
       Cases_on `expr_int_literal e` >> gvs[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`expr_type e`, `ftv`, `tv2`] >> simp[]
+  qexists_tac `expr_type e` >> simp[]
 QED
 
 Theorem augassign_attr_rhs_word_operand[local]:
@@ -916,6 +916,7 @@ Proof
   impl_tac >- fs[safe_operand_def] >> strip_tac >>
   qexists_tac `r` >> simp[] >>
   `value_has_type ftv result` by metis_tac[] >> simp[] >>
+  fs[stmt_state_rel_start_gas_obs] >>
   irule expr_val_rel_typed >> qexistsl_tac [`cx`, `ty`] >> simp[]
 QED
 
@@ -1216,11 +1217,9 @@ Proof
 QED
 Resume augassign_attr_normal_summary[store]:
   gvs[] >>
-  `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
-  drule_all augassign_attr_binop_ready >>
-  disch_then (qspecl_then [`func`, `ee with gas_obs := []`, `ctx`] strip_assume_tac) >>
-  `value_has_type ftv result` by
-    (first_x_assum irule >> simp[]) >>
+  `expr_body_pre cenv cx env e
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
   `?wr ff. write_place cx (MemoryPlace id [AttrSubscript fld]) result
       (ee with gas_obs := []) = (wr,ff)` by metis_tac[pairTheory.PAIR] >>
   `!m. wr <> INR (Error (TypeError m))` by
@@ -1234,7 +1233,6 @@ Resume augassign_attr_normal_summary[store]:
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var` by
     metis_tac[ci_mono_emit_op, ci_mono_lower_value_cfn, compile_expr_ci_mono,
       ci_mono_def, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS] >>
@@ -1546,7 +1544,9 @@ Theorem compile_augassign_attr_local_case:
       es
 Proof
   rpt strip_tac >> irule compile_augassign_attr_local_case_typed >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
 
 (* compile_augassign_attr_local_case for an e with no internal call. *)
