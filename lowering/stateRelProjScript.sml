@@ -16,6 +16,20 @@ Proof
   metis_tac[stmt_state_rel_def, state_rel_local_ptrs_rel]
 QED
 
+Theorem state_rel_vars_rels:
+  state_rel H func cenv cx vs ss ==>
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
+Proof
+  simp[state_rel_def]
+QED
+
+Theorem stmt_state_rel_vars_rels:
+  stmt_state_rel H ctx func cenv cx vs ss ==>
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
+Proof
+  metis_tac[stmt_state_rel_def, state_rel_vars_rels]
+QED
+
 Theorem type_stmt_raise_reason:
   type_stmt env ret_ty (Raise (RaiseReason e)) =
     (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n))
