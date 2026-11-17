@@ -21,7 +21,7 @@ Ancestors
   dftPacketFillingBoundary
   dftPacketFreshCut
   dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
   dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -42,6 +42,7 @@ Ancestors
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
+  dftPacketPseudoHistoryFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
