@@ -1733,8 +1733,8 @@ Resume append_nested_after_target_full[rhs_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
   rename1 `INR exc` >> Cases_on `exc` >>
-  FIRST [gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
-      exprSimDefsTheory.halt_exit_def]] >>
+  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
+      exprSimDefsTheory.halt_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
