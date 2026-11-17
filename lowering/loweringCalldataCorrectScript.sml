@@ -2,7 +2,7 @@
 Theory loweringCalldataCorrect
 Ancestors
   e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution
-  sourceUnitExitSafe ptrDiscipline vyperCalldata
+  sourceUnitExitSafe ptrDiscipline vyperCalldata sourceCallCount
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -54,6 +54,33 @@ Theorem lower_vyper_runtime_unit_correct_dispatched:
     source_unit_execution_correct tops ret am tx unit vs
 Proof
   (* HELD ADMISSION SEQ-4939: S1 for noncanonical/__default__ dispatch; needs the entry chain over calldata_exact_owned_run *)
+  cheat
+QED
+
+(* ADMISSION: the dispatched-calldata unit theorem with a shadow context
+   fixed by the program before the call, at the raw unit's own free-memory
+   pointer.  Waits for the fixed-shadow producer over
+   lower_vyper_runtime_unit_correct_dispatched. *)
+Theorem lower_vyper_runtime_unit_correct_dispatched_with:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops ==>
+    ?shadow_ctx. !am tx ret vs.
+      source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
+      dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
+      initial_venom_state_rel tops am tx vs /\
+      outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+      vs.vs_fmp = vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254 /\
+      unit_alloca_budget unit.cu_context +
+        32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp ==>
+      ?marks.
+        source_unit_execution_correct_with shadow_ctx marks
+          tops ret am tx unit vs
+Proof
   cheat
 QED
 
