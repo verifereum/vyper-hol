@@ -256,7 +256,7 @@ Proof
     dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule frag_reachable_members >>
      disch_then drule >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >>
      metis_tac[]) >>
   drule_all bop_bytes_eq_layout >> strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\

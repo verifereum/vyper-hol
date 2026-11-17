@@ -456,6 +456,23 @@ Proof
   simp[]
 QED
 
+(* The checked runtime unit has no DALLOCA. *)
+Theorem lower_vyper_runtime_unit_no_dalloca_checked:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops ==>
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_no_dalloca >>
+  impl_tac
+  >- metis_tac[check_contract_runtime_bodies_shape_ok,
+               check_contract_internal_names_distinct] >>
+  simp[]
+QED
+
 (* ===== supported_program excludes the raw shape roots ===== *)
 
 Theorem supported_assignment_exists_mono[local]:

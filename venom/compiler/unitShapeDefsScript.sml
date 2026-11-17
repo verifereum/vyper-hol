@@ -401,9 +401,11 @@ End
 
 (* ===== Additional raw O1-source restrictions ===== *)
 
+(* DALLOCA is the one FMP operation the lowering emits; the others come
+   only from FmpLowering. *)
 Definition raw_opcode_ok_def:
   raw_opcode_ok op <=>
-    ~MEM op [PHI; ASSERT_UNREACHABLE; DALLOCA; DRET;
+    ~MEM op [PHI; ASSERT_UNREACHABLE; DRET;
              GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP]
 End
 
@@ -424,7 +426,11 @@ Definition o1_source_unit_ok_def:
     EVERY (\fn. EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn))
           unit.cu_context.ctx_functions /\
     internal_termination_ok unit.cu_context /\
-    EVERY first_block_no_preds unit.cu_context.ctx_functions
+    EVERY first_block_no_preds unit.cu_context.ctx_functions /\
+    EVERY (\fn. !inst x. MEM inst (fn_insts fn) /\ inst.inst_opcode = DALLOCA /\
+                         MEM x inst.inst_outputs ==>
+                         ~gas_var fn x /\ ~retpc_var fn x)
+          unit.cu_context.ctx_functions
 End
 
 (* ===== Entry lookup (L4) ===== *)

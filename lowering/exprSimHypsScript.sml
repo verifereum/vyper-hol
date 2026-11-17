@@ -155,13 +155,15 @@
  *   - The outcomes clause (outcomes_accounts_typed): every call outcome
  *     still to consume has fewer than 2**256 bytes of return data, which
  *     RETURNDATASIZE reads as a word (raw_call stores the length it reads),
- *     and every successful one adopts runtime well-typed accounts.
+ *     and every one carries runtime well-typed accounts.
  *     take_call_outcome raises "call outcome accounts" on a successful
  *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
  *     it and goes on, so without the clause send and extcall do not
- *     simulate.  The outcomes are the environment's answers, not the
- *     contract's: e2eDefs's call_outcomes_ok asks this of the initial ones,
- *     and the evaluator only drops outcomes from the front
+ *     simulate.  take_create_outcome raises "create outcome accounts" on
+ *     any create outcome whose accounts are not, failed ones included.
+ *     The outcomes are the environment's answers, not the contract's:
+ *     e2eDefs's call_outcomes_ok asks this of the initial ones, and the
+ *     evaluator only drops outcomes from the front
  *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated

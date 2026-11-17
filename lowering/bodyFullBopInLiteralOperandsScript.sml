@@ -137,7 +137,7 @@ Proof
   >- (asm_rewrite_tac[] >> rpt strip_tac >>
       drule contextRawReachableTheory.frag_reachable_members >>
       disch_then drule >> strip_tac >>
-      fs[unitMemInvTheory.dalloca_no_wrap_def,
+      fs[unitTransformDefsTheory.dalloca_no_wrap_def,
          ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
       metis_tac[]) >>
   disch_tac >>

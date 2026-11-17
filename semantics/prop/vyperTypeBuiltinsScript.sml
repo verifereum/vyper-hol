@@ -48,8 +48,9 @@ Proof
 QED
 
 Theorem CalldataSlice_builtin_success_type:
-  evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME tv /\
-  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) tys vs = INL v ==>
+  n <= m /\
+  evaluate_type tenv (BaseT (BytesT (Dynamic m))) = SOME tv /\
+  evaluate_builtin cx acc (BaseT (BytesT (Dynamic m))) (CalldataSlice n) tys vs = INL v ==>
   value_has_type tv v
 Proof
   rpt strip_tac >> Cases_on `vs` >>
@@ -1067,7 +1068,7 @@ Theorem well_typed_builtin_app_length:
 Proof
   simp[oneline well_typed_builtin_app_def] >>
   Cases_on `blt` >> rw[builtin_args_length_ok_def] >>
-  pop_assum mp_tac >> CASE_TAC >> rw[]
+  pop_assum mp_tac >> TRY CASE_TAC >> rw[]
 QED
 
 (* Helper: Flag Not never produces TypeError when well-typed *)
