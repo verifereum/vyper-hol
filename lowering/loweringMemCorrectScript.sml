@@ -34,10 +34,10 @@ val _ = Parse.hide "tops";
    distinct labels, an acyclic reachable call graph, the allocation budget
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
-   global region.  No DALLOCA is the O1 source shape's
-   (o1_source_unit_ok_no_dalloca), which S4 has. The lowering's pointer
-   check excludes the other raw FMP operations, so the free-memory pointer
-   never moves. The entry floor gives the bridge's two pointer facts. *)
+   global region.  No DALLOCA is a premise: the bridge covers only
+   static allocation. The lowering's pointer check excludes the other raw
+   FMP operations, so the free-memory pointer never moves. The entry floor
+   gives the bridge's two pointer facts. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

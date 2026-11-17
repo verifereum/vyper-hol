@@ -62,7 +62,6 @@ Proof
   strip_tac >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
     (rw[listTheory.EVERY_MEM] >> irule source_pre_fmp_ops >> metis_tac[]) >>
@@ -172,7 +171,6 @@ Proof
   >- (disj2_tac >> irule deploy_exempt_result_rel >> first_assum ACCEPT_TAC) >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vs`, `tail`]
     mp_tac deploy_unit_exit_safe_runs >>
   impl_tac >- fs[] >> strip_tac >>

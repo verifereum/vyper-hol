@@ -197,7 +197,9 @@ Proof
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule every_no_dalloca >>
+     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
     (drule lower_vyper_runtime_unit_raw_defaults >>
@@ -288,8 +290,7 @@ Proof
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
         fs[o1_run_state_ok_def]) >>
-     `~ctx_has_dalloca unit.cu_context` by
-       metis_tac[o1_source_unit_ok_no_dalloca] >>
+     `~ctx_has_dalloca unit.cu_context` by simp[] >>
      drule_all lower_vyper_runtime_unit_correct >>
      disch_then (qx_choose_then `marks` assume_tac o
        REWRITE_RULE [source_unit_execution_correct_def]) >>
@@ -377,7 +378,7 @@ Proof
        ``\s:venom_state. s.vs_initial_fmp = s.vs_fmp``) >>
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `~ctx_has_dalloca dunit.cu_context` by
-    metis_tac[deploy_unit_shape_ok, o1_source_unit_ok_no_dalloca] >>
+    metis_tac[deploy_unit_shape_ok] >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
   `vi.vs_outcomes = MAP SND (call_trace es)` by
     (drule gas_variant_outcomes >>
