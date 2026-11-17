@@ -105,7 +105,8 @@ QED
 Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+    body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>
        occurs_abi_decode_target target tops) /\

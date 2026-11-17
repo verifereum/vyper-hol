@@ -15,7 +15,7 @@
  *)
 Theory bodyFullPreds
 Ancestors
-  bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts typedCopyMetadata
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
 val _ = Parse.hide "body";
@@ -24,7 +24,8 @@ val _ = Parse.hide "body";
 Definition body_expr_full_ok_def:
   (body_expr_full_ok cx e <=>
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+      body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+      expr_body_pre cenv cx env e es ==>
       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es /\
       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -35,7 +36,8 @@ Definition body_expr_full_ok_def:
       body_exprs_full_ok cx elems) /\
     (!ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
       e = Subscript ann e1 e2 /\
-      body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+      body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+      expr_map_pre cenv cx env e es ==>
       expr_map_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es)) /\
   body_exprs_full_ok cx [] = T /\
@@ -70,7 +72,8 @@ Definition body_stmt_full_ok_def:
   body_stmt_full_ok cx s <=>
     !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env
        env' ret_ty lctx RetQ es.
-      body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+      supported_stmt tops bindings s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -91,7 +94,8 @@ Definition body_stmts_full_ok_def:
   body_stmts_full_ok cx ss <=>
     !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env
        env' ret_ty lctx RetQ es.
-      body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+      supported_stmts tops bindings ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\
