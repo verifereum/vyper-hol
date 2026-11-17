@@ -60,21 +60,21 @@ End
 
 Definition rb_expr_callback_def:
   rb_expr_callback bound cfn <=>
-    !env ty e. expr_size e < bound /\ rb_env_ok env ==>
+    !env ty e. expr_size e + cenv_defaults_size env < bound /\ rb_env_ok env ==>
       rb_step rb_value_ok (cfn env ty e)
 End
 
 Definition rb_builtin_callback_def:
   rb_builtin_callback bound cfn <=>
     !env ret_ty ty bi args.
-      list_size expr_size args < bound /\ rb_env_ok env ==>
+      list_size expr_size args + cenv_defaults_size env < bound /\ rb_env_ok env ==>
       rb_step rb_value_ok (cfn env ret_ty ty bi args)
 End
 
 Definition rb_type_callback_def:
   rb_type_callback bound cfn <=>
     !env vv_ty ty tb ret_ty args.
-      list_size expr_size args < bound /\ rb_env_ok env ==>
+      list_size expr_size args + cenv_defaults_size env < bound /\ rb_env_ok env ==>
       rb_step rb_value_ok (cfn env vv_ty ty tb ret_ty args)
 End
 
@@ -270,7 +270,7 @@ Theorem rb_expr_child_callback:
   rb_step rb_value_ok (expr_child_callback bound cfn env ty e)
 Proof
   rw[rb_expr_callback_def] >>
-  Cases_on `expr_size e < bound` >>
+  Cases_on `expr_size e + cenv_defaults_size env < bound` >>
   gvs[rb_step_def, expr_child_callback_def] >>
   metis_tac[rb_invalid_expr_call, rb_step_def]
 QED
@@ -280,7 +280,7 @@ Theorem rb_builtin_child_callback:
   rb_step rb_value_ok (builtin_child_callback bound cfn env ret_ty ty bi args)
 Proof
   rw[rb_builtin_callback_def] >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size env < bound` >>
   gvs[rb_step_def, builtin_child_callback_def] >>
   metis_tac[rb_invalid_expr_call, rb_step_def]
 QED
@@ -290,7 +290,7 @@ Theorem rb_type_child_callback:
   rb_step rb_value_ok (type_child_callback bound cfn env vv_ty ty tb ret_ty args)
 Proof
   rw[rb_type_callback_def] >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size env < bound` >>
   gvs[rb_step_def, type_child_callback_def] >>
   metis_tac[rb_invalid_expr_call, rb_step_def]
 QED
@@ -305,4 +305,10 @@ Theorem rb_reserved_rejected:
 Proof
   simp[rb_operand_ok_def, rb_location_ok_def, rb_value_ok_def,
        rb_ptr_ok_def, mk_ptr_def]
+QED
+
+Theorem rb_env_ok_without_defaults:
+  !ce name. rb_env_ok ce ==> rb_env_ok (cenv_without_defaults ce name)
+Proof
+  simp[cenv_without_defaults_def, rb_env_ok_def] >> metis_tac[]
 QED

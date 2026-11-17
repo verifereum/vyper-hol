@@ -51,7 +51,7 @@ Theorem concretize_untainted_local_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   joint_trace vs0 C q0 es qs q /\ m <= n /\ n <= j /\ j <= LENGTH es /\
@@ -74,12 +74,12 @@ Proof
   strip_tac >>
   `wf_function fn /\ all_reachable fn` by
     (`MEM fn C.ctx_functions` by
-       (drule trace_config_at >> disch_then (qspec_then `m` mp_tac) >>
+       (drule frameJointTraceTheory.joint_trace_reachable_at >> disch_then (qspec_then `m` mp_tac) >>
         impl_tac >- decide_tac >> simp[] >>
         strip_tac >> gvs[joint_config_reachable_def] >>
         drule joint_origin_history_erasure >> strip_tac >>
         drule origin_frame_erasure >> strip_tac >>
-        metis_tac[frame_allocation_ownership]) >>
+        metis_tac[frame_reachable_functions_member]) >>
      gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
   `?la us. ml_iterate_fuel (concretize_memloc_fuel fn) bp
     (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm)))
@@ -122,7 +122,8 @@ Theorem concretize_untainted_incoming_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp) /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
@@ -147,19 +148,21 @@ Theorem concretize_untainted_incoming_read_liveset:
       ?addrs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
         observed.cu_context owner bp (cfg_analyze owner)) (Allocation aid) = SOME addrs /\ MEM p addrs)
 Proof
-  strip_tac >> drule_all concretize_untainted_incoming_read_liveat >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp` by simp[] >>
+  drule_all concretize_untainted_incoming_read_liveat >> strip_tac >>
   qexistsl_tac [`k`,`aid`,`owner`,`d`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `bp = _` SUBST_ALL_TAC >>
   qpat_x_assum `owner = _` kall_tac >> qpat_x_assum `d = _` kall_tac >>
   `MEM owner C.ctx_functions` by
-    (drule trace_config_at >> disch_then (qspec_then `m` mp_tac) >>
+    (drule frameJointTraceTheory.joint_trace_reachable_at >> disch_then (qspec_then `m` mp_tac) >>
      impl_tac >- decide_tac >> simp[] >>
      strip_tac >> gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     metis_tac[frame_allocation_ownership]) >>
+     metis_tac[frame_reachable_functions_member]) >>
   `wf_function owner /\ all_reachable owner` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `?la us. ml_iterate_fuel (concretize_memloc_fuel owner)
@@ -224,7 +227,7 @@ Theorem concretize_untainted_local_read_past_write_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   joint_trace vs0 C q0 es qs q /\ m <= n /\ n <= j /\ j <= LENGTH es /\
@@ -247,7 +250,7 @@ Proof
   strip_tac >>
   `joint_config_reachable vs0 C
     (JointConfig stkm PGm Gm tnm fn instm sm omsm omm hsm hm)` by
-    metis_tac[trace_config_at, arithmeticTheory.LESS_EQ_TRANS] >>
+    metis_tac[frameJointTraceTheory.joint_trace_reachable_at, arithmeticTheory.LESS_EQ_TRANS] >>
   `ml_used_gen (Allocation aid) bp
     (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) instm` by
     (gvs[] >> irule joint_local_write_used_generator >>

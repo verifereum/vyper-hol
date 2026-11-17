@@ -15,8 +15,8 @@ Definition bop_result_def:
     | INR e => INR (Error e)
 End
 
-Definition binop_frag_words_def:
-  binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+Definition binop_frag_post_def:
+  binop_frag_post post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !st0 sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
@@ -33,11 +33,10 @@ Definition binop_frag_words_def:
       ?r. gas_marked_path F ctx func s0 0 r /\
         ((?s v. r = OK s /\
                  bop_result cx ann bop tys v1 v2 es0 = INL v /\
-                 word_value v /\
+                 post v op s /\
                  (!H. valid_horizon cx st0 H es0.storage_trace ==>
                    stmt_state_rel H ctx func cenv cx es0 s /\
                    storage_well_formed_on cx es0 (FST H)) /\
-                 eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
                  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -48,8 +47,16 @@ Definition binop_frag_words_def:
          (exit_result r /\ expr_exit (bop_result cx ann bop tys v1 v2 es0) r))
 End
 
+Definition binop_frag_words_def:
+  binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+    binop_frag_post
+      (\v op s. word_value v /\ eval_operand op s = SOME (val_to_w256 v))
+      ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+End
+
 Definition binop_frag_def:
   binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
     binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2
       (val_to_w256 v1) (val_to_w256 v2) es0
 End
+

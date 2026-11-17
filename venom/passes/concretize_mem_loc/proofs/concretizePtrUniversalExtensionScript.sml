@@ -19,11 +19,12 @@ Ancestors
   concretizePtrRetpcProducer concretizePtrInitialFmpProducer concretizePtrBumpProducer
   concretizePtrEnvironmentReadProducer concretizePtrUnaryEnvironmentReadProducer
   concretizePtrAssertionProducer concretizePtrStructuralDispatch
+  concretizePtrDallocaProducer
 
 Theorem ptr_paired_universal_jump_extension[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ o1_ctx_shape C /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
     (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
@@ -59,8 +60,6 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `unitShapeDefs$retpc_shape_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
         EVERY_MEM] >> metis_tac[]) >>
@@ -241,12 +240,12 @@ QED
 Theorem ptr_paired_universal_excluded[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
   ~MEM a.po_inst.inst_opcode
-    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP;
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DRET; RETFMP;
      PHI; NOP; RETURN; REVERT; STOP; SINK; SELFDESTRUCT; INVALID]
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -259,9 +258,8 @@ Proof
   drule concretizePtrChronologicalDemandTheory.ptr_frame_operand_instructions >>
   strip_tac >>
   `~MEM a.po_inst.inst_opcode
-    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP; NOP]` by
-    (fs[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def,
-        ctx_has_dalloca_def, EXISTS_MEM, MEM] >> metis_tac[]) >>
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DRET; RETFMP; NOP]` by
+    (fs[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def, MEM] >> metis_tac[]) >>
   simp[MEM] >> rpt strip_tac >> gvs[] >>
   `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
   qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
@@ -301,17 +299,18 @@ Proof
   gvs[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
-Theorem ptr_paired_universal_immediate_extension[local]:
+Theorem ptr_paired_universal_immediate_extension_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   EVERY fn_inst_wf C.ctx_functions /\
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -328,29 +327,31 @@ Theorem ptr_paired_universal_immediate_extension[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   fs[MEM]
-  >- (drule_all ptr_paired_prefix_mload >> strip_tac >>
+  >- (drule_all ptr_paired_prefix_mload_static >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >- (drule_all ptr_paired_prefix_mstore >> strip_tac >>
+  >- (drule_all ptr_paired_prefix_mstore_static >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >- (drule_all ptr_paired_prefix_mcopy >> strip_tac >>
+  >- (drule_all ptr_paired_prefix_mcopy_static >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >- (drule_all ptr_paired_prefix_assign >> strip_tac >>
+  >- (drule_all ptr_paired_prefix_assign_static >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >> drule_all ptr_paired_prefix_param >> strip_tac >>
+  >> drule_all ptr_paired_prefix_param_static >> strip_tac >>
   drule_all ptr_paired_universal_normalize_immediate >> simp[]
 QED
 
-Theorem ptr_paired_universal_extension:
+
+Theorem ptr_paired_universal_extension_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
@@ -396,68 +397,111 @@ Proof
     (fs[o1_ctx_shape_def, o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
         EVERY_MEM] >> metis_tac[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [ADD; SUB]`
-  >- (drule_all ptr_paired_affine_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_affine_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [EQ; LT; GT]`
-  >- (drule_all ptr_paired_comparison_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_comparison_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [MLOAD; MSTORE; MCOPY; ASSIGN; PARAM]`
-  >- (drule_all ptr_paired_universal_immediate_extension >> simp[]) >>
+  >- (drule_all ptr_paired_universal_immediate_extension_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP]`
   >- (drule_all ptr_paired_universal_jump_extension >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = INVOKE`
   >- (drule_all ptr_paired_universal_invoke_extension >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = ALLOCA \/ a.po_inst.inst_opcode = RET`
-  >- (drule_all ptr_paired_structural_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_structural_prefix_normalize_static >> simp[]) >>
   suspend "families"
 QED
 
-Resume ptr_paired_universal_extension[families]:
+Resume ptr_paired_universal_extension_static[families]:
   Cases_on `MEM a.po_inst.inst_opcode [ILOAD]`
-  >- (drule_all ptr_paired_iload_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_iload_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [MSTORE8; ISTORE]`
-  >- (drule_all ptr_paired_byte_store_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_byte_store_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY]`
-  >- (drule_all ptr_paired_buffer_copy_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_buffer_copy_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [EXTCODECOPY]`
-  >- (drule_all ptr_paired_extcodecopy_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_extcodecopy_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [SLOAD; TLOAD]`
-  >- (drule_all ptr_paired_storage_read_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_storage_read_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [SSTORE; TSTORE]`
-  >- (drule_all ptr_paired_storage_write_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_storage_write_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [SHA3; LOG]`
-  >- (drule_all ptr_paired_hash_log_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_hash_log_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [CALL; STATICCALL]`
-  >- (drule_all ptr_paired_call_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_call_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]`
-  >- (drule_all ptr_paired_create_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_create_prefix_normalize_static >> simp[]) >>
   suspend "remaining"
 QED
 
-Resume ptr_paired_universal_extension[remaining]:
+Resume ptr_paired_universal_extension_static[remaining]:
   Cases_on `MEM a.po_inst.inst_opcode
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]`
-  >- (drule_all ptr_paired_scalar_core_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_scalar_core_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [SHL; SHR; SAR]`
-  >- (drule_all ptr_paired_shift_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_shift_prefix_normalize_static >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = RETPC_PARAM`
-  >- (drule_all ptr_paired_retpc_param_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_retpc_param_prefix_normalize_static >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = INITIAL_FMP`
-  >- (drule_all ptr_paired_initial_fmp_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_initial_fmp_prefix_normalize_static >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = BUMP`
-  >- (drule_all ptr_paired_bump_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_bump_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE]`
-  >- (drule_all ptr_paired_assertion_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_assertion_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode
     [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
      TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; CALLDATASIZE;
      RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE]`
-  >- (drule_all ptr_paired_environment_read_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_environment_read_prefix_normalize_static >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode
     [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD; DLOAD]`
-  >- (drule_all ptr_paired_unary_environment_read_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_unary_environment_read_prefix_normalize_static >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = GAS`
-  >- (drule_all ptr_paired_gas_prefix_normalize >> simp[]) >>
+  >- (drule_all ptr_paired_gas_prefix_normalize_static >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = DALLOCA`
+  >- (drule_all ptr_paired_prefix_dalloca_static >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode` >> gvs[MEM]
 QED
-Finalise ptr_paired_universal_extension
+Finalise ptr_paired_universal_extension_static
+
+Theorem ptr_paired_universal_extension:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ptr_chrono_step C' at zt ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_universal_extension_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 

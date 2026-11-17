@@ -173,15 +173,16 @@ QED
 
 Theorem fuel_ok_child_callbacks:
   (!bound f.
-     (!c t e Wv E. expr_size e < bound ==> fuel_ok Wv {} E (f c t e)) ==>
+     (!c t e Wv E. expr_size e + cenv_defaults_size c < bound ==>
+        fuel_ok Wv {} E (f c t e)) ==>
      !c t e Wv E. fuel_ok Wv {} E (expr_child_callback bound f c t e)) /\
   (!bound f.
-     (!c rt t bi es Wv E. list_size expr_size es < bound ==>
+     (!c rt t bi es Wv E. list_size expr_size es + cenv_defaults_size c < bound ==>
         fuel_ok Wv {} E (f c rt t bi es)) ==>
      !c rt t bi es Wv E.
        fuel_ok Wv {} E (builtin_child_callback bound f c rt t bi es)) /\
   (!bound f.
-     (!c vt t tb rt es Wv E. list_size expr_size es < bound ==>
+     (!c vt t tb rt es Wv E. list_size expr_size es + cenv_defaults_size c < bound ==>
         fuel_ok Wv {} E (f c vt t tb rt es)) ==>
      !c vt t tb rt es Wv E.
        fuel_ok Wv {} E (type_child_callback bound f c vt t tb rt es))

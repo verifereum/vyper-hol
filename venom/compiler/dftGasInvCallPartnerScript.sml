@@ -29,10 +29,10 @@ Theorem inv_call_partner_class:
   read_effects i.inst_opcode = {} /\ write_effects i.inst_opcode = {}
 Proof
   strip_tac >> Cases_on `i.inst_opcode` >>
-  gvs[dft_gas_swap_pair_def, effects_independent_def,
+  FIRST [gvs[dft_gas_swap_pair_def, effects_independent_def,
       read_effects_def, write_effects_def, all_effects_def, empty_effects_def,
       is_terminator_def, is_alloca_op_def, is_ext_call_op_def, is_pseudo_def,
-      DISJOINT_DEF, EXTENSION] >>
+      DISJOINT_DEF, EXTENSION]] >>
   metis_tac[]
 QED
 
@@ -75,8 +75,6 @@ Proof
        exec_read0_def, exec_read1_def, AllCaseEqs()] >> strip_tac >>
   gvs[inv_partner_inputs_def, MEM] >>
   FIRST [
-    qmatch_goalsub_abbrev_tac `update_var out2 value2 (update_var out1 value1 s)` >>
-      qexists_tac `[(out1,value1); (out2,value2)]` >> simp[],
     qmatch_goalsub_abbrev_tac `update_var out value s` >>
       qexists_tac `[(out,value)]` >> simp[] >>
       gvs[Abbr `value`] >> metis_tac[], 

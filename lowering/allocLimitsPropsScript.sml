@@ -70,6 +70,15 @@ Proof
   simp[target_subscript_overlap_def]
 QED
 
+Theorem aug_assign_overlap_frame:
+  !c c' tgt e.
+    c'.ce_modules = c.ce_modules /\
+    (!bt. target_place_type c' bt = target_place_type c bt) ==>
+    aug_assign_overlap c' tgt e = aug_assign_overlap c tgt e
+Proof
+  rw[aug_assign_overlap_def, var_is_prim_word_def]
+QED
+
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
@@ -422,6 +431,8 @@ Proof
    c1.ce_module_vars = c0.ce_module_vars /\
    c1.ce_event_info = c0.ce_event_info` by gvs[alloc_env_agree_def] >>
   drule_all alloc_limits_frame >> strip_tac >>
+  `!tgt e. aug_assign_overlap c1 tgt e = aug_assign_overlap c0 tgt e` by
+    (rpt gen_tac >> irule aug_assign_overlap_frame >> simp[]) >>
   gvs[alloc_limits_stmt_def, log_alloc_ok_def] >> metis_tac[]
 QED
 

@@ -11,3 +11,9 @@ rc03_value_gas
 rc21_internal_value_gas_order
 rc07_rof_false_tuple
 rc29_delegate
+rc10_msgdata
+rc11_msgdata_outsize
+rc12_msgdata_gas
+rc13_msgdata_value
+rc14_msgdata_rof
+rc15_msgdata_static

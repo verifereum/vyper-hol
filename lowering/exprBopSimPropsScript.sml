@@ -16,6 +16,30 @@ Ancestors
 Libs
   pairLib
 
+Theorem binop_frag_post_mono:
+  binop_frag_post p ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es /\
+  (!v op s. p v op s ==> q v op s) ==>
+  binop_frag_post q ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  pure_rewrite_tac[binop_frag_post_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!st0 sa sb x y op s0. _`
+    (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `r` >> simp[] >> metis_tac[]
+QED
+
+Theorem binop_frag_words_rel:
+  is_word_type ann /\
+  binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es ==>
+  binop_frag_post (expr_val_rel cx ann)
+    ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  simp[binop_frag_words_def] >> strip_tac >>
+  irule binop_frag_post_mono >> goal_assum (drule_at Any) >>
+  simp[expr_val_rel_def, typed_val_to_w256_word_value]
+QED
+
 Theorem comparison_digest_run:
   (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
@@ -297,12 +321,12 @@ Proof
   simp[]
 QED
 
-Theorem expr_post_bop:
+Theorem expr_post_bop_rel:
   !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
     expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
     stmt_state_rel H ctx func cenv cx es' ss /\
-    eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
+    expr_val_rel cx ann v op ss /\
     (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
            lookup_var z ss = SOME w) /\
     (!aid b. FLOOKUP u.vs_allocas aid = SOME b ==>
@@ -317,8 +341,7 @@ Theorem expr_post_bop:
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
-  simp[expr_val_rel_def, expr_val_at_def, vyperASTTheory.expr_type_def,
-       typed_val_to_w256_word_value] >>
+  simp[expr_val_at_def, vyperASTTheory.expr_type_def] >>
   conj_tac
   >- ((* the variables handed out before sa *)
       rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>
@@ -368,6 +391,31 @@ Proof
     (drule_all pure_frame_trans >> disch_then ACCEPT_TAC) >>
   irule pure_frame_mem_tail >> qexists_tac `u` >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem expr_post_bop:
+  !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
+    expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    stmt_state_rel H ctx func cenv cx es' ss /\
+    eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
+    (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
+           lookup_var z ss = SOME w) /\
+    (!aid b. FLOOKUP u.vs_allocas aid = SOME b ==>
+             FLOOKUP ss.vs_allocas aid = SOME b) /\
+    ss.vs_memory = u.vs_memory /\
+    is_word_type ann /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+    sa.cs_next_id <= s1.cs_next_id ==>
+    expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
+      v op ss
+Proof
+  rpt gen_tac >> strip_tac >> irule expr_post_bop_rel >>
+  qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[expr_val_rel_def, typed_val_to_w256_word_value]
 QED
 
 (* Source boundary for counted composition and concrete certificates. *)
@@ -574,7 +622,7 @@ Proof
   disch_then (mp_tac o MATCH_MP bop_value_scopes_dom) >> simp[]
 QED
 
-Theorem bop_normal_prefix_summary:
+Theorem bop_normal_prefix_summary_rel:
   gas_marked_exec F (ctx, func)
     (do r <- eval_expr cx e1; read_result cx r od)
     (es, s0) left (INL v1) mid (OK t) /\
@@ -600,7 +648,7 @@ Theorem bop_normal_prefix_summary:
   (!z. y = Var z ==> not_fresh_at s2 z) /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\
-  binop_frag_words ctx func cenv cx bop (expr_type e1) ann bl el
+  binop_frag_post (expr_val_rel cx ann) ctx func cenv cx bop (expr_type e1) ann bl el
     [expr_type e1; expr_type e2] v1 v2
     (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2)
     (fin with gas_obs := []) ==>
@@ -664,8 +712,8 @@ Proof
     metis_tac[not_fresh_at_mono, local_ptrs_reserved_next_var] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_words _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_words_def]) >>
+  qpat_x_assum `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `gas_marked_exec F (ctx, func)
@@ -690,10 +738,61 @@ Proof
       `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
         metis_tac[bop_marked_scopes_dom] >>
       qexists_tac `v` >> gvs[] >>
-      irule expr_post_bop >>
+      irule expr_post_bop_rel >>
       qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
       qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[]) >>
   metis_tac[bop_result_gas_obs]
+QED
+
+Theorem bop_normal_prefix_summary:
+  gas_marked_exec F (ctx, func)
+    (do r <- eval_expr cx e1; read_result cx r od)
+    (es, s0) left (INL v1) mid (OK t) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e1)
+      (sa, s1, x) (es, s0) left (v1, mid, t)) /\
+  gas_marked_exec F (ctx, func)
+    (do r <- eval_expr cx e2; read_result cx r od)
+    (mid with gas_obs := [], t) right (INL v2) fin (OK u) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e2)
+      (s1, s2, y) (mid with gas_obs := [], t) right (v2, fin, u)) /\
+  (?H. valid_horizon cx st0 H fin.storage_trace) /\
+  gas_admissible
+    (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx r od) expr_res_ok es /\
+  compile_binop bop x y (expr_type e1) bl el s2 = (op, sb) /\
+  fn_has_code s2 sb func /\ is_word_type ann /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+  evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
+  (!z. y = Var z ==> not_fresh_at s2 z) /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+  sa.cs_next_id <= s1.cs_next_id /\
+  binop_frag_words ctx func cenv cx bop (expr_type e1) ann bl el
+    [expr_type e1; expr_type e2] v1 v2
+    (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2)
+    (fin with gas_obs := []) ==>
+  gas_summary_at F (ctx, func) (left ++ right)
+    (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx r od) (es, s0)
+    (\res ee ss. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      ?v. res = INL v /\
+      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+        es sa sb s0 ee v op ss /\
+      ss.vs_current_bb = sb.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit res r)
+Proof
+  strip_tac >> irule bop_normal_prefix_summary_rel >> simp[] >>
+  qexistsl_tac [`bl`, `el`, `fin`, `mid`, `s1`, `s2`, `t`,
+                `u`, `v1`, `v2`, `x`, `y`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`?H. valid_horizon cx st0 H fin.storage_trace`]
+  >- (qexists_tac `H` >> simp[]) >>
+  irule binop_frag_words_rel >> simp[]
 QED
 
