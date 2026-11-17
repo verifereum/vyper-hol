@@ -145,7 +145,8 @@ Resume uint2str_builtin_sim_full[compose]:
      qexistsl_tac [`s0.vs_gas_readings`, `marks`, `mid`] >> simp[]) >>
   qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
   `LENGTH (num_to_dec_string X) <= n` by
-    metis_tac[vyperTypeBuiltinsTheory.uint2str_width_bound, LESS_EQ_TRANS] >>
+    metis_tac[vyperTypeBuiltinsTheory.uint2str_width_bound,
+              arithmeticTheory.LESS_EQ_TRANS] >>
   suspend "suffix"
 QED
 
