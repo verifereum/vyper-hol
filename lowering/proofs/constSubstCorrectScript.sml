@@ -6241,10 +6241,8 @@ Proof
       irule const_computations_related_prefix >> reverse conj_tac
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
-              >- (irule const_computations_related_prefix >> reverse conj_tac
-                  >- (simp[const_computations_related_eq] >>
-                      irule const_subst_code_source >> metis_tac[]) >>
-                  rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+              >- (simp[const_computations_related_eq] >>
+                  irule const_subst_code_source >> metis_tac[]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>
