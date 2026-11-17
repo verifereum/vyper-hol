@@ -160,6 +160,57 @@ Proof
   metis_tac[MEM_TAKE, MEM_DROP_IMP, MEM]
 QED
 
+Theorem LIST_REL_create_operand_layout[local]:
+  LIST_REL R xs ys ==>
+  LIST_REL R (create_operand_layout kind has_salt xs)
+    (create_operand_layout kind has_salt ys)
+Proof
+  Cases_on `kind` >> Cases_on `xs` >> Cases_on `ys` >>
+  simp[create_operand_layout_def] >> strip_tac >>
+  imp_res_tac LIST_REL_LENGTH >> fs[]
+  >~ [`LIST_REL R (_ ++ _) (_ ++ _)`]
+  >- (irule LIST_REL_APPEND_suff >> metis_tac[LIST_REL_TAKE, LIST_REL_DROP]) >>
+  qmatch_assum_rename_tac `LIST_REL R left right` >>
+  qmatch_goalsub_abbrev_tac `DROP n left` >>
+  `LIST_REL R (DROP n left) (DROP n right)` by metis_tac[LIST_REL_DROP] >>
+  `LIST_REL R (TAKE n left) (TAKE n right)` by metis_tac[LIST_REL_TAKE] >>
+  Cases_on `DROP n left` >> Cases_on `DROP n right` >> gvs[] >>
+  irule LIST_REL_APPEND_suff >> simp[]
+QED
+
+Theorem exprs_runtime_typed_create_operand_layout[local]:
+  exprs_runtime_typed env es vs ==>
+  exprs_runtime_typed env (create_operand_layout kind has_salt es)
+    (create_operand_layout kind has_salt vs)
+Proof
+  rw[exprs_runtime_typed_def] >>
+  qexists_tac `create_operand_layout kind has_salt tvs` >>
+  conj_tac >> irule LIST_REL_create_operand_layout >> simp[]
+QED
+
+Theorem create_operands_result_sound[local]:
+  runtime_consistent env cx st /\
+  exprs_runtime_typed env es (create_operand_layout kind has_salt vs) /\
+  create_arg_types_ok kind has_salt (MAP expr_type es) /\
+  eval_create_operands cx kind has_salt rof (MAP expr_type es)
+    literal_offset vs st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\
+  accounts_well_typed st'.accounts /\
+  (!msg. res <> INR (Error (TypeError msg))) /\
+  (case res of
+   | INL tv => expr_result_typed env
+       (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
+   | INR _ => T)
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[]
+  >~ [`check_create_blueprint _ _ _ _ = (INR _,_)`]
+  >- (gvs[runtime_consistent_def] >>
+      metis_tac[check_create_blueprint_no_type_error]) >>
+  drule_all create_tail_result_sound_simp >> simp[]
+QED
+
 Theorem fn_sigs_consistent_FLOOKUP:
   fn_sigs_consistent fn_sigs cx /\
   FLOOKUP fn_sigs (src_id_opt, fn) = SOME sig ==>
@@ -2624,8 +2675,6 @@ fun trace_root_key tm =
           "eval_target_place" => "Target"
         | "eval_base_place" => "Base_" ^ constructor
         | "eval_exprs" => if listSyntax.is_nil arg then "Exprs_nil" else "Exprs_cons"
-        | "eval_expr_results" =>
-            if listSyntax.is_nil arg then "Results_nil" else "Results_cons"
         | "eval_expr" => "Expr_" ^ constructor ^
             (if constructor = "Call" then "_" ^ name (el 2 (#2 (strip_comb arg))) else "")
         | _ => raise Fail ("Unknown transition evaluator: " ^ operation)
@@ -2805,20 +2854,7 @@ Theorem eval_scc_type_sound_results_mutual:
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\ assign_tuple_target_list cx gs vs st = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res) /\
-  (!cx es. (!env st res st'.
-    well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_exprs es) /\
-    eval_expr_results cx es st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of INL results => expr_results_typed (env,cx,st') es results | INR _ => T) /\
-   (!env st res st'.
-    well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_exprs es) /\
-    eval_expr_results cx es st = (res,st') ==> typed_scope_transition st st'))
+    no_type_error_result res)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> expose_soundness_aux_tac >>
@@ -2829,7 +2865,7 @@ Proof
         let val (h,args) = strip_comb tm
             val n = #Name (dest_thy_const h)
         in (List.exists (fn s => s = n) ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for",
-              "eval_expr", "eval_exprs", "eval_expr_results", "eval_base_place", "eval_target_place"]
+              "eval_expr", "eval_exprs", "eval_base_place", "eval_target_place"]
             andalso length args = (if n = "eval_for" then 6 else 3)) orelse
            (List.exists (fn s => s = n) ["assign_tuple_targets", "assign_tuple_target_list"] andalso
             length args = 4)
@@ -2873,7 +2909,6 @@ Proof
         else if n = "eval_for" then "For_" ^ shape (el 5 args)
         else if n = "eval_expr" then expr_label arg
         else if n = "eval_exprs" then "Exprs_" ^ shape arg
-        else if n = "eval_expr_results" then "Results_" ^ shape arg
         else if n = "eval_base_place" then "BasePlaceRoot_" ^ head arg
         else if n = "eval_target_place" then "TargetPlace"
         else if n = "assign_tuple_targets" then "TupleStore_" ^ head arg
@@ -7571,238 +7606,41 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
 QED
 
 Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
-  rpt gen_tac >> strip_tac >>
-  conj_tac
-  >- (
-    strip_tac >>
-    drule create_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _ kw_order) _ _)` mp_tac >>
-    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    Cases_on `kind`
-    >~ [`CreateFromBlueprint raw_args`] >- (
-      rename1 `CreateFromBlueprint raw_args` >>
-      full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
-      `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
-        metis_tac[well_typed_exprs_TAKE] >>
-      `well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
-        metis_tac[well_typed_exprs_DROP] >>
-      `call_evaluation_safe cx
-         (int_calls_exprs (TAKE (if has_salt then 4 else 3) es))` by
-        metis_tac[call_evaluation_safe_exprs_TAKE] >>
-      `call_evaluation_safe cx
-         (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
-        metis_tac[call_evaluation_safe_exprs_DROP] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (strip_tac >>
+      drule create_call_evaluation_safe_args >> strip_tac >>
+      qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _ _) _ _)` mp_tac >>
+      rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+      `well_typed_exprs env (create_operand_order kind has_salt es)` by
+        metis_tac[well_typed_exprs_create_operand_order] >>
+      `call_evaluation_safe cx (int_calls_exprs (create_operand_order kind has_salt es))` by
+        metis_tac[call_evaluation_safe_create_operand_order] >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-      Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
-      rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
-                 (prefix_res,prefix_st)` >>
-      qpat_x_assum `!s0 prefix0 t0 s1 code0 t1. _ ==> _`
-        (mk_asm "suffix_package") >>
-      qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-        (case res0 of INL vs => exprs_runtime_typed env0 (TAKE _ es) vs | INR _ => T)`
+      simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx (create_operand_order kind has_salt es) st` >>
+      rename1 `eval_exprs cx (create_operand_order kind has_salt es) st = (args_res,args_st)` >>
+      qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\
+        (case res of INL vs => exprs_runtime_typed _ _ vs | INR _ => T)`
         drule_all >> strip_tac >>
-      Cases_on `prefix_res` >> gvs[no_type_error_result_def]
-      >- (
-        rename1 `exprs_runtime_typed env
-                   (TAKE (if has_salt then 4 else 3) es) prefix` >>
-        Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st` >>
-        rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st =
-                   (gate_res,gate_st)` >>
-        `gate_st = prefix_st` by (
-          qpat_x_assum `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = _`
-            (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
-        gvs[] >>
-        Cases_on `gate_res` >> gvs[]
-        >- (
-          rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st =
-                     (INL code_size,prefix_st)` >>
-          Cases_on `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
-          rename1 `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st =
-                     (suffix_res,suffix_st)` >>
-          asm "suffix_package" drule_all >>
-          disch_then (fn th => assume_tac (cj 1 th)) >>
-          qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-            (case res0 of INL vs => expr_results_typed (env0,_,_) (DROP _ es) vs | INR _ => T)`
-            drule_all >> strip_tac >>
-          Cases_on `suffix_res` >> gvs[no_type_error_result_def]
-          >- (
-            rename1 `expr_results_typed (env,cx,suffix_st)
-                       (DROP (if has_salt then 4 else 3) es) results` >>
-            Cases_on `read_results cx results suffix_st` >>
-            rename1 `read_results cx results suffix_st = (read_res,read_st)` >>
-            drule read_results_state >> strip_tac >> gvs[] >>
-            drule_all read_results_typed >> strip_tac >>
-            Cases_on `read_res` >> gvs[no_type_error_result_def]
-            >- (
-            rename1 `exprs_runtime_typed env
-                       (DROP (if has_salt then 4 else 3) es) suffix` >>
-            `exprs_runtime_typed env es (prefix ++ suffix)` by
-              metis_tac[exprs_runtime_typed_APPEND, TAKE_DROP] >>
-            `runtime_consistent env cx read_st` by
-              simp[runtime_consistent_def] >>
-            strip_tac >>
-            drule_all create_tail_result_sound_simp >>
-            disch_then (mp_tac o SPEC_ALL) >>
-            simp[no_type_error_result_def] >>
-            strip_tac >> Cases_on `res` >>
-            gvs[expr_result_typed_def, expr_runtime_typed_def,
-                value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
-            strip_tac >> gvs[]) >>
-          strip_tac >> gvs[]) >>
-        strip_tac >> gvs[] >>
-        metis_tac[check_create_blueprint_no_type_error]) >>
+      Cases_on `args_res` >> gvs[no_type_error_result_def]
+      >- (rename1 `exprs_runtime_typed env (create_operand_order kind has_salt es) vs` >>
+          `exprs_runtime_typed env es (create_operand_layout kind has_salt vs)` by
+            metis_tac[exprs_runtime_typed_create_operand_layout, create_operand_layout_order] >>
+          `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+          strip_tac >> drule_all create_operands_result_sound >>
+          disch_then (mp_tac o SPEC_ALL) >> simp[no_type_error_result_def] >>
+          strip_tac >> Cases_on `res` >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def,
+              value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
       strip_tac >> gvs[]) >>
-    rule_assum_tac (REWRITE_RULE [create_kind_11, create_kind_distinct])
-    >~ [`RawCreate`] >- (
-      qpat_x_assum `!raw_args. RawCreate = CreateFromBlueprint raw_args ==> _` kall_tac >>
-      qpat_x_assum `!raw_args s prefix t s1 code t1.
-        RawCreate = CreateFromBlueprint raw_args /\ _ ==> _` kall_tac >>
-      rpt (qpat_x_assum `RawCreate = _ ==> _` kall_tac) >>
-      qpat_x_assum `(_ /\ _)` strip_assume_tac >>
-      rpt BasicProvers.VAR_EQ_TAC >>
-      `well_typed_exprs env (TAKE 2 es) /\
-       well_typed_exprs env (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)) /\
-       well_typed_exprs env (DROP (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es))` by
-        metis_tac[well_typed_exprs_TAKE, well_typed_exprs_DROP] >>
-      `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es)) /\
-       call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es))) /\
-       call_evaluation_safe cx (int_calls_exprs (DROP (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)))` by
-        metis_tac[call_evaluation_safe_exprs_TAKE, call_evaluation_safe_exprs_DROP] >>
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-      Cases_on `eval_exprs cx (TAKE 2 es) st` >>
-      rename1 `eval_exprs cx (TAKE 2 es) st = (prefix_res,prefix_st)` >>
-      qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-        (case res0 of INL vs => exprs_runtime_typed env0 (TAKE 2 es) vs | INR _ => T)`
-        drule_all >> strip_tac >>
-      Cases_on `prefix_res`
-      >- (qpat_assum `eval_exprs cx (TAKE 2 es) st = _`
-            (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
-          qpat_x_assum `!s prefix t ctor_es nargs. _ ==> _`
-            (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
-          rule_assum_tac (REWRITE_RULE [LENGTH_DROP]) >>
-          Cases_on `eval_expr_results cx
-            (TAKE (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)) prefix_st` >>
-          rename1 `eval_expr_results _ _ prefix_st = (capture_res,capture_st)` >>
-          qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-            (case res0 of INL rs => expr_results_typed _ _ rs | INR _ => T)`
-            drule_all >> strip_tac >>
-          Cases_on `capture_res`
-          >- (qpat_assum `eval_expr_results _ _ prefix_st = _`
-                (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
-              rule_assum_tac (BETA_RULE o REWRITE_RULE [sum_case_def]) >>
-              Cases_on `read_results cx x' capture_st` >>
-              rename1 `read_results cx x' capture_st = (read_res,read_st)` >>
-              drule read_results_state >> strip_tac >>
-              drule_all read_results_typed >> strip_tac >>
-              Cases_on `read_res`
-              >- (qpat_x_assum `!s prefix t ctor_es nargs s1 rs t1 s2 args t2. _ ==> _`
-                    (drule o SIMP_RULE (srw_ss()) []) >>
-                  disch_then drule >> disch_then drule >> strip_tac >>
-                  qpat_x_assum `read_st = capture_st` (SUBST_ALL_TAC o SYM) >>
-                  qpat_assum `read_results cx _ capture_st = _`
-                    (fn th => simp_tac(srw_ss())[th, bind_apply]) >>
-                  Cases_on `eval_exprs cx
-                    (DROP (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)) read_st` >>
-                  rename1 `eval_exprs _ _ read_st = (salt_res,salt_st)` >>
-                  qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-                    (case res0 of INL vs => exprs_runtime_typed env0 (DROP _ _) vs | INR _ => T)`
-                    drule_all >> strip_tac >>
-                  rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-                  Cases_on `salt_res` >> gvs[no_type_error_result_def] >> strip_tac
-                  >- (`exprs_runtime_typed env es (x ++ x'' ++ x''')` by
-                        (irule exprs_runtime_typed_slices >>
-                         qexistsl [`2`, `LENGTH es - 2 - (if has_salt then 1 else 0)`] >>
-                         simp[DROP_DROP]) >>
-                      `runtime_consistent env cx salt_st` by simp[runtime_consistent_def] >>
-                      drule_all create_tail_result_sound_simp >>
-                      disch_then (mp_tac o SPEC_ALL) >>
-                      simp[no_type_error_result_def] >> strip_tac >> Cases_on `res` >>
-                      gvs[expr_result_typed_def, expr_runtime_typed_def,
-                          value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
-                  gvs[]) >>
-              rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-              gvs[no_type_error_result_def] >> strip_tac >> gvs[]) >>
-          rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-          gvs[no_type_error_result_def] >> strip_tac >> gvs[]) >>
-      rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-      gvs[no_type_error_result_def] >> strip_tac >> gvs[]) >>
-    (qpat_x_assum `(_ /\ _)` strip_assume_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         type_check_def, assert_def, return_def, raise_def,
-                         lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp_tac (srw_ss()) [] >>
-    Cases_on `eval_exprs cx es st` >>
-    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
-      drule_all >> strip_tac >>
-    Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >- (
-      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      strip_tac >>
-      drule_all create_tail_result_sound_simp >>
-      disch_then (mp_tac o SPEC_ALL) >>
-      simp[no_type_error_result_def] >>
-      strip_tac >> Cases_on `res` >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def,
-          value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
-    strip_tac >> gvs[])) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
   simp[Once well_typed_expr_def]
 QED
 
-Resume eval_scc_type_sound_results_mutual[Results_nil]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, return_def, no_type_error_result_def,
-       expr_results_typed_def] >> strip_tac >> gvs[]
-QED
 
-Resume eval_scc_type_sound_results_mutual[Results_cons]:
-  rpt gen_tac >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
-  qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (head_res,head_st)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
-  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  reverse (Cases_on `head_res`) >-
-    (strip_tac >> gvs[no_type_error_result_def]) >>
-  rename1 `eval_expr cx e st = (INL pv,head_st)` >>
-  `live_memory_result head_st pv` by
-    (qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
-       (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-     disch_then (qspec_then `env` mp_tac) >> simp[]) >>
-  qpat_x_assum `!s pv t. eval_expr _ _ _ = (INL _,_) ==> _`
-    drule_all >> strip_tac >>
-  Cases_on `eval_expr_results cx es head_st` >>
-  rename1 `eval_expr_results cx es head_st = (tail_res,tail_st)` >>
-  qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ _`
-    drule_all >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    drule_all >> strip_tac >>
-  reverse (Cases_on `tail_res`)
-  >- (rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-      gvs[no_type_error_result_def] >> strip_tac >> gvs[]) >>
-  rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-  simp_tac(srw_ss())[] >> strip_tac >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame head_st tail_st` by
-    (drule eval_expr_results_immutable_metadata_frame >> simp[]) >>
-  rule_assum_tac (BETA_RULE o REWRITE_RULE [sum_case_def]) >>
-  `eval_result_typed (env,cx,tail_st) pv (Type (expr_type e))` by
-    (irule eval_result_typed_transport >> goal_assum drule_all) >>
-  `live_memory_result tail_st pv` by metis_tac[live_result_transport] >>
-  gvs[expr_results_typed_def, no_type_error_result_def]
-QED
+
+
 
 Resume eval_scc_type_sound_results_mutual[Exprs_nil]:
   rpt gen_tac >> strip_tac >>
@@ -7863,7 +7701,7 @@ QED
 val trace_root_labels = [
   "Trace_Target", "Trace_Base_SubscriptTarget", "Trace_Base_AttributeTarget",
   "Trace_Base_TopLevelNameTarget", "Trace_Base_NameTarget",
-  "Trace_Exprs_cons", "Trace_Exprs_nil", "Trace_Results_cons", "Trace_Results_nil",
+  "Trace_Exprs_cons", "Trace_Exprs_nil",
   "Trace_Expr_Call_CreateTarget", "Trace_Expr_Call_SelfDestructTarget",
   "Trace_Expr_Call_RawRevert", "Trace_Expr_Call_RawLog",
   "Trace_Expr_Call_RawCallCalldataTarget", "Trace_Expr_Call_RawCallTarget",
@@ -7887,42 +7725,9 @@ val _ = let
           then () else raise Fail "Transition inventory mismatch"
 in List.app check trace_root_labels end;
 
-Resume eval_scc_type_sound_results_mutual[Trace_Results_nil]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ [] _ = _` mp_tac >>
-  simp[Once evaluate_def, return_def] >> strip_tac >> gvs[] >>
-  irule typed_scope_transition_refl
-QED
 
-Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
-  rpt gen_tac >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
-  qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >>
-  strip_tac >>
-  FIRST [first_assum ACCEPT_TAC,
-    qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-      (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-    disch_then (qspec_then `env` mp_tac) >>
-    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-    qpat_x_assum `!s pv t. eval_expr _ _ _ = (INL _,_) ==> _`
-      (drule_all_then strip_assume_tac) >>
-    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-      (drule_at (Pat `eval_expr_results _ _ _ = _`)) >>
-    disch_then (qspec_then `env` mp_tac) >>
-    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-    metis_tac[typed_scope_transition_trans]]
-QED
+
+
 
 
 
@@ -8683,85 +8488,26 @@ Resume eval_scc_type_sound_results_mutual[Trace_Create_Operands]:
   drule create_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  Cases_on `kind` >>
-  RULE_ASSUM_TAC (SIMP_RULE bool_ss [create_kind_11, create_kind_distinct]) >>
-  rpt (first_x_assum (fn th => if is_conj (concl th) then strip_assume_tac th else NO_TAC)) >>
-  rpt BasicProvers.VAR_EQ_TAC
-  >~ [`CreateFromBlueprint raw_args`] >- suspend "TraceCreateBlueprint"
-  >~ [`RawCreate`] >- suspend "TraceRawCreate" >>
+  `well_typed_exprs env (create_operand_order kind has_salt es)` by
+    metis_tac[well_typed_exprs_create_operand_order] >>
+  `call_evaluation_safe cx (int_calls_exprs (create_operand_order kind has_salt es))` by
+    metis_tac[call_evaluation_safe_create_operand_order] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-  Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
+  Cases_on `eval_exprs cx (create_operand_order kind has_salt es) st` >>
+  rename1 `eval_exprs cx (create_operand_order kind has_salt es) st = (args_res,args_st)` >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
   strip_tac >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   Cases_on `args_res` >> gvs[] >> strip_tac >> gvs[] >>
-  drule vyperCreateFrameTheory.eval_create_preserves_scopes_immutables >> strip_tac >>
+  Cases_on `kind` >>
+  gvs[eval_create_operands_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  drule eval_create_preserves_scopes_immutables >> strip_tac >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED
 
-Resume eval_scc_type_sound_results_mutual[TraceRawCreate]:
-  RESUME_TAC >>
-  `well_typed_exprs env (TAKE 2 es) /\
-   well_typed_exprs env (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)) /\
-   well_typed_exprs env (DROP (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es))` by
-    metis_tac[well_typed_exprs_TAKE, well_typed_exprs_DROP] >>
-  `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es)) /\
-   call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es))) /\
-   call_evaluation_safe cx (int_calls_exprs (DROP (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)))` by
-    metis_tac[call_evaluation_safe_exprs_TAKE, call_evaluation_safe_exprs_DROP] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-  Cases_on `eval_exprs cx (TAKE 2 es) st` >>
-  rename1 `eval_exprs cx (TAKE 2 es) st = (prefix_res,prefix_st)` >>
-  qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-    (case res0 of INL vs => exprs_runtime_typed env0 (TAKE 2 es) vs | INR _ => T)`
-    drule_all >> strip_tac >>
-  qpat_assum `!env0 st0 res0 st0'. well_typed_exprs env0 (TAKE 2 es) /\ _ ==> typed_scope_transition _ _`
-    drule_all >> strip_tac >>
-  Cases_on `prefix_res`
-  >- (qpat_assum `eval_exprs cx (TAKE 2 es) st = _`
-        (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
-      qpat_x_assum `!s prefix t. eval_exprs cx (TAKE 2 es) s = (INL prefix,t) ==> _`
-        drule >> strip_tac >>
-      Cases_on `eval_expr_results cx
-        (TAKE (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)) prefix_st` >>
-      rename1 `eval_expr_results _ _ prefix_st = (capture_res,capture_st)` >>
-      qpat_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
-        (case res0 of INL rs => expr_results_typed _ _ rs | INR _ => T)`
-        drule_all >> strip_tac >>
-      qpat_assum `!env0 st0 res0 st0'. well_typed_exprs env0 (TAKE _ (DROP _ es)) /\ _ ==> typed_scope_transition _ _`
-        drule_all >> strip_tac >>
-      Cases_on `capture_res`
-      >- (qpat_assum `eval_expr_results _ _ prefix_st = _`
-            (fn th => simp_tac(srw_ss())[th, LET_THM, bind_apply]) >>
-          Cases_on `read_results cx x' capture_st` >>
-          rename1 `read_results cx x' capture_st = (read_res,read_st)` >>
-          drule read_results_state >> strip_tac >>
-          Cases_on `read_res`
-          >- (qpat_x_assum `!s prefix t s1 rs t1 s2 args t2. _ ==> _`
-                drule >> disch_then drule >> disch_then drule >> strip_tac >>
-              qpat_x_assum `read_st = capture_st` (SUBST_ALL_TAC o SYM) >>
-              qpat_assum `read_results cx _ capture_st = _`
-                (fn th => simp_tac(srw_ss())[th, bind_apply]) >>
-              Cases_on `eval_exprs cx
-                (DROP (LENGTH (DROP 2 es) - (if has_salt then 1 else 0)) (DROP 2 es)) read_st` >>
-              rename1 `eval_exprs _ _ read_st = (salt_res,salt_st)` >>
-              qpat_assum `!env0 st0 res0 st0'. well_typed_exprs env0 (DROP _ _) /\ _ ==> typed_scope_transition _ _`
-                drule_all >> strip_tac >>
-              rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-              Cases_on `salt_res` >> gvs[] >> strip_tac >> gvs[]
-              >- (drule eval_create_preserves_scopes_immutables >> strip_tac >>
-                  metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]) >>
-              metis_tac[typed_scope_transition_trans]) >>
-          rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-          gvs[] >> strip_tac >> gvs[] >> metis_tac[typed_scope_transition_trans]) >>
-      rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-      gvs[LET_THM, bind_apply] >> strip_tac >> gvs[] >> metis_tac[typed_scope_transition_trans]) >>
-  rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-  gvs[] >> strip_tac >> gvs[]
-QED
+
 
 val live_root_labels = [
   "LiveRootExpr_Name", "LiveRootExpr_TopLevelName", "LiveRootExpr_FlagMember",
@@ -9381,57 +9127,9 @@ val _ = let
     in List.app walk proofs end
 in walk parent end;
 
-Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
-  RESUME_TAC >>
-  `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
-    metis_tac[well_typed_exprs_TAKE] >>
-  `well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
-    metis_tac[well_typed_exprs_DROP] >>
-  `call_evaluation_safe cx (int_calls_exprs (TAKE (if has_salt then 4 else 3) es))` by
-    metis_tac[call_evaluation_safe_exprs_TAKE] >>
-  `call_evaluation_safe cx (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
-    metis_tac[call_evaluation_safe_exprs_DROP] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
-  Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
-  rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st = (prefix_res,prefix_st)` >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
-  strip_tac >>
-  Cases_on `prefix_res` >> simp[] >> rpt BasicProvers.VAR_EQ_TAC
-  >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
-        (INL prefix,prefix_st)` >>
-      Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st` >>
-      rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = (gate_res,gate_st)` >>
-      `gate_st = prefix_st` by metis_tac[check_create_blueprint_result_state] >>
-      gvs[] >> Cases_on `gate_res` >> gvs[]
-      >- suspend "TraceBlueprintSuffix" >>
-      strip_tac >> gvs[]) >>
-  strip_tac >> gvs[]
-QED
 
-Resume eval_scc_type_sound_results_mutual[TraceBlueprintSuffix]:
-  RESUME_TAC >>
-  rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = (INL code_size,prefix_st)` >>
-  qpat_x_assum `!a b c d e f. _ ==> _` drule_all >> strip_tac >>
-  Cases_on `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
-  rename1 `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st =
-    (suffix_res,suffix_st)` >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-  Cases_on `suffix_res` >> gvs[]
-  >- (rename1 `read_results cx results suffix_st` >>
-      Cases_on `read_results cx results suffix_st` >>
-      drule read_results_state >> strip_tac >> gvs[] >>
-      rename1 `read_results cx results suffix_st = (read_res,suffix_st)` >>
-      Cases_on `read_res` >> gvs[] >> strip_tac >> gvs[]
-      >- (drule eval_create_preserves_scopes_immutables >> strip_tac >>
-          metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]) >>
-      metis_tac[typed_scope_transition_trans]) >>
-  strip_tac >> gvs[] >> metis_tac[typed_scope_transition_trans]
-QED
+
+
 
 Resume eval_scc_type_sound_results_mutual[Live_Base_Attribute_Selection]:
   RESUME_TAC >>
@@ -9471,9 +9169,9 @@ Resume eval_scc_type_sound_results_mutual[Live_Create_Returned_Result]:
   RESUME_TAC >> Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   Cases_on `kind` >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-       AllCaseEqs(), live_memory_result_def] >>
+  simp[eval_create_operands_def, bind_def, AllCaseEqs(), live_memory_result_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   drule eval_create_success_value >> strip_tac >> gvs[]
 QED
