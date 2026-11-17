@@ -40,12 +40,6 @@ Proof
   simp[computed_precompile_def]
 QED
 
-Theorem dload_record_request_changed:
-  record_request rq xs <> xs <=> ~computed_precompile rq
-Proof
-  Cases_on `computed_precompile rq` >> simp[record_request_def] >>
-  strip_tac >> pop_assum (mp_tac o AP_TERM ``LENGTH:call_request list -> num``) >> simp[]
-QED
 
 Theorem dload_take_outcome_observations:
   rq.cr_kind = rr.cr_kind /\ rq.cr_value = rr.cr_value /\
@@ -89,12 +83,13 @@ QED
 Theorem dload_consume_call_adopted:
   consume_call_outcome rq ro rz s = (w,s') ==>
   ((~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~s.vs_call_ctx.cc_static /\ ~computed_precompile rq /\
      s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success))
 Proof
   simp[consume_call_outcome_eq] >> strip_tac >> gvs[] >>
-  simp[dload_record_request_changed, take_outcome_rest] >>
+  simp[record_request_changed, record_request_def, take_outcome_rest] >>
   Cases_on `s.vs_outcomes` >> simp[] >>
   `t <> h::t` by
     (strip_tac >> pop_assum (mp_tac o AP_TERM ``LENGTH:call_outcome list -> num``) >> simp[]) >>
@@ -175,8 +170,10 @@ Theorem dload_consume_call_adopted_cong:
   consume_call_outcome rq ro rz s = (w,s') /\
   consume_call_outcome rr to tz t = (v,t') ==>
   ((~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
     s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t'.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t'.vs_requests) /\
     t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
 Proof
   strip_tac >>
@@ -189,18 +186,6 @@ Proof
   simp[]
 QED
 
-Theorem dload_record_request_changed_cong:
-  rq.cr_kind = rr.cr_kind /\ rq.cr_value = rr.cr_value /\
-  rq.cr_target = rr.cr_target /\ rq.cr_data = rr.cr_data ==>
-  (record_request rq xs <> xs <=> record_request rr ys <> ys)
-Proof
-  strip_tac >>
-  `computed_precompile rq = computed_precompile rr` by
-    (irule dload_computed_precompile_cong >> simp[]) >>
-  mp_tac dload_record_request_changed >>
-  mp_tac (Q.INST [`rq` |-> `rr`, `xs` |-> `ys`] dload_record_request_changed) >>
-  simp[]
-QED
 
 Theorem dload_consume_call_memory:
   consume_call_outcome rq ro rz s = (w,s') ==>
@@ -355,8 +340,10 @@ Theorem dload_exec_ext_call_environment:
     dload_equal_environment s1 t1 /\
     (!out. MEM out inst.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
     ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s1.vs_requests) /\
       s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
      (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST t1.vs_requests) /\
       t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
 Proof
   strip_tac >>
@@ -375,8 +362,10 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[venom_call_request_def, dload_equal_environment_call_ctx]) >>
   `((~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST ss.vs_requests) /\
       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
      (~t.vs_call_ctx.cc_static /\ tt.vs_requests <> t.vs_requests /\
+    ~computed_precompile (LAST tt.vs_requests) /\
       tt.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))` by
     (irule dload_consume_call_adopted_cong >>
      goal_assum (drule_at Any) >> conj_tac >- simp[] >>
