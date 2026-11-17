@@ -65,17 +65,17 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aug_place_memory_reads_replay >> strip_tac >>
   drule_all aug_place_rhs_suffix_admissible >> strip_tac >>
-  drule aug_place_typing >> strip_tac >>
+  `well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    metis_tac[aug_place_typing] >>
   `((bop = Eq \/ bop = NotEq) ==> !bs. old <> BytesV bs)` by
     metis_tac[stmtSimAugAssignTheory.augassign_compare_not_bytes] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
     metis_tac[expr_body_pre_gas_admissible] >>
   irule aug_place_rhs_operator_write_mem_typed >>
   simp[storage_place_observed_def] >>
-  goal_assum (drule_at (Pat `lower_value`)) >>
-  goal_assum (drule_at (Pat `compile_binop`)) >>
-  goal_assum (drule_at (Pat `place_ptr_rel`)) >>
-  qexistsl_tac [`dst`, `env`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`dst`, `if bop = Exp then expr_int_literal e else NONE`,
+    `env`, `LocMemory`, `result`, `sl`, `s2`, `s3`, `w`, `cur`, `rhs`] >>
   simp[] >> rpt gen_tac >> strip_tac >>
   `?entry old'. lookup_scopes id ee.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL old'` by
