@@ -10,6 +10,7 @@ Ancestors
 
 Theorem lowered_snapshot_store_frame[local]:
   vv_post H ctx func ce cx e es sa sc s0 ee raw source s /\
+  read_result cx raw ee = (INL v,ee) /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   copy_static z = copy_static s /\
   (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
@@ -27,9 +28,21 @@ Theorem lowered_snapshot_store_frame[local]:
   vv_at ce cx (post_value_type ce e) sa sb ee raw saved z /\
   vv_own ce cx (post_value_type ce e) sa sb ee raw saved z /\
   vv_storage_live H cx saved ee z ==>
-  vv_post H ctx func ce cx e es sa sb s0 ee raw saved z
+  vv_post H ctx func ce cx e es sa sb s0 ee (Value v) saved z
 Proof
   strip_tac >>
+  `vv_holds ce cx (post_value_type ce e) (Value v) saved ee z` by
+    (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_holds_def, vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def]) >>
+  `vv_at ce cx (post_value_type ce e) sa sb ee (Value v) saved z` by
+    (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_at_def, vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def] >> metis_tac[]) >>
+  `vv_own ce cx (post_value_type ce e) sa sb ee (Value v) saved z` by
+    (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_own_def, vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def]) >>
   `!n lb len. local_region ce es.scopes s0 n lb len ==>
     regions_disjoint b sz lb len` by
     (rpt strip_tac >>
@@ -93,10 +106,10 @@ Theorem lowered_snapshot_store_mem[local]:
     aid < sa.cs_next_id ==>
     regions_disjoint (w2n d) (type_memory_size tv) off len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    vv_post H ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
       (LocatedValue lt (mk_ptr dst LocMemory)) z /\
-    vv_own ce cx lt sm sb ee raw (LocatedValue lt (mk_ptr dst LocMemory)) z /\
-    vv_store_bound cx lt lt ee raw (LocatedValue lt (mk_ptr dst LocMemory)) z /\
+    vv_own ce cx lt sm sb ee (Value v) (LocatedValue lt (mk_ptr dst LocMemory)) z /\
+    vv_store_bound cx lt lt ee (Value v) (LocatedValue lt (mk_ptr dst LocMemory)) z /\
     val_in_memory tv v (w2n d) z.vs_memory /\
     eval_operand dst z = SOME d /\
     FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv) /\
@@ -149,7 +162,7 @@ Proof
     (irule vv_own_start_mono >> qexists_tac `sm` >> simp[]) >>
   `vv_storage_live H cx (LocatedValue lt (mk_ptr dst LocMemory)) ee z` by
     simp[mk_ptr_def] >>
-  `vv_post H ctx func ce cx e es sa sb s0 ee raw
+  `vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
      (LocatedValue lt (mk_ptr dst LocMemory)) z` by
     (irule lowered_snapshot_store_frame >> simp[] >>
      qexistsl_tac [`w2n d`, `inst`, `s`, `sc`, `source`, `type_memory_size tv`] >> simp[] >>
@@ -160,7 +173,13 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ z.vs_memory = _`
        (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
-  qexists_tac `z` >> simp[] >> first_assum ACCEPT_TAC
+  qexists_tac `z` >> simp[] >> conj_tac
+  >- (qpat_x_assum `vv_own _ _ _ sm sb _ raw _ _` mp_tac >>
+      simp[vv_own_def, vyperStateTheory.read_result_def,
+           vyperStateTheory.return_def]) >>
+  qpat_x_assum `vv_store_bound _ _ _ _ raw _ _` mp_tac >>
+  simp[vv_store_bound_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.return_def]
 QED
 
 (* The capacity premise concerns the lowered layout, never the annotation.
@@ -194,10 +213,10 @@ Theorem snapshot_lowered_located_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?z dst d. gas_path_mem ctx func s 0 (OK z) /\
     saved = LocatedValue (lowered_value_type ce e) (mk_ptr dst LocMemory) /\
-    vv_post H ctx func ce cx e es sa sb s0 ee raw saved z /\
-    vv_own ce cx (lowered_value_type ce e) sm sb ee raw saved z /\
+    vv_post H ctx func ce cx e es sa sb s0 ee (Value v) saved z /\
+    vv_own ce cx (lowered_value_type ce e) sm sb ee (Value v) saved z /\
     vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e)
-      ee raw saved z /\
+      ee (Value v) saved z /\
     val_in_memory tv v (w2n d) z.vs_memory /\ eval_operand dst z = SOME d /\
     FLOOKUP z.vs_allocas sm.cs_next_id = SOME (w2n d,type_memory_size tv) /\
     (!n b len. local_region ce ee.scopes z n b len ==>
@@ -209,7 +228,7 @@ Theorem snapshot_lowered_located_mem:
     z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx /\
     (!H'. vv_post H' ctx func ce cx e es sa sm s0 ee raw
        (LocatedValue declared p) s ==>
-      vv_post H' ctx func ce cx e es sa sb s0 ee raw saved z)
+      vv_post H' ctx func ce cx e es sa sb s0 ee (Value v) saved z)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all snapshot_nonword_slices >> strip_tac >>
