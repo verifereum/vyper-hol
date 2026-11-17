@@ -206,7 +206,7 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
           (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
          (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
           Cases_on `tr` >>
-          simp[mk_inst_def,is_terminator_def,step_inst_base_def,
+          simp[mk_inst_def,is_terminator_def,step_inst_base_opcode_eqs,
                eval_operands_def,eval_operand_def,below_frontier_no_ranges,
                inst_dload_in_section_other]) >>
         Cases_on `tr` >> gvs[mk_inst_def]) >>

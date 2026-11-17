@@ -212,7 +212,7 @@ Proof
   >- (simp[] >> conj_tac
       >- (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
       rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-      fs[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[]) >>
+      fs[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[]) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>

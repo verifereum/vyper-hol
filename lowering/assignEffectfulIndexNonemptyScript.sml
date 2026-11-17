@@ -199,9 +199,10 @@ Resume assign_place_mutating_nonempty_case_with_store[continuation]:
      mid.storage_trace` by fs[storage_trace_domain_def] >>
   qabbrev_tac `Hr = storage_trace_horizon mid.storage_trace` >>
   `valid_horizon cx st0 Hr mid.storage_trace` by simp[Abbr`Hr`] >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `Hr` (drule_then strip_assume_tac)) >>
-  gvs[] >>
   `?v. read_result cx pv (mid with gas_obs := []) =
        (INL v,mid with gas_obs := [])` by metis_tac[vv_post_materialises] >>
   `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -332,7 +333,8 @@ Resume assign_place_mutating_nonempty_case_with_store[continuation]:
       >- (gen_tac >> pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
           qpat_x_assum `expr_exit _ _` mp_tac >>
           rpt (pop_assum kall_tac) >> simp[stmtSimPropsTheory.expr_exit_INR_type])) >>
-      gvs[halt_exit_def]
+      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
+      rpt (pop_assum kall_tac) >> simp[halt_exit_def]
 QED
 
 Resume assign_place_mutating_nonempty_case_with_store[store]:

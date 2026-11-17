@@ -1011,7 +1011,8 @@ QED
    pointer-safe runs, through the loweringMemCorrect bridges. *)
 Theorem selected_raw_memory[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  o1_source_unit_ok unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME "__entry" /\
@@ -1025,7 +1026,6 @@ Theorem selected_raw_memory[local]:
   mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`, `"__entry"`, `D`]
             lower_vyper_runtime_unit_memory_ok) >>
   impl_tac >- fs[] >> strip_tac >> simp[] >>
@@ -1160,6 +1160,9 @@ Proof
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule every_no_dalloca >>
+     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
@@ -1192,6 +1195,12 @@ Proof
   strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_safe_blocks D` >>
+  `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by
+    (qpat_assum `gas_variant _ _` mp_tac >>
+     pure_rewrite_tac[gas_variant_def] >>
+     disch_then (mp_tac o Q.AP_TERM
+       `\s:venom_state. w2n s.vs_initial_fmp <= w2n s.vs_fmp`) >>
+     simp[entry_venom_state_def]) >>
   `raw_unit_memory_ok unit.cu_context vs /\
    ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
    mem_inv dload_offset_ok unit.cu_context vs /\
@@ -1617,16 +1626,6 @@ Proof
   drule_all vyper_call_reverts_asm_opt >> simp[]
 QED
 
-(* The source call bound for the call the calldata dispatches to. *)
-Definition calldata_calls_within_def:
-  calldata_calls_within tops am tx es <=>
-    !f vals obs.
-      calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-      source_calls_within (2 ** 64) am
-        (tx with <| function_name := f; args := vals |>)
-        (MAP SND (call_trace es)) obs
-End
-
 (* What the call does for the calldata tx carries: revert with empty
    returndata when it dispatches to nothing, else the source result of
    the external call it dispatches to. *)
@@ -1655,7 +1654,7 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    calldata_calls_within tops am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     (!f vals.
        calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
        ?mut args dflts ret body.

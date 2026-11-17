@@ -104,11 +104,11 @@ Proof
 QED
 
 Theorem deploy_internal_package_certificates:
-  !tops target ut key is_ctor cap ifns.
+  !tops target ut key is_ctor cap srcs ifns.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) ==>
+      package_internal_fn tops ut key is_ctor cap) srcs ==>
     EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
@@ -120,18 +120,25 @@ Proof
   drule classified_internal_names_distinct >> strip_tac >>
   drule internal_descriptors_ok >>
   disch_then (qspec_then `is_ctor` strip_assume_tac) >>
+  drule sortingTheory.PERM_MEM_EQ >> strip_tac >>
+  `PERM
+    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor) srcs))
+    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
+      (FST (SND (classify_functions tops)))))` by
+    (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >> simp[]) >>
+  drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
-  simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+  fs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
   irule deploy_internal_package_shape >> simp[]
 QED
 
 Theorem deploy_internal_body_certificates:
-  !tops target ut key is_ctor cap ifns st_final post.
+  !tops target ut key is_ctor cap srcs ifns st_final post.
     supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap)
-      (FST (SND (classify_functions tops))) /\
+      package_internal_fn tops ut key is_ctor cap) srcs /\
     shape_state st_final /\
     compile_internal_fn_bodies ifns st_final = ((),post) ==>
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
@@ -268,11 +275,13 @@ Theorem deploy_ctor_lowering_trace:
       st_epilogue = ((),st_final) /\
     compile_internal_fn_bodies
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       st_final = ((),post) /\
     extract_context_with_internals "__deploy"
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       post = SOME (ctx,data) /\
     lowering_context_ok (install_immutable_reservation (imm_len tops) ctx) /\
     dunit = <|cu_context := install_immutable_reservation (imm_len tops) ctx;
@@ -358,7 +367,11 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
-      (FST (SND (classify_functions tops)))` by simp[Abbr `ifns`] >>
+      (order_internals (deploy_internal_order (SOME cf) ints) ints)` by
+    simp[Abbr `ifns`] >>
+  `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
+      (FST (SND (classify_functions tops)))` by
+    simp[PERM_order_deploy_internals] >>
   drule_all deploy_internal_package_certificates >> strip_tac >>
   drule_all deploy_ctor_packaged_entry >> strip_tac >>
   drule_all deploy_ctor_member_certificates >> strip_tac >>

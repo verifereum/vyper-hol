@@ -1322,21 +1322,6 @@ Proof
   simp[EL_APPEND_EQN]
 QED
 
-Triviality mem_byte_wmwe_agree:
-  !off bytes s1 s2 i.
-    (!j. (j < off \/ off + LENGTH bytes <= j) ==>
-         mem_byte j s1 = mem_byte j s2) ==>
-    mem_byte i (write_memory_with_expansion off bytes s1) =
-    mem_byte i (write_memory_with_expansion off bytes s2)
-Proof
-  rpt strip_tac >>
-  Cases_on `i < off \/ off + LENGTH bytes <= i`
-  >- (mp_tac (Q.SPECL [`off`,`bytes`,`s1`,`i`] mem_byte_wmwe_outside) >>
-      mp_tac (Q.SPECL [`off`,`bytes`,`s2`,`i`] mem_byte_wmwe_outside) >>
-      simp[] >> metis_tac[])
-  >> gvs[] >> simp[mem_byte_wmwe_inside]
-QED
-
 (* If two states agree on 32 bytes at offset, mload returns same value *)
 Theorem mload_mem_byte_eq:
   !off s1 s2.
@@ -2430,31 +2415,7 @@ Proof
 QED
 
 (* make_venom_call_state agrees under m2v_inv_noix *)
-Triviality make_venom_call_state_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  make_venom_call_state s1 tgt gas val cd code st =
-  make_venom_call_state s2 tgt gas val cd code st
-Proof
-  strip_tac >>
-  simp[make_venom_call_state_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2`
-    by metis_tac[venom_to_tx_params_m2v_inv] >>
-  gvs[m2v_inv_noix_def]
-QED
-
 (* make_venom_create_state agrees under m2v_inv_noix *)
-Triviality make_venom_create_state_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  make_venom_create_state s1 addr gas val ic =
-  make_venom_create_state s2 addr gas val ic
-Proof
-  strip_tac >>
-  simp[make_venom_create_state_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2`
-    by metis_tac[venom_to_tx_params_m2v_inv] >>
-  gvs[m2v_inv_noix_def]
-QED
-
 (* read_memory agrees under m2v_inv_noix when range is nonpromoted *)
 Triviality read_memory_m2v_inv:
   m2v_inv_noix fn s1 s2 /\
@@ -3534,12 +3495,6 @@ QED
 
 (* --- Resume blocks for m2v_nonpromoted_mem_dispatch --- *)
 
-Triviality lt_32_dimword_256:
-  32 < dimword (:256)
-Proof
-  simp[wordsTheory.dimword_def]
-QED
-
 (* Helper tactic: NAS write disjointness after step_inst_base unfold.
    After the selected opcode rewrite and gvs[AllCaseEqs()], names for
    operand eval results. Extract NAS for write range disjointness. *)
@@ -4481,22 +4436,7 @@ QED
    Chain passes step_inst result on s2 side to ih_cont,
    allowing pvars_set derivation for IH application. *)
 
-val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
-
-(* Abort: both sides run same non-promoted instruction *)
-Theorem step_inst_base_abort_input_equiv:
-  !inst s1 s2 a s1'.
-    step_inst_base inst s1 = Abort a s1' /\
-    ~is_terminator inst.inst_opcode /\
-    (!x. MEM (Var x) inst.inst_operands ==>
-         lookup_var x s1 = lookup_var x s2) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
-    ?s2'. step_inst_base inst s2 = Abort a s2'
-Proof
-  ACCEPT_TAC passSharedFrameTheory.step_inst_base_abort_input_equiv
-QED
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
 (* Characterize abort state form for non-terminal step_inst_base *)
 Theorem step_inst_base_abort_form:
@@ -4510,7 +4450,9 @@ Proof
   gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >>
-  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs(), exec_create_abort_iff]
+  ASM_REWRITE_TAC[] >> rw[] >>
+  gvs[AllCaseEqs(), exec_create_abort_iff, exec_ext_call_abort_iff,
+      exec_delegatecall_abort_iff]
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -4828,7 +4770,7 @@ Resume m2v_nonterminal_abort_sim[body]:
     strip_assume_tac
   >- (drule m2v_inv_noix_call_ctx >> strip_tac >>
       mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
-        step_inst_base_abort_input_equiv) >>
+        passSharedFrameTheory.step_inst_base_abort_input_equiv) >>
       simp[] >> gvs[m2v_inv_noix_def])
   >>
   (* Characterize abort state forms, conclude via abort_state *)
@@ -4958,42 +4900,8 @@ QED
 
 
 (* exec_ext_call preserves alloca_next and memory length = MAX old D *)
-Triviality exec_ext_call_nao:
-  !inst s gas addr value ao as_ ro rs st s'.
-    exec_ext_call inst s gas addr value ao as_ ro rs st = OK s' ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[exec_ext_call_def, LET_THM, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  (* Legacy completion: metis_tac[extract_venom_result_nao] *)
-  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
-QED
-
 (* exec_delegatecall preserves alloca_next and memory length = MAX old D *)
-Triviality exec_delegatecall_nao:
-  !inst s gas addr ao as_ ro rs s'.
-    exec_delegatecall inst s gas addr ao as_ ro rs = OK s' ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[exec_delegatecall_def, LET_THM, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
-QED
-
 (* exec_create preserves alloca_next and memory length = MAX old D *)
-Triviality exec_create_nao:
-  !inst s value offset sz salt_opt s'.
-    exec_create inst s value offset sz salt_opt = OK s' ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[exec_create_def, LET_THM, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  qexists_tac `0` >> simp[]
-QED
-
 (* Same-D variants: when two states agree on all fields that affect the
    callee construction, exec_* produces the same wmwe expansion D. *)
 (* Planned outcome-consumption interface: only the outcomes must agree;
@@ -5024,26 +4932,6 @@ Proof
     simp[venom_call_request_def] >>
   gvs[exec_ext_call_def, AllCaseEqs(), update_var_def] >>
   simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
-QED
-
-Triviality exec_create_same_D:
-  !inst s1 s2 v off sz salt s1' s2'.
-    exec_create inst s1 v off sz salt = OK s1' /\
-    exec_create inst s2 v off sz salt = OK s2' /\
-    read_memory (w2n off) (w2n sz) s1 = read_memory (w2n off) (w2n sz) s2 /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_transient = s2.vs_transient /\
-    venom_to_tx_params s1 = venom_to_tx_params s2 ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[exec_create_def, LET_THM, AllCaseEqs(),
-       make_venom_create_state_def] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  qexists_tac `0` >> simp[]
 QED
 
 (* For ext_call ops with FIND=NONE and same callee input: nao preserved.
