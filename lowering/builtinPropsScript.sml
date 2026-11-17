@@ -40,20 +40,6 @@ Libs
 
 (* ===== Shared infrastructure for weak-spec proofs ===== *)
 
-(* eval_operand definedness is preserved through update_var.
-   Key for weak-spec proofs: we don't track exact values, just that
-   operands remain defined through a chain of instruction steps. *)
-Theorem eval_operand_update_not_none[local]:
-  ∀ op ss v (w:bytes32).
-    eval_operand op ss ≠ NONE ⇒
-    eval_operand op (update_var v w ss) ≠ NONE
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, update_var_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> Cases_on `s = v` >> simp[]
-QED
-
 (* Monadic definition set for unfolding compile_* functions *)
 val compile_defs = [emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
   comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def,
@@ -501,83 +487,6 @@ Definition pure_opc_arity_def:
   pure_opc_arity OFFSET = NONE
 End
 
-Triviality exec_pure1_update_ok[local]:
-  !f inst ss.
-    LENGTH inst.inst_operands = 1 /\
-    LENGTH inst.inst_outputs = 1 /\
-    EVERY (λop. eval_operand op ss <> NONE) inst.inst_operands ==>
-    ?w. exec_pure1 f inst ss = OK (update_var (HD inst.inst_outputs) w ss)
-Proof
-  rpt strip_tac >>
-  gvs[exec_pure1_def, listTheory.LENGTH_EQ_NUM_compute,
-      listTheory.EVERY_DEF] >>
-  Cases_on `eval_operand h ss` >> gvs[] >>
-  metis_tac[]
-QED
-
-Triviality exec_pure2_update_ok[local]:
-  !f inst ss.
-    LENGTH inst.inst_operands = 2 /\
-    LENGTH inst.inst_outputs = 1 /\
-    EVERY (λop. eval_operand op ss <> NONE) inst.inst_operands ==>
-    ?w. exec_pure2 f inst ss = OK (update_var (HD inst.inst_outputs) w ss)
-Proof
-  rpt strip_tac >>
-  gvs[exec_pure2_def, listTheory.LENGTH_EQ_NUM_compute,
-      listTheory.EVERY_DEF] >>
-  Cases_on `eval_operand h ss` >> gvs[] >>
-  Cases_on `eval_operand h' ss` >> gvs[] >>
-  metis_tac[]
-QED
-
-val pure_chain_pure_tac =
-  simp[Once step_inst_base_def] >>
-  FIRST [irule exec_pure2_update_ok, irule exec_pure1_update_ok] >>
-  simp[];
-
-val pure_chain_assign_tac =
-  simp[Once step_inst_base_def] >>
-  gvs[listTheory.LENGTH_EQ_NUM_compute, listTheory.EVERY_DEF] >>
-  Cases_on `eval_operand h ss` >> gvs[] >>
-  metis_tac[];
-
-(* Master step lemma: for pure chain opcodes with correct arity and 1 output,
-   if all operands are defined then step returns OK (update_var ...). *)
-Theorem pure_chain_step_ok[local]:
-  ∀ inst ss n.
-    pure_opc_arity inst.inst_opcode = SOME n ∧
-    LENGTH inst.inst_operands = n ∧
-    LENGTH inst.inst_outputs = 1 ∧
-    EVERY (λop. eval_operand op ss ≠ NONE) inst.inst_operands
-    ⇒
-    ∃ w. step_inst_base inst ss =
-         OK (update_var (HD inst.inst_outputs) w ss)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[pure_opc_arity_def]
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_pure_tac
-  >- pure_chain_assign_tac
-QED
-
 (* Chain check: verify well-formedness of instruction chain against a set
    of known-defined variable names. Returns the set augmented with outputs.
    Labels and Lits are accepted unconditionally (they don't depend on known).
@@ -597,39 +506,6 @@ Definition check_chain_def:
       else NONE
 End
 
-(* Helper: label eval_operand is preserved through update_var *)
-Theorem eval_operand_label_update_var[local]:
-  ∀ lbl v w ss.
-    eval_operand (Label lbl) (update_var v w ss) = eval_operand (Label lbl) ss
-Proof
-  simp[eval_operand_def, update_var_def]
-QED
-
-(* Helper: operands in checked chain are defined when known vars are
-   defined and all label operands in the chain are defined (FILTER form).
-   Labels don't track names in known; they're valid by separate hypothesis. *)
-Theorem check_chain_operands_defined[local]:
-  ∀ ops known ss.
-    EVERY (λop. case op of Lit _ => T | Var v => MEM v known
-                | Label _ => T) ops ∧
-    EVERY (λv. eval_operand (Var v) ss ≠ NONE) known ∧
-    EVERY (λop. eval_operand op ss ≠ NONE)
-      (FILTER (λop. case op of Label _ => T | _ => F) ops)
-    ⇒
-    EVERY (λop. eval_operand op ss ≠ NONE) ops
-Proof
-  Induct >> simp[] >>
-  rpt gen_tac >>
-  Cases_on `h` >> simp[eval_operand_lit]
-  >- (strip_tac >> first_x_assum (qspecl_then [`known`, `ss`] mp_tac) >> simp[])
-  >- (strip_tac >> fs[listTheory.EVERY_MEM] >>
-      first_x_assum (qspecl_then [`known`, `ss`] mp_tac) >>
-      impl_tac >- fs[] >> simp[])
-  >> (strip_tac >>
-      first_x_assum (qspecl_then [`known`, `ss`] mp_tac) >>
-      impl_tac >- fs[] >> simp[])
-QED
-
 (* Collect all label-definedness requirements from an instruction chain *)
 Definition chain_labels_def:
   chain_labels [] = [] ∧
@@ -637,97 +513,6 @@ Definition chain_labels_def:
     FILTER (λop. case op of Label _ => T | _ => F) i.inst_operands ++
     chain_labels is
 End
-
-(* Merged step lemma: check_chain conditions → step succeeds.
-   Combines check_chain_operands_defined with pure_chain_step_ok
-   to avoid an intermediate EVERY eval_operand fact. *)
-Theorem check_chain_step_ok[local]:
-  ∀ inst ss n known.
-    pure_opc_arity inst.inst_opcode = SOME n ∧
-    LENGTH inst.inst_operands = n ∧
-    LENGTH inst.inst_outputs = 1 ∧
-    EVERY (λop. case op of Lit _ => T | Var v => MEM v known
-                | Label _ => T) inst.inst_operands ∧
-    EVERY (λv. eval_operand (Var v) ss ≠ NONE) known ∧
-    EVERY (λop. eval_operand op ss ≠ NONE)
-      (FILTER (λop. case op of Label _ => T | _ => F) inst.inst_operands)
-    ⇒
-    ∃ w. step_inst_base inst ss =
-         OK (update_var (HD inst.inst_outputs) w ss)
-Proof
-  rpt strip_tac >>
-  irule pure_chain_step_ok >> simp[] >>
-  mp_tac (Q.SPECL [`inst.inst_operands`, `known`, `ss`]
-            check_chain_operands_defined) >>
-  simp[]
-QED
-
-(* Chain correctness: if check_chain succeeds, run_inst_seq succeeds.
-   Also: all variables in the output known list are defined in ss'.
-   Requires that all Label operands in the chain are defined initially. *)
-Theorem run_inst_seq_check_chain[local]:
-  ∀ insts known ss known'.
-    check_chain insts known = SOME known' ∧
-    EVERY (λv. eval_operand (Var v) ss ≠ NONE) known ∧
-    EVERY (λop. eval_operand op ss ≠ NONE) (chain_labels insts)
-    ⇒
-    ∃ ss'. run_inst_seq insts ss = OK ss' ∧
-           EVERY (λv. eval_operand (Var v) ss' ≠ NONE) known'
-Proof
-  Induct_on `insts`
-  >- simp[check_chain_def, run_inst_seq_def]
-  >> rpt strip_tac >>
-  gvs[chain_labels_def] >>
-  qpat_x_assum `check_chain _ _ = _` mp_tac >>
-  simp[Once check_chain_def] >>
-  BasicProvers.every_case_tac >> simp[] >> strip_tac >>
-  (* Step head instruction using merged lemma *)
-  mp_tac (Q.SPECL [`h`, `ss`, `x`, `known`] check_chain_step_ok) >>
-  (impl_tac >- gvs[]) >>
-  strip_tac >>
-  simp[run_inst_seq_def] >>
-  (* Apply IH to tail *)
-  first_x_assum (qspecl_then
-    [`HD h.inst_outputs :: known`,
-     `update_var (HD h.inst_outputs) w ss`, `known'`] mp_tac) >>
-  (impl_tac
-   >- (
-    (conj_tac >- fs[]) >>
-    (conj_tac >- (
-      simp[listTheory.EVERY_DEF, eval_operand_update_var] >>
-      fs[listTheory.EVERY_MEM] >> rw[] >>
-      irule eval_operand_update_not_none >> simp[]
-    )) >>
-    (* All operands (Lit, Var, Label) preserved through update_var *)
-    fs[listTheory.EVERY_MEM, listTheory.MEM_FILTER, listTheory.MEM_APPEND] >>
-    rw[] >> first_x_assum drule >> strip_tac >>
-    Cases_on `op` >>
-    gvs[eval_operand_label_update_var, eval_operand_lit_update] >>
-    irule eval_operand_update_not_none >> simp[]
-  )) >>
-  simp[]
-QED
-
-(* Wrapper: if check_chain succeeds and output var is in known',
-   then run_inst_seq produces a state where the output operand is defined. *)
-Theorem run_inst_seq_check_chain_output[local]:
-  ∀ insts known ss v.
-    check_chain insts known ≠ NONE ∧
-    EVERY (λv. eval_operand (Var v) ss ≠ NONE) known ∧
-    EVERY (λop. eval_operand op ss ≠ NONE) (chain_labels insts) ∧
-    MEM v (THE (check_chain insts known))
-    ⇒
-    ∃ ss' r. run_inst_seq insts ss = OK ss' ∧
-             eval_operand (Var v) ss' = SOME r
-Proof
-  rpt strip_tac >>
-  Cases_on `check_chain insts known` >> gvs[] >>
-  drule_all run_inst_seq_check_chain >> strip_tac >>
-  qexistsl [`ss'`, `THE (eval_operand (Var v) ss')`] >>
-  simp[] >>
-  fs[listTheory.EVERY_MEM] >> res_tac >>
-  Cases_on `eval_operand (Var v) ss'` >> fs[]
-QED
 
 (* ===== Simple Builtins ===== *)
 

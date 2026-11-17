@@ -422,7 +422,8 @@ Resume ptr_paired_owned_read_recovery_static[target_frame]:
      `j < LENGTH done /\ w < EL j done` by
        (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
      irule ptr_paired_actual_protected_write_exclusion_static >>
-     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any) >>
      goal_assum (drule_at (Pat `FLOOKUP positions (Allocation _) = _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP (ptr_owner_view _ endpoint).cf_state.vs_allocas _ = _`)) >>
      goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
