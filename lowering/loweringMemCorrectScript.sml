@@ -35,12 +35,15 @@ val _ = Parse.hide "tops";
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
    global region.  No DALLOCA is the O1 source shape's
-   (o1_source_unit_ok_no_dalloca), which S4 has. *)
+   (o1_source_unit_ok_no_dalloca), which S4 has; with it, the free-memory
+   pointer never moves, so the entry state's pointer at or above its
+   initial one gives the bridge's two pointer facts. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
