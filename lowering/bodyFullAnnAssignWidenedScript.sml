@@ -11,6 +11,7 @@ Ancestors
   stmtSimDeclSource stmtSimDeclCompose stmtSimProps gasOutcomeFullStmts
   gasExemptCert vyperStorageTrace bodyMemoryDefs stmtLoweringMono freshWrites
   emitHelperProps fragExec allocaHistory typedMemoryCopy bodyDeclCopyMemory exprLowering stmtLowering
+  immutableDeployAssignRanges annassignRelayoutContinue exprOpenTerminals
 
 Theorem annassign_widened_full_layout:
   expr_body_pre ce cx env e es /\
@@ -151,7 +152,7 @@ QED
 (* The two implementation callbacks are literal contracts.  The common
    allocation/RHS prefix is a theorem dependency, never an assumption. *)
 Theorem annassign_widened_full_execution:
-  (!H0 ctx func ce cx mid s sa sf xs p sw dw src_loc dty sty stv dtv v
+  (!(H0 : (bool # 256 word # type_value) list # num list) ctx func ce cx mid s sa sf xs p sw dw src_loc dty sty stv dtv v
    n sz aid0 start lo explicit PG G tn.
     compile_assign_value ce (Var p) LocMemory (Var xs) F src_loc
       dty sty (type_memory_bytes ce dty) sa = ((),sf) /\
@@ -195,7 +196,8 @@ Theorem annassign_widened_full_execution:
     ?u sm Gu tnu t Gf tf.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,Gf,tf)) /\
-      (!H. stmt_state_rel H ctx func ce cx mid s ==>
+      (!(H : (bool # 256 word # type_value) list # num list).
+        stmt_state_rel H ctx func ce cx mid s ==>
         stmt_state_rel H ctx func ce cx mid u) /\
       (!D d. ghost_inv_at D lo d ce cx mid G tn s ==>
         ghost_inv_at D lo d ce cx mid Gu tnu u) /\
@@ -385,7 +387,9 @@ Resume annassign_widened_full_execution[prefix]:
   qpat_x_assum `unwrap_value _ _ _ = _ /\ _`
     (map_every assume_tac o CONJUNCTS) >>
   `type_memory_bytes old typ < dimword (:256)` by simp[dimword_def] >>
-  drule_all (SRULE [] annassign_full_alloc_rhs_prefix) >>
+  qpat_assum `declare_local old id typ sa = (ce,r)`
+    (mp_then Any mp_tac (SRULE [] annassign_full_alloc_rhs_prefix)) >>
+  disch_then drule_all >>
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "rhs"
 QED
@@ -400,14 +404,17 @@ Resume annassign_widened_full_execution[rhs]:
   (impl_tac >- (asm_x "dispatch" kall_tac >> asm_x "install" kall_tac >>
     simp[] >> rpt strip_tac >> gvs[] >>
     first_x_assum drule >> simp[])) >>
-  strip_tac >> suspend "source"
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ rhs_post _` >>
+  suspend "source"
 QED
 
 Resume annassign_widened_full_execution[source]:
   markerLib.RESUME_TAC >>
   irule gas_outcome_full_zero_prefix >> qexistsl_tac [`Ga`,`entry`,`tna`] >>
   conj_tac >- simp[] >>
-  drule eval_annassign_action >> disch_then (qspecl_then [`id`,`e`] SUBST1_TAC) >>
+  qpat_assum `evaluate_type (get_tenv cx) typ = SOME tyv`
+    (mp_then Any (qspecl_then [`id`,`e`] SUBST1_TAC) eval_annassign_action) >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`!v. storage_trace_frame (new_variable _ _ v)`]
   >- simp[storage_trace_frame_new_variable]
@@ -419,7 +426,141 @@ Resume annassign_widened_full_execution[source]:
       qexistsl_tac [`mid`,`t`,`v`] >> simp[])
   >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  FAIL_TAC "bind post"
+  qexists_tac `\H res mid G tn t. rhs_post H res mid G tn t /\
+    ~t.vs_halted /\ mid.gas_obs = []` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >>
+      qpat_assum `gas_outcome_full _ _ _ _ _ _ rhs_post _` (irule_at Any) >>
+      simp[] >> rpt strip_tac >> Cases_on `res`
+      >- fs[exprSimDefsTheory.expr_exit_def] >>
+      qpat_x_assum `expr_exit _ _` mp_tac >>
+      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+      simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.halt_exit_def] >>
+      fs[exprSimDefsTheory.halt_exit_def] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  BETA_TAC >> rpt strip_tac >> suspend "continuation"
+QED
+
+Resume annassign_widened_full_execution[continuation]:
+  markerLib.RESUME_TAC >>
+  qpat_assum `storage_trace_domain cx st0 mid.storage_trace`
+    (assume_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  qunabbrev_tac `rhs_post` >>
+  Cases_on `res` >>
+  qpat_x_assum `(\H res mid G tn t. _) _ _ _ _ _ _` mp_tac >>
+  BETA_TAC >> simp_tac (srw_ss()) [] >> strip_tac >>
+  suspend "new_variable"
+QED
+
+Resume annassign_widened_full_execution[new_variable]:
+  markerLib.RESUME_TAC >>
+  drule_all annassign_continuation_all_tails >> strip_tac >>
+  qabbrev_tac `out = mid with scopes :=
+    (sc |+ (id,<|assignable := T; type := tyv; value := x; popped := []|>))::rest` >>
+  `out.gas_obs = []` by simp[Abbr `out`] >>
+  `new_variable id tyv x mid = (INL (),out)` by
+    (qpat_assum `!tail. new_variable _ _ _ _ = _`
+      (qspec_then `mid.gas_obs` mp_tac) >>
+     simp_tac (srw_ss()) [Abbr `out`]) >>
+  suspend "suffix"
+QED
+
+Resume annassign_widened_full_execution[suffix]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
+  `?u Gu tu.
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (t,G1,tn1) [] (OK u,Gu,tu)) /\
+    !H. valid_horizon cx st0 H out.storage_trace ==>
+      stmt_lands lctx sf (INL ()) u /\ ~u.vs_halted /\ ~block_is_terminated sf /\
+      cenv_top_ext old ce out.scopes /\ stmt_state_rel H ctx func ce cx out u /\
+      storage_well_formed_on cx out (FST H) /\ return_buf_frame d ce sf u /\
+      alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\ ghost_inv_at (DF H) lo d ce cx out Gu tu u /\
+      (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
+      (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP u.vs_allocas aid = SOME ent) /\
+      (!z. not_fresh_at sa z ==> FLOOKUP Gu z = FLOOKUP G0 z /\
+        op_taint tu (Var z) = op_taint tn0 (Var z)) /\
+      alloca_frame old es sa s0 ce out u /\
+      (!aid off len i. FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+        (!name a cap. local_region old es.scopes s0 name a cap ==>
+          off+len <= a \/ a+cap <= off) /\
+        off <= i /\ i < off+len /\ i IN tu.t_mem ==> i IN tn0.t_mem)` by
+    (match_mp_tac (GEN_ALL annassign_memory_full_suffix_post) >>
+     qexistsl_tac [`xs`,`x`,`type_memory_bytes old typ`,`sw`,
+       `lowered_value_type old e`,`stv`,`a`,`vv_location vv`,`sc`,`rest`,
+       `p`,`type_memory_size stv`,`mid`,
+       `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes old typ))] [p]`,
+       `id`,`w`,`typ`,`tyv`,`b`,`storage_trace_horizon mid.storage_trace`] >>
+     conj_tac >- asm "dispatch" MATCH_ACCEPT_TAC >>
+     conj_tac >- asm "install" MATCH_ACCEPT_TAC >>
+     asm_x "dispatch" kall_tac >> asm_x "install" kall_tac >>
+     `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+     drule_all immutable_assign_copy_metadata >> strip_tac >>
+     `not_fresh_at b xs` by
+       (qpat_assum `lower_value compile_expr ce (expr_type e) e a = _`
+          (mp_then Any mp_tac compile_lower_value_var) >> simp[]) >>
+     `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx mid t /\
+      storage_well_formed_on cx mid (FST (storage_trace_horizon mid.storage_trace))` by
+       fs[expr_post_def] >>
+     `allocas_from lo t /\ lo <= t.vs_alloca_next` by fs[ghost_inv_at_def] >>
+     `mid with gas_obs := [] = mid` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     `value_has_type stv x /\ val_wf stv x` by
+       (qpat_assum `!gs v mid. _`
+          (qspecl_then [`gas_explicit marks entry.vs_gas_readings`,`x`,`mid`] mp_tac) >>
+        qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+        simp_tac (srw_ss()) [] >> simp[]) >>
+     `a.cs_next_id <= b.cs_next_id` by
+       (qpat_assum `lower_value compile_expr ce (expr_type e) e a = _`
+         (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
+     `b.cs_next_var <= sf.cs_next_var` by
+       (qpat_assum `compile_assign_value ce _ _ _ _ _ _ _ _ b = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+        metis_tac[cj 1 ci_mono_stmt_helpers,ci_mono_def,pairTheory.SND]) >>
+     `sa.cs_next_id < b.cs_next_id /\ sa.cs_next_id <= b.cs_next_id` by decide_tac >>
+     simp[Abbr `out`,ADD_COMM,venomInstTheory.mk_inst_def] >>
+     conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+     conj_tac >- metis_tac[] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+           drule >> simp[expr_post_def]) >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!aid off len i. _` irule >>
+         simp[ADD_COMM] >> qexists_tac `aid` >> simp[ADD_COMM] >>
+         rpt strip_tac >> first_x_assum drule >> decide_tac) >>
+     `~(lowered_value_type ce e = expr_type e \/
+        is_bytestring_type (expr_type e) /\
+        is_bytestring_type (lowered_value_type ce e) /\
+        arg_type_fits (lowered_value_type ce e) (expr_type e))` by simp[] >>
+     qpat_assum `compile_expr ce (expr_type e) e a = (vv,sv)`
+       (mp_then (Pat `compile_expr _ _ _ _ = _`)
+         (qspecl_then [`cx`,`env`,`es`] mp_tac) residual_call_compile_location) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     `~block_is_terminated b` by (drule_all unwrap_value_open >> simp[]) >>
+     irule compile_assign_memory_relayout_open >>
+     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     simp[]) >>
+  suspend "pure"
+QED
+
+Resume annassign_widened_full_execution[pure]:
+  markerLib.RESUME_TAC >> (
+  irule gas_outcome_full_pure >>
+  reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gu`,`out`,`INL ()`,`u`,`tu`] >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  gen_tac >> disch_tac >> conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  `out with gas_obs := [] = out` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp_tac (srw_ss()) [] >>
+  qpat_x_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _` drule >>
+  simp[ADD_COMM] >> strip_tac >> first_assum MATCH_ACCEPT_TAC)
 QED
 
 Finalise annassign_widened_full_execution
