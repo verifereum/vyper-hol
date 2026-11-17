@@ -18,7 +18,7 @@ Ancestors
   codegenSymRel fnFrameSteps fnFrameSinglePred fnEntryParams fnFrameBoundary asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symShuffleSim reorderStages codegenSymOwnRel
+  dfgDefs symShuffleSim reorderStages codegenSymOwnRel symFrameBoundaryPairing symFrameBoundaryNumeric
 
 (* Symbolic kinds at the boundary depend on the defining instruction,
    not on the concrete word used to represent a label. *)
@@ -149,12 +149,7 @@ Theorem sym_kinds_stack_poke:
   sym_kinds_ok cp fn ret srest
     (ps with ps_stack := stack_poke d op ps.ps_stack) ss
 Proof
-  rw[sym_kinds_ok_def] >> qexists `top` >>
-  gvs[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def] >>
-  rpt strip_tac >>
-  simp[listTheory.EL_REVERSE, listTheory.EL_LUPDATE] >>
-  IF_CASES_TAC >> gvs[stackModelTheory.stack_peek_def,
-    listTheory.EL_REVERSE] >> metis_tac[]
+  metis_tac[symFrameBoundaryNumericTheory.sym_kinds_stack_poke]
 QED
 
 Theorem sym_mload_mem_sval_label:
@@ -167,7 +162,7 @@ Theorem sym_mload_mem_sval_label:
                     ss.sym_base.as_memory);
                 sym_stack := Lab l d :: stk |>)
 Proof
-  simp[mem_sval_at_def, sym_mload_def]
+  metis_tac[symFrameBoundaryNumericTheory.sym_mload_mem_sval_label]
 QED
 
 Definition scratch_labels_store_def:
@@ -176,14 +171,20 @@ Definition scratch_labels_store_def:
     scratch_labels_store (scratch_store_labels labs off sv) xs
 End
 
+Theorem scratch_labels_store_fold[local]:
+  !xs labs. scratch_labels_store labs xs =
+    FOLDL (\acc p. scratch_store_labels acc (FST p) (SND p)) labs xs
+Proof
+  Induct >> simp[scratch_labels_store_def] >>
+  Cases_on `h` >> simp[scratch_labels_store_def]
+QED
+
 Theorem scratch_labels_store_outside:
   !xs labs b.
     EVERY (\p. ~in_mem_range (FST p) 32 b) xs ==>
     FLOOKUP (scratch_labels_store labs xs) b = FLOOKUP labs b
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_store_labels_outside]
+  simp[scratch_labels_store_fold, scratch_fold_outside]
 QED
 
 Theorem scratch_labels_store_preserves_saved:
@@ -192,9 +193,7 @@ Theorem scratch_labels_store_preserves_saved:
     (mem_sval_at (scratch_labels_store labs xs) old saved <=>
      mem_sval_at labs old saved)
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_store_labels_preserves_saved]
+  simp[scratch_labels_store_fold, scratch_fold_preserves_saved]
 QED
 
 Theorem scratch_labels_store_saved:
@@ -205,14 +204,7 @@ Theorem scratch_labels_store_saved:
     !off sv. MEM (off,sv) xs ==>
       mem_sval_at (scratch_labels_store labs xs) off sv
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  gen_tac >> PairCases_on `h` >> rw[scratch_labels_store_def]
-  >- (gvs[] >> rename1 `~MEM off (MAP FST xs)` >>
-      `EVERY (\p. off + 32 <= FST p \/ FST p + 32 <= off) xs` by
-        (simp[listTheory.EVERY_MEM] >>
-         metis_tac[listTheory.MEM_MAP, pairTheory.FST]) >>
-      metis_tac[scratch_labels_store_preserves_saved, scratch_store_labels_at]) >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  simp[scratch_labels_store_fold, scratch_fold_saved]
 QED
 
 Theorem sym_steps_two:
@@ -223,8 +215,7 @@ Theorem sym_steps_two:
     sym_step p env j s1 = SymOK s2 ==>
     sym_steps p env 2 ss = SymOK s2
 Proof
-  simp[stackOpSimTheory.asm_block_at_cons] >> rpt strip_tac >>
-  simp[asmSpliceTheory.sym_steps_compute]
+  metis_tac[symFrameBoundaryNumericTheory.sym_steps_two]
 QED
 
 Theorem sym_push_offset_then:
@@ -237,10 +228,7 @@ Theorem sym_push_offset_then:
     sym_step p env inst pushed = SymOK out ==>
     sym_steps p env 2 ss = SymOK out
 Proof
-  rpt strip_tac >>
-  `pushed.sym_base.as_pc = ss.sym_base.as_pc + 1` by
-    gvs[asmSemTheory.asm_next_def] >>
-  metis_tac[sym_steps_two, sym_scratch_push]
+  metis_tac[symFrameBoundaryNumericTheory.sym_push_offset_then]
 QED
 
 Theorem sym_pushed_mstore:
@@ -254,9 +242,7 @@ Theorem sym_pushed_mstore:
       out.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >>
-  qspec_then `pushed` mp_tac sym_mstore_scratch_step >>
-  gvs[sym_step_def, sym_step_op_def, asmSemTheory.asm_next_def]
+  metis_tac[symFrameBoundaryNumericTheory.sym_pushed_mstore]
 QED
 
 Theorem sym_spill_offset_steps:
@@ -269,7 +255,7 @@ Theorem sym_spill_offset_steps:
       ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
       ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >> metis_tac[sym_pushed_mstore, sym_push_offset_then]
+  metis_tac[symFrameBoundaryNumericTheory.sym_spill_offset_steps]
 QED
 
 Theorem sym_mload_saved_kinds:
@@ -282,10 +268,7 @@ Theorem sym_mload_saved_kinds:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
-  rpt gen_tac >> Cases_on `sv` >> strip_tac
-  >- (drule_all sym_mload_scratch_word >> strip_tac >> gvs[op_kind_ok_def]) >>
-  drule_all sym_mload_mem_sval_label >> disch_then SUBST1_TAC >>
-  simp[asmSemTheory.asm_next_def]
+  metis_tac[symFrameBoundaryNumericTheory.sym_mload_saved_kinds]
 QED
 
 Theorem sym_pushed_mload:
@@ -300,9 +283,7 @@ Theorem sym_pushed_mload:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >>
-  qspec_then `pushed` mp_tac sym_mload_saved_kinds >>
-  gvs[sym_step_def, sym_step_op_def, asmSemTheory.asm_next_def]
+  metis_tac[symFrameBoundaryNumericTheory.sym_pushed_mload]
 QED
 
 Theorem sym_restore_offset_steps:
@@ -316,13 +297,7 @@ Theorem sym_restore_offset_steps:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >>
-  qspecl_then [`p`, `env`, `ss`, `off`, `sv`] mp_tac sym_pushed_mload >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`out`, `sv'`] >> simp[] >>
-  qspecl_then [`p`, `env`, `ss`, `off`, `AsmOp "MLOAD"`] mp_tac
-    sym_push_offset_then >>
-  simp[]
+  metis_tac[symFrameBoundaryNumericTheory.sym_restore_offset_steps]
 QED
 
 Theorem sym_spill_offsets_cons_result:
@@ -339,8 +314,8 @@ Theorem sym_spill_offsets_cons_result:
       result.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_compose >>
-  gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
+  rewrite_tac[scratch_labels_store_fold] >>
+  metis_tac[symFrameBoundaryNumericTheory.sym_spill_offsets_cons_result_fold]
 QED
 
 Theorem sym_spill_offsets_cons_step:
@@ -364,22 +339,8 @@ Theorem sym_spill_offsets_cons_step:
       out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  gen_tac >> disch_tac >> rpt gen_tac >>
-  pure_rewrite_tac[listTheory.EVERY_DEF, listTheory.MAP,
-       pairTheory.FST, pairTheory.SND, listTheory.LENGTH,
-       execute_plan_def, listTheory.FLAT, exec_stack_op_def,
-       stackOpSimTheory.asm_block_at_append] >>
-  pure_rewrite_tac[GSYM execute_plan_def] >> simp[] >> rpt strip_tac >>
-  drule_all sym_spill_offset_steps >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  rename1 `sym_steps p env 2 ss = SymOK mid` >>
-  `asm_block_at p mid.sym_base.as_pc
-    (execute_plan initial_fmp (MAP SOSpill (MAP FST xs)))` by simp[] >>
-  first_x_assum drule_all >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  `out.sym_base.as_pc = mid.sym_base.as_pc + 2 * LENGTH xs` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  drule_all sym_spill_offsets_cons_result >> simp[]
+  rewrite_tac[scratch_labels_store_fold] >>
+  MATCH_ACCEPT_TAC symFrameBoundaryNumericTheory.sym_spill_offsets_cons_step_fold
 QED
 
 Theorem sym_spill_offsets_steps:
@@ -393,8 +354,8 @@ Theorem sym_spill_offsets_steps:
       out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
 Proof
-  Induct >- simp[asmSpliceTheory.sym_steps_def, scratch_labels_store_def] >>
-  Cases >> drule sym_spill_offsets_cons_step >> metis_tac[]
+  rewrite_tac[scratch_labels_store_fold] >>
+  metis_tac[symFrameBoundaryNumericTheory.sym_spill_offsets_steps_fold]
 QED
 
 Theorem sym_restore_offsets_cons_result:
