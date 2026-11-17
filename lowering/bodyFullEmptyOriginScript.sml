@@ -2,7 +2,7 @@ Theory bodyFullEmptyOrigin
 Ancestors
   typeBuiltinPrereqs
   bodyPtrTypeBuiltinsEmptyTail bodyPtrTypeBuiltinsEmptyAlloc
-  bodyEmptyBufferMemory bodyFullUnwrapRun instSeqPtrLo bodyFullAllocGeneric
+   bodyFullUnwrapRun instSeqPtrLo bodyFullAllocGeneric
   exprSimBufferEmptyExec exprSimAlloc fragGasSeqPtr ptrDiscipline
   venomState finite_map words list pred_set abiEmptyAllocate abiEmptySequence
   bodyPtrIfExpAllocCompiler emitHelperProps exprLoweringProps compileEnv

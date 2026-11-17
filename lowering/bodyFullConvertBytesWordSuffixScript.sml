@@ -1,8 +1,9 @@
 (* Uniform composition of the header and normalized payload certificates. *)
 Theory bodyFullConvertBytesWordSuffix
 Ancestors
+  typeBuiltinPrereqs
   bodyFullConvertBytesWordPrefix bodyFullConvertBytesWordNormalize
-  bodyFullConvertBytesWordContinuation bodyMemTbConvertReadSuffix
+  bodyFullConvertBytesWordContinuation
   bodyPtrSignedConvertClamp bodyPtrSignedConvertBool bodyPtrSignedConvertScalarOps
   ptrDiscipline instIdxIndep instSeqPtrLo fragGasSeqPtr emitHelperProps ASCIInumbers
   bodyPtrTypeBuiltinsBytesWordParts bodyPtrTypeBuiltinsBytesWordTypes

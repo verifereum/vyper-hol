@@ -1,6 +1,7 @@
 Theory bodyFullConvertCastOrigin
 Ancestors
-  exprSimConvertBytes bodyMemTbConvertCastMemory
+  typeBuiltinPrereqs
+  exprSimConvertBytes
   bodyPtrTypeBuiltinsCheckedArithmetic bodyPtrSignedConvertHeaderLoad
   bodyFullConvertScalarCertificate fragGasCopyLoop fragGasOriginPtr
   fragGasSeqPtr ptrSafetyTransport ptrSafeRun instIdxIndep stateFrame

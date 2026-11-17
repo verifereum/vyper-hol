@@ -1,11 +1,12 @@
 (* Signed conversion origins on the actual child state. *)
 Theory bodyFullConvertSignedOrigin
 Ancestors
+  typeBuiltinPrereqs
   bodyFullConvertBytesWordSuffix bodyFullConvertSignedLoader
   bodyFullConvertSignedClamp exprSimConvertFromBytes exprLowering
   builtinConvertPrefix exprLoweringProps emitHelperProps compileEnv finite_map words arithmetic list
   ptrDiscipline fragExec venomInst venomState fragGasSeqPtr
-  bodyMemTbConvertReadSuffix instSeqPtrLo instSeqComposePtr
+   instSeqPtrLo instSeqComposePtr
 
 (* Semantic actualization is the destination-generic
    bytes_word_conversion_run_actual, including signed and empty inputs. *)

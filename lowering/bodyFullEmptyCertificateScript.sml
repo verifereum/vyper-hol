@@ -9,7 +9,7 @@ Ancestors
   rich_list fragGasSeqPtr instIdxIndep fragExec
   exprSimBufferEmptyExec exprSimAlloc loweringHalt list loweringStateRelDefs
   bodyFullUnwrapRun instSeqPtrLo entrySinkExtraction fragExecPtr
-  venomInst bodyEmptyBufferMemory
+  venomInst
 
 Theorem empty_alloc_ghost_kept_at[local]:
   !ctx func cenv cx es s sa n out t PG G tn lo.

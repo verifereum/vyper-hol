@@ -4,8 +4,8 @@ Ancestors
   typeBuiltinPrereqs
   bodyFullExtract32Certificate bodyFullUnwrapRun bodyFullGhostFrame
   fragGasCopyLoop varsExt freshWrites
-  exprSimExtract32Run exprSimExtract32Read bodyMemTbExtract32SuffixPost bodyMemTbExtract32Readonly
-  bodyMemTbExtract32Load exprSimExtract32Source bodySimFull gasOutcomeFullCompose
+  exprSimExtract32Run exprSimExtract32Read
+   exprSimExtract32Source bodySimFull gasOutcomeFullCompose
   extract32Certificate exprLoweringProps exprSimMemDefs loweringPosts
   bodyPtrDefs ptrDiscipline compileEnv venomState venomInst
   builtinBytes vyperInterpreter vyperTypeSystem vyperState loweringStateRelDefs list words

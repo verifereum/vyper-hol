@@ -1,8 +1,9 @@
 (* Shared physical preparation for the joint Extract32 judgment. *)
 Theory bodyFullExtract32Prepare
 Ancestors
+  typeBuiltinPrereqs
   bodyFullUnwrapRun bodyFullGhostFrame extract32PrepareFrame
-  bodyPtrSignedConvertSourceCompile bodyMemTbExtract32Source
+  bodyPtrSignedConvertSourceCompile
   exprPtrCtorImmStore typedCopyLoopHeaderPtr bodyPtrSignedConvertLoad
   bodyPtrSignedConvertSourcePrefix exprSimExtract32Post
   fragExecMem instMemFrontier fragGasSeqPtr venomInstProofs
@@ -151,7 +152,7 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule_all bodyMemTbExtract32SourceTheory.extract32_source_post_view >>
+  drule_all typeBuiltinPrereqsTheory.extract32_source_post_view >>
   disch_then (qx_choose_then `p` strip_assume_tac) >>
   `ptr_mem_ok cx (expr_type src) (BytesV bs) (Var sv) G tn s /\
    op_taint tn (Var sv) = {}` by gvs[ptr_val_ok_def, is_word_type_def] >>

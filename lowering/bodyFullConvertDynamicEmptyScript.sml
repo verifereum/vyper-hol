@@ -1,8 +1,9 @@
 (* Empty runtime values still execute a nonzero-capacity conversion suffix. *)
 Theory bodyFullConvertDynamicEmpty
 Ancestors
+  typeBuiltinPrereqs
   bodyFullConvertBytesWordSuffix bodyFullConvertBytesWordContinuation
-  bodyMemTbConvertReadSuffix bodyPtrTypeBuiltinsBytesWordParts
+   bodyPtrTypeBuiltinsBytesWordParts
   bodyPtrTypeBuiltinsBytesWordTypes bodyPtrSignedConvertUnsignedCompose
   bodyPtrSignedConvertUnsignedLoad
   exprSimConvertFromBytes builtinConvertPrefix fragGasSeqPtr instSeqComposePtr instSeqPtrLo

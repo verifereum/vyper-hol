@@ -1,8 +1,9 @@
 Theory bodyFullTypeBuiltinExtract32
 Ancestors
+  typeBuiltinPrereqs
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
-  bodyFullExtract32Prepare bodyFullExtract32Suffix bodyMemTbExtract32Cuts
+  bodyFullExtract32Prepare bodyFullExtract32Suffix
   bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
@@ -131,7 +132,7 @@ Resume extract32_vv_full[source_continuation]:
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-     drule bodyMemTbExtract32SourceTheory.extract32_source_post_view >>
+     drule typeBuiltinPrereqsTheory.extract32_source_post_view >>
      simp[] >> metis_tac[]) >>
   `?sv. src_op = Var sv` by
     (fs[bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def,
