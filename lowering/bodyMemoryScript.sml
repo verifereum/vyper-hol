@@ -30,7 +30,7 @@ Ancestors
   bodyMemEcArith bodyMemBuiltinUnary bodyMemBuiltinRest bodyMemPopName
   bodyMemPopNested bodyMemTypeBuiltin bodyMemSend bodyMemExtCall
   bodyMemIntCall bodyMemRawCall bodyMemRawCallCalldata bodyMemRawLog
-  bodyMemRawRevert bodyMemSelfDestruct bodyMemCreate
+  bodyMemRawRevert bodyMemSelfDestruct
 
 val _ = Parse.hide "body";
 
@@ -38,8 +38,7 @@ val body_mem_ind = evaluate_ind
   |> Q.SPECL [`body_stmt_mem_ok`, `body_stmts_mem_ok`, `body_iterator_mem_ok`,
               `body_for_mem_ok`, `body_expr_mem_ok`, `body_exprs_mem_ok`,
               `body_base_target_mem_ok`, `body_base_target_mem_ok`,
-              `body_tuple_target_mem_ok`, `body_tuple_targets_mem_ok`,
-              `body_results_mem_ok`];
+              `body_tuple_target_mem_ok`, `body_tuple_targets_mem_ok`];
 
 (* ===== Expression cases split between proved subcases and a leaf ===== *)
 
@@ -116,8 +115,7 @@ Theorem body_mem_mutual:
   (!cx e. body_expr_mem_ok cx e) /\ (!cx es. body_exprs_mem_ok cx es) /\
   (!cx t. body_base_target_mem_ok cx t) /\
   (!cx g v. body_tuple_target_mem_ok cx g v) /\
-  (!cx gs vs. body_tuple_targets_mem_ok cx gs vs) /\
-  (!cx es. body_results_mem_ok cx es)
+  (!cx gs vs. body_tuple_targets_mem_ok cx gs vs)
 Proof
   mp_tac body_mem_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -173,7 +171,10 @@ Proof
     (* 44 *) MATCH_ACCEPT_TAC body_raw_log_mem_case,
     (* 45 *) MATCH_ACCEPT_TAC body_raw_revert_mem_case,
     (* 46 *) MATCH_ACCEPT_TAC body_selfdestruct_mem_case,
-    (* 47 *) MATCH_ACCEPT_TAC body_create_mem_case,
+    (* 47 *) rw[body_expr_mem_ok_def,
+                 exprSimHypsDefsTheory.expr_body_pre_def,
+                 supportedExprTraverseTheory.expr_has_evm_run_thm,
+                 supportedExprTraverseTheory.expr_evm_run_root_def],
     (* 48 *) simp[body_exprs_mem_ok_def],
     (* 49 *) rw[body_exprs_mem_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_mem_ok_def],
@@ -186,9 +187,7 @@ Proof
     (* 57 *) simp[body_tuple_target_mem_ok_def],
     (* 58 *) rw[body_tuple_target_mem_ok_def] >> metis_tac[],
     (* 59 *) simp[body_tuple_target_mem_ok_def],
-    (* 60 *) simp[body_tuple_target_mem_ok_def],
-    (* 61 *) simp[body_results_mem_ok_def],
-    (* 62 *) rw[body_results_mem_ok_def] >> metis_tac[]
+    (* 60 *) simp[body_tuple_target_mem_ok_def]
   ]) >>
   simp[]
 QED

@@ -797,8 +797,7 @@ Theorem typed_assignment_attribute_mutual[local]:
     MAP (\sc. OPTION_MAP
       (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
       (FLOOKUP sc root)) es.scopes /\
-    LENGTH es'.scopes = LENGTH es.scopes) /\
-  (!(cx:evaluation_context) (es:expr list). T)
+    LENGTH es'.scopes = LENGTH es.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt gen_tac >> rpt strip_tac

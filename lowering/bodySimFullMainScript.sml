@@ -6,7 +6,7 @@
  * and constructor frames alike.
  *
  * TOP-LEVEL:
- *   body_sim_full_mutual -- the eleven predicates, by evaluate_ind
+ *   body_sim_full_mutual -- the ten predicates, by evaluate_ind
  *   body_stmts_sim_full -- the statement-list judgment it gives
  *)
 Theory bodySimFullMain
@@ -20,8 +20,7 @@ val body_ind = evaluate_ind
   |> Q.SPECL [`body_stmt_full_ok`, `body_stmts_full_ok`, `body_iterator_full_ok`,
               `body_for_full_ok`, `body_expr_full_ok`, `body_exprs_full_ok`,
               `body_base_target_full_ok`, `body_base_target_full_ok`,
-              `body_tuple_target_full_ok`, `body_tuple_targets_full_ok`,
-              `body_results_full_ok`];
+              `body_tuple_target_full_ok`, `body_tuple_targets_full_ok`];
 
 Theorem body_sim_full_mutual:
   (!cx s. body_stmt_full_ok cx s) /\ (!cx ss. body_stmts_full_ok cx ss) /\
@@ -30,8 +29,7 @@ Theorem body_sim_full_mutual:
   (!cx e. body_expr_full_ok cx e) /\ (!cx es. body_exprs_full_ok cx es) /\
   (!cx t. body_base_target_full_ok cx t) /\
   (!cx g v. body_tuple_target_full_ok cx g v) /\
-  (!cx gs vs. body_tuple_targets_full_ok cx gs vs) /\
-  (!cx es. body_results_full_ok cx es)
+  (!cx gs vs. body_tuple_targets_full_ok cx gs vs)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -82,7 +80,10 @@ Proof
     (* 44 *) MATCH_ACCEPT_TAC body_raw_log_case_full,
     (* 45 *) MATCH_ACCEPT_TAC body_raw_revert_case_full,
     (* 46 *) MATCH_ACCEPT_TAC body_selfdestruct_case_full,
-    (* 47 *) MATCH_ACCEPT_TAC body_create_case_full,
+    (* 47 *) rw[body_expr_full_ok_def] >>
+             gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+                 supportedExprTraverseTheory.expr_has_evm_run_thm,
+                 supportedExprTraverseTheory.expr_evm_run_root_def],
     (* 48 *) simp[body_exprs_full_ok_def],
     (* 49 *) rw[body_exprs_full_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_full_ok_def],
@@ -95,9 +96,7 @@ Proof
     (* 57 *) simp[body_tuple_target_full_ok_def],
     (* 58 *) rw[body_tuple_target_full_ok_def] >> metis_tac[],
     (* 59 *) simp[body_tuple_target_full_ok_def],
-    (* 60 *) simp[body_tuple_target_full_ok_def],
-    (* 61 *) simp[body_results_full_ok_def],
-    (* 62 *) rw[body_results_full_ok_def] >> metis_tac[]
+    (* 60 *) simp[body_tuple_target_full_ok_def]
   ]) >>
   simp[]
 QED
