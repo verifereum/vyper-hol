@@ -41,7 +41,7 @@ Ancestors
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
+  dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketRootedPlainStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
