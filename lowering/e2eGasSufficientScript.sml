@@ -36,7 +36,7 @@ Theory e2eGasSufficient
 Ancestors
   e2eDefs e2eProducers e2eEntry unitTransformDefs
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
-  sourceUnitExecution exprSimHypsDefs
+  sourceUnitExecution exprSimHypsDefs sourceCallCount
   o1PipelineCorrect o1PassContract contextCodegenRel
   o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
@@ -175,14 +175,14 @@ Theorem vyper_call_gas_sufficient_identity:
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs.
-        source_storage_ok am tx
-          (MAP SND (call_trace (add_frame_gas g' es))) gs /\
-        call_outcomes_storage_ok am tx
-          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+      (FST (HD (add_frame_gas g' es).contexts)).msgParams.gasLimit < 2 ** 64 /\
+      (!gs. call_storage_ok am tx
+         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx))
+            obs am tx) /\
+       source_calls_within (2 ** 64) am tx
+         (MAP SND (call_trace (add_frame_gas g' es))) obs)
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\

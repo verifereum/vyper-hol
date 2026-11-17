@@ -18,7 +18,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringCalldataCorrect callPremiseDispatch
+  loweringCalldataCorrect callPremiseDispatch sourceCallCount
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout asmOptimizer
@@ -1156,12 +1156,15 @@ Theorem vyper_call_correct_identity:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    (!obs. source_calls_within (2 ** 64) am tx
+       (MAP SND (call_trace es)) obs)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+       call_result_rel tops am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -1209,12 +1212,15 @@ Theorem vyper_call_correct_asm_opt:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    (!obs. source_calls_within (2 ** 64) am tx
+       (MAP SND (call_trace es)) obs)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+       call_result_rel tops am tx es r es')
 Proof
   cheat
 QED
@@ -1230,12 +1236,15 @@ Theorem vyper_call_correct_dispatched:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    (!obs. source_calls_within (2 ** 64) am tx
+       (MAP SND (call_trace es)) obs)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+       call_result_rel tops am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
@@ -1389,15 +1398,14 @@ Proof
   drule_all vyper_call_reverts_asm_opt >> simp[]
 QED
 
-(* The declared return type of the external entry f, which fixes how the
-   call's return bytes encode the source result.  Every f that
-   calldata_dispatch returns is found by lookup_function, so the NoneT
-   default is never read there. *)
-Definition external_return_type_def:
-  external_return_type tops f =
-    case vyperInterpreter$lookup_function NONE f External tops of
-      SOME (_, _, _, _, ret, _) => ret
-    | NONE => NoneT
+(* The source call bound for the call the calldata dispatches to. *)
+Definition calldata_calls_within_def:
+  calldata_calls_within tops am tx es <=>
+    !f vals obs.
+      calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+      source_calls_within (2 ** 64) am
+        (tx with <| function_name := f; args := vals |>)
+        (MAP SND (call_trace es)) obs
 End
 
 (* What the call does for the calldata tx carries: revert with empty
@@ -1406,9 +1414,10 @@ End
 Definition calldata_result_rel_def:
   calldata_result_rel tops am tx es r es' <=>
     case calldata_dispatch tops tx.calldata of
-      NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
+      NONE => frame_raises es Reverted /\
+              ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
     | SOME (f, vals) =>
-        call_result_rel tops (external_return_type tops f) am
+        call_result_rel tops am
           (tx with <| function_name := f; args := vals |>) es r es'
 End
 
@@ -1427,10 +1436,9 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
+    calldata_calls_within tops am tx es /\
     (!f vals.
-       calldata_dispatch tops
-         (buffer_to_list (FST (HD es.contexts)).msgParams.data) =
-         SOME (f, vals) ==>
+       calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
        ?mut args dflts ret body.
          vyperInterpreter$lookup_function NONE f External tops =
            SOME (mut, F, args, dflts, ret, body))

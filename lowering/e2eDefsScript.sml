@@ -533,12 +533,23 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
+(* The declared return type of the external entry f, which fixes how the
+   call's return bytes encode the source result.  Every f that
+   calldata_dispatch returns is found by lookup_function, so the NoneT
+   default is never read there. *)
+Definition external_return_type_def:
+  external_return_type tops f =
+    case vyperInterpreter$lookup_function NONE f External tops of
+      SOME (_, _, _, _, ret, _) => ret
+    | NONE => NoneT
+End
+
 (* Observe the selected function's decorator at the transaction boundary. *)
 Definition tx_return_bytes_def:
-  tx_return_bytes tops ret tx v out <=>
+  tx_return_bytes tops tx v out <=>
     if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
     then raw_return_bytes v = SOME out
-    else return_bytes tops ret v out
+    else return_bytes tops (external_return_type tops tx.function_name) v out
 End
 
 Definition unspecified_behaviour_exempt_def:
@@ -746,7 +757,9 @@ Definition external_call_result_rel_def:
   external_call_result_rel H tops ret tx (res, am', rqs) vres <=>
     case (res, vres) of
       (INL v, Halt ss) =>
-        tx_return_bytes tops ret tx v ss.vs_returndata /\
+        (if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
+         then raw_return_bytes v = SOME ss.vs_returndata
+         else return_bytes tops ret v ss.vs_returndata) /\
         accounts_agree H tx.target am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree H tx.target am'.tStorage ss.vs_transient /\
@@ -816,12 +829,12 @@ QED
 
 (* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
-  call_result_rel_at gobs tops ret am tx es r es' <=>
+  call_result_rel_at gobs tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
     let H = storage_trace_horizon (source_storage_trace am tx os gobs) in
     let (res, am', rqs) = call_external (SOME os) gobs am tx in
     case res of
-      INL v => ?out. tx_return_bytes tops ret tx v out /\
+      INL v => ?out. tx_return_bytes tops tx v out /\
                      frame_outcome es r es' NONE out am'.logs /\
                      effects_agree H tx (am', rqs) es es'
     | INR HaltException => frame_outcome es r es' NONE [] am'.logs /\
@@ -830,9 +843,9 @@ Definition call_result_rel_at_def:
 End
 
 Definition call_result_rel_def:
-  call_result_rel tops ret am tx es r es' <=>
+  call_result_rel tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
       (\gobs. call_storage_ok am tx os gobs ==>
-              call_result_rel_at gobs tops ret am tx es r es')
+              call_result_rel_at gobs tops am tx es r es')
 End
