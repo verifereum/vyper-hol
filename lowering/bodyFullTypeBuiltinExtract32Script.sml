@@ -1,5 +1,6 @@
 Theory bodyFullTypeBuiltinExtract32
 Ancestors
+  haltExitProj
   typeBuiltinPrereqs
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric

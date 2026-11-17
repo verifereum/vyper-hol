@@ -10,8 +10,8 @@ Proof
   simp[exprSimDefsTheory.halt_exit_def]
 QED
 
-Theorem halt_exit_INR_not_halt:
-  exc <> HaltException ==> halt_exit H cx ee (INR exc : 'a + exception) r
+Theorem halt_exit_not_halt:
+  res <> INR HaltException ==> halt_exit H cx ee (res : 'a + exception) r
 Proof
   simp[exprSimDefsTheory.halt_exit_def]
 QED
