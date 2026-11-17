@@ -244,6 +244,13 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
   `K SOME IN accepted_finalizers` by simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  `K SOME <> asm_opt_finalizer` by
+    (strip_tac >>
+     qpat_x_assum `K SOME = asm_opt_finalizer`
+       (fn th => mp_tac (Q.AP_THM
+         (Q.AP_THM th `rpolicy with rpol_final_assembly := FAP_Optimize`)
+         `[AsmOp "STOP"; AsmOp "STOP"]`)) >>
+     EVAL_TAC) >>
   drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -252,17 +259,24 @@ Proof
   `~frame_resource_starved es r es'` by
     (fs[frameOutcomeTheory.creation_resource_starved_def,
         frameOutcomeTheory.frame_resource_starved_def] >> metis_tac[]) >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
-               `dout`, `prog`, `cplan`, `am`, `tx`, `es`, `r`, `es'`] mp_tac
-    deploy_pipeline_gas_link >>
-  impl_tac
-  >- (fs[] >> rpt strip_tac >>
-      drule_all deploy_unit_execution_correct_joint >> simp[]) >>
-  strip_tac >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `es`,
-               `r`, `es'`, `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
-    e2e_deploy_correct_from_gas_link >>
-  impl_tac >- fs[] >> simp[]
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >> gvs[] >>
+  `K SOME rpolicy prog = SOME prog` by simp[] >>
+  `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
+    by metis_tac[deploy_txp_identity] >>
+  drule deploy_raw_fmp_exists >>
+  disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
+  drule_all deploy_unit_execution_correct_raw_fmp >>
+  disch_then (qspec_then `fmp` strip_assume_tac) >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+               `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`,
+               `opt_deploy_entry_state prog prog cplan tops es`, `fmp`, `r`, `es'`]
+    mp_tac deploy_pipeline_gas_link >>
+  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `assemble prog`, `runtime_bc`,
+               `rpolicy`, `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
+               `tx`, `es`, `opt_deploy_entry_state prog prog cplan tops es`,
+               `fmp`, `r`, `es'`] mp_tac e2e_deploy_correct_from_gas_link >>
+  impl_tac >- gvs[] >> simp[]
 QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
