@@ -9,6 +9,9 @@
 Theory bodyFullAppend
 Ancestors
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
+  bodyFullMemoryFrames bodyFullMemoryCopy typedCopyOriginPtrBase
+  robustCopyTransportPtr typedMemoryCopy loweringStateRelDefs
+  bodyPtrMakeArrayCopyStateFrame bodyMemAggregatePath
   stmtSimAppendStorageCompose bodyFullMemoryStage bodyFullPathHistory
   bodyFullTarget bodyAppendResolvedPre gasOutcomeFullCompose stmtLoweringMono
   loweringPosts supportedTypes exprSimSource gasShadowCompileStmtHelpers
@@ -279,23 +282,192 @@ Theorem append_storage_aggregate_stage_ready[local]:
       !i. off <= i /\ i < off+sz ==> (i IN tf.t_mem <=> i IN tn.t_mem))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all bodyFullMemoryStageTheory.body_full_memory_stage_path >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  `op_taint tf buf.buf_operand = {}` by fs[bodyPtrDefsTheory.ptr_covers_def] >>
+  drule_all bodyFullMemoryFramesTheory.body_full_alloc_buffer_path >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
+  `b < dimword (:256)` by decide_tac >>
+  `not_fresh_at sm xs /\ lookup_var xs u = SOME sw` by metis_tac[] >>
+  `!name a len. local_region cenv es.scopes u name a len <=>
+    local_region cenv es.scopes s name a len` by
+    (rw[loweringStateRelDefsTheory.local_region_def] >>
+     metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+  `!mem. mem_agree_outside tn1.t_mem u.vs_memory mem ==>
+    val_in_memory tv v (w2n sw) mem` by suspend "source" >>
+  `s.vs_alloca_next <= u.vs_alloca_next` by suspend "frontier" >>
+  `b+n <= u.vs_alloca_next` by suspend "end_bound" >>
+  `compile_copy_memory (Var root) (Var xs) n sm = ((),sb)` by metis_tac[] >>
+  `ptr_covers G1 tn1 xs u n` by metis_tac[] >>
+  `w2n ((n2w b):bytes32) = b` by simp[] >>
+  `w2n sw+n < dimword (:256) /\ w2n ((n2w b):bytes32)+n < dimword (:256)` by simp[] >>
+  `n <> 0 ==> w2n sw+n <= u.vs_alloca_next` by decide_tac >>
+  mp_tac (Q.INST [`sa` |-> `sm`, `s` |-> `u`, `tn` |-> `tn1`,
+    `G` |-> `G1`, `xd` |-> `root`, `dw` |-> `(n2w b):bytes32`]
+    (SPEC_ALL bodyFullMemoryCopyTheory.body_full_memory_copy_path)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `w2n ((n2w b):bytes32) = b`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
+    (fs[typed_copy_state_frame_def,venomStateTheory.venom_state_component_equality]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[typed_copy_state_frame_allocas_below_fmp] >>
+  `ci_mono sm sb` by metis_tac[exprLoweringPropsTheory.ci_mono_compile_copy_memory,pairTheory.SND] >>
+  `!x. not_fresh_at sm x ==> not_fresh_at sb x` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `lookup_var root t = SOME (n2w b) /\
+    FLOOKUP Gf root = FLOOKUP G1 root /\
+    op_taint tf (Var root) = op_taint tn1 (Var root)` by metis_tac[] >>
+  `ptr_covers Gf tf root t n` by metis_tac[assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame] >>
+  `op_taint tf buf.buf_operand = {}` by fs[ptr_covers_def] >>
+  `!name a len. local_region cenv es.scopes t name a len <=>
+    local_region cenv es.scopes u name a len` by
+    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x /\
+    lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tf (Var x) = op_taint tn (Var x)` by metis_tac[] >>
+  `allocas_from lo t` by (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t,Gf,tf)` by
+    (gen_tac >>
+     qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+       (qspec_then `D` (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >>
+     disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK t`,`Gf`,`tf`] mp_tac) >>
+     simp[]) >>
   `alloca_history func t` by
     (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
      goal_assum (drule_at Any) >>
      metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
-  qexistsl_tac [`t`,`root`,`b`,`Gf`,`tf`] >> asm_rewrite_tac[] >>
+  qexistsl_tac [`t`,`root`,`b`,`Gf`,`tf`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "state" >>
+  conj_tac >- suspend "ghost" >>
+  simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- suspend "frame" >> suspend "older_taint"
 QED
 
+Resume append_storage_aggregate_stage_ready[source]:
+  mp_tac (Q.SPECL [`tn.t_mem`,`tn1.t_mem`,`s.vs_memory`,`u.vs_memory`,
+    `{i | b <= i /\ i < b+n}`,`tv`,`v`,`w2n (sw:bytes32)`]
+    robust_val_in_memory_exterior_frame) >>
+  (impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+       (mp_tac o Q.SPEC `tv` o REWRITE_RULE [loweringPostsTheory.expr_val_at_def]) >>
+     simp[venomStateTheory.eval_operand_def] >> strip_tac >>
+     gvs[regions_disjoint_def] >> res_tac >> decide_tac)) >> simp[]
+QED
+
+Resume append_storage_aggregate_stage_ready[frontier]:
+  qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspec_then `cx_dead H0 cx` mp_tac) >>
+  disch_then (strip_assume_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >>
+  drule fragGasOriginTheory.gas_origin_path_erase >> strip_tac >>
+  drule fragGasModeTheory.gas_marked_path_exec >> strip_tac >>
+  drule bodyMemBopRestWordPathTheory.rest_word_path_frontier >> simp[]
+QED
+
+Resume append_storage_aggregate_stage_ready[end_bound]:
+  `alloca_inv s` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
+  qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspec_then `cx_dead H0 cx` mp_tac) >>
+  disch_then (strip_assume_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >>
+  `gas_path_mem ctx func s 0 (OK u)` by
+    (drule fragGasOriginTheory.gas_origin_path_erase >>
+     simp[fragGasModeTheory.gas_marked_path_def]) >>
+  `alloca_inv u` by metis_tac[bodyMemAggregatePathTheory.aggregate_mem_path_alloca_inv] >>
+  fs[venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.alloca_next_valid_def] >>
+  qpat_x_assum `!aid base sz. FLOOKUP u.vs_allocas aid = SOME (base,sz) ==> _`
+    (qspecl_then [`sa.cs_next_id`,`b`,`n`] mp_tac) >> simp[]
+QED
+
+Resume append_storage_aggregate_stage_ready[state]:
+  rpt strip_tac >>
+  `copy_static t = copy_static u` by
+    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+       (mp_tac o AP_TERM ``copy_static`` o CONJUNCT1 o
+        REWRITE_RULE [typed_copy_state_frame_def]) >> simp[exprSimStorageCopyTheory.copy_static_def]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    metis_tac[exprSimAllocTheory.buffer_alloc_code] >>
+  qpat_assum `typed_copy_state_frame _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE
+      [typed_copy_state_frame_def,typed_copy_frame_def]) >>
+  irule literal_copy_window_stmt_state_rel >>
+  qexistsl_tac [`sa.cs_next_id`,`b`,`n`,
+    `STRING #"%" (toString sa.cs_next_var)`,`sa`,`sm`,`u`] >>
+  rpt conj_tac >> rpt strip_tac >> simp[] >> metis_tac[]
+QED
+
+Resume append_storage_aggregate_stage_ready[ghost]:
+  rpt strip_tac >>
+  `ghost_inv_at D lo d cenv cx es G1 tn1 u` by metis_tac[] >>
+  `t.vs_call_ctx = u.vs_call_ctx /\ t.vs_immutables = u.vs_immutables /\
+   t.vs_accounts = u.vs_accounts /\ t.vs_transient = u.vs_transient /\
+   t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+       (mp_tac o AP_TERM ``\z. (z.vs_call_ctx,z.vs_immutables,z.vs_accounts,
+          z.vs_transient,z.vs_allocas,z.vs_alloca_next)`` o CONJUNCT1 o
+        REWRITE_RULE [typed_copy_state_frame_def]) >> simp[]) >>
+  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
+    (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
+    not_fresh_at sm x` by metis_tac[] >>
+  `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==>
+    not_fresh_at sm x` by metis_tac[] >>
+  irule bodyFullMemoryFramesTheory.body_full_memory_ghost_frame >>
+  simp[] >> qexistsl_tac [`G1`,`u`,`sm`,`tn1`,`{i | b <= i /\ i < b+n}`] >>
+  simp[] >> rpt conj_tac
+  >- (qx_genl_tac [`name`,`entry`,`p`,`cap`,`w`] >> strip_tac >>
+      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      `lookup_var p s = SOME w` by metis_tac[] >>
+      `!name a len. local_region cenv es.scopes s name a len ==>
+        regions_disjoint b n a len` by
+        (qpat_assum `!name a len. local_region cenv es.scopes u name a len ==> _` mp_tac >>
+         simp[]) >>
+      drule_all exprSimPtrLiteralBufferTheory.literal_ptr_local_footprint_exterior >> simp[])
+  >- (qx_gen_tac `i` >> strip_tac >>
+      qpat_assum `typed_copy_state_frame _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE
+          [typed_copy_state_frame_def,typed_copy_frame_def]) >>
+      qpat_assum `!a len. a+len <= b \/ b+n <= a ==> _`
+        (qspecl_then [`i`,`1`] mp_tac) >>
+      (impl_tac >-
+        (irule (DECIDE ``!b i n:num.
+          ~(b <= i /\ i < b+n) ==> i+1 <= b \/ b+n <= i``) >> simp[])) >> simp[])
+  >- (qx_gen_tac `i` >> strip_tac >>
+      `~(b <= i /\ i < b+n)` by
+        (irule (DECIDE ``!i lo b n:num.
+          i < lo /\ lo <= b ==> ~(b <= i /\ i < b+n)``) >>
+         qexists_tac `lo` >> simp[]) >>
+      qpat_assum `!i. _ ==> (i IN tf.t_mem <=> i IN tn1.t_mem)`
+        (qspec_then `i` mp_tac) >>
+      qpat_assum `!i. _ ==> (i IN tn1.t_mem <=> i IN tn.t_mem)`
+        (qspec_then `i` mp_tac) >> simp[])
+  >- (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE
+          [typed_copy_state_frame_def,typed_copy_frame_def]) >>
+      qpat_assum `!a len. a+len <= b \/ b+n <= a ==> _`
+        (qspecl_then [`0`,`lo`] mp_tac) >>
+      (impl_tac >- simp[]) >> simp[]) >>
+  fs[typed_copy_state_frame_def,venomStateTheory.venom_state_component_equality,
+    ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
+QED
+
 Resume append_storage_aggregate_stage_ready[frame]:
-  cheat
+  irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
+  simp[] >> reverse conj_tac
+  >- (qexistsl_tac [`H0`,`ctx`,`cx`,`func`] >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `regions_disjoint b n off sz` by metis_tac[] >>
+  fs[typed_copy_state_frame_def,typed_copy_frame_def,regions_disjoint_def] >>
+  metis_tac[]
 QED
 
 Resume append_storage_aggregate_stage_ready[older_taint]:
-  cheat
+  rpt strip_tac >>
+  `regions_disjoint b n off sz` by metis_tac[] >>
+  `~(b <= i /\ i < b+n)` by (fs[regions_disjoint_def] >> decide_tac) >>
+  metis_tac[]
 QED
 
 Finalise append_storage_aggregate_stage_ready[local]
