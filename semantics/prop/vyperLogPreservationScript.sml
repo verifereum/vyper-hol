@@ -243,7 +243,7 @@ Theorem log_monad_take[local]:
   log_monad (take_call_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `call_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. call_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_call_outcome_def]
 QED
 
@@ -251,7 +251,7 @@ Theorem log_monad_take_delegate[local]:
   log_monad (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_delegate_outcome_def]
 QED
 
