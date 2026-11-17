@@ -62,10 +62,15 @@ QED
 
 
 Theorem dft_code_end_stage_contract_gas:
-  o1_stage_contract_gas rpolicy D (EL 7 o1_fn_passes)
-    (o1_walk_view rpolicy 7) (o1_pre 7)
-    (\C s. o1_inv D 7 C s /\ code_end_offset_ok (raw_reachable s) C)
-    (\C s. o1_inv D 8 C s /\ code_end_offset_ok (raw_reachable s) C)
+  !C C' vs'.
+    ctx_pass_stage rpolicy (EL 7 o1_fn_passes)
+      (o1_walk_view rpolicy 7) C C' /\
+    o1_pre 7 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_run_state_ok vs' ==>
+    ?vs. gas_variant vs vs' /\
+      (o1_inv D 7 C vs /\ code_end_offset_ok (raw_reachable vs) C ==>
+       ctx_sim_fuel (pass_fuel (EL 7 o1_fn_passes) C') D C C' vs vs' /\
+       o1_inv D 8 C' vs' /\ code_end_offset_ok (raw_reachable vs') C')
 Proof
   simp[o1_stage_contract_gas_def, o1_inv_def, o1_ssa_inv_def, pass_fuel_def] >>
   rpt strip_tac >> rename1 `o1_run_state_ok vs'` >>

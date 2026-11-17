@@ -48,40 +48,45 @@ Definition ptr_activation_read_seed_def:
 End
 
 Theorem ptr_activation_selected_read_seed:
-  ptr_activation_ready P site f /\
+  ptr_activation_ready dyn P site f /\
   MEM (Var v) f.cf_inst.inst_operands /\
   (inst_read_op f.cf_inst = SOME (Var v) \/ f.cf_inst.inst_opcode = INVOKE) /\
   FLOOKUP f.cf_prov v = SOME site ==>
-  ptr_activation_read_seed mems site f \/ MEM (SOME site) f.cf_params
+  ptr_activation_read_seed mems site f \/ MEM (SOME site) f.cf_params \/
+  dyn <= FST site
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `ptr_activation_ready P site f` mp_tac >>
+  qpat_x_assum `ptr_activation_ready dyn P site f` mp_tac >>
   simp[ptr_activation_ready_def] >> strip_tac >>
   drule_all ptr_selected_origin >> strip_tac
   >- (disj1_tac >> simp[ptr_activation_read_seed_def] >>
       qexists `aid` >> simp[] >>
-      irule ptr_production_selected_read_seed >> simp[] >> metis_tac[]) >>
-  disj2_tac >> simp[MEM_EL] >> qexists `w2n idx` >> simp[]
+      irule ptr_production_selected_read_seed >> simp[] >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >> simp[MEM_EL] >> qexists `w2n idx` >> simp[]) >>
+  simp[]
 QED
 
 Theorem ptr_ancestry_selected_read_seed:
   !stk f v.
-  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready P site f /\
-  EVERY (ptr_activation_ready P site) stk /\
+  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready dyn P site f /\
+  EVERY (ptr_activation_ready dyn P site) stk /\
   MEM (Var v) f.cf_inst.inst_operands /\
   (inst_read_op f.cf_inst = SOME (Var v) \/ f.cf_inst.inst_opcode = INVOKE) /\
   FLOOKUP f.cf_prov v = SOME site ==>
   ptr_activation_read_seed mems site f \/
-  ?n w. n < LENGTH stk /\
+  (?n w. n < LENGTH stk /\
     MEM (Var w) (EL n stk).cf_inst.inst_operands /\
     FLOOKUP (EL n stk).cf_prov w = SOME site /\
-    ptr_activation_read_seed mems site (EL n stk)
+    ptr_activation_read_seed mems site (EL n stk)) \/
+  dyn <= FST site
 Proof
-  Induct >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
-  >- (drule_all ptr_activation_selected_read_seed >>
-      gvs[ptr_call_ancestry_def]) >>
-  drule_all ptr_activation_selected_read_seed >>
-  disch_then (qspec_then `mems` strip_assume_tac) >- simp[] >>
+  Induct >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  (Cases_on `dyn <= FST site` >- simp[]) >>
+  (`ptr_activation_read_seed mems site f \/ MEM (SOME site) f.cf_params` by
+     (drule_all ptr_activation_selected_read_seed >>
+      disch_then (qspec_then `mems` mp_tac) >> gvs[])) >>
+  pop_assum strip_assume_tac >> TRY (gvs[] >> NO_TAC)
+  >- gvs[ptr_call_ancestry_def] >>
   `?w. MEM (Var w) h.cf_inst.inst_operands /\ FLOOKUP h.cf_prov w = SOME site` by
     metis_tac[ptr_call_ancestry_import] >>
   `ptr_call_ancestry h.cf_params stk /\ h.cf_inst.inst_opcode = INVOKE` by
@@ -89,13 +94,14 @@ Proof
   qpat_x_assum `EVERY _ (h::stk)` mp_tac >>
   simp[listTheory.EVERY_DEF] >> strip_tac >>
   first_x_assum (qspecl_then [`h`,`w`] mp_tac) >> simp[] >> strip_tac
-  >- (disj2_tac >> qexistsl [`0`,`w`] >> simp[]) >>
-  disj2_tac >> qexistsl [`SUC n`,`w'`] >> simp[]
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`0`,`w`] >> simp[])
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`SUC n`,`w'`] >> simp[]) >>
+  gvs[]
 QED
 
 Theorem ptr_frame_selected_read_seed:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs0 /\
   EVERY wf_function ctx.ctx_functions /\
   EVERY all_reachable ctx.ctx_functions /\
   EVERY ssa_form ctx.ctx_functions /\
@@ -112,7 +118,8 @@ Theorem ptr_frame_selected_read_seed:
     FLOOKUP (EL n stk).cf_prov w = SOME site /\
     ml_read_gen (Allocation aid)
       (bp_analyze_fuel (concretize_memloc_fuel (EL n stk).cf_fn)
-        (cfg_analyze (EL n stk).cf_fn) (EL n stk).cf_fn) mems (EL n stk).cf_inst)
+        (cfg_analyze (EL n stk).cf_fn) (EL n stk).cf_fn) mems (EL n stk).cf_inst) \/
+  dyn_floor ctx vs0 <= FST site
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_frame_table_support_invariant >> strip_tac >>
@@ -120,7 +127,7 @@ Proof
   drule ptr_frame_call_ancestry >> strip_tac >>
   qspecl_then [`stk`, `<| cf_fn := fn; cf_inst := inst; cf_state := s;
     cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>`, `v`]
-    mp_tac ptr_ancestry_selected_read_seed >>
+    mp_tac (Q.INST [`dyn` |-> `dyn_floor ctx vs0`] ptr_ancestry_selected_read_seed) >>
   simp[ptr_activation_ready_def, ptr_activation_read_seed_def] >>
   (impl_tac >- (gvs[EVERY_MEM, ptr_activation_ready_def] >> metis_tac[])) >>
   metis_tac[]

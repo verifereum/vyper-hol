@@ -50,8 +50,9 @@ Theorem o1_contract_lower_dload =
 Theorem o1_contract_concretize_mem_loc =
   o1ContractConcretizeTheory.o1_contract_concretize_mem_loc
 
-(* FmpLowering reads callee signatures (the walk view): the static
-   invariant becomes the lowered one. *)
+(* FmpLowering reads callee signatures (the walk view), and its input
+   runs at a raw free-memory pointer: the static invariant becomes the
+   lowered one. *)
 Theorem o1_contract_fmp_lowering =
   o1ContractFmpLoweringTheory.o1_contract_fmp_lowering
 

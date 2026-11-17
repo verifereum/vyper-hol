@@ -1715,6 +1715,8 @@ Resume pop_vv_full_of_target[memory_suffix]:
   >- (PURE_REWRITE_TAC [exprSimVVFrameTheory.vv_post_inst_idx] >>
       qpat_assum `fin = mid with scopes := updated_scopes`
         (fn th => PURE_REWRITE_TAC [th]) >>
+      qpat_assum `Abbrev (result = _)`
+        (fn th => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
       irule (pop_memory_live_suffix_post |>
         Q.INST [`e` |-> `Pop ann bt`] |>
         SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
@@ -2486,7 +2488,8 @@ Resume pop_vv_full_of_target[storage_vv]:
   PURE_REWRITE_TAC [exprSimVVFrameTheory.vv_post_inst_idx] >>
   irule nested_pop_suffix_vv_post >>
   qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[Abbr `result`] >> qexists_tac `last_slot` >> simp[]
+  simp[Abbr `result`, vv_place_ptr_def, contextTheory.mk_ptr_def,
+    slot_loc_def, eval_operand_def]
 QED
 
 Resume pop_vv_full_of_target[storage_history]:

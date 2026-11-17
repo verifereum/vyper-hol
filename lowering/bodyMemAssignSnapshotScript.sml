@@ -259,18 +259,19 @@ Theorem snapshot_stack_word_post[local]:
     read_result cx tv ee = (INL v, ee) /\
     expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
     u.vs_memory = s.vs_memory ==>
-    vv_post H ctx func cenv cx e es sa sb s0 ee tv
+    vv_post H ctx func cenv cx e es sa sb s0 ee (Value v)
       (StackValue (expr_type e) op) u /\
-    vv_own cenv cx (expr_type e) sm sb ee tv
+    vv_own cenv cx (expr_type e) sm sb ee (Value v)
       (StackValue (expr_type e) op) u /\
     pure_frame cenv func ee sm s u /\
-    vv_store_bound cx (expr_type e) (expr_type e) ee tv
+    vv_store_bound cx (expr_type e) (expr_type e) ee (Value v)
       (StackValue (expr_type e) op) u
 Proof
   rpt strip_tac >>
   gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
       expr_post_def, expr_val_rel_def, expr_val_own_def,
-      pure_frame_def, vv_store_bound_stack_word] >> metis_tac[]
+      pure_frame_def, vv_store_bound_stack_word, read_result_def,
+      return_def] >> metis_tac[]
 QED
 
 Theorem snapshot_word_counted_mem[local]:
@@ -305,10 +306,10 @@ Theorem snapshot_word_counted_mem[local]:
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_marked_path T ctx func s 0 (OK u) /\
-        vv_post H ctx func cenv cx e es sa sb s0 ee tv saved u /\
-        vv_own cenv cx (expr_type e) sm sb ee tv saved u /\
+        vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) saved u /\
+        vv_own cenv cx (expr_type e) sm sb ee (Value v) saved u /\
         pure_frame cenv func ee sm s u /\
-        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv
+        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v)
           saved u /\
         alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
         u.vs_current_bb = sb.cs_current_bb /\
@@ -357,7 +358,7 @@ Theorem snapshot_pointer_contract_cong[local]:
    vv_store_bound cx t lt ee raw (LocatedValue ty q) z)
 Proof
   strip_tac >> simp[vv_post_def, vv_holds_def, vv_at_def,
-    vv_own_def, vv_store_bound_def, vv_operand_def]
+    vv_own_def, vv_store_bound_def, vv_operand_def, vv_place_ptr_def]
 QED
 
 Theorem snapshot_memory_pointer_contract[local]:
@@ -412,14 +413,14 @@ Theorem snapshot_store_suffix_mem[local]:
   z.vs_current_bb = sc.cs_current_bb /\
   z.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   ?u. gas_path_mem ctx func z 0 (OK u) /\
-    vv_post H ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
       (LocatedValue (lowered_value_type ce e)
         <|ptr_location := LocMemory; ptr_operand := buf.buf_operand|>) u /\
-    vv_own ce cx (expr_type e) sm sb ee raw
+    vv_own ce cx (expr_type e) sm sb ee (Value v)
       (LocatedValue (lowered_value_type ce e)
         <|ptr_location := LocMemory; ptr_operand := buf.buf_operand|>) u /\
     pure_frame ce func ee sm z u /\
-    vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw
+    vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee (Value v)
       (LocatedValue (lowered_value_type ce e)
         <|ptr_location := LocMemory; ptr_operand := buf.buf_operand|>) u /\
     alloca_history func u /\ z.vs_alloca_next <= u.vs_alloca_next /\
@@ -434,6 +435,7 @@ Proof
   drule_all buffer_alloc_code >> strip_tac >>
   irule snapshot_store_result_room_mem >>
   simp[] >>
+  conj_tac >- (qexists_tac `raw` >> simp[]) >>
   qexists_tac `mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_size lt))]
     [STRING #"%" (toString sm.cs_next_var)]` >>
   qexistsl_tac [`sc`, `src`, `w`] >>
@@ -559,10 +561,10 @@ Theorem snapshot_nonword_counted_mem:
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_marked_path T ctx func s 0 (OK u) /\
-        vv_post H ctx func cenv cx e es sa sb s0 ee tv saved u /\
-        vv_own cenv cx (expr_type e) sm sb ee tv saved u /\
+        vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) saved u /\
+        vv_own cenv cx (expr_type e) sm sb ee (Value v) saved u /\
         pure_frame cenv func ee sm s u /\
-        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv saved u /\
+        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v) saved u /\
         alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -663,10 +665,10 @@ Theorem snapshot_vv_counted_mem:
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_marked_path T ctx func s 0 (OK u) /\
-        vv_post H ctx func cenv cx e es sa sb s0 ee tv saved u /\
-        vv_own cenv cx (expr_type e) sm sb ee tv saved u /\
+        vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) saved u /\
+        vv_own cenv cx (expr_type e) sm sb ee (Value v) saved u /\
         pure_frame cenv func ee sm s u /\
-        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv
+        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v)
           saved u /\
         alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
         u.vs_current_bb = sb.cs_current_bb /\
@@ -674,14 +676,14 @@ Theorem snapshot_vv_counted_mem:
         u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
         u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx /\
         (!H'. vv_post H' ctx func cenv cx e es sa sm s0 ee tv vv s ==>
-          vv_post H' ctx func cenv cx e es sa sb s0 ee tv saved u)
+          vv_post H' ctx func cenv cx e es sa sb s0 ee (Value v) saved u)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `?u. gas_marked_path T ctx func s 0 (OK u) /\
-        vv_post H ctx func cenv cx e es sa sb s0 ee tv saved u /\
-        vv_own cenv cx (expr_type e) sm sb ee tv saved u /\
+        vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) saved u /\
+        vv_own cenv cx (expr_type e) sm sb ee (Value v) saved u /\
         pure_frame cenv func ee sm s u /\
-        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv
+        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v)
           saved u /\
         alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
         u.vs_current_bb = sb.cs_current_bb /\

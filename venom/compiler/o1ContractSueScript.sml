@@ -519,12 +519,13 @@ Theorem sue_assign_observations:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp /\
-   t.vs_gas_readings = s.vs_gas_readings` by
+   t.vs_gas_readings = s.vs_gas_readings /\
+   t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp` by
     (fs[sue_state_rel_def] >>
      drule stateFrameTheory.execution_frame_projection >>
      simp[stateFrameTheory.execution_frame_def]) >>
-  simp[mem_corr_def, call_corr_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mem_corr_def, call_corr_def, unitMemInvTheory.dalloca_no_wrap_def,
+       unitMemInvTheory.inst_mem_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def]
 QED
@@ -655,11 +656,15 @@ Theorem sue_rewritten_mem_observation:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp /\
    t.vs_gas_readings = s.vs_gas_readings /\
+   t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp /\
    s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
     (fs[stateFrameTheory.execution_frame_def,
         venomStateTheory.venom_state_component_equality]) >>
+  `dalloca_no_wrap inst s ==>
+   dalloca_no_wrap (inst with inst_operands := ops) t` by
+    (simp[unitMemInvTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
+     gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]) >>
   simp[mem_corr_def] >> disj2_tac >>
   Cases_on `inst.inst_opcode = DRET`
   >- (irule sue_rewritten_dret_ranges >> simp[]) >>
@@ -1058,7 +1063,8 @@ Proof
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>
-  irule sue_stage_mem_inv >> metis_tac[]
+  irule sue_stage_mem_inv_rf >>
+  metis_tac[mem_corr_closed_rf_lowered_mem_fact]
 QED
 
 Theorem sue_stage_walk:

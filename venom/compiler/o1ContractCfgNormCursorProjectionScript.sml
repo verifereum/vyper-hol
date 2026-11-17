@@ -36,7 +36,8 @@ Proof
     (drule_all supply_split_index_shape >> gvs[] >> metis_tac[]) >>
   `inst_mem_ranges (EL v.vs_inst_idx split.bb_instructions) v = []` by
     (irule supply_inst_mem_ranges_empty >> gvs[]) >>
-  gvs[mem_corr_def, call_corr_def, supply_state_agree_def, execution_frame_def]
+  gvs[mem_corr_def, call_corr_def, supply_state_agree_def, execution_frame_def,
+      dalloca_no_wrap_def]
 QED
 
 Theorem cfg_norm_cursors_projection:

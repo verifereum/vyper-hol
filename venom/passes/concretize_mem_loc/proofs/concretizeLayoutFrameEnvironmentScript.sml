@@ -25,12 +25,13 @@ Proof
 QED
 
 Theorem relocation_environment_adopt_return_fmp:
-  relocation_env s t /\ relocation_reader_context s t ==>
+  relocation_env s t /\ relocation_reader_context s t /\
+  ir.iret_adopt_fmp = jr.iret_adopt_fmp ==>
   relocation_env (adopt_return_fmp ir s) (adopt_return_fmp jr t) /\
   relocation_reader_context (adopt_return_fmp ir s) (adopt_return_fmp jr t)
 Proof
-  Cases_on `ir.iret_adopt_fmp` >> Cases_on `jr.iret_adopt_fmp` >>
-  simp[adopt_return_fmp_def, relocation_env_def, relocation_reader_context_def]
+  rpt strip_tac >> gvs[adopt_return_fmp_def] >> Cases_on `jr.iret_adopt_fmp` >>
+  gvs[relocation_env_def, relocation_reader_context_def]
 QED
 
 Theorem relocation_environment_fold_outputs[local]:
@@ -66,6 +67,7 @@ QED
 Theorem relocation_environment_return_plumbing:
   relocation_env s t /\ relocation_reader_context s t /\
   sc.vs_gas_readings = tc.vs_gas_readings /\
+  ir.iret_adopt_fmp = jr.iret_adopt_fmp /\
   bind_outputs outs vals (adopt_return_fmp ir (merge_callee_state s sc)) =
     SOME post /\ LENGTH outs' = LENGTH vals' ==>
   ?post'.
@@ -75,7 +77,6 @@ Theorem relocation_environment_return_plumbing:
 Proof
   rpt strip_tac >>
   drule_all relocation_environment_merge_callee_state >> strip_tac >>
-  drule_all relocation_environment_adopt_return_fmp >>
-  disch_then (qspecl_then [`jr`, `ir`] strip_assume_tac) >>
+  drule_all relocation_environment_adopt_return_fmp >> strip_tac >>
   drule_all relocation_environment_bind_outputs >> simp[]
 QED

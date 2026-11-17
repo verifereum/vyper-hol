@@ -39,6 +39,7 @@ Proof
                    venomStateTheory.lookup_var_def, venomStateTheory.jump_to_def]) >>
   Cases_on `vv` >>
   simp[loweringPostsTheory.vv_post_def,
+       loweringPostsTheory.vv_place_ptr_def,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
        loweringPostsTheory.vv_own_def, loweringPostsTheory.expr_val_own_def,
