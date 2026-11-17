@@ -1990,7 +1990,9 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE] >>
   `sg.vs_outcomes = []` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
   qexists_tac `halt_state (set_returndata [] sg)` >>
-  simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+  simp[Once run_inst_seq_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[mk_inst_def, step_inst_base_def,
        eval_operand_def, exec_ext_call_def]
 QED
 
@@ -2039,7 +2041,8 @@ Proof
      ((write_memory_with_expansion (w2n wo) [] sg)
        with <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>))` by
     (qpat_x_assum `venom_call_request _ _ _ _ _ _ = _` kall_tac >>
-     irule computed_static_exec_failure >> simp[] >> metis_tac[]) >>
+     irule EQ_TRANS >> irule_at Any computed_static_exec_failure >>
+     simp[] >> metis_tac[]) >>
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -2311,6 +2314,9 @@ Proof
   `computed_precompile (venom_call_request s target 0w wi insz T)` by
     simp[computed_precompile_def, venom_call_request_def] >>
   drule_all computed_suffix_ok_outcomes >> disch_tac >>
+  `s.vs_outcomes <> []` by
+    (qpat_assum `?co rest. s.vs_outcomes = co::rest /\ co.co_success`
+       strip_assume_tac >> simp[]) >>
   drule_all computed_suffix_success >> strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
