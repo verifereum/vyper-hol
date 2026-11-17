@@ -168,7 +168,7 @@ Proof
          qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ z.vs_memory = _` irule >>
          decide_tac) >>
      conj_tac
-     >- (qexists_tac `raw` >> simp[ptr_fupdcanon]) >>
+     >- (qexists_tac `raw` >> fs[vv_holds_def, vv_at_def]) >>
      qexistsl_tac [`sc`, `src`] >> simp[]) >>
   qexists_tac `z` >> simp[] >> conj_tac
   >- (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
