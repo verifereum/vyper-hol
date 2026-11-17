@@ -460,10 +460,24 @@ Proof
      qexistsl_tac [`s`, `sa`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
   `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[] >>
-     conj_tac >- metis_tac[not_fresh_at_mono] >>
      conj_tac
-     >- (Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
-     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     >- (rpt strip_tac >>
+         `not_fresh_at sa q` by
+           (qpat_x_assum `local_ptrs_reserved ce sa`
+              (strip_assume_tac o PURE_REWRITE_RULE[local_ptrs_reserved_def]) >>
+            qpat_x_assum `!n1 n2 p sz1 sz2. _`
+              (qspecl_then [`id`, `id`, `q`, `sz`, `sz`] mp_tac) >> simp[]) >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s`
+           (qspec_then `q` mp_tac) >> simp[]) >>
+     conj_tac
+     >- (rpt strip_tac >>
+         `not_fresh_at sa x` by
+           (irule not_fresh_at_mono >> qexists_tac `origin` >> simp[]) >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s`
+           (qspec_then `x` mp_tac) >> simp[]) >>
+     Cases_on `vv_operand vv` >> simp[eval_operand_def] >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` irule >>
+     qpat_x_assum `!x. vv_operand vv = Var x ==> not_fresh_at sa x` irule >> simp[]) >>
   `origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id` by decide_tac >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var] >>
   qpat_assum `vv_post H _ _ _ _ _ es origin sm s0 _ _ _ u`

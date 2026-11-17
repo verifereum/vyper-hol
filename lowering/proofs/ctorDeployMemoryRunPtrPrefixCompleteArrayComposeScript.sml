@@ -253,7 +253,9 @@ Proof
      (impl_tac >-
        (asm_simp_tac std_ss [SUBSET_REFL] >> rpt strip_tac >> fs[])) >>
      disch_then (qx_choosel_then [`actual`,`Hout`,`qout`,`A`] strip_assume_tac) >>
-     qexistsl [`actual`,`Hout`,`qout`,`A`] >> fs[]) >>
+     qexistsl [`actual`,`Hout`,`qout`,`A`] >> asm_simp_tac std_ss [] >>
+     qpat_x_assum `checked ==> _ /\ _ /\ !D explicit. _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp_tac std_ss [] >> metis_tac[]) >>
   qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>

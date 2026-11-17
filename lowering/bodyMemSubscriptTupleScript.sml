@@ -162,7 +162,7 @@ Proof
   `vv_place_ptr cenv cx ee u tv'
      (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv)))` by
     (irule tuple_place_ptr >>
-     qexistsl_tac [`env`, `ee`, `tv`, `tys`, `tvs`, `k`, `ee`, `w`] >>
+     qexistsl_tac [`ee`, `env`, `k`, `tv`, `ee`, `tvs`, `tys`, `w`] >>
      simp[]) >>
   `vv_post H ctx func cenv cx
     (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0 ee tv'

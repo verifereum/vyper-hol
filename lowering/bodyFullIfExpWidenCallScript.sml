@@ -293,6 +293,16 @@ Proof
     (Cases_on `vv` >> fs[vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
     (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `?v. read_result cx tv ee = (INL v,ee)` by
+    (Cases_on `vv` >- gvs[vv_holds_def] >>
+     rename1 `LocatedValue result_ty result_ptr` >>
+     gvs[vv_holds_def] >>
+     Cases_on `result_ptr.ptr_location` >> gvs[storage_holds_def, immutable_holds_def] >>
+     metis_tac[]) >>
+  `vv_place_ptr cenv cx ee u tv vv` by
+    (irule vv_place_ptr_region_frame >> conj_tac
+     >- (qexists_tac `v` >> asm_rewrite_tac[]) >>
+     qexists_tac `s` >> asm_rewrite_tac[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 

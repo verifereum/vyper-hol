@@ -129,6 +129,17 @@ Proof
   `vv_at cenv cx (expr_type e) sa sd ee r (LocatedValue ann p) z` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`,`sc`] >>
      gvs[vv_post_def, contextTheory.vv_operand_def]) >>
+  `vv_place_ptr cenv cx ee z r (LocatedValue ann p)` by
+    (`vv_place_ptr cenv cx ee s r (LocatedValue ann p)` by fs[vv_post_def] >>
+     irule vv_place_ptr_vars_frame >> qexists_tac `s` >>
+     simp[contextTheory.vv_operand_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!x w. not_fresh_at sc x /\ _ ==> _` irule >> simp[] >>
+     irule not_fresh_at_mono >> qexists_tac `sa` >> simp[] >>
+     qpat_x_assum `local_ptrs_reserved cenv sa`
+       (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+     disch_then (mp_tac o CONJUNCT1 o CONJUNCT2) >>
+     disch_then (qspecl_then [`id`,`id`,`q`,`sz`,`sz`] mp_tac) >> simp[]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
     (strip_tac >>
      `pure_frame cenv func es sa s0 s` by fs[vv_post_def] >>

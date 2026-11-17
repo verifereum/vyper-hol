@@ -64,12 +64,12 @@ Theorem snapshot_store_result_room_mem:
     aid < sa.cs_next_id ==>
     regions_disjoint (w2n d) (type_memory_size ltv) off len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    vv_post H ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
-    vv_own ce cx (expr_type e) sm sb ee raw
+    vv_own ce cx (expr_type e) sm sb ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     pure_frame ce func ee sm s z /\
-    vv_store_bound cx (expr_type e) lt ee raw
+    vv_store_bound cx (expr_type e) lt ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = sb.cs_current_bb /\
@@ -94,16 +94,28 @@ Proof
          simp[regions_disjoint_def] >> rpt strip_tac >>
          qpat_x_assum `!n b len. local_region _ _ _ _ _ _ ==> _` drule >>
          simp[regions_disjoint_def]) >>
-      `vv_post H ctx func ce cx e es sa sc s0 ee raw
+      `vv_post H ctx func ce cx e es sa sc s0 ee (Value v)
          (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) s /\
        pure_frame ce func ee sm s s` by
         (irule snapshot_store_post_frame >> simp[] >>
          conj_tac
          >- (qexistsl_tac [`w2n d`, `inst`, `type_memory_size ltv`] >>
              simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-         metis_tac[]) >>
-      qexists_tac `s` >> simp[cj 1 gas_path_mem_rules]) >>
+         conj_tac
+         >- (qexists_tac `raw` >>
+             qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+             qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+             simp[vv_holds_def, vv_at_def]) >>
+         qexistsl_tac [`sc`, `src`] >> simp[]) >>
+      qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >> conj_tac
+      >- (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+          simp[vv_own_def, vyperStateTheory.read_result_def,
+               vyperStateTheory.return_def]) >>
+      qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_store_bound_def, vyperStateTheory.read_result_def,
+           vyperStateTheory.return_def]) >>
   irule snapshot_store_result_mem >> simp[] >>
+  conj_tac >- (qexists_tac `raw` >> simp[]) >>
   qexistsl_tac [`inst`, `sc`, `src`, `w`] >>
   simp[arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED

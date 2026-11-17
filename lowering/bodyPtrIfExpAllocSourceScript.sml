@@ -3,7 +3,7 @@ Ancestors
   exprSimVVFrame exprSimProps exprSimDefs loweringPosts exprLoweringProps
   compileEnv loweringStateRelDefs venomState finite_map exprLowering context
   bodyPtrIfExpAllocFrame allocationPtr exprSimAlloc loweringHalt fragExec
-  bodyPtrDefs decoderGhostFramePtr ptrDiscipline venomInst venomMemDefs vyperState
+  bodyPtrDefs decoderGhostFramePtr ptrDiscipline venomInst venomMemDefs
 
 (* Allocation extends the site map, unlike the variable-only frame. *)
 Theorem vv_at_alloc_map_frame:
@@ -55,23 +55,16 @@ Proof
   `~expr_has_effect e ==> pure_frame cenv fn es sa s0 q` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >>
      gvs[vv_post_def]) >>
+  `?v. read_result cx raw es' = (INL v,es')` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def] >> strip_tac >>
+     Cases_on `vv` >> gvs[vv_holds_def] >>
+     BasicProvers.every_case_tac >>
+     gvs[storage_holds_def, immutable_holds_def]) >>
   `vv_place_ptr cenv cx es' q raw vv` by
-    (Cases_on `vv` >> simp[vv_place_ptr_def] >>
-     Cases_on `raw` >> gvs[vv_post_def, vv_place_ptr_def, vv_operand_def] >>
-     BasicProvers.every_case_tac >> gvs[] >>
-     gvs[vv_holds_def] >>
-     rename1 `read_result cx (PlaceR (MemoryPlace name path)) es' = _` >>
-     Cases_on `lookup_scopes name es'.scopes` >>
-     gvs[read_result_def, read_place_def, get_scopes_def, bind_def,
-         lift_option_type_def, return_def, raise_def] >>
-     rename1 `lookup_var base_var q = SOME base_word` >>
-     `?ptr_size. local_region cenv es'.scopes s name (w2n base_word) ptr_size` by
-       (simp[local_region_def] >> metis_tac[]) >>
-     `?region_size. local_region cenv es'.scopes q name (w2n base_word) region_size` by
-       metis_tac[] >>
-     qpat_x_assum `!n b sz. local_region _ _ _ n b sz <=> _` kall_tac >>
-     qpat_x_assum `local_region _ _ q name _ _` mp_tac >>
-     simp[local_region_def, wordsTheory.w2n_11]) >>
+    (irule vv_place_ptr_region_frame >> conj_tac >- metis_tac[] >>
+     qexists_tac `s` >>
+     gvs[vv_post_def]) >>
   gvs[vv_post_def] >>
   conj_tac
   >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
