@@ -70,10 +70,45 @@ Proof
      simp[terminates_def, residual_result_def, lift_result_def] >> strip_tac >> gvs[]) >>
   qpat_assum `!rest. run_blocks _ _ _ _ = _ /\ _` (qspec_then `tail` strip_assume_tac) >>
   gvs[gas_merge_callee, gas_adopt_return, gas_bind_outputs, AllCaseEqs()] >>
-  `x.vs_gas_readings = (adopt_return_fmp ir (merge_callee_state u out)).vs_gas_readings` by
-    metis_tac[gas_bind_outputs_readings] >>
   simp[Once gas_events_defs, Once trace_defs] >>
-  conj_tac >- metis_tac[] >>
   gen_tac >> simp[Once run_defs, Once gas_events_defs, gas_merge_callee,
     gas_adopt_return, gas_bind_outputs]
+QED
+
+Theorem dft_packet_return_invoke_replay:
+  LIST_REL (\f g. g = dft_fn f) C7.ctx_functions C8.ctx_functions /\
+  LIST_REL dft_fn_rel C7.ctx_functions C8.ctx_functions /\
+  c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
+  lookup_function nm C8.ctx_functions = SOME ctf /\
+  eval_operands ops b0 = SOME args /\ setup_callee ctf args b0 = SOME entry /\
+  (!op. MEM op c.inst_operands ==> eval_operand op u = eval_operand op b0) /\
+  (!callee argv. setup_callee callee argv (u with vs_gas_readings := b0.vs_gas_readings) =
+    setup_callee callee argv b0) /\
+  LENGTH ks = LENGTH gs /\
+  (!csf. lookup_function nm C7.ctx_functions = SOME csf /\
+    ctf = dft_fn csf /\ dft_fn_rel csf ctf ==>
+    !tail.
+      (?extra. es = gas_events_blocks f C7 csf
+        (entry with vs_gas_readings := gs ++ tail) ++ extra) /\
+      (terminates (run_blocks f C7 csf (entry with vs_gas_readings := gs ++ tail)) ==>
+        residual_result tail (IntRet ir out)
+          (run_blocks f C7 csf (entry with vs_gas_readings := gs ++ tail)) /\
+        gas_events_blocks f C7 csf (entry with vs_gas_readings := gs ++ tail) = es) /\
+      (!ret v. run_blocks f C7 csf (entry with vs_gas_readings := gs ++ tail) = IntRet ret v ==>
+        trace_gas (trace_blocks ((e,c.inst_id)::a) e f C7 csf
+          (entry with vs_gas_readings := gs ++ tail)) = ZIP (ks,gs))) ==>
+  (!tail. ?extra. es = gas_events_step f C7 owner c
+    (u with vs_gas_readings := gs ++ tail) ++ extra) /\
+  (!tail v. step_inst f C7 c (u with vs_gas_readings := gs ++ tail) = OK v ==>
+    gas_events_step f C7 owner c (u with vs_gas_readings := gs ++ tail) = es /\
+    v.vs_gas_readings = tail /\
+    trace_gas (trace_step a e f C7 fn c (u with vs_gas_readings := gs ++ tail)) = ZIP (ks,gs) /\
+    (!tail'. step_inst f C7 c (u with vs_gas_readings := gs ++ tail') =
+      OK (v with vs_gas_readings := tail') /\
+      gas_events_step f C7 owner c (u with vs_gas_readings := gs ++ tail') = es))
+Proof
+  strip_tac >> drule_all dft_packet_callee_alignment >> strip_tac >>
+  irule return_invoke_aligned >>
+  simp[] >> qexistsl [`args`, `entry`, `ir`, `out`] >>
+  simp[gas_setup_callee]
 QED
