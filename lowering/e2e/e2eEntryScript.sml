@@ -162,3 +162,14 @@ Proof
       entry_venom_state_created_in_tx,
       asm_pc_to_offset_zero, context_memory_rel_def]
 QED
+
+(* es's entry state with prog's code and labels: prog's code followed by
+   the section es's code has after prog'. *)
+Definition opt_entry_state_def:
+  opt_entry_state prog prog' cplan es =
+    entry_venom_state prog cplan es with
+      <| vs_code := assemble prog ++
+           DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code;
+         vs_data_section :=
+           DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code |>
+End

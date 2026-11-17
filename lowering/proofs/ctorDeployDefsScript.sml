@@ -131,6 +131,13 @@ Definition deploy_entry_state_def:
     entry_venom_state prog cplan es with vs_alloca_next := imm_len tops
 End
 
+(* deploy_entry_state with prog's layout over es's code, which has prog'
+   in front of the constructor arguments. *)
+Definition opt_deploy_entry_state_def:
+  opt_deploy_entry_state prog prog' cplan tops es =
+    opt_entry_state prog prog' cplan es with vs_alloca_next := imm_len tops
+End
+
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
    gas filling; the finite storage guard deploy_storage_ok depends on the
    filling, so the unit theorem states it per filling. *)
