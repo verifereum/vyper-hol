@@ -6,7 +6,7 @@ Ancestors
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace stmtSimAugAssign
   tupleTargetStoreProps gasContext vyperState bodyMemoryPreds
   augAssignPlaceSuffixAdmissibility augAssignPlaceSourcePrefix
-  exprSimSource exprSimHyps exprSimHypsDefs vyperFiniteStoragePreservation
+  exprSimSource exprSimProps exprSimHyps exprSimHypsDefs vyperFiniteStoragePreservation
   vyperStoragePlaceObserved vyperStorageFootprint vyperStorageTrace
   bodyBinopFragMemory bodyBinopFamiliesMemory
 
@@ -111,10 +111,11 @@ Theorem aug_place_rhs_typed_memory_source:
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e (st with gas_obs := gs)` by simp[] >>
-  drule_all aug_place_rhs_suffix_ready >> strip_tac >>
-  drule_all aug_place_rhs_suffix_ready_mem >> strip_tac >>
-  goal_assum (drule_at (Pat `evaluate_type _ (expr_type e) = _`)) >>
-  simp[]
+  drule_all aug_place_rhs_suffix_ready >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
+  drule_all aug_place_rhs_suffix_ready_mem >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem aug_place_storage_suffix_source[local]:
@@ -197,8 +198,10 @@ Theorem aug_place_memory_rhs_callback:
       !tail. write_place cx (MemoryPlace id path) v (ee with gas_obs := tail) =
         (INL (),ff with gas_obs := tail))
 Proof
-  strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
-  drule aug_place_typing >> strip_tac >>
+  strip_tac >> drule_all aug_place_rhs_typed_memory_source >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
+  `well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    metis_tac[aug_place_typing] >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word_value] >>
   `expr_body_pre cenv cx env e (st with gas_obs := gs)` by simp[] >>
@@ -209,11 +212,8 @@ Proof
     [ty;expr_type e] cur rhs ee` by
     (rewrite_tac[binop_frag_val_mem_def] >>
      irule binop_frag_mem_word >>
-     simp[word_value_type_word] >>
-     conj_tac
-     >- (qpat_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-           mp_tac >> simp[typed_val_to_w256_word_value]) >>
-     rpt strip_tac >> metis_tac[word_value_type_typed]) >>
+     gvs[typed_val_to_w256_word_value] >>
+     metis_tac[word_value_type_word, word_value_type_typed]) >>
   drule_at (Pat `gas_admissible`) aug_place_memory_pointwise_tail >>
   disch_then (drule_at (Pat `bind _ _ _ = _`)) >> strip_tac >>
   drule_all aug_place_memory_suffix_source >> strip_tac >>
