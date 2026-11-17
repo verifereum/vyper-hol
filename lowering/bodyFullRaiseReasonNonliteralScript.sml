@@ -4,7 +4,7 @@ Ancestors
   stateRelProj
   bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
-  reasonResourcesPtr bodyFullRaiseReasonSource
+  reasonResourcesPtr
   exprSimSource exprSimHypsDefs exprOperandVar aggregateEvaluatedLayout vyperEvalExprPreservesScopesDom
   gasOutcomeFullCompose gasOutcomeFull gasShadowState gasShadow
   bodyExprPreFacts bodySim supportedStmtTraverse supportedExprTraverse
@@ -145,12 +145,12 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
       (\v. bind (lift_option_type (dest_StringV v) "not StringV")
         (\str. raise (AssertException str))) (mid with gas_obs := tail) =
       (INR (AssertException str) : unit + exception,mid with gas_obs := tail)` by
-    (mp_tac (Q.GENL [`r`,`H`] (Q.INST [`ee` |-> `mid`] (INST_TYPE [alpha |-> ``:256``] bodyFullRaiseReasonSourceTheory.raise_reason_raw_string))) >>
+    (mp_tac (Q.GENL [`r`,`H`] (Q.INST [`ee` |-> `mid`] (INST_TYPE [alpha |-> ``:256``] reasonSourcePropsTheory.raise_reason_raw_string))) >>
      simp[] >> disch_then irule >>
      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`e`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
-  drule_all bodyFullRaiseReasonSourceTheory.supported_reason_string_type >>
+  drule_all reasonSourcePropsTheory.supported_reason_string_type >>
   disch_then (qx_choose_then `cap` assume_tac) >>
   `post_value_type cenv e = expr_type e` by
     simp[post_value_type_bytestring, is_bytestring_type_def] >>
