@@ -22,10 +22,11 @@
  *                               (_return, _emit_op, _emit_void, _bind,
  *                               _ignore_bind)
  *   frag_exec_straight_fresh  — the fragment of a straight_fresh action
+ *   frag_exec_run_abort       — semantic-frame lifting for code that always aborts
  *   frag_exec_writes_fresh_abort, frag_exec_straight_fresh_abort
- *                             — the same for code that always aborts
+ *                             — the same for code that always aborts, pure/fresh
  *
- * Helpers: exec_pure_ok_update, step_fresh_write_op, fresh_write_op_simple,
+ * Helpers: step_fresh_write_op, fresh_write_op_simple,
  *   not_fresh_at_mono, eval_operand_drop_fresh
  *)
 
@@ -81,18 +82,19 @@ Theorem run_inst_seq_writes_fresh:
     tt = ss with vs_vars := tt.vs_vars /\
     !x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x
 Proof
-  Induct >- simp[run_inst_seq_def, venom_state_component_equality] >>
-  qx_gen_tac `inst` >> rpt gen_tac >>
-  simp[writes_fresh_def, run_inst_seq_def] >> strip_tac >>
-  Cases_on `step_inst_base inst ss` >> gvs[] >>
-  rename1 `step_inst_base inst ss = OK s1` >>
-  drule_all step_fresh_write_op >> strip_tac >>
-  first_x_assum (qspecl_then [`st`, `s1`, `tt`] mp_tac) >>
-  simp[writes_fresh_def] >> strip_tac >>
-  conj_tac
-  >- (qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
-      fs[venom_state_component_equality]) >>
-  rpt strip_tac >> fs[EVERY_MEM] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`is`, `not_fresh_at st`, `ss`, `tt`] mp_tac
+    run_inst_seq_protected_frame >>
+  impl_tac >- (
+    conj_tac >- (
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `writes_fresh _ _` mp_tac >>
+      simp[writes_fresh_def, EVERY_MEM] >> disch_then drule >> strip_tac >>
+      drule_all step_fresh_write_op >> strip_tac >> simp[] >>
+      rpt strip_tac >> qpat_x_assum `!x. ~MEM x _ ==> _` irule >>
+      strip_tac >> fs[EVERY_MEM] >> metis_tac[]) >>
+    first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 (* ===== The emitted code ===== *)
