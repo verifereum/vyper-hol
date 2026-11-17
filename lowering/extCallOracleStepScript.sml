@@ -321,6 +321,7 @@ Proof
   simp[eval_send_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, check_def, lift_option_type_def,
        vyperStateTheory.return_def] >>
+  qpat_assum `w2n gw = _` (fn th => rewrite_tac[GSYM th]) >>
   Cases_on `take_call_outcome (SOME (w2n gw)) (w2w aw) []
     (if cx.txn.is_static then NONE else SOME (w2n vw)) es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ _ = (tr, es1)` >>

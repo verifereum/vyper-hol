@@ -1041,7 +1041,8 @@ Theorem outcome_prefix_causal_call_effects[local]:
   outcome_prefix_causal
     (eval_ext_call_effects cx target calldata value_opt gas accounts)
 Proof
-  mp_tac outcome_prefix_causal_call_oracle >>
+  mp_tac (Q.INST [`gas_cap` |-> `OPTION_BIND gas dest_NumV`]
+    outcome_prefix_causal_call_oracle) >>
   simp_tac (srw_ss()) [outcome_prefix_causal_def, eval_ext_call_effects_def,
     vyperStateTheory.bind_def, vyperStateTheory.return_def,
     vyperStateTheory.ignore_bind_def]

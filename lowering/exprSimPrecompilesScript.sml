@@ -172,18 +172,20 @@ QED
 
 Theorem computed_static_consume_eq:
   rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq ==>
-  consume_call_outcome rq ro rs s =
+  !gas_cap. consume_call_outcome (rq with cr_gas := gas_cap) ro rs s =
     (if (FST (take_outcome rq s.vs_outcomes)).co_success then 1w else 0w,
      (write_memory_with_expansion ro
        (TAKE rs (FST (take_outcome rq s.vs_outcomes)).co_returnData) s)
        with <|vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData;
               vs_outcomes := DROP 1 s.vs_outcomes|>)
 Proof
-  strip_tac >> drule computed_precompile_no_request >>
-  disch_then (qspec_then `s.vs_requests` assume_tac) >>
+  strip_tac >> gen_tac >>
+  `take_outcome (rq with cr_gas := gas_cap) s.vs_outcomes =
+   take_outcome rq s.vs_outcomes` by
+    simp[take_outcome_def, failed_outcome_def, computed_precompile_def] >>
   `rq.cr_static` by simp[venom_call_request_def] >>
   simp[consume_call_outcome_eq, take_outcome_rest, adopt_outcome_def,
-       adopt_outcome_deletions_def,
+       adopt_outcome_deletions_def, record_request_def,
        write_memory_with_expansion_def, venom_state_component_equality]
 QED
 
