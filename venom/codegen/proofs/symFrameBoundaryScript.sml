@@ -18,18 +18,27 @@ Ancestors
   codegenSymRel fnFrameSteps fnFrameSinglePred fnEntryParams fnFrameBoundary asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symShuffleSim reorderStages
+  dfgDefs symShuffleSim reorderStages codegenSymOwnRel
 
 (* Symbolic kinds at the boundary depend on the defining instruction,
    not on the concrete word used to represent a label. *)
+Theorem phi_input_not_code_end_own:
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM (Var x) inst.inst_operands ==>
+  ~code_end_var fn x
+Proof
+  rw[label_flow_own_ok_def] >>
+  first_x_assum drule_all >> simp[] >> metis_tac[]
+QED
+
 Theorem phi_input_not_code_end:
   MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
   MEM (Var x) inst.inst_operands ==>
   ~code_end_var fn x
 Proof
-  rw[label_flow_ok_def] >>
-  first_x_assum drule_all >> simp[] >> metis_tac[]
+  metis_tac[phi_input_not_code_end_own, label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem phi_output_not_code_end:
@@ -40,6 +49,21 @@ Proof
   rpt strip_tac >> drule_all code_end_var_def_inst >> simp[]
 QED
 
+Theorem phi_operand_kind_transport_own:
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  ssa_form fn /\ retpc_shape_ok fn /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM x inst.inst_outputs /\ MEM (Var y) inst.inst_operands /\
+  op_kind_ok fn ret (Var y) sv ==>
+  op_kind_ok fn ret (Var x) sv
+Proof
+  strip_tac >>
+  drule_all phi_input_not_code_end_own >> strip_tac >>
+  drule_all phi_output_not_code_end >> strip_tac >>
+  drule_all frameViewFactsTheory.phi_output_retpc >> strip_tac >>
+  gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
+QED
+
 Theorem phi_operand_kind_transport:
   MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
   ssa_form fn /\ retpc_shape_ok fn /\
@@ -48,11 +72,7 @@ Theorem phi_operand_kind_transport:
   op_kind_ok fn ret (Var y) sv ==>
   op_kind_ok fn ret (Var x) sv
 Proof
-  strip_tac >>
-  drule_all phi_input_not_code_end >> strip_tac >>
-  drule_all phi_output_not_code_end >> strip_tac >>
-  drule_all frameViewFactsTheory.phi_output_retpc >> strip_tac >>
-  gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
+  metis_tac[phi_operand_kind_transport_own, label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem param_output_not_code_end:
@@ -88,6 +108,20 @@ Proof
   simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
 QED
 
+Theorem sym_run_same_endpoint:
+  !R lo prog env cs ss n cs' out.
+  (!n cs ss out.
+    R cs ss /\ sym_steps prog env n ss = SymOK out ==>
+    ?cs'. asm_steps lo (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      R cs' out) /\
+  R cs ss /\
+  asm_steps lo (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+  sym_steps prog env n ss = SymOK out ==>
+  R cs' out
+Proof
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]
+QED
+
 Theorem sym_frame_inv_same_count:
   !lo o2pc prog env ctx cp fn ret srest labs0 ps cs ss n cs' ss' ps'.
   lo = SND (compute_label_offsets prog) /\
@@ -101,7 +135,10 @@ Theorem sym_frame_inv_same_count:
   sym_frame_inv prog env ctx cp fn ret srest labs0 ps' cs' ss'
 Proof
   rw[sym_frame_inv_def] >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >> gvs[]
+  irule sym_run_same_endpoint >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  metis_tac[asm_sym_steps_lockstep]
 QED
 
 Theorem sym_kinds_stack_poke:
@@ -1269,10 +1306,10 @@ Proof
   irule sym_phi_plan_hit_no_dup_numeric >> metis_tac[]
 QED
 
-Theorem phi_run_inst_kind:
+Theorem phi_run_inst_kind_own:
   phi_run_context fn bb pred entry source final /\
   MEM inst (collect_phis bb.bb_instructions) /\
-  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
   MEM (Var y) inst.inst_operands /\ op_kind_ok fn ret (Var y) sv ==>
   op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv
 Proof
@@ -1280,10 +1317,20 @@ Proof
   drule_all fnPlanPrefixTheory.phi_codegen_inst_shape >> strip_tac >>
   `MEM (HD inst.inst_outputs) inst.inst_outputs` by
     (Cases_on `inst.inst_outputs` >> gvs[]) >>
-  irule phi_operand_kind_transport >>
+  irule phi_operand_kind_transport_own >>
   gvs[codegen_ready_fn_def] >>
   metis_tac[livenessProofsTheory.collect_phis_mem,
     unitShapeDefsTheory.MEM_fn_insts_blocks_iff, venomInstTheory.fn_insts_def]
+QED
+
+Theorem phi_run_inst_kind:
+  phi_run_context fn bb pred entry source final /\
+  MEM inst (collect_phis bb.bb_instructions) /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  MEM (Var y) inst.inst_operands /\ op_kind_ok fn ret (Var y) sv ==>
+  op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv
+Proof
+  metis_tac[phi_run_inst_kind_own, label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem phi_run_hit_dead:
@@ -1301,6 +1348,19 @@ Proof
   simp[listTheory.EL_APPEND_EQN]
 QED
 
+Theorem phi_run_hit_kind_own:
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+  (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
+    op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv)
+Proof
+  strip_tac >> drule fnFrameStepsPhiTheory.phi_stack_hit_operand >> strip_tac >>
+  Cases_on `stack_peek d ps.ps_stack` >> gvs[is_var_operand_def] >>
+  metis_tac[phi_run_inst_kind_own, listTheory.MEM_APPEND, listTheory.MEM]
+QED
+
 Theorem phi_run_hit_kind:
   phi_run_context fn bb pred entry source final /\
   collect_phis bb.bb_instructions = done ++ inst::todo /\
@@ -1309,9 +1369,33 @@ Theorem phi_run_hit_kind:
   (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
     op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv)
 Proof
-  strip_tac >> drule fnFrameStepsPhiTheory.phi_stack_hit_operand >> strip_tac >>
-  Cases_on `stack_peek d ps.ps_stack` >> gvs[is_var_operand_def] >>
-  metis_tac[phi_run_inst_kind, listTheory.MEM_APPEND, listTheory.MEM]
+  metis_tac[phi_run_hit_kind_own, label_flow_ok_imp_label_flow_own_ok]
+QED
+
+Theorem sym_phi_run_step_own:
+  !fn bb pred entry source final done inst todo ps halt ops next
+    prog initial_fmp cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+    (ops,next) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\
+  asm_block_at prog ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?out. sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest next out /\
+    out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> irule sym_phi_plan_no_dup_numeric >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[phi_run_hit_dead, phi_run_hit_kind_own,
+    genBlockSimTheory.stack_get_phi_depth_var_not_marker]
 QED
 
 Theorem sym_phi_run_step:
@@ -1334,10 +1418,47 @@ Theorem sym_phi_run_step:
     out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
     (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >> irule sym_phi_plan_no_dup_numeric >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[phi_run_hit_dead, phi_run_hit_kind,
-    genBlockSimTheory.stack_get_phi_depth_var_not_marker]
+  rpt gen_tac >> strip_tac >>
+  drule label_flow_ok_imp_label_flow_own_ok >> strip_tac >>
+  drule_all sym_phi_run_step_own >> simp[]
+QED
+
+Theorem paired_phi_run_step_own:
+  !base fn bb pred entry source final done inst todo ra lo m ps st halt ops next
+    prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  phi_run_config fn ra lo base pred entry source m done (inst::todo) ps st /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+    (ops,next) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ [inst]) todo next st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest next out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_run_step >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    gvs[fnFrameStepsPhiTheory.phi_run_config_def] >>
+  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `asm_block_at prog ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
+  drule_all sym_phi_run_step_own >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem paired_phi_run_step:
@@ -1365,17 +1486,8 @@ Theorem paired_phi_run_step:
     (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all fnFrameStepsPhiTheory.phi_run_step >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
-    gvs[fnFrameStepsPhiTheory.phi_run_config_def] >>
-  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)` by
-    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     first_x_assum drule >> simp[]) >>
-  `asm_block_at prog ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
-  drule_all sym_phi_run_step >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+  drule label_flow_ok_imp_label_flow_own_ok >> strip_tac >>
+  drule_all paired_phi_run_step_own >> simp[]
 QED
 
 Theorem block_insts_prefix_alloc_mono:
@@ -1457,6 +1569,141 @@ Proof
   metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
 QED
 
+Theorem paired_phi_run_prefix_cons_own:
+  !todo.
+  (!done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg (cfg:'cfg) halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
+    phi_run_context fn bb pred entry source final /\
+    collect_phis bb.bb_instructions = done ++ todo /\
+    phi_run_config fn ra lo base pred entry source m done todo ps st /\
+    block_len = LENGTH done + LENGTH (todo ++ body) /\
+    generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+      halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+    (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st' out.
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
+      sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  !inst done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg (cfg:'cfg) halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  phi_run_config fn ra lo base pred entry source m done (inst::todo) ps st /\
+  block_len = LENGTH done + LENGTH (inst::todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH (inst::todo)) (inst::todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ inst::todo) [] last st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  drule_all phi_run_prefix_cons_split >> strip_tac >>
+  drule_all paired_phi_run_step_own >>
+  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog _ st = AsmOK middle` >>
+  `collect_phis bb.bb_instructions = (done ++ [inst]) ++ todo` by simp[] >>
+  `asm_block_at prog middle.as_pc (execute_plan initial_fmp tail_ops)` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  rename1 `block_len = LENGTH done + LENGTH (inst::todo ++ suffix)` >>
+  first_x_assum (qspec_then `done ++ [inst]` mp_tac) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `suffix` mp_tac) >>
+  qpat_x_assum `block_len = _` SUBST_ALL_TAC >>
+  rule_assum_tac (SIMP_RULE bool_ss
+    [listTheory.LENGTH_APPEND, listTheory.LENGTH, arithmeticTheory.ADD1,
+     arithmeticTheory.ADD_CLAUSES,
+     AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  simp_tac bool_ss [listTheory.LENGTH_APPEND, listTheory.LENGTH,
+    arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  drule_all paired_steps_add_preserve >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `phi_run_config _ _ _ _ _ _ _ _ (_ ++ [_] ++ _) [] _ _`
+    (mp_tac o PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+  gvs[stackOpSimTheory.execute_plan_append]
+QED
+
+Theorem paired_phi_run_prefix_legacy_own:
+  !todo done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg cfg halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ todo /\
+  phi_run_config fn ra lo base pred entry source m done todo ps st /\
+  block_len = LENGTH done + LENGTH (todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
+  (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Induct >- (rpt gen_tac >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
+    strip_tac >> gvs[] >> qexistsl [`st`, `ss`] >>
+    simp[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
+  drule paired_phi_run_prefix_cons_own >> simp[]
+QED
+
+Theorem paired_phi_run_prefix:
+  !todo done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg cfg halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ todo /\
+  phi_run_config fn ra lo base pred entry source m done todo ps st /\
+  block_len = LENGTH done + LENGTH (todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule label_flow_ok_imp_label_flow_own_ok >> strip_tac >>
+  drule_all paired_phi_run_prefix_legacy_own >> simp[]
+QED
+
 Theorem paired_phi_run_prefix_cons:
   !todo.
   (!done base fn bb pred entry source final ra lo m ps st body block_len
@@ -1504,37 +1751,12 @@ Theorem paired_phi_run_prefix_cons:
     sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
     (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
-  drule_all phi_run_prefix_cons_split >> strip_tac >>
-  drule_all paired_phi_run_step >>
-  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
-  rename1 `asm_steps lo o2pc prog _ st = AsmOK middle` >>
-  `collect_phis bb.bb_instructions = (done ++ [inst]) ++ todo` by simp[] >>
-  `asm_block_at prog middle.as_pc (execute_plan initial_fmp tail_ops)` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  rename1 `block_len = LENGTH done + LENGTH (inst::todo ++ suffix)` >>
-  first_x_assum (qspec_then `done ++ [inst]` mp_tac) >>
-  disch_then drule >> disch_then drule >> disch_then drule >>
-  disch_then (qspec_then `suffix` mp_tac) >>
-  qpat_x_assum `block_len = _` SUBST_ALL_TAC >>
-  rule_assum_tac (SIMP_RULE bool_ss
-    [listTheory.LENGTH_APPEND, listTheory.LENGTH, arithmeticTheory.ADD1,
-     arithmeticTheory.ADD_CLAUSES,
-     AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
-  simp_tac bool_ss [listTheory.LENGTH_APPEND, listTheory.LENGTH,
-    arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES,
-    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
-  disch_then drule_all >>
-  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
-  drule_all paired_steps_add_preserve >> strip_tac >>
-  goal_assum (drule_at Any) >>
-  qpat_x_assum `phi_run_config _ _ _ _ _ _ _ _ (_ ++ [_] ++ _) [] _ _`
-    (mp_tac o PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
-  gvs[stackOpSimTheory.execute_plan_append]
+  gen_tac >> disch_then kall_tac >> rpt gen_tac >> strip_tac >>
+  drule_all paired_phi_run_prefix >> simp[]
 QED
 
-Theorem paired_phi_run_prefix:
-  !todo done base fn bb pred entry source final ra lo m ps st body block_len
+Theorem paired_phi_run_prefix_own:
+  !allow_own own todo done base fn bb pred entry source final ra lo m ps st body block_len
     dfg cfg halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
   phi_run_context fn bb pred entry source final /\
   collect_phis bb.bb_instructions = done ++ todo /\
@@ -1544,7 +1766,7 @@ Theorem paired_phi_run_prefix:
     halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
   EVERY (\s. case s of SOSpill off => off < dimword(:256)
     | SORestore off => off < dimword(:256) | _ => T) ops /\
-  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ label_flow_own_ok ctx /\
   (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
     context_spill_byte cp b /\ R b) /\
   sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
@@ -1553,14 +1775,15 @@ Theorem paired_phi_run_prefix:
     asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
     st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
     phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
-    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_steps_mode allow_own prog env own (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
     sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
     (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  Induct >- (rpt gen_tac >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
-    strip_tac >> gvs[] >> qexistsl [`st`, `ss`] >>
-    simp[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
-  drule paired_phi_run_prefix_cons >> simp[]
+  rpt gen_tac >> strip_tac >>
+  drule_all paired_phi_run_prefix_legacy_own >>
+  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >> irule sym_steps_mode_ok >> simp[]
 QED
 
 Theorem sym_frame_inv_local_same_count:
@@ -1846,6 +2069,29 @@ Proof
       strip_tac >> drule_all sym_popmany_numeric >>
       disch_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]))) >>
   simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]
+QED
+
+(* Boundary plans already have successful legacy runs.  Transport just the
+   execution component, retaining their kinds, pc and memory-label facts. *)
+Theorem sym_clean_stack_plan_numeric_mode:
+  !allow_own own liveness cfg fn bb ps ops ps' p env cp ret srest initial_fmp R ss.
+    clean_stack_plan liveness cfg fn bb ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps_mode allow_own p env own
+        (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all sym_clean_stack_plan_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >> irule sym_steps_mode_ok >> simp[]
 QED
 
 Theorem clean_stack_plan_frame_sim_exact:
@@ -2267,6 +2513,31 @@ Proof
   qexistsl [`installed`, `installed`] >> asm_rewrite_tac[] >> conj_tac
   >- (rpt strip_tac >> irule sym_label_numeric >> simp[]) >>
   rpt strip_tac >> irule sym_prepare_params_numeric >> metis_tac[]
+QED
+
+Theorem sym_label_prepare_numeric_mode:
+  !allow_own own ch growth spill_base lbl_ctr ps0 params installed liveness fn ops ps1
+    p env cp ret srest initial_fmp R ss lbl.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+    codegen_ready_fn fn /\
+    prepare_params_plan liveness fn ps0 = (ops,ps1) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+    (!b. ps1.ps_alloc.sa_spill_base <= b /\ b < ps1.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest installed ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (SOLabel lbl :: ops)) ==>
+    ?out. sym_steps_mode allow_own p env own
+        (LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps1 out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops)) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all sym_label_prepare_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >> irule sym_steps_mode_ok >> simp[]
 QED
 
 Theorem sym_entry_prefix_asm:
