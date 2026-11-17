@@ -504,19 +504,30 @@ Resume annassign_other_typed_full_execution[success]:
       TRY (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o PURE_REWRITE_RULE [expr_post_def]) >> first_assum ACCEPT_TAC) >>
       NO_TAC) >>
-   irule gas_outcome_full_pure >>
-   reverse conj_tac >- first_assum ACCEPT_TAC >>
-   qexistsl_tac [`Gf`,`out`,`INL ()`,`u`,`tf`] >>
-   conj_tac
-   >- (drule new_variable_success_gas_obs >> simp[NoAsms]) >>
-   gen_tac >> disch_tac >> conj_tac
-   >- first_assum MATCH_ACCEPT_TAC >>
-   qexists_tac `cenv'` >>
-   qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
-     (qspec_then `H` mp_tac) >>
-   (impl_tac >- first_assum ACCEPT_TAC) >>
-   POP_ASSUM_LIST (K all_tac) >>
-   simp[Abbr `out`, vyperStateTheory.evaluation_state_component_equality])
+   (irule gas_outcome_full_pure >>
+    (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+    qexistsl_tac [`Gf`,`out`,`INL ()`,`u`,`tf`] >>
+    (conj_tac
+     >- (drule new_variable_success_gas_obs >> simp[NoAsms])) >>
+    gen_tac >> disch_tac >>
+    (conj_tac >- first_assum MATCH_ACCEPT_TAC) >>
+    BETA_TAC >> qexists_tac `cenv'` >>
+    `out with gas_obs := [] = out` by
+      (qpat_assum `mid.gas_obs = []`
+         (fn th => simp[NoAsms,Abbr `out`,GSYM th])) >>
+    qpat_assum `out with gas_obs := [] = out`
+      (fn eq => pure_rewrite_tac [eq]) >>
+    qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
+      (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    POP_ASSUM_LIST (K all_tac) >>
+    strip_tac >> gvs[] >>
+    qpat_assum `!aid off len i. _ ==> i IN tn0.t_mem`
+      (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+    disch_tac >> rpt gen_tac >> strip_tac >>
+    first_x_assum (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+    simp[arithmeticTheory.ADD_SYM] >> disch_then irule >>
+    rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.ADD_SYM]))
 QED
 
 Finalise annassign_other_typed_full_execution
