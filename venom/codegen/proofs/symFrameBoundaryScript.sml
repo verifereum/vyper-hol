@@ -18,7 +18,7 @@ Ancestors
   codegenSymRel fnFrameSteps fnFrameSinglePred fnEntryParams fnFrameBoundary asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symShuffleSim reorderStages codegenSymOwnRel
+  dfgDefs symShuffleSim reorderStages codegenSymOwnRel symFrameBoundaryPairing
 
 (* Symbolic kinds at the boundary depend on the defining instruction,
    not on the concrete word used to represent a label. *)
