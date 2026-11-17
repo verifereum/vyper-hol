@@ -4,14 +4,14 @@ Ancestors
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
   dftPacketBlockAppendSemantics
-  dftGasPrefixProvider
+  dftPacketBlockAppendNative dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCalleeAlignment
-  dftPacketClosedRowNative
+  dftPacketCallFreshEntry dftPacketClosedRowNative
   dftPacketClosedRows
   dftPacketCommonOracle
   dftPacketCutExtension
@@ -20,7 +20,7 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshChildStop
   dftPacketFreshRow
-  dftPacketKeyMap
+  dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
   dftPacketNativeContinuation
@@ -50,5 +50,5 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
-  dftPacketTerminalPhi
-  dftPacketSuccessorObservation
+  dftPacketBlockTableSplice dftPacketTerminalPhi
+  dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
