@@ -56,7 +56,9 @@ Theorem run_deploy_lowering_source_unit_ok:
     EVERY (\d. internal_label_ok (FST d))
       (internal_fn_descriptors ctor_internal_fns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ctor_internal_fns)) ==>
-    o1_source_unit_ok unit
+    o1_source_unit_ok unit /\
+    EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+      unit.cu_context.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
@@ -81,12 +83,20 @@ Proof
     by (irule package_internal_blocks_segments >> asm_rewrite_tac [] >>
         REWRITE_TAC[EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
         irule deploy_internal_label_separate >> fs[EVERY_MEM]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     (mk_raw_function "__deploy" entry_blocks ::
+      MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                      (SND (SND d))) (internal_fn_descriptors ctor_internal_fns)
+           segs)`
+    by (irule entry_unit_no_dalloca >> fs[]) >>
   qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks st1 = _`
     (assume_tac o REWRITE_RULE[all_blocks_def]) >>
   gs[run_deploy_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
-  irule deploy_unit_reservation_shape >> qexists_tac `[]` >>
-  irule entry_unit_source_ok >> simp[deploy_label_names] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  conj_tac
+  >- (irule deploy_unit_reservation_shape >> qexists_tac `[]` >>
+      irule entry_unit_source_ok >> simp[deploy_label_names] >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  fs[install_immutable_reservation_def, mk_venom_context_def]
 QED

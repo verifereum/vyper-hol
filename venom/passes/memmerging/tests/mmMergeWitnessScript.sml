@@ -185,7 +185,7 @@ Theorem mm_copy_fixture_bound:
 Proof
   simp[mm_adjacent_copy_function_def, mk_raw_function_def,
        fn_insts_def, fn_insts_blocks_def, static_mem_ok_def,
-       dalloca_no_wrap_def, mk_inst_def] >>
+       unitTransformDefsTheory.dalloca_no_wrap_def, mk_inst_def] >>
   rpt conj_tac >> gen_tac >> strip_tac >> simp[] >> disj2_tac >> EVAL_TAC
 QED
 
