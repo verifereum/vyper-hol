@@ -124,6 +124,9 @@ Definition body_inv_def:
     (!vis mut nr rr fn args dflts ret body.
        MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
        function_mutability_ok [(NONE, tops)] vis mut nr dflts body) /\
+    (!fn. ~MEM (NONE,fn) cx.stk ==>
+       ALOOKUP cenv.ce_func_defaults fn =
+       ALOOKUP (build_func_defaults tops) fn) /\
     (!vis mut rr name args dflts ret ss.
        MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
        cx.nonreentrant_slot = SOME global_nonreentrant_slot)
