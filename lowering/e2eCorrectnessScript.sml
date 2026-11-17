@@ -846,19 +846,20 @@ Proof
     (qpat_x_assum `fn_entry_label fn = _` mp_tac >>
      Cases_on `fn.fn_blocks` >>
      simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >> strip_tac >>
-     qexists_tac `h` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+     rename1 `first_bb.bb_label = "__entry"` >>
+     qexists_tac `first_bb` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
      irule no_phis_phi_prefix_length_zero >>
      fs[o1_source_unit_ok_def, listTheory.EVERY_MEM] >>
      rpt strip_tac >>
      `MEM inst (fn_insts fn)` by
-       (irule lookup_block_fn_insts >> qexists_tac `h` >>
+       (irule lookup_block_fn_insts >> qexists_tac `first_bb` >>
         qexists_tac `"__entry"` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm]) >>
      metis_tac[raw_opcode_ok_def, listTheory.MEM]) >>
   conj_tac
   >- (qexists_tac `SUC fuel` >>
       simp[run_context_def, run_function_def] >>
       simp[fragExecTheory.run_blocks_run_from_no_phi]) >>
-  gen_tac >> Cases_on `fuel'` >- simp[Once mem_safe_blocks_def] >>
+  qx_gen_tac `block_fuel` >> Cases_on `block_fuel` >- simp[Once mem_safe_blocks_def] >>
   `eval_phis
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
     bb.bb_instructions = OK
