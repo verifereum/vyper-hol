@@ -639,7 +639,7 @@ Theorem lower_dload_stage_revert_empty:
     ?t. run_context fuel C' vs = Abort Revert_abort t /\
         t.vs_returndata = []
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fs[o1_run_state_ok_def] >>
   `terminates (Abort Revert_abort s)` by simp[terminates_def] >>
   drule_all ld_run_context_entry >> strip_tac >>
   qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
