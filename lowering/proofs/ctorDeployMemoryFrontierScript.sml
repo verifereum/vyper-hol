@@ -27,7 +27,7 @@ Ancestors
   vyperCompiler venomWf venomExecSemantics venomInst venomState
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
   unitTransformDefs lowerDloadDefs ctorDeployDefs deployUnitProducers
-  o1PassContract
+  o1PassContract rawReachableFmp ctxLookupAgree
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
@@ -226,8 +226,15 @@ Proof
   >~ [`reachability_closed _ _`]
   >- (irule alloca_frontier_inv_from_closed >> simp[])
   >~ [`fn_entry_inv _ _ _ _`]
-  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
-  rw[alloca_frontier_inv_from_def] >> decide_tac
+  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[])
+  >- (rw[alloca_frontier_inv_from_def] >> decide_tac) >>
+  rpt strip_tac >>
+  drule_all raw_reachable_fmp_fixed >> strip_tac >>
+  drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >>
+     metis_tac[active_inst_mem_fn_insts]) >>
+  simp[dalloca_no_wrap_def]
 QED
 
 (* Every reachable DLOAD/DLOADBYTES offset, added to the length of the code
