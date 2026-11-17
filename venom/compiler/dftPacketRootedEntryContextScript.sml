@@ -291,7 +291,8 @@ Resume dft_packet_rooted_entry_context[call_instruction]:
      (impl_tac >- simp[EL_APPEND1,EL_APPEND2]) >> strip_tac >>
      qpat_assum `!prior ent. rooted_eval _ _ _ _ = _ ==> _` irule >>
      qexists_tac `prior` >>
-     simp[TAKE_APPEND,arithmeticTheory.ADD1]) >>
+     qpat_assum `TAKE (LENGTH pre0) levels = _`
+       (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
   `LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` by
     (qpat_x_assum `plan_ok _ _ _ _ _ _` mp_tac >>
      qpat_assum `plan_ok = _` (fn th => pure_rewrite_tac[th]) >>
@@ -302,7 +303,12 @@ Resume dft_packet_rooted_entry_context[call_instruction]:
      simp[NoAsms] >>
      qpat_assum `pp = _` (fn th => pure_rewrite_tac[th]) >>
      simp[NoAsms]) >>
-  FAIL_TAC "instruction"
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`row_eval = _`,`plan_eval = _`,`call_setup = _`,`rooted_eval = _`,
+     `plan_ok = _`,`levels_ok = _`] >>
+  `LENGTH z + phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    gvs[LENGTH_DROP] >>
+  simp[get_instruction_def,listTheory.EL_DROP,arithmeticTheory.ADD_COMM]
 QED
 
 Finalise dft_packet_rooted_entry_context
