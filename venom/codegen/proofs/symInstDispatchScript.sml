@@ -1,15 +1,14 @@
 Theory symInstDispatch
 Ancestors
   symInstPieces symZeroInstSim symEmitSim codegenSymRel stackPlanGen
-  fnPlanLineageInventory venomWf asmIR venomInst
+  fnPlanLineageInventory venomWf asmIR venomInst symInstDispatchOwn
 
 Theorem istore_operand_shape[local]:
   inst.inst_opcode = ISTORE /\ inst_wf inst ==>
   ?dst value. inst.inst_operands = [dst; value] /\
     compute_operands inst = [dst; value]
 Proof
-  strip_tac >> gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
-  simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def]
+  MATCH_ACCEPT_TAC symInstDispatchOwnTheory.istore_operand_shape
 QED
 
 Theorem assertion_operand_shape[local]:
@@ -17,8 +16,7 @@ Theorem assertion_operand_shape[local]:
   inst_wf inst ==>
   ?cond. inst.inst_operands = [cond] /\ compute_operands inst = [cond]
 Proof
-  strip_tac >> gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
-  simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def]
+  MATCH_ACCEPT_TAC symInstDispatchOwnTheory.assertion_operand_shape
 QED
 
 Theorem sym_non_bump_inst_symbolic_run:
@@ -101,53 +99,5 @@ Theorem sym_non_bump_inst_symbolic_run:
         (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
           FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b)
 Proof
-  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (rpt strip_tac >>
-     qpat_x_assum `!op. _ ==> IS_SOME (stack_get_depth _ _) \/ _` mp_tac >>
-     simp[stack_get_depth_is_some, finite_mapTheory.FLOOKUP_DEF, COND_RAND]) >>
-  `~is_pre_codegen_opcode inst.inst_opcode` by
-    metis_tac[generate_inst_plan_pre_codegen_none, optionTheory.NOT_SOME_NONE] >>
-  drule_all sym_shaped_prepared_emission_families >>
-  simp[optionTheory.IS_SOME_EXISTS, listTheory.MEM] >> strip_tac >> simp[]
-  >- ((qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
-      (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac sym_named_inst_symbolic_run) >>
-      disch_then (fn th => drule_all th)) >>
-      `inst.inst_opcode <> ASSERT_UNREACHABLE` by
-        metis_tac[venom_to_evm_name_def, optionTheory.NOT_SOME_NONE] >> simp[])
-  >- (drule_all_then strip_assume_tac sym_generated_assign_sim >>
-      gvs[sym_frame_inv_def] >> metis_tac[])
-  >- (drule_all_then strip_assume_tac sym_generated_phi_sim >>
-      gvs[sym_frame_inv_def] >> metis_tac[])
-  >- (drule_all_then strip_assume_tac sym_generated_nop_sim >>
-      gvs[sym_frame_inv_def] >> metis_tac[])
-  >- (`?x. inst.inst_operands = [] /\ inst.inst_outputs = [x]` by
-        (qpat_x_assum `inst_wf inst` mp_tac >> simp[inst_wf_def, listTheory.LENGTH_EQ_1]) >>
-      drule_all sym_initial_fmp_inst_symbolic_run >> simp[])
-  >- (drule_all_then strip_assume_tac istore_operand_shape >>
-      qpat_assum `compute_operands inst = _` (fn ops_eq =>
-        qpat_assum `inst.inst_opcode = ISTORE` (fn opc_eq =>
-          every_assum (assume_tac o PURE_REWRITE_RULE [ops_eq, opc_eq]))) >>
-      drule_all_then MATCH_ACCEPT_TAC sym_istore_inst_symbolic_run)
-  >- (`?cond. inst.inst_operands = [cond] /\ compute_operands inst = [cond]` by
-        metis_tac[assertion_operand_shape] >>
-      qpat_assum `compute_operands inst = _` (fn ops_eq =>
-        qpat_assum `inst.inst_opcode = ASSERT` (fn opc_eq =>
-          every_assum (assume_tac o PURE_REWRITE_RULE [ops_eq, opc_eq]))) >>
-      drule_all_then MATCH_ACCEPT_TAC sym_assert_inst_symbolic_run)
-  >- (`?cond. inst.inst_operands = [cond] /\ compute_operands inst = [cond]` by
-        metis_tac[assertion_operand_shape] >>
-      qpat_assum `compute_operands inst = _` (fn ops_eq =>
-        qpat_assum `inst.inst_opcode = ASSERT_UNREACHABLE` (fn opc_eq =>
-          every_assum (assume_tac o PURE_REWRITE_RULE [ops_eq, opc_eq]))) >>
-      drule_all_then MATCH_ACCEPT_TAC sym_assert_unreachable_inst_symbolic_run)
-  >> (`?tc selected. inst.inst_operands = Lit tc :: selected /\ w2n tc <= 4 /\
-        compute_operands inst = selected` by
-        (qpat_x_assum `inst.inst_opcode = LOG ==> _` mp_tac >>
-         simp[] >> strip_tac >> simp[compute_operands_def]) >>
-      qpat_assum `compute_operands inst = _` (fn ops_eq =>
-        qpat_assum `inst.inst_opcode = LOG` (fn opc_eq =>
-          every_assum (assume_tac o PURE_REWRITE_RULE [ops_eq, opc_eq]))) >>
-      drule_all_then MATCH_ACCEPT_TAC sym_log_inst_symbolic_run)
+  MATCH_ACCEPT_TAC symInstDispatchOwnTheory.sym_non_bump_inst_symbolic_run_canonical
 QED
