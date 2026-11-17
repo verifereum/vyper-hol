@@ -4,7 +4,7 @@
 Theory bodyMemAssignTupleTargets
 Ancestors
   bodyMemoryPreds bodyMemAssignTupleTargetsFacts bodyMemAssignTupleTargetsWrapper
-  bodySimStmtCases bodyMemAssignTupleLocalsPrep
+  bodySimStmtFacts bodyMemAssignTupleLocalsPrep
   tupleTargetStoreProps bodyExprPreFacts bodySim bodyMemoryDefs exprSimDefs
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants exprSimHypsDefs
   supportedStmts supportedExprs stmtSimDefs loweringPosts

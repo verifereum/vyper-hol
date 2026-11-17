@@ -2,7 +2,7 @@
    require a newly executed ALLOCA to increase the allocation frontier. *)
 Theory bodyMemAssignTupleTargetsFacts
 Ancestors
-  bodySimStmtCases bodyMemAssignTupleLocalsPrep bodyDeclMemoryCounted tupleTypedLoad instMemFrontier
+  bodyMemAssignTupleLocalsPrep bodyDeclMemoryCounted tupleTypedLoad instMemFrontier
   exprLoweringProps venomMemDefs compileEnv loweringStateRelDefs tupleMemoryLayout valueEncodingProofs
   context venomInst bodyDeclMemoryCore exprSimAlloc exprSimBufferStore
   venomExecSemantics venomState loweringSlice loweringPosts list

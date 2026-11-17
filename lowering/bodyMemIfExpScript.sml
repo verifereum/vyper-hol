@@ -6,6 +6,7 @@
    exprSimMemUnwrap's expr_sim_mem_of_vv_sim_mem for the rest. *)
 Theory bodyMemIfExp
 Ancestors
+  bodySimStmtFacts
   bodyMemIfExpWidened bodyIfExpMemory exprSimMemUnwrap
   bodyMemoryPreds exprSimOperators exprSimIfExp exprSimSource exprSimHyps
   exprSimHypsDefs bodyIfExpArmLayout

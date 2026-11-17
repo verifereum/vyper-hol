@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringFrame
 Ancestors
+  bodySimStmtFacts
   immSectionDead
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
@@ -1189,7 +1190,7 @@ Proof
             src = NONE` by
     simp[deploy_evaluation_context_def, initial_evaluation_context_def,
          get_module_code_def] >>
-  metis_tac[bodySimStmtCasesTheory.body_inv_storage_var_types]
+  metis_tac[bodySimStmtFactsTheory.body_inv_storage_var_types]
 QED
 
 (* body_stmts_sim's premises for the constructor body at its start, and the

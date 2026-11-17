@@ -16,7 +16,7 @@ Ancestors
   bodyMemoryDefs stmtMemory stmtSimJumpMem stmtRaiseMemory stmtIfMemory
   stmtAssertMemory fragLoopMemory
   allocaHistoryFragment builtinBytesMemory concatMemory
-  bodySimMain bodySimStmtCases bodySimDeclCases
+  bodySimDeclCases
   bodySim exprSimHyps stmtLoweringProps exprLoweringProps supportedProgram
   vyperInterpreter vyperTypeSystem vyperState vyperContext supportedStmts
   bodyMemoryPreds bodyReturnMemory bodyExprStmtMemory bodySeqMemory
