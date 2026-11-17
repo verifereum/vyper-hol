@@ -51,7 +51,8 @@ Theorem bytes_bitwise_checker_pairs:
        ann = BaseT (BytesT (Fixed m)) /\ rhs = ann)) /\
   (!bop m ann rhs. MEM bop [ShL;ShR] ==>
     (well_typed_binop ann bop (BaseT (BytesT (Fixed m))) rhs <=>
-       m = 32 /\ ann = BaseT (BytesT (Fixed 32)) /\ is_int_type rhs))
+       m = 32 /\ ann = BaseT (BytesT (Fixed 32)) /\
+       (is_int_type rhs \/ rhs = ann)))
 Proof
   simp[] >> rpt strip_tac >> gvs[well_typed_binop_def] >>
   eq_tac >> strip_tac >> gvs[]
@@ -82,5 +83,41 @@ Theorem bytes_bitwise_mismatched_values:
   evaluate_binop (Unsigned 0) NoneTV ShR (BytesV [1w]) (IntV 1) =
     INR (TypeError "binop")
 Proof
+  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+(* The pin checks augmented shifts at bytes32, unlike ordinary shifts. *)
+Theorem bytes32_augassign_shift_domain:
+  !bop. MEM bop [ShL;ShR] ==>
+    augassign_operand_ok (BaseT (BytesT (Fixed 32))) bop
+      (Name (BaseT (BytesT (Fixed 32))) "n") /\
+    ~augassign_operand_ok (BaseT (BytesT (Fixed 32))) bop
+      (Name (BaseT (UintT 256)) "n") /\
+    ~builtin_operands_ok (BaseT (BytesT (Fixed 32))) (Bop bop)
+      [Name (BaseT (BytesT (Fixed 32))) "a";
+       Name (BaseT (BytesT (Fixed 32))) "n"]
+Proof
+  simp[] >> rpt strip_tac >> gvs[augassign_operand_ok_def,
+    augassign_shift_amount_ok_def, builtin_operands_ok_def,
+    shift_amount_ok_def, nonneg_int_literal_def, int_literal_value_def,
+    expr_type_def]
+QED
+
+Theorem bytes32_augassign_shift_pin_outputs:
+  evaluate_binop (Unsigned 0) NoneTV ShL
+    (BytesV (0x81w :: REPLICATE 30 0w ++ [3w]))
+    (BytesV (REPLICATE 31 0w ++ [1w])) =
+    INL (BytesV (2w :: REPLICATE 30 0w ++ [6w])) /\
+  evaluate_binop (Unsigned 0) NoneTV ShR
+    (BytesV (0x81w :: REPLICATE 30 0w ++ [3w]))
+    (BytesV (REPLICATE 31 0w ++ [1w])) =
+    INL (BytesV ([0x40w;0x80w] ++ REPLICATE 29 0w ++ [1w])) /\
+  (!bop. MEM bop [ShL;ShR] ==>
+    evaluate_binop (Unsigned 0) NoneTV bop
+      (BytesV (0x81w :: REPLICATE 30 0w ++ [3w]))
+      (BytesV (REPLICATE 30 0w ++ [1w;0w])) =
+    INL (BytesV (REPLICATE 32 0w)))
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
   simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
 QED

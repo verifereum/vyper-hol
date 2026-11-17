@@ -329,6 +329,7 @@ Theorem compile_bop_typed_sim:
     expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
   rpt gen_tac >> strip_tac >> irule compile_bop_rel_sim >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl_tac [`tv1`, `tv2`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
