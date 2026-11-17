@@ -1307,7 +1307,7 @@ QED
 
 Finalise append_nested_storage_endpoint_full
 
-Theorem append_nested_storage_cont_framed:
+Theorem append_nested_storage_cont_framed[local]:
  !DF lo d ctx shadow_ctx PG func cx st0 lctx RetQ cenv env sa sm sb s0 G0 tn0
    mid t G tn tr slot tv v bop vop w elem src_ty cap.
   body_inv (cx_tops cx) ctx cenv cx /\
@@ -1638,7 +1638,70 @@ Resume append_nested_storage_cont_framed[static]:
       exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >> simp[]
 QED
 
-Finalise append_nested_storage_cont_framed
+Finalise append_nested_storage_cont_framed[local]
+
+Theorem append_nested_storage_cont_full:
+ !DF lo d ctx shadow_ctx PG func cx st0 lctx RetQ cenv env sa sm sb s0 G0 tn0
+   mid t G tn tr slot tv v bop vop w elem src_ty cap.
+  body_inv (cx_tops cx) ctx cenv cx /\
+  gas_admissible (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v)
+    (stmt_res_ok lctx) mid /\
+  expr_sim_inv cenv cx env mid /\ supported_full_word_type elem /\
+  evaluate_type (get_tenv cx) elem = SOME tv /\
+  value_has_type tv v /\ abi_tuple_word tv v /\
+  compile_dynarray_append cenv bop vop 1 1 elem src_ty cap T
+    (if tr then LocTransient else LocStorage) sm = ((),sb) /\
+  (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sm x) /\
+  eval_operand bop t = SOME slot /\ eval_operand vop t = SOME w /\
+  w = typed_val_to_w256 tv v /\
+  op_taint tn bop = {} /\ op_taint tn vop = {} /\ cap < dimword (:256) /\
+  storage_trace_domain cx st0 mid.storage_trace /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid t /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
+    storage_place_observed H (StoragePlace tr slot (ArrayTV tv (Dynamic cap)))) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ fn_has_code sm sb func /\
+  cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  return_buf_frame d cenv sm t /\ alloca_history func t /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
+    op_taint tn (Var x) = op_taint tn0 (Var x)) ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v) (mid,t,G,tn)
+    (\H res ee Gf tf u. ?cenv''.
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee Gf tf u /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+         op_taint tf (Var x) = op_taint tn0 (Var x)))
+    (\H res ee gt r. (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+      halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==>
+        allocas_below_fmp s))
+Proof
+  rpt gen_tac >> disch_tac >>
+  first_x_assum (mp_tac o MATCH_MP append_nested_storage_cont_framed) >>
+  disch_then (qspecl_then [`shadow_ctx`, `PG`, `RetQ`] assume_tac) >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at (Pos last)) >> simp[] >>
+  rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[]
+QED
 
 Theorem append_nested_suffix_frame_post[local]:
   alloca_frame cenv es sa s0 cenv mid t /\
@@ -2165,9 +2228,14 @@ Resume append_nested_after_target_full[memory]:
   reverse conj_tac
   >- (irule (SRULE [] append_nested_memory_cont_full) >>
       rpt (conj_tac >- first_assum ACCEPT_TAC) >> simp[] >>
-      conj_tac >- (qexistsl_tac [`b`, `p`, `sz`] >> simp[]) >>
-      conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
-      FAIL_TAC "layout witnesses") >>
+      conj_tac >- ((metis_tac[])) >>
+      qexists_tac `w` >>
+      qpat_assum `compile_dynarray_append cenv (Var q) vop 32 32 _ _ _ _ _ sm = _`
+        (irule_at Any) >>
+      simp[arithmeticTheory.ADD_COMM] >>
+      conj_tac
+      >- metis_tac[arithmeticTheory.ADD_COMM] >>
+      metis_tac[]) >>
   decide_tac
 QED
 
@@ -2237,30 +2305,45 @@ Resume append_nested_after_target_full[storage]:
        ghost_inv_at (DF H) lo d cenv cx mid' G1 tn1 t'` by
     (qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[loweringPostsTheory.expr_post_def]) >>
-  qpat_assum `~ctx_has_dalloca ctx`
-    (fn th => irule (SRULE [th] append_nested_storage_cont_framed)) >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`r0`, `expr_type e`, `sm`, `lowered_value_type cenv e`, `shadow_op`] >>
-  simp[] >> conj_tac >- metis_tac[] >>
-  qpat_assum `compile_dynarray_append cenv r0 shadow_op _ _ _ _ _ _ _ sm = _` mp_tac >>
-  `type_memory_bytes cenv (expr_type e) = 32` by
-    (qpat_assum `supported_full_word_type (expr_type e)` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     rw[supportedTypesTheory.supported_full_word_type_def] >>
-     simp[compileEnvTheory.type_memory_bytes_def]) >>
-  qpat_assum `type_memory_bytes cenv (expr_type e) = 32` mp_tac >>
-  qpat_assum `loc = slot_loc b` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  Cases_on `b` >>
-  simp[loweringPostsTheory.slot_loc_def, compileEnvTheory.word_scale_def,
-       compileEnvTheory.elem_size_in_location_def, compileEnvTheory.is_slot_addressed_def]
+  `compile_dynarray_append cenv r0 shadow_op 1 1 (expr_type e)
+     (lowered_value_type cenv e) cap T
+     (if b then LocTransient else LocStorage) sm = ((),sb)` by
+    (`type_memory_bytes cenv (expr_type e) = 32` by
+       (qpat_assum `supported_full_word_type (expr_type e)` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        rw[supportedTypesTheory.supported_full_word_type_def] >>
+        simp[compileEnvTheory.type_memory_bytes_def]) >>
+     qpat_assum `compile_dynarray_append cenv r0 shadow_op _ _ _ _ _ _ _ sm = _` mp_tac >>
+     qpat_assum `type_memory_bytes cenv (expr_type e) = 32` mp_tac >>
+     qpat_assum `loc = slot_loc b` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `b` >>
+     simp[loweringPostsTheory.slot_loc_def, compileEnvTheory.word_scale_def,
+          compileEnvTheory.elem_size_in_location_def, compileEnvTheory.is_slot_addressed_def]) >>
+  irule append_nested_suffix_frame_post >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `sm` >>
+  reverse conj_tac
+  >- (qpat_assum `~ctx_has_dalloca ctx`
+        (fn th => irule (SRULE [th] append_nested_storage_cont_framed)) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >> simp[] >>
+      conj_tac >- metis_tac[] >>
+      conj_tac
+      >- (qpat_assum `compile_dynarray_append cenv r0 shadow_op 1 1 _ _ _ _ _ sm = _`
+            (irule_at Any) >> simp[] >> first_assum ACCEPT_TAC) >>
+      metis_tac[]) >>
+  decide_tac
 QED
 
 Finalise append_nested_after_target_full[local]
 
 (* A dynamic array reached through subscripts/attributes, rooted at a local
    (memory) or at a storage/transient/hashmap variable (gate SEQ-4806). *)
-(* TEMPORARILY CHEATED - the statement's normal post now carries alloca_frame and the older allocations' taint clause; the helper this proof closes the post with (append_nested_after_target_full) exports no memory or taint frame for the append. Original proof:
+Theorem body_append_nested_full:
+  !cx t e.
+    (!id. t <> NameTarget id) /\ (!nid. t <> TopLevelNameTarget nid) /\
+    (!s'' p t'.
+       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
+    body_base_target_full_ok cx t ==>
+    body_stmt_full_ok cx (Append t e)
 Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
@@ -2379,7 +2462,25 @@ Resume body_append_nested_full[target_success]:
   simp[] >>
   conj_tac >- fs[loweringPostsTheory.ret_pc_ok_def] >>
   conj_tac >- (`cx_tops cx = tops` by fs[body_inv_def, gasContextTheory.cx_tops_def] >> simp[]) >>
-  qexistsl_tac [`bindings`, `t`, `cap`, `env`, `es`,
+  reverse conj_tac
+  >- (`MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+        (drule vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom >>
+         simp[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) es.storage_trace` by
+        (qpat_assum `eval_target_place cx t (_ with gas_obs := _) = (res,mid)` mp_tac >>
+         qpat_assum `valid_horizon cx st0 _ mid.storage_trace` mp_tac >>
+         rpt (pop_assum kall_tac) >> rpt strip_tac >>
+         drule_at Any vyperStorageTraceTheory.storage_trace_frame_prefix >>
+         simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+         metis_tac[gasOutcomeFullTheory.valid_horizon_append]) >>
+      qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:256``]
+        stmtSimDefsTheory.target_post_alloca_frame) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any)) >>
+  qexistsl_tac [`bindings`, `t`, `cap`, `env`,
     `gas_explicit marks s0.vs_gas_readings ++ mid.gas_obs`, `r`, `ret_ty`,
     `shadow_func`, `shadow_sa`, `shadow_sb`, `shadow_sp`, `sp`] >>
   simp[] >>
@@ -2396,14 +2497,3 @@ Resume body_append_nested_full[target_success]:
 QED
 
 Finalise body_append_nested_full
-*)
-Theorem body_append_nested_full:
-  !cx t e.
-    (!id. t <> NameTarget id) /\ (!nid. t <> TopLevelNameTarget nid) /\
-    (!s'' p t'.
-       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx t ==>
-    body_stmt_full_ok cx (Append t e)
-Proof
-  cheat
-QED
