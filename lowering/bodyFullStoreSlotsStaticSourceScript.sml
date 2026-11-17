@@ -81,13 +81,24 @@ Proof
     MEM l (MAP (\bb. bb.bb_label)
       (FRONT (emitted_blocks (start_relabel L ids sa)
         (start_swap sa L ids sb))))` by
-    (rpt gen_tac >> strip_tac >>
-     `compile_store_slots cenv src dst ty tr (start_relabel L ids sa) =
-       ((),start_swap sa L ids sb)` by metis_tac[] >>
-     drule store_slots_fragment_control_layout >>
-     simp[EVERY_MEM] >> strip_tac >>
-     qpat_x_assum `!i'. MEM i' _ ==> _`
-       (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
-     gvs[MEM_MAP] >> FAIL_TAC "condition operand") >>
-  FAIL_TAC "assembly"
+    metis_tac[store_slots_fragment_label_operand_target] >>
+  drule store_slots_fragment_syntax_shape >> strip_tac >>
+  drule_all store_slots_canonical_observer_exists >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`L`, `ids`, `id`, `obs`] >> simp[] >>
+  `compile_store_slots cenv src dst ty tr (start_relabel L ids sa) =
+    ((),start_swap sa L ids sb)` by metis_tac[] >>
+  drule store_slots_fragment_syntax_shape >> strip_tac >>
+  `code_action (\opc. MEM opc
+    [ASSIGN;ADD;MUL;EQ;LT;ISZERO;SHR;MLOAD;JMP;JNZ;
+     SSTORE;TSTORE;INVALID]) (compile_store_slots cenv src dst ty tr)` by
+    simp[store_slots_code_family] >>
+  `EVERY (\i. MEM i.inst_opcode
+    [ASSIGN;ADD;MUL;EQ;LT;ISZERO;SHR;MLOAD;JMP;JNZ;
+     SSTORE;TSTORE;INVALID]) (frag_code (start_relabel L ids sa)
+       (start_swap sa L ids sb))` by
+    (fs[code_action_def, code_step_def] >> metis_tac[]) >>
+  drule store_slots_fragment_outputs_fresh >> strip_tac >>
+  drule store_slots_fragment_store_site_code >> disch_then assume_tac >>
+  gvs[] >> rpt strip_tac >> metis_tac[]
 QED
