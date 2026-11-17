@@ -911,7 +911,7 @@ Theorem ifexp_arm_finish_vv_family[local]:
   ?z Gz tf. !H. valid_horizon cx st0 H tr ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK z,Gz,tf) /\
     (?tv'. INL tv = INL tv' /\
-      vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv'
+      vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee (Value v)
         (if is_word_type t then StackValue t (Var rv)
          else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
       vv_store_bound cx (expr_type (IfExp t c a b))
