@@ -5,6 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftGasPrefixProvider
   dftNativePlanPrefix
+  dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
