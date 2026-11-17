@@ -51,6 +51,38 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+Theorem layout_canonical_ordinary_success_witness:
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend g s t /\
+  layout_driver_indexed es ass g /\ g.lop_cursor < LENGTH es /\
+  EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+  k.lop_ids = g.lop_ids /\
+  resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+    g.lop_ids g.lop_anns k.lop_anns /\
+  resolved_annotation_edge C g.lop_cursor g.lop_config (EL g.lop_cursor es) q'
+    g.lop_ids (EL g.lop_cursor ass) ids' (EL (SUC g.lop_cursor) ass) /\
+  layout_phase_ok_abort D lo vs0 C C' q0 es qs qend
+    (INL g) (INL k) (OK post) (OK tpost) /\
+  step_inst fuel C i s = OK post /\ step_inst_base j t = OK tpost /\
+  j.inst_opcode <> INVOKE /\
+  ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode ==>
+  layout_driver_indexed es ass k /\
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend k post tpost /\
+  k.lop_origin = g.lop_origin
+Proof
+  strip_tac >>
+  `layout_driver_indexed es ass k` by
+    (irule layout_driver_indexed_ordinary >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `layout_ordinary_entry D lo vs0 C C' q0 es qs qend k post tpost /\
+   k.lop_origin = g.lop_origin` by
+    gvs[layout_phase_ok_abort_def, layout_phase_entry_def, layout_phase_origin_def] >>
+  `step_inst 0 C' j t = OK tpost` by simp[step_inst_non_invoke] >>
+  `layout_aligned_entry D lo vs0 C C' q0 es qs qend k post tpost` by
+    (irule layout_aligned_step >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem layout_canonical_ordinary_success:
   layout_aligned_entry D lo vs0 C C' q0 es qs qend g s t /\
   layout_driver_indexed es ass g /\ g.lop_cursor < LENGTH es /\
@@ -69,19 +101,10 @@ Theorem layout_canonical_ordinary_success:
   layout_canonical_success D lo vs0 C C' q0 es qs ass qend
     g.lop_cursor F (INL g) post tpost
 Proof
-  strip_tac >>
-  `layout_driver_indexed es ass k` by
-    (irule layout_driver_indexed_ordinary >> goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
-  `layout_ordinary_entry D lo vs0 C C' q0 es qs qend k post tpost /\
-   k.lop_origin = g.lop_origin` by
-    gvs[layout_phase_ok_abort_def, layout_phase_entry_def, layout_phase_origin_def] >>
-  `step_inst 0 C' j t = OK tpost` by simp[step_inst_non_invoke] >>
-  `layout_aligned_entry D lo vs0 C C' q0 es qs qend k post tpost` by
-    (irule layout_aligned_step >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  strip_tac >> drule_all layout_canonical_ordinary_success_witness >> strip_tac >>
   simp[layout_canonical_success_def] >> qexists_tac `INL k` >>
   simp[layout_phase_origin_def] >>
-  metis_tac[layout_ordinary_entry_halted_agree]
+  metis_tac[layout_ordinary_entry_halted_agree, layout_aligned_entry_def]
 QED
 
 Theorem layout_driver_annotation_edge_at:
@@ -472,6 +495,307 @@ Proof
   PURE_REWRITE_TAC[context_read0_opcode_def, clean_value_shape_def,
     scalar_binary_opcode_def] >>
   Cases_on `i.inst_opcode` >> simp[PULL_EXISTS]
+QED
+
+Theorem layout_canonical_ordinary_nonterm_pending:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
+  step_inst_base i s = OK post ==>
+  ?k tpost. step_inst_base j t = OK tpost /\
+    k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\ k.lop_ids = g.lop_ids /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs qend
+      (INL g) (INL k) (OK post) (OK tpost)
+Proof
+  strip_tac >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    (fs[MEM, context_read0_opcode_def, clean_value_shape_def, scalar_binary_opcode_def] >>
+     gvs[is_terminator_def]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  qpat_x_assum `es = _` SUBST_ALL_TAC >>
+  qpat_x_assum `qs = _` SUBST_ALL_TAC >>
+  qpat_x_assum `q = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `g.lop_cursor = n` (SUBST_ALL_TAC o SYM) >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >> simp[] >> strip_tac >>
+  `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+  `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?k tpost. step_inst_base j t = OK tpost /\
+    k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_ids = g.lop_ids /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor (MAP FST path))
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 (MAP FST path) (MAP SND path) qend
+      (INL g) (INL k) (OK post) (OK tpost)` by
+    (Cases_on `i.inst_opcode = ALLOCA`
+     >- (`f = fn` by gvs[decoration_entry_def, decoration_at_def] >> gvs[] >>
+         rename1 `layout_driver_row C' fn fn' positions` >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?sz v. i.inst_operands = [Lit sz] /\ i.inst_outputs = [v]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute, AllCaseEqs()] >> metis_tac[]) >>
+         `FLOOKUP positions (Allocation i.inst_id) =
+            SOME (concretize_positions C' fn i.inst_id)` by
+           (qpat_x_assum `layout_driver_row _ _ _ _` mp_tac >>
+            simp[layout_driver_row_def] >> strip_tac >> gvs[] >>
+            drule_all layout_stage_row_position >> simp[]) >>
+         drule_all layout_alloca_trace_step >> metis_tac[]) >>
+     `j = i` by gvs[concretize_positions_unchanged] >>
+     qpat_x_assum `j = i` SUBST_ALL_TAC >>
+     `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+     `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+     Cases_on `i.inst_opcode = NOP`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_nop_trace_step >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [SSTORE; TSTORE]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_state_write_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [ASSERT; ASSERT_UNREACHABLE]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `i.inst_outputs = []` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_assert_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [MSTORE; MSTORE8]`
+     >- (`?opd opv. i.inst_operands = [opd;opv] /\ i.inst_outputs = []` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         `ALL_DISTINCT (fn_labels fn)` by
+           fs[o1_fn_shape_def, wf_function_def] >>
+         `active_inst fn i s` by fs[decoration_at_def] >>
+         `~in_revert_forward fn s` by
+           (irule active_inst_not_revert_forward >> simp[] >> qexists `i` >> fs[MEM]) >>
+         `~joint_read_exempt (EL g.lop_cursor (q0::MAP SND path))` by
+           (fs[layout_ordinary_trace_def, joint_read_exempt_def]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_memory_store_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `names`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = BUMP`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?v w. i.inst_outputs = [v;w]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         drule_all layout_bump_trace_step >> metis_tac[]) >>
+     `?v. i.inst_outputs = [v]` by
+       (irule layout_ordinary_single_output >> rpt conj_tac >>
+        FIRST [first_assum ACCEPT_TAC,
+               disj1_tac >> first_assum ACCEPT_TAC,
+               disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC,
+               disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC]) >>
+     Cases_on `i.inst_opcode = ASSIGN`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_assign_trace_step >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [ADD; SUB]`
+     >- (`i.inst_opcode = ADD \/ i.inst_opcode = SUB` by metis_tac[MEM] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_affine_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [SHL; SHR; SAR]`
+     >- (drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_shift_trace_step >>
+     disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = OFFSET`
+     >- (`LENGTH i.inst_operands = 2` by
+           (qpat_x_assum `inst_wf i` mp_tac >> simp[inst_wf_def] >>
+            rpt strip_tac >> gvs[]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_offset_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [CALLER; ADDRESS; CALLVALUE; GAS]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_environment_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `context_read0_opcode i.inst_opcode`
+     >- (gvs[context_read0_opcode_def] >>
+         `context_read0_opcode i.inst_opcode` by simp[context_read0_opcode_def] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_context_reader_trace_step >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [SLOAD; TLOAD]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_state_read_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `indexed_context_read_opcode i.inst_opcode`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[indexed_context_read_opcode_def, MEM] >>
+            gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_indexed_context_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [EQ; LT; GT]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_compare_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >>
+         disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [CODESIZE; DLOAD]`
+     >- (`code_data_reader_shape i` by
+           (fs[MEM] >> gvs[code_data_reader_shape_def] >>
+            qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_code_data_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = PARAM`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_param_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = RETPC_PARAM`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_retpc_param_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = INITIAL_FMP`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_all layout_initial_fmp_trace_step >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [BALANCE; SELFBALANCE]`
+     >- (`balance_reader_shape i` by
+           (fs[MEM] >> gvs[balance_reader_shape_def] >>
+            qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_balance_reader_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = EXTCODESIZE`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_all layout_extcodesize_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = EXTCODEHASH`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?arg. i.inst_operands = [arg]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_all layout_extcodehash_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = RETURNDATASIZE`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_returndatasize_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     `clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT]` by
+       (fs[MEM, indexed_context_read_opcode_def] >> metis_tac[]) >>
+     drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+       layout_clean_value_trace_step >>
+     disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `g.lop_config = _`)) >>
+     disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+     simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem layout_canonical_ordinary_nonterm_success_headroom_static:

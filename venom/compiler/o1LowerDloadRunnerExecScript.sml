@@ -339,3 +339,193 @@ Resume ld_runner_exec_clause_events_fuel[call_ok]:
 
 QED
 Finalise ld_runner_exec_clause_events_fuel
+
+(* Attach the terminal observation to the same selected recursive result. *)
+val ldEmptyObservation = ``!se. r = Abort Revert_abort se /\
+  se.vs_returndata = [] ==> ?te. r' = Abort Revert_abort te /\
+  te.vs_returndata = []``;
+fun ldObserveSelected tm =
+  if is_exists tm then
+    let val (v,b) = dest_exists tm in
+      if fst (dest_var v) = "r'" then
+        mk_exists (v, mk_conj (b, ldEmptyObservation))
+      else mk_exists (v, ldObserveSelected b)
+    end
+  else if is_abs tm then
+    let val (v,b) = dest_abs tm in mk_abs (v, ldObserveSelected b) end
+  else if is_comb tm then
+    let val (f,x) = dest_comb tm in
+      mk_comb (ldObserveSelected f, ldObserveSelected x) end
+  else tm;
+val ldExecClauseFuel = List.nth (strip_conj (fst (dest_imp
+  (concl ld_runner_templates_fuel))), 1);
+val ldObservedExecClauseFuel = ldObserveSelected ldExecClauseFuel;
+
+Theorem ld_runner_exec_clause_fuel_revert_empty_conditional:
+  ^ldObservedExecClauseFuel
+Proof
+  qabbrev_tac `RR = ^ldPacket` >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  `active_inst fn i s` by
+    (drule ld_joint_source >>
+     disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_projection) >>
+     fs[Once frame_reachable_cases] >> metis_tac[]) >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   ptr_discipline lo C vs /\ taint_within D C vs /\ fmp_free_ctx C` by
+    (fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+     metis_tac[ptr_discipline_upto_all, taint_within_upto_all]) >>
+  Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
+  >- suspend "forward" >>
+  Cases_on `step_inst fuel C i s`
+  >- suspend "ok"
+  >- suspend "halt"
+  >- suspend "abort"
+  >- suspend "ret"
+  >> qpat_x_assum `terminates _` mp_tac >>
+  simp[Once exec_block_def, terminates_def]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[forward]:
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   ptr_discipline lo C vs` by
+    (fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+     metis_tac[ptr_discipline_upto_all]) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by simp[] >>
+  fs[] >>
+  `exec_block fuel C bb s = exec_block fuel C bb s` by simp[] >>
+  drule_all (SRULE [] (Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] ld_runner_forward_endpoint)) >> strip_tac >>
+  gvs[Abbr `RR`] >> rpt strip_tac >> gvs[] >>
+  drule_all ld_runner_forward_abort_endpoint_revert_empty >>
+  strip_tac >> gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[ok]:
+  `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
+  Cases_on `is_terminator i.inst_opcode`
+  >- (drule_all (SRULE [] (Q.INST
+        [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] ld_runner_branch_endpoint)) >> strip_tac >>
+      `exec_block fuel C bb s = OK v` by simp[Once exec_block_def] >>
+      fs[Abbr `RR`] >> metis_tac[]) >>
+  `v.vs_current_bb = s.vs_current_bb /\
+   v.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
+    (conj_tac >- metis_tac[step_preserves_control_flow] >>
+     metis_tac[ld_step_ok_call_ctx]) >>
+  `terminates (exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (qpat_x_assum `terminates (exec_block fuel C bb s)` mp_tac >>
+     simp[Once exec_block_def]) >>
+  Cases_on `i.inst_opcode = INVOKE` >- suspend "call_ok" >>
+  `~in_revert_forward fn s` by
+    (spose_not_then assume_tac >>
+     fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
+     gvs[] >> fs[is_terminator_def]) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS]
+    (SRULE [] (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+      ld_joint_noncall_continue))) >>
+  strip_tac >>
+  `wf_function fn` by
+    (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
+     strip_tac >> fs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def]) >>
+  `get_instruction bb (SUC s.vs_inst_idx) = SOME inst2` by
+    (qpat_x_assum `active_inst fn inst2 _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb''` by
+       (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  qpat_x_assum `!s''. _` (qspec_then `v` mp_tac) >> simp[] >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  `tnext.vs_current_bb = t.vs_current_bb` by
+    (imp_res_tac ld_joint_current_bb >> fs[]) >>
+  `exec_block fuel C bb s =
+   exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  gvs[] >> simp[]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[halt]:
+  rename1 `step_inst fuel C i s = Halt se` >>
+  `exec_block fuel C bb s = Halt se` by simp[Once exec_block_def] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[terminates_def] >>
+      first_x_assum (drule_all_then strip_assume_tac) >>
+      `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+      drule_all ld_joint_unchanged_fetch >> strip_tac >>
+      `exec_block fuel C' bb' t = Halt te` by simp[Once exec_block_def] >>
+      gvs[Abbr `RR`]) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS]
+    (SRULE [] (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+      ld_runner_halt_endpoint))) >>
+  strip_tac >> gvs[Abbr `RR`]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[abort]:
+  rename1 `step_inst fuel C i s = Abort reason se` >>
+  `exec_block fuel C bb s = Abort reason se` by simp[Once exec_block_def] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[terminates_def] >>
+      first_x_assum (drule_all_then strip_assume_tac) >>
+      `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+      drule_all ld_joint_unchanged_fetch >> strip_tac >>
+      `exec_block fuel C' bb' t = Abort reason te` by simp[Once exec_block_def] >>
+      gvs[Abbr `RR`]) >>
+  drule_all (SRULE [] (Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] ld_runner_abort_endpoint)) >>
+  strip_tac >> gvs[Abbr `RR`] >> rpt strip_tac >> gvs[] >>
+  drule_all ld_runner_abort_endpoint_revert_empty >>
+  strip_tac >> gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[ret]:
+  rename1 `step_inst fuel C i s = IntRet ir se` >>
+  `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[terminates_def] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> strip_tac >>
+     drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM i (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
+    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+        o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
+  `i.inst_opcode = RET` by
+    (drule step_inst_intret_opcodes >>
+     fs[no_dret_def, EVERY_MEM] >> strip_tac >>
+     gvs[is_raw_fmp_opcode_def]) >>
+  drule_all (SRULE [] (Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] ld_runner_ret_endpoint)) >> strip_tac >>
+  fs[Abbr `RR`] >> metis_tac[]
+QED
+
+Resume ld_runner_exec_clause_fuel_revert_empty_conditional[call_ok]:
+  gvs[terminates_def] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+  drule_all ld_joint_unchanged_fetch >> strip_tac >>
+  `wf_function fn` by
+    (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
+     strip_tac >> fs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def]) >>
+  `get_instruction bb (SUC s.vs_inst_idx) = SOME next` by
+    (qpat_x_assum `active_inst fn next _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb''` by
+       (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `t1.vs_current_bb = t.vs_current_bb` by
+    (imp_res_tac ld_joint_current_bb >> fs[]) >>
+  gvs[] >>
+  `exec_block fuel C bb s =
+   exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  `exec_block fuel C' bb' t =
+   exec_block fuel C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  simp[]
+QED
+Finalise ld_runner_exec_clause_fuel_revert_empty_conditional
