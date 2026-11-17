@@ -126,7 +126,7 @@ Proof
   gvs[] >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Theorem own_nonterm_advance[local]:
+Theorem own_nonterm_advance:
   own_invoke_cut allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
       ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 /\ own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
@@ -234,7 +234,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem own_jump_continue[local]:
+Theorem own_jump_continue:
   own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 (k,prefix_ops,rest_ops,ps,vs,as,ss) /\
@@ -267,7 +267,7 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem own_terminator_result[local]:
+Theorem own_terminator_result:
   own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 (k,prefix_ops,rest_ops,ps,vs,as,ss) /\
@@ -297,7 +297,7 @@ Proof
   gvs[unitShapeDefsTheory.inst_shape_ok_def]
 QED
 
-Theorem own_revert_result[local]:
+Theorem own_revert_result:
   own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 (k,prefix_ops,rest_ops,ps,vs,as,ss) /\
@@ -314,7 +314,7 @@ Proof
   Cases_on `exec_block fuel ctx bb vs` >> gvs[block_rest_def] >> metis_tac[]
 QED
 
-Theorem own_nonok_result[local]:
+Theorem own_nonok_result:
   own_invoke_cut allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 /\

@@ -105,7 +105,7 @@ val _ = Parse.temp_overload_on ("own_invoke_cut",
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
       ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 prefix_ops rest_ops k ps vs as ss inst``);
 
-Theorem own_invoke_cut_discharged[local]:
+Theorem own_invoke_cut_discharged:
   own_invoke_cut allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0
