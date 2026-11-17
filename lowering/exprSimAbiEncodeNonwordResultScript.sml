@@ -100,20 +100,24 @@ Theorem abi_encode_bytes_vv_post:
   (!name b n. local_region ce es'.scopes actual name b n ==> p+sz <= b \/ b+n <= p) /\
   wb_frame ce es es' origin s0 actual /\
   (~expr_has_effect e ==> pure_frame ce func es origin s0 actual) ==>
-  vv_post H ctx func ce cx e es origin sb s0 es' result
+  vv_post H ctx func ce cx e es origin sb s0 es' (Value (BytesV payload))
     (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) actual
 Proof
   strip_tac >>
+  `read_result cx (Value (BytesV payload)) es' = (INL (BytesV payload),es')` by
+    simp[read_result_def, return_def] >>
   `post_value_type ce e = expr_type e` by
     (irule post_value_type_bytestring >> simp[compileEnvTheory.is_bytestring_type_def]) >>
   simp_tac bool_ss [vv_post_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (simp[] >> irule abi_encode_bytes_vv_holds >>
-    goal_assum (drule_at Any) >> simp[]) >>
+    goal_assum (drule_at Any) >> simp[] >> qexists_tac `p` >> simp[]) >>
   conj_tac >- (simp[] >> irule abi_encode_bytes_vv_at >>
-    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  fs[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
+    goal_assum (drule_at Any) >> simp[] >>
+    qexistsl_tac [`aid`, `p`, `sz`] >> fs[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  fs[wb_frame_def] >> simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_nonword_success_suffix:
@@ -192,7 +196,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
-  irule abi_encode_bytes_vv_post >>
+  irule (Q.INST [`result` |-> `Value (BytesV payload)`] abi_encode_bytes_vv_post) >>
   goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl_tac [`sa.cs_next_id`, `p`, `outsz`] >>

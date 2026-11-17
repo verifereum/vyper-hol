@@ -110,12 +110,12 @@ Theorem snapshot_store_result_mem:
     aid < sa.cs_next_id ==>
     regions_disjoint (w2n d) (type_memory_size ltv) off len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    vv_post H ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
-    vv_own ce cx (expr_type e) sm sb ee raw
+    vv_own ce cx (expr_type e) sm sb ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     pure_frame ce func ee sm s z /\
-    vv_store_bound cx (expr_type e) lt ee raw
+    vv_store_bound cx (expr_type e) lt ee (Value v)
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = sb.cs_current_bb /\
@@ -156,7 +156,7 @@ Proof
      qexists_tac `inst.inst_id` >>
      simp[regions_disjoint_def] >>
      metis_tac[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
-  `vv_post H ctx func ce cx e es sa sb s0 ee raw
+  `vv_post H ctx func ce cx e es sa sb s0 ee (Value v)
      (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
    pure_frame ce func ee sm s z` by
     (irule snapshot_store_post_frame >> simp[] >>
@@ -167,6 +167,17 @@ Proof
          rpt strip_tac >>
          qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ z.vs_memory = _` irule >>
          decide_tac) >>
-     metis_tac[]) >>
-  qexists_tac `z` >> simp[]
+     conj_tac
+     >- (qexists_tac `raw` >>
+         qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+         qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[vv_holds_def, vv_at_def]) >>
+     qexistsl_tac [`sc`, `src`] >> simp[]) >>
+  qexists_tac `z` >> simp[] >> conj_tac
+  >- (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_own_def, vyperStateTheory.read_result_def,
+           vyperStateTheory.return_def]) >>
+  qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_store_bound_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.return_def]
 QED

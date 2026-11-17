@@ -7,6 +7,8 @@ Ancestors
 
 Theorem live_immutable_captured_root:
   expr_sim_inv cenv cx env t /\
+  (~cx_const_name cx (src,id) \/
+   IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) /\
   FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
     | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) ==>
@@ -23,13 +25,16 @@ Proof
      gvs[get_source_immutables_def] >> metis_tac[]) >>
   conj_tac
   >- (fs[expr_sim_inv_def] >>
-      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
-        drule >> simp[] >> strip_tac >> gvs[]) >>
+      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+        (qspecl_then [`src`,`id`,`root_ty`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[]) >>
   metis_tac[]
 QED
 
 Theorem live_immutable_captured_array_view:
   expr_sim_inv cenv cx env t /\ expr_sim_inv cenv cx env ee /\
+  (~cx_const_name cx (src,id) \/
+   IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) /\
   stmt_state_rel H ctx func cenv cx ee s /\
   vv_place_ptr cenv cx t u (PlaceR (ImmutablePlace src id path))
     (LocatedValue (ArrayT et bd) p) /\
@@ -69,9 +74,9 @@ Proof
      Cases_on `ALOOKUP t.immutables cx.txn.target` >>
      gvs[raise_def, return_def]) >>
   `FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` by gvs[] >>
+  qpat_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   drule_all live_immutable_captured_root >> strip_tac >>
   `eval_operand p.ptr_operand s = SOME (n2w (off+k))` by metis_tac[] >>
-  `FLOOKUP env.bare_globals (src,id) = SOME root_ty` by gvs[] >>
   drule_all live_immutable_array_current_view >> strip_tac >>
   qexistsl_tac [`off`,`itv`,`k`,`iv'`,`v`] >> simp[]
 QED
