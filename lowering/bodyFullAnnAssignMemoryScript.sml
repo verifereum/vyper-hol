@@ -11,6 +11,8 @@ Ancestors
   context emitHelper venomState bodyPtrDefs typedMemoryCopy
   valueEncodingDefs valueEncodingProps valueEncoding vyperTyping ptrDiscipline
   gasOutcomeFullCompose
+  stmtSimDeclCopyFrame stmtSimDeclCompose bodyMemoryDefs bodyPtrDefs
+  loweringStateRelDefs bodyBinopFragMemory emitHelperProps fragExec allocaHistory
   compileEnv exprLowering stmtLowering loweringPosts
   vyperTypeSystem vyperTypeArgFits vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -169,6 +171,207 @@ Proof
   `tv = Value (default_value tyv)` by
     (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      simp[] >> metis_tac[]) >>
-  gvs[read_result_def, bind_return] >> first_x_assum irule >>
+  gvs[read_result_def, bind_return] >> first_x_assum irule >> simp[] >>
   qexistsl_tac [`marks`, `Value (default_value tyv)`] >> simp[]
 QED
+
+(* Empty declarations use a 32-byte write, although the declared runtime
+   type and the destination capacity may both be larger.  The installation
+   implication below is the common, capacity-parametric contract verbatim. *)
+Theorem annassign_memory_full_empty_post:
+  (!(H : (bool # 256 word # type_value) list # num list) D lo d ctx func old ce cx es mid out sa b sf s0 s t G0 tn0 G tn Gf tf
+   id p sz w inst n tyv v sc rest lctx.
+    new_variable id tyv v mid = (INL (),out) /\
+    mid.scopes = sc::rest /\ lookup_scopes id mid.scopes = NONE /\
+    out = mid with scopes :=
+      (sc |+ (id,<|assignable := T; type := tyv; value := v; popped := []|>))::rest /\
+    (!name. name <> id ==> FLOOKUP ce.ce_vars name = FLOOKUP old.ce_vars name) /\
+    ce with <|ce_vars := old.ce_vars; ce_var_type := old.ce_var_type;
+              ce_dynarray_capacity := old.ce_dynarray_capacity|> = old /\
+    FLOOKUP old.ce_vars id = NONE /\
+    stmt_state_rel H ctx func ce cx mid s /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at D lo d ce cx mid G tn s /\ fn_inst_ids_distinct func /\
+    FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr ce mid.scopes p /\ lookup_var p s = SOME w /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+    sa.cs_next_id <= inst.inst_id /\ ptr_covers G tn p s sz /\
+    local_ptrs_reserved ce b /\ not_fresh_at b p /\
+    (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+    (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+    (!x. not_fresh_at sa x ==> not_fresh_at b x) /\
+    n <= type_memory_size tyv /\ type_memory_size tyv <= sz /\
+    val_wf tyv v /\ value_has_type tyv v /\
+    typed_copy_state_frame b (w2n w) n s t /\
+    val_in_memory tyv v (w2n w) t.vs_memory /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory tyv v (w2n w) mem) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n w <= i /\ i < w2n w+n) ==>
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at b x ==>
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    alloca_frame old es sa s0 ce mid s /\
+    (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
+      FLOOKUP s.vs_allocas aid = SOME ent) /\
+    (!aid off len i.
+      FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+      (!name a cap. local_region old es.scopes s0 name a cap ==>
+        off+len <= a \/ a+cap <= off) /\
+      off <= i /\ i < off+len /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+    (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x s = SOME z) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sf.cs_current_insts /\ ~block_is_terminated sf /\
+    return_buf_frame d ce sf t /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+    stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sf /\
+    cenv_top_ext old ce out.scopes /\
+    stmt_state_rel H ctx func ce cx out t /\
+    storage_well_formed_on cx out (FST H) /\
+    return_buf_frame d ce sf t /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    ghost_inv_at D lo d ce cx out Gf tf t /\
+    (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z) /\
+    (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t.vs_allocas aid = SOME ent) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame old es sa s0 ce out t /\
+    (!aid off len i.
+      FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+      (!name a cap. local_region old es.scopes s0 name a cap ==>
+        off+len <= a \/ a+cap <= off) /\
+      off <= i /\ i < off+len /\ i IN tf.t_mem ==> i IN tn0.t_mem)) /\
+  has_length_word typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
+  new_variable id tyv (default_value tyv) mid = (INL (),out) /\
+  mid.scopes = sc::rest /\ lookup_scopes id mid.scopes = NONE /\
+  out = mid with scopes :=
+    (sc |+ (id,<|assignable := T; type := tyv;
+               value := default_value tyv; popped := []|>))::rest /\
+  (!name. name <> id ==> FLOOKUP ce.ce_vars name = FLOOKUP old.ce_vars name) /\
+  ce with <|ce_vars := old.ce_vars; ce_var_type := old.ce_var_type;
+            ce_dynarray_capacity := old.ce_dynarray_capacity|> = old /\
+  FLOOKUP old.ce_vars id = NONE /\
+  (!H. valid_horizon cx st0 H out.storage_trace ==>
+    stmt_state_rel H ctx func ce cx mid s /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at D lo d ce cx mid G tn s) /\
+  fn_inst_ids_distinct func /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  not_local_ptr ce mid.scopes p /\ lookup_var p s = SOME w /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+  sa.cs_next_id <= inst.inst_id /\ ptr_covers G tn p s sz /\
+  local_ptrs_reserved ce b /\ not_fresh_at b p /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+  (!x. not_fresh_at sa x ==> not_fresh_at b x) /\
+  type_memory_size tyv <= sz /\
+  alloca_frame old es sa s0 ce mid s /\
+  (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
+    FLOOKUP s.vs_allocas aid = SOME ent) /\
+  (!aid off len i.
+    FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+    (!name a cap. local_region old es.scopes s0 name a cap ==>
+      off+len <= a \/ a+cap <= off) /\
+    off <= i /\ i < off+len /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+  (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x s = SOME z) /\
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  emit_void MSTORE [Var p; Lit 0w] b = ((),sf) /\
+  w2n w + 32 < dimword (:256) /\ w2n w + 32 <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code b sf func /\ ~s.vs_halted /\ ~block_is_terminated sf /\
+  s.vs_current_bb = b.cs_current_bb /\ s.vs_inst_idx = LENGTH b.cs_current_insts /\
+  return_buf_frame d ce b s /\ alloca_history func s ==>
+  ?t Gf tf.
+    (!DF. gas_origin_ptr_path (DF,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    !H. valid_horizon cx st0 H out.storage_trace ==>
+      stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sf /\
+      cenv_top_ext old ce out.scopes /\
+      stmt_state_rel H ctx func ce cx out t /\
+      storage_well_formed_on cx out (FST H) /\
+      return_buf_frame d ce sf t /\ alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at D lo d ce cx out Gf tf t /\
+      (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z) /\
+      (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t.vs_allocas aid = SOME ent) /\
+      (!x. not_fresh_at sa x ==>
+        FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame old es sa s0 ce out t /\
+      (!aid off len i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+        (!name a cap. local_region old es.scopes s0 name a cap ==>
+          off+len <= a \/ a+cap <= off) /\
+        off <= i /\ i < off+len /\ i IN tf.t_mem ==> i IN tn0.t_mem)
+Proof
+  strip_tac >>
+  qpat_x_assum `!H D lo d ctx func old ce cx es mid out sa b sf s0 s t G0 tn0 G tn Gf tf id p sz w inst n tyv v sc rest lctx. _`
+    (mk_asm "install") >>
+  `32 <= type_memory_size tyv` by
+    (qspecl_then [`get_tenv cx`, `typ`, `tyv`, `0`, `(mstore 0 0w s).vs_memory`]
+       mp_tac memory_length_word_layout >> simp[mstore_mem_word_at_same]) >>
+  `ptr_covers G tn p s 32` by
+    (qpat_x_assum `ptr_covers G tn p s sz`
+       (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+     simp[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all annassign_memory_full_empty_store_path >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `Gf`, `tf`] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `return_buf_frame d ce sf t` by suspend "return_frame" >>
+  `alloca_history func t` by suspend "history" >>
+  qx_gen_tac `H` >> disch_tac >>
+  asm_x "install" match_mp_tac >>
+  qexistsl_tac [`mid`, `b`, `s`, `G`, `tn`, `id`, `p`, `sz`, `w`,
+                 `inst`, `32`, `tyv`, `default_value tyv`, `sc`, `rest`] >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _`
+    (drule_then strip_assume_tac) >>
+  simp[default_value_well_typed, arithmeticTheory.ADD_COMM] >> gvs[]
+QED
+
+Resume annassign_memory_full_empty_post[return_frame]:
+  qpat_x_assum `install :- _` kall_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  irule return_buf_frame_frame >>
+  qexistsl_tac [`ce`, `s`, `b`] >>
+  fs[typed_copy_state_frame_def]
+QED
+
+Resume annassign_memory_full_empty_post[history]:
+  qpat_x_assum `install :- _` kall_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sf.cs_current_bb = b.cs_current_bb` by
+    (qpat_x_assum `emit_void MSTORE _ b = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[]) >>
+  qpat_x_assum `fn_has_code b sf func` mp_tac >>
+  simp[fn_has_code_def] >> strip_tac >>
+  rename1 `lookup_block b.cs_current_bb func.fn_blocks = SOME bb` >>
+  `?restcode. bb.bb_instructions = sf.cs_current_insts ++ restcode` by
+    metis_tac[rich_listTheory.IS_PREFIX_APPEND] >>
+  `t with vs_inst_idx := s.vs_inst_idx + 1 = t` by
+    simp[venom_state_component_equality] >>
+  `alloca_history func (t with vs_inst_idx := s.vs_inst_idx + 1)` suffices_by
+    asm_rewrite_tac[] >>
+  drule alloca_history_no_alloca_slice >>
+  disch_then (qspecl_then [`t`, `bb`,
+    `[mk_inst b.cs_next_id MSTORE [Var p; Lit 0w] []]`, `restcode`] mp_tac) >>
+  simp[venomInstTheory.mk_inst_def, DROP_APPEND, arithmeticTheory.SUB_EQ_0] >>
+  `t with vs_inst_idx := LENGTH b.cs_current_insts + 1 = t` by
+    simp[venom_state_component_equality] >>
+  `LENGTH b.cs_current_insts - (LENGTH b.cs_current_insts + 1) = 0` by decide_tac >>
+  asm_rewrite_tac[DROP_0]
+QED
+
+Finalise annassign_memory_full_empty_post
