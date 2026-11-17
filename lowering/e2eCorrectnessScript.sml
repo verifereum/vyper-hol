@@ -819,6 +819,31 @@ Proof
   drule_all external_call_result_rel_frame >> simp[]
 QED
 
+(* ADMISSION: statement only.  Waits for the exceptional-arm composition proof (ctx_sim transport plus the coarse S7 abort observation). *)
+Theorem call_at_horizon_static_abort_composition:
+  run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' /\
+  external_call_result_rel
+    (storage_trace_horizon
+      (source_storage_trace am tx (MAP SND (call_trace es)) gs))
+    tops ret tx (call_external (SOME (MAP SND (call_trace es))) gs am tx)
+    (run_context fuel ctx vs) /\
+  ctx_sim
+    (external_call_dead
+      (storage_trace_horizon
+        (source_storage_trace am tx (MAP SND (call_trace es)) gs))
+      tx (call_external (SOME (MAP SND (call_trace es))) gs am tx))
+    ctx ctx' vs vs' /\
+  (!n. terminates (run_context n ctx vs) ==>
+    ?u. run_context n ctx vs = Abort ExHalt_abort u) /\
+  (!n a u. run_context n ctx' vs' = Abort a u ==>
+    ?r' es''. run_call es = SOME (r',es'') /\
+      (frame_resource_starved es r' es'' \/
+       ?exc out lgs. frame_outcome es r' es'' (SOME exc) out lgs)) ==>
+  call_result_rel_at gs tops ret am tx es r es'
+Proof
+  cheat
+QED
+
 (* The S3 memory facts of the raw unit from the entry's memory- and
    pointer-safe runs, through the loweringMemCorrect bridges. *)
 Theorem selected_raw_memory[local]:

@@ -563,3 +563,38 @@ Proof
       fs[]) >>
   simp[]
 QED
+
+(* ADMISSION: statement only.  Waits for its proof from gas_source_exempt's static disjunct and the source result relation. *)
+Theorem call_static_abort_gas_source_exempt:
+  !H tops ret tx src u.
+    tx.is_static /\
+    FST src <> INR (Error (RuntimeError "msg.gas: no gas reading")) /\
+    external_call_result_rel H tops ret tx src (Abort ExHalt_abort u) ==>
+    gas_source_exempt tops tx src
+Proof
+  cheat
+QED
+
+(* ADMISSION: statement only.  Waits for the static gas consumer's proof; the reading-availability premise is discharged inside the gas proof. *)
+Theorem call_gas_static_lowered_inv:
+  !H tops ret am tx fuel unit out vs_in vs marks tail.
+    tx.is_static /\
+    (!rest.
+      FST (call_external (SOME vs_in.vs_outcomes)
+        (gas_explicit marks vs_in.vs_gas_readings ++ rest) am tx) <>
+      INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+    ~gas_source_exempt tops tx
+      (call_external (SOME vs_in.vs_outcomes)
+        (gas_explicit marks vs_in.vs_gas_readings ++ tail) am tx) /\
+    external_call_result_rel H tops ret tx
+      (call_external (SOME vs_in.vs_outcomes)
+        (gas_explicit marks vs_in.vs_gas_readings ++ tail) am tx)
+      (run_context fuel unit.cu_context vs_in) /\
+    terminates (run_context fuel unit.cu_context vs_in) /\
+    (o1_lowered_inv out.po_unit.cu_context vs \/
+     (!n. terminates (run_context n unit.cu_context vs_in) ==>
+       ?u. run_context n unit.cu_context vs_in = Abort ExHalt_abort u)) ==>
+    o1_lowered_inv out.po_unit.cu_context vs
+Proof
+  cheat
+QED

@@ -19,6 +19,7 @@ Ancestors
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
+  contextStaticAbortRel
 
 Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
@@ -147,6 +148,35 @@ Proof
   gvs[codegen_context_obligations_def, unit_wf_def, venom_wf_def,
       reachable_call_graph_acyclic_def, unit_shape_ok_def] >>
   rpt strip_tac >> drule_all entry_fn_first_lookup >> simp[]
+QED
+
+(* ADMISSION: statement only.  Waits for the abort analogue of o1_pipeline_codegen_obligations' proof. *)
+Theorem o1_pipeline_codegen_obligations_abort:
+  !rpolicy unit out cp Inv.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    unit_shape_ok out.po_unit /\
+    codegen_memory_obligations_abort Inv out.po_unit.cu_context cp ==>
+    codegen_context_obligations_abort Inv out.po_unit.cu_context cp
+Proof
+  cheat
+QED
+
+(* ADMISSION: statement only.  Waits for its proof from o1_pipeline_codegen_obligations_abort and o1_pipeline_memory_obligations_lowered_abort. *)
+Theorem o1_pipeline_context_obligations_lowered_abort:
+  !rpolicy unit out cp vs.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    unit_shape_ok out.po_unit /\
+    (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+      mem_inv (\ctx fn inst s.
+        in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s)
+        out.po_unit.cu_context vs) /\
+    vs.vs_initial_fmp = n2w cp.cp_initial_fmp ==>
+    ?Inv. codegen_context_obligations_abort Inv out.po_unit.cu_context cp /\
+          codegen_reachability_package Inv out.po_unit.cu_context vs
+Proof
+  cheat
 QED
 
 (* L6: exact source-to-Venom entry boundary, including LIVE transferred state. *)

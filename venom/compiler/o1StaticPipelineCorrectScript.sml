@@ -9,7 +9,7 @@ Ancestors
   venomFnScheduleRunner venomPassSchedule fcgDefs fcgAnalysisProps fcgBridge
   fcgPruning fcgPostorder ptrDiscipline rawReachableFmp unitTransformDefs
   unitShapeDefs unitMemInv irSupply stateEquivProps staticAbortDefs
-  lowerDloadDefs venomState list rich_list
+  lowerDloadDefs venomState list rich_list codegenSymRel
 
 Theorem o1_pre_walk_sim_static_abort[local]:
   run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit s =
@@ -331,4 +331,68 @@ Proof
   rpt strip_tac >>
   drule_all run_venom_pipeline_fuel_static_abort >> strip_tac >>
   qexists_tac `vs_in` >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
+QED
+
+(* ADMISSION: statement only.  Waits for the static-inclusive raw S6b run-bound proof (the static O1 supplier's run bound). *)
+Theorem run_venom_pipeline_run_bounded_static_abort:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp ==>
+    ?fuel' M. !D vs fmp.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_initial_state_ok vs /\
+      vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+      (!fn inst.
+        MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+        ~MEM (Label "runtime_begin") inst.inst_operands) /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      w2n vs.vs_initial_fmp <= w2n fmp /\
+      (!vs_in. raw_variant fmp vs_in vs ==>
+        raw_unit_memory_ok unit.cu_context vs_in /\
+        ptr_discipline lo unit.cu_context vs_in /\
+        taint_within D unit.cu_context vs_in /\
+        mem_inv dload_offset_ok unit.cu_context vs_in /\
+        mem_inv dload_headroom_ok unit.cu_context vs_in /\
+        terminates (run_context fuel unit.cu_context vs_in)) ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  cheat
+QED
+
+(* ADMISSION: statement only.  Waits for the static-frame code-end proof, the companion of o1_pipeline_code_end_offset_ok without o1_run_state_ok. *)
+Theorem o1_pipeline_code_end_offset_ok_static_abort:
+  !D lo rpolicy unit out vs_out fmp.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+    o1_initial_state_ok vs_out /\ vs_out.vs_fmp = vs_out.vs_initial_fmp /\
+    code_layout_valid vs_out /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+       ~MEM (Label "runtime_begin") inst.inst_operands) /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               ~MEM (Label "code_end") inst.inst_operands) /\
+    LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp ==>
+    ?vs_in. raw_variant fmp vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in /\
+       ptr_discipline lo unit.cu_context vs_in /\
+       taint_within D unit.cu_context vs_in /\
+       mem_inv dload_offset_ok unit.cu_context vs_in /\
+       mem_inv dload_headroom_ok unit.cu_context vs_in /\
+       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                               s.vs_code = vs_in.vs_code /\
+                               s.vs_data_section = vs_in.vs_data_section)
+         unit.cu_context vs_in ==>
+       code_end_offset_ok (raw_reachable vs_out) out.po_unit.cu_context)
+Proof
+  cheat
 QED
