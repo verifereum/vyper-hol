@@ -10,6 +10,7 @@
 Theory bodyFullRaiseReason
 Ancestors
   stateRelProj
+  bodyFullRaiseReasonLiteral bodyFullRaiseReasonNonliteral
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -36,5 +37,9 @@ Theorem compile_raise_reason_frag_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
+  >- (gvs[] >> irule compile_raise_reason_literal_frag_full >>
+      metis_tac[]) >>
+  irule compile_raise_reason_nonliteral_frag_full >> metis_tac[]
 QED
