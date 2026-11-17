@@ -45,7 +45,7 @@ Ancestors
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative
+  dftPacketReturnNative dftPacketReturnRowSupply
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
