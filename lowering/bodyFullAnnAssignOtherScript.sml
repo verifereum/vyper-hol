@@ -4,7 +4,7 @@ Ancestors
   bodySim bodySimFull bodyFullPreds bodyFullAllocaFresh bodyFullUnwrap
   bodyFullAnnAssignMemoryPost bodyInvNoDalloca gasOutcomeFullCompose
   stmtSimDeclSource gasOutcomeFullStmts gasExemptCert vyperStorageTrace
-  stmtLoweringMono allocLimits exprSimAggregateLayout
+  stmtLoweringMono allocLimits exprSimAggregateLayout bodyDeclCopyMemory
   annassignRelayoutSource memoryLocalRhsProps exprSimHyps exprSimHypsDefs
   stmtSimDeclTypedCode stmtSimDeclSourceSeparation externalNormalizePremises
   assignBasePtrBoundary
@@ -271,21 +271,52 @@ Proof
     (mk_asm "dispatch") >>
   qpat_x_assum `!H D lo d ctx func old ce cx es mid out sa b sf s0 s t G0 tn0 G tn Gf tf id p sz w inst n tyv v sc rest lctx. _`
     (mk_asm "install") >>
-  `~ctx_has_dalloca ctx /\ cenv.ce_alloca_locals` by
-    metis_tac[body_inv_no_dalloca, body_inv_def] >>
-  rw[stmt_frag_full_def] >>
+  `~ctx_has_dalloca ctx` by
+    (drule body_inv_no_dalloca >> simp[]) >>
+  `cenv.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all annassign_full_prefix_parts >>
   disch_then (qx_choosel_then
     [`r`,`shadow_r`,`p`,`sz`,`a`,`shadow_a`,`vv`,`sv`,`shadow_sv`,`op`,`b`,`shadow_b`]
     strip_assume_tac) >>
-  gvs[] >>
+  gnvs[] >>
   qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _` drule >>
   disch_then (qspec_then `expr_type e` strip_assume_tac) >>
   suspend "layout"
 QED
 
 Resume annassign_other_typed_full_execution[layout]:
-  FAIL_TAC "layout"
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    (qpat_assum `stmt_exprs_ok cenv (AnnAssign id typ e)`
+       (strip_assume_tac o
+        PURE_REWRITE_RULE [stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all declare_local_memory_types_mem >> strip_tac >>
+  `lowered_value_type cenv' e = expr_type e /\
+   type_memory_bytes cenv' typ < 2 ** 64` by simp[] >>
+  drule_all annassign_other_typed_layout >> strip_tac >>
+  suspend "prefix"
+QED
+
+Resume annassign_other_typed_full_execution[prefix]:
+  irule gas_outcome_full_initial_domain >>
+  simp[] >> (conj_tac >- simp[evaluate_storage_trace_frame]) >>
+  disch_tac >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `~(has_length_word typ /\ is_empty_value_expr e)` by metis_tac[] >>
+  gvs[Excl "NOT_AND"] >>
+  drule_all annassign_full_alloc_rhs_prefix >>
+  disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
+  suspend "compose"
+QED
+
+Resume annassign_other_typed_full_execution[compose]:
+  FAIL_TAC "compose"
 QED
 
 Finalise annassign_other_typed_full_execution
