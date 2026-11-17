@@ -124,6 +124,7 @@ QED
 Theorem incompatible_return_layout_located:
   !tops am tx ce env es ret e ty sa vv sm.
   supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
   expr_sim_inv ce
     (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
   IS_SOME (type_stmt env ret (Return (SOME e))) /\

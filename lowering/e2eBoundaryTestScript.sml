@@ -61,7 +61,11 @@ Theorem boundary_live_and_fresh:
     ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
     LENGTH ctxt.msgParams.code <= 24576
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  strip_tac >>
+  drule call_state_rel_parsed >> strip_tac >>
+  drule call_state_rel_code_length >> strip_tac >>
+  fs[call_state_rel_def] >>
+  qpat_x_assum `es.contexts = _` (fn th => gvs[th])
 QED
 
 Theorem block_environment_bounds:
@@ -119,18 +123,22 @@ QED
 
 Theorem typing_and_storage_contracts:
   (source_typing_ok tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
-          checked_contract_runtime_ready art [(NONE,tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx) /\
-  (source_storage_ok am tx os gs <=>
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx) /\
+  (call_storage_ok am tx os gs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
     let obs = source_storage_trace am tx os gs in
     let (regions, locks) = storage_trace_horizon obs in
       storage_roots_fit obs /\ regions_consistent regions /\
       storage_locks_separated regions locks /\
-      storage_well_formed_on cx (initial_state am []) regions)
+      storage_well_formed_on cx (initial_state am []) regions /\
+      storage_trace_backends_well_formed cx regions obs)
 Proof
-  simp[source_typing_ok_def, source_storage_ok_def]
+  simp[source_typing_ok_def, call_storage_ok_def]
 QED
 
 Theorem outcome_guard_success_only:
@@ -336,12 +344,14 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel_at [] tops ret am tx es r es' <=>
     ?out. frame_outcome es r es' NONE out am'.logs /\
       tx_return_bytes tops ret tx v out /\
-      accounts_agree H cx am'.accounts
+      accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es))
+      transient_agree H cx.txn.target am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx.txn.target) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def, call_success_rel_def]
+  strip_tac >>
+  gvs[call_result_rel_at_def, effects_agree_def, initial_evaluation_context_def,
+      AC CONJ_ASSOC CONJ_COMM]
 QED
 
 Theorem halt_requires_empty_success_and_effects:
@@ -352,12 +362,13 @@ Theorem halt_requires_empty_success_and_effects:
     (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
     frame_outcome es r es' NONE [] am'.logs /\
-      accounts_agree H cx am'.accounts
+      accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es))
+      transient_agree H cx.txn.target am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx.txn.target) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def]
+  strip_tac >>
+  gvs[call_result_rel_at_def, effects_agree_def, initial_evaluation_context_def]
 QED
 
 Theorem assert_result_does_not_compare_requests:
