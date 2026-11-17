@@ -25,6 +25,7 @@
  *)
 Theory codegenLabelDisciplined
 Ancestors
+  codegenEntryFacts
   symFnStep symFnSimSpec codegenAsmStaticWf codegenSymRel codegenEntrySim
   codegenEntryRel asmSymBridge asmSymSem fnSimSpec frameRel
   contextCodegenRel codegenRel unitShapeDefs venomExecSemantics venomState
