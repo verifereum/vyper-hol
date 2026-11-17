@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState stateRelProj placeMemoryFieldRebuild assignTuplePtrStoreWord abiDecodeStaticProps representationCleanPtr valueEncodingProofs stmtSimDeclStore bodyPtrDefs venomMemDefs pred_set
+  sum venomState stateRelProj placeMemoryFieldRebuild assignTuplePtrStoreWord abiDecodeStaticProps representationCleanPtr valueEncodingProofs stmtSimDeclStore bodyPtrDefs venomMemDefs pred_set stateRelProjStorage
 
 val _ = Parse.hide "body";
 
