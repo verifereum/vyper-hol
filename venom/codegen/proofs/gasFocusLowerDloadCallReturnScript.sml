@@ -300,12 +300,12 @@ Resume ld_focus_invoke_pop_correlated[readings]:
      simp[merge_callee_state_def]) >>
   `EVERY (\h. h.lf_src.vs_gas_readings = h.lf_tgt.vs_gas_readings /\
     LENGTH cs'.vs_gas_readings <= LENGTH h.lf_src.vs_gas_readings) (f::fs)` by
-    (qpat_x_assum `EVERY (\h. h.lf_src.vs_gas_readings = _) fr` mp_tac >>
+    (qpat_x_assum `EVERY (\h. h.lf_src.vs_gas_readings = _ /\ _) fr` mp_tac >>
      qpat_x_assum `fr = HD fr::f::fs` (fn th => once_rewrite_tac[th]) >>
      rpt (pop_assum kall_tac) >> simp[]) >>
   `EVERY (\h. h.lf_src.vs_gas_readings = h.lf_tgt.vs_gas_readings /\
     LENGTH sr.vs_gas_readings <= LENGTH h.lf_src.vs_gas_readings) (g::fs)` by
-    (qpat_x_assum `EVERY (\h. h.lf_src.vs_gas_readings = _) (f::fs)` mp_tac >>
+    (qpat_x_assum `EVERY (\h. h.lf_src.vs_gas_readings = _ /\ _) (f::fs)` mp_tac >>
      simp[Abbr `g`]) >>
   qexistsl_tac [`PG`, `DRESTRICT G keep`, `tn1`, `next`,
     `sr with vs_inst_idx := SUC s.vs_inst_idx`,
@@ -315,12 +315,34 @@ Resume ld_focus_invoke_pop_correlated[readings]:
   simp[NoAsms, listTheory.HD] >>
   conj_tac >- simp[Abbr `g`, ld_image_def] >>
   conj_tac >- simp[Abbr `g`] >>
-  reverse conj_tac >- simp[] >>
+  reverse conj_tac
+  >- (qpat_assum `EVERY (\h. h.lf_src.vs_gas_readings = _ /\ _) (g::fs)` mp_tac >>
+      qpat_assum `!caller_cs. ld_return_cont C fn caller_cs s ==> _` mp_tac >>
+      qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
+      qpat_assum `q.vs_current_bb = t.vs_current_bb` mp_tac >>
+      qpat_assum `sr.vs_gas_readings = cs'.vs_gas_readings` mp_tac >>
+      qpat_assum `q.vs_gas_readings = u.vs_gas_readings` mp_tac >>
+      qpat_assum `cs'.vs_gas_readings = u.vs_gas_readings` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]) >>
   suspend "prefix"
 QED
 
 Resume ld_focus_invoke_pop_correlated[prefix]:
-  FAIL_TAC "prefix"
+  qpat_assum `ld_envelope _ _ (sr with vs_inst_idx := SUC s.vs_inst_idx) _ Y _` mp_tac >>
+  qpat_assum `active_inst fn' nexti _` mp_tac >>
+  qpat_assum `fn' = ld_image f` mp_tac >>
+  qpat_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
+  qpat_assum `q.vs_current_bb = t.vs_current_bb` mp_tac >>
+  qpat_assum `sr.vs_current_bb = s.vs_current_bb` mp_tac >>
+  qpat_assum `t.vs_inst_idx = p` mp_tac >>
+  qpat_assum `f.lf_fn = fn` mp_tac >>
+  qpat_assum `ALL_DISTINCT (MAP _ fn.fn_blocks)` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt disch_tac >>
+  drule ld_sync_control >> strip_tac >> gvs[ld_image_def] >>
+  drule_at (Pat `ld_envelope _ _ _ _ _ _`)
+    lowerDloadSafetyLocationsTheory.ld_envelope_active_head >> simp[] >>
+  disch_then (qspecl_then [`nexti`, `q with vs_inst_idx := SUC t.vs_inst_idx`] mp_tac) >>
+  simp[ld_prefix_zero] >> strip_tac >> gvs[]
 QED
 
 Finalise ld_focus_invoke_pop_correlated
