@@ -260,7 +260,7 @@ Theorem annassign_memory_full_empty_post:
   (!H. valid_horizon cx st0 H out.storage_trace ==>
     stmt_state_rel H ctx func ce cx mid s /\
     storage_well_formed_on cx mid (FST H) /\
-    ghost_inv_at D lo d ce cx mid G tn s) /\
+    ghost_inv_at (DF H) lo d ce cx mid G tn s) /\
   fn_inst_ids_distinct func /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   not_local_ptr ce mid.scopes p /\ lookup_var p s = SOME w /\
@@ -301,7 +301,7 @@ Theorem annassign_memory_full_empty_post:
       return_buf_frame d ce sf t /\ alloca_history func t /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at D lo d ce cx out Gf tf t /\
+      ghost_inv_at (DF H) lo d ce cx out Gf tf t /\
       (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z) /\
       (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t.vs_allocas aid = SOME ent) /\
       (!x. not_fresh_at sa x ==>
