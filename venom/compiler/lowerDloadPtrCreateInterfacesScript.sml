@@ -19,6 +19,7 @@ Theorem dload_exec_create_success_iff:
   exec_create i s value off sz salt = OK u <=>
   ?out w v. i.inst_outputs = [out] /\
     w2n sz <= 2 * max_code_size /\
+    s.vs_outcomes <> [] /\
     consume_create_outcome (venom_create_request s value off sz salt) s = (w,v) /\
     u = update_var out w v
 Proof

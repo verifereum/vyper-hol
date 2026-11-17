@@ -370,6 +370,7 @@ Theorem ricf_execution_ext_call_next:
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\
   step_inst fuel C inst s = exec_ext_call inst s gas addr value ao az ro rs static /\
   step_inst fuel Ct inst t = exec_ext_call inst t gas addr value ao' az ro' rs static /\
   rq1 = venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas) /\
