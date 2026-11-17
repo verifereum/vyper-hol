@@ -955,6 +955,15 @@ Proof
   simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 
+Theorem storage_trace_frame_create_operands:
+  storage_trace_frame
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, storage_trace_frame_create,
+       storage_trace_frame_bind_all, storage_trace_frame_check_create_blueprint]
+QED
+
 Theorem storage_trace_frame_prefix:
   storage_trace_frame f /\ f st = (res,st') ==>
   ?observations. st'.storage_trace = st.storage_trace ++ observations
@@ -1017,7 +1026,8 @@ val trace_frame_atoms = List.concat (map (CONJUNCTS o SPEC_ALL)
    storage_trace_frame_append_place,
    storage_trace_frame_pop_place, storage_trace_frame_raw_call,
    storage_trace_frame_ext_call, storage_trace_frame_send,
-   storage_trace_frame_create, storage_trace_frame_conditional_result,
+   storage_trace_frame_create, storage_trace_frame_create_operands,
+   storage_trace_frame_conditional_result,
    storage_trace_frame_check_create_blueprint,
    storage_trace_frame_precompile_call_success]);
 
