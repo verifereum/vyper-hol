@@ -48,6 +48,9 @@ Proof
     (qpat_x_assum `step_inst fuel C inst s = OK u` mp_tac >>
      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
      metis_tac[]) >>
+  `s.vs_outcomes <> []` by
+    (spose_not_then assume_tac >>
+     fs[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     (fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
      metis_tac[occ_frame_reachable_projection]) >>
@@ -70,6 +73,13 @@ Proof
   `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
     sites (ricf_complete_params PG s.vs_params) G tn s t` by
     fs[ricf_execution_invariant_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def,
+        Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
    s.vs_call_ctx = t.vs_call_ctx` by
     (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
