@@ -194,6 +194,9 @@ Theorem abi_decode_dynarray_prepare_site_effect:
 Proof
   strip_tac >> drule_all abi_decode_array_prepare_reentry_opcodes >> strip_tac >>
   drule_all abi_decode_array_setup_sequence_static >> strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx func t` by
     (irule decode_site_resources_fields >> qexists `s` >>
       fs[venom_state_component_equality]) >>

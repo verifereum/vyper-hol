@@ -12,7 +12,7 @@ Theorem aug_place_memory_target_ready:
   expr_body_pre cenv cx env e es /\ target_indices_pre cenv cx env bt /\
   eval_target_place cx bt (es with gas_obs := gs) =
     (INL (MemoryPlace id path),mid) /\
-  target_post ctx func cenv cx es sa sp s0 mid
+  target_post H ctx func cenv cx es sa sp s0 mid
     (PlaceR (MemoryPlace id path)) (Type ty) r t ==>
   expr_body_pre cenv cx env e mid /\
   ?cur tv. read_place cx (MemoryPlace id path) mid = (INL cur,mid) /\
@@ -27,12 +27,12 @@ Proof
   simp[] >>
   `expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env mid` by
     fs[expr_body_pre_def] >>
-  `target_post ctx func cenv cx (es with gas_obs := gs) sa sp s0 mid
+  `target_post H ctx func cenv cx (es with gas_obs := gs) sa sp s0 mid
      (PlaceR (MemoryPlace id path)) (Type ty) r t` by
-    (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_assum `target_post _ _ _ _ (_ with gas_obs := _) _ _ _ _ _ _ _ _`
+  qpat_assum `target_post _ _ _ _ _ (_ with gas_obs := _) _ _ _ _ _ _ _ _`
     (mp_then (Pat `target_post`) mp_tac aug_place_memory_source_ready) >>
   disch_then (drule_at (Pat `supported_stmt`)) >>
   disch_then (drule_at (Pat `type_stmt`)) >> simp[]

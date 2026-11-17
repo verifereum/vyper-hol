@@ -10,7 +10,7 @@ Ancestors
 Theorem unwrap_ensure_slot_loop:
   (loc = LocStorage \/ loc = LocTransient) /\ n <> 1 /\
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -59,6 +59,7 @@ Proof
   drule_all ensure_slot_memory_loop_code >> strip_tac >>
   drule_all unwrap_alloc_site_bound >> strip_tac >>
   `buffer_allocation_base s sa.cs_next_id < dimword (:256)` by decide_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all unwrap_alloc_loop_entry >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `compile_slot_to_memory src (Var root) n loc sm = (lab,sb)` by metis_tac[] >>

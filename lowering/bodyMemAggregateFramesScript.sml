@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem aggregate_alloca_immutable_prefix_sep:
-  stmt_state_rel ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\ used <= sz ==>
   ce.ce_is_ctor ==>

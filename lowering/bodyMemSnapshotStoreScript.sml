@@ -26,11 +26,11 @@ Proof
       `val_store_size tv v <= type_memory_size tv` by
         metis_tac[val_store_size_le] >>
       gvs[compile_store_memory_def] >>
-      irule compile_store_bytestring_body_mem_ok >>
+      irule bodyCopyMemoryBaseTheory.compile_store_bytestring_body_mem_ok >>
       qexistsl_tac [`d`, `dst`, `len`, `src`, `w`] >> simp[] >>
       metis_tac[]) >>
   gvs[compile_store_memory_def] >>
-  irule compile_copy_memory_body_mem_ok >>
+  irule bodyCopyMemoryBaseTheory.compile_copy_memory_body_mem_ok >>
   qexistsl_tac [`d`, `dst`, `type_memory_size tv`, `src`, `w`] >> simp[]
 QED
 
@@ -97,7 +97,7 @@ Theorem snapshot_store_result_mem:
   alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  expr_post ctx func ce cx e es sa sc s0 ee v src s /\
+  expr_post H ctx func ce cx e es sa sc s0 ee v src s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id <= inst.inst_id /\
@@ -110,7 +110,7 @@ Theorem snapshot_store_result_mem:
     aid < sa.cs_next_id ==>
     regions_disjoint (w2n d) (type_memory_size ltv) off len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    vv_post ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee raw
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     vv_own ce cx (expr_type e) sm sb ee raw
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
@@ -119,7 +119,9 @@ Theorem snapshot_store_result_mem:
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
     z.vs_current_bb = sb.cs_current_bb /\
-    z.vs_inst_idx = LENGTH sb.cs_current_insts
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+    z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all snapshot_nonword_store_path_mem >>
@@ -129,6 +131,9 @@ Proof
       mp_tac >> simp[copy_static_def, venom_state_component_equality] >>
      rpt strip_tac >> simp[]) >>
   drule copy_static_fields >> strip_tac >>
+  `z.vs_requests = s.vs_requests` by
+    (qpat_x_assum `copy_static z = copy_static s` mp_tac >>
+     simp[copy_static_def, venom_state_component_equality]) >>
   `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s` by
     metis_tac[not_fresh_at_mono] >>
   `eval_operand dst z = SOME d` by
@@ -151,7 +156,7 @@ Proof
      qexists_tac `inst.inst_id` >>
      simp[regions_disjoint_def] >>
      metis_tac[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
-  `vv_post ctx func ce cx e es sa sb s0 ee raw
+  `vv_post H ctx func ce cx e es sa sb s0 ee raw
      (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
    pure_frame ce func ee sm s z` by
     (irule snapshot_store_post_frame >> simp[] >>

@@ -6,8 +6,8 @@ Ancestors bodyPtrHashBuiltinsGhostFrame bodyPtrDefs pred_set
 
 Theorem hash_shrinking_ghost_frame:
   !d cenv cx es G tn s ctx fn sa t G' tn' writes.
-    ghost_inv d cenv cx es G tn s /\
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x. not_fresh_at sa x ==>
@@ -16,8 +16,8 @@ Theorem hash_shrinking_ghost_frame:
     (!name b k i. local_region cenv es.scopes s name b k /\
       b <= i /\ i < b+k ==> i NOTIN writes) /\
     (!i. i NOTIN writes ==> mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
-    tn'.t_mem = tn.t_mem DIFF writes /\ stor_taint_ok cx tn' t ==>
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
+    tn'.t_mem = tn.t_mem DIFF writes /\ stor_taint_ok H cx tn' t ==>
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
 Proof
   rpt gen_tac >> strip_tac >>
   `!i. i NOTIN writes ==> (i IN tn'.t_mem <=> i IN tn.t_mem)` by simp[] >>
@@ -28,8 +28,8 @@ QED
 
 Theorem hash_ghost_inv_outcomes[local]:
   !d cenv cx es G tn s os.
-    ghost_inv d cenv cx (es with outcomes := os) G tn s =
-    ghost_inv d cenv cx es G tn s
+    ghost_inv H d cenv cx (es with outcomes := os) G tn s =
+    ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def]
 QED
@@ -44,7 +44,7 @@ Theorem hash_sha256_tail_success_frame:
     run_inst_seq [mk_inst i0 GAS [] [gv];
       mk_inst i1 STATICCALL [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv];
       mk_inst i2 ASSERT [Var sv] []; mk_inst i3 MLOAD [Var q] [out]] s = OK t /\
-    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
     local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
@@ -54,7 +54,7 @@ Theorem hash_sha256_tail_success_frame:
     Gf = DRESTRICT G (COMPL {gv;sv;out}) /\
     tf = tn with <|t_var := tn.t_var |+ (gv,{}) |+ (sv,{}) |+ (out,{});
       t_mem := tn.t_mem DIFF range_bytes [(w2n r,32)]|> ==>
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+4) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf (Var out) = {} /\
     op_prov Gf (Var out) = NONE
@@ -69,7 +69,7 @@ Proof
           (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
         <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T; vs_outcomes := rest|>)))` by
     (irule sha256_tail_run >> simp[] >> metis_tac[]) >>
-  `ghost_inv d cenv cx es Gf tf t /\ ghost_kept cenv es sa G tn s Gf tf` by
+  `ghost_inv H d cenv cx es Gf tf t /\ ghost_kept cenv es sa G tn s Gf tf` by
     suspend "frame" >>
   simp[hash_ghost_inv_inst_idx, hash_ghost_inv_outcomes] >>
   gvs[op_taint_def, FLOOKUP_UPDATE, op_prov_def, FLOOKUP_DRESTRICT]

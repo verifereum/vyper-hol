@@ -5,7 +5,7 @@ Ancestors
 
 Theorem ecadd_insts_mem_ok:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\

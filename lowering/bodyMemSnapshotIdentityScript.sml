@@ -14,13 +14,13 @@ Theorem snapshot_identity_unwrap_mem:
     unwrap_value cenv (vv_with_type (lowered_value_type cenv e) vv) sm =
       (op,sb) /\
     read_result cx tv ee = (INL v,ee) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     sb = sm /\ op = vv_operand vv /\
     gas_path_mem ctx func s 0 (OK s) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
     expr_store_bound cx (expr_type e) v op s /\
     (!sw tvt. eval_operand op s = SOME sw /\
        evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>

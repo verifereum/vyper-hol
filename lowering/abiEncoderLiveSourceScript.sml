@@ -18,7 +18,7 @@ Proof
        vyper_base_to_abi_type_def, is_dynamic_def]
 QED
 
-Theorem abi_source_non_nominal_forms[local]:
+Theorem abi_source_non_nominal_forms:
   evaluate_type env ty = SOME tv /\ value_has_type tv v /\
   val_footprint tv v <> type_memory_size tv ==>
   (?n bs. ty = BaseT (BytesT (Dynamic n)) /\

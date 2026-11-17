@@ -6,7 +6,7 @@ Ancestors
   valueEncodingDefs valueTypingMemoryProps words integer arithmetic
 
 Theorem array_selected_store_bound_mem:
-  vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee child
+  vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee child
     (LocatedValue et (mk_ptr dst (vv_loc bvv))) u /\
   vv_store_bound cx (ArrayT et bd) lt eb tv bvv t /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\

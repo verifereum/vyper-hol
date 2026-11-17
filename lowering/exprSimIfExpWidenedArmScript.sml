@@ -46,8 +46,8 @@ Theorem compile_selected_ifexp_post_frag:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   acyclic_struct_metadata ce.ce_struct_fields ==>
   frag_exec ctx sa sb
-    (\s. vv_post ctx func ce cx e es origin sa s0 ee tvv vv s)
-    (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
+    (\s. vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s)
+    (\q. expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q) R
 Proof
   strip_tac >>

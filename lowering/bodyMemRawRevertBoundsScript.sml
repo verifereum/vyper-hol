@@ -4,7 +4,7 @@ Ancestors
   bodyMemBiKeccakBounds exprLoweringProps loweringPosts valueEncodingProps
 
 Theorem raw_revert_dynamic_post_bounds:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) /\

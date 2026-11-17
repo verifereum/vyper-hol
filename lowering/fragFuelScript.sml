@@ -411,6 +411,7 @@ Theorem frag_fuel_seq:
     E1 SUBSET E UNION L2 /\ E2 SUBSET E ==>
     frag_fuel Wv (L1 UNION L2) E st st' (K1 + K2)
 Proof
+  rpt gen_tac >> rename1 `frag_fuel _ _ _ _ _ (K1 + bound2)` >>
   rpt strip_tac >> PURE_REWRITE_TAC[frag_fuel_def] >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN assume_tac) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
@@ -418,12 +419,12 @@ Proof
     metis_tac[fn_has_code_split] >>
   `N <= mid.cs_next_var` by decide_tac >>
   `!t. at_point mid t \/ (t.vs_current_bb IN L2 /\ t.vs_inst_idx = 0) ==>
-       ?j2. j2 <= K2 /\
+       ?j2. j2 <= bound2 /\
             fuel_outcome G ctx fn t j2
               (\u. vars_kept N Wv t u /\
                    (at_point st' u \/ (u.vs_current_bb IN E /\ u.vs_inst_idx = 0)))` by
     (gen_tac >> disch_tac >>
-     qpat_x_assum `frag_fuel Wv L2 E2 mid st' K2`
+     qpat_x_assum `frag_fuel Wv L2 E2 mid st' bound2`
        (mp_tac o SIMP_RULE std_ss [frag_fuel_def]) >>
      disch_then (qspecl_then [`G`, `N`, `ctx`, `fn`, `t`] mp_tac) >>
      impl_tac >- simp[] >>
@@ -432,7 +433,7 @@ Proof
      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
      simp[] >> rpt strip_tac >> fs[SUBSET_DEF]) >>
   `!t. at_point st t \/ (t.vs_current_bb IN L1 /\ t.vs_inst_idx = 0) ==>
-       ?j. j <= K1 + K2 /\
+       ?j. j <= K1 + bound2 /\
            fuel_outcome G ctx fn t j
              (\u. vars_kept N Wv t u /\
                   (at_point st' u \/ (u.vs_current_bb IN E /\ u.vs_inst_idx = 0)))` by
@@ -446,7 +447,7 @@ Proof
      disch_then (qspecl_then
        [`\u. vars_kept N Wv t u /\
              (at_point st' u \/ (u.vs_current_bb IN E /\ u.vs_inst_idx = 0))`,
-        `K2`] mp_tac) >>
+        `bound2`] mp_tac) >>
      impl_tac
      >- (qx_gen_tac `u` >> BETA_TAC >> disch_then (CONJUNCTS_THEN assume_tac) >>
          Cases_on `at_point mid u \/ (u.vs_current_bb IN L2 /\ u.vs_inst_idx = 0)`
@@ -486,13 +487,13 @@ Proof
    (cs_no_phi st ==> cs_no_phi mid) /\ ?K1. frag_fuel Wv L1 E1 st mid K1` by
     metis_tac[fuel_ok_def] >>
   `cs_extends mid st' /\ mid.cs_next_var <= st'.cs_next_var /\
-   (cs_no_phi mid ==> cs_no_phi st') /\ ?K2. frag_fuel Wv L2 E2 mid st' K2` by
+   (cs_no_phi mid ==> cs_no_phi st') /\ ?bound2. frag_fuel Wv L2 E2 mid st' bound2` by
     metis_tac[fuel_ok_def] >>
   rpt conj_tac
   >- metis_tac[cs_extends_trans]
   >- decide_tac
   >- metis_tac[] >>
-  qexists_tac `K1 + K2` >> metis_tac[frag_fuel_seq]
+  qexists_tac `K1 + bound2` >> metis_tac[frag_fuel_seq]
 QED
 
 Theorem fuel_ok_ignore_bind:
@@ -934,13 +935,13 @@ Proof
     metis_tac[fuel_okS_def] >>
   `Q a mid` by metis_tac[] >>
   `cs_extends mid st' /\ mid.cs_next_var <= st'.cs_next_var /\
-   (cs_no_phi mid ==> cs_no_phi st') /\ ?K2. frag_fuel Wv L2 E2 mid st' K2` by
+   (cs_no_phi mid ==> cs_no_phi st') /\ ?bound2. frag_fuel Wv L2 E2 mid st' bound2` by
     metis_tac[fuel_okS_def] >>
   rpt conj_tac
   >- metis_tac[cs_extends_trans]
   >- decide_tac
   >- metis_tac[] >>
-  qexists_tac `K1 + K2` >> metis_tac[frag_fuel_seq]
+  qexists_tac `K1 + bound2` >> metis_tac[frag_fuel_seq]
 QED
 
 (* A precondition that only needs the variables allocated so far to stay

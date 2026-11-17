@@ -34,8 +34,9 @@ Theorem name_value_post:
   value_has_type entry.type entry.value /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME ann /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  vv_post ctx func cenv cx (Name ann id) es sa sa s0
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) ==>
+  vv_post H ctx func cenv cx (Name ann id) es sa sa s0
     (es with gas_obs := []) (PlaceR (MemoryPlace id []))
     (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0
 Proof
@@ -46,7 +47,7 @@ Proof
        mp_tac eval_name_word >>
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
@@ -56,6 +57,10 @@ Proof
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
      simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def,
        vyperASTTheory.expr_type_def, eval_operand_def, locals_kept_mem] >>
   conj_tac >- metis_tac[val_in_memory_word_type] >>
@@ -84,10 +89,12 @@ Proof
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`, `OK s0`] >>
   conj_tac >- (irule name_value_marked_exec >> simp[]) >>
-  disj1_tac >> simp[] >> irule name_value_post >> simp[]
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  irule name_value_post >> simp[]
 QED
 

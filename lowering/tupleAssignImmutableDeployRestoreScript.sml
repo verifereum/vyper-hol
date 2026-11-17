@@ -3,10 +3,10 @@
 Theory tupleAssignImmutableDeployRestore
 Ancestors
   tuplePlaceHeadAdvance immutableAssignCompose tuplePlacePointerReady
-  externalReturnBufferlessNormalize
+  valueEncodingProps vyperStorageFootprint vyperStorageTrace
 
 Theorem tuple_immutable_pending_memory[local]:
-  tuple_place_head ctx func ce cx es lo sa tys ltys ltvs vs elems w i s /\
+  tuple_place_head ctx func ce cx st0 es lo sa tys ltys ltvs vs elems w i s /\
   ce.ce_is_ctor /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
@@ -25,13 +25,19 @@ Theorem tuple_immutable_pending_memory[local]:
     (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) q.vs_memory
 Proof
   strip_tac >>
+  drule_all tuplePlaceHeadTheory.tuple_place_head_witness >>
+  disch_then (qx_choose_then `H0` strip_assume_tac) >>
   `val_wf (EL j ltvs) (EL j vs)` by
     (fs[tuplePlaceHeadTheory.tuple_place_head_def,
         vyperTypeDefaultsTheory.values_have_types_LIST_REL, listTheory.LIST_REL_EL_EQN] >>
      metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf]) >>
   Cases_on `type_memory_size (EL j ltvs) = 0`
-  >- metis_tac[return_zero_wf_memory] >>
-  `stmt_state_rel ctx func ce cx es s /\ LENGTH ltvs = LENGTH ltys /\
+  >- (irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+      conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `s.vs_memory`] >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
+      fs[tuplePlaceHeadTheory.tuple_place_head_def]) >>
+  `stmt_state_rel H0 ctx func ce cx es s /\ LENGTH ltvs = LENGTH ltys /\
    tuple_place_snapshot ce cx es lo sa.cs_next_id tys ltys ltvs w s /\
    val_in_memory (EL j ltvs) (EL j vs)
      (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s.vs_memory` by
@@ -61,9 +67,12 @@ Proof
 QED
 
 Theorem tuple_immutable_endpoint_restore:
-  tuple_place_head ctx func ce cx es lo sa tys ltys ltvs vs elems w i s /\
+  tuple_place_head ctx func ce cx st0 es lo sa tys ltys ltvs vs elems w i s /\
   i < LENGTH ltys /\ ci_mono sa sb /\ expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es r /\ alloca_frame ce es sa s ce es r /\
+  stmt_state_rel H0 ctx func ce cx es r /\
+  r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+  r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx /\
+  alloca_frame ce es sa s ce es r /\
   (ltys = tys ==> r = s) /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -94,7 +103,7 @@ Theorem tuple_immutable_endpoint_restore:
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
   ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
   q.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  tuple_place_head ctx func ce cx ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
+  tuple_place_head ctx func ce cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
   (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP q.vs_allocas aid = SOME entry) /\
@@ -103,13 +112,32 @@ Proof
   strip_tac >>
   `local_ptrs_reserved ce sa` by fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
   `expr_sim_inv ce cx env es` by simp[] >>
-  `stmt_state_rel ctx func ce cx ff q` by
-    (irule immutableDeployAssignRestoreTheory.immutable_store_stmt_state_rel >>
-     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-     qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-     qpat_assum `evaluate_type _ _ = _` (irule_at Any) >>
-     qpat_assum `local_ptrs_reserved _ _` (irule_at Any) >>
-     qexists `r` >> simp[]) >>
+  `?imms. ff = es with immutables := imms` by
+    metis_tac[vyperPlaceFramesTheory.write_immutable_place_frame] >>
+  `ff.storage_trace = es.storage_trace /\ ff.accounts = es.accounts /\
+   ff.tStorage = es.tStorage` by simp[] >>
+  `?H. valid_horizon cx st0 H ff.storage_trace` by
+    (drule_all tuplePlaceHeadTheory.tuple_place_head_witness >> strip_tac >>
+     qexists_tac `H` >> simp[]) >>
+  `!H. valid_horizon cx st0 H ff.storage_trace ==>
+     stmt_state_rel H ctx func ce cx ff q /\
+     storage_well_formed_on cx ff (FST H)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     `stmt_state_rel H1 ctx func ce cx es s /\
+      storage_well_formed_on cx es (FST H1)` by
+       (fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
+     `stmt_state_rel H1 ctx func ce cx es r` by
+       (irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+        conj_tac >- (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
+        qexists_tac `s` >> simp[]) >>
+     conj_tac
+     >- (irule immutableDeployAssignRestoreTheory.immutable_store_stmt_state_rel >>
+         qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+         qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+         qpat_assum `evaluate_type _ _ = _` (irule_at Any) >>
+         qpat_assum `local_ptrs_reserved _ _` (irule_at Any) >>
+         qexists `r` >> simp[]) >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   `ff.scopes = es.scopes` by
     metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
   `!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s` by metis_tac[] >>
@@ -122,14 +150,16 @@ Proof
     (irule stmtSimDefsTheory.alloca_frame_trans >>
      qexistsl [`ce`, `es`, `r`, `sa`] >> simp[]) >>
   simp[] >> irule tuple_place_head_advance >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >> conj_tac
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> qexists_tac `H` >> fs[] >> conj_tac
   >- (rpt strip_tac >>
       once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
       irule tuple_immutable_pending_memory >>
-      qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       qexistsl [`r`, `off`, `ity`, `itv`, `id`] >> simp[] >> gvs[]) >>
-  conj_tac
+  rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[]
   >- (irule tuple_place_endpoint_local_regions >>
       simp[] >> qexists `sa` >> simp[]) >>
   fs[exprLoweringPropsTheory.ci_mono_def]

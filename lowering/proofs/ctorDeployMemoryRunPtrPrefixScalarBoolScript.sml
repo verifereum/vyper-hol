@@ -2,11 +2,31 @@
 Theory ctorDeployMemoryRunPtrPrefixScalarBool
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixScalarPackage
-  ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixBoolWord
-  abiEncoder abiDecoderContract abiDecoderClampedWord compileEnv exprLoweringProps
-  venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
-  fragExec finite_map list rich_list words pred_set allocaFrontierBound
+  ctorDeployMemoryRunPtrPrefixCanonical
+  ctorDeployMemoryRunPtrPrefixBoolWord
+  abiEncoder
+  abiDecoderContract
+  abiDecoderClampedWord
+  exprLoweringProps
+  venomState
+  venomInst
+  venomExecSemantics
+  ptrDiscipline
+  ptrSafeRun
+  fragExec
+  finite_map
+  list
+  rich_list
+  words
+  pred_set
+  allocaFrontierBound
+  ctorDeployMemoryRunPtrPrefixScalarClamps
+  fragGasSeqPtr
+  fragGasOriginPtrLoop
+  instIdxIndep
+  ctorDeployMemoryRunPtrPrefixSteps
 
 Theorem prefix_scalar_bool_success:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord BoolClamp) st = ((),st') /\
@@ -28,24 +48,25 @@ Theorem prefix_scalar_bool_success:
       FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := s.vs_inst_idx+5)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
-  strip_tac >> drule_all prefix_decoder_boolword_ptr >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qmatch_goalsub_abbrev_tac `word_of_bytes T (0w:bytes32) bytes` >>
-  qmatch_goalsub_abbrev_tac `mstore (w2n p) w pre` >>
-  qabbrev_tac `end = mstore (w2n p) w pre` >>
-  qmatch_goalsub_abbrev_tac `step_taint (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []) u v qt0` >>
-  qabbrev_tac `qt = step_taint (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []) u v qt0` >>
-  qabbrev_tac `H = DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y})) (COMPL {z})` >>
   strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = if _ then _ else _` mp_tac >>
-  asm_rewrite_tac[] >> IF_CASES_TAC >> simp[] >> strip_tac >>
-  qexistsl [`H`,`qt`] >> asm_rewrite_tac[] >>
-  conj_tac
-  >- (qpat_x_assum `!v. v <> x /\ _ ==> _` mp_tac >> simp[] >> metis_tac[]) >>
-  metis_tac[]
+  `emitted_insts st st' =
+    [mk_inst st.cs_next_id DLOAD [src] [x];
+     mk_inst (st.cs_next_id+1) SHR [Lit 1w;Var x] [y];
+     mk_inst (st.cs_next_id+2) ISZERO [Var y] [z];
+     mk_inst (st.cs_next_id+3) ASSERT [Var z] [];
+     mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []]` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+          comp_return_def, comp_bind_def, compile_abi_decode_range_check_def] >>
+     strip_tac >> drule prefix_boolword_code >> simp[]) >>
+  drule_all (SRULE [] (Q.INST
+    [`signed` |-> `F`, `left` |-> `F`, `n` |-> `1w`]
+    prefix_scalar_word_success)) >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+  asm_rewrite_tac[]
 QED
 
 Theorem prefix_scalar_bool_shape:
@@ -77,7 +98,8 @@ Theorem prefix_scalar_bool_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >> drule prefix_scalar_bool_shape >> strip_tac >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -112,80 +134,6 @@ Proof
   simp[]
 QED
 
-val canonical_pair = ``\ty tv.
- !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
-  G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-   (type_to_abi_dec_info sf ce ty) st = ((),st') /\
- abi_decoder_coherent ce env sf ty tv /\
- abi_decoder_metadata ce env ty tv root_di av v /\
- eval_operand src initial = SOME (n2w sb) /\
- eval_operand (Var dst) initial = SOME (n2w d) /\
- sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
- mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
-   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
- (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
- st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
- fn_has_code st st' func /\ fn_inst_ids_distinct func /\
- (st.cs_blocks = st'.cs_blocks \/ !bb.
-    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0) /\
- alloca_inv initial /\ alloca_frontier_inv ctx func site initial /\
- unit_alloca_budget ctx < dimword (:256) /\
- D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
- frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts /\
- FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
- d + type_memory_bytes ce ty <= b+sz /\
- op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx ==>
- ?actual H qt B.
- val_in_memory tv v d actual.vs_memory /\
- abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-   [(d,type_memory_bytes ce ty)] initial actual /\
- alloca_inv actual /\ alloca_frontier_inv ctx func site actual /\
- ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
- actual.vs_data_section = initial.vs_data_section /\
- actual.vs_call_ctx = initial.vs_call_ctx /\
- (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
-    lookup_var x actual = SOME w) /\
- ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
- abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
- actual.vs_labels = initial.vs_labels /\
- FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
- DISJOINT B qt.t_mem /\
- (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem =
-                        mem_bytes_at a 1 actual.vs_memory) ==>
-    val_in_memory tv v d mem) /\
- qt.t_mem SUBSET tn.t_mem /\
- qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-                           op_taint qt (Var x) = op_taint tn (Var x)) /\
- ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
-   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_canonical_bool_paired:
-  type_to_abi_dec_info sf ce ty = DecPrimWord BoolClamp ==> (^canonical_pair) ty tv
-Proof
-  strip_tac >> BETA_TAC >> rpt gen_tac >> strip_tac >>
-  drule_all prefix_scalar_prepare >> strip_tac >>
-  `d < dimword (:256)` by
-    (drule_all alloca_frontier_inv_bound >> decide_tac) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-    (DecPrimWord BoolClamp) st = ((),st')` by metis_tac[] >>
-  `d+32 <= b+sz` by metis_tac[] >>
-  drule_all prefix_scalar_bool_ghost >>
-  disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
-  qabbrev_tac `actual = t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
-  rule_assum_tac (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all prefix_scalar_transport >> strip_tac >>
-  drule_all prefix_scalar_support_package >> strip_tac >>
-  qexistsl [`actual`,`H`,`qt`,`range_bytes [(d,32)]`] >>
-  asm_rewrite_tac[] >>
-  conj_tac >- metis_tac[] >>
-  simp[DISJOINT_DEF, EXTENSION, SUBSET_DEF] >> metis_tac[]
-QED
 
 val _ = export_theory();

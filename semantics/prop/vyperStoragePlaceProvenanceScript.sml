@@ -77,7 +77,7 @@ Theorem lookup_global_storage_region:
     (INL (PlaceR (StoragePlace tr slot tv)),st') ==>
   declared_storage_region cx mid var_name [] = SOME (tr,slot,tv)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -90,7 +90,7 @@ Theorem lookup_global_mapping_region:
     (INL (HashMapRef tr slot kt vt),st') ==>
   storage_mapping_region cx tr slot (HashMapT kt vt)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -137,6 +137,29 @@ Proof
   simp[storage_subregion_def]
 QED
 
+Theorem extend_place_immutable_root:
+  extend_place cx operand sb st =
+    (INL (PlaceR (ImmutablePlace sid nm path)),st') ==>
+  ?pre. operand = PlaceR (ImmutablePlace sid nm pre) /\ path = pre ++ [sb]
+Proof
+  Cases_on `operand`
+  >- (simp[extend_place_def, record_storage_event_def, ignore_bind_def, raise_def])
+  >- (rename1 `PlaceR pl` >> Cases_on `pl`
+      >- (simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[AllCaseEqs()] >>
+          drule extend_storage_place_subregion >> strip_tac >> gvs[]) >>
+      simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, ignore_bind_def, lift_sum_def,
+           return_def, raise_def, extend_memory_place_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
+  Cases_on `sb` >>
+  simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, lift_option_type_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  rpt strip_tac >>
+  gvs[bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]
+QED
+
 Theorem extend_storage_place_region:
   storage_place_region cx (StoragePlace tr slot tv) /\
   extend_storage_place cx tr slot tv sb st = (INL p,st') ==>
@@ -161,7 +184,7 @@ Theorem extend_mapping_place_region:
   storage_result_region cx pv
 Proof
   Cases_on `sb` >>
-  simp[extend_place_def, bind_def, lift_option_type_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[value_type_CASE_rator, vyperMiscTheory.option_CASE_rator,
       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs(),
@@ -176,10 +199,10 @@ Theorem extend_place_region:
   extend_place cx pv sb st = (INL next,st') ==>
   storage_result_region cx next
 Proof
-  Cases_on `pv` >> simp[storage_result_region_def, extend_place_def, raise_def]
+  Cases_on `pv` >> simp[storage_result_region_def, extend_place_def, ignore_bind_def, record_storage_event_def, raise_def]
   >- (rename1 `PlaceR p` >> Cases_on `p` >>
       simp[storage_result_region_def] >> strip_tac >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+      gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
           AllCaseEqs()] >>
       gvs[storage_result_region_def, storage_place_region_def,
           extend_memory_place_def] >>

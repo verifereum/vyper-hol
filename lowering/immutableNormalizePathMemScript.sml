@@ -29,7 +29,7 @@ Proof
     simp[Abbr `code`, emitted_insts_def, DROP_LENGTH_APPEND, same_blocks_def] >>
   `gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH mid.cs_current_insts))` by
-    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sm` >>
+    (irule bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >> simp[] >> qexists_tac `sm` >>
      fs[Abbr `code`, venomInstTheory.mk_inst_def,
        venomInstTheory.is_terminator_def]) >>
   simp_tac bool_ss [gas_marked_path_def] >> first_assum ACCEPT_TAC
@@ -39,7 +39,7 @@ Theorem immutable_normalize_mem_path_endpoint:
   compile_alloc_buffer (type_memory_bytes ce dty) sm = (buf,mid) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   expr_val_at ce cx sty sa sm es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\

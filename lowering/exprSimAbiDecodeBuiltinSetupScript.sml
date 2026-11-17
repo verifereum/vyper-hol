@@ -71,6 +71,9 @@ Proof
   strip_tac >> drule_all abi_decode_setup_run_split >> strip_tac >>
   drule abi_decode_builtin_header_opcodes >> strip_tac >>
   drule_all abi_bytes_sequence_static >> strip_tac >>
+  `u.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx func u` by
     (irule decode_site_resources_fields >> qexists `s` >>
      fs[venom_state_component_equality]) >>

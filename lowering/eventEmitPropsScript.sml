@@ -58,8 +58,8 @@ QED
 
 Theorem state_rel_simple_append_event:
   !cenv cx es ss ev.
-    state_rel_simple cenv cx es ss ==>
-    state_rel_simple cenv cx (es with logs := es.logs ++ [ev])
+    state_rel_simple H cenv cx es ss ==>
+    state_rel_simple H cenv cx (es with logs := es.logs ++ [ev])
       (ss with vs_logs := ss.vs_logs ++ [ev])
 Proof
   rpt gen_tac >> strip_tac >>

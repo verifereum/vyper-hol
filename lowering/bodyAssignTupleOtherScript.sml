@@ -2,10 +2,9 @@
    the element shapes left once body_assign_tuple_locals and
    body_assign_tuple_targets have taken theirs.  Every element is then a
    place outside an immutable, which stmtSimAssignTuplePlaces' root
-   assigns, except one case left admitted: an immutable assigned in the
-   constructor.
+   assigns, together with immutables assigned in the constructor.
    TOP-LEVEL: assign_tuple_other_shapes, tuple_places_targets_ready,
-   body_assign_tuple_places; immutable_deploy_tuple_assign (RESIDUAL). *)
+   body_assign_tuple_places; immutable_deploy_tuple_assign. *)
 Theory bodyAssignTupleOther
 Ancestors
   stmtSimAssignTuplePlaces targetPlaceSimCases targetPlaceSim bodySimExprCases

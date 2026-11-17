@@ -22,7 +22,7 @@ Proof
   qmatch_goalsub_abbrev_tac `emit_inst opc ops [] sa` >>
   Cases_on `emit_inst opc ops [] sa` >> rename1 `_ = (u, sm)` >>
   Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
        Once evaluate_def, raise_def] >>
   qmatch_goalsub_abbrev_tac `AssertException msg` >>
@@ -34,6 +34,6 @@ Proof
   qexists_tac `Abort a t` >> simp[exit_result_def, stmt_exit_def] >>
   (conj_tac >- (irule emit_abort_zero_path >> simp[] >>
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[]) >>
-   gvs[expr_exit_def])
+   gvs[expr_exit_def, halt_exit_def])
 QED
 

@@ -27,10 +27,14 @@ Proof
       qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       strip_tac >> imp_res_tac read_result_state >>
-      imp_res_tac extend_place_state >>
+      imp_res_tac (extend_place_state |> UNDISCH
+        |> AP_TERM ``\s:evaluation_state. s.scopes`` |> DISCH_ALL
+        |> SIMP_RULE (srw_ss()) []) >>
       imp_res_tac not_mutate_expr_scopes >> gvs[] >> metis_tac[])
   >> rpt strip_tac >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  strip_tac >> imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  strip_tac >> imp_res_tac (extend_place_state |> UNDISCH
+        |> AP_TERM ``\s:evaluation_state. s.scopes`` |> DISCH_ALL
+        |> SIMP_RULE (srw_ss()) []) >> gvs[] >> metis_tac[]
 QED

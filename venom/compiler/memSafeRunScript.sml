@@ -450,7 +450,7 @@ Proof
 QED
 
 (* Entering a block on a run that is safe at every fuel. *)
-Theorem mem_safe_enters_block[local]:
+Theorem mem_safe_enters_block:
   !ctx fn s s1.
     enters_block fn s s1 /\ (!fuel. mem_safe_blocks fuel ctx fn s) ==>
     !fuel. mem_safe_run fuel ctx fn s1

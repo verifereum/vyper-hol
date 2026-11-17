@@ -1,11 +1,12 @@
 (* Same-witness frames for the decoder loop backedge. *)
 Theory decoderLoopBackedgeCorePtr
-Ancestors compileEnv loweringStateRelDefs wordLoadStorePtr abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
+Ancestors decoderNavigationPtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem fragGasOrigin instMemFrontier fragGasPathMem fragGasPathPtr memSafeRun venomExecProofs venomInstProofs
+  compileEnv loweringStateRelDefs wordLoadStorePtr abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
   entryDispatchPtr typedCopyArrayPtr ptrSafeRun ptrDiscipline
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic
 
-Theorem decoder_index_backedge_ptr_core_uniform:
+Theorem decoder_index_backedge_ptr_core_uniform_origin:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv (Var q) hdr /\
   s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\ q <> nv /\
@@ -28,6 +29,9 @@ Theorem decoder_index_backedge_ptr_core_uniform:
     (!x. x <> nv ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     op_taint u (Var nv) = {} /\ op_prov H (Var nv) = NONE /\
+    (slot + 32 <= s.vs_alloca_next ==>
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -82,27 +86,10 @@ Proof
     by (simp[] >> ASM_SET_TAC[]) >>
   `mload slot (jump_to hdr ss) = n2w (SUC j)` by
     simp[Abbr `ss`, abi_decode_mload_jump, venomMemProofsTheory.mload_mstore_same_proof] >>
-  qexistsl_tac [`H`, `u`, `jump_to hdr ss`] >>
-  simp[] >> gen_tac >> strip_tac >> gen_tac >>
   `step_inst_base ainst s = OK a` by
     (drule_all abi_decode_loop_increment_word >> strip_tac >>
      simp[Abbr `ainst`, Abbr `a`, step_inst_base_opcode_eqs,
           exec_pure2_def, mk_inst_def, eval_operand_def]) >>
-  simp[ptr_safe_run_def, Once ptr_safe_block_def,
-       get_instruction_def, abi_decode_backedge_insts_def, EL_APPEND_EQN] >>
-  conj_tac
-  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-           Abbr `ainst`, mk_inst_def, source_memory_write_ranges_def,
-           source_memory_read_ranges_def, op_taint_def] >>
-      conj_tac >- (gen_tac >> Cases_on `op = Var iv` >> gvs[op_taint_def] >>
-                   Cases_on `op = Lit 1w` >> gvs[]) >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def,
-           eval_operand_def, update_var_def] >> rpt strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke, Abbr `ainst`, mk_inst_def, is_terminator_def,
-       ghost_step_def] >>
-  qsuff_tac `ptr_safe_block D lo fuel ctx fn PG H v bb
-    (a with vs_inst_idx := SUC (LENGTH prefix))`
-  >- gvs[Abbr `H`, Abbr `v`, mk_inst_def] >>
   `ptr_covers H v q a 32` by
     (irule ptr_covers_frame >> qexistsl_tac [`G`, `s`, `tn`] >>
      simp[Abbr `a`, lookup_var_update_var, FLOOKUP_DRESTRICT,
@@ -110,7 +97,7 @@ Proof
   `step_inst_base store a = OK ss` by
     simp[Abbr `store`, Abbr `ss`, step_inst_base_opcode_eqs,
          exec_write2_def, mk_inst_def, eval_operand_def, w2n_n2w] >>
-  `!k n. ptr_safe_step D lo k ctx fn PG H v store (a with vs_inst_idx := n)` by
+  `!D k n. ptr_safe_step D lo k ctx fn PG H v store (a with vs_inst_idx := n)` by
     (rpt gen_tac >> simp[ptr_safe_step_def] >>
      `allocas_from lo a /\ (ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
        (simp[Abbr `a`, allocas_from_def, allocas_below_fmp_def, update_var_def] >>
@@ -135,6 +122,76 @@ Proof
         gvs[mk_inst_def, is_terminator_def, exec_result_map_def]) >>
      gvs[mk_inst_def] >>
      simp[Abbr `ss`, mstore_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `!D k. ptr_safe_step D lo k ctx fn PG G tn ainst s` by
+    (rpt gen_tac >> simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          Abbr `ainst`, mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, op_taint_def] >>
+        conj_tac >- (gen_tac >> Cases_on `op = Var iv` >> gvs[op_taint_def] >>
+                     Cases_on `op = Lit 1w` >> gvs[]) >>
+        simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def,
+          eval_operand_def, update_var_def] >> rpt strip_tac >> gvs[]) >>
+  `slot + 32 <= s.vs_alloca_next ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (jump_to hdr ss),H,u)` by
+    (strip_tac >> rpt gen_tac >>
+     qpat_assum `!D k. ptr_safe_step D lo k ctx fn PG G tn ainst s`
+       (qspecl_then [`D`,`0`] assume_tac) >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+       (OK (a with vs_inst_idx := SUC (LENGTH prefix)),H,v)` by
+       (simp_tac bool_ss [Abbr `H`, Abbr `v`] >>
+        `SUC (LENGTH prefix) = SUC s.vs_inst_idx` by simp[] >>
+        pop_assum SUBST1_TAC >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
+        simp[Abbr `ainst`, mk_inst_def, is_terminator_def,
+          get_instruction_def, abi_decode_backedge_insts_def, EL_APPEND_EQN,
+          below_frontier_no_ranges, inst_dload_in_section_other,
+          Abbr `a`, update_var_def] >>
+        gvs[ptr_safe_step_def, mk_inst_def] >> metis_tac[]) >>
+     qabbrev_tac `aa = a with vs_inst_idx := SUC (LENGTH prefix)` >>
+     qabbrev_tac `ss2 = ss with vs_inst_idx := LENGTH prefix + 2` >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (aa,H,v) [] (OK ss2,H,u)` by
+       (qsuff_tac `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (aa,H,v) []
+          (OK ((ss with vs_inst_idx := SUC (LENGTH prefix)) with vs_inst_idx := SUC aa.vs_inst_idx),
+           step_prov PG H store (ss with vs_inst_idx := SUC (LENGTH prefix)),
+           step_taint store aa (ss with vs_inst_idx := SUC (LENGTH prefix)) v)`
+        >- simp[Abbr `aa`, Abbr `ss2`, step_prov_inst_idx, step_taint_inst_idx,
+             Abbr `u`, ADD1] >>
+        `ptr_inst_ok D lo 0 ctx fn H v store aa` by
+          (qpat_assum `!D k n. ptr_safe_step _ _ _ _ _ _ _ _ _ _`
+            (qspecl_then [`D`,`0`,`SUC (LENGTH prefix)`] mp_tac) >>
+           simp_tac bool_ss [Abbr `aa`] >> metis_tac[ptr_safe_step_def]) >>
+        `step_inst_base store aa = OK (ss with vs_inst_idx := SUC (LENGTH prefix))` by
+          simp[Abbr `aa`, step_inst_inst_idx_indep, exec_result_map_def,
+            Abbr `store`, mk_inst_def, is_terminator_def] >>
+        irule decoderNavigationPtrTheory.straight_line_step_origin >> simp[] >>
+        simp[Abbr `aa`, Abbr `store`, Abbr `a`, Abbr `ss`,
+          mk_inst_def, is_terminator_def, get_instruction_def,
+          abi_decode_backedge_insts_def, EL_APPEND_EQN, ADD1,
+          update_var_def, mstore_def, inst_dload_in_section_other] >>
+        simp[GSYM mk_inst_def, below_frontier_MSTORE, eval_operand_def,
+          GSYM update_var_def, lookup_var_update_var, w2n_n2w] >>
+        `slot < dimword (:256)` by decide_tac >> simp[]) >>
+     `~ss2.vs_halted /\ ss2.vs_current_bb = s.vs_current_bb /\
+      ss2.vs_inst_idx = LENGTH prefix + 2 /\ jump_to hdr ss2 = jump_to hdr ss` by
+       simp[Abbr `ss2`, Abbr `ss`, Abbr `a`, mstore_def, update_var_def, jump_to_def] >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (ss2,H,u) [] (OK (jump_to hdr ss),H,u)` by
+       (qpat_assum `jump_to hdr ss2 = jump_to hdr ss`
+          (fn th => pure_rewrite_tac [GSYM th]) >>
+        irule (Q.INST [`bb` |-> `bb`, `id` |-> `id+2`]
+          (SPEC_ALL decoderNavigationPtrTheory.jump_origin_ptr_path)) >>
+        simp[get_instruction_def, EL_APPEND_EQN, abi_decode_backedge_insts_def] >>
+        simp[Abbr `ss2`, Abbr `ss`, Abbr `a`, update_var_def, mstore_def,
+          allocas_from_def, allocas_below_fmp_def] >>
+        metis_tac[allocas_from_def, allocas_below_fmp_def]) >>
+     metis_tac[gas_origin_ptr_path_append, APPEND]) >>
+  qexistsl_tac [`H`, `u`, `jump_to hdr ss`] >>
+  simp[] >> gen_tac >> strip_tac >> gen_tac >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def,
+       get_instruction_def, abi_decode_backedge_insts_def, EL_APPEND_EQN] >>
+  simp[step_inst_non_invoke, Abbr `ainst`, mk_inst_def, is_terminator_def,
+       ghost_step_def] >>
+  qsuff_tac `ptr_safe_block D lo fuel ctx fn PG H v bb
+    (a with vs_inst_idx := SUC (LENGTH prefix))`
+  >- gvs[Abbr `H`, Abbr `v`, mk_inst_def] >>
   `step_inst_base store (a with vs_inst_idx := SUC (LENGTH prefix)) =
      OK (ss with vs_inst_idx := SUC (LENGTH prefix))` by
     ( `~is_terminator store.inst_opcode` by
@@ -174,6 +231,37 @@ Proof
   gvs[GSYM jump_to_def, ptr_safe_run_def] >>
   qpat_x_assum `!fuel. option_CASE _ _ _` (qspec_then `n` mp_tac) >>
   simp[jump_to_def]
+QED
+
+Theorem decoder_index_backedge_ptr_core_uniform:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv (Var q) hdr /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\ q <> nv /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  slot + 32 < dimword (:256) /\
+  eval_operand (Var iv) s = SOME (n2w j) /\
+  op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
+  j < ncount /\ ncount < dimword (:256) /\ DISJOINT P tn.t_mem /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 ==>
+  ?H u t.
+    t = jump_to hdr (mstore slot (n2w (SUC j)) (update_var nv (n2w (SUC j)) s)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_fmp = s.vs_fmp /\ ptr_covers H u q t 32 /\
+    mload slot t = n2w (SUC j) /\
+    DISJOINT {a | slot <= a /\ a < slot + 32} u.t_mem /\
+    DISJOINT P u.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_imm = tn.t_imm /\ u.t_mem SUBSET tn.t_mem /\
+    (!x. x <> nv ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    op_taint u (Var nv) = {} /\ op_prov H (Var nv) = NONE /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all decoder_index_backedge_ptr_core_uniform_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`t`] >> simp[]
 QED
 
 Theorem decoder_index_backedge_ptr_core:

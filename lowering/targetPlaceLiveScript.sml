@@ -255,7 +255,8 @@ QED
 Theorem nested_pop_eval_base_pure_state:
   !bt cx st res st'.
     EVERY pure_expr (target_indices bt) /\
-    eval_base_place cx bt st = (res,st') ==> st' = st
+    eval_base_place cx bt st = (res,st') ==>
+    st' = st with storage_trace := st'.storage_trace
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -268,20 +269,22 @@ Proof
   simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
        get_scopes_def, type_check_def, assert_def, ignore_bind_def,
        return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> gvs[evaluation_state_component_equality] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
-  first_x_assum drule >> simp[] >> strip_tac >> gvs[] >>
-  metis_tac[eval_expr_preserves_state, read_result_state, extend_place_state]
+  first_x_assum drule >> simp[] >> strip_tac >>
+  imp_res_tac eval_expr_preserves_state >> imp_res_tac read_result_state >>
+  imp_res_tac extend_place_state >> gvs[] >>
+  fs[evaluation_state_component_equality]
 QED
 
 Theorem nested_pop_eval_target_pure_state:
   EVERY pure_expr (target_indices bt) /\
-  eval_target_place cx bt st = (res,st') ==> st' = st
+  eval_target_place cx bt st = (res,st') ==>
+  st' = st with storage_trace := st'.storage_trace
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
+  rpt strip_tac >> imp_res_tac nested_pop_eval_base_pure_state >> gvs[] >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]
 QED
 
@@ -308,9 +311,9 @@ Proof
 QED
 
 Theorem nested_pop_live_fixed_element:
-  !cx tr st w elem n k.
-    storage_read_live cx tr st w (ArrayTV elem (Fixed n)) /\ k < n ==>
-    storage_read_live cx tr st (w + n2w (k * type_slot_size elem)) elem
+  !H tr st w elem n k.
+    storage_read_live H tr st w (ArrayTV elem (Fixed n)) /\ k < n ==>
+    storage_read_live H tr st (w + n2w (k * type_slot_size elem)) elem
 Proof
   rpt gen_tac >> strip_tac >>
   `k * type_slot_size elem + type_slot_size elem <= n * type_slot_size elem` by
@@ -342,10 +345,10 @@ Proof
 QED
 
 Theorem nested_pop_live_dynamic_element:
-  !cx tr st w elem n k.
-    storage_read_live cx tr st w (ArrayTV elem (Dynamic n)) /\
+  !H tr st w elem n k.
+    storage_read_live H tr st w (ArrayTV elem (Dynamic n)) /\
     k < n /\ k < w2n (lookup_storage w st) ==>
-    storage_read_live cx tr st (w + n2w (k * type_slot_size elem + 1)) elem
+    storage_read_live H tr st (w + n2w (k * type_slot_size elem + 1)) elem
 Proof
   rpt gen_tac >> strip_tac >>
   `k * type_slot_size elem + type_slot_size elem <= n * type_slot_size elem` by
@@ -380,9 +383,9 @@ Proof
 QED
 
 Theorem nested_pop_live_tuple_element:
-  !cx tr st w tvs k elem.
-    storage_read_live cx tr st w (TupleTV tvs) /\ oEL k tvs = SOME elem ==>
-    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs)) elem
+  !H tr st w tvs k elem.
+    storage_read_live H tr st w (TupleTV tvs) /\ oEL k tvs = SOME elem ==>
+    storage_read_live H tr st (w + n2w (tuple_prefix_slot_size k tvs)) elem
 Proof
   rpt gen_tac >> strip_tac >>
   drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >> strip_tac >>
@@ -407,10 +410,10 @@ QED
 
 Theorem nested_pop_extend_storage_live:
   get_storage_backend cx tr st = (INL raw,st) /\
-  storage_read_live cx tr raw slot tv /\
+  storage_read_live H tr raw slot tv /\
   extend_storage_place cx tr slot tv sb st =
     (INL (StoragePlace tr' slot' tv'),st') ==>
-  tr' = tr /\ storage_read_live cx tr raw slot' tv'
+  tr' = tr /\ storage_read_live H tr raw slot' tv'
 Proof
   reverse (Cases_on `sb`)
   >- (Cases_on `tv` >>
@@ -439,46 +442,63 @@ Proof
   irule nested_pop_live_dynamic_element >> metis_tac[]
 QED
 
+(* A storage place's slots are read live by the horizon H.  Only a storage
+   place carries a fact: a mapping's leaf becomes a storage place by
+   recording its root in the trace (extend_place), so its liveness comes
+   from the horizon of the trace that records it. *)
 Definition nested_pop_result_live_def:
-  nested_pop_result_live cx st (PlaceR (StoragePlace tr slot tv)) =
+  nested_pop_result_live H cx st (PlaceR (StoragePlace tr slot tv)) =
     (!raw. get_storage_backend cx tr st = (INL raw,st) ==>
-       storage_read_live cx tr raw slot tv) /\
-  nested_pop_result_live cx st (PlaceR _) = T /\
-  nested_pop_result_live cx st (HashMapRef tr slot kt vt) =
-    storage_mapping_region cx tr slot (HashMapT kt vt) /\
-  nested_pop_result_live cx st (Value _) = T
+       storage_read_live H tr raw slot tv) /\
+  nested_pop_result_live H cx st (PlaceR _) = T /\
+  nested_pop_result_live H cx st (HashMapRef tr slot kt vt) = T /\
+  nested_pop_result_live H cx st (Value _) = T
 End
 
-Theorem nested_pop_mapping_leaf_live:
-  storage_mapping_region cx tr slot (Type typ) /\
-  evaluate_type (get_tenv cx) typ = SOME tv ==>
-  storage_read_live cx tr raw slot tv
+Theorem nested_pop_result_live_trace[simp]:
+  nested_pop_result_live H cx (st with storage_trace := obs) pv =
+  nested_pop_result_live H cx st pv
+Proof
+  Cases_on `pv` >> simp[nested_pop_result_live_def] >>
+  Cases_on `p` >>
+  simp[nested_pop_result_live_def,
+       vyperStorageBackendTheory.get_storage_backend_eq]
+QED
+
+(* A root recorded in a trace the horizon covers is read live. *)
+Theorem nested_pop_root_live[local]:
+  valid_horizon cx st0 H (obs ++ [StorageRoot tr slot tv]) ==>
+  storage_read_live H tr raw (n2w slot) tv
 Proof
   strip_tac >>
-  qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
-  rewrite_tac[storage_mapping_region_def] >> strip_tac >>
-  qpat_x_assum `!subs leaf_slot leaf_tv. _`
-    (qspecl_then [`[]`, `slot`, `tv`] mp_tac) >>
-  asm_simp_tac bool_ss [vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def,
-                       optionTheory.option_case_def, APPEND_NIL] >>
-  strip_tac >> drule accountsRelPropsTheory.declared_storage_region_read_live >> simp[]
+  irule accountsRelPropsTheory.observed_storage_region_read_live >>
+  gvs[vyperStorageFootprintTheory.valid_horizon_def,
+      vyperStorageFootprintTheory.storage_observations_ok_def,
+      vyperStorageFootprintTheory.storage_trace_regions_def]
 QED
 
 Theorem nested_pop_lookup_global_live:
-  lookup_global cx mid var_name st = (INL pv,st') ==>
-  nested_pop_result_live cx st pv
+  lookup_global cx mid var_name st = (INL pv,st') /\
+  valid_horizon cx st0 H st'.storage_trace ==>
+  nested_pop_result_live H cx st pv
 Proof
-  Cases_on `pv` >> simp[nested_pop_result_live_def]
-  >- (Cases_on `p` >> simp[nested_pop_result_live_def] >> rpt strip_tac >>
-      drule lookup_global_storage_region >> strip_tac >>
-      drule accountsRelPropsTheory.declared_storage_region_read_live >> simp[]) >>
-  strip_tac >> drule lookup_global_mapping_region >> simp[]
+  Cases_on `pv` >> simp[nested_pop_result_live_def] >>
+  Cases_on `p` >> simp[nested_pop_result_live_def] >>
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def,
+       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+      var_decl_info_CASE_rator, bind_def, lift_option_type_def,
+      record_storage_event_def, ignore_bind_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  metis_tac[nested_pop_root_live]
 QED
 
 Theorem nested_pop_extend_result_live:
-  nested_pop_result_live cx st pv /\
-  extend_place cx pv sb st = (INL pv',st') ==>
-  nested_pop_result_live cx st pv'
+  nested_pop_result_live H cx st pv /\
+  extend_place cx pv sb st = (INL pv',st') /\
+  valid_horizon cx st0 H st'.storage_trace ==>
+  nested_pop_result_live H cx st pv'
 Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def, nested_pop_result_live_def]
   >- (Cases_on `p` >>
@@ -491,22 +511,20 @@ Proof
           drule_all nested_pop_extend_storage_live >> simp[]) >>
       simp[extend_memory_place_def, nested_pop_result_live_def]) >>
   Cases_on `sb` >> simp[extend_place_def, raise_def] >>
-  Cases_on `v` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs()] >> rpt strip_tac >>
-  gvs[nested_pop_result_live_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  drule storage_mapping_region_step >>
-  disch_then (qspec_then `v'` assume_tac) >>
-  simp[] >> rpt strip_tac >>
-  irule nested_pop_mapping_leaf_live >> goal_assum (drule_at Any) >> simp[]
+  simp[value_type_CASE_rator, bind_def, ignore_bind_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[record_storage_event_def, return_def, AllCaseEqs(),
+      nested_pop_result_live_def] >>
+  metis_tac[nested_pop_root_live, wordsTheory.n2w_w2n]
 QED
 
 Theorem nested_pop_eval_base_live:
   !bt cx st pv st'.
     EVERY pure_expr (target_indices bt) /\
-    eval_base_place cx bt st = (INL pv,st') ==>
-    nested_pop_result_live cx st pv
+    eval_base_place cx bt st = (INL pv,st') /\
+    valid_horizon cx st0 H st'.storage_trace ==>
+    nested_pop_result_live H cx st pv
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -523,35 +541,50 @@ Proof
   simp[nested_pop_result_live_def] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
-  first_x_assum drule >> simp[] >> strip_tac >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[]
-  >~ [`pure_expr e`]
-  >- (drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      drule_all nested_pop_extend_result_live >> simp[]) >>
-  drule_all nested_pop_extend_result_live >> simp[]
+  rename1 `eval_base_place cx b st = (INL bpv,s1)` >>
+  `valid_horizon cx st0 H s1.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.valid_horizon_frame,
+              vyperStorageTraceTheory.storage_trace_frame_extend_place,
+              vyperStorageTraceTheory.storage_trace_frame_read_result,
+              cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >>
+  qmatch_assum_rename_tac `extend_place _ _ _ s3 = (INL pv,st')` >>
+  `s3 = st with storage_trace := s3.storage_trace` by
+    (imp_res_tac eval_expr_preserves_state >> imp_res_tac read_result_state >>
+     gvs[] >> fs[evaluation_state_component_equality]) >>
+  `nested_pop_result_live H cx s3 bpv` by
+    (pop_assum SUBST1_TAC >> metis_tac[nested_pop_result_live_trace]) >>
+  drule_all nested_pop_extend_result_live >>
+  qpat_x_assum `s3 = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem nested_pop_eval_target_live:
   EVERY pure_expr (target_indices bt) /\
   eval_target_place cx bt st = (INL (StoragePlace tr slot tv),st') /\
+  valid_horizon cx st0 H st'.storage_trace /\
   get_storage_backend cx tr st = (INL raw,st) ==>
-  storage_read_live cx tr raw slot tv
+  storage_read_live H tr raw slot tv
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
   drule_all nested_pop_eval_base_live >> strip_tac >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def,
-                       nested_pop_result_live_def]
+  gvs[nested_pop_result_live_def]
 QED
 
 Theorem nested_pop_eval_target_live_post:
   EVERY pure_expr (target_indices bt) /\
   eval_target_place cx bt st = (INL (StoragePlace tr slot tv),st') /\
+  valid_horizon cx st0 H st'.storage_trace /\
   get_storage_backend cx tr st' = (INL raw,st') ==>
-  storage_read_live cx tr raw slot tv
+  storage_read_live H tr raw slot tv
 Proof
   rpt strip_tac >>
-  drule_all nested_pop_eval_target_pure_state >> strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_target_live >> simp[]
+  drule_all nested_pop_eval_target_pure_state >> strip_tac >>
+  `get_storage_backend cx tr st = (INL raw,st)` by
+    (qpat_x_assum `get_storage_backend _ _ st' = _` mp_tac >>
+     qpat_x_assum `st' = _` (fn th => once_rewrite_tac[th]) >>
+     simp[vyperStorageBackendTheory.get_storage_backend_eq]) >>
+  metis_tac[nested_pop_eval_target_live]
 QED

@@ -21,7 +21,7 @@ QED
 Theorem attribute_typed_selection:
   expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
   eval_expr cx obj es0 = (INL btv,ee) /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t ==>
+  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv t ==>
   ?sid fs ftv vals fv tv' w.
     expr_type obj = StructT sid /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem attribute_memory_field_address:
-  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
   post_value_type cenv obj = StructT sid /\ vv_loc bvv = LocMemory /\
   read_result cx btv ee = (INL (StructV vals),ee) /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -87,9 +87,9 @@ Theorem attribute_memory_field_address:
     w2n w + struct_field_offset fields fld
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
   `vv_at cenv cx (StructT sid) sa sm ee btv bvv t` by fs[vv_post_def] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   drule stmt_state_rel_region_lt >> strip_tac >>
   drule_all struct_field_offset_le >> strip_tac >>
   Cases_on `bvv` >>

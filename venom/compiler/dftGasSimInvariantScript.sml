@@ -12,27 +12,6 @@ Proof
   gvs[setup_callee_def, AllCaseEqs(), fn_entry_label_def, entry_block_def]
 QED
 
-Theorem ev_step_labels:
-  ev_step orc p d fuel C inst s = OK t ==> t.vs_labels = s.vs_labels
-Proof
-  Cases_on `inst.inst_opcode = GAS`
-  >- (simp[ev_step_gas, ev_gas_def] >>
-      Cases_on `inst.inst_outputs` >> simp[] >>
-      rename1 `inst.inst_outputs = out::outs` >> Cases_on `outs` >>
-      simp[update_var_def] >> strip_tac >> gvs[]) >>
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (simp[Once ev_step_def] >>
-      simp[AllCaseEqs()] >> rpt strip_tac >>
-      `!pairs st. (FOLDL (\st' (out,value). update_var out value st') st pairs).vs_labels = st.vs_labels` by
-        (Induct >> simp[] >> Cases >> simp[update_var_def]) >>
-      gvs[bind_outputs_def, AllCaseEqs()] >>
-      simp[adopt_return_fmp_def, merge_callee_state_def] >>
-      Cases_on `ret.iret_adopt_fmp` >> simp[]) >>
-  simp[Once ev_step_def] >> strip_tac >>
-  `step_inst fuel C inst s = OK t` by simp[step_inst_non_invoke] >>
-  metis_tac[step_inst_preserves_labels_always]
-QED
-
 Theorem ev_suffix_labels:
   !xs s t. ev_suffix orc p d fuel C xs s = OK t ==>
     t.vs_labels = s.vs_labels

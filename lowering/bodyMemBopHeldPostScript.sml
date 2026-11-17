@@ -6,6 +6,7 @@ Ancestors
   loweringSlice freshWrites venomExecSemantics exprSimWordArgs
 
 Theorem held_digest_compare_post:
+  !H ctx func cenv cx bop e1 e2 es es1 ee sa s1 s2 sb s0 t u ss op b.
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -28,37 +29,48 @@ Theorem held_digest_compare_post:
     mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz t.vs_memory) /\
   locals_kept cenv es1 ee t u /\
   (~expr_has_effect e2 ==> pure_frame cenv func es1 s1 t u) /\
-  stmt_state_rel ctx func cenv cx ee ss /\
+  stmt_state_rel H ctx func cenv cx ee ss /\
+  storage_well_formed_on cx ee (FST H) /\
   eval_operand op ss = SOME (bool_to_word b) /\
   (!z. not_fresh_at s2 z ==> lookup_var z ss = lookup_var z u) /\
   ss.vs_memory = u.vs_memory /\ ss.vs_allocas = u.vs_allocas /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id ==>
-  expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+  expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
     es sa sb s0 ee (BoolV b) op ss
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `wb_frame cenv es es1 sa s0 t` by
     (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es1 ee s1 t u` by
     (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ee sa s0 u` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
-       `es1`, `ee`, `s1`, `t`, `u`, `ctx`] wb_frame_trans) >>
+       `es1`, `ee`, `s1`, `t`, `u`, `ctx`]
+       wb_frame_trans) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `wb_frame cenv es ee sa s0 ss` by
     (mp_tac (Q.SPECL [`cenv`, `es`, `ee`, `sa`, `s0`, `u`, `s2`, `ss`]
        wb_frame_readonly_tail) >>
      impl_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
-  `~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
+  `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
    pure_frame cenv func es sa s0 ss` by
-    (strip_tac >>
+    (simp[] >> strip_tac >>
+     `pure_frame cenv func es sa s0 t` by
+       (qpat_x_assum `~expr_has_effect e1 ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func es1 s1 t u` by
+       (qpat_x_assum `~expr_has_effect e2 ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
      `pure_frame cenv func es sa s0 u` by
-       (irule pure_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
-        qexistsl_tac [`es1`, `s1`, `t`] >> fs[]) >>
-     irule pure_frame_mem_tail >> qexists_tac `u` >> fs[]) >>
+       (mp_tac (Q.SPECL [`cenv`, `func`, `es`, `es1`, `sa`, `s1`, `s0`, `t`,
+                         `u`] pure_frame_trans) >>
+        impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+     mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s0`, `u`, `ss`]
+                     pure_frame_mem_tail) >>
+     impl_tac >- simp[] >> simp[]) >>
   irule expr_post_word_intro >>
   fs[expr_type_def, is_word_type_def, word_value_def, val_to_w256_def,
      bool_to_word_def] >> Cases_on `b` >> fs[bool_to_word_def]

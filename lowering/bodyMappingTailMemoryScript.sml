@@ -104,7 +104,7 @@ QED
 
 Theorem mapping_slot_body_seq_mem:
   compile_mapping_subscript base_op key sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   (!v. base_op = Var v ==> not_fresh_at sa v) /\
   (!v. key = Var v ==> not_fresh_at sa v) /\
   eval_operand base_op s = SOME b /\ eval_operand key s = SOME k ==>
@@ -131,7 +131,7 @@ Proof
 QED
 
 Theorem compile_hashmap_tail_seq_mem:
-  expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+  expr_post H ctx func cenv cx e es sa sn s0 en kv key s /\
   expr_store_bound cx (expr_type e) kv key s /\
   expr_type e = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
@@ -198,7 +198,7 @@ Proof
 QED
 
 Theorem compile_hashmap_tail_frontier[local]:
-  expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+  expr_post H ctx func cenv cx e es sa sn s0 en kv key s /\
   expr_type e = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type kt then compile_keccak256_key key F sn
@@ -263,7 +263,10 @@ Proof
 QED
 
 Theorem compile_mapping_index_success_tail_mem:
-  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  valid_horizon cx st0 H0 en.storage_trace /\
+  (!H. valid_horizon cx st0 H en.storage_trace ==>
+    expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
+    stmt_state_rel H ctx func cenv cx em s1) /\
   expr_type idx = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type kt then compile_keccak256_key key F sn
@@ -273,7 +276,7 @@ Theorem compile_mapping_index_success_tail_mem:
   (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s1 = SOME base_slot /\
   fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
-  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  local_ptrs_reserved cenv sm /\
   MAP FDOM em.scopes = MAP FDOM en.scopes /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
@@ -281,13 +284,16 @@ Theorem compile_mapping_index_success_tail_mem:
   expr_store_bound cx (expr_type idx) kv key t /\ alloca_history func t ==>
   ?u. gas_marked_path T ctx func t 0 (OK u) /\
       eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-      stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
+      (!H. valid_horizon cx st0 H en.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx en u) /\ wb_frame cenv em en sm s1 u /\
       (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
+  `expr_post H0 ctx func cenv cx idx em sm sn s1 en kv key t /\
+   stmt_state_rel H0 ctx func cenv cx em s1` by simp[] >>
   `eval_operand base_op t = SOME base_slot` by
     (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sm`, `s1`] >>
      gvs[loweringPostsTheory.expr_post_def]) >>
@@ -295,31 +301,25 @@ Proof
     metis_tac[not_fresh_at_mono] >>
   `local_ptrs_reserved cenv sn` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all compile_hashmap_tail_run >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `H0`]
+    compile_mapping_index_success_tail_run) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sn sb) t = OK u` >>
   `run_inst_seq_mem_ok (emitted_insts sn sb) t` by
-    (drule_all compile_hashmap_tail_seq_mem >> simp[]) >>
+    (drule_all (Q.INST [`H` |-> `H0`] compile_hashmap_tail_seq_mem) >> simp[]) >>
   `t.vs_alloca_next <= u.vs_alloca_next` by
-    (drule_all compile_hashmap_tail_frontier >> simp[]) >>
+    (drule_all (Q.INST [`H` |-> `H0`] compile_hashmap_tail_frontier) >> simp[]) >>
   `alloca_inv t` by
-    (drule expr_post_state >> simp[stmt_state_rel_def]) >>
+    (drule (Q.INST [`H` |-> `H0`] expr_post_state) >> simp[stmt_state_rel_def]) >>
   `gas_marked_path T ctx func t 0
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
    alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (drule_all compile_hashmap_tail_mem_path >> simp[]) >>
-  `wb_frame cenv em en sm s1 u /\
-   (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u)` by
-    (irule expr_post_suffix_frames >> goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
-  `u.vs_current_bb = sb.cs_current_bb` by
-    (drule_all compile_hashmap_tail_shape >> strip_tac >>
-     `u.vs_current_bb = t.vs_current_bb` suffices_by gvs[same_blocks_def] >>
-     drule_at (Pos hd)
-       (Q.ISPEC `\s:venom_state. s.vs_current_bb` run_inst_seq_preserves_field) >>
-     simp[] >> disch_then irule >> rpt strip_tac >> fs[EVERY_MEM] >>
-     metis_tac[step_preserves_control_flow, step_inst_non_invoke]) >>
-  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  simp[stmt_state_rel_inst_idx] >>
-  qpat_x_assum `wb_frame cenv em en sm s1 u` mp_tac >>
-  simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
-  strip_tac >> first_assum ACCEPT_TAC
+  `!H. valid_horizon cx st0 H en.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx en
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (rpt strip_tac >>
+     `expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
+      stmt_state_rel H ctx func cenv cx em s1` by simp[] >>
+     drule_all compile_mapping_index_success_tail_run >> strip_tac >> gvs[]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED

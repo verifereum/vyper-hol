@@ -8,11 +8,13 @@ Ancestors
   stmtSimDefs exprSimProps venomMemDefs exprLoweringProps fragExec loweringHalt
   emitHelperProps venomInst venomState venomExecSemantics
 
+Libs horizonTypeLib
+
 Theorem owned_target_relayout_store_static_exit:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -28,7 +30,7 @@ Theorem owned_target_relayout_store_static_exit:
   expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
   assign_alloc_ok cenv bt e /\ lowered_value_type cenv e = sty /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-  storage_place_region cx p /\
+  storage_place_observed H p /\ regions_consistent (FST H) /\
   local_ptrs_reserved cenv sb /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -38,13 +40,14 @@ Theorem owned_target_relayout_store_static_exit:
       stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[target_post_def] >>
   `!x. op = Var x ==> not_fresh_at sa x` by simp[] >>
   drule_all target_post_owned_source_registered >> strip_tac >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac [target_post_def, pairTheory.FST, pairTheory.SND] >>
   disch_then (CONJUNCTS_THEN2 kall_tac
-    (CONJUNCTS_THEN2 (qx_choose_then `dw` strip_assume_tac) strip_assume_tac)) >>
+    (CONJUNCTS_THEN2 kall_tac
+      (CONJUNCTS_THEN2 (qx_choose_then `dw` strip_assume_tac) strip_assume_tac))) >>
   `0 < type_slot_size dtv` by
     metis_tac[type_widens_to_assignable_type, assignable_type_slot_size_pos] >>
   `type_alloc_ok cenv dty` by
@@ -85,9 +88,9 @@ Resume owned_target_relayout_store_static_exit[normalize]:
   `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv dty))]
     [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func)` by
     (irule entry_alloc_buffer_inst >> goal_assum (drule_at Any) >> simp[]) >>
-  drule place_normalize_framed_path >>
+  drule (at_horizon_named "H" place_normalize_framed_path) >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ s`)) >>
   disch_then (drule_at (Pat `eval_operand _ s = _`)) >>
   disch_then (qspecl_then [`stv`, `dtv`, `v`] mp_tac) >>
   (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >>

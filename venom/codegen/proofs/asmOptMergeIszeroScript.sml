@@ -98,7 +98,7 @@ Proof
        arithmeticTheory.LESS_MOD]
 QED
 
-Theorem b2w_b2w_zero_or_one[local]:
+Theorem b2w_b2w_zero_or_one:
   w = 0w ∨ w = 1w ⇒ b2w (b2w (w = 0w) = (0w:bytes32)) = (w:bytes32)
 Proof
   rw[] >> simp[one_ne_zero_bytes32]
@@ -184,7 +184,7 @@ QED
 
 (* ===== ISZERO ISZERO PUSHLABEL l JUMPI ===== *)
 
-Theorem b2w_b2w_eq_zero[local]:
+Theorem b2w_b2w_eq_zero:
   (b2w (b2w (w = 0w) = (0w:bytes32)) = (0w:bytes32)) ⇔ (w = (0w:bytes32))
 Proof
   Cases_on `w = 0w` >> simp[one_ne_zero_bytes32, GSYM one_ne_zero_bytes32]

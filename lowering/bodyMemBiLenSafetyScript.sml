@@ -119,7 +119,7 @@ QED
 
 Theorem len_mem_immutable_holds_memory[local]:
   !func cenv cx es s t tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+    stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
     immutable_holds cenv cx t tv w es s ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
@@ -135,7 +135,7 @@ QED
 
 Theorem len_mem_vv_holds_len_header_widens:
   !env func cenv cx es s pt t pvt tvt tv vv n ctx.
-    stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx pt tv vv es s /\
+    stmt_state_rel H ctx func cenv cx es s /\ vv_holds cenv cx pt tv vv es s /\
     type_widens_to env.type_defs pt t /\
     is_sized_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
     evaluate_type (get_tenv cx) pt = SOME pvt /\
@@ -220,7 +220,7 @@ QED
 Theorem len_load_mem_ok:
   compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
     (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
   vv_store_bound cx (expr_type e) lt es' tv vv s /\
@@ -229,7 +229,7 @@ Theorem len_load_mem_ok:
   run_inst_seq_mem_ok (emitted_insts sm sb) s
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s /\
+  `stmt_state_rel H ctx func cenv cx es' s /\
    vv_holds cenv cx (post_value_type cenv e) tv vv es' s` by fs[vv_post_def] >>
   `32 <= type_memory_size vt /\ ~is_word_type (expr_type e)` by
     metis_tac[len_sized_store_header] >>

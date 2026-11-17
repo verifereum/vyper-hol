@@ -23,8 +23,8 @@ Proof
 QED
 
 Theorem gas_path_ptr_provenance_frame:
-  !D lo ctx fn PG G tn s n H tm r.
-    gas_path_ptr D lo ctx fn PG G tn s n H tm r ==>
+  !D lo ctx fn PG G tn s n HG tm r.
+    gas_path_ptr D lo ctx fn PG G tn s n HG tm r ==>
     !x region.
       region s /\
       (!G0 tn0 s0 k G1 tn1 r0.
@@ -32,19 +32,19 @@ Theorem gas_path_ptr_provenance_frame:
          gas_path_ptr_edge D lo ctx fn PG G0 tn0 s0 k G1 tn1 r0 ==>
          FLOOKUP G1 x = FLOOKUP G0 x /\
          (!t. r0 = OK t ==> region t)) ==>
-      FLOOKUP H x = FLOOKUP G x
+      FLOOKUP HG x = FLOOKUP G x
 Proof
   ho_match_mp_tac gas_path_ptr_ind >> rpt strip_tac >>
   metis_tac[]
 QED
 
 Theorem gas_path_ptr_untagged_frame:
-  gas_path_ptr D lo ctx fn PG G tn s n H tm r /\
+  gas_path_ptr D lo ctx fn PG G tn s n HG tm r /\
   op_prov G (Var x) = NONE /\ region s /\
   (!G0 tn0 s0 k G1 tn1 r0.
      region s0 /\ gas_path_ptr_edge D lo ctx fn PG G0 tn0 s0 k G1 tn1 r0 ==>
      FLOOKUP G1 x = FLOOKUP G0 x /\ (!t. r0 = OK t ==> region t)) ==>
-  op_prov H (Var x) = NONE
+  op_prov HG (Var x) = NONE
 Proof
   strip_tac >> drule gas_path_ptr_provenance_frame >>
   disch_then (qspecl_then [`x`, `region`] mp_tac) >> gvs[op_prov_def] >> metis_tac[]
@@ -66,12 +66,12 @@ QED
 Theorem load_then_preserving_path_untagged:
   MEM opc [MLOAD; SLOAD; TLOAD; CALLDATALOAD] /\
   gas_path_ptr D lo ctx fn PG
-    (step_prov PG G (mk_inst id opc [src] [x]) u) tn s n H tm r /\
+    (step_prov PG G (mk_inst id opc [src] [x]) u) tn s n HG tm r /\
   region s /\
   (!G0 tn0 s0 k G1 tn1 r0.
      region s0 /\ gas_path_ptr_edge D lo ctx fn PG G0 tn0 s0 k G1 tn1 r0 ==>
      FLOOKUP G1 x = FLOOKUP G0 x /\ (!t. r0 = OK t ==> region t)) ==>
-  op_prov H (Var x) = NONE
+  op_prov HG (Var x) = NONE
 Proof
   strip_tac >>
   `op_prov (step_prov PG G (mk_inst id opc [src] [x]) u) (Var x) = NONE`
@@ -100,11 +100,11 @@ Theorem load_ghost_then_preserving_path_untagged:
   MEM opc [MLOAD; SLOAD; TLOAD; CALLDATALOAD] /\
   step_inst fuel ctx (mk_inst id opc [src] [x]) before = OK u /\
   ghost_step fuel ctx PG G tn0 (mk_inst id opc [src] [x]) before = (G1, tn) /\
-  gas_path_ptr D lo ctx fn PG G1 tn s n H tm r /\ region s /\
+  gas_path_ptr D lo ctx fn PG G1 tn s n HG tm r /\ region s /\
   (!G0 tm0 s0 k G2 tm2 r0.
      region s0 /\ gas_path_ptr_edge D lo ctx fn PG G0 tm0 s0 k G2 tm2 r0 ==>
      FLOOKUP G2 x = FLOOKUP G0 x /\ (!t. r0 = OK t ==> region t)) ==>
-  op_prov H (Var x) = NONE
+  op_prov HG (Var x) = NONE
 Proof
   strip_tac >> drule_all load_ghost_result_has_no_provenance >>
   disch_then (qspecl_then [`tn0`, `PG`, `G`] mp_tac) >>
@@ -125,13 +125,13 @@ QED
            not_fresh_at sa x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
            not_fresh_at sa x) /\
-   stmt_state_rel ctx func cenv cx es s0 /\
-   ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+   stmt_state_rel H ctx func cenv cx es s0 /\
+   ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
    s0.vs_current_bb = sa.cs_current_bb /\
    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-   gas_path_ptr (cx_dead cx) (cx_tops cx) ctx func PG
+   gas_path_ptr (cx_dead H cx) (cx_tops cx) ctx func PG
                 G0 tn0 s0 n G tn (OK t) /\
-   expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+   expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
    t.vs_inst_idx = LENGTH sb.cs_current_insts
    ==> op_prov G op = NONE

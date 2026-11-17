@@ -260,7 +260,7 @@ QED
 
 Theorem tuple_return_intret_post[local]:
   cenv.ce_imm_alloca = NONE /\ cenv.ce_returns_count = LENGTH tys /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
   LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) tys tvs /\
   values_have_types tvs vs /\ EVERY is_word_type tys /\
   (ret_tv = TupleTV tvs /\ v = ArrayV (TupleV vs) \/
@@ -269,7 +269,7 @@ Theorem tuple_return_intret_post[local]:
   tuple_in_memory vs tvs (w2n w) s.vs_memory /\
   w2n w + 32 * LENGTH tys < dimword (:256) /\
   LENGTH (return_unlock_insts cenv sa.cs_next_id) <= idx ==>
-  intret_q func cenv cx ret_tv v
+  intret_q H func cenv cx ret_tv v
     (es with scopes := [])
     (IntRet <|iret_values := tuple_words cenv w tys 0 s.vs_memory;
               iret_adopt_fmp := NONE|>
@@ -287,10 +287,10 @@ Proof
     vs_inst_idx := idx - LENGTH (return_unlock_insts cenv sa.cs_next_id)|>` >>
   simp[return_unlock_load_frame, loweringStateRelDefsTheory.result_rel_def,
        loweringStateRelDefsTheory.intret_vals_match_def] >>
-  `stmt_state_rel ctx func cenv cx (es with scopes := []) (s with vs_vars := vars)` by
+  `stmt_state_rel H ctx func cenv cx (es with scopes := []) (s with vs_vars := vars)` by
     (irule exprSimPropsTheory.stmt_state_rel_vars_frame >>
      simp[vyperStateTheory.lookup_scopes_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with scopes := [])
+  `stmt_state_rel H ctx func cenv cx (es with scopes := [])
     ((s with vs_vars := vars) with vs_inst_idx :=
       idx - LENGTH (return_unlock_insts cenv sa.cs_next_id))` by
     simp[stmt_state_rel_inst_idx] >>
@@ -298,7 +298,7 @@ Proof
 QED
 
 Theorem compile_internal_tuple_return_intret_mem:
-  cenv.ce_return_buf = NONE /\ cenv.ce_imm_alloca = NONE /\
+  ~cx.txn.is_static /\ cenv.ce_return_buf = NONE /\ cenv.ce_imm_alloca = NONE /\
   cenv.ce_returns_count = LENGTH tys /\ tys <> [] /\
   (case ty of TupleT ts => ts | StructT nm =>
     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nm))
@@ -319,16 +319,17 @@ Theorem compile_internal_tuple_return_intret_mem:
   w2n w + 32 * LENGTH tys < dimword (:256) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s ==>
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s ==>
   ?n r. gas_path_mem ctx func s n r /\
-    intret_q func cenv cx ret_tv v (es with scopes := []) r
+    intret_q H func cenv cx ret_tv v (es with scopes := []) r
 Proof
   strip_tac >>
   `0 < cenv.ce_returns_count` by (Cases_on `tys` >> gvs[]) >>
   drule_all compile_internal_tuple_return_parts >> strip_tac >>
   `~s.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
   drule_all tuple_unlock_load_ret_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexistsl_tac [`n`, `r`] >> simp[] >> gvs[] >>

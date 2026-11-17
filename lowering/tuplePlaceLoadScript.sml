@@ -5,7 +5,7 @@ Ancestors
   stmtLowering stmtLoweringMono exprLoweringProps valueEncoding vyperValue fragGasPath
 
 Theorem tuple_place_load_snapshot_path:
-  !ltys ltvs vals tenv cenv bop sa elems sb s w ctx func cx es lo tys.
+  !H ltys ltvs vals tenv cenv bop sa elems sb s w ctx func cx es lo tys.
     compile_tuple_load_all cenv bop ltys 0 sa = (elems,sb) /\
     (!x. bop = Var x ==> not_fresh_at sa x) /\
     eval_operand bop s = SOME w /\
@@ -13,7 +13,7 @@ Theorem tuple_place_load_snapshot_path:
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
     values_have_types ltvs vals /\ tuple_in_memory vals ltvs (w2n w) s.vs_memory /\
     w2n w + type_memory_size_list ltvs < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\ cs_extends sa sb /\
@@ -21,7 +21,9 @@ Theorem tuple_place_load_snapshot_path:
     LENGTH elems = LENGTH ltys /\ EVERY (\op. ?x. op = Var x) elems /\
     (!x. MEM (Var x) elems ==> not_fresh_at sb x) /\
     local_ptrs_reserved cenv sb /\
-    ?t. stmt_state_rel ctx func cenv cx es t /\
+    ?t. stmt_state_rel H ctx func cenv cx es t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
       gas_marked_path F ctx func s 0 (OK t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -49,7 +51,7 @@ Proof
 QED
 
 Theorem tuple_place_load_zero_path:
-  !ltys ltvs vals tenv cenv bop sa elems sb s w ctx func cx es lo tys.
+  !H ltys ltvs vals tenv cenv bop sa elems sb s w ctx func cx es lo tys.
     compile_tuple_load_all cenv bop ltys 0 sa = (elems,sb) /\
     (!x. bop = Var x ==> not_fresh_at sa x) /\
     eval_operand bop s = SOME w /\
@@ -57,14 +59,14 @@ Theorem tuple_place_load_zero_path:
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
     values_have_types ltvs vals /\ tuple_in_memory vals ltvs (w2n w) s.vs_memory /\
     type_memory_size_list ltvs = 0 /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\ cs_extends sa sb ==>
     LENGTH elems = LENGTH ltys /\ EVERY (\op. ?x. op = Var x) elems /\
     (!x. MEM (Var x) elems ==> not_fresh_at sb x) /\
     local_ptrs_reserved cenv sb /\
-    ?t. stmt_state_rel ctx func cenv cx es t /\
+    ?t. stmt_state_rel H ctx func cenv cx es t /\
       gas_marked_path F ctx func s 0 (OK t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -81,8 +83,9 @@ Theorem tuple_place_load_zero_path:
       tuple_place_snapshot cenv cx es lo sb.cs_next_id tys ltys ltvs w t
 Proof
   rpt gen_tac >> strip_tac >>
-  irule tuple_place_load_snapshot_path >>
-  simp[wordsTheory.w2n_lt, tuple_place_snapshot_zero] >>
-  conj_tac >- (qexists `bop` >> simp[]) >>
-  qexists `tenv` >> simp[]
+  qspecl_then [`H`, `ltys`, `ltvs`, `vals`, `tenv`, `cenv`, `bop`, `sa`, `elems`,
+               `sb`, `s`, `w`, `ctx`, `func`, `cx`, `es`, `lo`, `tys`]
+    mp_tac tuple_place_load_snapshot_path >>
+  impl_tac >- fs[wordsTheory.w2n_lt, tuple_place_snapshot_zero] >>
+  strip_tac >> fs[] >> qexists `t` >> fs[]
 QED

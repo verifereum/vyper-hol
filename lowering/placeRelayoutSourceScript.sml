@@ -5,7 +5,7 @@ Ancestors
   loweringPosts exprSimProps exprBopSimProps valueEncodingProofs valueEncoding valueEncodingDefs
 
 Theorem target_post_owned_source:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s /\
   expr_val_own cenv cx ty own_start own_end es v op s0 /\
   own_end.cs_next_id <= sa.cs_next_id /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -23,7 +23,7 @@ Theorem target_post_owned_source:
    val_footprint tv v = 0)
 Proof
   strip_tac >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[target_post_def] >> strip_tac >>
   `eval_operand op s = SOME w` by
     (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sa`, `s0`] >> simp[]) >>

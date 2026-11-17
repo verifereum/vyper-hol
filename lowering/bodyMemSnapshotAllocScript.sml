@@ -13,13 +13,13 @@ Theorem snapshot_alloc_source_mem:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sz < dimword (:256) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u w. gas_path_mem ctx func s 0 (OK u) /\
-      vv_post ctx func cenv cx e es sa mid s0 ee tv vv u /\
+      vv_post H ctx func cenv cx e es sa mid s0 ee tv vv u /\
       vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
@@ -38,10 +38,12 @@ Theorem snapshot_alloc_source_mem:
       pure_frame cenv func ee sm s u /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
-      u.vs_inst_idx = LENGTH mid.cs_current_insts
+      u.vs_inst_idx = LENGTH mid.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   `!x. Lit 0w = Var x ==> not_fresh_at sm x` by simp[] >>
   drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
@@ -49,12 +51,13 @@ Proof
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all ifexp_alloc_preserves_post >> strip_tac >>
+  imp_res_tac exprSimUnwrapTheory.alloc_buffer_fields >>
   gvs[] >>
   qexistsl_tac [`q with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
   `!ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9 n9.
-     vv_post ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9
+     vv_post H ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9
        (s9 with vs_inst_idx := n9) <=>
-     vv_post ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9` by
+     vv_post H ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9` by
     (rpt gen_tac >>
      `!op. eval_operand op (s9 with vs_inst_idx := n9) = eval_operand op s9` by
        (Cases >> simp[eval_operand_def, lookup_var_def]) >>

@@ -2,15 +2,16 @@
 Theory ctorDeployMemoryRunPtrPrefixScalarPackage
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixCanonical ctorAbiActualWordRun
   ctorAbiActualWorld ctorAbiActualObservations abiDecoderReentryPointer
   abiDecoderReentry abiDecoderClampedWord
   abiDecoderWordTyped abiDecoderTypedContract abiDecoderLayout
   abiDecoderCoherence abiDecoderContract abiDecoderLoop
   abiEncoderRegisteredEffect allocaBudgetProps venomMemDefs
-  abiEncoder valueEncoding valueEncodingProps valueEncodingProofs vyperTyping
+  abiEncoder valueEncodingProps valueEncodingProofs vyperTyping
   fragExec instIdxIndep allocaFrontierBound ctorAbiActualFrame
-  venomState venomInst venomExecSemantics compileEnv exprLoweringProps
+  venomState venomInst venomExecSemantics exprLoweringProps
   memLocDefs ptrDiscipline words list pred_set finite_map
 
 Theorem prefix_scalar_support:

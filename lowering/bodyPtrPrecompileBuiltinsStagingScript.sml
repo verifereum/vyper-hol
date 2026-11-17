@@ -7,7 +7,7 @@ Ancestors wordLoadStorePtr bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompile
           ghostPcTransportPtr
 
 Theorem allocated_buffer_checked:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -104,7 +104,7 @@ QED
 
 Theorem emitted_allocation_checked:
   compile_alloc_buffer n sa = (buf,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
@@ -385,7 +385,7 @@ Proof
 QED
 
 Theorem allocated_buffer_checked_cursors:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -395,7 +395,7 @@ Theorem allocated_buffer_checked_cursors:
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn)
 Proof
   strip_tac >> gen_tac >>
-  `stmt_state_rel ctx fn cenv cx es (s with vs_inst_idx := k)` by
+  `stmt_state_rel H ctx fn cenv cx es (s with vs_inst_idx := k)` by
     simp[stmt_state_rel_inst_idx] >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out])
       (s with vs_inst_idx := k) = OK (t with vs_inst_idx := k)` by
@@ -406,7 +406,7 @@ QED
 
 Theorem emitted_allocation_checked_cursors:
   compile_alloc_buffer n sa = (buf,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\

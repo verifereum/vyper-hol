@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem bop_bytes_payload_covers:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx t sa sb es (BytesV bs) (Var p) s /\
   ptr_val_ok cx t (BytesV bs) (Var p) G tn s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem bop_string_payload_covers:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx t sa sb es (StringV str) (Var p) s /\
   ptr_val_ok cx t (StringV str) (Var p) G tn s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem bop_payload_offset_no_wrap:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx t sa sb es v (Var p) s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
   lookup_var p s = SOME w /\ 0 < n /\

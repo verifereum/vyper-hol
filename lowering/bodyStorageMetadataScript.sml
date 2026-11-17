@@ -1,6 +1,7 @@
 (* Shared module declaration and compiler-map metadata. *)
 Theory bodyStorageMetadata
 Ancestors
+  supportedStmts supportedExprForms
   compileVyper supportedDecls vyperState vyperTypeContract
   vyperTypeContractStaticMaps list
 
@@ -88,4 +89,33 @@ Proof
   gvs[build_hashmap_info_def, build_var_type_map_def,
       toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
   metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
+QED
+
+(* A storage declaration found by name is a variable declaration of tops
+   under that name. *)
+Theorem find_var_decl_storage_some:
+  !ts vis mut id ty init.
+    MEM (VariableDecl vis mut id ty init) ts /\
+    (mut = Storage \/ mut = Transient) ==>
+    find_var_decl_by_name id ts <> NONE
+Proof
+  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
+QED
+
+(* A struct field write the supported subset admits is to a storage or
+   transient struct of the main module, tops. *)
+Theorem supported_storage_field_write_decl:
+  !tops src id fld.
+    supported_storage_field_write tops (src, id) fld ==>
+    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
+    ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
+Proof
+  rpt gen_tac >>
+  simp[supported_storage_field_write_def,
+       supportedExprFormsTheory.supported_storage_fields_def] >>
+  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
+  rename1 `SOME x` >> PairCases_on `x` >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >> simp[] >>
+  metis_tac[find_var_decl_storage_some]
 QED

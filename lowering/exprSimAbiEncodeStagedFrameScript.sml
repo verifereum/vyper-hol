@@ -4,7 +4,7 @@ Ancestors
   loweringPosts compileEnv vyperState
 
 Theorem abi_encode_staged_origin_frame:
-  abi_encode_staged_observation ctx func ce cx es' st out mid outsz p at av s actual /\
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' st out mid outsz p at av s actual /\
   wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>

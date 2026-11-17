@@ -29,15 +29,15 @@ Ancestors
    epilogue-aware intret_q (zero stack words when ce_returns_count = 0),
    with the returned value in the caller's buffer at address buf. *)
 Definition intret_mem_q_def:
-  intret_mem_q func cenv cx ret_tv (buf:bytes32) v
+  intret_mem_q H func cenv cx ret_tv (buf:bytes32) v
                (es : evaluation_state) r <=>
-    intret_q func cenv cx ret_tv v es r /\
+    intret_q H func cenv cx ret_tv v es r /\
     ?ir s. r = IntRet ir s /\ val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
 Theorem intret_mem_q_gas_obs:
-  intret_mem_q func cenv cx ret_tv buf v (es with gas_obs := readings) r =
-  intret_mem_q func cenv cx ret_tv buf v es r
+  intret_mem_q H func cenv cx ret_tv buf v (es with gas_obs := readings) r =
+  intret_mem_q H func cenv cx ret_tv buf v es r
 Proof
   simp[intret_mem_q_def, intret_q_gas_obs]
 QED
@@ -45,10 +45,10 @@ QED
 (* The low-level helper emits no unlock.  Keep its result explicitly raw;
    only the environment/epilogue-level theorem below promises intret_q. *)
 Definition intret_mem_q_raw_def:
-  intret_mem_q_raw func cenv cx ret_tv (buf:bytes32) v
+  intret_mem_q_raw H func cenv cx ret_tv (buf:bytes32) v
                    (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir s /\ ir.iret_values = [] /\
-      result_rel func ret_tv cenv cx (INR (ReturnException v), es) r /\
+      result_rel H func ret_tv cenv cx (INR (ReturnException v), es) r /\
       val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
@@ -106,16 +106,16 @@ Theorem compile_internal_return_memory_frag_raw:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q_raw func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q_raw H func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   (* the shape needs one state to run the store from *)
-  reverse (Cases_on `?s0. stmt_state_rel ctx func cenv cx (es with scopes := []) s0 /\
+  reverse (Cases_on `?s0. stmt_state_rel H ctx func cenv cx (es with scopes := []) s0 /\
                           expr_val_rel cx ty v val_op s0 /\
                           eval_operand buf_op s0 = SOME bw`)
   >- (simp[frag_exec_def] >> metis_tac[]) >>
@@ -136,7 +136,7 @@ Proof
     (irule cs_extends_same_block >> gvs[same_blocks_def, IS_PREFIX_APPEND]) >>
   `cs_extends sm sb` by (irule cs_extends_emit_inst >> metis_tac[]) >>
   irule frag_exec_seq >>
-  qexistsl_tac [`\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+  qexistsl_tac [`\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
                      val_in_memory tv v (w2n bw) s.vs_memory /\
                      ?pc. eval_operand rpc s = SOME pc`, `sm`] >>
   simp[] >> rpt conj_tac
@@ -160,7 +160,7 @@ Resume compile_internal_return_memory_frag_raw[store]:
   drule_all compile_store_memory_run_capacity >> strip_tac >>
   rename1 `run_inst_seq _ s = OK t1` >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s` by fs[stmt_state_rel_def, state_rel_def] >>
+     (es with scopes := []) s` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `t1.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
        (mp_tac o AP_TERM ``\z. z.vs_data_section``) >> simp[]) >>
@@ -208,7 +208,7 @@ QED
    epilogue-aware contract, including persistent and transient guards. *)
 Theorem compile_internal_return_memory_frag:
   !ctx func cenv cx es ty tv v val_op rpc elem_types buf_op sa su sb bw.
-    compile_return_unlock cenv sa = ((),su) /\
+    ~cx.txn.is_static /\ compile_return_unlock cenv sa = ((),su) /\
     compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
       ty ty elem_types (SOME buf_op) su = ((),sb) /\
     cenv.ce_returns_count = 0 /\
@@ -228,17 +228,17 @@ Theorem compile_internal_return_memory_frag:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q H func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
-  rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
-  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  rename1 `stmt_state_rel H ctx func cenv cx (es with scopes := []) s0` >>
+  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\
@@ -278,7 +278,7 @@ Resume compile_internal_return_memory_frag[frame]:
                   `LENGTH sm.cs_current_insts`, `sa.cs_next_id`]
        mp_tac return_unlock_memory_frame >> simp[Abbr `pre`]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def] >>
+     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
      (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
@@ -287,15 +287,16 @@ Resume compile_internal_return_memory_frag[frame]:
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> simp[regions_disjoint_def] >> strip_tac >>
      first_x_assum irule >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es with scopes := [])
+  `stmt_state_rel H ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
-    (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
+    (`LENGTH s0.vs_memory <= LENGTH t.vs_memory` by fs[return_unlock_frames] >>
+     irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
      simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
      `not_fresh_at su x` by metis_tac[] >>
      qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
      simp[lookup_var_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with scopes := []) pre` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
+  `stmt_state_rel H ctx func cenv cx (es with scopes := []) pre` by
+    (qspecl_then [`H`, `func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,
        `LENGTH sm.cs_current_insts -
           LENGTH (return_unlock_insts cenv sa.cs_next_id)`, `ctx`]
@@ -309,14 +310,14 @@ Resume compile_internal_return_memory_frag[fragments]:
   `cs_extends sm sb` by (irule cs_extends_emit_inst >> metis_tac[]) >>
   `frag_exec ctx sa su (\s. s = s0)
      (\s. s = return_unlock_state cenv s0)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_conseq >>
      qexistsl_tac [`\s. s = s0`, `\s. s = return_unlock_state cenv s0`,
                    `\r. F`] >> simp[] >>
      irule compile_return_unlock_frag >> simp[]) >>
   `frag_exec ctx su sm (\s. s = return_unlock_state cenv s0)
      (\s. s = return_unlock_state cenv pre)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_run_inst_seq >>
      fs[same_blocks_def, IS_PREFIX_APPEND] >>
      qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >> simp[]) >>
@@ -327,7 +328,7 @@ Resume compile_internal_return_memory_frag[fragments]:
     (qpat_x_assum `t with vs_inst_idx := _ = _`
        (mp_tac o AP_TERM ``eval_operand rpc``) >> simp[eval_op_inst_idx]) >>
   `frag_exec ctx sm sb (\s. s = return_unlock_state cenv pre) (\s. F)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule emit_ret_pc_frag >> qexists_tac `rpc` >> simp[] >>
      simp[intret_mem_q_def] >>
      conj_tac
@@ -336,7 +337,7 @@ Resume compile_internal_return_memory_frag[fragments]:
          qexists_tac `pre` >> fs[stmt_state_rel_def]) >>
      simp[Abbr `pre`]) >>
   `frag_exec ctx sa sb (\s. s = s0) (\s. F)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_seq >>
      qexistsl_tac [`\s. s = return_unlock_state cenv pre`, `sm`] >> simp[] >>
      conj_tac >- metis_tac[cs_extends_trans] >>

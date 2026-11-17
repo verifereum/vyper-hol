@@ -8,7 +8,7 @@ Theorem immutable_assign_normalized_mem_endpoint:
     (type_memory_bytes ce dty) sm = ((),sb) /\
   ce.ce_imm_alloca = SOME region /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   expr_val_at ce cx sty sa sm es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\

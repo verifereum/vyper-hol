@@ -63,6 +63,7 @@
 
 Theory codegenCorrectness
 Ancestors
+  fnFrameSymbolicPrefix
   fnFramePrefixDriver
   codegenEntryRel codegenEntrySim codegenAsmRunCall
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
@@ -92,6 +93,7 @@ Theorem stack_params_rel_def = codegenEntryRelTheory.stack_params_rel_def
 
 Theorem initial_state_rel_def = codegenEntryRelTheory.initial_state_rel_def
 
+
 (* ===== Return Value Correspondence ===== *)
 
 (* After execution: return data and side effects match. *)
@@ -112,9 +114,25 @@ End
 
 (* ===== Composition Helpers ===== *)
 
+(* Terminal state composition: venom_asm_terminal_rel + asm_evm_rel → final_state_rel.
+   After asm execution ends at a terminal, the asm state relates to both Venom (terminal_rel)
+   and EVM (evm_rel). Composing these gives the end-to-end final_state_rel. *)
+Theorem terminal_asm_evm_final:
+  !prog vs' as' es'.
+    venom_asm_terminal_rel vs' as' /\
+    asm_evm_rel prog as' es' ==>
+    final_state_rel vs' es'
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[venom_asm_terminal_rel_def, asm_evm_rel_def, final_state_rel_def] >>
+  every_case_tac >> gvs[]
+QED
+
 (* The obsolete single-function codegen unfolding is intentionally absent:
    context codegen is exposed through [codegen_assembly] and the selected
    region is located by [ops_contain_at]. *)
+
+
 
 (* ===== Whole-Context Frame Interface ===== *)
 

@@ -62,8 +62,8 @@ Theorem call_ptr_safe_step:
    (inst.inst_opcode = STATICCALL /\
     inst.inst_operands = [gas; addr; ao; az; ro; rz])) /\
   access_ok 0 G fn inst s /\ taint_ok fn tn inst s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s ==>
-  ptr_safe_step (cx_dead cx) 0 fuel ctx fn PG G tn inst s
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s ==>
+  ptr_safe_step (cx_dead H cx) 0 fuel ctx fn PG G tn inst s
 Proof
   strip_tac >> simp[Once ptr_safe_step_def, ptr_inst_ok_def] >>
   gvs[stor_taint_ok_def] >>
@@ -74,17 +74,17 @@ Theorem call_adopted_stor_taint_ok:
   inst.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
   s'.vs_requests <> s.vs_requests /\ s'.vs_outcomes <> s.vs_outcomes /\
   (HD s.vs_outcomes).co_success /\ tn.t_imm = {} ==>
-  stor_taint_ok cx (step_taint inst s s' tn) s'
+  stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
   simp[stor_taint_ok_def, step_taint_def, adopt_reset_def, imm_taint_def]
 QED
 
 Theorem call_unchanged_stor_taint_ok:
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_accounts = s.vs_accounts /\
   s'.vs_transient = s.vs_transient ==>
-  stor_taint_ok cx (step_taint inst s s' tn) s'
+  stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
   strip_tac >>
   gvs[stor_taint_ok_def, step_taint_def, adopt_reset_def,
@@ -98,18 +98,18 @@ Theorem call_gas_path_ptr_edge:
    (inst.inst_opcode = STATICCALL /\
     inst.inst_operands = [gas; addr; ao; az; ro; rz])) /\
   access_ok 0 G fn inst s /\ taint_ok fn tn inst s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   step_inst_base inst s = OK u ==>
-  gas_path_ptr_edge (cx_dead cx) 0 ctx fn PG G tn s 0
+  gas_path_ptr_edge (cx_dead H cx) 0 ctx fn PG G tn s 0
     (step_prov PG G inst u) (step_taint inst s u tn)
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   strip_tac >>
-  `ptr_safe_step (cx_dead cx) 0 0 ctx fn PG G tn inst s` by
+  `ptr_safe_step (cx_dead H cx) 0 0 ctx fn PG G tn inst s` by
     (irule call_ptr_safe_step >> metis_tac[]) >>
-  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn inst s` by
+  `ptr_inst_ok (cx_dead H cx) 0 0 ctx fn G tn inst s` by
     gvs[Once ptr_safe_step_def] >>
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode` by
     simp[is_terminator_def] >>
@@ -205,8 +205,8 @@ Theorem exec_ext_call_stor_taint_ok:
   ((inst.inst_opcode = CALL /\ ~stat) \/
    (inst.inst_opcode = STATICCALL /\ stat)) /\
   exec_ext_call inst s gas addr value ao az ro rz stat = OK u /\
-  stor_taint_ok cx tn s ==>
-  stor_taint_ok cx (step_taint inst s u tn) u
+  stor_taint_ok H cx tn s ==>
+  stor_taint_ok H cx (step_taint inst s u tn) u
 Proof
   strip_tac >> drule exec_ext_call_storage_cases >> strip_tac
   >- (irule call_unchanged_stor_taint_ok >> metis_tac[])

@@ -5,7 +5,7 @@ Ancestors
   stmtSimDefs vyperState vyperInterpreter finite_map list words
 
 Theorem memory_place_mcopy_stmt_state:
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
@@ -21,7 +21,7 @@ Theorem memory_place_mcopy_stmt_state:
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
     off + type_memory_size tv <= w2n dw \/ w2n dw + n <= off) ==>
-  stmt_state_rel ctx func cenv cx ff (mcopy (w2n dw) src n s)
+  stmt_state_rel H ctx func cenv cx ff (mcopy (w2n dw) src n s)
 Proof
   strip_tac >> irule memory_place_write_stmt_state >>
   qexistsl_tac [`dtv`, `dty`, `ee`, `env`, `p`, `s`, `s`, `sa`, `v`, `dw`] >>

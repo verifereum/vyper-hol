@@ -66,7 +66,7 @@ QED
 
 Theorem normalization_allocate:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
-  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx ee s /\
+  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx ee s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   type_memory_size dtv < dimword (:256) /\
   vv_at ce cx sty origin sa ee raw vv s /\
@@ -83,7 +83,7 @@ Theorem normalization_allocate:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r dw. gas_path_mem ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func ce cx ee r /\ alloca_history func r /\
+    stmt_state_rel H ctx func ce cx ee r /\ alloca_history func r /\
     r.vs_memory = s.vs_memory /\ s.vs_alloca_next <= r.vs_alloca_next /\
     eval_operand (vv_operand vv) r = SOME sw /\
     eval_operand buf.buf_operand r = SOME dw /\
@@ -98,13 +98,25 @@ Theorem normalization_allocate:
     (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
     ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
-    r.vs_inst_idx = LENGTH sm.cs_current_insts
+    r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    (!J. stmt_state_rel J ctx func ce cx ee s ==>
+      stmt_state_rel J ctx func ce cx ee r)
 Proof
   strip_tac >>
   drule_all normalization_source_capacity >> strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
   drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
+  `!J : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel J ctx func ce cx ee s ==>
+    stmt_state_rel J ctx func ce cx ee u` by
+    (qx_gen_tac `J` >> disch_tac >>
+     qspecl_then [`ctx`, `func`, `ce`, `cx`, `ee`, `sa`, `sm`,
+       `buf`, `type_memory_size dtv`, `s`, `vv_operand vv`, `sw`] mp_tac
+       (Q.INST [`H` |-> `J`]
+         (INST_TYPE [alpha |-> beta] alloc_buffer_source_path_mem_endpoint)) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (qx_choosel_then [`u'`, `w'`] strip_assume_tac) >> gvs[]) >>
   `type_memory_size stv = 0 \/
    w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
@@ -114,6 +126,6 @@ Proof
      qexistsl_tac [`u`,`v`] >> simp[] >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `u = _` kall_tac >>
-  qexistsl_tac [`u`,`w`] >> simp[] >> decide_tac
+  qexistsl_tac [`u`,`w`] >> simp[] >> rpt strip_tac >> decide_tac
 QED
 

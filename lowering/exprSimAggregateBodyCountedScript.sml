@@ -3,7 +3,7 @@ Theory exprSimAggregateBodyCounted
 Ancestors
   exprSimAggregateChildren exprSimAggregateLoops exprSimSource
   gasSummary fragGasMode fragGasPath vyperInterpreter vyperState exprSimHypsDefs
-  exprSimHyps exprSimUnwrap exprSimUnwrapProps exprSimMemoryRead
+  exprSimHyps exprSimUnwrap exprSimUnwrapProps exprSimMemoryRead exprSimMemoryForce
   exprLoweringProps loweringPosts compileEnv loweringStateRelDefs placeTypedCopyRecursivePath
   placeMemoryPrimitiveForward localMemoryStorePath freshWrites exprSimProps
   vyperAST vyperTypeCallGraph aggregateStoreSizePath
@@ -55,13 +55,13 @@ Theorem unwrap_value_body_rebased_path:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-    expr_post ctx func ce cx e es'
+    expr_post H ctx func ce cx e es'
       (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
     ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts
@@ -69,11 +69,11 @@ Proof
   strip_tac >>
   drule vv_post_rebase >>
   disch_then assume_tac >>
-  `vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  `vv_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     sm r es' (Value v) vv r` by metis_tac[vv_post_read_result] >>
   Cases_on `post_value_type ce e = expr_type e`
   >- (mp_tac unwrap_value_path >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (qspecl_then [`su`, `op`] mp_tac) >>
       impl_tac
       >- (simp[] >> conj_tac
@@ -90,7 +90,7 @@ Proof
   `p.ptr_location = LocMemory` by metis_tac[] >>
   Cases_on `is_word_type t`
   >- (mp_tac (GEN_ALL unwrap_memory_marked_read) >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (qspecl_then [`su`, `op`] mp_tac) >>
       impl_tac
       >- (simp[] >> gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
@@ -103,6 +103,86 @@ Proof
   qexists_tac `r` >> simp[gas_marked_path_def, gas_path_rules] >>
   irule expr_post_of_vv_post_memory >> simp[] >> qexists_tac `t` >> simp[]
 QED
+
+(* unwrap_value_body_rebased_path over every horizon valid at tr, with one
+   shared endpoint. *)
+Theorem unwrap_value_body_rebased_path_horizons:
+  compile_expr ce ty e si = (vv,sj) /\
+  expr_body_pre ce cx env e es /\
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tv es' = (INL v,es') /\
+  (!H. valid_horizon cx st0 H tr ==>
+     vv_post H ctx func ce cx e es sa sm s0 es' tv vv r) /\
+  valid_horizon cx st0 H0 tr /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+    (!H. valid_horizon cx st0 H tr ==>
+       expr_post H ctx func ce cx e es'
+         (sa with cs_next_var := sm.cs_next_var) su r es' v op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+    u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H tr ==> _` (fn th =>
+    `!H. valid_horizon cx st0 H tr ==>
+       vv_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+         sm r es' (Value v) vv r` by
+      (rpt strip_tac >>
+       `vv_post H ctx func ce cx e es sa sm s0 es' tv vv r` by
+         (irule th >> first_assum ACCEPT_TAC) >>
+       drule (INST_TYPE [alpha |-> ``:256``] vv_post_rebase) >> strip_tac >>
+       irule (INST_TYPE [alpha |-> ``:256``] vv_post_read_result) >>
+       qexists_tac `tv` >> asm_rewrite_tac[])) >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- suspend "same"
+  >> suspend "unequal"
+QED
+
+Resume unwrap_value_body_rebased_path_horizons[same]:
+  qspecl_then [`ctx`, `func`, `ce`, `cx`, `e`, `es'`,
+    `sa with cs_next_var := sm.cs_next_var`, `sm`, `su`, `r`, `es'`, `v`,
+    `vv`, `op`, `r`, `st0`, `tr`, `H0`] mp_tac unwrap_value_path_horizons >>
+  impl_tac
+  >- (asm_rewrite_tac[] >> simp[] >> conj_tac
+      >- (gvs[local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[]) >>
+      rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  strip_tac >> qexists_tac `u` >>
+  gvs[gas_marked_path_def] >> metis_tac[gas_path_normal]
+QED
+Resume unwrap_value_body_rebased_path_horizons[unequal]:
+  `!t p. vv = LocatedValue t p ==> p.ptr_location = LocMemory` by
+    metis_tac[aggregate_unequal_post_result_location] >>
+  Cases_on `vv`
+  >- (gvs[exprLoweringTheory.unwrap_value_def, compileEnvTheory.comp_return_def] >>
+      qexists_tac `r` >> simp[gas_marked_path_def, gas_path_rules] >>
+      rpt strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:256``] expr_post_of_vv_post_stack) >>
+      metis_tac[]) >>
+  `p.ptr_location = LocMemory` by metis_tac[] >>
+  Cases_on `is_word_type t`
+  >- (mp_tac (GEN_ALL unwrap_memory_marked_read_horizons) >>
+      disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+      disch_then (drule_at
+        (Pat `!H. valid_horizon _ _ H _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+      impl_tac
+      >- (simp[] >> gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
+          metis_tac[]) >>
+      strip_tac >>
+      gvs[gas_marked_exec_def, read_result_def, return_def] >>
+      qexists_tac `u` >> simp[] >>
+      metis_tac[gas_marked_path_def, gas_path_normal]) >>
+  gvs[exprLoweringTheory.unwrap_value_def, compileEnvTheory.comp_return_def] >>
+  qexists_tac `r` >> simp[gas_marked_path_def, gas_path_rules] >>
+  rpt strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:256``] expr_post_of_vv_post_memory) >>
+  simp[] >> qexists_tac `t` >> simp[]
+QED
+Finalise unwrap_value_body_rebased_path_horizons
 
 Theorem aggregate_store_body_rebased_slice_path:
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e)
@@ -119,7 +199,7 @@ Theorem aggregate_store_body_rebased_slice_path:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -130,7 +210,7 @@ Theorem aggregate_store_body_rebased_slice_path:
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -139,7 +219,7 @@ Theorem aggregate_store_body_rebased_slice_path:
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
     (!aid off sz a len.
@@ -162,7 +242,7 @@ Proof
   gvs[] >>
   `lookup_var x s = SOME w` by metis_tac[expr_post_rebased_lookup] >>
   `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >>
-  `stmt_state_rel ctx func ce cx es' s /\
+  `stmt_state_rel H ctx func ce cx es' s /\
    FLOOKUP s.vs_allocas did = SOME (b,k)` by fs[expr_post_def] >>
   `!name a len. local_region ce es'.scopes s name a len ==>
     a+len <= w2n w \/ w2n w + type_memory_size tv <= a` by
@@ -207,7 +287,7 @@ Proof
      irule aggregate_physical_source_slot_bounds >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `type_widens_to _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ s`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (b,k)`)) >>
      simp[arithmeticTheory.ADD_COMM] >>
      first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])) >>
@@ -297,7 +377,7 @@ Theorem aggregate_body_child_store_slice_path:
   (!z. op = Var z ==> not_fresh_at su z) /\
   cs_extends sm su /\ cs_extends su sb /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
@@ -305,7 +385,7 @@ Theorem aggregate_body_child_store_slice_path:
   type_memory_size tv < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -317,7 +397,7 @@ Theorem aggregate_body_child_store_slice_path:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
   (!q. val_in_memory tv v (w2n w) q.vs_memory /\
-      stmt_state_rel ctx func ce cx es' q /\
+      stmt_state_rel H ctx func ce cx es' q /\
       (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
       (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b) /\
       (!aid off sz a k.

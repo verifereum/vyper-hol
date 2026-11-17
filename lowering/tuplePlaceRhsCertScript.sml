@@ -22,8 +22,8 @@ Theorem tuple_place_rhs_certificate:
   expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT ltys /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
   value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
-  expr_post ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv ==>
-  stmt_state_rel ctx func cenv cx es1 sv /\
+  expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv ==>
+  stmt_state_rel H ctx func cenv cx es1 sv /\
   expr_val_rel cx (TupleT ltys) (ArrayV (TupleV vs)) op sv /\
   expr_val_at cenv cx (TupleT ltys) sa su es1 (ArrayV (TupleV vs)) op sv /\
   ?w. eval_operand op sv = SOME w /\

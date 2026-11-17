@@ -308,16 +308,17 @@ Theorem select_result_hashmap_nested:
     (ValueSubscript kv) st =
   (INL (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt'),st)
 Proof
-  simp[select_result_def, extend_place_def, return_def]
+  simp[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, return_def]
 QED
 
 Theorem select_result_hashmap_leaf:
   evaluate_type (get_tenv cx) t = SOME tv ==>
   select_result cx ty (HashMapRef tr slot kt (Type t)) (ValueSubscript kv) st =
-  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)),st)
+  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)),
+   st with storage_trace := st.storage_trace ++
+     [StorageRoot tr (w2n (hashmap_slot slot (encode_hashmap_key kt kv))) tv])
 Proof
-  simp[select_result_def, extend_place_def, lift_option_type_def,
-       lift_option_def, bind_def, return_def]
+  simp[select_result_def, extend_place_mapping_leaf]
 QED
 
 (* ===== encode_hashmap_key Properties ===== *)

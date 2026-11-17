@@ -13,7 +13,7 @@ Theorem abi_encode_args_producer_phases:
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid0) target (MAP expr_type args) vs = INL result /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) values /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
@@ -72,7 +72,7 @@ Proof
   `enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)` by
     (asm_rewrite_tac [vyper_to_abi_types_MAP, MAP_MAP_o]) >>
   drule_at (Pat `abi_encoder_open_input _ _ _ _ _ _`) abi_encode_args_phase_resources >>
-  disch_then (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>

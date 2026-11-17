@@ -47,7 +47,7 @@ Theorem abi_encode_fresh_nonword_zero_input_supplier:
   type_memory_bytes ce ty = type_memory_size tv /\
   type_memory_bytes ce ty < dimword (:256) /\
   abi_decoder_operand_live next op /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   expr_val_at ce cx ty sa st es v op s /\ s.vs_alloca_next <= lo /\
   abi_embedded_static_size ce.ce_struct_fields ty =
     abi_member_head_size (vyper_to_abi_type (get_tenv cx) ty) /\

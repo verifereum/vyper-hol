@@ -8,11 +8,12 @@ Ancestors
   exprLowering vyperContext vyperValue valueEncoding valueEncodingProofs
   integer_word words exprSimWordArgs exprSimProps exprSimEnv stmtFragPtr
   vyperAST exprSimPrecompiles vyperTypeSystem gasSummary
+  gasSummaryComposePtr gasStorage vyperStorageTrace vyperStorageFootprint vyperStorageBackend
   exprPtrUnwrap bodyPtrPreds exprSimHypsDefs exprSimCalldata loweringSlice
 
 Theorem ghost_inv_inst_idx[simp]:
-  ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_inst_idx := k) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def, stor_taint_ok_def,
                         lookup_var_def] >>
@@ -29,13 +30,13 @@ Theorem emit_scalar_builtin_run:
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc args
@@ -43,12 +44,12 @@ Theorem emit_scalar_builtin_run:
       OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s) ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s (if opc = GAS then 1 else 0) G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\
     (opc <> ADD /\ opc <> SUB ==> op_prov G' op = NONE) /\
     eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -63,7 +64,79 @@ Proof
   disch_then (qspecl_then [`w`, `args`, `sa.cs_next_id`, `PG`] strip_assume_tac) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es
+  `stmt_state_rel H ctx fn cenv cx es
+    (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[stmt_state_rel_inst_idx, update_var_def, eval_operand_def,
+       lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac
+  >- (irule scalar_builtin_output_clean >> simp[]) >>
+  conj_tac
+  >- (strip_tac >> irule scalar_builtin_output_no_prov >> gvs[MEM]) >>
+  rpt strip_tac >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem emit_scalar_builtin_run_horizons:
+  emit_op opc args sa = (op, sb) /\ fn_has_code sa sb fn /\
+  MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
+    GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
+    ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
+    BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
+  (!a. MEM a args ==> op_taint tn a = {}) /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s) /\
+  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  step_inst_base (mk_inst sa.cs_next_id opc args
+    [STRING #"%" (toString sa.cs_next_var)]) s =
+      OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s) ==>
+  ?G' tn' t. !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s (if opc = GAS then 1 else 0) G' tn' (OK t) /\
+    ghost_inv H d cenv cx es G' tn' t /\
+    ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
+    op_taint tn' op = {} /\
+    (opc <> ADD /\ opc <> SUB ==> op_prov G' op = NONE) /\
+    eval_operand op t = SOME w /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >>
+  qexistsl_tac
+    [`step_prov PG G
+       (mk_inst sa.cs_next_id opc args [STRING #"%" (toString sa.cs_next_var)])
+       (update_var (STRING #"%" (toString sa.cs_next_var)) w s)`,
+     `step_taint
+       (mk_inst sa.cs_next_id opc args [STRING #"%" (toString sa.cs_next_var)])
+       s (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn`,
+     `(update_var (STRING #"%" (toString sa.cs_next_var)) w s)
+       with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  gen_tac >> strip_tac >>
+  `ghost_inv H d cenv cx es G tn s /\
+   stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
+  `~not_fresh_at sa (STRING #"%" (toString sa.cs_next_var))` by
+    simp[not_fresh_at_def] >>
+  drule_all emit_scalar_builtin_counted_suffix >>
+  disch_then (qspecl_then [`PG`, `G`, `D H`] assume_tac) >>
+  drule_all scalar_builtin_update_ghosts >>
+  disch_then (qspecl_then [`w`, `args`, `sa.cs_next_id`, `PG`] strip_assume_tac) >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
+    (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel H ctx fn cenv cx es
     (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -85,34 +158,41 @@ Theorem env_builtin_counted_run:
   compile_env_var item sa = (op, sb) /\ fn_has_code sa sb fn /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s) /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?G' tn' t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+  ?G' tn' t. !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME (val_to_w256 v) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
 Proof
-  strip_tac >> Cases_on `item` >>
+  strip_tac >>
+  `stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
+  Cases_on `item` >>
   gvs[compile_env_var_def, vyperContextTheory.evaluate_builtin_def] >>
-  drule emit_scalar_builtin_run >> simp[MEM] >>
+  drule emit_scalar_builtin_run_horizons >> simp[MEM] >>
   disch_then irule >> simp[] >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-  gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-      val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]
+  `stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
+  qpat_x_assum `stmt_state_rel H ctx fn cenv cx es s`
+    (strip_assume_tac o REWRITE_RULE
+      [stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+  gvs[val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]
 QED
 
 Theorem env_builtin_stack_encoding:
@@ -135,29 +215,40 @@ Theorem env_builtin_counted_post:
   fn_has_code sa sb fn /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
+    storage_well_formed_on cx es (FST H)) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?G' tn' t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    expr_post ctx fn cenv cx (Builtin (env_item_type item) (Env item) [])
+  ?G' tn' t. !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    expr_post H ctx fn cenv cx (Builtin (env_item_type item) (Env item) [])
       es sa sb s (es with gas_obs := []) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ghost_inv H d cenv cx (es with gas_obs := []) G' tn' t /\
     ptr_val_ok cx (env_item_type item) v op G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >>
   drule lower_value_env >> strip_tac >>
   `ghost_kept cenv es sa G tn s G tn` by simp[ghost_kept_refl] >>
-  drule_all env_builtin_counted_run >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  mp_tac (Q.INST [`es0` |-> `es`, `G0` |-> `G`, `tn0` |-> `tn`, `s0` |-> `s`]
+    (SPEC_ALL env_builtin_counted_run)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qexistsl_tac [`G'`,`tn'`,`t`] >> qx_gen_tac `Hpost` >> strip_tac >>
+  qpat_x_assum `!Hpost. valid_horizon cx st0 Hpost es.storage_trace ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `Hpost` mp_tac) >> simp[] >> strip_tac >>
+  `storage_well_formed_on cx es (FST Hpost)` by metis_tac[] >>
+  `!b. get_storage cx (es with gas_obs := []) b = get_storage cx es b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST Hpost)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   drule_all env_builtin_stack_encoding >> strip_tac >>
-  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def] >>
   irule expr_post_typed_stack_intro >>
   simp[expr_type_def] >>
@@ -175,13 +266,23 @@ Proof
          (read_result cx) (es with gas_obs := tail) =
            (INL v, es with gas_obs := tail)` by
     metis_tac[PURE_REWRITE_RULE [ETA_THM] env_source_all_tails] >>
-  drule_all env_builtin_counted_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx fn cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  Cases_on `?H. valid_horizon cx st0 H es.storage_trace`
+  >- (drule_all env_builtin_counted_post >>
+  disch_then (qspecl_then [`PG`, `\H. cx_dead H cx`] strip_assume_tac) >>
   drule_all env_builtin_stack_encoding >> strip_tac >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL v`, `es`, `G'`, `tn'`, `OK t`] >>
-  simp[gas_explicit_def, expr_type_def]
+  simp[gas_explicit_def, expr_type_def] >> metis_tac[]) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule gas_bad_storage_at_initial >> conj_tac
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  simp[storage_trace_domain_def] >> metis_tac[]
 QED
 
 Theorem compile_env_vv_sim_ptr:
@@ -209,23 +310,27 @@ QED
 Theorem calldata_counted_post:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
   fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
+    storage_well_formed_on cx es (FST H)) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?G' tn' t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    expr_post ctx fn cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+  ?G' tn' t. !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    expr_post H ctx fn cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
       es sa sb s (es with gas_obs := []) (IntV &LENGTH cx.txn.calldata) op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ghost_inv H d cenv cx (es with gas_obs := []) G' tn' t /\
     ptr_val_ok cx (BaseT (UintT 256)) (IntV &LENGTH cx.txn.calldata) op G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >> gvs[lower_value_calldata_len] >>
+  `stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
   `step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE []
      [STRING #"%" (toString sa.cs_next_var)]) s =
      OK (update_var (STRING #"%" (toString sa.cs_next_var))
@@ -234,10 +339,23 @@ Proof
      gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
          val_to_w256_def, integer_wordTheory.i2w_def]) >>
   `ghost_kept cenv es sa G tn s G tn` by simp[ghost_kept_refl] >>
-  drule emit_scalar_builtin_run >> simp[MEM] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
+  drule emit_scalar_builtin_run_horizons >> simp[MEM] >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  disch_then (qspecl_then [`PG`, `D`]
+    (qx_choose_then `outG` (qx_choose_then `outTn`
+      (qx_choose_then `outState` assume_tac)))) >>
+  qexistsl_tac [`outG`,`outTn`,`outState`] >>
+  qx_gen_tac `Hpost` >> strip_tac >>
+  qpat_x_assum `!Hpost. valid_horizon cx st0 Hpost es.storage_trace ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `Hpost` mp_tac) >> simp[] >> strip_tac >>
+  `storage_well_formed_on cx es (FST Hpost)` by metis_tac[] >>
+  `!b. get_storage cx (es with gas_obs := []) b = get_storage cx es b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST Hpost)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   irule expr_post_word_intro >>
   simp[expr_type_def, is_word_type_def, word_value_def] >>
@@ -249,12 +367,23 @@ Theorem compile_calldata_sim_ptr:
   expr_sim_ptr d ctx PG fn cenv cx ty (Builtin (BaseT (UintT 256)) CalldataLen []) es
 Proof
   rw[expr_sim_ptr_def] >>
-  drule_all calldata_counted_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx fn cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  Cases_on `?H. valid_horizon cx st0 H es.storage_trace`
+  >- (drule_all calldata_counted_post >>
+  disch_then (qspecl_then [`PG`, `\H. cx_dead H cx`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (IntV &LENGTH cx.txn.calldata)`, `es`, `G'`, `tn'`, `OK t`] >>
-  simp[gas_explicit_def, expr_type_def, is_word_type_def, calldata_source_all_tails]
+  simp[gas_explicit_def, expr_type_def, is_word_type_def, calldata_source_all_tails] >>
+  metis_tac[]) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule gas_bad_storage_at_initial >> conj_tac
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  simp[storage_trace_domain_def] >> metis_tac[]
 QED
 
 Theorem compile_calldata_vv_sim_ptr:

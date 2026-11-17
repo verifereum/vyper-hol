@@ -50,78 +50,92 @@ Proof
             scfg_bypass_fn_bisim, scfg_bypass_frame_sim, ctx_bisim_refl]
 QED
 
+Theorem scfg_collapse_joint_relation:
+  (!f. scfg_normalized f ==> R f f) /\
+  (!f g h. R f g /\ R g h ==> R f h) /\
+  (!f g. R f g ==> scfg_normalized g) /\
+  (!fn a b. scfg_chain_hyp fn a b ==> R fn (scfg_chain fn a b)) /\
+  (!fn bb lm candidates fn' lm' changed.
+     scfg_normalized fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+     try_bypass fn lm bb candidates = (fn',lm',changed) ==> R fn fn') ==>
+  (!fn lm visited lbl. scfg_normalized fn ==>
+    R fn (FST (collapse_dfs fn lm visited lbl))) /\
+  (!fn lm visited succs. scfg_normalized fn ==>
+    R fn (FST (collapse_dfs_succs fn lm visited succs)))
+Proof
+  strip_tac >> ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
+  >- suspend "dfs"
+  >- suspend "nil"
+  >> suspend "succs"
+QED
+
+Resume scfg_collapse_joint_relation[dfs]:
+  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
+  Cases_on `lookup_block lbl fn.fn_blocks`
+  >- simp[] >>
+  rename1 `lookup_block lbl fn.fn_blocks = SOME bb` >>
+  `bb.bb_label = lbl` by metis_tac[lookup_block_member_label] >>
+  namedCases_on `bb_succs bb` ["", "s1 rest"]
+  >- (Cases_on `MEM lbl visited`
+      >- simp[try_bypass_def] >> gvs[try_bypass_def]) >>
+  namedCases_on `rest` ["", "s2 rest2"]
+  >- (Cases_on `lookup_block s1 fn.fn_blocks`
+      >- (Cases_on `MEM lbl visited` >> simp[]) >>
+      rename1 `lookup_block s1 fn.fn_blocks = SOME next_bb` >>
+      Cases_on `can_merge_blocks fn bb next_bb`
+      >- suspend "merge" >>
+      Cases_on `MEM lbl visited` >- simp[] >> gvs[]) >>
+  suspend "bypass"
+QED
+
+Resume scfg_collapse_joint_relation[merge]:
+  gvs[] >>
+  `next_bb.bb_label = s1` by metis_tac[lookup_block_member_label] >>
+  `scfg_chain_hyp fn bb next_bb` by
+    (simp[scfg_chain_hyp_def] >> metis_tac[]) >>
+  `R fn (scfg_chain fn bb next_bb)` by metis_tac[] >>
+  `scfg_normalized (scfg_chain fn bb next_bb)` by metis_tac[] >>
+  gvs[GSYM scfg_chain_def] >> metis_tac[]
+QED
+
+Resume scfg_collapse_joint_relation[bypass]:
+  Cases_on `try_bypass fn lm bb (s1::s2::rest2)` >>
+  rename1 `try_bypass fn lm bb (s1::s2::rest2) = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >>
+  rename1 `try_bypass fn lm bb (s1::s2::rest2) = (collapsed_fn,label_map,new_visited)` >>
+  `R fn collapsed_fn` by metis_tac[] >>
+  `scfg_normalized collapsed_fn` by metis_tac[] >>
+  Cases_on `new_visited` >> gvs[] >- metis_tac[] >>
+  Cases_on `MEM bb.bb_label visited` >> gvs[] >> metis_tac[]
+QED
+
+Resume scfg_collapse_joint_relation[nil]:
+  simp[collapse_dfs_def]
+QED
+
+Resume scfg_collapse_joint_relation[succs]:
+  rpt strip_tac >> simp[Once collapse_dfs_def] >>
+  Cases_on `collapse_dfs fn lm visited lbl` >>
+  rename1 `collapse_dfs fn lm visited lbl = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >> gvs[] >>
+  `scfg_normalized collapsed_fn` by metis_tac[] >>
+  ONCE_REWRITE_TAC [List.last (CONJUNCTS collapse_dfs_def)] >> simp[] >>
+  qpat_x_assum `!f g h. R f g /\ R g h ==> R f h` irule >>
+  qexists_tac `collapsed_fn` >> simp[]
+QED
+
+Finalise scfg_collapse_joint_relation
+
 Theorem scfg_collapse_joint:
   (!fn lm visited lbl. scfg_normalized fn ==>
     scfg_collapse_contract fn (FST (collapse_dfs fn lm visited lbl))) /\
   (!fn lm visited succs. scfg_normalized fn ==>
     scfg_collapse_contract fn (FST (collapse_dfs_succs fn lm visited succs)))
 Proof
-  ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
-  >- suspend "dfs"
-  >- suspend "nil"
-  >> suspend "succs"
+  irule scfg_collapse_joint_relation >>
+  metis_tac[scfg_collapse_contract_refl, scfg_collapse_contract_trans,
+            scfg_collapse_contract_def, scfg_collapse_chain, scfg_collapse_bypass]
 QED
-
-Resume scfg_collapse_joint[dfs]:
-  rpt strip_tac >>
-  simp[NoAsms, Once collapse_dfs_def] >>
-  Cases_on `lookup_block lbl fn.fn_blocks`
-  >- simp[scfg_collapse_contract_refl] >>
-  rename1 `lookup_block lbl fn.fn_blocks = SOME bb` >>
-  `bb.bb_label = lbl` by metis_tac[lookup_block_member_label] >>
-  namedCases_on `bb_succs bb` ["", "s1 rest"]
-  >- (Cases_on `MEM lbl visited`
-      >- simp[try_bypass_def, scfg_collapse_contract_refl] >>
-      gvs[try_bypass_def]) >>
-  namedCases_on `rest` ["", "s2 rest2"]
-  >- (Cases_on `lookup_block s1 fn.fn_blocks`
-      >- (Cases_on `MEM lbl visited` >> simp[scfg_collapse_contract_refl]) >>
-      rename1 `lookup_block s1 fn.fn_blocks = SOME next_bb` >>
-      Cases_on `can_merge_blocks fn bb next_bb`
-      >- suspend "merge" >>
-      Cases_on `MEM lbl visited`
-      >- simp[scfg_collapse_contract_refl] >> gvs[]) >>
-  suspend "bypass"
-QED
-
-Resume scfg_collapse_joint[merge]:
-  gvs[] >>
-  `next_bb.bb_label = s1` by metis_tac[lookup_block_member_label] >>
-  `scfg_chain_hyp fn bb next_bb` by
-    (simp[scfg_chain_hyp_def] >> metis_tac[]) >>
-  drule scfg_collapse_chain >> strip_tac >>
-  gvs[GSYM scfg_chain_def] >>
-  irule scfg_collapse_contract_trans >>
-  qexists_tac `scfg_chain fn bb next_bb` >>
-  simp[] >> first_x_assum irule >>
-  fs[scfg_collapse_contract_def]
-QED
-
-Resume scfg_collapse_joint[bypass]:
-  Cases_on `try_bypass fn lm bb (s1::s2::rest2)` >> PairCases_on `r` >>
-  `scfg_collapse_contract fn q` by
-    (irule scfg_collapse_bypass >> simp[] >>
-     qexistsl_tac [`bb`, `s1::s2::rest2`, `r1`, `lm`, `r0`] >> simp[]) >>
-  `scfg_normalized q` by fs[scfg_collapse_contract_def] >>
-  Cases_on `r1` >> gvs[]
-  >- metis_tac[scfg_collapse_contract_trans] >>
-  Cases_on `MEM bb.bb_label visited` >> gvs[] >>
-  metis_tac[scfg_collapse_contract_trans]
-QED
-
-Resume scfg_collapse_joint[nil]:
-  simp[collapse_dfs_def, scfg_collapse_contract_refl]
-QED
-
-Resume scfg_collapse_joint[succs]:
-  rpt strip_tac >> simp[Once collapse_dfs_def] >>
-  Cases_on `collapse_dfs fn lm visited lbl` >> PairCases_on `r` >>
-  gvs[] >>
-  `scfg_normalized q` by fs[scfg_collapse_contract_def] >>
-  metis_tac[scfg_collapse_contract_trans]
-QED
-
-Finalise scfg_collapse_joint
 
 Theorem scfg_collapse_normalized:
   scfg_normalized fn /\ collapse_dfs fn lm visited lbl = (fn',lm',vis') ==>
@@ -162,64 +176,15 @@ Theorem scfg_collapse_fuel_from_steps:
   (!fn lm visited succs. scfg_normalized fn ==>
     fn_bisim_fuel I fn (FST (collapse_dfs_succs fn lm visited succs)))
 Proof
-  strip_tac >> ho_match_mp_tac collapse_dfs_ind >> rpt conj_tac
-  >- suspend "dfs"
-  >- simp[collapse_dfs_def, fn_bisim_fuel_I_refl]
-  >> suspend "succs"
-QED
-
-Resume scfg_collapse_fuel_from_steps[dfs]:
-  rpt strip_tac >> simp[NoAsms, Once collapse_dfs_def] >>
-  Cases_on `lookup_block lbl fn.fn_blocks`
-  >- simp[fn_bisim_fuel_I_refl] >>
-  rename1 `lookup_block lbl fn.fn_blocks = SOME bb` >>
-  `bb.bb_label = lbl` by metis_tac[lookup_block_member_label] >>
-  namedCases_on `bb_succs bb` ["", "s1 rest"]
-  >- (Cases_on `MEM lbl visited`
-      >- simp[try_bypass_def, fn_bisim_fuel_I_refl] >>
-      gvs[try_bypass_def]) >>
-  namedCases_on `rest` ["", "s2 rest2"]
-  >- (Cases_on `lookup_block s1 fn.fn_blocks`
-      >- (Cases_on `MEM lbl visited` >> simp[fn_bisim_fuel_I_refl]) >>
-      rename1 `lookup_block s1 fn.fn_blocks = SOME next_bb` >>
-      Cases_on `can_merge_blocks fn bb next_bb`
-      >- suspend "merge" >>
-      Cases_on `MEM lbl visited`
-      >- simp[fn_bisim_fuel_I_refl] >> gvs[]) >>
-  suspend "bypass"
-QED
-
-Resume scfg_collapse_fuel_from_steps[merge]:
-  gvs[] >>
-  `next_bb.bb_label = s1` by metis_tac[lookup_block_member_label] >>
-  `scfg_chain_hyp fn bb next_bb` by
-    (simp[scfg_chain_hyp_def] >> metis_tac[]) >>
-  `scfg_normalized (scfg_chain fn bb next_bb)` by
-    metis_tac[scfg_chain_normalized] >>
-  gvs[GSYM scfg_chain_def] >>
-  irule fn_bisim_fuel_I_trans >>
-  qexists_tac `scfg_chain fn bb next_bb` >>
+  strip_tac >>
+  mp_tac (Q.INST [`R` |-> `\f g. scfg_collapse_contract f g /\ fn_bisim_fuel I f g`]
+    scfg_collapse_joint_relation) >> simp[] >>
+  (impl_tac >-
+    (rpt conj_tac
+     >- metis_tac[scfg_collapse_contract_refl, fn_bisim_fuel_I_refl]
+     >- metis_tac[scfg_collapse_contract_trans, fn_bisim_fuel_I_trans]
+     >- simp[scfg_collapse_contract_def]
+     >- metis_tac[scfg_collapse_chain]
+     >> metis_tac[scfg_collapse_bypass, scfg_try_bypass_choice, fn_bisim_fuel_I_refl])) >>
   metis_tac[]
 QED
-
-Resume scfg_collapse_fuel_from_steps[bypass]:
-  Cases_on `try_bypass fn lm bb (s1::s2::rest2)` >> PairCases_on `r` >>
-  `scfg_normalized q` by
-    (irule scfg_try_bypass_normalized >> metis_tac[]) >>
-  `fn_bisim_fuel I fn q` by
-    (metis_tac[scfg_try_bypass_choice, fn_bisim_fuel_I_refl]) >>
-  Cases_on `r1` >> gvs[]
-  >- metis_tac[fn_bisim_fuel_I_trans] >>
-  Cases_on `MEM bb.bb_label visited` >> gvs[] >>
-  metis_tac[fn_bisim_fuel_I_trans]
-QED
-
-Resume scfg_collapse_fuel_from_steps[succs]:
-  rpt strip_tac >> pure_once_rewrite_tac[collapse_dfs_def] >>
-  Cases_on `collapse_dfs fn lm visited lbl` >> PairCases_on `r` >>
-  gvs[] >>
-  `scfg_normalized q` by metis_tac[scfg_collapse_normalized] >>
-  simp[Once collapse_dfs_def] >>
-  irule fn_bisim_fuel_I_trans >> qexists_tac `q` >> simp[]
-QED
-Finalise scfg_collapse_fuel_from_steps

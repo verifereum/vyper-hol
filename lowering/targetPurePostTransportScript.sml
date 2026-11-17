@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem target_saved_storage_oracles:
-  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
+  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) <=>
   read_storage_slot cx tr w tv es = (INL v,es)
 Proof
   Cases_on `tr` >> simp[read_storage_slot_def, get_storage_backend_eq, bind_def,
@@ -47,8 +47,8 @@ QED
 
 
 Theorem target_saved_read_oracles:
-  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
+  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) <=>
   read_result cx r es = (INL v,es)
 Proof
   Cases_on `r` >> simp[read_result_def, return_def, raise_def] >>
@@ -63,6 +63,34 @@ Proof
        vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
   metis_tac[]
 QED
+Theorem saved_value_region_bytes:
+  vv_at ce cx ty origin endpoint es raw (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx raw es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  wb_frame ce es es' cut s u /\ es'.scopes = es.scopes /\
+  endpoint.cs_next_id <= cut.cs_next_id ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_at_def] >> strip_tac >> gvs[]
+  >- (gvs[wb_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (first_x_assum irule >> simp[] >>
+         conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+         qexists `aid` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (gvs[wb_frame_def, locals_kept_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` irule >>
+         qexists `n` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem target_saved_value_region_bytes:
   vv_at cenv cx ty sa sm es r (LocatedValue carried_ty p) s /\
   p.ptr_location = LocMemory /\
@@ -74,26 +102,20 @@ Theorem target_saved_value_region_bytes:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   strip_tac >>
-  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_at_def] >> strip_tac >> gvs[]
-  >- (gvs[wb_frame_def] >>
-      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[])
-  >- (gvs[wb_frame_def, locals_kept_def] >>
-      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[]) >>
-  simp[mem_bytes_at_def]
+  mp_tac (Q.INST [`ce` |-> `cenv`, `origin` |-> `sa`,
+    `endpoint` |-> `sm`, `cut` |-> `sm`, `es'` |-> `es`,
+    `raw` |-> `r`, `ann` |-> `carried_ty`, `p` |-> `p`,
+    `cx` |-> `cx`, `ty` |-> `ty`, `es` |-> `es`]
+    saved_value_region_bytes) >> simp[]
 QED
 
 Theorem target_saved_regions_oracles:
-  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
+  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) r vv s <=>
    vv_at cenv cx ty sa sb es r vv s) /\
-  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
+  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) r vv s <=>
    vv_own cenv cx ty sa sb es r vv s) /\
-  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
-   vv_storage_live cx vv es s)
+  (vv_storage_live H cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) s <=>
+   vv_storage_live H cx vv es s)
 Proof
   Cases_on `vv` >>
   simp[vv_at_def, vv_own_def, target_saved_read_oracles,
@@ -101,7 +123,7 @@ Proof
 QED
 
 Theorem target_saved_holds_oracles:
-  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
+  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) s <=>
   vv_holds cenv cx ty r vv es s
 Proof
   Cases_on `vv` >>
@@ -114,29 +136,44 @@ Proof
        SRULE [] target_saved_storage_oracles]
 QED
 
+Theorem saved_stack_value_frame:
+  expr_val_rel cx ty v op s /\ expr_val_at ce cx ty origin endpoint es v op s /\
+  wb_frame ce es es' cut s u /\ es'.scopes = es.scopes /\
+  endpoint.cs_next_id <= cut.cs_next_id /\
+  (!w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) ==>
+  expr_val_rel cx ty v op u
+Proof
+  strip_tac >> gvs[expr_val_rel_def] >> rpt strip_tac >>
+  Cases_on `is_word_type ty` >- gvs[] >> simp[] >>
+  `val_in_memory tv v (w2n w) s.vs_memory` by metis_tac[] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  irule exprSimPropsTheory.val_in_memory_footprint_agree >> simp[] >>
+  qexists `s.vs_memory` >> simp[]
+  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def] >> first_x_assum irule >> simp[] >>
+         conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+         qexists `aid` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def, locals_kept_def] >>
+         qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` irule >>
+         qexists `n` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem target_saved_stack_value_frame:
   expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sm es v op s /\
   wb_frame cenv es es sm s u /\
   (!w. eval_operand op s = SOME w ==> eval_operand op u = SOME w) ==>
   expr_val_rel cx ty v op u
 Proof
-  strip_tac >> gvs[expr_val_rel_def] >>
-  rpt strip_tac >>
-  Cases_on `is_word_type ty` >- gvs[] >> simp[] >>
-  `val_in_memory tv v (w2n w) s.vs_memory` by metis_tac[] >>
-  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_val_at_def] >> strip_tac >>
-  irule exprSimPropsTheory.val_in_memory_footprint_agree >>
-  simp[] >> qexists_tac `s.vs_memory` >> simp[] >>
-  gvs[wb_frame_def, locals_kept_def]
-  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (qpat_x_assum `!aid off sz. FLOOKUP _ aid = SOME (off,sz) /\ _ ==> _` irule >>
-         metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[])
-  >- (`mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule mem_bytes_at_agree_window >> simp[]) >>
-  simp[mem_bytes_at_def]
+  strip_tac >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `origin` |-> `sa`,
+    `endpoint` |-> `sm`, `cut` |-> `sm`, `es'` |-> `es`,
+    `cx` |-> `cx`, `ty` |-> `ty`, `es` |-> `es`, `op` |-> `op`]
+    saved_stack_value_frame) >> simp[]
 QED
 
 
@@ -179,9 +216,9 @@ Theorem target_saved_holds_frame:
   wb_frame cenv es es sm s u /\
   (!w. eval_operand (vv_operand vv) s = SOME w ==>
        eval_operand (vv_operand vv) u = SOME w) /\
-  vv_storage_live cx vv es s /\
-  storage_rel cx cx.txn.target es u /\
-  transient_rel cx cx.txn.target es u ==>
+  vv_storage_live H cx vv es s /\
+  storage_rel H cx.txn.target es u /\
+  transient_rel H cx.txn.target es u ==>
   vv_holds cenv cx ty r vv es u
 Proof
   Cases_on `vv`
@@ -196,12 +233,12 @@ Proof
   >- (gvs[storage_holds_def] >>
       irule storage_range_agree_of_live >>
       conj_tac >- gvs[storage_range_agree_def] >>
-      qexistsl_tac [`cx`, `F`] >>
+      qexistsl_tac [`H`, `F`] >>
       gvs[storage_rel_def, get_storage_def, vfmStateTheory.lookup_account_def])
   >- (gvs[storage_holds_def] >>
       irule storage_range_agree_of_live >>
       conj_tac >- gvs[storage_range_agree_def] >>
-      qexistsl_tac [`cx`, `T`] >>
+      qexistsl_tac [`H`, `T`] >>
       gvs[transient_rel_def, get_storage_def])
   >- (gvs[vv_location_def, immutable_holds_def] >> metis_tac[]) >>
   rpt gen_tac >> disch_tac >>
@@ -209,11 +246,11 @@ Proof
 QED
 
 Theorem target_saved_storage_live_frame:
-  vv_storage_live cx vv es s /\
+  vv_storage_live H cx vv es s /\
   (?w. eval_operand (vv_operand vv) s = SOME w) /\
   (!w. eval_operand (vv_operand vv) s = SOME w ==>
        eval_operand (vv_operand vv) u = SOME w) ==>
-  vv_storage_live cx vv es u
+  vv_storage_live H cx vv es u
 Proof
   Cases_on `vv` >> simp[vv_operand_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
@@ -229,17 +266,17 @@ QED
 
 
 Theorem target_saved_post_transport:
-  vv_post ctx func cenv cx e es sa sm s0 es1 r vv s /\
-  target_post ctx func cenv cx es1 sm sb s ee pv vt op u /\
-  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|> /\
+  vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
+  target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
+  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  vv_storage_live cx vv es1 s ==>
-  vv_post ctx func cenv cx e ee sa sb u ee r vv u /\
+  vv_storage_live H cx vv es1 s ==>
+  vv_post H ctx func cenv cx e ee sa sb u ee r vv u /\
   wb_frame cenv es ee sa s0 u
 Proof
   strip_tac >> gvs[] >>
@@ -252,28 +289,32 @@ Proof
         eval_operand (vv_operand vv) u = SOME w` by
     (rpt strip_tac >> irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`sm`, `s`] >> gvs[wb_frame_def]) >>
-  `storage_rel cx cx.txn.target es1 u /\
-   transient_rel cx cx.txn.target es1 u` by
+  `storage_rel H cx.txn.target es1 u /\
+   transient_rel H cx.txn.target es1 u` by
     (gvs[target_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
          state_rel_def, storage_rel_def, transient_rel_def]) >>
-  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) sa s0 u` by
-    (irule wb_frame_trans >>
-     simp[] >> conj_tac >- metis_tac[] >>
-     qexistsl_tac [`es1`, `sm`, `s`] >>
-     gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) sa s0 u` by
+    (irule wb_frame_trans >> simp[] >> conj_tac >-
+      (qexistsl_tac [`es1`, `sm`, `s`] >>
+       gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   simp[] >>
   gvs[vv_post_def] >>
   simp[SRULE [] target_saved_holds_oracles,
        SRULE [] target_saved_regions_oracles] >>
   rpt conj_tac
   >- gvs[target_post_def]
+  >- gvs[target_post_def]
   >- (irule target_saved_holds_frame >>
-      simp[] >> qexistsl_tac [`s`, `sa`, `sm`] >> simp[])
+      simp[] >> qexistsl_tac [`H`, `s`, `sa`, `sm`] >> simp[])
   >- (irule (cj 1 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule target_saved_storage_live_frame >>
-      metis_tac[target_saved_operand_exists]) >>
+      qexists_tac `s` >>
+      conj_tac >- simp[] >>
+      conj_tac >- (drule target_saved_operand_exists >> simp[]) >>
+      Cases_on `vv` >> gvs[get_storage_def]) >>
   simp[exprSimPropsTheory.locals_kept_refl]
 QED

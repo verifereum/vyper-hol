@@ -1,6 +1,7 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
+  gasCount
   exprWordOperand exprSimPopNestedLocalPath
   compileEnv valueEncoding
   exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
@@ -53,33 +54,6 @@ QED
 
 
 
-Theorem expr_body_pre_storage_preserved:
-  !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
-Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (Cases_on `int_calls_expr e = []`
-      >- (irule eval_expr_oracle_preserves_contract_storage_well_formed >>
-          gvs[expr_body_pre_def, expr_sim_inv_def,
-              runtime_storage_consistent_def, runtime_consistent_def] >>
-          metis_tac[]) >>
-      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
-        by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
-            metis_tac[]) >>
-      `EVERY (\c. FST c = NONE /\
-                  IS_SOME (supported_function_decl tops c Internal))
-         (int_calls_expr e)` by
-        (gvs[expr_body_pre_def, listTheory.EVERY_MEM] >>
-         rpt strip_tac >> res_tac >> gvs[]) >>
-      irule eval_expr_body_oracle_storage >>
-      gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
-          runtime_storage_consistent_def, runtime_consistent_def] >>
-      metis_tac[]) >>
-  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
-  gvs[expr_body_pre_def, expr_sim_inv_def] >>
-  drule_then irule (cj 5 eval_outcome_suffix_mutual)
-QED
 
 (* The outcomes stay SOME: evaluation only drops some from the front. *)
 Theorem eval_expr_outcomes_some:
@@ -300,7 +274,6 @@ Theorem expr_body_pre_eval_result:
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all expr_body_pre_storage_preserved >> strip_tac >>
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
      gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
@@ -665,4 +638,30 @@ Proof
   gvs[no_control_exc_def, no_type_error_result_def]
   >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
   metis_tac[eval_expr_calls_no_halt, expr_body_pre_def]
+QED
+
+Theorem operand_eval_evidence_semantics:
+  expr_body_pre cenv cx env e es /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  expr_sim_inv cenv cx env ee /\
+  expr_result_typed env e (Value v) /\
+  (is_word_type (expr_type e) ==>
+    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+      value_has_type tyv v)
+Proof
+  strip_tac >>
+  first_x_assum (qspec_then `[]` assume_tac) >>
+  qpat_x_assum `ee = _` SUBST_ALL_TAC >>
+  qpat_assum `_ = (INL v,_)`
+    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] expr_body_pre_eval)) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  simp[expr_body_pre_gas_obs] >> strip_tac >>
+  simp[] >> strip_tac >>
+  qpat_assum `_ = (INL v,_)`
+    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] expr_body_pre_word_value)) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  simp[expr_body_pre_gas_obs]
 QED

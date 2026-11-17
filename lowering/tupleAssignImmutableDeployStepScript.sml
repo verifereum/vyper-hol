@@ -3,11 +3,14 @@ Theory tupleAssignImmutableDeployStep
 Ancestors
   tupleAssignImmutableDeployWord tupleAssignImmutableDeployAggregate
   tupleAssignImmutableDeployRestore tupleAssignImmutableDeploySource
-  tuplePlaceHeadOpen immutableAssignMetadata immutableDeployAssignRanges
+  immutableAssignMetadata immutableDeployAssignRanges tuplePlaceHeadOpen
   immutableDeployAssignAdmissible immutableAssignOpen stmtLoweringMono
 
+Libs
+  horizonTypeLib
+
 Theorem tuple_immutable_loaded_head_step:
-  tuple_place_head ctx func ce cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func ce cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\ body_inv tops ctx ce cx /\ cx.in_deploy /\
   expr_sim_inv ce cx env es /\
   supported_immutable_type tops (src,id) = SOME ity /\
@@ -22,28 +25,33 @@ Theorem tuple_immutable_loaded_head_step:
     type_memory_size (EL j ltvs)+64 < dimword (:256)) /\
   (EXISTS (\t. ~is_word_type t) ltys ==> ce.ce_target CapMcopy) /\
   type_alloc_ok ce (TupleT tys) /\ i < LENGTH tys /\
-  (let dst = FST place; loc_opt = FST (SND place); dst_ty_opt = SND (SND place);
-       loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
-   in (if is_word_type (EL i ltys) then
-         if is_word_type dty then
-           compile_store_at_loc ce.ce_imm_alloca dst (EL i elems) loc_opt
-         else emit_void INVALID []
-       else compile_assign_value ce dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) (type_memory_bytes ce dty)) sa) = ((),sb) /\
+  (if is_word_type (EL i ltys) then
+     if is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys) then
+       compile_store_at_loc ce.ce_imm_alloca (FST place) (EL i elems) (FST (SND place))
+     else emit_void INVALID []
+   else compile_assign_value ce (FST place)
+     (case FST (SND place) of SOME l => l | NONE => LocMemory)
+     (EL i elems)
+     (is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))
+     NONE (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys)
+     (EL i ltys)
+     (type_memory_bytes ce
+       (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))) sa = ((),sb) /\
   acyclic_struct_metadata ce.ce_struct_fields /\ local_ptrs_reserved ce sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
   write_place cx (ImmutablePlace src id []) (EL i vs) es = (INL (),ff) ==>
   ?q. gas_marked_path F ctx func s0 0 (OK q) /\ expr_sim_inv ce cx env ff /\
     ~block_is_terminated sb /\
-    tuple_place_head ctx func ce cx ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
+    tuple_place_head ctx func ce cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
     (!x. not_fresh_at sp x ==> lookup_var x q = lookup_var x s0) /\
     (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
       FLOOKUP q.vs_allocas aid = SOME entry) /\
     alloca_frame ce es sp s0 ce ff q
 Proof
   strip_tac >>
+  drule_all tuplePlaceHeadTheory.tuple_place_head_witness >>
+  disch_then (qx_choose_then `H0` strip_assume_tac) >>
   drule_all immutable_assign_bare_global >> strip_tac >>
   `~cx_const_name cx (src,id)` by
     (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
@@ -65,7 +73,7 @@ Proof
    evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
    type_widens_to (get_tenv cx) (EL i ltys) ity /\
    i < LENGTH ltys` by metis_tac[] >>
-  `stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  `stmt_state_rel H0 ctx func ce cx es s0 /\ ~s0.vs_halted /\
    s0.vs_current_bb = sa.cs_current_bb /\
    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
    value_has_type (EL i ltvs) (EL i vs) /\
@@ -128,15 +136,16 @@ Proof
        qpat_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s0`
          mp_tac >> simp[venomStateTheory.venom_state_component_equality] >> strip_tac >>
        qexists `q` >> simp[] >>
-       irule tuple_immutable_endpoint_restore >>
-       qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+       irule (horizonTypeLib.at_horizon_named "H0"
+         tuple_immutable_endpoint_restore) >>
+       qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
        qexistsl [`s0`, `off`, `ity`, `EL i tvs`, `id`, `env`] >>
        fs[Abbr `q`, venomStateTheory.lookup_var_def,
             exprLoweringPropsTheory.same_blocks_def,
             venomMemPropsTheory.LENGTH_mstore_eq,
             stmtSimDefsTheory.alloca_frame_same,
             venomStateTheory.venom_state_component_equality] >>
-       conj_tac >> rpt strip_tac >>
+       qexists_tac `H0` >> simp[] >> conj_tac >> rpt strip_tac >>
        irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
        fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_sizes >> strip_tac >>
@@ -185,7 +194,9 @@ Proof
          qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule_all >>
          gvs[] >> decide_tac) >>
      `b+sz <= s0.vs_alloca_next` by
-       (irule bodyMemoryDefsTheory.body_local_region_frontier >> metis_tac[]) >>
+       (irule (horizonTypeLib.at_horizon_named "H"
+           bodyMemoryDefsTheory.body_local_region_frontier) >>
+        goal_assum (drule_at Any) >> metis_tac[]) >>
      `regions_disjoint off (type_memory_size (EL i tvs)) b sz` by metis_tac[] >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> gvs[] >> decide_tac) >>
   `eval_operand (Lit (n2w off)) s0 = SOME (n2w off)` by
@@ -194,7 +205,7 @@ Proof
      not_fresh_at sa x` by
     (rpt strip_tac >> gvs[] >>
      metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]) >>
-  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) tuple_immutable_aggregate_store >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) tuple_immutable_aggregate_store >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `ce.ce_module_var_type _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
@@ -214,14 +225,16 @@ Proof
   `immutable_value_admissible (EL i tvs) (EL i vs)` by
     metis_tac[immutableDeployAssignAdmissibleTheory.evaluated_immutable_admissible] >>
   qexists `q` >> simp[] >>
-  `tuple_place_head ctx func ce cx ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
+  `tuple_place_head ctx func ce cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s0) /\
    (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
       FLOOKUP q.vs_allocas aid = SOME entry) /\
    alloca_frame ce es sa s0 ce ff q` suffices_by simp[] >>
-  irule tuple_immutable_endpoint_restore >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  irule (horizonTypeLib.at_horizon_named "H0"
+         tuple_immutable_endpoint_restore) >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl [`r`, `off`, `ity`, `EL i tvs`, `id`, `env`] >>
+  qexists_tac `H0` >>
   gvs[GSYM valueEncodingPropsTheory.type_memory_size_slots] >>
   gvs[]
 QED

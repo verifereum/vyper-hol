@@ -12,7 +12,7 @@ open typedCopyFieldsPtrTheory typedCopyBytesRobustPtrTheory typedCopyOffsetPtrTh
 fun field (offset, robust, next_var) =
   rpt gen_tac >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
   drule_all offset >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `lookup_var p s1 = SOME (n2w (w2n b+doff))` >>
   rename1 `ptr_covers G1 tn1 p s1 n` >>
   `not_fresh_at sb src /\ lookup_var src s1 = SOME a /\
@@ -24,7 +24,7 @@ fun field (offset, robust, next_var) =
      simp[] >> gvs[ptr_covers_def]) >>
   qpat_x_assum `compile_with_byte_offset (Var src) soff sb = _` assume_tac >>
   drule_all offset >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `lookup_var q s2 = SOME (n2w (w2n a+soff))` >>
   rename1 `ptr_covers G2 tn2 q s2 n` >>
   `not_fresh_at sc p /\ lookup_var p s2 = SOME (n2w (w2n b+doff)) /\
@@ -35,7 +35,7 @@ fun field (offset, robust, next_var) =
      val_in_memory stv v (w2n (n2w (w2n a+soff):bytes32)) m` by
     (gvs[w2n_n2w, LESS_MOD]) >>
   drule_all robust >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   suspend "package";
 
 fun destination_offset next_var =
@@ -53,13 +53,13 @@ fun package shape =
   qexistsl_tac [`Gf`, `tnf`, `sf`] >>
   conj_tac >-
     (irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sa sb _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[cs_extends_trans] >>
      irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sa sb _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sb sc _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sc sd _ _ _` kall_tac >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sc sd _ _ _` kall_tac >>
   qpat_x_assum `sf.vs_memory = _` kall_tac >>
   qpat_x_assum `n = _` kall_tac >>
   qpat_x_assum `(?bs. _) \/ _` kall_tac >>
@@ -97,7 +97,7 @@ fun fields_head field_execution =
     (fn fact => disch_then (fn th => mp_then Any mp_tac th fact)) >>
   qpat_assum `value_has_type stv v`
     (fn fact => disch_then (fn th => mp_then Any mp_tac th fact)) >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] mp_tac) >>
   disch_then (qspec_then `len` mp_tac) >>
   (impl_tac >-
     (qpat_x_assum `!sts dtvs stvs vals lens tenv cx ctx PG R cenv dst src sa sz a b G tn s dtotal stotal doff soff. _` kall_tac >>
@@ -107,7 +107,7 @@ fun fields_head field_execution =
 
 fun fields_endpoint (shape, next_var) =
   markerLib.RESUME_TAC >>
-  rename1 `frag_exec_ptr cx ctx PG sa sm _
+  rename1 `frag_exec_ptr H cx ctx PG sa sm _
     (\g t v. g = G1 /\ t = tn1 /\ v = s1) R` >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (qpat_x_assum `!sts dtvs stvs vals lens tenv cx ctx PG R cenv dst src sa sz a b G tn s dtotal stotal doff soff. _` kall_tac >>

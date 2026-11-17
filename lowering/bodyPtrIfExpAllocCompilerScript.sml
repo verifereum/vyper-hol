@@ -27,7 +27,7 @@ QED
    relation from vv_post, not the stronger operand-valued expr_post. *)
 Theorem compile_alloc_buffer_raw_step:
   !ctx fn cenv cx es sb n buf sc s.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
     n < dimword (:256) ==>
     ?out u. buf.buf_operand = Var out /\
@@ -50,7 +50,7 @@ QED
 
 Theorem compile_alloc_buffer_counted:
   !D ctx fn PG G tn cenv cx es sb n buf sc s.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
     n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sb.cs_current_bb /\
@@ -80,14 +80,14 @@ QED
 
 Theorem compile_alloc_buffer_ghost_frame:
   !ctx fn cenv cx es sa sb n buf sc s out u d PG G tn.
-    stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
     buf.buf_operand = Var out /\ n < dimword (:256) /\
     step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
       (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn) u
 Proof
@@ -100,7 +100,7 @@ QED
 
 Theorem compile_alloc_buffer_kept_frame:
   !ctx fn cenv cx e es sa sb s0 es' tv vv s n buf sc out u PG G0 tn0 G tn.
-    vv_post ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+    vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sb.cs_next_var /\
@@ -141,8 +141,8 @@ Finalise compile_alloc_buffer_kept_frame
 
 Theorem compile_alloc_buffer_vv_counted_frame:
   !D d ctx fn PG G0 tn0 G tn cenv cx e es sa sb s0 es' tv vv s n buf sc.
-    vv_post ctx fn cenv cx e es sa sb s0 es' tv vv s /\
-    ghost_inv d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+    ghost_inv H d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -155,11 +155,11 @@ Theorem compile_alloc_buffer_vv_counted_frame:
       buf.buf_operand = Var out /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
       ptr_covers G1 tn1 out t n /\
-      ghost_inv d cenv cx es' G1 tn1 t /\
+      ghost_inv H d cenv cx es' G1 tn1 t /\
       ghost_kept cenv es sa G0 tn0 s0 G1 tn1
 Proof
   rpt strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by gvs[vv_post_def] >>
   drule_all compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`D`, `PG`, `G`, `tn`] strip_assume_tac) >>
   drule_all compile_alloc_buffer_ghost_frame >>
@@ -171,7 +171,7 @@ Proof
 QED
 
 Resume compile_alloc_buffer_vv_counted_frame[position]:
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ u` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ u` mp_tac >>
   rpt (pop_assum kall_tac) >> Cases_on `d`
   >- (simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def,
            return_buf_ptr_def] >> strip_tac >> simp[]) >>

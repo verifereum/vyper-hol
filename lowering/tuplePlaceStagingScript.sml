@@ -11,7 +11,7 @@ Ancestors
 Theorem tuple_place_staging_positive:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand op n sm = ((),sn) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 0 < n /\ n < dimword (:256) /\
   fn_has_code sa sn func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -23,7 +23,7 @@ Theorem tuple_place_staging_positive:
   ((?name. local_region cenv ee.scopes s name b len) \/
    (?aid. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id)) ==>
   ?r u tw. gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx ee r /\
+    stmt_state_rel H ctx func cenv cx ee r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     w2n tw+n < dimword (:256) /\ r.vs_memory = s.vs_memory /\

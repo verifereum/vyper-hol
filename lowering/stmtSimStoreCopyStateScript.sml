@@ -7,13 +7,13 @@ Ancestors
   list rich_list arithmetic words
 
 Theorem place_store_normalize_state:
-  stmt_state_rel ctx func cenv cx es (store_copy_normalize q t) /\
+  stmt_state_rel H ctx func cenv cx es (store_copy_normalize q t) /\
   local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x q) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
     ((store_copy_normalize q t) with vs_vars := t.vs_vars)` by
     (irule stmt_state_rel_vars_frame >>
      conj_tac
@@ -27,8 +27,8 @@ Proof
            (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
          first_x_assum drule >> simp[store_copy_normalize_def, lookup_var_def]) >>
      first_assum ACCEPT_TAC) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (store_copy_normalize _ _)` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (store_copy_normalize _ _)` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
   rpt (pop_assum kall_tac) >>
   simp_tac (srw_ss()) [store_copy_normalize_def, stmt_state_rel_def, state_rel_def,
     local_ptrs_rel_def, local_region_def, local_backed_def, storage_rel_def,

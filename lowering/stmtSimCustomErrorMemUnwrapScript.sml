@@ -14,7 +14,7 @@ Theorem unwrap_memory_marked_read_mem:
   p.ptr_location = LocMemory /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
     ee tv (LocatedValue t p) s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -24,16 +24,18 @@ Theorem unwrap_memory_marked_read_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
           [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next
+    alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `?w v. eval_operand p.ptr_operand s = SOME w /\
          read_result cx tv ee = (INL v,ee)` by
     gvs[vv_post_def, vv_holds_def] >>
-  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
+  `vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
     metis_tac[vv_post_read_result] >>
   `!u. gas_path_mem ctx func s 0 (OK u) ==>
        gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s) [] (INL v) ee (OK u)` by
@@ -72,7 +74,7 @@ Theorem unwrap_memory_marked_read_body_mem:
   p.ptr_location = LocMemory /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
     ee tv (LocatedValue t p) s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -81,10 +83,12 @@ Theorem unwrap_memory_marked_read_body_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
           [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next
+    alloca_history func u /\ u.vs_alloca_next = s.vs_alloca_next /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `is_word_type t ==> t = expr_type e /\

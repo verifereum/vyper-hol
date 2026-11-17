@@ -17,9 +17,9 @@ Theorem unwrap_code_old_variable_frames:
   tn0 = step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
   copy_runtime_frame mid a sb z /\
   (!x. not_fresh_at mid x ==>
-    FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) ==>
+    FLOOKUP HG x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) ==>
   !x. not_fresh_at sa x ==>
-    lookup_var x z = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    lookup_var x z = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
     op_taint tf (Var x) = op_taint tn (Var x)
 Proof
   strip_tac >> gen_tac >> disch_tac >>
@@ -31,7 +31,7 @@ Proof
     (simp[] >> irule alloca_step_operand_preserved >>
      goal_assum (drule_at (Pat `step_inst_base _ _ = _`)) >> simp[]) >>
   `lookup_var x z = lookup_var x a` by metis_tac[copy_runtime_frame_def] >>
-  `FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)` by
+  `FLOOKUP HG x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)` by
     (first_x_assum irule >> simp[]) >>
   fs[eval_operand_def] >>
   simp[step_prov_other_output, step_taint_other_output, mk_inst_def]
@@ -39,7 +39,7 @@ QED
 
 Theorem unwrap_code_exterior_frames:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
   buf.buf_operand = Var root /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
   tn0 = step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
@@ -73,8 +73,8 @@ QED
 
 Theorem unwrap_code_ghost_inv:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv H ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -91,15 +91,15 @@ Theorem unwrap_code_ghost_inv:
   a.vs_call_ctx = s.vs_call_ctx /\ copy_runtime_frame mid a sb z /\
   tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
   (!x. not_fresh_at mid x ==>
-    FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x)) /\
   (!off len. off+len <= w2n d \/ w2n d+32*n <= off ==>
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory) /\
   tf.t_mem = tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32*n} ==>
-  ghost_inv ret cenv cx es H tf z
+  ghost_inv H ret cenv cx es HG tf z
 Proof
   strip_tac >>
   `!x. not_fresh_at sa x ==>
-    lookup_var x z = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    lookup_var x z = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
     op_taint tf (Var x) = op_taint tn (Var x)` by
     (gen_tac >> disch_tac >> irule unwrap_code_old_variable_frames >>
      goal_assum (drule_at (Pat `copy_runtime_frame _ _ _ _`)) >>
@@ -110,14 +110,14 @@ Proof
   `!name off len. local_region cenv es.scopes s name off len ==>
     w2n d+nb <= off \/ off+len <= w2n d` by
     (rpt strip_tac >> drule_all unwrap_alloc_local_separation >> simp[]) >>
-  `stor_taint_ok cx tf z` by
+  `stor_taint_ok H cx tf z` by
     (irule copy_stor_taint_frame >> qexistsl [`s`, `tn`] >>
      fs[ghost_inv_def, copy_runtime_frame_def] >>
      qpat_x_assum `copy_static z = copy_static a`
        (mp_tac o Q.AP_TERM `\st. (st.vs_accounts,st.vs_transient,st.vs_call_ctx)`) >>
      simp[copy_static_def] >> gvs[]) >>
   irule unwrap_endpoint_ghost_inv >> (conj_tac >- simp[]) >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
   qexistsl [`nb`, `sa`, `w2n d`] >> asm_rewrite_tac[] >> metis_tac[]
 QED

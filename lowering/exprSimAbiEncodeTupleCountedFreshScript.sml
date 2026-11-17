@@ -21,7 +21,7 @@ Theorem abi_encode_tuple_relabel_observer_fresh_free:
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
@@ -43,14 +43,14 @@ Theorem abi_encode_tuple_relabel_observer_fresh_free:
   fn_has_code (start_relabel L ids staged) (start_swap staged L ids final) obs /\
   staged.cs_blocks <> final.cs_blocks /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
-  stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
+  stmt_state_rel H ctx func ce cx es' s /\ abi_encoder_admissible ei /\
   (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
   ~s.vs_halted /\ s.vs_inst_idx = LENGTH staged.cs_current_insts ==>
   ?p actual. abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
-    abi_encode_staged_observation ctx func ce cx es' staged out mid
+    abi_encode_staged_observation H ctx func ce cx es' staged out mid
       (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
@@ -85,7 +85,7 @@ Resume abi_encode_tuple_relabel_observer_fresh_free[phases]:
      `cs_extends staged final` by metis_tac[lower_abi_encode_extends] >>
      drule_all abi_encode_start_swap_control >>
      disch_then (qspecl_then [`ids`, `L`] strip_assume_tac) >> asm_rewrite_tac []) >>
-  `stmt_state_rel ctx func ce cx es' rs /\ local_ptrs_reserved ce rst` by
+  `stmt_state_rel H ctx func ce cx es' rs /\ local_ptrs_reserved ce rst` by
     (simp_tac (srw_ss()) [Abbr `rs`, Abbr `rst`,
       abi_encode_stmt_rel_current_bb, abi_encode_start_relabel_resources] >> asm_rewrite_tac []) >>
   `!x. buf.buf_operand = Var x ==> not_fresh_at rst x` by
@@ -109,7 +109,7 @@ Resume abi_encode_tuple_relabel_observer_fresh_free[phases]:
     actual.vs_current_bb = rf.cs_current_bb /\
     actual.vs_inst_idx = LENGTH rf.cs_current_insts /\
     abi_encode_exec_frame obs rs actual /\
-    abi_encode_staged_observation ctx func ce cx es' rst (FST ops) mid
+    abi_encode_staged_observation H ctx func ce cx es' rst (FST ops) mid
       (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv rs actual` by
     (irule abi_encode_staged_observer_no_fresh >>
@@ -123,7 +123,7 @@ Resume abi_encode_tuple_relabel_observer_fresh_free[phases]:
      simp_tac (srw_ss()) [Abbr `rs`, eval_operand_def, lookup_var_def] >>
      rpt conj_tac >> decide_tac) >>
   qexistsl [`p`, `actual`] >> asm_rewrite_tac [] >>
-  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [Abbr `rst`, Abbr `rs`] >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, start_relabel_def, not_fresh_at_def,
@@ -137,7 +137,7 @@ Theorem abi_encode_tuple_counted_encoder_fresh_free:
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
@@ -153,7 +153,7 @@ Theorem abi_encode_tuple_counted_encoder_fresh_free:
     (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code st allocated func /\ fn_has_code staged final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
-  stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
+  stmt_state_rel H ctx func ce cx es' s /\ abi_encoder_admissible ei /\
   (!l. buf.buf_operand <> Label l) /\
   (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
   ~s.vs_halted /\ s.vs_current_bb = staged.cs_current_bb /\
@@ -161,14 +161,14 @@ Theorem abi_encode_tuple_counted_encoder_fresh_free:
   ?p actual. gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    abi_encode_staged_observation ctx func ce cx es' staged out mid
+    abi_encode_staged_observation H ctx func ce cx es' staged out mid
       (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
   qabbrev_tac `Q = \actual. ?p.
-    abi_encode_staged_observation ctx func ce cx es' staged out mid
+    abi_encode_staged_observation H ctx func ce cx es' staged out mid
       (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual` >>
   `(!t rd. Q t ==> Q (t with vs_returndata := rd)) /\

@@ -21,9 +21,14 @@ structure compilerNativeRuntime = struct
   fun hn_mul (m : IntInf.int) n = m * n
   fun hn_DIV (m : IntInf.int) n = if n = 0 then stuck "DIV 0" else IntInf.div (m, n)
   fun hn_MOD (m : IntInf.int) n = if n = 0 then stuck "MOD 0" else IntInf.mod (m, n)
+  (* Decide 0 and 1 before narrowing n to a machine int, which raises Overflow
+     for exponents such as 2^256 - 1.  Narrow once, so an oversized exponent of
+     2 raises Overflow too rather than wrapping. *)
   fun hn_EXP (m : IntInf.int) (n : IntInf.int) =
-    if m = 2 then IntInf.<< (1, Word.fromLargeInt (IntInf.toLarge n))
-    else IntInf.pow (m, IntInf.toInt n)
+    if n = 0 orelse m = 1 then 1
+    else if m = 0 then 0
+    else let val k = IntInf.toInt n
+         in if m = 2 then IntInf.<< (1, Word.fromInt k) else IntInf.pow (m, k) end
   fun hn_lt (m : IntInf.int) n = m < n
   fun hn_le (m : IntInf.int) n = m <= n
   fun hn_gt (m : IntInf.int) n = m > n

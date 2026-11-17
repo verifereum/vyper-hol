@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps venomMemDefs valueEncoding vyperValue vyperInterpreter
 
 Theorem ec_result_vv_store_bound:
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) t /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lowered_value_type cenv e = expr_type e ==>
@@ -20,7 +20,7 @@ Proof
       qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
       disch_then irule >>
       simp[evaluate_type_def, type_slot_size_def, wordsTheory.dimword_def] >>
-      qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
       gvs[vv_at_def, vyperStateTheory.read_result_def, vyperStateTheory.return_def,
           evaluate_type_def, type_slot_size_def, wordsTheory.dimword_def,

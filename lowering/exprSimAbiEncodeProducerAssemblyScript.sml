@@ -12,7 +12,7 @@ Ancestors
 Theorem abi_encode_args_region_inputs:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   eval_exprs cx args es = (INL vs,es') /\
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa st s0 es' args ops vs s /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   EVERY (abi_decoder_operand_live next) ops /\
   (!k tv w. k < LENGTH args /\
@@ -77,7 +77,7 @@ Theorem abi_encode_args_registered_inputs:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs = INL out /\
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live next) ops /\ alloca_inv s /\
   fn_inst_ids_distinct func /\ local_ptrs_rel func ce es'.scopes s /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
@@ -158,7 +158,7 @@ Theorem abi_encode_args_staged_source:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs = INL out /\
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs initial /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa st s0 es' args ops vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) ops /\
   (!k tv w. k < LENGTH args /\
     evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\

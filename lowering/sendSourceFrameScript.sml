@@ -35,6 +35,7 @@ Proof
   simp[return_def, raise_def, assert_def, update_accounts_def,
        update_pending_deletions_def,
        update_transient_def, append_logs_def, adopt_call_outcome_def,
+       record_storage_backend_def, record_storage_event_def,
        bind_def, ignore_bind_def]
   >>~- ([`s.outcomes = NONE`],
     qpat_abbrev_tac `run_result = run_ext_call _ _ _ _ _ _ _ _` >>
@@ -44,12 +45,13 @@ Proof
   qpat_abbrev_tac `taken = take_outcome _ _` >>
   PairCases_on `taken` >>
   simp[ignore_bind_def, bind_def, assert_def, adopt_call_outcome_def,
-       return_def] >>
+       record_storage_backend_def, record_storage_event_def, return_def] >>
   Cases_on `taken0.co_success` >>
   Cases_on `accounts_runtime_well_typed taken0.co_accounts` >>
   simp[ignore_bind_def, bind_def, assert_def, adopt_call_outcome_def,
        return_def] >>
-  simp[pairTheory.UNCURRY] >>
+  simp[pairTheory.UNCURRY, record_storage_backend_def, record_storage_event_def,
+       return_def] >>
   strip_tac >> gvs[] >>
   qpat_x_assum `!s r t. _` imp_res_tac >> fs[]
 QED

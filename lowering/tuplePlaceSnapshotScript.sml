@@ -8,14 +8,14 @@ Libs
   monadsyntax
 
 Theorem tuple_place_target_frame:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s ==>
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s ==>
   wb_frame cenv es es' sa s0 s
 Proof
   simp[target_post_def, wb_frame_def] >> metis_tac[]
 QED
 
 Theorem tuple_place_target_operand:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!lbl. op <> Label lbl) /\
   eval_operand op s0 = SOME w ==>
@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem tuple_place_target_allocation:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
   (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
     b + sz <= lb \/ lb + lsz <= b) ==>
@@ -37,7 +37,7 @@ QED
 
 (* The unchanged-entry clause includes dynamic-array length words. *)
 Theorem tuple_place_target_unchanged_local:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s /\
   local_region cenv es.scopes s0 n b sz /\
   lookup_scopes n es'.scopes = lookup_scopes n es.scopes ==>
   mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
@@ -113,13 +113,13 @@ Theorem tuple_place_stage_owned_probe:
   eval_operand op s = SOME sw /\
   val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
   val_footprint tv v <= sz /\ sz < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t w. eval_operand staged t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     val_in_memory tv v (w2n w) t.vs_memory /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!n lb lsz. local_region cenv es.scopes t n lb lsz ==>
       w2n w + sz <= lb \/ lb + lsz <= w2n w) /\
     (!fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>

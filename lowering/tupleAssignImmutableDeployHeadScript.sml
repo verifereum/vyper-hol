@@ -4,7 +4,7 @@ Ancestors
   tupleAssignImmutableDeployStep tuplePlaceHeadOpen
 
 Theorem tuple_immutable_head_gas_continuation_open:
-  tuple_place_head ctx func ce cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func ce cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\ body_inv tops ctx ce cx /\ cx.in_deploy /\
   expr_sim_inv ce cx env es /\
   supported_immutable_type tops (src,id) = SOME ity /\
@@ -19,30 +19,33 @@ Theorem tuple_immutable_head_gas_continuation_open:
     type_memory_size (EL j ltvs)+64 < dimword (:256)) /\
   (EXISTS (\t. ~is_word_type t) ltys ==> ce.ce_target CapMcopy) /\
   type_alloc_ok ce (TupleT tys) /\ i < LENGTH tys /\
-  (let dst = FST place; loc_opt = FST (SND place); dst_ty_opt = SND (SND place);
-       loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
-   in (if is_word_type (EL i ltys) then
-         if is_word_type dty then
-           compile_store_at_loc ce.ce_imm_alloca dst (EL i elems) loc_opt
-         else emit_void INVALID []
-       else compile_assign_value ce dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) (type_memory_bytes ce dty)) sa) = ((),sb) /\
+  (if is_word_type (EL i ltys) then
+     if is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys) then
+       compile_store_at_loc ce.ce_imm_alloca (FST place) (EL i elems) (FST (SND place))
+     else emit_void INVALID []
+   else compile_assign_value ce (FST place)
+     (case FST (SND place) of SOME l => l | NONE => LocMemory)
+     (EL i elems)
+     (is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))
+     NONE (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys)
+     (EL i ltys)
+     (type_memory_bytes ce
+       (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))) sa = ((),sb) /\
   acyclic_struct_metadata ce.ce_struct_fields /\ local_ptrs_reserved ce sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
   (!ff t. ~block_is_terminated sb /\ expr_sim_inv ce cx env ff /\
-    tuple_place_head ctx func ce cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func ce cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
       FLOOKUP t.vs_allocas aid = SOME entry) /\
     alloca_frame ce es sp s0 ce ff t ==>
-    gas_outcome F (cx_tops cx) (ctx,func) next (ff with gas_obs := [],t) Q
-      (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 next (ff with gas_obs := [],t) Q
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx (TopLevelNameTarget (src,id)))
       (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>

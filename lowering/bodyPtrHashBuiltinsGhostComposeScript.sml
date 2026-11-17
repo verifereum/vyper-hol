@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem hash_expr_post_local_regions:
-  expr_post ctx fn cenv cx e es sa sm s0 ee v x s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee v x s /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
   !n b sz. local_region cenv ee.scopes s n b sz <=>
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem hash_expr_post_ghost_kept_compose:
-  expr_post ctx fn cenv cx e es sa sm s0 ee v x s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee v x s /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!z. not_fresh_at sa z ==> not_fresh_at sm z) /\

@@ -1,0 +1,835 @@
+(* The cases of bodySimFullMain's induction, one per evaluate_ind case
+ * bodySimPtrMainAt's does not close by a short tactic, at the joint
+ * judgments of bodySimFull.  A case with an existing joint producer is
+ * proved here; every other case is admitted until its leaf lands, and its
+ * comment names the separate source, memory and pointer cases it joins.
+ *
+ * TOP-LEVEL: body_expr_full_ok_leaf and the body_*_case_full cases.
+ *)
+Theory bodyFullCases
+Ancestors
+  bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
+  bodyFullAppend bodyFullIfExp bodyFullAttribute
+  bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullStructLit bodyFullPop
+  bodyFullRawCallCalldata
+  bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
+  gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
+  supportedExprs supportedStmtTraverse supportedExprTraverse
+  msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
+  vyperAST vyperInterpreter vyperState vyperValue list
+
+val _ = Parse.hide "body";
+
+(* Join the four joint expression leaves. *)
+Theorem body_expr_full_ok_leaf:
+  !cx e.
+    (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
+    (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
+    body_expr_full_ok cx e
+Proof
+  rpt strip_tac >> gvs[] >>
+  simp[name_expr_full_ok, toplevel_name_expr_full_ok,
+       flag_member_expr_full_ok, literal_expr_full_ok]
+QED
+
+(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+Theorem body_annassign_case_full:
+  !cx id typ e.
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_expr_full_ok cx e) ==>
+    body_stmt_full_ok cx (AnnAssign id typ e)
+Proof
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `is_word_type typ`
+  >- (irule body_annassign_word_full >> metis_tac[]) >>
+  `0 < type_memory_bytes cenv typ` by
+    metis_tac[annassign_memory_bytes_pos_ptr] >>
+  Cases_on `expr_type e = typ \/ lowered_value_type cenv e = typ \/
+            is_bytestring_type typ \/
+            has_length_word typ /\ is_empty_value_expr e`
+  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+           has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
+          irule body_annassign_memory_full >> fs[] >> metis_tac[]) >>
+      irule body_annassign_widened_full >> metis_tac[]) >>
+  irule body_annassign_other_full >> metis_tac[]
+QED
+
+(* Admitted: the joint Append case. *)
+Theorem body_append_case_full:
+  !cx t e.
+    (!s'' p t'.
+       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
+    body_base_target_full_ok cx t ==>
+    body_stmt_full_ok cx (Append t e)
+Proof
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_full_ok_def, supported_stmt_def, supported_append_target_def]
+QED
+
+(* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
+Theorem body_assert_case_full:
+  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertBare)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
+QED
+
+(* The joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullAssertReason. *)
+Theorem body_assert_reason_case_full:
+  !cx e se.
+    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
+    body_expr_full_ok cx e ==>
+    body_stmt_full_ok cx (Assert e (AssertReason se))
+Proof
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_assert_reason_frag_full >> metis_tac[]
+QED
+
+(* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
+Theorem body_assert_unreachable_case_full:
+  !cx e.
+    body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertUnreachable)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_unreachable_stmt_full_ok
+QED
+
+(* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
+Theorem body_assign_case_full:
+  !cx t e.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
+    body_expr_full_ok cx e ==>
+    body_stmt_full_ok cx (Assign (BaseTarget t) e)
+Proof
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    is_word_type ty`
+  >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    ~is_word_type ty /\
+                    (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+                     is_bytestring_type ty \/
+                     has_length_word (expr_type e) /\ is_empty_value_expr e)`
+  >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
+              0 < type_memory_bytes cenv ty` by
+        (rpt strip_tac >> gvs[] >>
+         metis_tac[exprSimAggregateLayoutTheory.assign_local_memory_bytes_pos]) >>
+      Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
+      gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?nsid mut ty slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+  >- (gvs[] >> irule body_assign_toplevel_copy_full >> metis_tac[]) >>
+  Cases_on `?id fld sid fty.
+              t = AttributeTarget (NameTarget id) fld /\
+              FLOOKUP env.var_types id = SOME (StructT sid) /\
+              attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+              is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld fty.
+              t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+              supported_storage_field_write tops nsid fld /\
+              type_place_target env t = SOME (Type fty) /\ is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_storage_full >> metis_tac[]) >>
+  irule body_assign_other_full >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]
+QED
+
+(* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
+Theorem body_assign_tuple_case_full:
+  !cx gs e.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\ body_expr_full_ok cx e ==>
+    body_stmt_full_ok cx (Assign (TupleTarget gs) e)
+Proof
+  rw[body_stmt_full_ok_def] >>
+  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
+  >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
+  Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids`
+  >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
+      `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) ids` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      irule body_assign_tuple_locals_full >> metis_tac[]) >>
+  Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                                FLOOKUP env.var_types id = SOME ty /\
+                                0 < type_memory_bytes cenv ty) \/
+                       (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                               supported_scalar_target tops nsid) \/
+                       (?nsid fld fty.
+                          g = BaseTarget
+                                (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                          supported_storage_field_write tops nsid fld /\
+                          type_place_target env
+                            (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                            SOME (Type fty) /\ is_word_type fty)) gs`
+  >- (irule body_assign_tuple_targets_full >> metis_tac[]) >>
+  irule body_assign_tuple_other_full >> metis_tac[]
+QED
+
+(* Attribute's joint leaf is proved in bodyFullAttribute. *)
+Theorem body_attribute_case_full:
+  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
+Proof
+  ACCEPT_TAC bodyFullAttributeTheory.attribute_expr_full_ok
+QED
+
+(* Admitted: the joint twin of body_augassign_case_ptr_at (bodyPtrAssignCases). *)
+Theorem body_augassign_case_full:
+  !cx ty t bop e.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_full_ok cx e) /\ body_base_target_full_ok cx t ==>
+    body_stmt_full_ok cx (AugAssign ty t bop e)
+Proof
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_augassign_local_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_augassign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> irule body_augassign_attr_storage_full >> metis_tac[]) >>
+  irule body_augassign_other_full >> metis_tac[]
+QED
+
+(* The joint twin of body_break_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
+Theorem body_break_case_full:
+  !cx. body_stmt_full_ok cx Break
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
+QED
+
+(* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
+Theorem env_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
+     (?i. bt = Acc i) \/ bt = BlockHash \/ bt = BlobHash \/ bt = MethodId) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len ==>
+       body_exprs_full_ok cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt = Len ==>
+       body_expr_full_ok cx (HD es)) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
+Theorem bop_in_expr_full_ok:
+  !cx ty bop es.
+    (bop = In \/ bop = NotIn) /\
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_bop_args >> strip_tac >> gvs[] >> (
+  `body_exprs_full_ok cx [e1;e2]` by fs[builtin_args_length_ok_def] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `is_word_type (expr_type e1) /\ ty = BaseT BoolT` by
+    gvs[well_typed_binop_def, membership_element_word_boundary, is_word_type_def] >>
+  conj_asm1_tac
+  >- (Cases_on `word_value_type (expr_type e1) /\ word_value_type (expr_type e2)`
+      >- (irule bop_word_sim_full >> metis_tac[]) >>
+      Cases_on `?a t n elems. e2 = Builtin a (MakeArray t n) elems`
+      >- (gvs[] >> irule bop_in_literal_word_sim_full >> simp[] >>
+          gvs[body_exprs_full_ok_def] >>
+          metis_tac[body_make_array_children_full_ok]) >>
+      irule bop_rest_word_sim_full >> simp[] >>
+      metis_tac[]) >>
+  match_mp_tac bodyFullExprGenericTheory.expr_vv_sim_stack_full >>
+  simp[post_value_type_word, expr_type_def, is_word_type_def, compile_bop_stack] >>
+  metis_tac[eval_expr_builtin_value])
+QED
+
+(* Admitted: the joint twin of bodyPtrBop's bop_expr_ptr_ok. *)
+Theorem bop_expr_full_ok:
+  !cx ty bop es.
+    bop <> In /\ bop <> NotIn /\
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_bop_args >> strip_tac >> gvs[] >>
+  `body_exprs_full_ok cx [e1;e2]` by fs[builtin_args_length_ok_def] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `is_word_type ty` by
+    (Cases_on `bop` >> gvs[well_typed_binop_def, is_numeric_type_def] >>
+     Cases_on `expr_type e1` >>
+     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def]) >>
+  conj_asm1_tac
+  >- (Cases_on `(bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)`
+      >- (irule bop_bytestring_eqne_sim_full >> metis_tac[]) >>
+      Cases_on `word_value_type (expr_type e1) /\ word_value_type (expr_type e2)`
+      >- (irule bop_word_sim_full >> metis_tac[]) >>
+      Cases_on `(bop = Eq \/ bop = NotEq) /\
+                (expr_type e1 = BaseT AddressT \/
+                 ?m. expr_type e1 = BaseT (BytesT (Fixed m)))`
+      >- (irule bop_bytes_eq_sim_full >> metis_tac[]) >>
+      irule bop_rest_word_sim_full >> simp[] >> metis_tac[]) >>
+  match_mp_tac bodyFullExprGenericTheory.expr_vv_sim_stack_full >>
+  simp[post_value_type_word, expr_type_def, compile_bop_stack] >>
+  metis_tac[eval_expr_builtin_value]
+QED
+
+(* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
+Theorem make_array_expr_full_ok:
+  !cx ty bt es.
+    (?t n. bt = MakeArray t n) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
+Theorem word_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Not \/ bt = Neg \/ bt = Abs \/ (?d. bt = AsWeiValue d) \/ bt = Ceil \/
+     bt = Floor \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule word_builtin_sim_full >>
+      metis_tac[expr_vv_sim_stack_full, post_value_type_word]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
+QED
+
+(* The joint hash producer supplies the same singleton-argument case. *)
+Theorem hash_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Keccak256 \/ bt = Sha256) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
+QED
+
+(* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
+Theorem bytestring_builtin_expr_full_ok:
+  !cx ty bt es.
+    ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
+     (?n. bt = Uint2Str n)) /\
+    (builtin_args_length_ok bt (LENGTH es) ==>
+      case code_slice_source bt es of
+        NONE => body_exprs_full_ok cx es
+      | SOME (code_ty,addr) =>
+          body_exprs_full_ok cx (TL es) /\
+          (!s tail_vs t. eval_exprs cx (TL es) s = (INL tail_vs,t) ==>
+            body_exprs_full_ok cx [addr])) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
+Theorem precompile_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* msg.gas, by msgGasFull's joint fragment: typing fixes the
+   annotation and the empty argument list. *)
+Theorem body_msg_gas_full_case:
+  !cx ann args. body_expr_full_ok cx (Builtin ann (Env MsgGas) args)
+Proof
+  rw[body_expr_full_ok_def] >>
+  `args = [] /\ ann = env_item_type MsgGas` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[compile_msg_gas_sim_full]
+QED
+
+(* A builtin, split by family as body_builtin_case_ptr does. *)
+Theorem body_builtin_case_full:
+  !cx ty bt es.
+    (!s'' x t v code_ty addr tail_s tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) /\
+       eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
+       body_exprs_full_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) ==>
+       body_exprs_full_ok cx (TL es)) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+       body_exprs_full_ok cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==>
+       body_exprs_full_ok cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt = Len ==>
+       body_expr_full_ok cx (HD es)) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bt = Env MsgGas` >- simp[body_msg_gas_full_case] >>
+  reverse (Cases_on `code_slice_source bt es`)
+  >- (rename1 `code_slice_source bt es = SOME src` >>
+      Cases_on `src` >> gvs[code_slice_source_SOME] >>
+      irule bytestring_builtin_expr_full_ok >>
+      gvs[code_slice_source_def, type_check_def, assert_def,
+          builtin_args_length_ok_def] >> metis_tac[]) >>
+  `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
+   body_exprs_full_ok cx es` by
+    (strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+     metis_tac[type_check_def, assert_def]) >>
+  Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
+             bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
+  >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
+      metis_tac[]) >>
+  Cases_on `?bop. bt = Bop bop`
+  >- (gvs[] >> Cases_on `bop = In \/ bop = NotIn`
+      >- (irule bop_in_expr_full_ok >> gvs[]) >>
+      irule bop_expr_full_ok >> gvs[]) >>
+  Cases_on `bt` >> gvs[] >>
+  FIRST (map (fn th => irule th >> simp[] >> NO_TAC)
+    [make_array_expr_full_ok, word_builtin_expr_full_ok,
+     hash_builtin_expr_full_ok, bytestring_builtin_expr_full_ok,
+     precompile_builtin_expr_full_ok])
+QED
+
+(* The joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
+Theorem body_continue_case_full:
+  !cx. body_stmt_full_ok cx Continue
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
+QED
+
+(* Vacuous: expr_body_pre excludes create (expr_evm_run_root). *)
+Theorem body_create_case_full:
+  !cx ty kind has_salt rof v26 es v27.
+    (!raw_args s'' prefix t s'3' code_size t'.
+       kind = CreateFromBlueprint raw_args /\
+       eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' =
+       (INL prefix,t) /\
+       check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
+       body_results_full_ok cx (DROP (if has_salt then 4 else 3) es)) /\
+    (!raw_args.
+       kind = CreateFromBlueprint raw_args ==>
+       body_exprs_full_ok cx (TAKE (if has_salt then 4 else 3) es)) /\
+    (!s'' prefix t ctor_es nargs s'3' results t' s'4' args t''.
+       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
+       ctor_es = DROP 2 es /\
+       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) /\
+       eval_expr_results cx (TAKE nargs ctor_es) s'3' = (INL results,t') /\
+       read_results cx results s'4' = (INL args,t'') ==>
+       body_exprs_full_ok cx (DROP nargs ctor_es)) /\
+    (!s'' prefix t ctor_es nargs.
+       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
+       ctor_es = DROP 2 es /\
+       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) ==>
+       body_results_full_ok cx (TAKE nargs ctor_es)) /\
+    (kind = CreateCopyOf ==> body_exprs_full_ok cx es) /\
+    (kind = CreateMinimalProxy ==> body_exprs_full_ok cx es) /\
+    (kind = RawCreate ==> body_exprs_full_ok cx (TAKE 2 es)) ==>
+    body_expr_full_ok cx (Call ty (CreateTarget kind has_salt rof v26) es v27)
+Proof
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
+QED
+
+(* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
+Theorem body_expr_stmt_case_full:
+  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Expr e)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.expr_stmt_full_ok
+QED
+
+(* Admitted: the joint twin of body_extcall_case_ptr_at (bodyPtrCallCases). *)
+Theorem body_extcall_case_full:
+  !cx v14 is_static skip_check sig opts es v15.
+    (!s'' target t nargs s'3' results t'.
+       eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
+       nargs = LENGTH (FST (SND sig)) /\
+       eval_exprs cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
+       body_exprs_full_ok cx (DROP (1 + nargs) es)) /\
+    (!s'' target t nargs.
+       eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
+       nargs = LENGTH (FST (SND sig)) ==>
+       body_exprs_full_ok cx (TAKE nargs (DROP 1 es))) /\
+    body_exprs_full_ok cx (TAKE 1 es) ==>
+    body_expr_full_ok cx
+      (Call v14 (ExtCall is_static skip_check sig opts) es v15)
+Proof
+  cheat
+QED
+
+(* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
+   by its fragment in bodyFullFor. *)
+Theorem body_for_case_full:
+  !cx id typ it n body.
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_full_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_full_ok cx it) ==>
+    body_stmt_full_ok cx (For id typ it n body)
+Proof
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_for_frag_full >> metis_tac[]
+QED
+
+(* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
+Theorem body_if_case_full:
+  !cx e ss1 ss2.
+    (!s'' tv t s'3' x t'.
+       eval_expr cx e s'' = (INL tv,t) /\ push_scope s'3' = (INL x,t') ==>
+       body_stmts_full_ok cx ss1) /\
+    (!s'' tv t s'3' x t'.
+       eval_expr cx e s'' = (INL tv,t) /\ push_scope s'3' = (INL x,t') ==>
+       body_stmts_full_ok cx ss2) /\ body_expr_full_ok cx e ==>
+    body_stmt_full_ok cx (If e ss1 ss2)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
+QED
+
+(* The joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases): bodyFullIfExp. *)
+Theorem body_ifexp_case_full:
+  !cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e3) /\
+    body_expr_full_ok cx e1 ==>
+    body_expr_full_ok cx (IfExp v5 e1 e2 e3)
+Proof
+  ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
+QED
+
+(* Admitted: the joint twin of body_intcall_case_ptr_at (bodyPtrIntCallCase). *)
+Theorem body_intcall_case_full:
+  !cx v16 src_id_opt fn es v17.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
+         t'8' is_view s'11' x'' t'9' s'12' cxf t'10'.
+       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+       lift_option_type (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'3' = (INL ts,t') /\
+       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
+       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
+       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
+       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
+       type_check
+         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+         "IntCall args length" s'5' = (INL x',t'3') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
+       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+       get_scopes s'7' = (INL prev,t'5') /\
+       finally
+         (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
+         (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
+       all_tenv = get_tenv cx /\
+       lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
+         "IntCall bind_arguments" s'9' = (INL env,t'7') /\
+       lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'10' =
+       (INL rtv,t'8') /\ (is_view <=> is_view_mut mut) /\
+       lock_if_nr cx nr is_view s'11' = (INL x'',t'9') /\
+       push_function (src_id_opt,fn) env cx s'12' = (INL cxf,t'10') ==>
+       body_stmts_full_ok cxf body') /\
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' x'' t'6'.
+       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+       lift_option_type (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'3' = (INL ts,t') /\
+       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
+       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
+       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
+       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
+       type_check
+         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+         "IntCall args length" s'5' = (INL x',t'3') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
+       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+       get_scopes s'7' = (INL prev,t'5') /\
+       set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
+       body_exprs_full_ok cxd needed_dflts) /\
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3'.
+       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+       lift_option_type (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'3' = (INL ts,t') /\
+       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
+       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
+       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
+       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
+       type_check
+         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+         "IntCall args length" s'5' = (INL x',t'3') ==>
+       body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
+Proof
+  cheat
+QED
+
+(* Log, by bodyFullLog's joint fragment. *)
+Theorem body_log_case_full:
+  !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
+Proof
+  rw[body_stmt_full_ok_def] >>
+  irule compile_log_frag_full >> metis_tac[]
+QED
+
+(* Pass, by stmtSimPass's joint fragment. *)
+Theorem body_pass_case_full:
+  !cx. body_stmt_full_ok cx Pass
+Proof
+  rw[body_stmt_full_ok_def, gas_shadow_stmt_def, compile_pass_frag_full]
+QED
+
+Theorem body_pop_case_full:
+  !cx v10 bt. body_base_target_full_ok cx bt ==> body_expr_full_ok cx (Pop v10 bt)
+Proof
+  ACCEPT_TAC bodyFullPopTheory.pop_expr_full_ok
+QED
+
+(* The joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
+Theorem body_raise_bare_case_full:
+  !cx. body_stmt_full_ok cx (Raise RaiseBare)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
+QED
+
+(* The joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullRaiseReason. *)
+Theorem body_raise_reason_case_full:
+  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Raise (RaiseReason e))
+Proof
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_raise_reason_frag_full >> metis_tac[]
+QED
+
+(* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
+Theorem body_raise_unreachable_case_full:
+  !cx. body_stmt_full_ok cx (Raise RaiseUnreachable)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
+QED
+
+(* The joint raw_call-with-calldata case. *)
+Theorem body_raw_call_calldata_case_full:
+  !cx ty flags es v19.
+    body_exprs_full_ok cx es ==>
+    body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
+Proof
+  ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
+QED
+
+(* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
+Theorem body_raw_call_case_full:
+  !cx ty flags es v18.
+    body_exprs_full_ok cx es ==>
+    body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
+Proof
+  cheat
+QED
+
+(* RawLog composes its topic and data children at one joint midpoint. *)
+Theorem body_raw_log_case_full:
+  !cx v20 es v21.
+    body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v20 RawLog es v21)
+Proof
+  rpt strip_tac >> irule raw_log_expr_full_ok >> simp[] >> conj_tac
+  >- (rpt gen_tac >>
+      irule (gas_shadow_compiles_multi_exprs
+             |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+      MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  rpt gen_tac >>
+  irule (gas_shadow_compiles_lower_value
+         |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+  MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)
+QED
+
+(* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
+ * premise is gas_shadow_compile_expr lifted by gas_shadow_compiles_lower_value. *)
+Theorem body_raw_revert_case_full:
+  !cx v22 es v23.
+    body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v22 RawRevert es v23)
+Proof
+  rpt strip_tac >>
+  `!cenv ty e. gas_shadow_compiles (lower_value compile_expr cenv ty e)
+     (lower_value compile_expr cenv ty (gas_shadow_expr e))`
+    by (rpt gen_tac >>
+        irule (gas_shadow_compiles_lower_value
+               |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+        MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  irule raw_revert_expr_full_ok >> asm_rewrite_tac[]
+QED
+
+(* Return e, by the frame's own joint Return fragment and e's case. *)
+Theorem body_return_case_full:
+  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Return (SOME e))
+Proof
+  rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_const_name_free >> simp[]) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
+         body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
+  simp[same_frame_refl] >> disch_then irule >>
+  fs[body_expr_full_ok_def] >> metis_tac[]
+QED
+
+(* Return, by the frame's own joint Return fragment. *)
+Theorem body_return_none_case_full:
+  !cx. body_stmt_full_ok cx (Return NONE)
+Proof
+  rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
+  first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `NONE`, `es`] mp_tac) >>
+  simp[same_frame_refl]
+QED
+
+(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
+Theorem body_selfdestruct_case_full:
+  !cx v24 es v25.
+    body_exprs_full_ok cx es ==>
+    body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
+Proof
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
+QED
+
+(* The send operands and CALL/ASSERT suffix share the joint witness. *)
+Theorem body_send_case_full:
+  !cx v12 has_gas es v13.
+    (!s'' x t.
+       type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
+       (INL x,t) ==>
+       body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
+Proof
+  ACCEPT_TAC bodyFullSendTheory.body_send_case_full
+QED
+
+(* The joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
+Theorem body_stmts_cons_case_full:
+  !cx s ss.
+    (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok cx ss) /\
+    body_stmt_full_ok cx s ==>
+    body_stmts_full_ok cx (s::ss)
+Proof
+  ACCEPT_TAC bodyFullCtrlCasesTheory.stmts_cons_full_ok
+QED
+
+(* The empty list, by stmtSimZero's joint fragment. *)
+Theorem body_stmts_nil_case_full:
+  !cx. body_stmts_full_ok cx []
+Proof
+  rw[body_stmts_full_ok_def, stmt_frag_nil_full]
+QED
+
+Theorem body_structlit_case_full:
+  !cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_full_ok cx (MAP SND kes)) ==>
+    body_expr_full_ok cx (StructLit v7 (src_id_opt,id) kes)
+Proof
+  ACCEPT_TAC bodyFullStructLitTheory.structlit_expr_full_ok
+QED
+
+(* Admitted: the joint twin of body_subscript_case_ptr_at (bodyPtrExprCases). *)
+Theorem body_subscript_case_full:
+  !cx v8 e1 e2.
+    (!s'' res t s'3' res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s'3' = (INL res',t') ==>
+       body_expr_full_ok cx e2) /\
+    body_expr_full_ok cx e1 ==>
+    body_expr_full_ok cx (Subscript v8 e1 e2)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of body_type_builtin_case_ptr_at (bodyPtrExprCases). *)
+Theorem body_type_builtin_case_full:
+  !cx v11 tb typ es.
+    (!s'' x t.
+       type_check (type_builtin_args_length_ok tb (LENGTH es))
+         "TypeBuiltin args" s'' = (INL x,t) ==>
+       body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (TypeBuiltin v11 tb typ es)
+Proof
+  cheat
+QED

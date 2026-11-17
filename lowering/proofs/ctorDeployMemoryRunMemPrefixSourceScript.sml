@@ -44,7 +44,7 @@ Theorem ctor_prefix_source_start_if:
   ?am_c es0. deploy_ctor_start tops am tx (mut,F,fbody,am_c,es0)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  gns[deploy_source_ok_def, deploy_typing_ok_def, deploy_state_rel_def,
+  gns[deploy_source_ok_def, deploy_typing_ok_constants_ready, deploy_state_rel_def,
       constructor_args_encode_def] >>
   qpat_x_assum `supported_program _ /\ _` strip_assume_tac >>
   qpat_x_assum `?ctxt rb args_bytes. _` strip_assume_tac >>

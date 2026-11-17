@@ -17,12 +17,65 @@
 
 Theory contextRawReachable
 Ancestors
-  contextCodegenRelProps contextCodegenRel venomExecSemantics
+  contextCodegenRelProps contextCodegenRel venomExecSemantics venomFnInstsProofs
+  venomInst list
 
 (* ===== Definition ===== *)
 
 (* Rules mirror the context entry of codegen_reachability_package and the
    three clauses of reachability_closed, in that order. *)
+Inductive frag_reachable:
+[~start:]
+  (!ctx fn0 s0 inst.
+     active_inst fn0 inst s0 ==>
+     frag_reachable ctx fn0 s0 fn0 inst s0)
+[~next:]
+  (!ctx fn0 s0 fn inst inst' s s' fuel.
+     frag_reachable ctx fn0 s0 fn inst s /\ active_inst fn inst s /\
+     ~is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+     active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+     frag_reachable ctx fn0 s0 fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx))
+[~block:]
+  (!ctx fn0 s0 fn inst inst' s s' s1 fuel.
+     frag_reachable ctx fn0 s0 fn inst s /\ active_inst fn inst s /\
+     is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+     ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+     frag_reachable ctx fn0 s0 fn inst' s1)
+[~callee:]
+  (!ctx fn0 s0 caller inv s nm ops callee args cs s1 inst.
+     frag_reachable ctx fn0 s0 caller inv s /\ active_inst caller inv s /\
+     inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm, ops) /\
+     lookup_function nm ctx.ctx_functions = SOME callee /\
+     eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+     enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+     frag_reachable ctx fn0 s0 callee inst s1)
+End
+
+Theorem frag_reachable_trans:
+  !ctx fn1 s1 fn2 inst2 s2.
+    frag_reachable ctx fn1 s1 fn2 inst2 s2 ==>
+    !fn0 s0.
+      (!inst1. active_inst fn1 inst1 s1 ==>
+         frag_reachable ctx fn0 s0 fn1 inst1 s1) ==>
+      frag_reachable ctx fn0 s0 fn2 inst2 s2
+Proof
+  ho_match_mp_tac frag_reachable_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> metis_tac[frag_reachable_rules]
+QED
+
+Theorem frag_reachable_members:
+  !ctx fn0 s0 fn inst s.
+    frag_reachable ctx fn0 s0 fn inst s ==>
+    MEM fn0 ctx.ctx_functions ==>
+    MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn)
+Proof
+  ho_match_mp_tac frag_reachable_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac >>
+  fs[active_inst_def] >>
+  metis_tac[MEM_fn_insts, EL_MEM, lookup_function_MEM]
+QED
+
 Inductive raw_reachable:
 [~entry:]
   (!vs0 ctx name fn lbl inst s1.

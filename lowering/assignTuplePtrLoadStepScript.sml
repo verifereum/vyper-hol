@@ -39,7 +39,7 @@ QED
 
 (* Fresh variable writes preserve the ghost at an unchanged source scope. *)
 Theorem ghost_inv_old_vars_frame_ptr:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==>
@@ -49,7 +49,7 @@ Theorem ghost_inv_old_vars_frame_ptr:
   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es G' tn' t
+  ghost_inv H d cenv cx es G' tn' t
 Proof
   strip_tac >>
   fs[ghost_inv_def, local_ptrs_reserved_def, ptr_covers_def,
@@ -262,10 +262,10 @@ Proof
 QED
 
 Theorem stmt_state_rel_old_vars_frame_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `t = (s with vs_inst_idx := t.vs_inst_idx) with vs_vars := t.vs_vars` by
