@@ -52,31 +52,32 @@ QED
 (* The run result is one state, so the relation at any horizon follows from
    the relation of the start state there. *)
 Theorem slice_state_rel_any_horizon[local]:
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr_op,sb) /\
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size m) sa = (ptr_op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
-  context_well_typed cx /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
-  32 + 32 * word_size n < 2 ** 64 /\
+  context_well_typed cx /\ n <= m /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
+  32 + 32 * word_size m < 2 ** 64 /\
   eval_operand op s = SOME (n2w a) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   ~(dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   stmt_state_rel H ctx func cenv cx es t
 Proof
-  strip_tac >> drule_all slice_calldata_run >>
+  strip_tac >>
+  drule_all slice_calldata_run >>
   qpat_x_assum `~(_ \/ _)` (fn th => simp[th]) >>
   strip_tac >> gvs[]
 QED
 
 Theorem slice_calldata_path_mem:
-  !ctx func cenv cx e es sa sb op p n a s0 bres st0 tr.
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
+  !ctx func cenv cx e es sa sb op p n m a s0 bres st0 tr.
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size m) sa =
     (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
-  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  expr_type e = BaseT (BytesT (Dynamic m)) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ context_well_typed cx /\
-  0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
-  32 + 32 * word_size n < 2 ** 64 /\
+  n <= m /\ 0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
+  32 + 32 * word_size m < 2 ** 64 /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
@@ -86,7 +87,7 @@ Theorem slice_calldata_path_mem:
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?m r. gas_marked_path T ctx func s0 m r /\
+  ?marks r. gas_marked_path T ctx func s0 marks r /\
     ((?u. r = OK u /\
           (?rv. bres = INL rv /\
              (!H. valid_horizon cx st0 H tr ==>
@@ -109,16 +110,16 @@ Proof
      DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND1]) >>
-  `MEM (mk_inst (sa.cs_next_id + 7) ALLOCA [Lit (n2w (32 + 32 * word_size n))]
+  `MEM (mk_inst (sa.cs_next_id + 7) ALLOCA [Lit (n2w (32 + 32 * word_size m))]
        [STRING #"%" (toString (sa.cs_next_var + 6))]) (fn_insts func)` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
      simp[MEM_APPEND] >> metis_tac[MEM_APPEND]) >>
-  `32 + 32 * word_size n < dimword (:256)` by
+  `32 + 32 * word_size m < dimword (:256)` by
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
     (irule (INST_TYPE [alpha |-> ``:256``] calldata_slice_seq_mem) >>
-     qexistsl_tac [`H0`, `p.ptr_operand`, `cenv`, `ctx`, `cx`, `es`, `func`, `n`, `op`, `n2w a`] >>
+     qexistsl_tac [`H0`, `p.ptr_operand`, `cenv`, `ctx`, `cx`, `es`, `func`, `m`, `n`, `op`, `n2w a`] >>
      simp[]) >>
   `n < dimword (:256) /\ a < dimword (:256)` by
     fs[wordsTheory.dimword_def] >>
@@ -189,7 +190,8 @@ Resume slice_calldata_path_mem[success]:
      `storage_well_formed_on cx es (FST H)` by
        (qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (qspec_then `H` mp_tac) >>
         impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
-     irule slice_calldata_vv_post >> simp[] >>
+     irule slice_calldata_vv_post >>
+     simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `sa.cs_next_id + 7` >>
      conj_tac >- simp[] >> conj_tac >- simp[] >>
@@ -233,7 +235,7 @@ Resume slice_calldata_path_mem[success]:
   irule (INST_TYPE [alpha |-> ``:256``] slice_calldata_vv_capacity) >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
-  >- (qexistsl_tac [`sa.cs_next_id + 7`, `n`] >> simp[]) >>
+  >- (qexistsl_tac [`sa.cs_next_id + 7`, `m`] >> simp[]) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
