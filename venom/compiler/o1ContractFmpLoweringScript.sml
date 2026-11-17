@@ -17,6 +17,7 @@ Ancestors
   fmpStageRunner fmpStageCoverage list
   o1RequestContract fcgDefs ctxLookupAgreeHelpers fmpAnalysisProps
   fmpStageFmpStepsCallAbi ctxSealAgree
+  fmpStageRel ptrDiscipline passSimulationDefs
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
    need and no publication. *)
@@ -220,23 +221,28 @@ QED
 Theorem fmp_lowering_stage_revert_empty:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
-  o1_ctx_shape C /\
-  EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
-    C.ctx_functions /\
-  callee_first names C.ctx_functions /\
-  mem_inv (static_mem_ok eom) C vs /\
-  run_context fuel C vs = Abort Revert_abort s /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' /\
+  o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+  fmp_variant_room (SOME fmp) C' vs' /\
+  run_context fuel C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) =
+    Abort Revert_abort s /\
   s.vs_returndata = [] ==>
-  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+  ?t. run_context fuel C' vs' = Abort Revert_abort t /\ t.vs_returndata = []
 Proof
-  strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
-  `ctx_seal_eq C C'`
-    by (fs[ctx_seal_eq_def, ctx_pass_stage_def] >>
-        irule LIST_REL_mono >> first_x_assum (irule_at Any) >>
-        simp[fn_seal_eq_def]) >>
-  `run_context fuel C' vs = run_context fuel C vs` by
-    metis_tac[run_context_seal_eq] >>
-  simp[]
+  strip_tac >>
+  `?eom. max_live_eom C = SOME eom` by
+    (fs[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
+  `fmp_stage_ctx rpolicy D C C'
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) vs' fmp eom` by
+    simp[fmpStageRelTheory.fmp_stage_ctx_def] >>
+  `terminates (run_context fuel C
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>))` by
+    simp[terminates_def] >>
+  drule_all fmp_runner_entry >> strip_tac >>
+  Cases_on `run_context fuel C' vs'` >>
+  gvs[dead_result_rel_def] >> metis_tac[]
 QED
 
 Theorem o1_static_stage_fmp_lowering:
