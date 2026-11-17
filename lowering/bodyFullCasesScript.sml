@@ -1197,13 +1197,13 @@ Proof
        lower_value_callback_contract, expr_child_callback_agrees] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   `lower_value
-      (expr_child_callback (expr_size e +
+      (expr_child_callback (cenv_defaults_size cenv + expr_size e +
         (type_size ann + (option_size expr_size dflt + 2))) compile_expr)
       cenv (BaseT AddressT) e = lower_value compile_expr cenv (BaseT AddressT) e` by
     (irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[]) >>
   `lower_value
-      (expr_child_callback (expr_size (gas_shadow_expr e) +
+      (expr_child_callback (cenv_defaults_size cenv + expr_size (gas_shadow_expr e) +
         (type_size ann +
          (option_size expr_size (OPTION_MAP gas_shadow_expr dflt) + 2)))
         compile_expr) cenv (BaseT AddressT) (gas_shadow_expr e) =
