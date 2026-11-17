@@ -92,7 +92,8 @@ Theorem ev_suffix_second_abort:
   dft_gas_swap_pair x y /\ ev_step orc p d fuel C x s = OK sx /\
   ev_step orc p d fuel C y (sx with vs_inst_idx := SUC s.vs_inst_idx) = Abort a t ==>
   ev_suffix orc p d fuel C (x::y::tail) s = Abort a t /\
-  ?u. ev_suffix orc p d fuel C (y::x::tail) s = Abort a u
+  ?a' u. ev_suffix orc p d fuel C (y::x::tail) s = Abort a' u /\
+         (a = Revert_abort ==> a' = Revert_abort)
 Proof
   strip_tac >>
   `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by

@@ -98,7 +98,11 @@ Proof
      `~is_terminator x.inst_opcode` by fs[dft_gas_swap_pair_def] >>
      `step_inst fuel C x s = Abort a t` by metis_tac[ev_step_ordinary] >>
      drule_all dft_swap_nonstatic_abort_class >> strip_tac >>
-     metis_tac[dft_swap_exhalt_partner_class]) >>
+     gvs[] >>
+     qpat_x_assum `MEM _ _` (strip_assume_tac o SIMP_RULE list_ss []) >>
+     strip_tac >>
+     gvs[dft_gas_swap_pair_def, effects_independent_def,
+         read_effects_def, write_effects_def, all_effects_def]) >>
   irule ev_suffix_first_abort_requests_static >> simp[] >> metis_tac[]
 QED
 
