@@ -6,6 +6,13 @@ Ancestors
 Libs
   cv_transLib wordsLib dep_rewrite
 
+(* Keep the Vyper translations of helpers also used by contractABI. *)
+val () = List.app cv_rep_delete
+  ["contractABI.MAP_o_n2w_ORD_function_signatu_ho",
+   "contractABI.cv_dimword_thm",
+   "contractABI.cv_rep_bool_bool_itself_datatype",
+   "contractABI.cv_num_to_dec_string_thm"];
+
 (* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
 Overload abi_IntV[local] = ``IntV : int -> abi_value``
 Overload abi_BytesV[local] = ``BytesV : word8 list -> abi_value``
