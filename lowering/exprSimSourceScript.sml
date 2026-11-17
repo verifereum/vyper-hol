@@ -584,6 +584,34 @@ Proof
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
 
+(* The result of an operand of a word type: an address or a bytesN one
+   is no word_value_type, so expr_body_pre_word_result does not cover it. *)
+Theorem expr_body_pre_word_type_result:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\
+    !v. res = INL v ==>
+        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+              value_has_type tyv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
+  rw[] >> drule_all expr_body_pre_word_value >> simp[]
+QED
+
+Theorem expr_sim_pre_word_type_result:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\
+    !v. res = INL v ==>
+        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+              value_has_type tyv v
+Proof
+  metis_tac[expr_body_pre_word_type_result, expr_sim_pre_body_pre]
+QED
+
 Theorem expr_body_pre_lower_value_word_shape:
   !cenv cx env e es ty sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
