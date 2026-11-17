@@ -20,6 +20,7 @@ Ancestors
   dftPacketNativeContinuation
   dftPacketNativePrefixBoundary
   dftPacketNativeSlice
+  dftPacketNestedCutPrefix
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
