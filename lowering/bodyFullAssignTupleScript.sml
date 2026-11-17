@@ -18,7 +18,7 @@ Ancestors
   tupleLoadProps fragExec fragGasOriginPtrLoop
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
-  tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr
+  tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr memoryPlaceStorePost
   assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
   tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice
 
