@@ -91,6 +91,7 @@ Theorem ld_consume_adoption_cases[local]:
   consume_call_outcome rq' ro' rs' t = (w',ts) ==>
   if inst.inst_opcode = CALL /\
      (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
   then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
   else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
@@ -124,9 +125,11 @@ Theorem ld_consume_call_nonghost:
   tn'.t_imm = tn.t_imm /\
   tn'.t_stor = adopt_reset inst
     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
   tn'.t_trans = adopt_reset inst
     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans ==>
   ld_nonghost tn' ss ts
 Proof
@@ -140,6 +143,7 @@ Proof
     (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> metis_tac[]) >>
   `if inst.inst_opcode = CALL /\
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
    then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
    else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
@@ -242,9 +246,11 @@ Theorem ld_consume_call_effect:
   tn'.t_imm = tn.t_imm /\
   tn'.t_stor = adopt_reset inst
     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
   tn'.t_trans = adopt_reset inst
     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\

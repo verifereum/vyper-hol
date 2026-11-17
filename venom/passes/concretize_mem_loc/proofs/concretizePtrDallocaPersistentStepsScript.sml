@@ -58,8 +58,10 @@ Theorem ptr_dalloca_persistent_next:
      op_taint un v SUBSET op_taint tn v) /\
   (inst.inst_opcode = CALL ==>
     ((~t.vs_call_ctx.cc_static /\ postT.vs_requests <> t.vs_requests /\
+        ~computed_precompile (LAST postT.vs_requests) /\
       postT.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) =
      (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST post.vs_requests) /\
       post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success))) ==>
   (step_taint instT t postT un).t_stor SUBSET
     (step_taint inst s post tn).t_stor /\
