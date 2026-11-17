@@ -47,7 +47,7 @@ Theorem supported_bitwise_comparison_operator_coverage:
   EVERY (\op. ~supported_binop op (BaseT (UintT 256))
                 (BaseT (UintT 256)) T T) [In; NotIn; ExpMod]
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem supported_power_shift_counterexamples:

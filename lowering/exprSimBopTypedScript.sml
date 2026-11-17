@@ -334,7 +334,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
   rpt gen_tac >> strip_tac >> irule binop_frag_words_rel >>
-  simp[] >> first_x_assum irule >> simp[]
+  simp[] >> first_x_assum irule >> metis_tac[]
 QED
 
 Theorem compile_bop_sim:
