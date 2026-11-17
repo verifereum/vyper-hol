@@ -5932,27 +5932,20 @@ Theorem sym_halt_frame_sim_deep:
         venom_asm_terminal_rel vs' as' /\
         sym_terminal (sym_steps prog env n ss)
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  gen_tac >> disch_tac >>
-  SUBGOAL_THEN ``inst.inst_opcode = STOP \/ inst.inst_opcode = RETURN \/
-    inst.inst_opcode = SELFDESTRUCT`` assume_tac
-  >- (drule opcodeClassTheory.step_inst_halt_opcodes >>
-      gvs[generate_inst_plan_def, is_pre_codegen_opcode_def]) >>
-  drule_all sym_frame_terminal_prefix_setup_marked >> strip_tac >>
-  `!values. eval_operands (REVERSE (compute_operands inst)) vs = SOME values ==>
-    mid.as_stack = values ++ DROP (LENGTH (compute_operands inst)) mid.as_stack` by
-    metis_tac[] >>
-  `!values. eval_operands (REVERSE (compute_operands inst)) vs = SOME values ==>
-    ?suffix. ss_mid.sym_stack = MAP Val values ++ suffix` by metis_tac[] >>
-  drule_all terminal_halt_prepared_step >>
-  disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
-  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
-  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
-  drule_all sym_halt_prepared_step >> disch_tac >>
-  qexistsl [`n + 1`, `out`] >>
-  conj_tac
-  >- (irule blockSimHelpersTheory.asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
-  simp[sym_steps_add]
+  rpt gen_tac >> strip_tac >> gvs[sym_frame_inv_def] >>
+  gen_tac >> strip_tac >>
+  irule (SRULE [asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical,
+                 sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+             `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`]
+      (SPEC_ALL symControlHaltOwnTheory.sym_halt_frame_sim_deep_mode_kernel))) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `cs.as_pc < LENGTH prog /\ EL cs.as_pc prog = ai` by
+        gvs[asm_block_at_def] >>
+      drule_all asm_sym_step >> simp[]) >>
+  conj_tac >- metis_tac[asm_sym_steps_lockstep] >>
+  simp[] >> rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
 QED
 
 Theorem regular_abort_operand_order:
@@ -5960,12 +5953,7 @@ Theorem regular_abort_operand_order:
   inst_wf inst ==>
   compute_operands inst = REVERSE inst.inst_operands
 Proof
-  simp[listTheory.MEM] >> strip_tac >>
-  gvs[compute_operands_def, python_stack_operands_def,
-      ir_specific_operand_order_def, venomWfTheory.inst_wf_def,
-      listTheory.LENGTH_EQ_NUM_compute] >>
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  rename1 `LENGTH t` >> Cases_on `t` >> gvs[]
+  ACCEPT_TAC symControlAbortRegularOwnTheory.regular_abort_operand_order
 QED
 
 Theorem regular_abort_source_arguments:
@@ -6546,18 +6534,9 @@ Theorem sym_assert_unreachable_suffix_terminal:
   ss.sym_stack = Val 0w :: stk ==>
   sym_terminal (sym_steps p env 3 ss)
 Proof
-  strip_tac >>
-  fs[stackOpSimTheory.asm_block_at_cons] >>
-  rewrite_tac[numLib.num_CONV ``3:num``, arithmeticTheory.TWO,
-              arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  simp[Once sym_step_def, sym_set_stack_def, asm_next_def] >>
-  simp[Once sym_step_def, sym_step_op_def, sym_jumpi_def] >>
-  simp[sym_set_stack_def, asm_next_def] >>
-  simp[Once sym_step_def, sym_terminal_opcode_concrete] >>
-  simp[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
-       asm_op_mem_reads_def, asmSemTheory.log_table_def, mem_labels_hit_def] >>
-  simp[SRULE [asm_step_def] stackOpAsmSimTheory.asm_step_invalid,
-       sym_lift_def, sym_terminal_def]
+  ACCEPT_TAC (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`]
+      (SPEC_ALL symControlAbortConditionalOwnTheory.sym_assert_unreachable_suffix_terminal_mode)))
 QED
 
 Theorem sym_assert_zero_iszero:
@@ -6567,10 +6546,9 @@ Theorem sym_assert_zero_iszero:
     (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
                sym_stack := Val 1w :: stk|>)
 Proof
-  strip_tac >> fs[stackOpSimTheory.asm_block_at_cons] >>
-  rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  drule asmSpliceTheory.sym_step_iszero_val >>
-  disch_then (qspecl_then [`p`, `env`] assume_tac) >> simp[]
+  ACCEPT_TAC (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`]
+      (SPEC_ALL symControlAbortConditionalOwnTheory.sym_assert_zero_iszero_mode)))
 QED
 
 Theorem sym_assert_suffix_terminal:
@@ -6635,8 +6613,7 @@ Theorem sym_conditional_abort_inversion:
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?cond. inst.inst_operands = [cond] /\ eval_operand cond vs = SOME 0w
 Proof
-  metis_tac[genBlockSimTheory.step_inst_assert_abort,
-            genBlockSimTheory.step_inst_assert_unreachable_abort]
+  ACCEPT_TAC symControlAbortConditionalOwnTheory.sym_conditional_abort_inversion
 QED
 
 Theorem sym_abort_conditional_terminal_exists:
@@ -6740,9 +6717,9 @@ Theorem sym_abort_terminal_counts_join:
      (a = ExHalt_abort /\ asm_steps lo o2pc prog k st = AsmFault fin)) /\
     venom_asm_terminal_rel vs fin /\ sym_terminal (sym_steps prog env k ss)
 Proof
-  strip_tac >> qexistsl_tac [`n + m`, `out`] >>
-  simp[stackOpSimTheory.asm_steps_add] >>
-  metis_tac[sym_steps_terminal_extend, arithmeticTheory.ADD_COMM]
+  ACCEPT_TAC (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`]
+      (SPEC_ALL symControlTerminalOwnTheory.sym_abort_terminal_counts_join_mode)))
 QED
 
 Theorem sym_abort_frame_sim_deep:
@@ -6848,9 +6825,7 @@ Theorem sym_pop_pushed_steps:
     SymOK (ss with <|sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + 1;
                     sym_stack := stk|>)
 Proof
-  strip_tac >> rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  gvs[asm_block_at_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
-      asm_next_def]
+  ACCEPT_TAC symControlGasOwnTheory.sym_pop_pushed_steps
 QED
 
 Theorem sym_pop_pushed_frame_sim:
