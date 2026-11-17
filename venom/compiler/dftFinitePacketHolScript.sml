@@ -21,6 +21,7 @@ Ancestors
   dftPacketKeySubstitution
   dftPacketNativeContinuation
   dftPacketNativePrefixBoundary
+  dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
