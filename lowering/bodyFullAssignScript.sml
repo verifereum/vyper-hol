@@ -50,7 +50,7 @@ Ancestors
   ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
   bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
-  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
+  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics vyperTyping valueEncodingDefs valueEncoding
 Libs
   monadsyntax
 
@@ -2594,4 +2594,132 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_sensitivity_tuple_list[local]:
+  !tvs vs a mem dirty.
+    EVERY well_formed_type_value tvs /\
+    (values_have_types tvs vs \/ vs = MAP default_value tvs) /\
+    tuple_val_wf vs tvs /\
+    (!m. mem_agree_outside dirty mem m ==> tuple_in_memory vs tvs a m) /\
+    (!tv. MEM tv tvs ==> !v a mem dirty.
+      well_formed_type_value tv /\
+      (value_has_type tv v \/ v = default_value tv) /\
+      val_wf tv v /\
+      (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+      !j. j < type_memory_size tv /\ a+j IN dirty ==>
+        mem_dead_bytes mem a tv (a+j)) ==>
+    !j. j < type_memory_size_list tvs /\ a+j IN dirty ==>
+      mem_dead_bytes_list mem a tvs (a+j)
+Proof
+  Induct >> simp[type_memory_size_def] >>
+  gen_tac >> Cases_on `vs` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def, type_memory_size_def] >>
+  rpt strip_tac >>
+  simp[Once mem_dead_bytes_def] >>
+  (Cases_on `j < type_memory_size h`
+  >- (disj1_tac >>
+      qpat_x_assum `!tv. tv = h \/ _ ==> _` (qspec_then `h` mp_tac) >>
+      simp[] >>
+      disch_then (qspecl_then [`h'`, `a`, `mem`, `dirty`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  disj2_tac >>
+  qpat_x_assum `!vs a mem dirty. _`
+    (qspecl_then [`t`, `a + type_memory_size h`, `mem`, `dirty`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (qspec_then `j - type_memory_size h` mp_tac) >>
+  `a + type_memory_size h + (j - type_memory_size h) = a+j` by decide_tac >>
+  simp[])
+QED
+
+Theorem body_assign_immutable_sensitivity_tuple:
+  !tvs.
+    (!tv. MEM tv tvs ==> !v a mem dirty.
+      well_formed_type_value tv /\
+      (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+      (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+      !j. j < type_memory_size tv /\ a+j IN dirty ==>
+        mem_dead_bytes mem a tv (a+j)) ==>
+    !v a mem dirty.
+      well_formed_type_value (TupleTV tvs) /\
+      (value_has_type (TupleTV tvs) v \/ v = default_value (TupleTV tvs)) /\
+      val_wf (TupleTV tvs) v /\
+      (!m. mem_agree_outside dirty mem m ==>
+        val_in_memory (TupleTV tvs) v a m) ==>
+      !j. j < type_memory_size (TupleTV tvs) /\ a+j IN dirty ==>
+        mem_dead_bytes mem a (TupleTV tvs) (a+j)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `v` >>
+  simp[value_has_type_def, default_value_def, default_value_tuple_MAP] >>
+  rename1 `ArrayV arr` >> Cases_on `arr` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def,
+       well_formed_type_value_def, type_memory_size_def, mem_dead_bytes_def] >>
+  rpt strip_tac >> irule body_assign_immutable_sensitivity_tuple_list >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem body_assign_immutable_sensitivity_field_list[local]:
+  !fields vs a mem dirty.
+    EVERY (well_formed_type_value o SND) fields /\
+    (struct_has_type fields vs \/
+     vs = MAP (\(name,tv). (name,default_value tv)) fields) /\
+    fields_val_wf vs fields /\
+    (!m. mem_agree_outside dirty mem m ==> fields_in_memory vs fields a m) /\
+    (!name tv. MEM (name,tv) fields ==> !v a mem dirty.
+      well_formed_type_value tv /\
+      (value_has_type tv v \/ v = default_value tv) /\
+      val_wf tv v /\
+      (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+      !j. j < type_memory_size tv /\ a+j IN dirty ==>
+        mem_dead_bytes mem a tv (a+j)) ==>
+    !j. j < type_memory_size_fields fields /\ a+j IN dirty ==>
+      mem_dead_bytes_fields mem a fields (a+j)
+Proof
+  Induct >> simp[type_memory_size_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >> Cases_on `vs`
+  >- simp[value_has_type_def] >>
+  PairCases_on `h` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def, type_memory_size_def] >>
+  rpt strip_tac >>
+  simp[Once mem_dead_bytes_def] >>
+  (Cases_on `j < type_memory_size h1`
+  >- (disj1_tac >>
+      qpat_x_assum `!name tv. _` (qspecl_then [`h0`, `h1`] mp_tac) >>
+      simp[] >>
+      disch_then (qspecl_then [`h1'`, `a`, `mem`, `dirty`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  disj2_tac >>
+  qpat_x_assum `!vs a mem dirty. _`
+    (qspecl_then [`t`, `a + type_memory_size h1`, `mem`, `dirty`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (qspec_then `j - type_memory_size h1` mp_tac) >>
+  `a + type_memory_size h1 + (j - type_memory_size h1) = a+j` by decide_tac >>
+  simp[])
+QED
+
+Theorem body_assign_immutable_sensitivity_struct:
+  !fields.
+    (!name tv. MEM (name,tv) fields ==> !v a mem dirty.
+      well_formed_type_value tv /\
+      (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+      (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+      !j. j < type_memory_size tv /\ a+j IN dirty ==>
+        mem_dead_bytes mem a tv (a+j)) ==>
+    !v a mem dirty.
+      well_formed_type_value (StructTV fields) /\
+      (value_has_type (StructTV fields) v \/ v = default_value (StructTV fields)) /\
+      val_wf (StructTV fields) v /\
+      (!m. mem_agree_outside dirty mem m ==>
+        val_in_memory (StructTV fields) v a m) ==>
+      !j. j < type_memory_size (StructTV fields) /\ a+j IN dirty ==>
+        mem_dead_bytes mem a (StructTV fields) (a+j)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `v` >>
+  simp[value_has_type_def, default_value_def, default_value_struct_MAP] >>
+  simp[val_wf_def, val_in_memory_def, well_formed_type_value_def,
+       type_memory_size_def, mem_dead_bytes_def] >>
+  rpt strip_tac >> irule body_assign_immutable_sensitivity_field_list >>
+  simp[] >> metis_tac[]
 QED
