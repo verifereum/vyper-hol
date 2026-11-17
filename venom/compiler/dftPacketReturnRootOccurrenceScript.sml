@@ -5,7 +5,7 @@ Ancestors
   dftPacketNativeContinuation dftPacketReturnNative venomExecSemantics
   venomInst list rich_list arithmetic
 
-Theorem return_trace_block_endpoint[local]:
+Theorem return_trace_block_endpoint:
   !fuel C bb s p d id fn i t ir out.
   MEM ((p,d,id),fn,i,t) (trace_block p d fuel C fn bb s) /\
   i.inst_opcode <> INVOKE /\ step_inst fuel C i t = IntRet ir out ==>
@@ -43,7 +43,7 @@ Proof
   simp[listTheory.LAST_CONS_cond, LAST_APPEND_NOT_NIL]
 QED
 
-Theorem return_trace_blocks_endpoint[local]:
+Theorem return_trace_blocks_endpoint:
   !fuel p D C fn s d id i t ir out.
   MEM ((p,d,id),fn,i,t) (trace_blocks p D fuel C fn s) /\
   i.inst_opcode <> INVOKE /\ step_inst (D + fuel - d) C i t = IntRet ir out ==>
