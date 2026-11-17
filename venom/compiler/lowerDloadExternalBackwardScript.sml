@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem ld_exec_delegatecall_backward_extract:
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_shared_state tn un s t /\
   read_memory (w2n offS) (w2n sz) s =
     read_memory (w2n offT) (w2n sz) t /\
   exec_delegatecall i t gas addr offT sz roT rs = OK t' ==>
@@ -140,7 +140,7 @@ Proof
 QED
 
 Theorem ld_exec_delegatecall_backward:
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_shared_state tn un s t /\
   read_memory (w2n offS) (w2n sz) s =
     read_memory (w2n offT) (w2n sz) t /\
   exec_delegatecall i t gas addr offT sz roT rs = OK t' ==>
@@ -239,7 +239,7 @@ Theorem ld_delegatecall_step_backward_extract:
   eval_operand szop s = SOME sz /\ eval_operand szop t = SOME sz /\
   eval_operand rop s = SOME roS /\ eval_operand rop t = SOME roT /\
   eval_operand rsop s = SOME rs /\ eval_operand rsop t = SOME rs /\
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_shared_state tn un s t /\
   read_memory (w2n offS) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   step_inst fuel CT i t = OK t' ==>
   ?out w rS rT.
@@ -273,7 +273,7 @@ Theorem ld_delegatecall_step_backward:
   eval_operand szop s = SOME sz /\ eval_operand szop t = SOME sz /\
   eval_operand rop s = SOME roS /\ eval_operand rop t = SOME roT /\
   eval_operand rsop s = SOME rs /\ eval_operand rsop t = SOME rs /\
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_shared_state tn un s t /\
   read_memory (w2n offS) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   step_inst fuel CT i t = OK t' ==>
   ?out w rS rT.

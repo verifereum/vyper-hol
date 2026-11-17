@@ -19,7 +19,7 @@ Ancestors
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
-  contextStaticAbortRel
+  contextStaticAbortRel o1PipelineMemoryLoweredAbort
 
 Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
@@ -150,7 +150,7 @@ Proof
   rpt strip_tac >> drule_all entry_fn_first_lookup >> simp[]
 QED
 
-(* ADMISSION: statement only.  Waits for the abort analogue of o1_pipeline_codegen_obligations' proof. *)
+(* The structural checks also supply the static-abort context obligations. *)
 Theorem o1_pipeline_codegen_obligations_abort:
   !rpolicy unit out cp Inv.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -159,10 +159,15 @@ Theorem o1_pipeline_codegen_obligations_abort:
     codegen_memory_obligations_abort Inv out.po_unit.cu_context cp ==>
     codegen_context_obligations_abort Inv out.po_unit.cu_context cp
 Proof
-  cheat
+  simp[o1PipelineCorrectTheory.o1_pipeline_def] >> rpt strip_tac >>
+  drule run_venom_pipeline_success_boundary >> strip_tac >>
+  drule generate_context_plan_layout_wf >> strip_tac >>
+  gvs[codegen_context_obligations_abort_def, unit_wf_def, venom_wf_def,
+      reachable_call_graph_acyclic_def, unit_shape_ok_def] >>
+  rpt strip_tac >> drule_all entry_fn_first_lookup >> simp[]
 QED
 
-(* ADMISSION: statement only.  Waits for its proof from o1_pipeline_codegen_obligations_abort and o1_pipeline_memory_obligations_lowered_abort. *)
+(* Lowered memory and structural checks share the reachability invariant. *)
 Theorem o1_pipeline_context_obligations_lowered_abort:
   !rpolicy unit out cp vs.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -176,7 +181,14 @@ Theorem o1_pipeline_context_obligations_lowered_abort:
     ?Inv. codegen_context_obligations_abort Inv out.po_unit.cu_context cp /\
           codegen_reachability_package Inv out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  rename1 `generate_context_plan _ = SOME plan` >>
+  mp_tac (Q.SPECL [`out`, `plan`, `vs`]
+    o1_pipeline_memory_obligations_lowered_abort) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  goal_assum $ drule_at Any >>
+  irule o1_pipeline_codegen_obligations_abort >> simp[] >>
+  goal_assum $ drule_at Any >> simp[]
 QED
 
 (* L6: exact source-to-Venom entry boundary, including LIVE transferred state. *)

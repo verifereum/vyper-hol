@@ -1712,7 +1712,7 @@ Proof
     [value; Var (ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v); len] /\
     ti.inst_outputs = inst.inst_outputs` by
     (gvs[ircf_block_plan_def, ircf_redirect_op_def] >> metis_tac[]) >>
-  `MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
+  `MEM inst.inst_opcode [CREATE; CREATE2]` by simp[] >>
   drule_all taint_agree_external_clean_shared >> strip_tac >>
   `?t'. step_inst_base ti t = OK t' /\
      taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
@@ -1774,7 +1774,7 @@ Proof
     ti.inst_outputs = inst.inst_outputs` by
     (qpat_x_assum `!pos. _` (fn th => map_every mp_tac [Q.SPEC `0` th, Q.SPEC `2` th, Q.SPEC `3` th]) >>
      simp[] >> rpt strip_tac >> gvs[ircf_block_plan_def, ircf_redirect_op_def] >> metis_tac[]) >>
-  `MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
+  `MEM inst.inst_opcode [CREATE; CREATE2]` by simp[] >>
   drule_all taint_agree_external_clean_shared >> strip_tac >>
   `?t'. step_inst_base ti t = OK t' /\
      taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)

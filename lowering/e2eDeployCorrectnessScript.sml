@@ -28,20 +28,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-(* ADMISSION: moves the deploy certificate to any free-memory pointer.
-   Waits for its proof. *)
-Theorem deploy_unit_execution_correct_with_fmp:
-  !shadow_ctx marks tops runtime_bc am tx dunit vs fmp.
-    o1_source_unit_ok dunit /\
-    vs.vs_fmp = vs.vs_initial_fmp /\
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit vs ==>
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit (vs with <| vs_fmp := fmp; vs_initial_fmp := fmp |>)
-Proof
-  cheat
-QED
-
 (* ADMISSION: moves the deploy certificate to any call outcomes, for a call-free constructor.
    Waits for its proof. *)
 Theorem deploy_unit_execution_correct_with_outcomes:
@@ -112,7 +98,7 @@ Theorem deploy_raw_fmp_exists:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan es.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) ==>
-    ?fmp.
+    ?fmp:bytes32.
       w2n (opt_deploy_entry_state prog prog' cplan tops es).vs_initial_fmp <=
         w2n fmp /\
       w2n fmp < 2 ** 254 /\
