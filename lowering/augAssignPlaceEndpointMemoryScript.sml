@@ -93,7 +93,9 @@ Theorem aug_place_memory_endpoint:
       halt_exit H cx ff res rr)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `expr_sim_inv cenv cx env es` by
     fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
   drule_all aug_place_typing_word >> strip_tac >>
