@@ -2,7 +2,7 @@
 Theory symBodyInvokeOwn
 Ancestors
   symFrameInvokeSourceOwn asmSymModeOwn fnBlockBodyClasses fnBlockBodySteps
-  symFnSimSpec codegenSymRel unitShapeDefs stackPlanCfgIrrelevance
+  symFnSimSpec codegenSymRel unitShapeDefs stackPlanCfgIrrelevance symBodyInvokePointwise
 
 Theorem sym_body_invoke_step_own_kernel:
   gen_fn_sim_at_simple_reloc fuel /\ sym_fn_sim_at_own allow_own fuel /\
@@ -49,37 +49,14 @@ Theorem sym_body_invoke_step_own_kernel:
         sym_terminal (sym_steps_mode allow_own prog env own n ss))
 Proof
   strip_tac >>
-  drule body_inv_facts_reloc >> strip_tac >>
-  drule_all body_inv_inst_reloc >> strip_tac >>
-  drule_all body_inv_step_reloc >> strip_tac >>
-  drule_all body_inv_static_reloc >> strip_tac >>
-  drule body_inv_equiv_reloc >> disch_then drule >> disch_then drule >>
-  disch_then assume_tac >>
-  qhdtm_assum `body_inv_reloc`
-    (strip_assume_tac o REWRITE_RULE [body_inv_reloc_def]) >>
-  `fn_shape_ok fn` by
-    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
-  qexistsl_tac [`ops`, `ps'`, `rest'`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  irule sym_invoke_frame_sim_deep_own >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  conj_tac >- metis_tac[asm_sym_steps_mode_sim] >>
+  drule_at (Pos (el 3)) sym_body_invoke_step_pointwise >>
+  disch_then irule >> simp[SF CONJ_ss] >>
   conj_tac >-
-    (rpt gen_tac >> strip_tac >> irule body_callee_placed_reloc >>
-     rpt (goal_assum (drule_at Any)) >> simp[] >>
-     qexistsl_tac [`Inv`, `rpolicy`, `unit`] >> gvs[]) >>
-  conj_tac >-
-    (qexistsl_tac [`rpolicy`, `unit`] >> simp[]) >>
-  conj_tac >- (qexists_tac `r` >> simp[]) >>
-  conj_tac >-
-    ((qexists_tac `Inv` >> gvs[] >> rpt gen_tac >> strip_tac >>
-     irule body_callee_sim_reloc >>
-     rpt (goal_assum (drule_at Any)) >> simp[] >> (metis_tac[]))) >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  gvs[] >> rpt (goal_assum (drule_at Any)) >> simp[] >>
-  qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp[generate_inst_plan_cfg_unit] >> metis_tac[]
+    (qhdtm_assum `body_inv_reloc`
+       (strip_assume_tac o REWRITE_RULE [body_inv_reloc_def]) >>
+     rpt gen_tac >> strip_tac >> irule body_callee_sim_reloc >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule symFrameInvokeSupportTheory.sym_invoke_callee_sim_own >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
