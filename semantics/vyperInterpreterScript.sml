@@ -1391,7 +1391,11 @@ Definition precompile_call_success_def:
          od) st
 End
 
-val () = cv_auto_trans precompile_call_success_def;
+val () = precompile_call_success_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            check_def, assert_def]
+  |> cv_auto_trans;
 
 Theorem precompile_call_success_not_builtin[simp]:
   ~precompile_builtin bt ==> precompile_call_success bt vs = return ()
