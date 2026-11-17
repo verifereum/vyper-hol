@@ -220,26 +220,6 @@ Proof
        store_taint_def, imm_taint_def]
 QED
 
-Theorem ld_extract_result_shared:
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  extract_venom_result s v roS rs rr = SOME (wS,rS) /\
-  extract_venom_result t v roT rs rr = SOME (wT,rT) ==>
-  ld_shared_state tn un rS rT /\
-  rS.vs_accounts = rT.vs_accounts /\ rS.vs_transient = rT.vs_transient
-Proof
-  strip_tac >> drule_all ld_shared_state_empty_exact >> strip_tac >>
-  Cases_on `rr` >- gvs[extract_venom_result_def] >>
-  rename1 `extract_venom_result s v roS rs (SOME p) = _` >>
-  PairCases_on `p` >> gvs[extract_venom_result_def] >>
-  Cases_on `p1.contexts` >> gvs[] >>
-  rename1 `p1.contexts = h::rest` >>
-  Cases_on `rest` >> gvs[] >> PairCases_on `h` >>
-  Cases_on `p0`
-  >- gvs[ld_shared_state_def] >>
-  Cases_on `y` >> gvs[ld_shared_state_def, storage_agree_except_def,
-    word_agree_except_def]
-QED
-
 Theorem ld_extract_result_frame_fields:
   extract_venom_result s v ro rs rr = SOME (w,r) ==>
   r.vs_params = s.vs_params /\ r.vs_allocas = s.vs_allocas /\
@@ -250,19 +230,6 @@ Theorem ld_extract_result_frame_fields:
 Proof
   strip_tac >> drule ld_extract_concrete_shape >>
   disch_then SUBST1_TAC >> simp[]
-QED
-
-Theorem ld_delegate_extract_tainted_shared:
-  i.inst_opcode = DELEGATECALL /\
-  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  extract_venom_result s v roS rs rr = SOME (wS,rS) /\
-  extract_venom_result t v roT rs rr = SOME (wT,rT) ==>
-  ld_shared_state (step_taint i s rS tn) (step_taint i t rT un) rS rT /\
-  rS.vs_accounts = rT.vs_accounts /\ rS.vs_transient = rT.vs_transient
-Proof
-  strip_tac >> drule_all ld_extract_result_shared >> strip_tac >>
-  gvs[ld_shared_state_def, step_taint_def, adopt_reset_def,
-       store_taint_def, imm_taint_def]
 QED
 
 Theorem ld_external_clean_output:
