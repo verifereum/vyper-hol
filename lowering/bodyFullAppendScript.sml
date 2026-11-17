@@ -472,6 +472,151 @@ QED
 
 Finalise append_storage_aggregate_stage_ready[local]
 
+(* Retain the primitive's exact endpoint while varying only the horizon. *)
+Theorem append_storage_address_binop_uniform[local]:
+  emit_op opc [left;right] a = (op,b) /\ fn_has_code a b func /\
+  (opc = MUL /\ w = x*y \/ opc = ADD /\ w = x+y) /\
+  eval_operand left s = SOME x /\ eval_operand right s = SOME y /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?out t Gf tf.
+    op = Var out /\ not_fresh_at b out /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    eval_operand op t = SOME w /\ op_taint tf op = {} /\
+    allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    typed_copy_state_frame a 0 0 s t /\ t.vs_memory = s.vs_memory /\
+    t.vs_labels = s.vs_labels /\ tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    (!p. not_fresh_at a p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all typed_copy_origin_ptr_binop_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`ARB`] strip_assume_tac) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t,G',tn')` by
+    (gen_tac >> drule_all typed_copy_origin_ptr_binop_path >>
+     disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`D`] strip_assume_tac) >>
+     gvs[]) >>
+  `!p. not_fresh_at a p ==> p <> out` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[typed_copy_state_frame_allocas_below_fmp] >>
+  qexistsl_tac [`out`,`t`,`G'`,`tn'`] >>
+  gvs[] >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame] >>
+  rpt strip_tac >> `p <> out` by metis_tac[] >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame,
+    venomStateTheory.update_var_def,venomStateTheory.lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* The cursor here is the successful guard endpoint, not its input. *)
+Theorem append_storage_aggregate_address_ready[local]:
+  emit_op ADD [bop; Lit 1w] a = (dop,b) /\
+  emit_op MUL [lop; Lit (n2w (type_slot_size tv))] b = (off,c) /\
+  emit_op ADD [dop;off] c = (addr,d) /\ fn_has_code a d func /\
+  (!x. bop = Var x \/ lop = Var x ==> not_fresh_at a x) /\
+  eval_operand bop s = SOME slot /\ eval_operand lop s = SOME (n2w len) /\
+  op_taint tn bop = {} /\ op_taint tn lop = {} /\
+  0 < type_slot_size tv /\ len < cap /\
+  w2n slot + (1+cap*type_slot_size tv) <= dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?out t Gf tf.
+    addr = Var out /\ not_fresh_at d out /\
+    eval_operand addr t = SOME (slot+n2w (1+len*type_slot_size tv)) /\
+    op_taint tf addr = {} /\
+    w2n (slot+n2w (1+len*type_slot_size tv)) + type_slot_size tv <= dimword (:256) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    typed_copy_state_frame a 0 0 s t /\ t.vs_memory = s.vs_memory /\
+    allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
+    t.vs_inst_idx = LENGTH d.cs_current_insts /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at a x ==> not_fresh_at d x /\
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d` by
+    metis_tac[typed_copy_emit_op_mono] >>
+  `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by fs[ci_mono_def] >>
+  `fn_has_code a b func /\ fn_has_code b c func /\ fn_has_code c d func` by
+    metis_tac[fragExecTheory.fn_has_code_split,compileEnvTheory.cs_extends_trans] >>
+  `!x. not_fresh_at a x ==> not_fresh_at b x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono,ci_mono_def] >>
+  `!x. not_fresh_at b x ==> not_fresh_at c x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono,ci_mono_def] >>
+  `!x. not_fresh_at c x ==> not_fresh_at d x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono,ci_mono_def] >>
+  `eval_operand (Lit 1w) s = SOME 1w /\ op_taint tn (Lit 1w) = {}` by
+    simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `w` |-> `x+y`]
+    append_storage_address_binop_uniform)) >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+  rename1 `dop = Var vdata` >>
+  rename1 `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q1,G1,tn1)` >>
+  `eval_operand lop q1 = SOME (n2w len) /\ op_taint tn1 lop = {}` by
+    (Cases_on `lop` >> fs[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `eval_operand (Lit (n2w (type_slot_size tv))) q1 = SOME (n2w (type_slot_size tv)) /\
+    op_taint tn1 (Lit (n2w (type_slot_size tv))) = {}` by
+    simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `MUL`, `w` |-> `x*y`]
+    append_storage_address_binop_uniform)) >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G1`] strip_assume_tac) >>
+  rename1 `off = Var vscale` >>
+  rename1 `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q1,G1,tn1) [] (OK q2,G2,tn2)` >>
+  `eval_operand dop q2 = SOME (slot+1w) /\ op_taint tn2 dop = {}` by
+    (gvs[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `w` |-> `x+y`]
+    append_storage_address_binop_uniform)) >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G2`] strip_assume_tac) >>
+  rename1 `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q2,G2,tn2) [] (OK t,Gf,tf)` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t,Gf,tf)` by suspend "paths" >>
+  `typed_copy_state_frame a 0 0 s t` by suspend "frame" >>
+  `w2n (slot+n2w (1+len*type_slot_size tv)) + type_slot_size tv <= dimword (:256)`
+    by suspend "bound" >>
+  `slot+1w+n2w len*n2w (type_slot_size tv) =
+    slot+n2w (1+len*type_slot_size tv)` by
+    (pure_rewrite_tac[wordsTheory.word_mul_n2w,
+       GSYM wordsTheory.word_add_n2w,wordsTheory.WORD_ADD_ASSOC] >> REFL_TAC) >>
+  qexistsl_tac [`out`,`t`,`Gf`,`tf`] >> simp[] >>
+  metis_tac[]
+QED
+
+Resume append_storage_aggregate_address_ready[paths]:
+  gen_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]
+QED
+
+Resume append_storage_aggregate_address_ready[frame]:
+  `ci_mono a c` by metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
+  `typed_copy_state_frame a 0 0 q1 q2 /\
+   typed_copy_state_frame a 0 0 q2 t` by
+    metis_tac[typed_copy_state_frame_mono] >>
+  metis_tac[typed_copy_state_frame_trans]
+QED
+
+Resume append_storage_aggregate_address_ready[bound]:
+  `len * type_slot_size tv + type_slot_size tv <= cap * type_slot_size tv` by
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+  `w2n slot + (1 + len * type_slot_size tv) < dimword (:256)` by decide_tac >>
+  simp[wordsTheory.word_add_def,wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD] >>
+  decide_tac
+QED
+
+Finalise append_storage_aggregate_address_ready[local]
+
 (* The top-level storage/transient dynamic array. *)
 (* The sparse endpoint bridge is independent of the implementation of the
    slots path.  In particular, it assumes neither nonstatic execution nor a
