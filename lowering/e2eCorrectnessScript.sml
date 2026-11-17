@@ -1040,7 +1040,7 @@ Proof
   metis_tac[lower_vyper_runtime_unit_dload_headroom_ok]
 QED
 
-Theorem selected_run[local]:
+Theorem selected_run:
   o1_source_unit_ok unit /\
   unit.cu_context.ctx_entry = SOME "__entry" /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
