@@ -14,6 +14,7 @@ Ancestors
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
   bodyFullRawCallCalldata
+  bodyFullRawCall
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -685,13 +686,13 @@ Proof
   ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
+(* The bytes-payload leaf supplies the joint case. *)
 Theorem body_raw_call_case_full:
   !cx ty flags es v18.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullRawCallTheory.raw_call_expr_full_ok
 QED
 
 (* RawLog composes its topic and data children at one joint midpoint. *)
