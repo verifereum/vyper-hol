@@ -293,6 +293,7 @@ Theorem current_exec_ext_call_pair_forward:
        state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_call_request st addr value ao sz static =
    venom_call_request st' addr value ao sz static` by
     metis_tac[current_exec_oracle_requests_pair] >>
@@ -316,6 +317,7 @@ Theorem current_exec_create_pair_forward:
   ?t'. exec_create inst' st' value off sz salt = OK t' /\ state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_create_request st value off sz salt =
    venom_create_request st' value off sz salt` by
     metis_tac[current_exec_oracle_requests_pair] >>
@@ -324,10 +326,13 @@ Proof
    state_rel sg (SND (consume_create_outcome rq st))
                 (SND (consume_create_outcome rq st'))` by
     metis_tac[current_exec_consume_create_pair] >>
-  gvs[exec_create_def, AllCaseEqs()] >>
+  Cases_on `consume_create_outcome rq st` >>
+  Cases_on `consume_create_outcome rq st'` >>
+  gvs[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
   `LENGTH inst'.inst_outputs = 1` by fs[current_last_output_slots_def] >>
-  Cases_on `inst'.inst_outputs` >> gvs[] >>
-  metis_tac[current_exec_update_last_slots]
+  Cases_on `inst'.inst_outputs` >> gvs[Excl "consume_create_outcome_eq"] >>
+  irule current_exec_update_last_slots >> qexists_tac `sg` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem current_exec_call_opcodes_pair_forward:
@@ -384,6 +389,7 @@ Theorem current_exec_delegatecall_pair_forward:
   ?t'. exec_delegatecall inst' st' gas addr ao sz ro rs = OK t' /\ state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_call_request st addr 0w ao sz F =
    venom_call_request st' addr 0w ao sz F` by
     metis_tac[current_exec_oracle_requests_pair] >>
