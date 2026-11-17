@@ -32,7 +32,7 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend
+  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
