@@ -793,6 +793,7 @@ Proof
   goal_assum (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
   qexists_tac `mid with scopes :=
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>))::rest` >> simp[] >>
+  rename1 `stmt_state_rel Hentry ctx func cenv' cx es t` >>
   qx_genl_tac [`H`, `Gf`, `tnf`, `t'`] >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
@@ -820,7 +821,7 @@ Proof
        stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
      fs[loweringPostsTheory.expr_post_def] >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
+     qexistsl_tac [`Hentry`, `ctx`, `cx`, `func`] >> simp[]) >>
   drule annassign_word_full_final_post >> disch_then drule >>
   disch_then (fn th => qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac th)) >>
@@ -832,7 +833,10 @@ Proof
   goal_assum (drule_at (Pat `compile_stmt _ _ _ _ _ = _`)) >>
   simp[venomInstTheory.mk_inst_def] >> qexistsl_tac [`G0`, `tn0`] >> simp[] >>
   qpat_x_assum `mid.scopes = _` (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
-  simp[] >> first_assum ACCEPT_TAC
+  simp[] >> conj_tac
+  >- (strip_tac >> first_assum ACCEPT_TAC) >>
+  qx_gen_tac `qq` >>
+  qpat_x_assum `!q. q = p \/ _ ==> _` (qspec_then `qq` mp_tac) >> simp[]
 QED
 
 Theorem annassign_word_full_execution:
