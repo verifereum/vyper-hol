@@ -70,15 +70,11 @@ Proof
         simp[check_contract_def, check_module_def, listTheory.EVERY_MEM] >>
         metis_tac[]) >>
      gvs[check_toplevel_decl_def, function_mutability_ok_def]) >>
-  `cenv_static_ok ce /\ ce.ce_return_pc = NONE /\
-   ce.ce_nonreentrant = (nr,key,trans,F)` by
+  `ce.ce_return_pc = NONE /\ ce.ce_nonreentrant = (nr,key,trans,F)` by
     (qpat_x_assum `set_constructor_package_target _ _ = _` mp_tac >>
      simp[package_constructor_def, set_constructor_package_target_def,
-       update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
-     `cenv_static_ok (build_compile_env tops Deploy v_mut v_name v_args ret fbody T)` by
-       irule build_compile_env_static >>
-     gvs[deploy_build_env_no_return_pc, cenv_static_ok_def] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       update_cenv_nonreentrant_def] >> strip_tac >>
+     gvs[deploy_build_env_no_return_pc]) >>
   `!ce st.
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\
                 i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
