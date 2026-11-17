@@ -287,4 +287,40 @@ Resume focus_retained_row_replay[observations_ok]:
   irule ZIP_APPEND >> simp[]
 QED
 
+Resume focus_retained_row_replay[contribution]:
+  qpat_assum `!q. q < k ==> _` (qspec_then `a` mp_tac) >>
+  (impl_tac >- decide_tac) >> disch_then strip_assume_tac >>
+  Cases_on `(EL a xs).inst_opcode = GAS`
+  >- (gvs[] >>
+      `LENGTH g = 1` by metis_tac[LIST_REL_LENGTH, LENGTH] >>
+      Cases_on `g` >> gvs[] >>
+      simp[gas_events_step_def, dftGasFromListTraceDefsTheory.visit_gas_def,
+        dftGasFromListTraceDefsTheory.trace_step_gas,
+        dftGasFromListTraceDefsTheory.trace_gas_def] >>
+      rpt strip_tac >>
+      qspecl_then [`fuel-d`, `C7`, `EL a xs`, `v`] mp_tac (cj 1 gasCountTheory.gas_count_suffix) >>
+      simp[gasCountTheory.gas_count_suffix_def, gasCountTheory.gas_count_step_def]) >>
+  Cases_on `(EL a xs).inst_opcode = INVOKE`
+  >- (qpat_x_assum `!q. q < k /\ _ ==> _` (qspec_then `a` mp_tac) >>
+      simp[] >> disch_then strip_assume_tac >>
+      qpat_x_assum `!kgss tail u. _`
+        (qspecl_then [`front`, `g ++ tail`, `v`] mp_tac) >>
+      simp[] >> disch_then strip_assume_tac >>
+      qpat_x_assum `!g tail. _` (qspecl_then [`g`, `tail`] mp_tac) >>
+      simp[] >> disch_then strip_assume_tac >>
+      simp[Once dftGasFromListTraceDefsTheory.visit_gas_def] >>
+      irule focus_retained_invoke_contribution >>
+      simp[] >> goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`args`, `b0`, `child_out`, `ir`] >>
+      simp[] >> (gvs[])) >>
+  `EL a ms = [] /\ EL a ess = [] /\ EL a ks = []` by metis_tac[] >>
+  gvs[] >>
+  simp[gas_events_step_def, dftGasFromListTraceDefsTheory.visit_gas_def,
+    dftGasFromListTraceDefsTheory.trace_step_noninvoke,
+    dftGasFromListTraceDefsTheory.trace_gas_def] >>
+  rpt strip_tac >>
+  qspecl_then [`fuel-d`, `C7`, `EL a xs`, `v`] mp_tac (cj 1 gasCountTheory.gas_count_suffix) >>
+  simp[gasCountTheory.gas_count_suffix_def, gasCountTheory.gas_count_step_def]
+QED
+
 Finalise focus_retained_row_replay
