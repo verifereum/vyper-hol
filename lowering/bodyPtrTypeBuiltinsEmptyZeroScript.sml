@@ -26,7 +26,7 @@ Proof
       arithmeticTheory.LESS_EQ_LESS_EQ_MONO]) >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit 0w] []) s =
     OK (mstore (w2n w) 0w s)` by
-    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (irule step_MSTORE >> simp[eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id MSTORE [Var p; Lit 0w] []) s` by
     (irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
@@ -108,9 +108,20 @@ Resume empty_zero_pair_certificate[sequence]:
      (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
+  `!k. step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
+      (u with vs_inst_idx := k) =
+      OK ((mstore (w2n (w+n2w off)) 0w u) with vs_inst_idx := k)` by
+    (gen_tac >>
+     `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
+        (u with vs_inst_idx := k) =
+        OK (mstore (w2n (w+n2w off)) 0w (u with vs_inst_idx := k))` by
+       (irule step_MSTORE >> simp[eval_operand_def]) >>
+     simp[]) >>
+  `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit 0w] []) u =
+      OK (mstore (w2n (w+n2w off)) 0w u)` by
+    (irule step_MSTORE >> simp[eval_operand_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ u _ _` mp_tac >>
-  simp[inst_seq_ptr_def, step_inst_base_opcode_eqs,
-       mk_inst_def, exec_write2_def, eval_operand_def]
+  simp[inst_seq_ptr_def]
 QED
 
 Finalise empty_zero_pair_certificate

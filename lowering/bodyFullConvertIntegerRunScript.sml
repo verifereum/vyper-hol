@@ -75,8 +75,19 @@ QED
 Resume scalar_integer_source_run[signed_address]:
   Cases_on `v` >> gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
     mk_convert_op_def, is_bytestring_type_def] >>
+  `within_int_bound (Signed 256) i` by
+    (mp_tac (Q.SPECL [`bits`,`i`] exprBopShiftTheory.within_int_bound_widen_256) >> simp[]) >>
+  `compile_int_clamp F 160 x sa = (out,sb)` by
+    gvs[bodyPtrTypeBuiltinsScalarChecksTheory.convert_address_clamp] >>
+  `(in_type_range (BaseT (UintT 160)) (&w2n (i2w i : bytes32)) <=>
+     within_int_bound (Unsigned 160) i)` by
+    (gvs[in_type_range_def, type_bounds_def, within_int_bound_ineq,
+       integer_wordTheory.w2n_i2w, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``] >> intLib.COOPER_TAC) >>
   Cases_on `within_int_bound (Unsigned 160) i`
-  >- (drule_all scalar_int_address_run_ok >> strip_tac >>
+  >- (`in_type_range (BaseT (UintT 160)) (&w2n (i2w i : bytes32))` by simp[] >>
+      drule_all (SRULE [] (Q.SPECL [`F`,`160`]
+        convertScalarBytesRunTheory.scalar_int_clamp_word_ok)) >> strip_tac >>
       simp[convert_result_def, evaluate_convert_from_not_address_bytes,
         evaluate_convert_def, convertScalarBytesTheory.scalar_typed_address_word] >>
       `0 <= i /\ i < &(2**160)` by fs[within_int_bound_ineq] >>
@@ -86,11 +97,9 @@ Resume scalar_integer_source_run[signed_address]:
       simp[integer_wordTheory.i2w_pos, wordsTheory.w2w_def,
         wordsTheory.w2n_n2w, wordsTheory.dimword_def,
         fcpLib.INDEX_CONV ``dimindex(:160)``] >> fs[]) >>
-  `within_int_bound (Signed 256) i` by
-    (mp_tac (Q.SPECL [`bits`,`i`] exprBopShiftTheory.within_int_bound_widen_256) >> simp[]) >>
-  `-&(2**255) <= i /\ i < &(2**256)` by
-    (gvs[within_int_bound_ineq] >> intLib.ARITH_TAC) >>
-  drule_all scalar_int_address_run_abort >> strip_tac >>
+  `~in_type_range (BaseT (UintT 160)) (&w2n (i2w i : bytes32))` by simp[] >>
+  drule_all (SRULE [] (Q.SPECL [`F`,`160`]
+    convertScalarBytesRunTheory.scalar_int_clamp_word_abort)) >> strip_tac >>
   simp[convert_result_def, evaluate_convert_from_not_address_bytes,
     evaluate_convert_def] >> metis_tac[]
 QED
