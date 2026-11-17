@@ -108,8 +108,10 @@ Theorem send_call_step:
   eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
   step_inst_base inst s =
     OK (update_var out
-      (FST (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s))
-      (SND (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s)))
+      (FST (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s))
+      (SND (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s)))
 Proof
   strip_tac >>
   `venom_call_request s aw vw 0w 0w s.vs_call_ctx.cc_static =
@@ -953,9 +955,12 @@ Resume send_expr_sim_ptr[normal]:
   `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
     fs[expr_sim_inv_def,
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw` by
+  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw /\
+    w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g)` by
     (Cases_on `has_gas` >> gvs[eval_operand_def, op_taint_def] >>
-     gvs[LENGTH_EQ_NUM_compute]) >>
+     gvs[LENGTH_EQ_NUM_compute, ext_call_kwarg_def, evaluate_type_def] >>
+     imp_res_tac uint256_typed_dest >> simp[]) >>
   `dest_AddressV to_v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) to_v))` by
     metis_tac[address_typed_dest] >>
   `dest_NumV amount_v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) amount_v))` by

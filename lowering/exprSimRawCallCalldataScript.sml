@@ -648,7 +648,8 @@ Proof
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
-     qexists_tac `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)` >>
+     qexistsl_tac [`gas_cap`,
+       `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)`] >>
      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
   `write_memory_with_expansion (w2n rp)
       (TAKE (w2n cap) outcome.co_returnData) s = s with vs_memory := t.vs_memory` by
@@ -3704,8 +3705,7 @@ Proof
     simp[adopt_call_outcome_equation] >>
   drule calldata_call_pre >> strip_tac >>
   drule_all raw_call_oracle_result >>
-  disch_then (qspecl_then [
-    `ext_call_kwarg EKGas flags.rcf_kws vals`] assume_tac) >>
+  disch_then assume_tac >>
   qexistsl_tac [`aw`,`amount`,`rq`,`outcome`,`es1'`] >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `outcome.co_success` >>
   gvs[]
@@ -3759,7 +3759,9 @@ Theorem calldata_call_gas[local]:
   typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
   ?gw. (case ext_call_kwarg EKGas flags.rcf_kws ops of
     NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))
-  | SOME p => eval_operand p entry) = SOME gw
+  | SOME p => eval_operand p entry) = SOME gw /\
+  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws (TL vs)) dest_NumV = SOME g ==>
+       g = w2n gw)
 Proof
   strip_tac >> drule_all calldata_call_args_values >> strip_tac >>
   drule calldata_call_pre >> strip_tac >> gvs[] >>
@@ -3773,7 +3775,7 @@ Proof
   disch_then (qspec_then `flags.rcf_kws` mp_tac) >>
   rename1 `LIST_REL _ vals ops` >>
   Cases_on `ext_call_kwarg EKGas flags.rcf_kws vals` >> simp[] >>
-  strip_tac >> gvs[]
+  strip_tac >> gvs[] >> drule uint256_typed_dest >> simp[]
 QED
 
 

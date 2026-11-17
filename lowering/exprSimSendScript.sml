@@ -47,7 +47,7 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
-  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperCallFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState
@@ -150,14 +150,7 @@ Theorem eval_send_value:
   !cx has_gas vs st tv st'.
     eval_send cx has_gas vs st = (INL tv, st') ==> ?v. tv = Value v
 Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       lift_option_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >> drule eval_send_success_value >> simp[]
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
@@ -890,12 +883,11 @@ Proof
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
   qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
-  rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC,
-         irule address_typed_dest >> first_assum ACCEPT_TAC,
-         irule uint256_typed_dest >> first_assum ACCEPT_TAC,
-         Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC]
+  imp_res_tac address_typed_dest >>
+  imp_res_tac uint256_typed_dest >>
+  Cases_on `has_gas` >>
+  gvs[LENGTH_EQ_NUM_compute, ext_call_kwarg_def, eval_operand_def, evaluate_type_def] >>
+  imp_res_tac uint256_typed_dest >> simp[]
 QED
 
 (* TOP-LEVEL *)
