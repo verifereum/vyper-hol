@@ -21,6 +21,7 @@ Ancestors
   dftPacketNativePrefixBoundary
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
+  dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
