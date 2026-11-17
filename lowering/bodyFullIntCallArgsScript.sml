@@ -1785,6 +1785,15 @@ Proof
       disch_then irule >> qexists_tac `ws` >> simp[])
   >> rpt gen_tac >> strip_tac >>
   rename1 `body_exprs_full_ok cx (e::es)` >>
+  `!t fn inst u. frag_reachable ctx func t fn inst u ==>
+     dalloca_no_wrap inst u` by
+    (rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     `inst.inst_opcode <> DALLOCA` by
+       (qpat_x_assum `~ctx_has_dalloca ctx` mp_tac >>
+        simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
+        metis_tac[]) >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `!res ee.
      vyperState$bind (eval_expr cx e) (\tv. read_result cx tv) esi = (res,ee) ==>
      expr_sim_inv cenv cx tenv ee /\
@@ -1894,6 +1903,8 @@ Proof
       disch_then (qspecl_then [`s`,`G`,`tn`] mp_tac) >>
       simp[] >> disch_then assume_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+      qpat_x_assum `_ ==> gas_outcome_full _ _ _ _ _ _ childQ childR` mp_tac >>
+      (impl_tac >- metis_tac[]) >> strip_tac >>
       `bind (eval_exprs cx (e::es)) f =
          bind (bind (eval_expr cx e) (read_result cx))
            (\v. bind (eval_exprs cx es) (\xs. f (v::xs)))` by
@@ -1962,9 +1973,8 @@ Proof
               vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
       `local_ptrs_rel func cenv esi.scopes s` by
         (qpat_x_assum `!H. valid_horizon cx st0 H esi.storage_trace ==> _`
-           drule >>
-         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
-              stateRelProjTheory.state_rel_local_ptrs_rel]) >>
+           drule >> strip_tac >>
+         drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> simp[]) >>
       `!n b sz. local_region cenv esi.scopes s n b sz <=>
                   local_region cenv mid.scopes t n b sz` by
         (qpat_assum `local_ptrs_rel func cenv esi.scopes s` mp_tac >>
@@ -2400,6 +2410,8 @@ Proof
   disch_then (qspecl_then [`s`,`G`,`tn`] mp_tac) >>
   simp[] >> disch_then assume_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+      qpat_x_assum `_ ==> gas_outcome_full _ _ _ _ _ _ childQ childR` mp_tac >>
+      (impl_tac >- metis_tac[]) >> strip_tac >>
   `bind (eval_exprs cx (e::es)) f =
      bind (eval_expr cx e) (\tv. bind (read_result cx tv)
        (\v. bind (eval_exprs cx es) (\xs. f (v::xs))))` by
@@ -2474,6 +2486,7 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then (mp_tac o MATCH_MP fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec) >>
      simp[fragExecTheory.exit_result_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``]
     bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
   disch_then (qspecl_then [`tn1`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G1`]
@@ -2518,7 +2531,7 @@ Proof
     (Cases_on `vv_operand vv` >>
      simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
           ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
-  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) mid tv vv at` by
+  `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) mid tv vv at` by
     (irule exprSimMemDefsTheory.vv_store_bound_frame_mem_src >>
      qexists_tac `t` >> simp[]) >>
   `ptr_buf_ok cenv e (vv_operand vv) G1 t ==>
@@ -2590,8 +2603,9 @@ Proof
         (qpat_assum `stmt_state_rel _ ctx func cenv cx esi s` mp_tac >>
          qpat_assum `FLOOKUP s.vs_allocas aid = SOME (off,sz)` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
-              venomMemDefsTheory.alloca_inv_def,
+         rpt strip_tac >>
+         drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
+         simp[venomMemDefsTheory.alloca_inv_def,
               venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
       qpat_assum `off + sz <= s.vs_alloca_next` mp_tac >>
       qpat_assum `s.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
@@ -2618,9 +2632,9 @@ Proof
          loweringPostsTheory.expr_val_at_def] >>
      `b + sz <= t.vs_alloca_next` by
        ((drule_all bodyMemoryDefsTheory.body_local_region_frontier >> simp[]) ORELSE
-        (fs[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
-            venomMemDefsTheory.alloca_inv_def,
-            venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[])) >>
+        (drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
+         simp[venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[])) >>
      decide_tac) >>
   `!rt v b.
      val_wf rt v /\
@@ -2737,15 +2751,13 @@ Proof
      simp[venomStateTheory.contract_storage_def,
           venomStateTheory.contract_transient_def,
           exprLoweringPropsTheory.ci_mono_def] >>
-     rpt strip_tac >>
-     `not_fresh_at ci x` by
-       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `si` >>
-        conj_tac >-
-          (qpat_assum `ci_mono si ci` mp_tac >>
-           simp[exprLoweringPropsTheory.ci_mono_def, NoAsms]) >>
-        first_assum ACCEPT_TAC) >>
-     qpat_assum `!x. not_fresh_at ci x ==> lookup_var x at = lookup_var x t /\ _`
-       drule >> simp[]) >>
+     qpat_assum `!x. not_fresh_at ci x ==> lookup_var x at = lookup_var x t /\ _` mp_tac >>
+     qpat_assum `local_ptrs_reserved cenv ci` mp_tac >>
+     qpat_assum `ci_mono si ci` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[loweringStateRelDefsTheory.local_ptrs_reserved_def,
+          exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `expr_body_pre cenv cx tenv e esi` by fs[] >>
   drule exprSimHypsTheory.post_type_evaluates >>
   disch_then (qx_choose_then `rty` assume_tac) >>
@@ -2823,11 +2835,10 @@ Proof
   disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_inst_ids_distinct _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `storage_trace_domain _ _ _`)) >>
   disch_then (qspec_then `rty` mp_tac) >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`d`,`PG`,`DF`] mp_tac) >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`d`,`ctx`,`PG`,`DF`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]] >> NO_TAC)) >>
   strip_tac >>
   `lookup_var aq z = SOME aw /\
@@ -3010,8 +3021,8 @@ Proof
          qpat_assum `stmt_state_rel _ ctx func cenv cx esi s` mp_tac >>
          qpat_assum `local_ptrs_reserved cenv si` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
-              stateRelProjTheory.state_rel_local_ptrs_rel] >> rpt strip_tac >>
+         rpt strip_tac >>
+         drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> strip_tac >>
          eq_tac
          >- (rw[loweringStateRelDefsTheory.local_region_def] >>
              `lookup_scopes n mid.scopes <> NONE` by
@@ -3258,7 +3269,7 @@ Proof
             simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
          `op_prov aG (Var aq) =
             SOME (w2n aw, MAX 32 (type_memory_bytes cenv dty))` by
-           first_assum ACCEPT_TAC >>
+           simp[ptrDisciplineTheory.op_prov_def] >>
          `not_fresh_at cu aq` by
            (irule freshWritesTheory.not_fresh_at_mono >>
             qexists_tac `ca` >> simp[] >>
@@ -3456,8 +3467,7 @@ Proof
       `local_ptrs_rel func cenv mid.scopes z` by
         (qpat_assum `stmt_state_rel H ctx func cenv cx mid z` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca,
-              stateRelProjTheory.state_rel_local_ptrs_rel]) >>
+         metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
       `si.cs_next_var <= cu.cs_next_var` by
         (qpat_assum `ci_mono si ci` mp_tac >> qpat_assum `ci_mono ci ca` mp_tac >>
          qpat_assum `ci_mono ca cu` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
