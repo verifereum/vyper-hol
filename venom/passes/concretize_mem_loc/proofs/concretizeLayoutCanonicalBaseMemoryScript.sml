@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem layout_canonical_exempt_returncopy_scalar_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
@@ -144,7 +144,8 @@ Theorem layout_canonical_ordinary_memory_pending:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -200,7 +201,8 @@ Proof
      `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
      FIRST [(`MEM i.inst_opcode [MLOAD; ILOAD]` by simp[] >>
          drule_all layout_word_load_trace_step),
-       drule_all layout_mcopy_trace_step, drule_all layout_istore_trace_step,
+       drule_all layout_mcopy_trace_step,
+       drule_all layout_istore_trace_step,
        (`calldata_reader_shape i` by simp[calldata_reader_shape_def] >>
          drule_all layout_calldata_reader_trace_step),
        (`MEM i.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES]` by simp[] >>

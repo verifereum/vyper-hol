@@ -134,7 +134,7 @@ QED
 (* Empty terminal data depends only on the scalar length, not the
    relocated address or the contents of target memory. *)
 Theorem ptr_terminal_revert_empty:
-  ptr_ledger_erases births TG G /\
+  ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\ ptr_use_ok P pv inst /\
   FDOM G SUBSET pv /\ taint_ok f tn inst s /\

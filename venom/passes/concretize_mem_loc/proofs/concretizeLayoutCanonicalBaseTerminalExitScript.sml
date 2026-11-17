@@ -16,7 +16,7 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalBase concretizeLayout
 Theorem layout_ordinary_revert_empty:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   ptr_static_support P fn G /\
-  resolved_frame_ok birth cache PG G om rp rv ids frames /\
+  resolved_frame_ok dyn birth cache PG G om rp rv ids frames /\
   taint_ok fn tn inst s /\ inst.inst_opcode = REVERT /\
   s.vs_labels = t.vs_labels /\ variable_domains s t /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem layout_canonical_ordinary_revert_empty:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
@@ -81,7 +81,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn i s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `o1_fn_shape C fn /\ fn_ptr_ok P fn` by
     (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM i (fn_insts fn)` by
