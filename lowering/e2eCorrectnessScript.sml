@@ -35,6 +35,8 @@ Ancestors
   fragExec memSafeRun venomExecProofs unitShapeDefs
   list
 
+val _ = Parse.hide "tops";
+
 (* =====================================================================
    Call-Level Correctness (Main Theorem)
    ===================================================================== *)
@@ -794,7 +796,8 @@ QED
    pointer-safe runs, through the loweringMemCorrect bridges. *)
 Theorem selected_raw_memory[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  o1_source_unit_ok unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME "__entry" /\
@@ -808,7 +811,6 @@ Theorem selected_raw_memory[local]:
   mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`, `"__entry"`, `D`]
             lower_vyper_runtime_unit_memory_ok) >>
   impl_tac >- fs[] >> strip_tac >> simp[] >>
@@ -844,19 +846,20 @@ Proof
     (qpat_x_assum `fn_entry_label fn = _` mp_tac >>
      Cases_on `fn.fn_blocks` >>
      simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >> strip_tac >>
-     qexists_tac `h` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+     rename1 `first_bb.bb_label = "__entry"` >>
+     qexists_tac `first_bb` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
      irule no_phis_phi_prefix_length_zero >>
      fs[o1_source_unit_ok_def, listTheory.EVERY_MEM] >>
      rpt strip_tac >>
      `MEM inst (fn_insts fn)` by
-       (irule lookup_block_fn_insts >> qexists_tac `h` >>
+       (irule lookup_block_fn_insts >> qexists_tac `first_bb` >>
         qexists_tac `"__entry"` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm]) >>
      metis_tac[raw_opcode_ok_def, listTheory.MEM]) >>
   conj_tac
   >- (qexists_tac `SUC fuel` >>
       simp[run_context_def, run_function_def] >>
       simp[fragExecTheory.run_blocks_run_from_no_phi]) >>
-  gen_tac >> Cases_on `fuel'` >- simp[Once mem_safe_blocks_def] >>
+  qx_gen_tac `block_fuel` >> Cases_on `block_fuel` >- simp[Once mem_safe_blocks_def] >>
   `eval_phis
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
     bb.bb_instructions = OK
@@ -919,6 +922,9 @@ Proof
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule every_no_dalloca >>
+     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
@@ -951,6 +957,12 @@ Proof
   strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_safe_blocks D` >>
+  `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by
+    (qpat_assum `gas_variant _ _` mp_tac >>
+     pure_rewrite_tac[gas_variant_def] >>
+     disch_then (mp_tac o Q.AP_TERM
+       `\s:venom_state. w2n s.vs_initial_fmp <= w2n s.vs_fmp`) >>
+     simp[entry_venom_state_def]) >>
   `raw_unit_memory_ok unit.cu_context vs /\
    ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
    mem_inv dload_offset_ok unit.cu_context vs /\
@@ -1071,10 +1083,7 @@ Proof
   qpat_x_assum `_ /\ _ ==> ?vs marks tail. _` mp_tac >>
   impl_tac >- fs[] >> strip_tac >>
   gvs[] >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `ret`, `es`,
-               `rpolicy`, `unit`, `out`, `prog`, `cp`, `vs`, `marks`] mp_tac
-    vyper_call_correct_at_marks >>
-  impl_tac >- fs[] >> strip_tac >> gvs[]
+  drule_all vyper_call_correct_at_marks >> strip_tac >> gvs[]
 QED
 
 Theorem vyper_call_correct_identity:
@@ -1101,7 +1110,7 @@ Proof
     (`wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
        fs[call_state_rel_def] >>
      drule_all call_trace_outcomes_bounded >>
-     simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
+     simp[exprSimHypsDefsTheory.outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
   `initial_venom_state_rel tops am tx (entry_venom_state prog cplan es)` by
     (irule entry_venom_state_initial_venom_state_rel >> gvs[]) >>
   `!vs. gas_variant vs (entry_venom_state prog cplan es) ==>
@@ -1115,7 +1124,7 @@ Proof
      `initial_venom_state_rel tops am tx vs` by
        metis_tac[gas_variant_initial_venom_state_rel] >>
      irule lower_vyper_runtime_unit_correct >>
-     qexists_tac `rpolicy` >> gvs[]) >>
+     gvs[] >> qexists_tac `rpolicy` >> fs[]) >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `unit`,
                `out`, `prog`, `cplan`, `am`, `tx`, `ret`, `es`, `r`, `es'`] mp_tac
     call_pipeline_gas_link >>

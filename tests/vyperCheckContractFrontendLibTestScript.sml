@@ -40,7 +40,7 @@ end;
 fun check_call label func ret_ty pop_target expected =
   check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_target expected;
 fun check_bool_call label func expected =
-  check_call label func ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option`` expected;
+  check_call label func ``JT_Named NONE "bool"`` ``NONE : (expr # base_assignment_target) option`` expected;
 fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
@@ -55,16 +55,22 @@ val override_call_ctx =
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
-  ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option``
+  ``JT_Named NONE "bool"`` ``NONE : (expr # base_assignment_target) option``
   (internal_call ``NONE : num option`` ``"compute"``);
 val _ = check_bool_call "interface before builtin"
   (call_name ``"len"`` ``SOME "interface"``) iface_result;
 val _ = app (fn tc => check_bool_call "builtin with negative interface tag"
   (call_name ``"len"`` tc) ``Builtin (BaseT BoolT) Len [^call_arg]``)
   [``NONE : string option``, ``SOME "interfaces"``];
+val rejected = rhs (concl (EVAL ``rejected_expr``));
+(* A bare-name call is always a builtin in Vyper (functions are called through
+   self), so an unknown name is rejected rather than read as an internal call. *)
 val _ = app (fn tc => check_bool_call "non-interface name"
-  (call_name ``"unknown"`` tc) (internal_call ``NONE : num option`` ``"unknown"``))
+  (call_name ``"unknown"`` tc) rejected)
   [``NONE : string option``, ``SOME "interfaces"``, ``SOME "module"``];
+val _ = app (fn name => check_bool_call "unsupported builtin" (call_name name
+  ``SOME "builtin_function"``) rejected)
+  [``"print"``, ``"breakpoint"``, ``"shift"``];
 val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
   (call_attr self_name shortcut ``NONE : string option``) iface_result)
   [``"__at__"``, ``"__interface__"``];
@@ -116,7 +122,8 @@ val subscript_base =
 val subscript_target =
   ``SubscriptTarget (NameTarget "xs") (Literal (BaseT (UintT 256)) (IntL 7))``;
 val _ = check_call "pop translated target" (pop_call subscript_base)
-  ``JT_Named NONE "bool"`` ``SOME ^subscript_target``
+  ``JT_Named NONE "bool"``
+  ``SOME (Name (BaseT BoolT) "xs", ^subscript_target)``
   ``Pop (BaseT BoolT) ^subscript_target``;
 val _ = check_pop "pop translates subscript index" subscript_base
   ``Pop (BaseT BoolT) ^subscript_target``;
@@ -153,15 +160,15 @@ val _ = check_bool_call "non-attribute fallback" ``JE_Bool T``
   (internal_call ``SOME 9`` ``""``);
 val _ = check_call "module struct constructor source recovery"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
+  ``JT_Struct NONE "Record"`` ``NONE : (expr # base_assignment_target) option``
   ``StructLit (StructT (SOME 3, "Record")) (SOME 3, "Record") []``;
 val _ = check_call "module struct constructor explicit source"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct (SOME 2) "Record"`` ``NONE : base_assignment_target option``
+  ``JT_Struct (SOME 2) "Record"`` ``NONE : (expr # base_assignment_target) option``
   ``StructLit (StructT (SOME 4, "Record")) (SOME 4, "Record") []``;
 val _ = check_call "module function returning struct"
   (call_attr lib_name ``"foo"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
+  ``JT_Struct NONE "Record"`` ``NONE : (expr # base_assignment_target) option``
   ``Call (StructT (SOME 9, "Record")) (IntCall (SOME 7, "foo")) [^call_arg] NONE``;
 
 (* Abstract functions are compile-time holes. Translation must link calls to
@@ -527,6 +534,32 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
+fun check_fixture_rejected path =
+  ((check_fixture false path;
+    raise Fail ("frontend contract checker accepted " ^ path))
+   handle Fail message =>
+     if String.isSubstring "check_contract returned NONE" message then ()
+     else raise Fail message);
+
+(* A same-named internal function doesn't capture a bare builtin call: Vyper
+   compiles these to the builtin (a console call, INVALID, a runtime shift),
+   which the frontend doesn't support. *)
+val _ = check_fixture_rejected "builtin_shadow_print.json";
+val _ = check_fixture_rejected "builtin_shadow_breakpoint.json";
+val _ = check_fixture_rejected "builtin_shadow_shift.json";
+
+(* A Decimal node's value is its source span, signs Vyper folded and comments
+   included; the values are those the pinned compiler stores. *)
+val _ = app (fn (span, expected) =>
+    if aconv (rhs (concl (EVAL ``decimal_string_to_int ^(stringSyntax.fromMLstring span)``)))
+             expected then ()
+    else raise Fail ("decimal span " ^ span))
+  [("--1.5", ``15000000000 : int``),
+   ("-(-2.25)", ``22500000000 : int``),
+   ("-( # e9\n        3.0)", ``-30000000000 : int``),
+   ("1.5", ``15000000000 : int``),
+   ("-15e-10", ``-15 : int``)];
+
 (* A runtime length bounds the result by the source: Bytes[64] fits a
    Bytes[64] result but not a Bytes[63] one. *)
 Theorem slice_runtime_length_source_bound:
@@ -558,6 +591,64 @@ fun fixture_input path = vyperCheckContractFrontendLib.prepare_check_input
      (fixture_dir ^ path),
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
      (fixture_dir ^ path)};
+
+(* Vyper reads the denomination from a constant's folded value; the frontend
+   substitutes the constant before resolving it, so this one is ether. *)
+val _ = check_fixture false "aswei_constant_denomination.json";
+val _ = if null (find_terms (aconv ``AsWeiValue Ether``)
+                  (#modules (fixture_input "aswei_constant_denomination.json")))
+  then raise Fail "as_wei_value constant denomination not read as ether"
+  else ();
+(* A denomination the frontend can't resolve is rejected, not read as wei. *)
+val _ = if aconv (rhs (concl (EVAL
+    ``make_builtin_call (BaseT (UintT 256)) "as_wei_value"
+        [Name (BaseT (UintT 256)) "amount"; Name (BaseT (StringT 5)) "unit"]
+        [] (JT_Integer 256 F)``))) rejected then ()
+  else raise Fail "unresolved as_wei_value denomination not rejected";
+
+fun assert_fixture_has path label tm =
+  if null (find_terms (aconv tm) (#modules (fixture_input path)))
+  then raise Fail (path ^ ": " ^ label) else ();
+
+(* convert(x, T) and abi_decode(x, T) produce a T, not the wider return type
+   Vyper annotates the call with: an input longer than T's bound reverts. *)
+val _ = check_fixture false "convert_type_argument.json";
+val _ = assert_fixture_has "convert_type_argument.json" "convert not at its type argument"
+  ``TypeBuiltin (BaseT (StringT 10)) Convert (BaseT (StringT 10))``;
+val _ = assert_fixture_has "convert_type_argument.json" "abi_decode not at its type argument"
+  ``TypeBuiltin (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (AbiDecode T)
+      (ArrayT (BaseT (UintT 256)) (Dynamic 3))``;
+
+(* A field, element or popped value read into a wider context keeps its own
+   type; each of these was rejected while typed at the context's. *)
+val _ = check_fixture false "member_own_type.json";
+val _ = assert_fixture_has "member_own_type.json" "field not at its own type"
+  ``Attribute (ArrayT (BaseT (BytesT (Dynamic 5))) (Dynamic 2))``;
+val _ = check_fixture false "pop_element_type.json";
+val _ = assert_fixture_has "pop_element_type.json" "pop not at the element type"
+  ``Pop (BaseT (BytesT (Dynamic 10)))``;
+
+(* Vyper folds a shift amount and annotates a small literal ecrecover v as
+   int8; both are accepted. *)
+val _ = check_fixture false "shift_folded_amount.json";
+val _ = check_fixture false "ecrecover_literal_v.json";
+
+(* A constant may refer to one declared after it: constants are emitted in
+   dependency order. *)
+val _ = check_fixture false "constant_forward_reference.json";
+
+(* initializes: lib1.lib2 keys its layout "lib2", beside the main module's
+   own alias lib2 for lib3. *)
+val _ = check_fixture false "initializes_alias_shadow/main.json";
+
+(* lib exports a JSON ABI interface it imports; the JSON source isn't among
+   the annotated AST's imports, so the translation is rejected rather than
+   exporting a made-up function. *)
+val _ = (check_fixture false "export_json_interface/main.json";
+         raise Fail "JSON interface export accepted")
+  handle Fail message =>
+    if String.isSubstring "annotated AST translation rejected" message then ()
+    else raise Fail message;
 
 (* token (source 1) nests ownable (source 2) under its own alias; the
    main module's owner keeps its own key. *)

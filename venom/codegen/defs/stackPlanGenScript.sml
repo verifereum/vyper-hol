@@ -1507,9 +1507,16 @@ Definition generate_context_plan_with_def:
           NONE => NONE
         | SOME acc =>
             let cp = finish_context_plan max_eom acc in
-            if cp.cp_initial_fmp < dimword (:256)
+            if cp.cp_initial_fmp < 2 ** 254
             then SOME cp else NONE
 End
+
+Theorem generate_context_plan_with_headroom:
+  generate_context_plan_with gen ctx = SOME cp ==>
+  cp.cp_initial_fmp < 2 ** 254
+Proof
+  simp[generate_context_plan_with_def, AllCaseEqs()] >> strip_tac >> gvs[]
+QED
 
 Definition generate_context_plan_def:
   generate_context_plan ctx =

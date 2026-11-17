@@ -17,6 +17,41 @@ Ancestors
 Libs
   wordsLib monadsyntax
 
+Theorem eval_create_success_value:
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  Cases_on `dest_create_args kind has_salt vs` >>
+  simp[vyperCreateTheory.eval_create_def, bind_apply, ignore_bind_apply,
+       lift_option_type_def, get_accounts_def, update_accounts_def,
+       get_pending_deletions_def, get_transient_storage_def, check_def, assert_def,
+       vyperCreateTheory.create_soft_failure_def, return_def, raise_def] >>
+  Cases_on `create_arg_ctor_types kind has_salt arg_tys` >>
+  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
+  Cases_on `build_create_code (get_tenv cx) kind x st.accounts x' blueprint_size` >>
+  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
+  Cases_on `IS_SOME st.outcomes`
+  >- (rpt (IF_CASES_TAC >>
+        simp[bind_apply, ignore_bind_apply, check_def, assert_def,
+             return_def, raise_def]) >>
+      rpt strip_tac >> drule vyperCreateTheory.create_oracle_result_address >>
+      metis_tac[]) >>
+  rpt (IF_CASES_TAC >>
+    simp[bind_apply, ignore_bind_apply, get_transient_storage_def,
+         get_pending_deletions_def, update_accounts_def,
+         check_def, assert_def, return_def, raise_def]) >>
+  rpt strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_create_evm ca cb cc cd ce cf cg ch` >>
+  (Cases_on `run_create_evm ca cb cc cd ce cf cg ch`
+   >- gvs[ignore_bind_apply, update_accounts_def, return_def, raise_def]) >>
+  rename1 `run_create_evm ca cb cc cd ce cf cg ch = SOME adapter` >>
+  PairCases_on `adapter` >>
+  Cases_on `adapter0` >>
+  gvs[ignore_bind_apply, update_accounts_def, update_transient_def,
+      record_storage_backend_def, record_storage_event_def, ignore_bind_def, bind_def,
+      update_pending_deletions_def, append_logs_def, return_def, raise_def]
+QED
+
 Theorem check_create_blueprint_result_state:
   check_create_blueprint has_salt vs st = (res, st') ==> st' = st
 Proof

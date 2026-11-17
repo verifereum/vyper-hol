@@ -7,13 +7,13 @@ data in statement and expression position, `max_outsize`, `is_static_call`,
 (the bool and the `(bool, Bytes)` results), data from a function argument,
 from storage and from `msg.data`, and the keyword operands `value=` and `gas=`
 in source order.
-`parity-fixtures.txt` selects 13 exact bytecode comparisons, checked by the native
+`parity-fixtures.txt` selects 19 exact bytecode comparisons, checked by the native
 runner (`../native/README.md`); the other sources are related witnesses kept for
 diagnostic comparison. Of those, `rc09` and `rc23`, `rc27`, `rc28` match too;
 `rc08` and `rc26` differ at runtime byte 54, like the other `concat` witnesses
 ([issue #566](https://github.com/verifereum/vyper-hol/issues/566)); the
-`msg.data` forms (`rc10` to `rc15`, `rc24`) do not finish evaluating within the
-probe's 900-second budget.
+`msg.data` forms `rc10` to `rc15` match in the native runner. Their earlier
+kernel evaluation probes, and `rc24`, exceeded the probe's 900-second budget.
 
 `oracle/` contains independently generated annotated AST/layout JSON and
 deployment/runtime bytecode, with the provenance record of the pinned compiler,

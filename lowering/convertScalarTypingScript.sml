@@ -13,6 +13,8 @@ Theorem scalar_conversion_to_bytes:
     (src = BaseT AddressT /\ 20 <= m /\ m <= 32) \/
     (?n. src = BaseT (UintT n) /\ n <= 8 * m) \/
     (?n. src = BaseT (IntT n) /\ n <= 8 * m) \/
+    (src = BaseT BoolT /\ 0 < m) \/
+    (src = BaseT DecimalT /\ 168 <= 8 * m) \/
     (?name. src = FlagT name /\ m = 32)
 Proof
   Cases_on `src` >> simp[valid_conversion_def, is_bytestring_type_def] >>
@@ -47,7 +49,7 @@ QED
 
 Theorem scalar_conversion_from_address:
   !t. valid_conversion (BaseT AddressT) t /\ ~is_bytestring_type t ==>
-    (?n. t = BaseT (UintT n)) \/
+    (?n. t = BaseT (UintT n)) \/ t = BaseT BoolT \/
     (?m. t = BaseT (BytesT (Fixed m)) /\ 20 <= m /\ m <= 32)
 Proof
   Cases_on `t` >> simp[valid_conversion_def, is_bytestring_type_def] >>
@@ -59,7 +61,9 @@ QED
 
 Theorem scalar_conversion_from_decimal:
   !t. valid_conversion (BaseT DecimalT) t ==>
-    (?n. t = BaseT (IntT n)) \/ (?n. t = BaseT (UintT n))
+    (?n. t = BaseT (IntT n)) \/ (?n. t = BaseT (UintT n)) \/
+    t = BaseT BoolT \/
+    (?m. t = BaseT (BytesT (Fixed m)) /\ 168 <= 8 * m)
 Proof
   Cases_on `t` >> simp[valid_conversion_def] >>
   rename1 `valid_conversion _ (BaseT bt)` >> Cases_on `bt` >> simp[valid_conversion_def] >>
@@ -95,7 +99,20 @@ Theorem scalar_conversion_from_int:
   !n t. valid_conversion (BaseT (IntT n)) t /\
     ~is_bytestring_type t /\ ~int_convert_pair (BaseT (IntT n)) t ==>
     (?m. t = BaseT (BytesT (Fixed m)) /\ n <= 8 * m) \/
-    t = BaseT AddressT \/ t = BaseT DecimalT
+    t = BaseT DecimalT
+Proof
+  Cases_on `t` >> simp[valid_conversion_def, is_bytestring_type_def,
+    int_convert_pair_def] >>
+  rename1 `valid_conversion _ (BaseT bt)` >> Cases_on `bt` >>
+  simp[valid_conversion_def, is_bytestring_type_def, int_convert_pair_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[valid_conversion_def, is_bytestring_type_def, int_convert_pair_def]
+QED
+
+Theorem scalar_conversion_from_bool:
+  !t. valid_conversion (BaseT BoolT) t /\
+    ~is_bytestring_type t /\ ~int_convert_pair (BaseT BoolT) t ==>
+    t = BaseT DecimalT \/ (?m. t = BaseT (BytesT (Fixed m)) /\ 0 < m)
 Proof
   Cases_on `t` >> simp[valid_conversion_def, is_bytestring_type_def,
     int_convert_pair_def] >>
@@ -111,17 +128,15 @@ Theorem scalar_conversion_source:
     (?m. src = BaseT (BytesT (Fixed m))) \/
     src = BaseT AddressT \/ (?n. src = BaseT (IntT n)) \/
     (?n. src = BaseT (UintT n)) \/ src = BaseT DecimalT \/
-    (?name. src = FlagT name)
+    src = BaseT BoolT \/ (?name. src = FlagT name)
 Proof
   rpt gen_tac >> Cases_on `src` >> Cases_on `t` >>
   simp[valid_conversion_def, is_bytestring_type_def, int_convert_pair_def] >>
   rename1 `valid_conversion (BaseT bt) _` >> Cases_on `bt` >>
-  simp[valid_conversion_def, is_bytestring_type_def, int_convert_pair_def]
-  >- (rename1 `valid_conversion _ (BaseT bt)` >> Cases_on `bt` >>
-      simp[valid_conversion_def, is_bytestring_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >> simp[valid_conversion_def]) >>
-  rpt strip_tac >> rename1 `BytesT bd` >> Cases_on `bd` >>
-  gvs[is_bytestring_type_def]
+  simp[valid_conversion_def, is_bytestring_type_def, int_convert_pair_def] >>
+  rpt strip_tac >>
+  qmatch_asmsub_rename_tac `valid_conversion (BaseT (BytesT bd)) _` >>
+  Cases_on `bd` >> gvs[is_bytestring_type_def]
 QED
 
 Theorem scalar_flag_member_count:

@@ -7,7 +7,7 @@ Ancestors
   vyperStorageFootprint vyperStorageBackend vyperState emitHelper
   compileEnv context emitHelperProps venomInst loweringStateRelDefs stmtSimDeclMem
   entryDecoderHistoryFrame fragExec venomExecSemantics venomState bodyPtrDefs ptrDiscipline
-  list finite_map pred_set
+  list finite_map pred_set bodyFullHashKeccakFixed loweringHalt
 
 Theorem body_assign_toplevel_word_store_history[local]:
   emit_void (if tr then TSTORE else SSTORE) [Lit slot;op] sb = ((),sf) /\
@@ -31,7 +31,7 @@ QED
 Theorem body_assign_toplevel_word_full_static_store:
   cx.txn.is_static /\ ee.gas_obs = [] /\
   emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);op] sb = ((),sf) /\
-  fn_has_code sb sf func /\ ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
+  fn_has_code sb sf func /\ ~t.vs_halted /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   eval_operand op t = SOME w /\ op_taint tn op = {} /\
@@ -40,8 +40,11 @@ Theorem body_assign_toplevel_word_full_static_store:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
       (write_storage_slot cx tr (n2w slot) tvt v)) (ee,t,G,tn) Q
-    (\H res ef gt r. !tail.
-      stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) res gt r)
+    (\H res ef gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) res gt r) /\
+      halt_exit H cx ef res r /\
+      (ctx_has_dalloca ctx ==>
+       !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   strip_tac >> irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`G`, `ee with storage_trace :=
@@ -54,6 +57,9 @@ Proof
   `valid_horizon cx st0 H ee.storage_trace` by
     metis_tac[valid_horizon_append] >>
   first_x_assum drule >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
   `t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   conj_tac
@@ -61,7 +67,7 @@ Proof
       qexistsl_tac [`n2w slot`, `Lit (n2w slot)`, `sb`, `sf`, `tr`, `op`, `w`] >>
       simp[eval_operand_def, op_taint_def]) >>
   simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
-       halt_state_def, set_returndata_def]
+       halt_state_def, set_returndata_def, exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem body_assign_toplevel_word_full_store_post:
@@ -90,6 +96,9 @@ Theorem body_assign_toplevel_word_full_store_post:
   alloca_history func
     ((if tr then tstore (n2w slot) w t else sstore (n2w slot) w t)
       with vs_inst_idx := LENGTH sf.cs_current_insts) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp
+    ((if tr then tstore (n2w slot) w t else sstore (n2w slot) w t)
+      with vs_inst_idx := LENGTH sf.cs_current_insts)) /\
   s0.vs_alloca_next <=
     (if tr then tstore (n2w slot) w t else sstore (n2w slot) w t).vs_alloca_next /\
   ghost_inv_at D lo d cenv cx ef G
@@ -151,7 +160,12 @@ Proof
   conj_tac
   >- (irule body_assign_toplevel_word_store_history >>
       fs[stmt_state_rel_def, state_rel_def] >> qexistsl [`op`, `sb`] >> simp[]) >>
-  Cases_on `tr` >> gvs[sstore_def, tstore_def, ghost_kept_at_def]
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+  Cases_on `ctx_has_dalloca ctx` >> Cases_on `tr` >>
+  gvs[sstore_def, tstore_def, ghost_kept_at_def,
+    allocas_below_fmp_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem body_assign_toplevel_word_full_continue:
@@ -164,7 +178,7 @@ Theorem body_assign_toplevel_word_full_continue:
   is_word_type (expr_type e) /\ value_has_type tvt v /\
   encode_value tvt v = SOME [(0,typed_val_to_w256 etv v)] /\
   emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);op] sb = ((),sf) /\
-  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ MAP FDOM ee.scopes = MAP FDOM es0.scopes /\
   ee.gas_obs = [] /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_taint tn op = {} /\
@@ -182,6 +196,7 @@ Theorem body_assign_toplevel_word_full_continue:
     (\H res ef Gf tnf tf.
       res = INL () /\ stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ef tf /\
       return_buf_frame d cenv sf tf /\ alloca_history func tf /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp tf) /\
       s0.vs_alloca_next <= tf.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ef Gf tnf tf /\
       (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
@@ -218,6 +233,10 @@ Proof
   first_x_assum drule >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_post_def, expr_val_rel_def, post_value_type_word] >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[expr_post_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
   conj_tac
   >- (irule storage_word_store_origin_ptr >> simp[] >>
       conj_tac >- fs[ghost_inv_at_def] >>

@@ -4,25 +4,7 @@ Ancestors
   exprSimSubscriptArraySource exprLowering vyperState vyperInterpreter
   vyperAST vyperValue vyperMisc pair vyperTypeContract vyperTypeSystem
   compileEnv finite_map context exprSafeOperandBuiltins
-  vyperStoragePlaceProvenance stmtSimForArrayFrame
-
-Theorem extend_place_memory_origin:
-  extend_place cx r sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
-  ?path0. r = PlaceR (MemoryPlace id path0)
-Proof
-  Cases_on `r` >> simp[extend_place_def, raise_def]
-  >- (Cases_on `p` >>
-      simp[extend_place_def, extend_memory_place_def, bind_def,
-           ignore_bind_def, return_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      drule extend_storage_place_subregion >> simp[]) >>
-  Cases_on `sb` >>
-  simp[extend_place_def, bind_def, ignore_bind_def, lift_option_type_def,
-       return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[value_type_CASE_rator, return_def, raise_def, bind_def, ignore_bind_def,
-      record_storage_event_def, AllCaseEqs()]
-QED
+  vyperStoragePlaceProvenance stmtSimForArrayFrame vyperLocalAccessFrame
 
 Theorem select_result_memory_origin:
   select_result cx ty r sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>

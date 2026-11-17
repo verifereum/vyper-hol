@@ -59,7 +59,7 @@ Ancestors
   vyperTypeContract
   bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map pair
-  bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
+  bodySim allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
   supportedStmts supportedStmtTraverse supportedExprTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
@@ -196,7 +196,9 @@ Proof
       simp[])
   >- (gen_tac >> strip_tac >> irule dynarray_elements_typed >>
       simp[] >> qexists_tac `c` >> gvs[])
-  >- (rpt strip_tac >> irule dynarray_snapshot_memory >> metis_tac[])
+  >- (rpt strip_tac >>
+      `value_has_type entry.type entry.value` by simp[] >>
+      drule_all dynarray_snapshot_memory >> disch_then ACCEPT_TAC)
   >- (rpt strip_tac >>
       `body_stmts_ok cx stmts` by
         (fs[body_for_ok_def] >> Cases_on `vs` >>
@@ -281,10 +283,15 @@ Proof
       raise_def, AllCaseEqs()]
   >>~- ([`eval_send`], metis_tac[exprSimSendTheory.eval_send_value])
   >>~- ([`eval_raw_call`],
-       gvs[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
-           raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM])
+       qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+            raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+       rw[] >> gvs[])
   >>~- ([`eval_create`],
-       gvs[vyperCreateTheory.eval_create_def,
+       qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[vyperCreateTheory.eval_create_def,
            vyperCreateTheory.create_soft_failure_def,
            bind_def, ignore_bind_def, return_def, raise_def,
            lift_option_type_def, check_def, assert_def,
@@ -293,6 +300,7 @@ Proof
            update_pending_deletions_def, append_logs_def,
            COND_RATOR, option_CASE_rator, prod_CASE_rator,
            sum_CASE_rator, AllCaseEqs(), UNCURRY, LET_THM] >>
+       rw[] >> gvs[] >>
        metis_tac[vyperCreateTheory.create_oracle_result_address]) >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>

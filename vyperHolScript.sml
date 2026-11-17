@@ -50,12 +50,18 @@ Ancestors
   placeTypingE2EProps
   (* lowering: entry decoding, allocation frames and registration, constructor
      arguments, nonreentrancy, byte-builtin and concat memory, conversion from
-     bytes, widened returns, body memory *)
+     bytes, widened returns *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment ctorRegisterArgs
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
-  stmtSimReturnWiden bodyMemory
+  stmtSimReturnWiden
+  (* body memory pieces kept for the builtin and raw_call lanes, and the S1
+     statement reason theories *)
+  bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
+  bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
+  stmtReasonKindsMemory stmtSimAssignPlace stmtSimAugAssignPlaceStorage
+  stmtSimIfCounted stmtSimRaise stmtSimSeqMem
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
@@ -73,4 +79,3 @@ Ancestors
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
-  asmFinalizerPrefix
