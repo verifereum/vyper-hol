@@ -15,6 +15,53 @@ Ancestors
 Libs
   pairLib
 
+Theorem binop_frag_post_success:
+  (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
+  bop_result cx ann bop tys v1 v2 es = INL v /\
+  (!op s. eval_operand op s = SOME w ==> post v op s) /\
+  (!x y sa sb op ss.
+    compile_binop bop x y ty bl el sa = (op,sb) /\
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME w1 /\
+    eval_operand y ss = SOME w2 ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+          eval_operand op ss' = SOME w) ==>
+  binop_frag_post post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  strip_tac >> simp[binop_frag_post_def] >> rpt gen_tac >> strip_tac >>
+  `straight_fresh (compile_binop bop x y ty bl el)` by simp[] >>
+  `eval_operand x (drop_fresh sa s0) = SOME w1 /\
+   eval_operand y (drop_fresh sa s0) = SOME w2` by simp[eval_operand_drop_fresh] >>
+  qpat_x_assum `!x y sa sb op ss. _`
+    (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `drop_fresh sa s0` mp_tac) >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `vars_ext ss' target` >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es
+      (target with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+     drule_all straight_fresh_run_post >> simp[]) >>
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `eval_operand op target = SOME w` by
+    (fs[vars_ext_def] >>
+     qpat_x_assum `target = ss' with vs_vars := _` SUBST1_TAC >>
+     simp[eval_operand_vars_ext]) >>
+  `eval_operand op (target with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
+    (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]) >>
+  `post v op (target with vs_inst_idx := LENGTH sb.cs_current_insts)` by simp[] >>
+  `target.vs_allocas = s0.vs_allocas /\ target.vs_memory = s0.vs_memory /\
+   target.vs_halted = s0.vs_halted /\ target.vs_current_bb = s0.vs_current_bb` by
+    (qpat_x_assum `target = s0 with vs_vars := _`
+       (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  qpat_x_assum `target = s0 with vs_vars := _` kall_tac >>
+  qexists_tac `OK (target with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
+  simp[] >> simp[lookup_var_def] >> metis_tac[straight_fresh_def]
+QED
+
 Theorem binop_frag_straight:
   !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
@@ -37,7 +84,7 @@ Theorem binop_frag_straight:
                     Abort Revert_abort ss')) ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def, binop_frag_post_def] >> rpt gen_tac >>
   strip_tac >>
   `straight_fresh (compile_binop bop x y ty bl el)` by simp[] >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac

@@ -1,0 +1,10 @@
+{
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "source_sha256": "add4f750044029cad8622434b0af388944cffbfbe42e4f386a908bc9f504fb8d",
+  "settings": {
+    "optimization": "O1",
+    "experimental_codegen": true,
+    "evm_version": "prague"
+  },
+  "runtime_bytes": 23051
+}
