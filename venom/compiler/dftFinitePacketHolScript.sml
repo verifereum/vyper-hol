@@ -10,6 +10,7 @@ Ancestors
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
+  dftPacketCallRecordFrame dftPacketCallRecordJoin
   dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation
   dftPacketCallFreshReplay dftPacketCallReplayJoin
   dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
@@ -42,8 +43,8 @@ Ancestors
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
-  dftPacketPseudoHistoryFrame
-  dftPacketRefinementBoundary
+  dftPacketPseudoHistoryFrame dftPacketPseudoHistoryCuts
+  dftPacketPseudoHistoryReplay dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative dftPacketReturnRowSupply
@@ -61,3 +62,4 @@ Ancestors
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
   dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry
+  dftPacketChangedCallerSuccess
