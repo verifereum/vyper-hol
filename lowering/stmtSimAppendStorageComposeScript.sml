@@ -1584,7 +1584,10 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
   Cases_on `cx.txn.is_static`
   >- suspend "static" >>
   `~staged.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ staged` mp_tac >>
+     qpat_assum `~cx.txn.is_static` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[vyperTypingTheory.value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
   drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
