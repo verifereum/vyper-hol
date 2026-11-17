@@ -1,25 +1,7 @@
 (* Observational transport of statement-boundary pointer ghosts. *)
 Theory ghostObservationPtr
 Ancestors bodyPtrDefs robustCopyTransportPtr valueEncodingProps
-  valueEncodingProofs
-
-Theorem ghost_kept_observational_frame:
-  ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  (!x. not_fresh_at sa x ==>
-    FLOOKUP Gf x = FLOOKUP G x /\
-    op_taint tnf (Var x) = op_taint tn (Var x)) /\
-  (!aid off sz i.
-    FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
-    (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-      off+sz <= b \/ b+sz' <= off) /\
-    off <= i /\ i < off+sz /\ i IN tnf.t_mem ==> i IN tn.t_mem) /\
-  (!n b sz i.
-    local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    i IN tnf.t_mem ==> i IN tn.t_mem) ==>
-  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
-Proof
-  simp[ghost_kept_def] >> rpt strip_tac >> metis_tac[]
-QED
+  valueEncodingProofs exprPtrUnwrapPostFrames
 
 Theorem ghost_kept_exterior_frame:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
@@ -37,7 +19,7 @@ Theorem ghost_kept_exterior_frame:
     i NOTIN R) ==>
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
-  strip_tac >> irule ghost_kept_observational_frame >>
+  strip_tac >> irule copy_ghost_kept_transport >>
   qexistsl_tac [`G`, `tn`] >>
   RULE_ASSUM_TAC (REWRITE_RULE[arithmeticTheory.ADD_ASSOC]) >>
   pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> metis_tac[]
