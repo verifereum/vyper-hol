@@ -145,23 +145,6 @@ Proof
   metis_tac[]
 QED
 
-val static_bridge_core_tm = let
-  val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
-  val core = fst (dest_imp body)
-  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars core) of
-      [v] => v | _ => raise Fail ("missing bridge parameter " ^ n)
-in list_mk_abs (params @ [named "cs", named "ss"], core) end;
-val static_bridge_result_tm = let
-  val body = lhs (concl asmSymBridgeTheory.asm_sym_step_rel_core_canonical)
-  val rel = ``asm_sym_rel p env``
-  val r = mk_var ("R", type_of rel)
-  val body = subst [rel |-> r] body
-  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars body) of
-      [v] => v | _ => raise Fail ("missing result parameter " ^ n)
-in list_mk_abs ([r, named "sr", named "cr"], body) end;
-val _ = Parse.temp_overload_on ("bridge_core", static_bridge_core_tm);
-val _ = Parse.temp_overload_on ("bridge_result", static_bridge_result_tm);
-
 Theorem sym_static_log_arranged_terminal_mode_kernel:
   (!cs ss ai cr.
     bridge_core lo code_ok cs ss /\ asm_block_at prog cs.as_pc [ai] /\
@@ -359,5 +342,102 @@ Proof
      FIRST [first_assum ACCEPT_TAC,
        qexists `m` >> rpt conj_tac >> first_assum ACCEPT_TAC]) >>
   qexists `LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1` >>
+  simp[sym_steps_mode_add]
+QED
+
+Theorem sym_abort_static_log_terminal_exists_mode_kernel:
+  (!n cs ss ss'. bridge_core lo code_ok cs ss /\
+    sym_steps_mode allow_own prog env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      bridge_core lo code_ok cs' ss') /\
+  (!cs ss ai cr.
+    bridge_core lo code_ok cs ss /\ asm_block_at prog cs.as_pc [ai] /\
+    asm_step lo (build_offset_to_pc prog) ai cs = cr /\
+    (!e. (if allow_own then sym_step_own prog env own ai ss
+          else sym_step prog env ai ss) <> SymBad e) /\
+    ((?s. cr = AsmHalt s) \/ (?s. cr = AsmRevert s) \/ (?s. cr = AsmFault s)) ==>
+    bridge_result (bridge_core lo code_ok)
+      (if allow_own then sym_step_own prog env own ai ss else sym_step prog env ai ss) cr) /\
+  o2pc = build_offset_to_pc prog /\ inst.inst_opcode = LOG /\
+  source_memory_reads_disjoint cplan inst vs /\
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked spillbase ps /\ codegen_ready_fn fn /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ asm_static_wf prog /\
+  bridge_core lo code_ok st ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP ss.sym_mem_labels b = FLOOKUP labs0 b) /\
+  (fn_has_retpc fn ==> MEM (AsmLabel ret) prog) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?m. sym_terminal (sym_steps_mode allow_own prog env own m ss)
+Proof
+  disch_then assume_tac >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  drule_all step_inst_log_abort >> strip_tac >>
+  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  `?tc lops. inst.inst_operands = Lit tc :: lops /\
+    LENGTH lops = w2n tc + 2 /\ w2n tc <= 4` by
+    gvs[venomWfTheory.inst_wf_def, codegen_ready_inst_def] >>
+  `compute_operands inst = lops` by simp[compute_operands_def] >>
+  drule_all genBlockSimTheory.log_inst_plan_decompose >> strip_tac >>
+  qpat_x_assum `compute_operands inst = lops`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  `ps4.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+   ps4.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset` by
+    gvs[allocMonoTheory.release_dead_spills_spill_base,
+        allocMonoTheory.release_dead_spills_next_offset] >>
+  `LOG <> INVOKE /\ PERM lops lops /\
+   LENGTH lops <= LENGTH ps1.ps_stack` by gvs[] >>
+  drule_all sym_frame_entry_selected_prefix_sim_marked_mode_conditional >>
+  disch_then assume_tac >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  pop_assum (qx_choose_then `mid` (qx_choose_then `ss_mid` assume_tac)) >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  `asm_block_at prog mid.as_pc [AsmOp ("LOG" ++ num_to_dec_string (w2n tc))]` by
+    (qpat_x_assum `mid.as_pc = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+          stackOpSimTheory.asm_block_at_append]) >>
+  `label_positions_ok inst` by
+    (fs[fn_shape_ok_def, listTheory.EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
+  `EVERY (\op. op <> dead_stack_marker) lops` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `sym_terminal (sym_steps_mode allow_own prog env own 1 ss_mid)` by
+    (irule sym_static_log_arranged_terminal_mode_kernel >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `venom_asm_terminal_rel _ _`)) >>
+     goal_assum (drule_at (Pat `source_memory_reads_disjoint _ _ _`)) >>
+     goal_assum (drule_at (Pat `MEM fn ctx.ctx_functions`)) >>
+     goal_assum (drule_at (Pat `inst.inst_operands = _`)) >>
+     qexistsl [`code_ok`, `stack_pop (LENGTH lops) ps4.ps_stack`] >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       qexists `st.as_memory` >> rpt conj_tac >> first_assum ACCEPT_TAC]) >>
+  qexists `LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops)) + 1` >>
   simp[sym_steps_mode_add]
 QED
