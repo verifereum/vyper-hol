@@ -1,7 +1,7 @@
 (* INVOKE outcome join over relocated labels and fixed own-code bytes. *)
 Theory symFrameInvokeSourceOwn
 Ancestors
-  symFrameInvokeEntryAssembly symFrameInvokeTerminalSource symFrameInvokeReturnSource
+  symFrameInvokeEntryAssembly symFrameInvokeTerminalSource symFrameInvokeReturnSource symFrameInvokeCalleePointwise
 
 Theorem sym_invoke_frame_sim_deep_own:
   !allow_own own fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
@@ -119,9 +119,20 @@ Theorem sym_invoke_frame_sim_deep_own:
                venom_asm_terminal_rel vs' as' /\
                sym_terminal (sym_steps_mode allow_own prog env own n ss))
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_ok_own >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    sym_invoke_frame_sim_deep_pointwise >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then irule >> simp[SF CONJ_ss] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_halt_own >> simp[]) >>
-  rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_abort_own >> simp[]
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      irule symFrameInvokeSupportTheory.sym_invoke_callee_sim_own >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED

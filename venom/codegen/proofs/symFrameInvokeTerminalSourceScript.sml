@@ -3,7 +3,7 @@
  *)
 Theory symFrameInvokeTerminalSource
 Ancestors
-  symFrameInvokeSupport symFrameInvokePrefixOwn fnFrameBoundaryInvoke
+  symFrameInvokeSupport symFrameInvokePrefixOwn fnFrameBoundaryInvoke symFrameInvokeCalleePointwise
 
 Theorem sym_invoke_source_halt_local:
   asm_steps lo o2pc prog k st = AsmOK cas /\
@@ -17,9 +17,7 @@ Theorem sym_invoke_source_halt_local:
     venom_asm_terminal_rel vs' as' /\
     sym_terminal (sym_steps_mode allow_own prog env own n ss)
 Proof
-  strip_tac >>
-  qpat_x_assum `!v. run_blocks _ _ _ _ = Halt v ==> _` drule >>
-  strip_tac >> drule_all sym_invoke_halt_compose_mode >> simp[]
+  ACCEPT_TAC sym_invoke_halt_pointwise_compose
 QED
 
 Theorem sym_invoke_source_abort_local:
@@ -36,11 +34,7 @@ Theorem sym_invoke_source_abort_local:
     venom_asm_terminal_rel vs' as' /\
     sym_terminal (sym_steps_mode allow_own prog env own n ss)
 Proof
-  strip_tac >>
-  qpat_x_assum `!ab v. run_blocks _ _ _ _ = Abort ab v ==> _` drule >>
-  disch_then (qx_choose_then `n` (qx_choose_then `fin`
-    (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
-  drule_all sym_invoke_abort_compose_mode >> simp[]
+  ACCEPT_TAC sym_invoke_abort_pointwise_compose
 QED
 
 Theorem sym_invoke_source_halt_own:
@@ -108,22 +102,20 @@ Theorem sym_invoke_source_halt_own:
     sym_terminal (sym_steps_mode allow_own prog env own n ss)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all fnFrameBoundaryInvokeTheory.invoke_source_halt >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_prefix_own >>
-  disch_then (drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then drule_all >> strip_tac >>
-  rename1 `generate_context_plan ctx = SOME cplan` >>
-  `EL j cplan.cp_regions = EL j cplan.cp_regions` by simp[] >>
-  `scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ (saved_sym ++ srest)` by
-    simp[listTheory.APPEND_ASSOC] >>
-  drule_at (Pat `fn_entry_state_rel _ _ _ _ _ _`) sym_invoke_callee_sim_own >>
-  disch_then (drule_at (Pat `asm_sym_rel_own _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `sym_fn_sim_at_own _ _`)) >>
-  disch_then (drule_at (Pat `scas.sym_stack = _`)) >>
-  disch_then drule_all >> strip_tac >>
-  drule_all sym_invoke_source_halt_local >> simp[]
+    sym_invoke_source_halt_pointwise >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then irule >> simp[SF CONJ_ss] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      irule symFrameInvokeSupportTheory.sym_invoke_callee_sim_own >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem sym_invoke_source_abort_own:
@@ -192,20 +184,18 @@ Theorem sym_invoke_source_abort_own:
     sym_terminal (sym_steps_mode allow_own prog env own n ss)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all fnFrameBoundaryInvokeTheory.invoke_source_abort >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_prefix_own >>
-  disch_then (drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then drule_all >> strip_tac >>
-  rename1 `generate_context_plan ctx = SOME cplan` >>
-  `EL j cplan.cp_regions = EL j cplan.cp_regions` by simp[] >>
-  `scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ (saved_sym ++ srest)` by
-    simp[listTheory.APPEND_ASSOC] >>
-  drule_at (Pat `fn_entry_state_rel _ _ _ _ _ _`) sym_invoke_callee_sim_own >>
-  disch_then (drule_at (Pat `asm_sym_rel_own _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `sym_fn_sim_at_own _ _`)) >>
-  disch_then (drule_at (Pat `scas.sym_stack = _`)) >>
-  disch_then drule_all >> strip_tac >>
-  drule_all sym_invoke_source_abort_local >> simp[]
+    sym_invoke_source_abort_pointwise >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then irule >> simp[SF CONJ_ss] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      irule symFrameInvokeSupportTheory.sym_invoke_callee_sim_own >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
