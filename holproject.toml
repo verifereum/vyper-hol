@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.12.0"
+minimum_version = "0.14.59"
 
 [project]
 name = "vyper-hol"
@@ -38,7 +38,7 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "09c122c01da3a4680aa8afdc5a68f2f99db5b0c3"
+rev = "e7a1d48e53c062e3caa8523ad7457534c381ccc2"
 
 # Functor parameter signatures are not inferred by HOL's module scanner.
 [actions.JsonASTDecodeFn]
