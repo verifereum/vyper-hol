@@ -1699,11 +1699,13 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
     (simp[eval_expr_subscript_copied_bind, vyperStateTheory.bind_assoc] >>
      simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.return_def]) >>
   pop_assum (fn th => pure_rewrite_tac[th]) >>
-  `!res out. expr_exit (res : value + exception) out =
-    (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) out)` by
-    (map_every qx_gen_tac [`res`, `out`] >>
+  `!H res ee out.
+    (expr_exit (res : value + exception) out /\ halt_exit H cx ee res out) =
+    (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) out /\
+      halt_exit H cx ee (INR exc : eval_result + exception) out)` by
+    (map_every qx_gen_tac [`H`, `res`, `ee`, `out`] >>
      Cases_on `res` >- simp[] >>
-     simp[] >> rename1 `expr_exit (INR exc) out` >>
+     simp[exprSimDefsTheory.halt_exit_def] >> rename1 `expr_exit (INR exc) out` >>
      mp_tac (Q.ISPECL [`Value`, `INR exc : value + exception`] exprSimDefsTheory.expr_exit_success_map) >>
      simp[] >> metis_tac[]) >>
   pop_assum (fn eq => qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
