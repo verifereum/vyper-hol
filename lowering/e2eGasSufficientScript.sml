@@ -209,18 +209,18 @@ Proof
   >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> simp[])
   >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
         (qspec_then `[]` assume_tac) >> fs[] >>
-      drule call_external_trace_result >> strip_tac >>
+      drule vyperInterpreterTheory.call_external_trace_result >> strip_tac >>
       gvs[gas_source_exempt_def]) >>
   qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
     (qspec_then `[]` assume_tac) >> fs[] >>
-  drule call_external_trace_result >> strip_tac >>
+  drule vyperInterpreterTheory.call_external_trace_result >> strip_tac >>
   drule_all e2eCorrectnessTheory.selected_run >> strip_tac >>
   `terminates (run_context fuel unit.cu_context vs)` by
-    gvs[terminates_def, exit_result_def] >>
+    gvs[terminates_def, fragExecTheory.exit_result_def] >>
   qpat_x_assum `!n. terminates _ ==> _` drule >> strip_tac >>
   `external_call_result_rel (storage_trace_horizon obs) tops ret tx
      (res, am', rqs) (Abort ExHalt_abort u)` by
-    gvs[storage_trace_domain_def] >>
+    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all call_static_abort_gas_source_exempt >> gvs[]
 QED
 
@@ -432,7 +432,9 @@ Proof
           ptr_discipline 0 unit.cu_context vs_in /\
           taint_within D unit.cu_context vs_in /\
           mem_inv dload_offset_ok unit.cu_context vs_in /\
-          mem_inv dload_headroom_ok unit.cu_context vs_in` by metis_tac[] >>
+          mem_inv dload_headroom_ok unit.cu_context vs_in` by
+           (qpat_x_assum `!vi. gas_variant vi vs ==> _`
+              (qspec_then `vs_in` mp_tac) >> simp[]) >>
          qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` drule_all >> strip_tac >>
          `initial_venom_state_rel tops am tx vs_in` by
            metis_tac[gas_variant_initial_venom_state_rel] >>
