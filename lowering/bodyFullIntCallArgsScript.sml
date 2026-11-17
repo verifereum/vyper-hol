@@ -14,6 +14,7 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   exprReasonOperand typedMemoryCopy
   exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
+  ctorDeployLoweringFrameSupport[qualified]
 
 val _ = Parse.hide "body";
 
@@ -346,6 +347,156 @@ Proof
   rewrite_tac[compile_expr_call] >> strip_tac >>
   drule reason_compile_call >> Cases_on `vv` >>
   gvs[reason_result_shape_def, vv_type_def]
+QED
+
+(* Defaults retain the caller frame and erase only their recursive table entry. *)
+Theorem intcall_args_defaults_body_inv[local]:
+  body_inv tops ctx ce cx ==>
+  body_inv tops ctx (cenv_without_defaults ce name)
+    (cx with stk updated_by CONS (NONE,name))
+Proof
+  simp[bodySimTheory.body_inv_def, cenv_without_defaults_def,
+       bodySimTheory.cenv_module_pins_def,
+       vyperContextTheory.get_module_code_def,
+       vyperContextTheory.get_tenv_def, alistTheory.ALOOKUP_FILTER] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem intcall_args_defaults_inv[local]:
+  expr_sim_inv ce cx env st ==>
+  expr_sim_inv (cenv_without_defaults ce name)
+    (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) st
+Proof
+  `functions_well_typed (cx with stk updated_by CONS (NONE,name)) =
+   functions_well_typed cx` by
+    simp[vyperTypeInvariantsTheory.functions_well_typed_def,
+         vyperTypeInvariantsTheory.fn_sigs_consistent_def,
+         vyperTypeInvariantsTheory.fn_sigs_declared_complete_def,
+         vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+         vyperTypeInvariantsTheory.bare_globals_complete_def,
+         vyperTypeInvariantsTheory.bare_global_assignable_complete_def,
+         vyperTypeInvariantsTheory.flag_members_complete_def,
+         vyperContextTheory.get_module_code_def,
+         vyperContextTheory.get_tenv_def] >>
+  `env_consistent env cx st ==>
+   env_consistent (env with current_src := NONE)
+      (cx with stk updated_by CONS (NONE,name)) st` by
+    (simp[vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_context_consistent_def,
+         vyperTypeInvariantsTheory.env_scopes_consistent_def,
+         vyperTypeInvariantsTheory.env_immutables_consistent_def,
+         vyperTypeInvariantsTheory.fn_sigs_consistent_def,
+         vyperTypeInvariantsTheory.fn_sigs_declared_complete_def,
+         vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+         vyperTypeInvariantsTheory.bare_globals_complete_def,
+         vyperTypeInvariantsTheory.bare_global_assignable_complete_def,
+         vyperTypeInvariantsTheory.flag_members_complete_def,
+         vyperContextTheory.get_module_code_def,
+         vyperContextTheory.get_tenv_def,
+         vyperContextTheory.current_module_def] >>
+     strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[expr_sim_inv_def, cenv_without_defaults_def,
+       vyperTypeInvariantsTheory.context_well_typed_def,
+       vyperContextTheory.get_module_code_def,
+       vyperContextTheory.get_tenv_def,
+       cx_const_name_def, gasContextTheory.cx_tops_def,
+       placeTypingPropsTheory.place_map_tables_agree_on_defined_def,
+       bare_globals_layout_def] >>
+  strip_tac >> simp[] >> conj_tac
+  >- gvs[] >> conj_tac
+  >- (qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+        mp_tac >> simp[] >> metis_tac[]) >>
+  conj_tac >- gvs[] >> gvs[]
+QED
+
+(* Pure allocation checks depend on layouts and overlap modules, not locals. *)
+Theorem intcall_args_pure_alloc_mutual[local]:
+  (!tops e. supported_pure_expr tops e ==>
+    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
+      c'.ce_modules = c.ce_modules ==>
+      (alloc_limits_expr c' e = alloc_limits_expr c e)) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
+      c'.ce_modules = c.ce_modules ==>
+      (alloc_limits_exprs c' es = alloc_limits_exprs c es)) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
+      c'.ce_modules = c.ce_modules ==>
+      (alloc_limits_named_exprs c' fields = alloc_limits_named_exprs c fields)) /\
+  (!tops e. supported_place_expr tops e ==>
+    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
+      c'.ce_modules = c.ce_modules ==>
+      (alloc_limits_expr c' e = alloc_limits_expr c e))
+Proof
+  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[supportedExprsTheory.supported_pure_expr_def] >>
+  drule compileEnvTheory.type_memory_bytes_frame >> strip_tac >>
+  rpt (first_x_assum (qspecl_then [`c`,`c'`] assume_tac)) >>
+  fs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def] >>
+  drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
+  Cases_on `es` >- simp[allocLimitsTheory.alloc_limits_expr_def] >>
+  simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
+  `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
+  simp[]
+QED
+
+Theorem intcall_args_pure_alloc_frame:
+  supported_pure_expr tops e /\ c'.ce_struct_fields = c.ce_struct_fields /\
+  c'.ce_modules = c.ce_modules ==>
+  (alloc_limits_expr c' e = alloc_limits_expr c e)
+Proof
+  metis_tac[intcall_args_pure_alloc_mutual]
+QED
+
+Theorem intcall_args_pure_allocs_frame:
+  supported_pure_exprs tops ds /\ c'.ce_struct_fields = c.ce_struct_fields /\
+  c'.ce_modules = c.ce_modules ==>
+  (alloc_limits_exprs c' ds = alloc_limits_exprs c ds)
+Proof
+  metis_tac[intcall_args_pure_alloc_mutual]
+QED
+
+Theorem intcall_args_defaults_alloc:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  alloc_limits_exprs (cenv_without_defaults cenv name) dflts
+Proof
+  rpt strip_tac >>
+  `supported_program tops` by gvs[bodySimTheory.body_inv_def] >>
+  `supported_pure_exprs tops dflts` by
+    (drule_all supportedProgramTheory.supported_program_declaration >>
+     simp[supportedProgramTheory.supported_declaration_body_def]) >>
+  `module_consts_env tops [] = []` by
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
+     qexists `tops` >> gvs[supportedProgramTheory.supported_program_def,
+         supportedDeclsTheory.supported_declaration_headers_def]) >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+      (FST (SND (classify_functions tops)))` by
+    (simp[loweringShapePropsTheory.MEM_classify_internal] >>
+     qexistsl [`dflts`,`ss`] >> simp[]) >>
+  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+  simp[bodySimTheory.body_inv_def] >> strip_tac >>
+  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
+  PairCases_on `rest` >>
+  `fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,ss)` by
+    (Cases_on `cx.in_deploy`
+     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
+         metis_tac[]) >>
+     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
+     metis_tac[]) >>
+  `alloc_limits_exprs
+     (build_compile_env tops Internal mut name args ret ss F) dflts` by
+    gvs[compileVyperTheory.fn_allocs_ok_def] >>
+  `alloc_limits_exprs (cenv_without_defaults cenv name) dflts =
+   alloc_limits_exprs (build_compile_env tops Internal mut name args ret ss F) dflts` by
+    (irule intcall_args_pure_allocs_frame >>
+     gvs[cenv_without_defaults_def, bodySimTheory.cenv_module_pins_def,
+         compileVyperTheory.build_compile_env_ce_struct_fields,
+         compileVyperTheory.build_compile_env_ce_modules] >>
+     qexists `tops` >> simp[]) >>
+  simp[]
 QED
 
 (* A completed memory argument is protected by its full allocation, not by
