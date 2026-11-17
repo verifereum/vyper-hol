@@ -73,7 +73,8 @@ Theorem aggregate_struct_fields_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\H res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      exprSimDefs$halt_exit H cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   drule exprSimAggregateLayoutTheory.compile_struct_lit_as_tuple >>
@@ -159,7 +160,8 @@ Theorem aggregate_make_array_elems_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\H res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      exprSimDefs$halt_exit H cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
@@ -268,7 +270,8 @@ Theorem aggregate_make_array_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\H res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      exprSimDefs$halt_exit H cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
