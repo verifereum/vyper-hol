@@ -39,7 +39,7 @@ Ancestors
   dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
-  dftPacketPseudoHistory
+  dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
@@ -48,7 +48,7 @@ Ancestors
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
-  dftPacketRootedPlainStop
+  dftPacketBlockRootedOperational dftPacketRootedPlainStop
   dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
@@ -58,4 +58,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallRootConservation
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation
