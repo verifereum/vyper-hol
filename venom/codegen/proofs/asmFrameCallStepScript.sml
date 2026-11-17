@@ -2456,6 +2456,8 @@ Theorem asm_frame_call_effects_restore:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_frame_rel_rtc_trans >> disch_tac >>
+  `a.as_outcomes <> []` by
+    (CCONTR_TAC >> gvs[asm_consume_call_outcome_exhausted]) >>
   qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
   simp[asm_consume_call_outcome_eq] >> strip_tac >>
   qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
@@ -2466,6 +2468,7 @@ QED
 
 Theorem asm_frame_call_effects_step_ok:
   asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  a.as_outcomes <> [] /\
   asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
     asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
@@ -2942,6 +2945,7 @@ Proof
      drule asm_pc_to_offset_suc >>
      simp[arithmeticTheory.ADD1, EL_APPEND1] >>
      Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[asm_inst_size_def]) >>
+  `a.as_outcomes <> []` by simp[] >>
   drule_all asm_frame_call_effects_step_ok >> strip_tac >>
   `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -3147,6 +3151,7 @@ Proof
      drule asm_pc_to_offset_suc >>
      simp[arithmeticTheory.ADD1, EL_APPEND1] >>
      Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[asm_inst_size_def]) >>
+  `a.as_outcomes <> []` by simp[] >>
   drule_all asm_frame_call_effects_step_ok >> strip_tac >>
   `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -7759,6 +7764,7 @@ Resume asm_frame_call_enter_step_ok[consume]:
      drule asm_pc_to_offset_suc >>
      simp[arithmeticTheory.ADD1, EL_APPEND1] >>
      Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[asm_inst_size_def]) >>
+  `a.as_outcomes <> []` by simp[] >>
   drule_all asm_frame_call_effects_step_ok >> strip_tac >>
   `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>

@@ -2322,14 +2322,25 @@ QED
 Theorem terminal_source_memory_reads_safe:
   !cp.
   MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; INVALID;
-    CREATE; CREATE2; RETURNDATACOPY] /\ inst_wf inst /\
+    CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\ inst_wf inst /\
   eval_operands inst.inst_operands vs = SOME args /\
   venom_to_evm_name inst.inst_opcode = SOME name /\
   (!b. b IN FDOM labs ==> context_spill_byte cp b) /\
-  source_memory_reads_disjoint cp inst vs ==>
+  source_memory_reads_disjoint cp inst vs /\
+  context_source_memory_writes_disjoint cp inst vs ==>
   ~mem_labels_hit labs (asm_op_mem_reads name args)
 Proof
   gen_tac >> strip_tac >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]`
+  >- (`MEM inst.inst_opcode [ILOAD; MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+         CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+         CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` by gvs[listTheory.MEM] >>
+      `!b. asm_op_mem_reads name args b ==>
+        source_memory_read_byte inst vs b \/
+        (?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b)` by
+        metis_tac[memory_family_source_read_coverage] >>
+      simp[mem_labels_hit_def] >>
+      metis_tac[source_read_byte_no_labels, source_write_byte_no_labels]) >>
   fs[listTheory.MEM] >>
   gvs[venomWfTheory.inst_wf_def, asmIRTheory.venom_to_evm_name_def,
       asm_op_mem_reads_def, asmSemTheory.log_table_def, mem_labels_hit_def,
@@ -2394,7 +2405,7 @@ QED
 
 Theorem sym_terminal_opcode_concrete:
   MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-            "CREATE"; "CREATE2"; "RETURNDATACOPY"] ==>
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"] ==>
   sym_step_op p env name ss = sym_step_concrete name ss
 Proof
   simp[listTheory.MEM] >> strip_tac >>
@@ -2413,7 +2424,7 @@ QED
 
 Theorem sym_terminal_opcode_safe:
   MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-            "CREATE"; "CREATE2"; "RETURNDATACOPY"] /\
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"] /\
   ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
   ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) ==>
   !e. sym_step p env (AsmOp name) ss <> SymBad e
@@ -2443,7 +2454,7 @@ Theorem sym_terminal_opcode_transfer:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   asm_block_at p cs.as_pc [AsmOp name] /\
   MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-            "CREATE"; "CREATE2"; "RETURNDATACOPY"] /\
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"] /\
   ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
   ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) /\
   asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
@@ -4070,7 +4081,7 @@ Theorem terminal_arranged_word_stack:
   opaque_use_ok fn /\ label_flow_ok ctx /\ label_positions_ok inst /\
   MEM inst.inst_opcode
     [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
-     INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+     INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
   (!op. MEM op (compute_operands inst) ==>
     eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
@@ -6378,7 +6389,7 @@ Proof
 QED
 
 Theorem regular_abort_operand_order:
-  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   inst_wf inst ==>
   compute_operands inst = REVERSE inst.inst_operands
 Proof
@@ -6391,11 +6402,21 @@ Proof
 QED
 
 Theorem regular_abort_source_arguments:
-  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   inst_wf inst /\ inst.inst_opcode <> INVALID /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?args. eval_operands inst.inst_operands vs = SOME args
 Proof
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]`
+  >- (strip_tac >> Cases_on `vs.vs_outcomes = []`
+      >- (`MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` by
+            gvs[listTheory.MEM] >>
+          drule_all genBlockSimTheory.step_inst_exhausted_call_abort >> metis_tac[]) >>
+      `vs.vs_call_ctx.cc_static /\ inst.inst_opcode = CALL` by
+        (drule opcodeClassTheory.step_inst_abort_opcodes >> gvs[listTheory.MEM]) >>
+      `MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2]` by
+        gvs[listTheory.MEM] >>
+      drule_all step_inst_static_abort >> metis_tac[]) >>
   Cases_on `vs.vs_call_ctx.cc_static /\ MEM inst.inst_opcode [CREATE; CREATE2]`
   >- (strip_tac >>
       qpat_x_assum `vs.vs_call_ctx.cc_static /\ _` strip_assume_tac >>
@@ -6414,17 +6435,32 @@ Proof
 QED
 
 Theorem regular_abort_prepared_step:
-  MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   inst_wf inst /\
   step_inst fuel ctx inst vs = Abort a vs' /\
   eval_operands inst.inst_operands vs = SOME args /\
   venom_to_evm_name inst.inst_opcode = SOME name /\
   cs.as_stack = args ++ tail /\ cs.as_call_ctx = vs.vs_call_ctx /\
+  cs.as_outcomes = vs.vs_outcomes /\
   venom_asm_terminal_rel vs cs ==>
   LENGTH args = asm_op_arity name /\
   ((?out. asm_step lo o2pc (AsmOp name) cs = AsmRevert out) \/
    (?out. asm_step lo o2pc (AsmOp name) cs = AsmFault out))
 Proof
+  Cases_on `vs.vs_outcomes = [] /\
+    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+  >- (strip_tac >>
+      qpat_x_assum `vs.vs_outcomes = [] /\ _` strip_assume_tac >>
+      gvs[listTheory.MEM, venomWfTheory.inst_wf_def,
+          listTheory.LENGTH_EQ_NUM_compute, eval_operands_def, AllCaseEqs(),
+          asmIRTheory.venom_to_evm_name_def, asm_op_arity_def, asm_op_arity_table_def] >>
+      simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
+           asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+           asm_step_control_def, asm_step_extcall_def] >>
+      simp[asm_exec_call_def, asm_exec_staticcall_def, asm_exec_delegatecall_def,
+           asm_exec_create_def, asm_exec_create2_def] >>
+      simp[asm_consume_call_outcome_def, asm_consume_create_outcome_def] >>
+      rpt IF_CASES_TAC >> simp[]) >>
   Cases_on `vs.vs_call_ctx.cc_static /\ MEM inst.inst_opcode [CREATE; CREATE2]`
   >- (strip_tac >>
       gvs[listTheory.MEM, asmIRTheory.venom_to_evm_name_def,
@@ -6434,6 +6470,20 @@ Proof
           asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
           asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
           asm_exec_create_def, asm_exec_create2_def]) >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]`
+  >- (strip_tac >>
+      `vs.vs_call_ctx.cc_static /\ inst.inst_opcode = CALL` by
+        (drule opcodeClassTheory.step_inst_abort_opcodes >> gvs[listTheory.MEM]) >>
+      `MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2]` by
+        gvs[listTheory.MEM] >>
+      drule_all step_inst_static_abort >> strip_tac >>
+      gvs[listTheory.MEM, eval_operands_def, AllCaseEqs(),
+          venomWfTheory.inst_wf_def, listTheory.LENGTH_EQ_NUM_compute,
+          asmIRTheory.venom_to_evm_name_def, asm_op_arity_def, asm_op_arity_table_def,
+          asm_step_def, asm_step_op_def, asm_step_arith_def,
+          asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+          asm_step_control_def, asm_step_extcall_def, asm_exec_call_def,
+          asm_consume_call_outcome_def]) >>
   simp[listTheory.MEM] >> strip_tac >> gvs[]
   >- (drule_all genBlockSimTheory.step_inst_revert_abort >> strip_tac >>
       gvs[eval_operands_def, asmIRTheory.venom_to_evm_name_def,
@@ -6475,25 +6525,27 @@ Proof
 QED
 
 Theorem sym_regular_abort_prepared_terminal:
-  !cp. MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY] /\
+  !cp. MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   inst_wf inst /\
   step_inst fuel ctx inst vs = Abort a vs' /\
   eval_operands inst.inst_operands vs = SOME args /\
   venom_to_evm_name inst.inst_opcode = SOME name /\
   cs.as_stack = args ++ tail /\ cs.as_call_ctx = vs.vs_call_ctx /\
+  cs.as_outcomes = vs.vs_outcomes /\
   venom_asm_terminal_rel vs cs /\
   ss.sym_stack = MAP Val args ++ suffix /\
   (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
   source_memory_reads_disjoint cp inst vs /\
+  context_source_memory_writes_disjoint cp inst vs /\
   asm_static_wf prog /\ asm_sym_rel prog env cs ss /\
   asm_block_at prog cs.as_pc [AsmOp name] ==>
   sym_terminal (sym_steps prog env 1 ss)
 Proof
   gen_tac >> strip_tac >>
   `MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; INVALID;
-      CREATE; CREATE2; RETURNDATACOPY] /\
+      CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
    MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-      "CREATE"; "CREATE2"; "RETURNDATACOPY"]` by
+      "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"]` by
     gvs[listTheory.MEM, asmIRTheory.venom_to_evm_name_def] >>
   drule_all terminal_source_memory_reads_safe >> strip_tac >>
   drule_all regular_abort_prepared_step >> strip_tac >>
@@ -6503,7 +6555,7 @@ QED
 Theorem sym_regular_abort_arranged_terminal:
   !cp.
   lo = SND (compute_label_offsets prog) /\
-  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   inst_wf inst /\
   step_inst fuel ctx inst vs = Abort a vs' /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -6516,7 +6568,8 @@ Theorem sym_regular_abort_arranged_terminal:
   venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest) /\
   asm_sym_rel prog env (mid with as_stack := mid.as_stack ++ rest) ss /\
   sym_kinds_ok cp fn ret srest arranged ss /\
-  source_memory_reads_disjoint cp inst vs /\ asm_static_wf prog /\
+  source_memory_reads_disjoint cp inst vs /\
+  context_source_memory_writes_disjoint cp inst vs /\ asm_static_wf prog /\
   venom_to_evm_name inst.inst_opcode = SOME name /\
   asm_block_at prog mid.as_pc [AsmOp name] ==>
   sym_terminal (sym_steps prog env 1 ss)
@@ -6532,15 +6585,16 @@ Proof
   `compute_operands inst = REVERSE inst.inst_operands` by
     metis_tac[regular_abort_operand_order] >>
   `MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT;
-      ASSERT_UNREACHABLE; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+      ASSERT_UNREACHABLE; INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
    eval_operands (REVERSE (compute_operands inst)) vs = SOME args` by
     gvs[listTheory.MEM] >>
   drule_all terminal_arranged_word_stack >> strip_tac >>
-  `MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY] /\
+  `MEM inst.inst_opcode [REVERT; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cplan b)` by
     ((conj_tac >- metis_tac[listTheory.MEM]) >>
      fs[sym_kinds_ok_def]) >>
-  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  `mid.as_call_ctx = vs.vs_call_ctx /\ mid.as_outcomes = vs.vs_outcomes` by
+    fs[venom_asm_rel_def, frame_view_def] >>
   irule sym_regular_abort_prepared_terminal >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `source_memory_reads_disjoint _ _ _`)) >>
@@ -6553,8 +6607,9 @@ Theorem sym_abort_regular_terminal_exists:
   !fuel ctx cp lo o2pc prog lv dfg cfg fn inst nl halting term label
    base ps vs st ops final r ra rest mem0 env ret srest labs0 ss a vs'.
   lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
-  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
   source_memory_reads_disjoint cp inst vs /\
+  context_source_memory_writes_disjoint cp inst vs /\
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
   r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
@@ -6665,12 +6720,13 @@ Proof
   drule_all arranged_word_prepared_symbolic_stack >> strip_tac >>
   `LENGTH vals = LENGTH inst.inst_operands` by
     metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length] >>
-  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  `mid.as_call_ctx = vs.vs_call_ctx /\ mid.as_outcomes = vs.vs_outcomes` by
+    fs[venom_asm_rel_def, frame_view_def] >>
   `MEM (name,LENGTH vals)
     [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
      ("CREATE2",4); ("CALL",7)] /\
    LENGTH vals = asm_op_arity name /\
-   (name = "CALL" ==> EL 2 vals <> 0w)` by
+   (name = "CALL" ==> EL 2 vals <> 0w \/ mid.as_outcomes = [])` by
     gvs[listTheory.MEM, asmIRTheory.venom_to_evm_name_def,
         venomWfTheory.inst_wf_def, asm_op_arity_def, asm_op_arity_table_def] >>
   `?out. asm_steps lo o2pc prog 1
@@ -7255,7 +7311,8 @@ Proof
          `MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL]` by
            gvs[listTheory.MEM] >>
          drule_all sym_abort_static_regular_terminal_exists >> simp[]) >>
-     `MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
+     `MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY;
+         CALL; STATICCALL; DELEGATECALL]` by
        (drule opcodeClassTheory.step_inst_abort_opcodes >> fs[listTheory.MEM] >> metis_tac[]) >>
      drule_all sym_abort_regular_terminal_exists >> simp[]) >>
   drule_all gen_inst_abort_frame_sim_deep >>
