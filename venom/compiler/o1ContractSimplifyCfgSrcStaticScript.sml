@@ -851,8 +851,10 @@ Proof
        EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts (simplify_cfg_fn f))` by
     (gen_tac >> strip_tac >> simp[simplify_cfg_fn_def] >>
      ho_match_mp_tac simplify_cfg_fn_with_labels_opcodes >> simp[]) >>
-  `!f. no_raw_fmp_ops f ==> no_raw_fmp_ops (simplify_cfg_fn f)` by
-    simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_no_raw_fmp_ops] >>
+  `!f. pre_fmp_ops f ==> pre_fmp_ops (simplify_cfg_fn f)` by
+    (rw[pre_fmp_ops_def, simplify_cfg_fn_def] >>
+     irule simplify_cfg_fn_with_labels_opcodes >>
+     simp[pre_fmp_opcode_def]) >>
   fs[EVERY_MAP, EVERY_MEM, ctx_has_dalloca_def, EXISTS_MEM,
      fmp_free_ctx_def, fixed_region_reserved_def, MEM_MAP] >> metis_tac[]
 QED

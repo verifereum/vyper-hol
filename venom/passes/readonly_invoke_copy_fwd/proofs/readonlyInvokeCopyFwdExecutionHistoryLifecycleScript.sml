@@ -28,7 +28,7 @@ Theorem ricf_chosen_ledger_next[local]:
 Proof
   simp[ricf_chosen_ledger_def, EVERY_MEM] >> rpt strip_tac >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   first_x_assum drule >> strip_tac >>
   Cases_on `inst.inst_opcode = ALLOCA`
   >- (irule ricf_phase_entry_alloca >> metis_tac[]) >>
@@ -211,7 +211,7 @@ Proof
     (irule ricf_aligned_origin_next >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = ALLOCA`
   >- (irule ricf_aligned_origin_sites_step >>
-      drule occ_frame_reachable_annotation >>
+      drule occ_frame_reachable_annotation_static >>
       fs[occurrence_annotation_ok_def] >> metis_tac[]) >>
   fs[occurrence_sites_step_def]
 QED
@@ -274,7 +274,7 @@ Theorem ricf_history_origin_size_bound[local]:
 Proof
   simp[ricf_history_origin_def, ricf_source_copy_payload_def] >> rpt strip_tac >>
   `occurrence_allocas_ok B p.rpe_owner p.rpe_before` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   `FLOOKUP p.rpe_before.vs_allocas (SND p.rpe_dst) =
       SOME (p.rpe_db,p.rpe_size)` by
     (fs[occurrence_allocas_ok_def] >> metis_tac[pairTheory.PAIR]) >>
@@ -362,8 +362,8 @@ Proof
     (fs[ricf_remaining_selected_use_def] >>
      `s.vs_inst_idx = j` by
        (irule ricf_located_event_owner_call_cutoff >> metis_tac[]) >> simp[]) >>
-  `occurrence_annotation_ok n p.rpe_owner U B HP H stk PG G s` by
-    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `occurrence_annotation_ok (dimword (:256)) n p.rpe_owner U B HP H stk PG G s` by
+    (drule occ_frame_reachable_annotation_static >> simp[]) >>
   `fn_inst_ids_distinct p.rpe_fn` by fs[wf_function_def] >>
   gvs[] >>
   `FLOOKUP s.vs_allocas da.inst_id = SOME (p.rpe_db,p.rpe_size) /\

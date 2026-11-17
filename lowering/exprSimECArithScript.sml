@@ -344,7 +344,7 @@ Proof
   Cases_on `v` >> simp[val_footprint_def, type_memory_size_def]
 QED
 
-Theorem ec_uint256_encoding[local]:
+Theorem ec_uint256_encoding:
   value_has_type (BaseTV (UintT 256)) v ==>
   ?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** 256 /\
       typed_val_to_w256 (BaseTV (UintT 256)) v = n2w (Num i)
@@ -354,7 +354,7 @@ Proof
   strip_tac >> `~(i < 0)` by intLib.ARITH_TAC >> simp[]
 QED
 
-Theorem ec_point_index_memory[local]:
+Theorem ec_point_index_memory:
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (ArrayV av) /\
   val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
     (ArrayV av) off mem /\ j < 2 ==>
@@ -378,7 +378,7 @@ Proof
        val_to_w256_def, integer_wordTheory.i2w_def] >>
   `~(i < 0)` by intLib.ARITH_TAC >> simp[]
 QED
-Theorem ec_point_memory_words[local]:
+Theorem ec_point_memory_words:
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v /\
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v op s ==>
   ?w x y. eval_operand op s = SOME w /\
@@ -453,7 +453,7 @@ Proof
   disj2_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
-Theorem ec_precompile_words[local]:
+Theorem ec_precompile_words:
   (!x1 y1 x2 y2.
   precompile_result 6w
     (word_to_bytes (x1:bytes32) T ++ word_to_bytes (y1:bytes32) T ++
@@ -502,7 +502,7 @@ Proof
   PairCases_on `a` >> gvs[bn254Theory.validAffine_def]
 QED
 
-Theorem ec_result_memory[local]:
+Theorem ec_result_memory:
   mem_word_at off mem = n2w x /\ mem_word_at (off + 32) mem = n2w y ==>
   val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
     (mk_ec_result (x,y)) off mem
@@ -516,7 +516,7 @@ Proof
   rpt strip_tac >> `i = 0 \/ i = 1` by decide_tac >> gvs[]
 QED
 
-Theorem ec_precompile_success[local]:
+Theorem ec_precompile_success:
   (!x1 y1 x2 y2 x y.
   vfmExecution$ecadd (w2n x1,w2n y1) (w2n x2,w2n y2) = SOME (x,y) ==>
   precompile_result 6w
@@ -724,7 +724,7 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem ec_result_val_wf[local]:
+Theorem ec_result_val_wf:
   val_wf (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (mk_ec_result (x,y))
 Proof
   simp[mk_ec_result_def, make_array_value_def, enumerate_static_array_def,
@@ -733,7 +733,7 @@ Proof
   simp[val_wf_def, type_memory_size_def]
 QED
 
-Theorem ec_result_pointer_post[local]:
+Theorem ec_result_pointer_post:
   post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel H ctx func cenv cx es' t /\

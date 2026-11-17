@@ -12,12 +12,18 @@ Theorem opcode_every_custom_error_store_args[local]:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !es tys ce dst off st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   EVERY ($~ o supported_expr_exists R) es /\
   EVERY ($~ o supported_expr_exists expr_shape_root) es ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -32,7 +38,8 @@ Proof
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[COND_RATOR, COND_RAND, every_state_insts_return,
-      opcode_every_emit_op, (UNDISCH opcode_every_unwrap_value), (UNDISCH opcode_every_store_memory)])])
+      opcode_every_emit_op, (UNDISCH opcode_every_unwrap_value), (UNDISCH opcode_every_store_memory)])]) >>
+  metis_tac[]
 QED
 
 Theorem opcode_every_revert_with_custom_error[local]:
@@ -40,12 +47,18 @@ Theorem opcode_every_revert_with_custom_error[local]:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce err st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   EVERY ($~ o supported_expr_exists R) (custom_error_exprs err) /\
   EVERY ($~ o supported_expr_exists expr_shape_root) (custom_error_exprs err) ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -63,7 +76,8 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac, IF_CASES_TAC,
     gen_tac, CHANGED_TAC (simp[every_state_insts_return,
       opcode_every_emit_inst, opcode_every_emit_void, opcode_every_emit_op,
-      (UNDISCH opcode_every_alloc_buffer), cj 2 (UNDISCH opcode_every_abi_encode)])])
+      (UNDISCH opcode_every_alloc_buffer), cj 2 (UNDISCH opcode_every_abi_encode)])]) >>
+  metis_tac[]
 QED
 
 Theorem opcode_every_stmt_assert:
@@ -71,12 +85,18 @@ Theorem opcode_every_stmt_assert:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty e ar.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Assert e ar) /\
   ~supported_stmt_expr_exists expr_shape_root (Assert e ar) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -96,7 +116,7 @@ Proof
       every_state_insts_fresh_label, every_state_insts_new_block,
       opcode_every_emit_inst, (UNDISCH opcode_every_revert_with_reason)]) ,
     qid_spec_tac `st` >> ho_match_mp_tac every_state_insts_lower_value >>
-      simp[(UNDISCH opcode_every_unwrap_value)]])
+      simp[(UNDISCH opcode_every_unwrap_value)]]) >> metis_tac[]
 QED
 
 Theorem opcode_every_stmt_raise:
@@ -104,12 +124,18 @@ Theorem opcode_every_stmt_raise:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty rr.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Raise rr) /\
   ~supported_stmt_expr_exists expr_shape_root (Raise rr) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -126,7 +152,7 @@ Proof
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[every_state_insts_return,
-      opcode_every_emit_inst, (UNDISCH opcode_every_revert_with_reason)])])
+      opcode_every_emit_inst, (UNDISCH opcode_every_revert_with_reason)])]) >> metis_tac[]
 QED
 
 Theorem opcode_every_stmt_log:
@@ -134,12 +160,18 @@ Theorem opcode_every_stmt_log:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty eid args.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Log eid args) /\
   ~supported_stmt_expr_exists expr_shape_root (Log eid args) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -162,7 +194,7 @@ Proof
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_inst,
       (UNDISCH opcode_every_log_topic_ops), (UNDISCH opcode_every_log_store_data), (UNDISCH opcode_every_alloc_buffer),
-      (UNDISCH opcode_every_abi_encode)])])
+      (UNDISCH opcode_every_abi_encode)])]) >> metis_tac[]
 QED
 
 Theorem opcode_every_stmt_return_none:
@@ -205,12 +237,18 @@ Theorem opcode_every_stmt_return_some:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty e.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Return (SOME e)) /\
   ~supported_stmt_expr_exists expr_shape_root (Return (SOME e)) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -223,7 +261,8 @@ Proof
   simp[supported_stmt_expr_exists_def, supported_expr_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def] >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac
-  >- (ho_match_mp_tac every_state_insts_lower_value >> simp[(UNDISCH opcode_every_unwrap_value)]) >>
+  >- (ho_match_mp_tac every_state_insts_lower_value >>
+      simp[(UNDISCH opcode_every_unwrap_value)] >> metis_tac[]) >>
   gen_tac >> Cases_on `ce.ce_return_pc` >> simp[]
   >- (rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
         ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,

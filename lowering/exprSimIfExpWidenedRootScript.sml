@@ -50,6 +50,8 @@ Theorem normalized_arm_join_outcome[local]:
         (jump_to lbl tt) ee v op u /\
       (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
+      (~is_word_type ann ==> vv_place_ptr ce cx ee u tv
+        (LocatedValue ann (mk_ptr op LocMemory))) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
@@ -95,7 +97,9 @@ Proof
       expr_post H1 ctx func ce cx (IfExp ann nc na nb) es1 sc sd
         (jump_to lbl tt) ee v op u /\
       (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
-        (LocatedValue ann (mk_ptr op LocMemory)) u)` by metis_tac[] >>
+        (LocatedValue ann (mk_ptr op LocMemory)) u) /\
+      (~is_word_type ann ==> vv_place_ptr ce cx ee u tv
+        (LocatedValue ann (mk_ptr op LocMemory)))` by metis_tac[] >>
   qexists_tac `tv` >> simp[] >>
   reverse conj_tac >- simp[jump_to_def] >>
   irule normalized_ifexp_root_vv_post >> metis_tac[]

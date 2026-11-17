@@ -31,14 +31,14 @@ QED
 (* Conditional transport states exactly what the suffix theorem must supply.
    It does not infer summary equality from the name-only runner checks. *)
 Theorem walk_view_mems_used:
-  walk_view rpolicy later C' fn observed /\
+  walk_view R rpolicy k later C' fn observed /\
   (!g h. fn_steps rpolicy later g h ==> h.fn_mems_used = g.fn_mems_used) /\
   MEM name (fn_invoke_targets fn) /\
   lookup_function name C'.ctx_functions = SOME g' ==>
   ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
       g.fn_name = g'.fn_name /\ g.fn_mems_used = g'.fn_mems_used
 Proof
-  rw[walk_view_def] >> first_x_assum drule_all >> strip_tac >>
+  strip_tac >> drule_all walk_view_fn_steps >> strip_tac >>
   qexists_tac `g` >> metis_tac[fn_steps_name]
 QED
 
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem concretize_walk_view_mems_used:
-  walk_view rpolicy (DROP 3 o1_fn_passes) C' fn observed /\
+  walk_view R rpolicy k (DROP 3 o1_fn_passes) C' fn observed /\
   MEM name (fn_invoke_targets fn) /\
   lookup_function name C'.ctx_functions = SOME g' ==>
   ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\

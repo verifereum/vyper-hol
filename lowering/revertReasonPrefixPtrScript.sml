@@ -1,7 +1,7 @@
 (* Checked allocation-prefix boundaries, including reused allocation sites. *)
 Theory revertReasonPrefixPtr
 Ancestors
-  wordLoadStorePtr revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
+  reasonPrefixResourcesPtr wordLoadStorePtr revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
   loweringSlice exprLoweringProps bodyPtrDefs fragExecPtr venomExecSemantics venomInst venomState
   ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv loweringStateRelDefs instIdxIndep
   normalizationAllocPtr decoderGhostFramePtr loweringPosts
@@ -747,14 +747,6 @@ Proof
   simp[update_var_def, GSYM update_var_def, local_region_update_nonlocal]
 QED
 
-Theorem expr_val_at_mstore:
-  expr_val_at cenv cx ty sa sb es v op (mstore a value s) <=>
-  expr_val_at cenv cx ty sa sb es v op s
-Proof
-  simp[expr_val_at_def, eval_operand_mstore, local_region_def,
-    lookup_var_mstore, mstore_def]
-QED
-
 Theorem alloca_store_offset_expr_frames:
   expr_val_at cenv cx ty sa sb es v op s /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
@@ -771,7 +763,7 @@ Proof
     (irule alloca_step_expr_val_at >> simp[] >> metis_tac[]) >>
   drule_all store_offset_endpoint >> strip_tac >>
   qpat_x_assum `s3 = _` SUBST_ALL_TAC >>
-  irule expr_val_at_update_nonlocal >> simp[expr_val_at_mstore] >> metis_tac[]
+  irule expr_val_at_update_nonlocal >> simp[reason_encoder_store_value_location] >> metis_tac[]
 QED
 
 Theorem alloca_store_offset_ptr_val_ok:

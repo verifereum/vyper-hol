@@ -296,6 +296,19 @@ Proof
   \\ gvs[]
 QED
 
+Theorem nonconstant_reads_lookup_cong:
+  (!src. ALOOKUP mods1 src = ALOOKUP mods2 src) ==>
+  nonconstant_reads mods1 accs = nonconstant_reads mods2 accs
+Proof
+  strip_tac >> Induct_on `accs` >> simp[nonconstant_reads_def] >>
+  qx_gen_tac `acc` >> Cases_on `acc` >>
+  simp[nonconstant_reads_def] >>
+  rename1 `ReadAcc ref` >> Cases_on `ref` >>
+  simp[nonconstant_reads_def] >>
+  rename1 `StateRef ns` >> Cases_on `ns` >>
+  simp[nonconstant_reads_def]
+QED
+
 Definition any_written_def:
   any_written [] accs = F ∧
   any_written (v :: vs) accs = (MEM (WriteAcc v) accs ∨ any_written vs accs)

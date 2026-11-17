@@ -281,37 +281,6 @@ Proof
   gvs[bind_def, target_res_ok_def, expr_res_ok_def]
 QED
 
-(* Internal-call defaults use the existing finally_set_scopes boundary
-   from vyperScopePreservation; body cleanup additionally unlocks. *)
-Theorem target_subscript_unlock_scopes:
-  unlock_if_nr cx nr is_view es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  Cases_on `nr /\ ~is_view` >>
-  simp[unlock_if_nr_def, return_def] >>
-  Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
-  metis_tac[release_nonreentrant_lock_scopes]
-QED
-
-Theorem target_subscript_call_cleanup_scopes:
-  finally_unless_halt (finally f (pop_function prev))
-    (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
-Proof
-  strip_tac >>
-  Cases_on `finally f (pop_function prev) s` >> rename1 `_ = (q0,s0)` >>
-  `s0.scopes = prev` by
-    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
-     simp[finally_def, pop_function_def, set_scopes_def, bind_def,
-          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-     rw[] >> gvs[]) >>
-  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
-  simp[finally_unless_halt_def] >>
-  Cases_on `q0` >> TRY (Cases_on `y`) >>
-  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
-  Cases_on `unlock_if_nr cx nr is_view s0` >> rename1 `_ = (gr,gs)` >>
-  Cases_on `gr` >> simp[] >> rw[] >>
-  imp_res_tac target_subscript_unlock_scopes >> gvs[]
-QED
-
 val trace_scopes_tac =
   rpt (qpat_x_assum `_ = _ with storage_trace := _`
     (fn th => assume_tac (SIMP_RULE (srw_ss()) []
@@ -533,7 +502,7 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
        return_def, raise_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   imp_res_tac finally_set_scopes >>
-  imp_res_tac (target_subscript_call_cleanup_scopes |>
+  imp_res_tac (vyperLocalAccessFrameTheory.call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
     SRULE [unlock_if_nr_def]) >>
   imp_res_tac read_results_state >>

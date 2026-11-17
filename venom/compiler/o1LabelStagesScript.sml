@@ -115,7 +115,7 @@ Theorem o1_schedule_stages_no_runtime_begin:
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
-       ctx_pass_stage rp (EL k passes) (walk_view rp (DROP (SUC k) passes))
+       ctx_pass_stage rp (EL k passes) (walk_view R rp (SUC k) (DROP (SUC k) passes))
          (stage k) (stage (SUC k)))) /\
     (!k fn inst. k <= LENGTH passes /\
       MEM fn (stage k).ctx_functions /\ MEM inst (fn_insts fn) ==>

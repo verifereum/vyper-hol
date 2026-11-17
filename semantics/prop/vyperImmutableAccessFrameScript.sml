@@ -156,7 +156,8 @@ Theorem lookup_global_immutable_origin[local]:
 Proof
   simp[lookup_global_def, vyperMiscTheory.option_CASE_rator,
        vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+       bind_def, ignore_bind_def, record_storage_event_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -177,7 +178,9 @@ Proof
   >> simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
   rpt strip_tac >>
   `?path0. pv = PlaceR (ImmutablePlace src id path0)` by
-    (Cases_on `pv` >> gvs[extend_place_def, raise_def]
+    (Cases_on `pv` >>
+     gvs[extend_place_def, ignore_bind_def, record_storage_event_def,
+         bind_def, return_def, raise_def, AllCaseEqs()]
      >- (Cases_on `p` >>
          gvs[extend_place_def, extend_memory_place_def, bind_def,
              ignore_bind_def, return_def, AllCaseEqs()] >>
@@ -320,7 +323,7 @@ Theorem evaluate_immutable_global_case[local]:
   ^(immutable_constructor_case "TopLevelName")
 Proof
   BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
-  imp_res_tac lookup_global_state >> gvs[]
+  imp_res_tac lookup_global_immutables >> gvs[]
 QED
 
 Theorem evaluate_immutable_flag_case[local]:
@@ -348,7 +351,7 @@ Theorem evaluate_immutable_baseglobal_case[local]:
   ^(immutable_constructor_case "TopLevelNameTarget")
 Proof
   BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
-  imp_res_tac lookup_global_state >> gvs[]
+  imp_res_tac lookup_global_immutables >> gvs[]
 QED
 
 Theorem evaluate_immutable_attribute_case[local]:
@@ -357,7 +360,8 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac select_result_state >> gvs[] >>
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -377,7 +381,9 @@ Proof
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
   imp_res_tac subscript_base_read_state >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
   last_x_assum (drule_then (drule_then assume_tac)) >>
   rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
@@ -393,7 +399,8 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac extend_place_state >> gvs[] >>
+  imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -404,7 +411,9 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality] >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt (qpat_x_assum `!s r t. eval_base_place _ _ _ = _ ==> _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>

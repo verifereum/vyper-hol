@@ -3,7 +3,7 @@ Ancestors lowerDloadPtrDelegateInterfaces lowerDloadPtrCallBuffers
   lowerDloadPtrPhi lowerDloadPtrAggregate lowerDloadPtrRel lowerDloadPtrScalar
   lowerDloadPtrResidualInterfaces lowerDloadPtrCall lowerDloadPtrExternalCall
   pointerConfinedDefs memLocDefs ptrDiscipline contextCodegenRel codegenRel
-  venomExecSemantics venomState finite_map pred_set list
+  venomExecSemantics venomCallOracleDefs extCallOracle venomState finite_map pred_set list
 
 Theorem dload_delegate_success_inputs:
   i.inst_opcode = DELEGATECALL /\ step_inst fuel C i t = OK t1 ==>
@@ -24,20 +24,19 @@ Theorem dload_delegate_evaluated_inputs:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel C i t = OK t1 ==>
   (!op. MEM op i.inst_operands ==> eval_operand op s <> NONE) /\
   (!op. MEM op [gas;addr;sz;rs] ==> eval_operand op s = eval_operand op t) /\
   (!op x y. MEM op [a;r] /\ eval_operand op s = SOME x /\
     eval_operand op t = SOME y ==>
-    dload_value_word fs {} (op_prov G op) (op_prov H op) x y) /\
+    dload_value_word fl fs {} (op_prov G op) (op_prov H op) x y) /\
   (!x y z. eval_operand a s = SOME x /\ eval_operand a t = SOME y /\
     eval_operand sz s = SOME z ==>
     MEM (w2n x,w2n z) (source_memory_read_ranges i s) /\
     read_memory (w2n x) (w2n z) s = read_memory (w2n y) (w2n z) t) /\
   (!x z. eval_operand r s = SOME x /\ eval_operand rs s = SOME z ==>
-    MEM (w2n x,w2n z) (source_memory_write_ranges i s)) /\
-  tn.t_stor = {} /\ tn.t_trans = {}
+    MEM (w2n x,w2n z) (source_memory_write_ranges i s))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!op. MEM op i.inst_operands ==> eval_operand op t <> NONE` by
@@ -46,7 +45,7 @@ Proof
     (eval_operand op s = NONE <=> eval_operand op t = NONE)` by
     (rpt strip_tac >> irule eval_operand_definedness >> metis_tac[]) >>
   `!op. MEM op i.inst_operands ==> eval_operand op s <> NONE` by metis_tac[] >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `!op. MEM op [gas;addr;sz;rs] ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> drule scalar_operand_equal >> disch_then irule >>
      `op_prov G op = NONE /\ op_taint tn op = {}` by
@@ -55,10 +54,9 @@ Proof
   `!op. MEM op i.inst_operands ==> op_taint tn op = {}` by
     (fs[taint_ok_def] >> rpt strip_tac >>
      qpat_x_assum `!op. MEM op _ /\ _ ==> _` (qspec_then `op` mp_tac) >> simp[]) >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by gvs[taint_ok_def] >>
   `!op x y. MEM op [a;r] /\ eval_operand op s = SOME x /\
     eval_operand op t = SOME y ==>
-    dload_value_word fs {} (op_prov G op) (op_prov H op) x y` by
+    dload_value_word fl fs {} (op_prov G op) (op_prov H op) x y` by
     (rpt strip_tac >>
      `op_taint tn op = {}` by (gvs[] >> metis_tac[]) >>
      `!v. op = Var v ==> v IN V` by (gvs[] >> metis_tac[]) >>
@@ -78,8 +76,8 @@ Resume dload_delegate_evaluated_inputs[delegate_read_inputs]:
      Cases_on `eval_operand rs t` >> gvs[] >> metis_tac[]) >>
   simp[] >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
-  `dload_value_word fs {} (op_prov G a) (op_prov H a) x y` by simp[] >>
+   dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+  `dload_value_word fl fs {} (op_prov G a) (op_prov H a) x y` by simp[] >>
   `?ops. mem_read_ops i = SOME ops /\ ops.iao_ofst = a` by gvs[mem_read_ops_def] >>
   Q.SUBGOAL_THEN
     `i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL \/
@@ -139,24 +137,26 @@ Theorem dload_delegate_memory[local]:
   i.inst_opcode = DELEGATECALL /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
   source_memory_write_ranges i t = [(w2n rt,w2n rz)] /\
-  dload_memory_match lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\ dload_value_word fs {} p q ro rt /\
+  dload_memory_match fl lo fs tn un s t /\
+  dload_live_layout lo sf tf fs /\ dload_value_word fl fs {} p q ro rt /\
   exec_delegatecall i s gas addr ao az ro rz = OK s1 /\
   exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
   s1.vs_returndata = t1.vs_returndata /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
-    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) ==>
-  dload_memory_match lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
+    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  tf <= fl ==>
+  dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `s1.vs_allocas = s.vs_allocas /\ s1.vs_fmp = s.vs_fmp /\
    t1.vs_allocas = t.vs_allocas /\ t1.vs_fmp = t.vs_fmp /\
+   t1.vs_alloca_next = t.vs_alloca_next /\
    s1.vs_memory = (write_memory_with_expansion (w2n ro)
      (TAKE (w2n rz) s1.vs_returndata) s).vs_memory /\
    t1.vs_memory = (write_memory_with_expansion (w2n rt)
      (TAKE (w2n rz) s1.vs_returndata) t).vs_memory` by
     metis_tac[dload_delegate_frame_fields] >>
-  `dload_memory_match lo fs
+  `dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF
       {a | w2n ro <= a /\ a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)})
     (un with t_mem := un.t_mem DIFF
@@ -174,49 +174,33 @@ Proof
       t_var := set_var_taint un.t_var i.inst_outputs {};
       t_stor := un.t_stor; t_trans := un.t_trans; t_imm := un.t_imm|>` by
     (irule (cj 2 dload_delegate_ghosts) >> metis_tac[]) >>
-  qpat_x_assum `dload_memory_match _ _ _ _ s1 t1` mp_tac >>
+  qpat_x_assum `dload_memory_match _ _ _ _ _ s1 t1` mp_tac >>
   pure_asm_rewrite_tac[] >>
   POP_ASSUM_LIST (K all_tac) >> simp[dload_memory_match_def] >> metis_tac[]
 QED
 
 Theorem dload_delegate_reverse_inputs[local]:
-  dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} ==>
-  dload_equal_environment t s /\ dload_shared_store un tn t s /\
-  un.t_stor = {} /\ un.t_trans = {}
+  dload_equal_environment s t /\ dload_shared_store tn un s t ==>
+  dload_equal_environment t s /\ dload_shared_store un tn t s
 Proof
   strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    metis_tac[dload_delegate_full_stores] >>
   conj_tac
   >- gvs[dload_equal_environment_def, venom_state_component_equality] >>
-  gvs[dload_shared_store_def, storage_agree_except_def, word_agree_except_def] >>
+  gvs[dload_equal_environment_def, venom_state_component_equality,
+      dload_shared_store_def, storage_agree_except_def, word_agree_except_def] >>
+  conj_tac
+  >- (gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
+      qpat_x_assum `s.vs_accounts a with storage := _ = _`
+        (SUBST1_TAC o SYM) >> simp[]) >>
   metis_tac[]
-QED
-
-Theorem dload_delegate_exec_shape[local]:
-  exec_delegatecall i s gas addr ao az ro rz = OK s1 ==>
-  s1 = s with <|vs_vars := s1.vs_vars;
-    vs_returndata := s1.vs_returndata; vs_accounts := s1.vs_accounts;
-    vs_logs := s1.vs_logs;
-    vs_memory := (write_memory_with_expansion (w2n ro)
-       (TAKE (w2n rz) s1.vs_returndata) s).vs_memory;
-    vs_transient := s1.vs_transient;
-    vs_pending_deletions := s1.vs_pending_deletions;
-    vs_outcomes := s1.vs_outcomes; vs_requests := s1.vs_requests|>
-Proof
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def, venom_state_component_equality]
 QED
 
 Theorem dload_delegate_exec_backward[local]:
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i t gas addr bo az rt rz = OK t1 ==>
   ?s1. exec_delegatecall i s gas addr ao az (ro:bytes32) rz = OK s1 /\
     dload_equal_environment s1 t1 /\
-    s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1)
 Proof
   strip_tac >> drule_all dload_delegate_reverse_inputs >> strip_tac >>
@@ -224,14 +208,7 @@ Proof
   drule_all (Q.ISPEC `ro:bytes32` (Q.GEN `tr` (SPEC_ALL dload_delegate_exec_success))) >>
   strip_tac >> first_x_assum (qspec_then `ro:bytes32` strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `t1 = _` SUBST_ALL_TAC >>
-  drule dload_delegate_exec_shape >>
-  disch_then (fn th => once_rewrite_tac[th]) >>
-  qpat_x_assum `dload_equal_environment s t` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-       dload_equal_environment_def, venom_state_component_equality]
+  gvs[dload_equal_environment_def, venom_state_component_equality]
 QED
 
 Theorem dload_delegate_step[local]:
@@ -244,14 +221,12 @@ Theorem dload_delegate_step[local]:
   eval_operand r s = SOME ro /\ eval_operand r t = SOME rt /\
   eval_operand rs s = SOME rz /\ eval_operand rs t = SOME rz /\
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     exec_delegatecall i s gv addr ao az ro rz = OK s1 /\
     exec_delegatecall i t gv addr bo az rt rz = OK t1 /\
     dload_equal_environment s1 t1 /\
-    s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -265,26 +240,24 @@ Proof
 QED
 
 Theorem dload_delegate_shared_store[local]:
-  i.inst_opcode = DELEGATECALL /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  i.inst_opcode = DELEGATECALL /\
+  dload_equal_environment s t /\ dload_shared_store tn un s t /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i s gas addr ao az ro rz = OK s1 /\
-  exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
-  s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient ==>
+  exec_delegatecall i t gas addr bo az rt rz = OK t1 ==>
   dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   strip_tac >>
-  `s1.vs_immutables = s.vs_immutables` by
-    (qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` mp_tac >>
-     disch_then (fn th => assume_tac th) >>
-     drule dload_delegate_exec_shape >>
-     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `t1.vs_immutables = t.vs_immutables` by
-    (qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` kall_tac >>
-     drule dload_delegate_exec_shape >>
-     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes` by
+    gvs[dload_equal_environment_def, venom_state_component_equality] >>
+  fs[exec_delegatecall_def, AllCaseEqs()] >>
+  Cases_on `t.vs_outcomes` >>
   gvs[dload_shared_store_def, step_taint_def, store_taint_def,
-      adopt_reset_def, imm_taint_def, storage_agree_except_def,
-      word_agree_except_def] >> metis_tac[]
+      adopt_reset_def, imm_taint_def, update_var_def,
+      venom_call_request_def, take_outcome_def,
+      computed_precompile_def, adopt_outcome_def,
+      storage_agree_except_def, word_agree_except_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> metis_tac[]
 QED
 
 Theorem dload_delegate_outputs[local]:
@@ -299,34 +272,34 @@ Theorem dload_delegate_boundary[local]:
   i.inst_opcode = DELEGATECALL /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
   source_memory_write_ranges i t = [(w2n rt,w2n rz)] /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
-  dload_value_word fs {} p q ro rt /\
+  dload_value_word fl fs {} p q ro rt /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i s gas addr ao az ro rz = OK s1 /\
   exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
   dload_equal_environment s1 t1 /\
-  s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) ==>
-  dload_boundary_core lo fs V Ws PG PH
+  dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
   (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dload_vars_match fs V G H tn un s t /\
-   dload_memory_match lo fs tn un s t /\
+  `dload_vars_match fl fs V G H tn un s t /\
+   dload_memory_match fl lo fs tn un s t /\
    dload_shared_store tn un s t /\ dload_equal_environment s t /\
    dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs` by
     metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   `s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas /\
    s1.vs_alloca_next = s.vs_alloca_next /\ t1.vs_alloca_next = t.vs_alloca_next /\
    s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
    s1.vs_fmp = s.vs_fmp /\ t1.vs_fmp = t.vs_fmp` by
     metis_tac[dload_delegate_frame_fields] >>
-  `dload_vars_match fs V (step_prov PG G i s1) (step_prov PH H i t1)
+  `dload_vars_match fl fs V (step_prov PG G i s1) (step_prov PH H i t1)
      (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
    (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))` by
     (irule dload_scalar_result_vars >>
@@ -335,10 +308,10 @@ Proof
     (drule_all dload_delegate_shared_store >> simp[]) >>
   `s1.vs_returndata = t1.vs_returndata` by
     gvs[dload_equal_environment_def, venom_state_component_equality] >>
-  `dload_memory_match lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
+  `dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
     (irule dload_delegate_memory >> metis_tac[]) >>
   simp[dload_boundary_core_def] >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[dload_boundary_core_def] >> strip_tac >>
   irule dload_allocation_neutral_tables >> metis_tac[]
 QED
@@ -353,10 +326,10 @@ Theorem dload_boundary_core_delegate_shaped[local]:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
@@ -395,7 +368,7 @@ Proof
   `source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
    source_memory_write_ranges i t = [(w2n rt,w2n rz)]` by
     gvs[source_memory_write_ranges_def] >>
-  `dload_value_word fs {} (op_prov G r) (op_prov H r) ro rt` by
+  `dload_value_word fl fs {} (op_prov G r) (op_prov H r) ro rt` by
     (first_x_assum irule >> simp[]) >>
   `(w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ op_prov G r <> NONE) ==>
     ?b n. op_prov G r = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n))` by
@@ -419,10 +392,10 @@ Theorem dload_boundary_core_delegate:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\

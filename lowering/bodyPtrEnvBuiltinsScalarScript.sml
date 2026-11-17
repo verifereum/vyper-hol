@@ -9,7 +9,7 @@ Ancestors
   integer_word words exprSimWordArgs exprSimProps exprSimEnv stmtFragPtr
   vyperAST exprSimPrecompiles vyperTypeSystem gasSummary
   gasSummaryComposePtr gasStorage vyperStorageTrace vyperStorageFootprint vyperStorageBackend
-  exprPtrUnwrap bodyPtrPreds exprSimHypsDefs exprSimCalldata loweringSlice
+  exprPtrUnwrap exprStackPtr bodyPtrPreds exprSimHypsDefs exprSimCalldata loweringSlice
 
 Theorem ghost_inv_inst_idx[simp]:
   ghost_inv H d cenv cx es G tn (s with vs_inst_idx := k) <=>
@@ -289,7 +289,7 @@ Theorem compile_env_vv_sim_ptr:
   item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
   expr_vv_sim_ptr d ctx PG fn cenv cx ty (Builtin ann (Env item) []) es
 Proof
-  strip_tac >> irule expr_vv_sim_ptr_stack >> conj_tac
+  strip_tac >> irule expr_vv_sim_stack_ptr >> conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
       Cases_on `compile_env_var item sa` >> simp[as_stack_val_def]) >>
   conj_tac
@@ -389,7 +389,7 @@ QED
 Theorem compile_calldata_vv_sim_ptr:
   expr_vv_sim_ptr d ctx PG fn cenv cx ty (Builtin (BaseT (UintT 256)) CalldataLen []) es
 Proof
-  irule expr_vv_sim_ptr_stack >>
+  irule expr_vv_sim_stack_ptr >>
   simp[compile_calldata_len_stack, compile_calldata_sim_ptr] >>
   metis_tac[eval_expr_builtin_value]
 QED

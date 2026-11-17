@@ -185,7 +185,7 @@ Theorem ricf_analyzed_ledger_next:
 Proof
   simp[ricf_analyzed_ledger_def, EVERY_MEM] >> rpt strip_tac >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`ctxP`,`logP`] >> simp[] >>
   Cases_on `inst.inst_opcode = ALLOCA`
@@ -293,7 +293,7 @@ Theorem ricf_analyzed_origins_next:
 Proof
   strip_tac >> fs[ricf_analyzed_origins_def] >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   conj_tac >- (irule ricf_analyzed_ledger_next >> metis_tac[]) >>
   conj_tac
   >- (`ricf_analyzed_map_origins vs C stk PG (step_prov PG G inst u)

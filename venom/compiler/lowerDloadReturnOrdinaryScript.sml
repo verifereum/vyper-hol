@@ -22,8 +22,8 @@ QED
 
 (* Singleton witnesses are explicit: ordinary generated scratch instructions
    are not mistaken for source instruction boundaries. *)
-Theorem ld_return_point_ordinary_next:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_return_point_ordinary_next_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs f0 A0 A (f::fs) /\
   fn' = ld_image f /\
@@ -100,3 +100,28 @@ Proof
   simp[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
   fs[ADD1] >> metis_tac[ld_image_def]
 QED
+
+Theorem ld_return_point_ordinary_next:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs f0 A0 A (f::fs) /\
+  fn' = ld_image f /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn cs s /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ^ld_probe_guard C' k bb t /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DLOAD /\
+  inst.inst_opcode <> DLOADBYTES /\ step_inst fuel C' inst t = OK u /\
+  ^ld_probe_guard C' j bb (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> irule ld_return_point_ordinary_next_static >>
+  simp[] >> rpt conj_tac
+  >- (goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      gvs[] >> metis_tac[]) >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+

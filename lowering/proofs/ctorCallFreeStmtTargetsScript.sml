@@ -10,12 +10,18 @@ Theorem opcode_every_get_target_ptr:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !target ce.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_target_exists R target /\
   ~supported_target_exists expr_shape_root target ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -24,13 +30,14 @@ Theorem opcode_every_get_target_ptr:
   )
 Proof
   strip_tac >>
-  strip_tac >> gen_tac >> gen_tac >> qid_spec_tac `target` >>
+  strip_tac >> gen_tac >> gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >> qid_spec_tac `target` >>
   ho_match_mp_tac every_state_insts_get_target_ptr >>
   simp[(UNDISCH opcode_every_keccak256_key), (UNDISCH opcode_every_mapping_subscript), (UNDISCH opcode_every_alloc_buffer),
     opcode_every_emit_op, (UNDISCH opcode_every_array_subscript), (UNDISCH opcode_every_ptr_load)] >>
   rpt gen_tac >> strip_tac >> qid_spec_tac `st` >>
   ho_match_mp_tac every_state_insts_lower_value >>
-  simp[(UNDISCH opcode_every_unwrap_value)]
+  simp[(UNDISCH opcode_every_unwrap_value)] >> metis_tac[]
 QED
 
 Theorem opcode_every_tuple_store_all:
