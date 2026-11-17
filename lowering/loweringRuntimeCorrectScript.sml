@@ -881,3 +881,26 @@ Theorem call_external_marked_readings_available:
 Proof
   cheat
 QED
+
+(* ADMISSION: statement only.  Waits for its proof from the three reading
+   lemmas above and the S1 certificate at the selected marks. *)
+Theorem lower_vyper_runtime_unit_correct_readings_available:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
+    ?marks.
+      source_unit_execution_correct_at marks tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  cheat
+QED
