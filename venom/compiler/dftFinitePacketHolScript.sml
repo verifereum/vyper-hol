@@ -21,7 +21,7 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
-  dftPacketFreshChildStop dftPacketFreshSingletonStop
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop dftPacketFreshSingletonStop
   dftPacketFreshChildOccurrence dftPacketFreshRow
   dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
   dftPacketKeyMap
@@ -46,7 +46,7 @@ Ancestors
   dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketReturnRecordFrame
-  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
@@ -60,4 +60,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess dftPacketFreshRootGeometry
