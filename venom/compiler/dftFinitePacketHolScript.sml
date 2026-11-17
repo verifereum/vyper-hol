@@ -44,7 +44,7 @@ Ancestors
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
-  dftPacketReturnRecordFrame
+  dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts
   dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
