@@ -20,6 +20,7 @@ Ancestors
   dftPacketKeySubstitution
   dftPacketNativeContinuation
   dftPacketNativePrefixBoundary
+  dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
@@ -28,7 +29,9 @@ Ancestors
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPseudoAdvance
+  dftPacketPseudoCursor
   dftPacketRefinementBoundary
+  dftPacketRetainedOracle
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
