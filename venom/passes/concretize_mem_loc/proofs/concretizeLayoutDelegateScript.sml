@@ -47,6 +47,10 @@ QED
 
 Theorem concretize_delegate_observation:
   inst.inst_opcode = DELEGATECALL /\ taint_ok fn tn inst s /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
   relocation_env s t /\ relocation_reader_context s t /\
   concretize_local_obs s t /\ concretize_supplement D tn s t /\
   read_memory (w2n off) (w2n sz) s =
@@ -61,57 +65,60 @@ Theorem concretize_delegate_observation:
       post.vs_vars = (update_var out w s).vs_vars /\
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
-  strip_tac >> drule_all concretize_delegate_clean_snapshots >> strip_tac >>
-  `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions /\
-   LIST_REL (request_agree_except <| d_stor := K (K UNIV); d_trans := K (K UNIV);
-     d_imm := K UNIV; d_ret := K {} |>) s.vs_requests t.vs_requests` by
-    fs[concretize_local_obs_def, dead_result_rel_def] >>
+  strip_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[relocation_env_def] >>
   `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
   drule delegate_success_envelope >> strip_tac >>
   qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
-  `venom_call_request t addr 0w offT sz F with cr_kind := DelegateMessageCall = rq` by
-    simp[Abbr `rq`, venom_call_request_def] >>
-  `!M. request_agree_except M rq rq` by
-    simp[request_agree_except_def, accounts_agree_except_def,
-         transient_agree_except_def, storage_agree_except_def,
-         word_agree_except_def] >>
-  Cases_on `take_outcome rq s.vs_outcomes` >>
-  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
-  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
-  PairCases_on `r` >> rename1 `adopt_outcome rq oc _ = (ac,ats,alg)` >>
-  drule_all call_completion_fields >> strip_tac >>
-  `take_outcome rq t.vs_outcomes = (oc,rest) /\
-   adopt_outcome rq oc (t.vs_accounts,t.vs_transient,t.vs_logs) = (ac,ats,alg)` by
-    metis_tac[] >>
-  `LIST_REL (request_agree_except <| d_stor := K (K UNIV); d_trans := K (K UNIV);
-     d_imm := K UNIV; d_ret := K {} |>)
-     (record_request rq s.vs_requests) (record_request rq t.vs_requests) /\
-   LIST_REL (request_agree_except D)
-     (record_request rq s.vs_requests) (record_request rq t.vs_requests)` by
-    (conj_tac >> irule request_agree_record_request >>
-     fs[concretize_supplement_def]) >>
-  qexists_tac `update_var out w (t with <|
-    vs_outcomes := rest; vs_requests := record_request rq t.vs_requests;
-    vs_accounts := ac; vs_transient := ats; vs_logs := alg;
-    vs_pending_deletions := adopt_outcome_deletions rq oc t.vs_pending_deletions;
-    vs_returndata := oc.co_returnData;
-    vs_memory := (write_memory_with_expansion (w2n roT)
-      (TAKE (w2n rs) oc.co_returnData) t).vs_memory |>)` >>
-  conj_tac >- simp[exec_delegatecall_def] >>
-  qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
-  rpt conj_tac
+  qabbrev_tac `rqT = venom_call_request t addr 0w offT sz F with
+    cr_kind := DelegateMessageCall` >>
+  `rq.cr_accounts = s.vs_accounts /\ rqT.cr_accounts = t.vs_accounts /\
+   rq.cr_tStorage = s.vs_transient /\ rqT.cr_tStorage = t.vs_transient /\
+   rq.cr_kind = DelegateMessageCall /\
+   rq with <|cr_accounts := rqT.cr_accounts; cr_tStorage := rqT.cr_tStorage|> = rqT` by
+    simp[Abbr `rq`, Abbr `rqT`, venom_call_request_def] >>
+  `request_agree_except D rq rqT` by
+    (drule_all concretize_request_observation >> simp[]) >>
+  Cases_on `consume_call_outcome rqT (w2n roT) (w2n rs) t` >>
+  rename1 `consume_call_outcome rqT _ _ t = (wT,pT)` >>
+  drule_all concretize_call_completion_observation >> strip_tac >>
+  qexists_tac `update_var out wT pT` >> conj_tac
+  >- (gvs[Abbr `rqT`, Excl "consume_call_outcome_eq"] >>
+      simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"]) >>
+  conj_tac
   >- gvs[concretize_local_obs_def, dead_result_rel_def, update_var_def,
-         accounts_agree_except_def, transient_agree_except_def,
-         storage_agree_except_def, word_agree_except_def]
-  >- gvs[concretize_supplement_def, step_taint_def, store_taint_def,
-         imm_taint_def, adopt_reset_def, update_var_def,
-         accounts_agree_except_def, transient_agree_except_def,
-         storage_agree_except_def, word_agree_except_def]
-  >- gvs[relocation_env_def, update_var_def]
-  >- gvs[relocation_reader_context_def, update_var_def] >>
-  qexistsl_tac [`out`,`w`] >> gvs[update_var_def]
+         Excl "consume_call_outcome_eq"] >>
+  conj_tac >- suspend "supplement" >>
+  conj_tac >- suspend "environment" >>
+  conj_tac >- suspend "reader" >>
+  qexistsl_tac [`out`,`w`] >> simp[update_var_def]
 QED
+Resume concretize_delegate_observation[supplement]:
+  `LIST_REL (request_agree_except D)
+    (record_request rq s.vs_requests) (record_request rqT t.vs_requests)` by
+    (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
+  fs[concretize_supplement_def] >>
+  qpat_x_assum `s.vs_outcomes = t.vs_outcomes` SUBST_ALL_TAC >>
+  Cases_on `t.vs_outcomes` >>
+  gvs[consume_call_outcome_def, take_outcome_def, computed_precompile_def,
+      Abbr `rq`, Abbr `rqT`, venom_call_request_def,
+      failed_outcome_def, adopt_outcome_def, Excl "consume_call_outcome_eq"] >>
+  Cases_on `h.co_success` >> Cases_on `t.vs_call_ctx.cc_static` >>
+  gvs[concretize_supplement_def, step_taint_def, store_taint_def,
+      imm_taint_def, adopt_reset_def, update_var_def,
+      accounts_agree_except_def, transient_agree_except_def,
+      storage_agree_except_def, word_agree_except_def,
+      Excl "consume_call_outcome_eq"]
+QED
+Resume concretize_delegate_observation[environment]:
+  gvs[consume_call_outcome_def, update_var_def, relocation_env_def,
+      Excl "consume_call_outcome_eq", pairTheory.UNCURRY] >> pairarg_tac >> gvs[]
+QED
+Resume concretize_delegate_observation[reader]:
+  gvs[consume_call_outcome_def, update_var_def, relocation_reader_context_def,
+      Excl "consume_call_outcome_eq", pairTheory.UNCURRY] >> pairarg_tac >> gvs[]
+QED
+Finalise concretize_delegate_observation
 
 Theorem delegate_execution_fields:
   exec_delegatecall inst s (gas:bytes32) (addr:bytes32)
@@ -134,6 +141,10 @@ QED
 
 Theorem concretize_delegate_local_execution:
   inst.inst_opcode = DELEGATECALL /\ taint_ok fn tn inst s /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
   inst.inst_operands = [opg;opa;opd;opn;opr;opm] /\
   relocation_env s t /\ relocation_reader_context s t /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
@@ -358,6 +369,29 @@ Proof
         simp[] >> fs[]) >>
      drule local_rel_demand >> simp[frameRelocationDemandTheory.demand_agree_def] >>
      metis_tac[]) >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+     (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (`active_inst fn inst s` by
+       (fs[joint_config_reachable_def] >>
+         metis_tac[joint_origin_history_projection,
+           frameHistoryDefinitionsTheory.frame_history_active]) >>
+     `gas_cut ncut vs0 s` by
+       metis_tac[layout_cut_safe_edge_frame, layout_cut_safe_frame,
+                 layout_cut_safe_frame_cfg] >>
+     `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
+     `inst.inst_opcode <> INVOKE` by simp[] >>
+     `step_inst 0 C inst s = OK post` by
+       gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+     `LENGTH s.vs_requests < LENGTH post.vs_requests` by
+       (drule delegate_success_envelope >> strip_tac >>
+        qpat_x_assum `consume_call_outcome _ _ _ _ = _` mp_tac >>
+        simp[consume_call_outcome_def, record_request_def, computed_precompile_def,
+             venom_call_request_def, update_var_def, pairTheory.UNCURRY,
+             Excl "consume_call_outcome_eq"] >> strip_tac >>
+        gvs[update_var_def]) >>
+     drule_all taint_within_upto_request >> simp[]) >>
   `post.vs_allocas = s.vs_allocas` by metis_tac[delegate_execution_fields] >>
   `?roT. eval_operand opr t = SOME roT /\
     (!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b /\
