@@ -168,9 +168,7 @@ QED
 
 Theorem ricf_frame_consume_call:
   ricf_frame_agree D X sites PG H tn s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -235,9 +233,7 @@ QED
 
 Theorem ricf_cert_consume_call:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -290,24 +286,15 @@ QED
 Theorem ricf_call_request_compatible:
   ricf_frame_agree D X sites PG H tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static) \/
-   (accounts_agree_except D s.vs_accounts t.vs_accounts /\
-    transient_agree_except D s.vs_transient t.vs_transient)) ==>
-  ((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient ==>
+  request_agree_except D (venom_call_request s addr value ao az static)
+    (venom_call_request t addr value ao' az static)
 Proof
   rpt gen_tac >> disch_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     (fs[ricf_frame_agree_def] >> drule taint_agree_call_ctx >> simp[]) >>
-  fs[Excl "consume_call_outcome_eq"]
-  >- (disj1_tac >> gvs[extCallOracleTheory.computed_precompile_def, venom_call_request_def]) >>
-  disj2_tac >> irule o1LowerDloadJointExternalTheory.ld_venom_call_request_masked >> simp[]
+  irule o1LowerDloadJointExternalTheory.ld_venom_call_request_masked >> simp[]
 QED
 
 Theorem ricf_cert_exec_ext_call:
@@ -315,9 +302,8 @@ Theorem ricf_cert_exec_ext_call:
   s.vs_outcomes <> [] /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) \/
-   (accounts_agree_except D s.vs_accounts t.vs_accounts /\
-    transient_agree_except D s.vs_transient t.vs_transient)) /\
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient /\
   consume_call_outcome (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) s = (w,r) /\
   (!gam db sb sz k.
@@ -342,29 +328,15 @@ Proof
     fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
        taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   `t.vs_outcomes <> []` by metis_tac[] >>
-  `((computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) /\
-    computed_precompile (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)) /\
-    (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_target =
-      (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)).cr_target /\
-    (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_data =
-      (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
-     (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)))` by
-    (`((computed_precompile (venom_call_request s addr value ao az static) /\
-        computed_precompile (venom_call_request t addr value ao' az static) /\
-        (venom_call_request s addr value ao az static).cr_target =
-          (venom_call_request t addr value ao' az static).cr_target /\
-        (venom_call_request s addr value ao az static).cr_data =
-          (venom_call_request t addr value ao' az static).cr_data) \/
-       request_agree_except D (venom_call_request s addr value ao az static)
-         (venom_call_request t addr value ao' az static))` suffices_by
-       simp[venom_call_request_def, extCallOracleTheory.computed_precompile_def,
-            request_agree_except_def] >>
+  `request_agree_except D
+     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
+     (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas))` by
+    (`request_agree_except D (venom_call_request s addr value ao az static)
+        (venom_call_request t addr value ao' az static)` suffices_by
+       simp[venom_call_request_def, request_agree_except_def] >>
      irule ricf_call_request_compatible >>
      fs[ricf_cert_core_def, ricf_live_boundary_core_def,
-        venom_call_request_def, extCallOracleTheory.computed_precompile_def,
-        Excl "consume_call_outcome_eq"] >>
-     metis_tac[]) >>
+        Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
   Cases_on `consume_call_outcome (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) t` >>
   `w = q /\ ricf_cert_core D ids stk PG

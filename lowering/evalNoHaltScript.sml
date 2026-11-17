@@ -145,7 +145,7 @@ QED
 
 Theorem call_ops_nh[local]:
   (next_gas_reading s = (INR HaltException, s') ==> F) /\
-  (precompile_call_success bt s = (INR HaltException, s') ==> F) /\
+  (precompile_call_success bt vs s = (INR HaltException, s') ==> F) /\
   (frame_call_value cx vo s = (INR HaltException, s') ==> F) /\
   (take_call_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
   (take_delegate_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
