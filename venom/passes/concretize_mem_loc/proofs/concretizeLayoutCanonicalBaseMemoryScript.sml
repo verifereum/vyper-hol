@@ -198,6 +198,8 @@ Proof
      gvs[] >>
      `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
      `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+     `(ctx_has_dalloca C ==>
+        ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp)` by simp[] >>
      FIRST [(`MEM i.inst_opcode [MLOAD; ILOAD]` by simp[] >>
          drule_all layout_word_load_trace_step),
        drule_all layout_mcopy_trace_step, drule_all layout_istore_trace_step,
