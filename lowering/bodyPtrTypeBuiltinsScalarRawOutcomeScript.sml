@@ -400,9 +400,26 @@ Theorem scalar_integer_address_actual_outcome:
   (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
     expr_exit (convert_result cx src (BaseT AddressT) (IntV i)) (Abort err t))
 Proof
-  strip_tac >> Cases_on `within_int_bound (Unsigned 160) i`
-  >- (drule_all scalar_int_address_run_ok >> strip_tac >>
-      disj1_tac >> qexistsl_tac [`ss'`, `AddressV (n2w (Num i))`] >>
+  strip_tac >>
+  `within_int_bound (Unsigned 160) (&w2n (i2w i:bytes32)) <=>
+   within_int_bound (Unsigned 160) i` by
+    (Cases_on `i < 0`
+     >- (`i % &(2**256) = i + &(2**256)` by
+           (irule integerTheory.INT_MOD_UNIQUE >> qexists_tac `-1` >>
+            gvs[] >> intLib.ARITH_TAC) >>
+         pure_rewrite_tac[within_int_bound_ineq, integer_wordTheory.w2n_i2w] >>
+         gvs[wordsTheory.dimword_def] >> intLib.ARITH_TAC) >>
+     `i % &(2**256) = i` by
+       (irule integerTheory.INT_MOD_UNIQUE >> qexists_tac `0` >>
+        gvs[] >> intLib.ARITH_TAC) >>
+     pure_rewrite_tac[within_int_bound_ineq, integer_wordTheory.w2n_i2w] >>
+     gvs[wordsTheory.dimword_def]) >>
+  `compile_int_clamp F 160 x sa = (out,sb)` by
+    gvs[bodyPtrTypeBuiltinsScalarChecksTheory.convert_address_clamp] >>
+  drule_all (SRULE [] (Q.INST [`sg` |-> `F`, `b` |-> `160`]
+    exprSimConvertFromBytesTheory.dynamic_int_clamp_exact)) >> simp[] >>
+  Cases_on `within_int_bound (Unsigned 160) i` >> simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`sf`, `AddressV (n2w (Num i))`] >>
       simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
         vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
         vyperValueTheory.evaluate_type_def, is_word_type_def,
@@ -414,8 +431,7 @@ Proof
       simp[integer_wordTheory.i2w_pos, wordsTheory.w2w_def,
         wordsTheory.w2n_n2w, wordsTheory.dimword_def,
         fcpLib.INDEX_CONV ``dimindex(:160)``] >> fs[]) >>
-  drule_all scalar_int_address_run_abort >> strip_tac >>
-  disj2_tac >> qexistsl_tac [`Revert_abort`, `ss'`] >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `sf`] >>
   simp[expr_exit_def, convert_result_def,
     vyperValueOperationTheory.evaluate_convert_from_def,
     vyperValueOperationTheory.evaluate_convert_def]
@@ -575,7 +591,17 @@ Proof
   >- (strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
       fs[mk_convert_op_def, is_bytestring_type_def] >>
-      irule scalar_address_uint_actual_outcome >> metis_tac[]) >>
+      irule scalar_address_uint_actual_outcome >> metis_tac[])
+  >- (strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      fs[mk_convert_op_def, is_bytestring_type_def] >>
+      drule_all scalar_address_bool_run >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `BoolV (EXISTS (\b. b <> 0w) l)`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def] >>
+      Cases_on `EXISTS (\b. b <> 0w) l` >> simp[bool_to_word_def]) >>
   Cases_on `b'` >> simp[vyperTypeSystemTheory.valid_conversion_def] >>
   strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
@@ -642,8 +668,8 @@ Proof
       fs[SRULE [] (Q.SPEC `167` arithmeticPropsTheory.w2i_i2w_neg_pow2),
          SRULE [] (Q.SPEC `167` arithmeticPropsTheory.w2i_i2w_pow2_sub1)] >>
       `0 < 2 ** (n-1)` by simp[] >> fs[integerTheory.INT_SUB] >>
-      irule scalar_decimal_signed_actual_outcome >> simp[integerTheory.INT_SUB] >> metis_tac[]) >>
-  gvs[vyperValueTheory.evaluate_type_def] >>
+      irule scalar_decimal_signed_actual_outcome >> simp[integerTheory.INT_SUB] >> metis_tac[])
+  >- (gvs[vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
   Cases_on `n = 256` >>
   fs[mk_convert_op_def, is_bytestring_type_def, typed_val_to_w256_def,
@@ -661,7 +687,26 @@ Proof
      SRULE [] (Q.SPEC `167` arithmeticPropsTheory.w2i_i2w_pow2_sub1)] >>
   `0 < 2 ** n` by simp[] >>
   fs[EVAL ``w2i (0w:bytes32)``] >>
-  irule scalar_decimal_unsigned_actual_outcome >> simp[integerTheory.INT_SUB] >> metis_tac[]
+  irule scalar_decimal_unsigned_actual_outcome >> simp[integerTheory.INT_SUB] >> metis_tac[])
+  >- (gvs[vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      fs[mk_convert_op_def, is_bytestring_type_def] >>
+      drule_all scalar_decimal_bool_run >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `BoolV (i <> 0)`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def] >>
+      Cases_on `i = 0` >> simp[bool_to_word_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  fs[mk_convert_op_def, is_bytestring_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  drule_all scalar_int_bytes_run >> strip_tac >>
+  disj1_tac >> qexistsl_tac [`ss'`, `BytesV (DROP (32-m) (word_to_bytes_be (i2w i:bytes32)))`] >>
+  simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+    vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+    vyperValueTheory.evaluate_type_def, is_word_type_def,
+    convertScalarEncodingTheory.scalar_word_to_fixed]
 QED
 
 Theorem scalar_uint_address_actual_outcome:
@@ -774,11 +819,7 @@ Proof
             scalar_integer_base_source_actual_outcome)) >> metis_tac[])
       >- (strip_tac >> irule (SRULE [] (Q.INST [`sg` |-> `T`]
             scalar_integer_base_source_actual_outcome)) >> metis_tac[])
-      >- (Cases_on `bt` >> simp[vyperTypeSystemTheory.valid_conversion_def] >>
-          strip_tac >> disj1_tac >>
-          irule scalar_identity_actual_outcome >>
-          fs[mk_convert_op_def, is_bytestring_type_def] >>
-          metis_tac[vyperTypeSystemTheory.valid_conversion_def])
+      >- suspend "bool_source"
       >- (strip_tac >> irule scalar_decimal_source_actual_outcome >> metis_tac[])
       >- simp[is_bytestring_type_def]
       >- (Cases_on `b'` >> simp[is_bytestring_type_def] >> strip_tac >>
@@ -786,6 +827,40 @@ Proof
       strip_tac >> irule scalar_address_source_actual_outcome >> metis_tac[]) >>
   strip_tac >> irule scalar_flag_source_actual_outcome >> metis_tac[]
 QED
+
+Resume scalar_base_destination_actual_outcome[bool_source]:
+  Cases_on `bt` >> simp[vyperTypeSystemTheory.valid_conversion_def]
+  >- (strip_tac >> disj1_tac >> irule scalar_identity_actual_outcome >>
+      fs[vyperTypeSystemTheory.valid_conversion_def, mk_convert_op_def,
+         is_bytestring_type_def] >> qexists_tac `x` >> simp[])
+  >- (strip_tac >> disj1_tac >> irule scalar_identity_actual_outcome >>
+      fs[vyperTypeSystemTheory.valid_conversion_def, mk_convert_op_def,
+         is_bytestring_type_def] >> qexists_tac `x` >> simp[])
+  >- (strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      fs[mk_convert_op_def, is_bytestring_type_def] >>
+      drule_all scalar_bool_decimal_run >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `DecimalV (if b then decimal_scale else 0)`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def] >> Cases_on `b` >> simp[]) >>
+  Cases_on `b` >> gvs[vyperTypeSystemTheory.valid_conversion_def] >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  fs[mk_convert_op_def, is_bytestring_type_def] >>
+  fs[scalar_bool_word] >>
+  `8 <= 8*n` by decide_tac >>
+  drule_all scalar_int_bytes_run >> strip_tac >>
+  disj1_tac >>
+  qexistsl_tac [`ss'`, `BytesV (DROP (32-n) (word_to_bytes_be (i2w (if b then 1 else 0):bytes32)))`] >>
+  simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+    vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+    vyperValueTheory.evaluate_type_def, is_word_type_def,
+    convertScalarEncodingTheory.scalar_word_to_fixed] >> Cases_on `b` >>
+  simp[integer_wordTheory.i2w_pos]
+QED
+Finalise scalar_base_destination_actual_outcome
 
 Theorem scalar_raw_clean_outcome[local]:
   valid_conversion src dst /\ ~is_bytestring_type src /\
