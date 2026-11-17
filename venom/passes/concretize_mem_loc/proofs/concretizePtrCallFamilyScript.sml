@@ -205,6 +205,22 @@ Proof
   irule ptr_payload_write_content >> simp[LENGTH_TAKE_EQ]
 QED
 
+Theorem ptr_call_update_frame[local]:
+  exec_ext_call inst s gas addr value ao az ro rz st = OK (update_var out w u) /\
+  inst.inst_outputs = [out] ==>
+  u.vs_allocas = s.vs_allocas /\ u.vs_current_bb = s.vs_current_bb /\
+  u.vs_prev_bb = s.vs_prev_bb /\ u.vs_params = s.vs_params /\
+  (!x. x <> out ==> lookup_var x u = lookup_var x s) /\
+  u.vs_return_pc_token = s.vs_return_pc_token
+Proof
+  strip_tac >> Cases_on `s.vs_outcomes = []` >>
+  gvs[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
+  rpt strip_tac >> simp[lookup_var_def] >>
+  qpat_x_assum `(_ |+ (out,_)) = (_ |+ (out,_))`
+    (mp_tac o Q.AP_TERM `\m. FLOOKUP m x`) >>
+  simp[FLOOKUP_UPDATE]
+QED
+
 Theorem ptr_paired_call_step_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -390,19 +406,18 @@ Proof
    u.vs_params = a.po_state.vs_params /\
    (!x. x <> out ==> lookup_var x u = lookup_var x a.po_state) /\
    u.vs_return_pc_token = a.po_state.vs_return_pc_token` by
-    (qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
-     Cases_on `a.po_state.vs_outcomes = []` >>
-     simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
+    (qpat_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] ptr_call_update_frame)) >>
+     simp[]) >>
   `v.vs_current_bb = at.po_state.vs_current_bb /\
    v.vs_prev_bb = at.po_state.vs_prev_bb /\
    v.vs_params = at.po_state.vs_params /\
    (!x. x <> out ==> lookup_var x v = lookup_var x at.po_state) /\
    v.vs_return_pc_token = at.po_state.vs_return_pc_token` by
     (qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
-     Cases_on `at.po_state.vs_outcomes = []` >>
-     simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
+     simp[] >>
+     disch_then (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] ptr_call_update_frame)) >>
+     simp[]) >>
   gvs[Excl "MEM"] >>
   simp[mem_write_ops_def, source_memory_write_ranges_def,
        fixed_source_write_range_def, memory_range_of_operands_def,
