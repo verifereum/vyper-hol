@@ -300,11 +300,17 @@ Proof
   strip_tac >>
   `alloca_frame old es sa s0 old es entry` by
     (irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >> simp[]) >>
-  fs[stmtSimDefsTheory.alloca_frame_def] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> qexists_tac `n` >>
+     asm_rewrite_tac[] >> simp[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
+  qpat_x_assum `alloca_frame old es sa s0 old es entry`
+    (assume_tac o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
+  pure_rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!aid off sz. _` (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  conj_tac >- simp[] >> rpt strip_tac >>
+  qpat_x_assum `!n b sz'. local_region old es.scopes entry n b sz' ==> _` irule >>
+  qexists_tac `n` >>
   fs[loweringStateRelDefsTheory.local_region_def] >>
   `n <> id` by (strip_tac >> gvs[]) >> metis_tac[]
 QED
