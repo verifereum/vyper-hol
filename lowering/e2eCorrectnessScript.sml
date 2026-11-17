@@ -39,7 +39,7 @@ Ancestors
   o1SymStaticData o1SymStaticPipeline venomPipelineDriverProps
   venomCompilerWf venomWf o1LabelFlowCompose
   contextStaticAbortRel
-  list
+  list callRawVariant
 
 
 (* =====================================================================
@@ -843,62 +843,11 @@ QED
 
 (* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
    proof. *)
-Theorem raw_variant_outcomes:
-  raw_variant fmp si so ==> si.vs_outcomes = so.vs_outcomes
-Proof
-  cheat
-QED
-
-(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
-   proof. *)
-Theorem raw_variant_call_ctx:
-  raw_variant fmp si so ==> si.vs_call_ctx = so.vs_call_ctx
-Proof
-  cheat
-QED
-
-(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
-   proof. *)
-Theorem raw_variant_initial_venom_state_rel:
-  raw_variant fmp si so /\ initial_venom_state_rel tops am tx so ==>
-  initial_venom_state_rel tops am tx si
-Proof
-  cheat
-QED
-
-(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
-   proof. *)
 Theorem raw_variant_opt_entry_calldata_bound:
   !tops bc am tx prog prog' cp es fmp vs.
     call_state_rel tops bc am tx es /\
     raw_variant fmp vs (opt_entry_state prog prog' cp es) ==>
     LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64
-Proof
-  cheat
-QED
-
-(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
-   proof. *)
-Theorem raw_fmp_choice:
-  !tops rpolicy unit out cp prog prog' es fmp.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    generate_context_plan out.po_unit.cu_context = SOME cp /\
-    fmp = (n2w (MAX cp.cp_initial_fmp
-                  (unit_alloca_budget unit.cu_context +
-                   32 * ctx_dload_count unit.cu_context)) : bytes32) ==>
-    w2n (opt_entry_state prog prog' cp es).vs_initial_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    unit_alloca_budget unit.cu_context +
-      32 * ctx_dload_count unit.cu_context <= w2n fmp
-Proof
-  cheat
-QED
-
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
-Theorem source_typing_ok_code_update:
-  source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
-  source_typing_ok tops am (tx with code := c)
 Proof
   cheat
 QED
