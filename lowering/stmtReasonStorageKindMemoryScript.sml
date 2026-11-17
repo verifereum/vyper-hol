@@ -231,7 +231,9 @@ Proof
       (if loc = LocStorage then SLOAD else TLOAD) <> DLOADBYTES` by rw[] >>
      asm_simp_tac (srw_ss()) [run_inst_seq_mem_ok_def, dload_mk_inst_other,
        below_frontier_MSTORE, eval_operand_def, lookup_var_update_var] >>
-     irule below_frontier_no_ranges >> rw[mk_inst_def]) >>
+     conj_tac
+     >- (irule below_frontier_no_ranges >> rw[mk_inst_def]) >>
+     simp[update_var_def]) >>
   qspecl_then [`l`, `s`, `mstore b w (update_var v w s)`, `ctx`, `func`, `bb`]
     mp_tac run_inst_seq_gas_path_mem >>
   impl_tac

@@ -579,9 +579,6 @@ Resume compile_assert_reason_vv_frag_mem[false]:
      `expr_post H ctx func cenv cx e es sa s1 s0 (mid with gas_obs := [])
         (BoolV F) op t` by metis_tac[] >>
      pop_assum (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-     qpat_x_assum `stmt_state_rel _ _ _ _ _ (mid with gas_obs := []) t`
-       (assume_tac o
-        REWRITE_RULE [exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
      rewrite_tac[stmt_state_rel_jump_to] >> metis_tac[]) >>
   `alloca_history func (jump_to s5.cs_current_bb t)` by
     fs[allocaHistoryTheory.alloca_history_def, jump_to_def] >>
