@@ -230,6 +230,7 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
     simp[] >>
   rpt conj_tac
   >- (irule pop_storage_vv_post >>
+      qexists_tac `elem` >> simp[] >>
       simp[vv_place_ptr_def, contextTheory.mk_ptr_def, slot_loc_def,
            eval_operand_def])
   >- (irule vv_store_bound_nonmem >> Cases_on `tr` >> simp[contextTheory.mk_ptr_def])
