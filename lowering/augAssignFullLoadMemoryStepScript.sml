@@ -13,14 +13,13 @@ val load_steps = LIST_CONJ (List.filter (fn th =>
   end) (CONJUNCTS step_inst_base_opcode_eqs));
 
 Theorem augassign_mload_joint_step:
-  !K DF lo explicit ctx func PG sa arg a s G tn old sb.
-  let x = STRING #"%" (toString sa.cs_next_var);
-      i = mk_inst sa.cs_next_id MLOAD [arg] [x];
-      raw = update_var x (mload (w2n a) s) s;
-      u = raw with vs_inst_idx := SUC s.vs_inst_idx;
-      G1 = step_prov PG G i raw;
-      tn1 = step_taint i s raw tn
-  in
+  !K DF lo explicit ctx func PG sa arg a s G tn old sb x i raw u G1 tn1.
+    x = STRING #"%" (toString sa.cs_next_var) /\
+    i = mk_inst sa.cs_next_id MLOAD [arg] [x] /\
+    raw = update_var x (mload (w2n a) s) s /\
+    u = (raw with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G1 = step_prov PG G i raw /\
+    tn1 = step_taint i s raw tn /\
     emit_op MLOAD [arg] sa = (old,sb) /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
@@ -44,46 +43,49 @@ Theorem augassign_mload_joint_step:
     (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s /\
          FLOOKUP G1 q = FLOOKUP G q /\ op_taint tn1 (Var q) = op_taint tn (Var q))
 Proof
-  rpt gen_tac >> simp_tac bool_ss [LET_THM] >>
-  qabbrev_tac `x = STRING #"%" (toString sa.cs_next_var)` >>
-  qabbrev_tac `i = mk_inst sa.cs_next_id MLOAD [arg] [x]` >>
-  qabbrev_tac `raw = update_var x (mload (w2n a) s) s` >>
-  qabbrev_tac `u = raw with vs_inst_idx := SUC s.vs_inst_idx` >>
-  qabbrev_tac `G1 = step_prov PG G i raw` >>
-  qabbrev_tac `tn1 = step_taint i s raw tn` >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `u = _` SUBST_ALL_TAC >>
+  qpat_x_assum `x = _` (mk_asm "eq_x") >>
+  qpat_x_assum `i = _` (mk_asm "eq_i") >>
+  qpat_x_assum `raw = _` (mk_asm "eq_raw") >>
+  qpat_x_assum `G1 = _` (mk_asm "eq_G1") >>
+  qpat_x_assum `tn1 = _` (mk_asm "eq_tn1") >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   `!q. not_fresh_at sa q ==> q <> x` by
-    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
+    (simp[not_fresh_at_def, markerLib.L "eq_x"] >> metis_tac[LESS_EQ_REFL]) >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_assum `s.vs_inst_idx = _` (fn th =>
         pure_rewrite_tac [GSYM th]) >>
-      simp_tac bool_ss [Abbr `G1`, Abbr `tn1`] >>
+      simp_tac bool_ss [markerLib.L "eq_G1", markerLib.L "eq_tn1"] >>
       irule navigation_instruction_origin >>
       goal_assum (drule_at Any) >>
-      simp[Abbr `i`, mk_inst_def, is_terminator_def,
+      simp[markerLib.L "eq_i", below_frontier_MLOAD] >>
+      simp[mk_inst_def, is_terminator_def,
         below_frontier_MLOAD, inst_dload_in_section_other,
-        load_steps, exec_read1_def, Abbr `raw`] >>
-      qexistsl_tac [`sa`,`sb`] >> simp[Abbr `x`, mk_inst_def]) >>
+        load_steps, exec_read1_def, markerLib.L "eq_raw"] >>
+      qexistsl_tac [`sa`,`sb`] >> simp[markerLib.L "eq_x", mk_inst_def]) >>
   `op_taint tn1 (Var x) = {} /\ tn1.t_mem = tn.t_mem /\
    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
-    (simp_tac bool_ss [Abbr `tn1`, Abbr `i`, Abbr `raw`] >>
+    (simp_tac bool_ss [markerLib.L "eq_tn1", markerLib.L "eq_i", markerLib.L "eq_raw"] >>
      irule mload_ghost_clean >> simp[]) >>
   `tn1.t_imm = tn.t_imm` by
-    simp[Abbr `tn1`, Abbr `i`, step_taint_nonmemory_frame, mk_inst_def] >>
+    simp[markerLib.L "eq_tn1", markerLib.L "eq_i", step_taint_nonmemory_frame, mk_inst_def] >>
   `op_prov G1 (Var x) = NONE` by
-    simp[Abbr `G1`, Abbr `i`, op_prov_def, step_prov_def,
+    simp[markerLib.L "eq_G1", markerLib.L "eq_i", op_prov_def, step_prov_def,
       out_prov_def, set_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
   `eval_operand arg (raw with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)) =
    SOME a` by
     (Cases_on `arg` >>
-     gvs[eval_operand_def, Abbr `raw`, update_var_def, lookup_var_def,
+     gvs[eval_operand_def, markerLib.L "eq_raw", update_var_def, lookup_var_def,
        FLOOKUP_UPDATE] >> metis_tac[]) >>
-  simp[Abbr `raw`, Abbr `x`, eval_operand_def, lookup_var_def,
+  gvs[markerLib.L "eq_raw", markerLib.L "eq_x", eval_operand_def, lookup_var_def,
     update_var_def, state_frame_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >>
-  simp[Abbr `G1`, Abbr `tn1`, Abbr `i`, step_prov_other_output,
+  `q <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
+  simp[markerLib.L "eq_G1", markerLib.L "eq_tn1", markerLib.L "eq_i",
+    markerLib.L "eq_x", step_prov_other_output,
     step_taint_other_output, mk_inst_def]
 QED
