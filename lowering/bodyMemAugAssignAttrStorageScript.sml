@@ -979,7 +979,7 @@ QED
 
 Finalise compile_augassign_attr_storage_mem_typed
 
-Theorem compile_augassign_attr_storage_mem[local]:
+Theorem compile_augassign_attr_storage_mem:
   !d ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot fs off ftv.
     (!gs. expr_sim_mem ctx func cenv cx ty e
