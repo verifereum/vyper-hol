@@ -554,7 +554,12 @@ Resume aggregate_declared_head_continuation_mem[store_join]:
   drule_at (Pat `locals_kept _ _ _ _ _`) aggregate_slice_frame_transport >>
   disch_then (qspecl_then [`sn`, `sm`, `t1`, `sa.cs_next_id`,
     `\a k. a+k <= b+off \/ b+off+type_memory_size htv <= a`] mp_tac) >>
-  (impl_tac >- (gvs[] >> rpt strip_tac >> first_x_assum irule >> metis_tac[])) >>
+  (impl_tac >- (gvs[] >> rpt strip_tac >> first_x_assum irule >>
+      (conj_tac >-
+        (rename1 `FLOOKUP t1.vs_allocas aid = SOME (alo,asz0)` >>
+         qexistsl_tac [`aid`, `alo`, `asz0`] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       simp[]))) >>
   strip_tac >>
   `gas_marked_exec T (ctx,func) (read_result cx tvv) (es1,t1)
       [] (INL v) es1 (OK q)` by

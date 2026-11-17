@@ -19,7 +19,9 @@
  * subscript whose base passes through a dynamic-array element
  * (vyperlang/vyper#5280); target_in_immutables rejects a pop() of, and
  * (in alloc_limits_stmt) an append() to, an immutable's member, where
- * Python's Venom codegen panics.
+ * Python's Venom codegen panics; and aug_assign_overlap (in
+ * alloc_limits_stmt) rejects an augmented assignment whose value can
+ * invalidate its target, Python's GHSA-4w26-8p97-f4jp panic.
  *)
 Theory allocLimits
 Ancestors
@@ -469,6 +471,191 @@ Definition tuple_assign_alloc_ok_def:
   tuple_assign_alloc_ok cenv _ _ = T
 End
 
+(* A call that can write state: extcall (not staticcall), a raw_call that
+   is not is_static_call, send, and the create builtins.
+   Mirrors Python: stmt.py _emits_writeable_call (one call) *)
+Definition writeable_call_target_def:
+  writeable_call_target (ExtCall is_static _ _ _) = ~is_static /\
+  writeable_call_target (RawCallTarget flags) = ~flags.rcf_is_static /\
+  writeable_call_target (RawCallCalldataTarget flags) =
+    ~flags.rcf_is_static /\
+  writeable_call_target (Send _) = T /\
+  writeable_call_target (CreateTarget _ _ _ _) = T /\
+  writeable_call_target _ = F
+End
+
+(* Whether the expression makes a writeable call itself, not counting the
+   internal functions it calls.
+   Mirrors Python: stmt.py _emits_writeable_call *)
+Definition emits_writeable_call_def:
+  emits_writeable_call (IfExp _ c x y) =
+    (emits_writeable_call c \/ emits_writeable_call x \/
+     emits_writeable_call y) /\
+  emits_writeable_call (StructLit _ _ kes) = emits_writeable_call_named kes /\
+  emits_writeable_call (Subscript _ x y) =
+    (emits_writeable_call x \/ emits_writeable_call y) /\
+  emits_writeable_call (Attribute _ x _) = emits_writeable_call x /\
+  emits_writeable_call (Builtin _ _ es) = emits_writeable_calls es /\
+  emits_writeable_call (TypeBuiltin _ _ _ es) = emits_writeable_calls es /\
+  emits_writeable_call (Pop _ tgt) = emits_writeable_call_target tgt /\
+  emits_writeable_call (Call _ ct es drv) =
+    (writeable_call_target ct \/ emits_writeable_calls es \/
+     emits_writeable_call_opt drv) /\
+  emits_writeable_call _ = F /\
+
+  emits_writeable_call_target (SubscriptTarget tgt e) =
+    (emits_writeable_call_target tgt \/ emits_writeable_call e) /\
+  emits_writeable_call_target (AttributeTarget tgt _) =
+    emits_writeable_call_target tgt /\
+  emits_writeable_call_target _ = F /\
+
+  emits_writeable_calls [] = F /\
+  emits_writeable_calls (e::es) =
+    (emits_writeable_call e \/ emits_writeable_calls es) /\
+
+  emits_writeable_call_opt NONE = F /\
+  emits_writeable_call_opt (SOME e) = emits_writeable_call e /\
+
+  emits_writeable_call_named [] = F /\
+  emits_writeable_call_named ((_,e)::kes) =
+    (emits_writeable_call e \/ emits_writeable_call_named kes)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+                                      expr option + (identifier # expr) list).
+    case x of
+    | INL e => expr_size e
+    | INR (INL tgt) => base_assignment_target_size tgt
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
+End
+
+Definition atarget_emits_writeable_call_def:
+  atarget_emits_writeable_call (BaseTarget tgt) =
+    emits_writeable_call_target tgt /\
+  atarget_emits_writeable_call (TupleTarget tgts) =
+    atargets_emit_writeable_call tgts /\
+  atargets_emit_writeable_call [] = F /\
+  atargets_emit_writeable_call (t::ts) =
+    (atarget_emits_writeable_call t \/ atargets_emit_writeable_call ts)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL tgt => assignment_target_size tgt
+    | INR tgts => list_size assignment_target_size tgts)` >>
+  simp[assignment_target_size_def, listTheory.list_size_def]
+End
+
+Definition iterator_emits_writeable_call_def:
+  iterator_emits_writeable_call (Array e) = emits_writeable_call e /\
+  iterator_emits_writeable_call (Range x y) =
+    (emits_writeable_call x \/ emits_writeable_call y)
+End
+
+Definition assert_reason_emits_writeable_call_def:
+  assert_reason_emits_writeable_call (AssertReason e) =
+    emits_writeable_call e /\
+  assert_reason_emits_writeable_call (AssertCustomError err) =
+    emits_writeable_calls (custom_error_exprs err) /\
+  assert_reason_emits_writeable_call _ = F
+End
+
+Definition raise_reason_emits_writeable_call_def:
+  raise_reason_emits_writeable_call (RaiseReason e) = emits_writeable_call e /\
+  raise_reason_emits_writeable_call (RaiseCustomError err) =
+    emits_writeable_calls (custom_error_exprs err) /\
+  raise_reason_emits_writeable_call _ = F
+End
+
+Definition stmt_emits_writeable_call_def:
+  stmt_emits_writeable_call Pass = F /\
+  stmt_emits_writeable_call Continue = F /\
+  stmt_emits_writeable_call Break = F /\
+  stmt_emits_writeable_call (Expr e) = emits_writeable_call e /\
+  stmt_emits_writeable_call (For _ _ it _ ss) =
+    (iterator_emits_writeable_call it \/ stmts_emit_writeable_call ss) /\
+  stmt_emits_writeable_call (If e yes no) =
+    (emits_writeable_call e \/ stmts_emit_writeable_call yes \/
+     stmts_emit_writeable_call no) /\
+  stmt_emits_writeable_call (Assert e reason) =
+    (emits_writeable_call e \/ assert_reason_emits_writeable_call reason) /\
+  stmt_emits_writeable_call (Log _ es) = emits_writeable_calls es /\
+  stmt_emits_writeable_call (Raise reason) =
+    raise_reason_emits_writeable_call reason /\
+  stmt_emits_writeable_call (Return opt) = emits_writeable_call_opt opt /\
+  stmt_emits_writeable_call (Assign tgt e) =
+    (atarget_emits_writeable_call tgt \/ emits_writeable_call e) /\
+  stmt_emits_writeable_call (AugAssign _ tgt _ e) =
+    (emits_writeable_call_target tgt \/ emits_writeable_call e) /\
+  stmt_emits_writeable_call (Append tgt e) =
+    (emits_writeable_call_target tgt \/ emits_writeable_call e) /\
+  stmt_emits_writeable_call (AnnAssign _ _ e) = emits_writeable_call e /\
+
+  stmts_emit_writeable_call [] = F /\
+  stmts_emit_writeable_call (s::ss) =
+    (stmt_emits_writeable_call s \/ stmts_emit_writeable_call ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL s => stmt_size s
+    | INR ss => list_size stmt_size ss)` >>
+  simp[]
+End
+
+(* Whether e makes a writeable call, itself or in an internal function it
+   reaches (its default arguments included).
+   Mirrors Python: stmt.py _contains_writeable_call *)
+Definition contains_writeable_call_def:
+  contains_writeable_call mods e <=>
+    emits_writeable_call e \/
+    EXISTS (\(src, name).
+              case ALOOKUP mods src of
+                NONE => F
+              | SOME tls =>
+                  case find_function name tls of
+                    NONE => F
+                  | SOME (dflts, ss) =>
+                      emits_writeable_calls dflts \/
+                      stmts_emit_writeable_call ss)
+      (reached_functions mods e)
+End
+
+(* Whether the variable's type is a single word: a hashmap's is not.
+   Mirrors Python: VyperType._is_prim_word *)
+Definition var_is_prim_word_def:
+  var_is_prim_word cenv v <=>
+    case target_place_type cenv
+           (case v of LocalRef id => NameTarget id
+                    | StateRef nsid => TopLevelNameTarget nsid) of
+      SOME (ValPT t) => is_word_type t
+    | _ => F
+End
+
+(* Whether augmented assignment tgt op= e is rejected: tgt reads a variable
+   that is not a single word, and e writes that variable, or the variable
+   is a state variable and e makes a writeable call.  The target is resolved
+   and bounds-checked before e runs, so e could invalidate it.  A constant is
+   neither written nor a state variable, so nonconstant_reads loses
+   nothing.
+   Mirrors Python: stmt.py lower_AugAssign (GHSA-4w26-8p97-f4jp), lines
+   414-424 at VYPER_PIN 577d25343 *)
+Definition aug_assign_overlap_def:
+  aug_assign_overlap cenv tgt e <=>
+    let mods = cenv.ce_modules;
+        rhs_as = expr_accesses mods e in
+      EXISTS (\v. ~var_is_prim_word cenv v /\
+                  (MEM (WriteAcc v) rhs_as \/
+                   (case v of
+                      StateRef _ => contains_writeable_call mods e
+                    | LocalRef _ => F)))
+        (nonconstant_reads mods (expr_accesses mods (target_to_expr tgt)))
+End
+
 (* The local types after statement s, as compile_stmts threads them
    (declare_stmt_local): an AnnAssign declares its local, for the rest of
    its block.  A name reused at another type in a sibling block keeps each
@@ -523,7 +710,8 @@ Definition alloc_limits_stmt_def:
              | _ => []) gs
       | BaseTarget bt => assign_alloc_ok cenv bt e)) ∧
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
-    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
+    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
+     ¬aug_assign_overlap cenv tgt e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
      ¬target_in_immutables cenv.ce_module_vars tgt ∧
