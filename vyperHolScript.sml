@@ -83,8 +83,9 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
-  (* body induction: custom-error rows, admitted until the gate admits them *)
-  bodyCustomErrorCases
+  (* body induction: custom-error raise and assert pieces *)
+  bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
+  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
