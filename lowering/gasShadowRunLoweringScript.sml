@@ -15,7 +15,8 @@ Definition runtime_gas_shadow_unit_def:
     let packs = MAP (set_external_package_target rpolicy.rpol_target o
       package_external_fn tops T (K global_nonreentrant_slot)) exts in
     let ips = MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints in
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops ints) ints) in
     let fall = set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops T (K global_nonreentrant_slot) fb) in
     run_lowering selectors (MAP gas_shadow_external_package packs)
