@@ -17,7 +17,7 @@ Libs
   pairLib
 
 
-Theorem compile_bop_typed_sim:
+Theorem compile_bop_rel_sim:
   !ctx func cenv cx ty ann bop e1 e2 es tv1 tv2.
     ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
     ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
@@ -46,7 +46,7 @@ Theorem compile_bop_typed_sim:
        expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
        !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
          (es1 with gas_obs := gs2) = (INL v2, es2) ==>
-         binop_frag_words ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_post (expr_val_rel cx ann) ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2
@@ -100,7 +100,7 @@ Proof
   suspend "left_exempt"
 QED
 
-Resume compile_bop_typed_sim[left_normal]:
+Resume compile_bop_rel_sim[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
     (drule_then strip_assume_tac) >>
@@ -179,7 +179,7 @@ Resume compile_bop_typed_sim[left_normal]:
       >> suspend "right_exit") >>
   suspend "right_exempt"
 QED
-Resume compile_bop_typed_sim[left_exit]:
+Resume compile_bop_rel_sim[left_exit]:
   Cases_on `res`
   >- (qpat_x_assum `(\res ee r. _) _ _ _`
         (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac o
@@ -194,11 +194,11 @@ Resume compile_bop_typed_sim[left_exit]:
   disj2_tac >> gnvs[] >> rpt strip_tac >>
   first_x_assum drule >> simp[]
 QED
-Resume compile_bop_typed_sim[left_exempt]:
+Resume compile_bop_rel_sim[left_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule (REWRITE_RULE [ETA_AX] bop_first_exempt_cert) >> metis_tac[]
 QED
-Resume compile_bop_typed_sim[right_normal]:
+Resume compile_bop_rel_sim[right_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> ?v. _`
     (drule_then strip_assume_tac) >>
@@ -252,7 +252,7 @@ Resume compile_bop_typed_sim[right_normal]:
   drule_all (Q.INST [`mid` |-> `es_end`, `fin` |-> `es_end'`,
                      `left` |-> `marks`, `right` |-> `marks'`]
                (SIMP_RULE bool_ss [PULL_EXISTS]
-                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary))) >>
+                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_rel))) >>
   rewrite_tac[gas_summary_at_def] >>
   disch_then (qx_choose_then `out` (qx_choose_then `end_es`
     (qx_choose_then `end_r` strip_assume_tac))) >>
@@ -268,7 +268,7 @@ Resume compile_bop_typed_sim[right_normal]:
   qexistsl_tac [`out`, `end_es`, `end_r`] >>
   fs[halt_exit_def] >> metis_tac[]
 QED
-Resume compile_bop_typed_sim[right_exit]:
+Resume compile_bop_rel_sim[right_exit]:
   Cases_on `res`
   >- (qpat_x_assum `(\res ee r. _) _ _ _`
         (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac o
@@ -285,12 +285,56 @@ Resume compile_bop_typed_sim[right_exit]:
   disj2_tac >> gnvs[] >> rpt strip_tac >>
   first_x_assum drule >> simp[]
 QED
-Resume compile_bop_typed_sim[right_exempt]:
+Resume compile_bop_rel_sim[right_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
   irule_at Any (REWRITE_RULE [ETA_AX] bop_second_exempt_cert) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
 QED
-Finalise compile_bop_typed_sim
+Finalise compile_bop_rel_sim
+
+Theorem compile_bop_typed_sim:
+  !ctx func cenv cx ty ann bop e1 e2 es tv1 tv2.
+    ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+    ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
+    is_word_type ann /\
+    is_word_type (expr_type e1) /\
+    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+    is_word_type (expr_type e2) /\
+    evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e2 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!x y sa sb op.
+       compile_binop bop x y (expr_type e1)
+         (if bop = Exp then expr_int_literal e1 else NONE)
+         (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    expr_sim ctx func cenv cx (expr_type e1) e1 es /\
+    (!gs1 v1 es1. (do result <- eval_expr cx e1; read_result cx result od)
+        (es with gas_obs := gs1) = (INL v1, es1) ==>
+       expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
+       !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
+         (es1 with gas_obs := gs2) = (INL v2, es2) ==>
+         binop_frag_words ctx func cenv cx bop (expr_type e1) ann
+           (if bop = Exp then expr_int_literal e1 else NONE)
+           (if bop = Exp then expr_int_literal e2 else NONE)
+           [expr_type e1; expr_type e2] v1 v2
+           (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es2) ==>
+    expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> strip_tac >> irule compile_bop_rel_sim >>
+  qexistsl_tac [`tv1`, `tv2`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
+  rpt gen_tac >> strip_tac >> irule binop_frag_words_rel >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
 
 Theorem compile_bop_sim:
   !ctx func cenv cx ty ann bop e1 e2 es.

@@ -741,7 +741,7 @@ Proof
     (rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
   qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[binop_frag_def, binop_frag_words_def] >>
+  rewrite_tac[binop_frag_def, binop_frag_words_def, binop_frag_post_def] >>
   disch_then (qspecl_then [`st0`, `sb`, `sc`, `cur`, `rhs`, `out`, `t`] mp_tac) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>

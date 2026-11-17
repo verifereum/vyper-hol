@@ -132,15 +132,22 @@ Definition well_typed_binop_def:
   (* Vyper shifts only int256 and uint256 values; >> stays admitted on narrower
      types, where SHR/SAR of an in-range value stays in range. *)
   well_typed_binop ty ShL t1 t2 =
-    (t1 = ty /\ is_int_type ty /\ is_int_type t2 /\
-     (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256))) /\
-  well_typed_binop ty ShR t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
+    (t1 = ty /\
+     ((is_int_type ty /\ is_int_type t2 /\
+       (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256))) \/
+      (ty = BaseT (BytesT (Fixed 32)) /\ is_int_type t2))) /\
+  well_typed_binop ty ShR t1 t2 =
+    (t1 = ty /\ ((is_int_type ty /\ is_int_type t2) \/
+                (ty = BaseT (BytesT (Fixed 32)) /\ is_int_type t2))) /\
   well_typed_binop ty And t1 t2 =
-    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
+    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty \/
+                              ?m. ty = BaseT (BytesT (Fixed m)))) /\
   well_typed_binop ty Or t1 t2 =
-    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
+    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty \/
+                              ?m. ty = BaseT (BytesT (Fixed m)))) /\
   well_typed_binop ty XOr t1 t2 =
-    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
+    (t1 = ty /\ t2 = ty /\ (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty \/
+                              ?m. ty = BaseT (BytesT (Fixed m)))) /\
   well_typed_binop ty Eq t1 t2 =
     (t1 = t2 /\ ty = BaseT BoolT /\ is_comparable_type t1) /\
   well_typed_binop ty NotEq t1 t2 =

@@ -669,7 +669,8 @@ Proof
     (irule aug_place_bop_write_result_ok >> metis_tac[]) >>
   qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_def,
-                          exprBopSimDefsTheory.binop_frag_words_def]) >>
+                          exprBopSimDefsTheory.binop_frag_words_def,
+                          exprBopSimDefsTheory.binop_frag_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >- suspend "normal" >> suspend "exit"

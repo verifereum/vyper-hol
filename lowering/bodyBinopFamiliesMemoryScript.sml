@@ -400,6 +400,7 @@ QED
 Theorem compile_bitwise_sim_mem:
   !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (bop = And \/ bop = Or \/ bop = XOr) /\
+    word_value v1 /\
     (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
@@ -408,7 +409,7 @@ Theorem compile_bitwise_sim_mem:
     binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   irule binop_frag_val_mem_straight >>
   conj_tac >- metis_tac[straight_fresh_compile_bitwise] >>
   disch_tac >>
@@ -568,7 +569,7 @@ Proof
   rpt gen_tac >> strip_tac >> irule compile_bitwise_sim_mem >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
   qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac word_value_type_value_cases >>
-  asm_rewrite_tac[] >> rpt strip_tac >> gvs[type_to_int_bound_def]
+  asm_rewrite_tac[] >> rpt strip_tac >> gvs[type_to_int_bound_def, word_value_def]
 QED
 
 (* From exprSimBinopFrag. *)
@@ -696,12 +697,12 @@ QED
 Theorem binop_frag_shift_572_mem:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\ (?i. v2 = IntV i /\ 0 <= i) /\
-    well_typed_binop ann bop t1 t2 /\
+    well_typed_binop ann bop t1 t2 /\ word_value_type t1 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
     binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def]
+  rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def, word_value_type_def]
   >- (irule binop_frag_shift_typed_mem >> simp[is_int_type_def, type_bits_def] >>
       metis_tac[])
   >- (irule binop_frag_shift_typed_mem >> simp[is_int_type_def, type_bits_def] >>
@@ -765,7 +766,7 @@ QED
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_shift_any_mem:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    (bop = ShL \/ bop = ShR) /\ well_typed_binop ann bop t1 t2 /\
+    (bop = ShL \/ bop = ShR) /\ well_typed_binop ann bop t1 t2 /\ word_value_type t1 /\
     (?i. v2 = IntV i /\ 0 <= i) /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>

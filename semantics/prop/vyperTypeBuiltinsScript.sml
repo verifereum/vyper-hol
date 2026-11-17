@@ -852,8 +852,21 @@ Proof
   PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
                    vyperValueTheory.value_case_def] >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
-  gvs[CaseEq "bool", CaseEq "sum", CaseEq "option"] >>
+  TRY (qpat_x_assum `bounded_int_op _ _ = INL _`
+         (strip_assume_tac o MATCH_MP bounded_int_op_INL) >>
+       gvs[value_has_type_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `bounded_decimal_op _ = INL _`
+         (strip_assume_tac o MATCH_MP bounded_decimal_op_INL) >>
+       gvs[value_has_type_def, within_int_bound_def] >> NO_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `MAP2 ff xs ys` >>
+       qexists_tac `MAP2 ff xs ys` >>
+       simp_tac pure_ss [vyperValueTheory.value_11, LENGTH_MAP2,
+                         REFL_CLAUSE, AND_CLAUSES] >>
+       simp_tac pure_ss [arithmeticTheory.MIN_DEF] >>
+       decide_tac >> NO_TAC) >>
+  gvs[CaseEq "bool"] >> gvs[CaseEq "sum"] >> gvs[CaseEq "option"] >>
   gvs[value_has_type_def, Excl "within_int_bound_def"] >>
+  TRY (gvs[byteTheory.word_to_bytes_be_def] >> NO_TAC) >>
   (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
   TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
   (* Bounded int ops: INL gives within_int_bound *)

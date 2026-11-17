@@ -185,7 +185,7 @@ Proof
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
      drule_at (Pat `bind _ _ _ = _`)
        (CONV_RULE (DEPTH_CONV ETA_CONV)
-          exprSimOperatorsTheory.expr_body_pre_word_type_result) >>
+          exprSimSourceTheory.expr_body_pre_word_type_result) >>
      disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
      impl_tac >- asm_rewrite_tac[] >>
      strip_tac >> conj_tac >- asm_rewrite_tac[] >>

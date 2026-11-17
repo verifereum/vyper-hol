@@ -1523,7 +1523,7 @@ Proof
   rpt gen_tac >> strip_tac >> irule compile_bitwise_sim_mem >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases_mem_src >>
   qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac word_value_type_value_cases_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >> gvs[type_to_int_bound_def]
+  asm_rewrite_tac[] >> rpt strip_tac >> gvs[type_to_int_bound_def, word_value_def]
 QED
 
 Theorem binop_frag_shift_typed_mem_src[local]:
@@ -1584,12 +1584,12 @@ QED
 Theorem binop_frag_shift_572_mem_src[local]:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\ (?i. v2 = IntV i /\ 0 <= i) /\
-    well_typed_binop ann bop t1 t2 /\
+    well_typed_binop ann bop t1 t2 /\ word_value_type t1 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
     binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def]
+  rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def, word_value_type_def]
   >- (irule binop_frag_shift_typed_mem_src >> simp[is_int_type_def, type_bits_def] >>
       metis_tac[])
   >- (irule binop_frag_shift_typed_mem_src >> simp[is_int_type_def, type_bits_def] >>
