@@ -16,7 +16,7 @@ Ancestors
   venomCompilerTypes venomState venomInst o1ComposeSupport fmpStepContract
   fmpStageRunner fmpStageCoverage list
   o1RequestContract fcgDefs ctxLookupAgreeHelpers fmpAnalysisProps
-  fmpStageFmpStepsCallAbi
+  fmpStageFmpStepsCallAbi ctxSealAgree
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
    need and no publication. *)
