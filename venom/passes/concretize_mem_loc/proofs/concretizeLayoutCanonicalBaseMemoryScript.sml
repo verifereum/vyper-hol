@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem layout_canonical_exempt_returncopy_scalar_success:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
@@ -144,7 +144,8 @@ Theorem layout_canonical_ordinary_memory_pending:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -200,15 +201,12 @@ Proof
      `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
      FIRST [(`MEM i.inst_opcode [MLOAD; ILOAD]` by simp[] >>
          drule_all layout_word_load_trace_step),
-       drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-         layout_mcopy_trace_step),
-       drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-         layout_istore_trace_step),
+       drule_all layout_mcopy_trace_step,
+       drule_all layout_istore_trace_step,
        (`calldata_reader_shape i` by simp[calldata_reader_shape_def] >>
          drule_all layout_calldata_reader_trace_step),
        (`MEM i.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES]` by simp[] >>
-         drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-           layout_readcopy_trace_step)), drule_all layout_sha3_trace_step,
+         drule_all layout_readcopy_trace_step), drule_all layout_sha3_trace_step,
        drule_all layout_log_trace_step,
        (qpat_assum `i.inst_opcode = EXTCODECOPY` kall_tac >>
         rename1 `i.inst_operands = [opa;opd;ops;opn]` >>
@@ -217,8 +215,7 @@ Proof
           eval_operand opn s = SOME sz` by
           (qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
            simp[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
-        drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-          layout_extcodecopy_trace_step)),
+        drule_all layout_extcodecopy_trace_step),
        (qpat_assum `i.inst_opcode = RETURNDATACOPY` kall_tac >>
         rename1 `i.inst_operands = [opd;ops;opn]` >>
         `(?dst src sz. eval_operand opd s = SOME dst /\
@@ -227,8 +224,7 @@ Proof
           (qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
            simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
            gvs[write_memory_with_expansion_def, write_memory_def] >> metis_tac[]) >>
-        drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-          layout_returncopy_trace_step))] >> strip_tac >> metis_tac[]) >>
+        drule_all layout_returncopy_trace_step)] >> strip_tac >> metis_tac[]) >>
   metis_tac[]
 QED
 

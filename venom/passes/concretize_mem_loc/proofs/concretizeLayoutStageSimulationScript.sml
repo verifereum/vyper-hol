@@ -131,7 +131,8 @@ Theorem layout_selected_empty_induction[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -257,8 +258,7 @@ Resume layout_selected_empty_induction[block_next]:
     (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
     (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
     (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
-    (irule (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-       layout_canonical_simulation_contract_fuel) >> simp[] >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
   `?rs. step_inst fuel C' j t = rs /\ finite_step C' j t rs /\
     events_OS C C'
       (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
@@ -331,8 +331,7 @@ Resume layout_selected_empty_induction[block_exit]:
     (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
     (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
     (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
-    (irule (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-       layout_canonical_simulation_contract_fuel) >> simp[] >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
   `?rs. step_inst fuel C' j t = rs /\ finite_step C' j t rs /\
     events_OS C C'
       (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
@@ -370,8 +369,7 @@ Resume layout_selected_empty_induction[run_next]:
     (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
     (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
     (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
-    (irule (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-       layout_canonical_simulation_contract_fuel) >> simp[] >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
   `?rb. run_block_non_phis h' C' bb'
     (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = rb /\
     finite_block C' bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) rb /\
@@ -417,8 +415,7 @@ Resume layout_selected_empty_induction[run_exit]:
     (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
     (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
     (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
-    (irule (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-       layout_canonical_simulation_contract_fuel) >> simp[] >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
   `?rb. run_block_non_phis h C' bb'
     (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = rb /\
     finite_block C' bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) rb /\
@@ -450,7 +447,8 @@ Theorem layout_stage_selected_run_fuel_revert_empty:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -477,10 +475,10 @@ Proof
   strip_tac >>
   `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
     metis_tac[layout_cut_safe_whole_run] >>
-  drule_all (SIMP_RULE bool_ss [ASSUME ``~ctx_has_dalloca C``]
-    layout_stage_selected_run_fuel) >> strip_tac >>
-  qexists `run_blocks fuel C' fn' t` >> simp[] >> rpt strip_tac >>
-  irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
+  drule_all layout_stage_selected_run_fuel >> strip_tac >>
+  qexists `run_blocks fuel C' fn' t` >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  rpt strip_tac >> irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
 QED
 
 Theorem layout_segment_chain[local]:
@@ -961,7 +959,8 @@ Theorem layout_stage_context_revert_empty:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ~ctx_has_dalloca C /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\

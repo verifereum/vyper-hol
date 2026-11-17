@@ -1420,7 +1420,8 @@ Theorem layout_canonical_prefix_base_successor[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -1476,7 +1477,8 @@ Theorem layout_canonical_prefix_next_ordinary:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -1598,7 +1600,7 @@ Proof
 QED
 
 Theorem layout_canonical_exempt_scalar_demand:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -1761,7 +1763,7 @@ Proof
 QED
 
 Theorem layout_forward_block_revert_empty:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
