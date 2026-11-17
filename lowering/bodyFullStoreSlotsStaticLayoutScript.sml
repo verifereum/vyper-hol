@@ -138,3 +138,11 @@ Proof
   simp[DISJ_IMP_THM, FORALL_AND_THM, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR,
        EXISTS_OR_THM] >> EVAL_TAC
 QED
+
+Theorem store_slots_start_oblivious:
+  frag_start_oblivious (compile_store_slots cenv src dst ty tr)
+Proof
+  irule code_trace_start_oblivious >>
+  mp_tac (cj 1 store_slots_trace_family) >>
+  simp[code_trace_certified_def, code_trace_parametric_def] >> metis_tac[]
+QED

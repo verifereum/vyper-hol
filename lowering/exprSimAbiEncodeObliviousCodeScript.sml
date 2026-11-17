@@ -214,3 +214,42 @@ Theorem code_step_frag_facts:
 Proof
   rw[code_step_def, frag_ops_free_def] >> metis_tac[entry_shape_extends]
 QED
+
+(* Entry independence removes the arbitrary old entry from weak targets. *)
+val oblivious_J = ``\T i.
+  (i.inst_opcode = JMP ==> ?l. i.inst_operands = [Label l] /\ l IN T) /\
+  (i.inst_opcode = JNZ ==> ?v l r.
+    i.inst_operands = [v; Label l; Label r] /\ l IN T /\ r IN T)``;
+val oblivious_B = ``\a b. {l | (?bb. MEM bb (emitted_blocks a b) /\ l = bb.bb_label) \/
+  l = b.cs_current_bb}``;
+val oblivious_BF = ``\a b. {l | (?bb. MEM bb (FRONT (emitted_blocks a b)) /\ l = bb.bb_label) \/
+  l = b.cs_current_bb}``;
+
+Theorem frag_start_oblivious_target_closure:
+  frag_start_oblivious m /\
+  (!a x b. m a = (x,b) ==> entry_shape a b /\
+    EVERY ((^oblivious_J) ((^oblivious_B) a b)) (frag_code a b)) ==>
+  !a x b. m a = (x,b) ==>
+    EVERY ((^oblivious_J) ((^oblivious_BF) a b)) (frag_code a b)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `entry_shape a b` by metis_tac[] >>
+  `cs_extends a b` by metis_tac[entry_shape_extends] >>
+  qspecl_then [`b`, `a`] strip_assume_tac frag_relabel_fresh_label >>
+  qabbrev_tac `ids = MAP (\i. i.inst_id) a.cs_current_insts` >>
+  `LENGTH ids = LENGTH a.cs_current_insts` by simp[Abbr `ids`] >>
+  `m (start_relabel L ids a) = (x,start_swap a L ids b)` by
+    metis_tac[frag_start_oblivious_def] >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `a.cs_blocks = b.cs_blocks`
+  >- (gvs[entry_shape_def, emitted_blocks_def, start_swap_def,
+          start_relabel_def, frag_code_def, DROP_LENGTH_APPEND,
+          emitted_insts_def, EVERY_MEM] >>
+      rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]) >>
+  drule_all start_relabel_frag_code >> strip_tac >>
+  drule_all start_swap_emitted_blocks >> strip_tac >>
+  drule_all start_swap_fields >> strip_tac >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> simp[MEM_APPEND, MEM] >>
+  strip_tac >> res_tac >> gvs[] >> metis_tac[]
+QED
