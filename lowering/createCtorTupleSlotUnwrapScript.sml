@@ -67,6 +67,7 @@ Theorem ctor_slot_unwrap_path:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin c_vvs es raw vv s /\
   read_result cx raw es = (INL v,es) /\
   FLOOKUP s.vs_allocas tuple_aid = SOME (source_base,source_cap) /\
@@ -111,6 +112,14 @@ Proof
     metis_tac[ci_mono_def, fragExecTheory.fn_has_code_split] >>
   `local_ptrs_reserved ce a` by metis_tac[local_ptrs_reserved_next_var] >>
   drule_all ctor_slot_add_path >> strip_tac >>
+  `vv_storage_live H cx vv es q` by
+    (`!x. vv_operand vv = Var x ==> not_fresh_at a x` by
+       metis_tac[not_fresh_at_mono] >>
+     irule vv_storage_live_operand_frame >> qexists_tac `s` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- metis_tac[vv_holds_operand_exists] >>
+     rpt strip_tac >> irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl [`a`,`s`] >> gvs[wb_frame_def]) >>
   `vv_holds ce cx ty raw vv es q /\
    vv_at ce cx ty origin a1 es raw vv q /\
    read_result cx raw es = (INL v,es)` by

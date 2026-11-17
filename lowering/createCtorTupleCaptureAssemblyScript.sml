@@ -28,6 +28,7 @@ Theorem compile_multi_vvs_singleton_outcome:
     (\H res ee t. ?raw value tv.
       res = INL ([raw],[value]) /\
       vv_holds ce cx (lowered_value_type ce e) raw vv ee t /\
+      vv_storage_live H cx vv ee t /\
       vv_at ce cx (lowered_value_type ce e) c1 c_vvs ee raw vv t /\
       read_result cx raw ee = (INL value,ee) /\
       evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
@@ -89,6 +90,7 @@ Theorem compile_multi_vvs_pure_outcome:
       (!i. i < LENGTH args ==>
         vv_holds ce cx (lowered_value_type ce (EL i args))
           (EL i raws) (EL i vvs) ee t /\
+        vv_storage_live H cx (EL i vvs) ee t /\
         vv_at ce cx (lowered_value_type ce (EL i args)) c1 c_vvs ee
           (EL i raws) (EL i vvs) t /\
         read_result cx (EL i raws) ee = (INL (EL i values),ee) /\
@@ -149,6 +151,7 @@ Theorem compile_multi_vvs_singleton_capture:
         (es,s_buf) marks (INL (raws,values)) (ee with gas_obs := []) (OK t) /\
       ee.gas_obs = tail /\ raws = [raw] /\ values = [value] /\
       vv_holds ce cx (lowered_value_type ce e) raw vv (ee with gas_obs := []) t /\
+      vv_storage_live H cx vv (ee with gas_obs := []) t /\
       vv_at ce cx (lowered_value_type ce e) c1 c_vvs
         (ee with gas_obs := []) raw vv t /\
       read_result cx raw (ee with gas_obs := []) = (INL value,ee with gas_obs := []) /\
@@ -229,6 +232,7 @@ Theorem compile_multi_vvs_pure_capture:
       (!i. i < LENGTH args ==>
         vv_holds ce cx (lowered_value_type ce (EL i args))
           (EL i raws) (EL i vvs) (ee with gas_obs := []) t /\
+        vv_storage_live H cx (EL i vvs) (ee with gas_obs := []) t /\
         vv_at ce cx (lowered_value_type ce (EL i args)) c1 c_vvs
           (ee with gas_obs := []) (EL i raws) (EL i vvs) t /\
         read_result cx (EL i raws) (ee with gas_obs := []) =

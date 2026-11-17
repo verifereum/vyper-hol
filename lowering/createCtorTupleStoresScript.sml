@@ -35,6 +35,7 @@ Theorem ctor_delayed_slot_path:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin c_vvs es raw vv s /\
   read_result cx raw es = (INL v,es) /\
   FLOOKUP s.vs_allocas tuple_aid = SOME (source_base,source_cap) /\
@@ -229,6 +230,7 @@ Theorem ctor_delayed_stores_from_boundaries:
     (!x. vv_operand (EL i vvs) = Var x ==> not_fresh_at c_vvs x) /\
     (!l. vv_operand (EL i vvs) <> Label l) /\
     vv_holds ce cx (EL i tys) (EL i raws) (EL i vvs) es s /\
+    vv_storage_live H cx (EL i vvs) es s /\
     vv_at ce cx (EL i tys) origin c_vvs es (EL i raws) (EL i vvs) s /\
     read_result cx (EL i raws) es = (INL (EL i values),es)) /\
   stmt_state_rel H ctx func ce cx es s /\
@@ -326,6 +328,16 @@ Proof
   simp[] >>
   impl_tac >- (conj_tac >- metis_tac[] >> metis_tac[]) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `!ty' raw' vv'.
+     vv_holds ce cx ty' raw' vv' es s /\ vv_storage_live H cx vv' es s /\
+     (!x. vv_operand vv' = Var x ==> not_fresh_at c_vvs x) /\
+     (!l. vv_operand vv' <> Label l) ==>
+     vv_storage_live H cx vv' es u` by
+    (rpt strip_tac >> irule vv_storage_live_operand_frame >>
+     qexists_tac `s` >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- metis_tac[vv_holds_operand_exists] >>
+     rpt strip_tac >> irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl [`c_vvs`,`s`] >> gvs[wb_frame_def]) >>
   `c_vvs.cs_next_var <= a3.cs_next_var /\ c_vvs.cs_next_id <= a3.cs_next_id /\
    ca.cs_next_var <= a3.cs_next_var /\ ca.cs_next_id <= a3.cs_next_id` by
     gvs[ci_mono_def] >>

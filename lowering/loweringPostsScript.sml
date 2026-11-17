@@ -661,6 +661,26 @@ Proof
   Cases_on `vv` >> simp[]
 QED
 
+(* Liveness reads the state only through the pointer's value. *)
+Theorem vv_storage_live_operand_frame:
+  vv_storage_live H cx vv es s /\
+  (?w. eval_operand (vv_operand vv) s = SOME w) /\
+  (!w. eval_operand (vv_operand vv) s = SOME w ==>
+       eval_operand (vv_operand vv) u = SOME w) ==>
+  vv_storage_live H cx vv es u
+Proof
+  Cases_on `vv` >> simp[contextTheory.vv_operand_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem vv_holds_operand_exists:
+  vv_holds cenv cx ty r vv es s ==>
+  ?w. eval_operand (vv_operand vv) s = SOME w
+Proof
+  Cases_on `vv` >> simp[vv_holds_def, contextTheory.vv_operand_def, expr_val_rel_def] >>
+  metis_tac[]
+QED
+
 (* The location of a storage or transient place. *)
 Definition slot_loc_def:
   slot_loc tr = if tr then LocTransient else LocStorage

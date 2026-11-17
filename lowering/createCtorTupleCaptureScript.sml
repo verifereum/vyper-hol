@@ -45,6 +45,7 @@ Theorem ctor_capture_singleton_from_boundaries:
     (\H res ee t. ?raw value tv.
       res = INL ([raw],[value]) /\
       vv_holds ce cx (lowered_value_type ce e) raw vv ee t /\
+      vv_storage_live H cx vv ee t /\
       vv_at ce cx (lowered_value_type ce e) c1 c_vvs ee raw vv t /\
       read_result cx raw ee = (INL value,ee) /\
       evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
@@ -216,6 +217,7 @@ Theorem ctor_capture_pure_raw[local]:
       (!i. i < LENGTH args ==>
         vv_holds ce cx (lowered_value_type ce (EL i args))
           (EL i raws) (EL i vvs) ee t /\
+        vv_storage_live H cx (EL i vvs) ee t /\
         vv_at ce cx (lowered_value_type ce (EL i args)) c1 c_vvs ee
           (EL i raws) (EL i vvs) t /\
         read_result cx (EL i raws) ee = (INL (EL i values),ee) /\
@@ -477,6 +479,7 @@ Theorem ctor_capture_pure_from_boundaries:
       (!i. i < LENGTH args ==>
         vv_holds ce cx (lowered_value_type ce (EL i args))
           (EL i raws) (EL i vvs) ee t /\
+        vv_storage_live H cx (EL i vvs) ee t /\
         vv_at ce cx (lowered_value_type ce (EL i args)) c1 c_vvs ee
           (EL i raws) (EL i vvs) t /\
         read_result cx (EL i raws) ee = (INL (EL i values),ee) /\

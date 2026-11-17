@@ -51,6 +51,7 @@ Theorem ctor_tuple_capture_domain[local]:
       (!i. i < LENGTH args ==>
         vv_holds ce cx (lowered_value_type ce (EL i args))
           (EL i raws) (EL i vvs) (ee with gas_obs := []) t /\
+        vv_storage_live H cx (EL i vvs) (ee with gas_obs := []) t /\
         vv_at ce cx (lowered_value_type ce (EL i args)) c1 c_vvs
           (ee with gas_obs := []) (EL i raws) (EL i vvs) t /\
         read_result cx (EL i raws) (ee with gas_obs := []) =
@@ -227,6 +228,7 @@ Proof
     (!l. vv_operand (EL i vvs) <> Label l) /\
     vv_holds ce cx (EL i (MAP (lowered_value_type ce) args)) (EL i raws) (EL i vvs)
       (ee with gas_obs := []) t /\
+    vv_storage_live H cx (EL i vvs) (ee with gas_obs := []) t /\
     vv_at ce cx (EL i (MAP (lowered_value_type ce) args)) c1 c_vvs (ee with gas_obs := [])
       (EL i raws) (EL i vvs) t /\
     read_result cx (EL i raws) (ee with gas_obs := []) = (INL (EL i values),ee with gas_obs := [])` by

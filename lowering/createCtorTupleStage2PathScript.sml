@@ -33,6 +33,7 @@ Theorem ctor_tuple_stage2_path:
     (!x. vv_operand (EL i vvs) = Var x ==> not_fresh_at c_vvs x) /\
     (!l. vv_operand (EL i vvs) <> Label l) /\
     vv_holds ce cx (EL i tys) (EL i raws) (EL i vvs) es s_vvs /\
+    vv_storage_live H cx (EL i vvs) es s_vvs /\
     vv_at ce cx (EL i tys) origin c_vvs es (EL i raws) (EL i vvs) s_vvs /\
     read_result cx (EL i raws) es = (INL (EL i values),es)) /\
   stmt_state_rel H ctx func ce cx es s_vvs /\
@@ -107,6 +108,14 @@ Proof
      disch_then (qspecl_then [`c_vvs`,`c_vvs`] mp_tac) >>
      simp[contract_storage_def, contract_transient_def] >>
      Cases_on `EL i vvs` >> gvs[vv_operand_def]) >>
+  `!i. i < LENGTH tys ==> vv_storage_live H cx (EL i vvs) es u` by
+    (rpt strip_tac >>
+     qpat_assum `!i. i < LENGTH tys ==> evaluate_type _ _ = _ /\ _` drule >>
+     strip_tac >> irule vv_storage_live_operand_frame >>
+     qexists_tac `s_vvs` >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- metis_tac[vv_holds_operand_exists] >>
+     rpt strip_tac >> irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl [`c_vvs`,`s_vvs`] >> gvs[wb_frame_def]) >>
   `alloca_inv u /\ alloca_room ctx func u /\ fmp_room ctx func u` by
     gvs[stmt_state_rel_def] >>
   `w2n w + type_memory_bytes ce (TupleT tys) <= u.vs_alloca_next` by

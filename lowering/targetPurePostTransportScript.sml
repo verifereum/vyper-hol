@@ -245,26 +245,6 @@ Proof
   irule target_saved_memory_value_frame >> metis_tac[]
 QED
 
-Theorem target_saved_storage_live_frame:
-  vv_storage_live H cx vv es s /\
-  (?w. eval_operand (vv_operand vv) s = SOME w) /\
-  (!w. eval_operand (vv_operand vv) s = SOME w ==>
-       eval_operand (vv_operand vv) u = SOME w) ==>
-  vv_storage_live H cx vv es u
-Proof
-  Cases_on `vv` >> simp[vv_operand_def] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem target_saved_operand_exists:
-  vv_holds cenv cx ty r vv es s ==>
-  ?w. eval_operand (vv_operand vv) s = SOME w
-Proof
-  Cases_on `vv` >> simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >>
-  metis_tac[]
-QED
-
-
 Theorem target_saved_post_transport:
   vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
   target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
@@ -316,16 +296,16 @@ Proof
            (rpt strip_tac >> fs[local_ptrs_reserved_def, wb_frame_def] >>
             metis_tac[]) >>
          `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
-           metis_tac[target_saved_operand_exists] >>
+           metis_tac[vv_holds_operand_exists] >>
          irule vv_place_ptr_vars_frame >> qexists_tac `s` >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
       Cases_on `vv` >> fs[vv_place_ptr_def])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
-  >- (irule target_saved_storage_live_frame >>
+  >- (irule vv_storage_live_operand_frame >>
       qexists_tac `s` >>
       conj_tac >- simp[] >>
-      conj_tac >- (drule target_saved_operand_exists >> simp[]) >>
+      conj_tac >- (drule vv_holds_operand_exists >> simp[]) >>
       Cases_on `vv` >> gvs[get_storage_def]) >>
   simp[exprSimPropsTheory.locals_kept_refl]
 QED

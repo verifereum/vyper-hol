@@ -5,26 +5,23 @@ Ancestors
   exprSimUnwrapProps vyperState venomState
 
 (* A captured result is not re-evaluated.  Pop is only an adapter for the
-   effectful postcondition, so neither liveness nor a pure frame is needed. *)
+   effectful postcondition, so no pure frame is needed; the capture's
+   storage liveness is. *)
 Theorem ctor_captured_vv_post:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin sm es raw vv s /\
   read_result cx raw es = (INL v,es) ==>
   vv_post H ctx func ce cx (Pop ty (NameTarget ""))
     es origin sm s es (Value v) vv s
-(* LOCAL STAND-IN, NOT FOR PUBLICATION - needs storage liveness
 Proof
   Cases_on `vv` >>
   simp[vv_post_def, expr_type_def, vv_holds_def, vv_at_def,
        storage_holds_def, immutable_holds_def, read_result_def, return_def] >>
   rpt strip_tac >> gvs[] >> rpt strip_tac >>
   metis_tac[]
-QED
-*)
-Proof
-  cheat
 QED
 
 Theorem ctor_captured_unwrap_post_path:
@@ -40,6 +37,7 @@ Theorem ctor_captured_unwrap_post_path:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin sm es raw vv s /\
   read_result cx raw es = (INL v,es) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -74,6 +72,7 @@ Theorem ctor_captured_unwrap_frame[local]:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin sm es raw vv s /\
   read_result cx raw es = (INL v,es) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -175,6 +174,7 @@ Theorem ctor_captured_unwrap_path:
   stmt_state_rel H ctx func ce cx es s /\
   storage_well_formed_on cx es (FST H) /\
   vv_holds ce cx ty raw vv es s /\
+  vv_storage_live H cx vv es s /\
   vv_at ce cx ty origin sm es raw vv s /\
   read_result cx raw es = (INL v,es) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\

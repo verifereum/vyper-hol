@@ -32,6 +32,7 @@ Theorem ctor_tuple_stage2_correct:
     (!x. vv_operand (EL i vvs) = Var x ==> not_fresh_at c_vvs x) /\
     (!l. vv_operand (EL i vvs) <> Label l) /\
     vv_holds ce cx (EL i tys) (EL i raws) (EL i vvs) es s_vvs /\
+    vv_storage_live H cx (EL i vvs) es s_vvs /\
     vv_at ce cx (EL i tys) origin c_vvs es (EL i raws) (EL i vvs) s_vvs /\
     read_result cx (EL i raws) es = (INL (EL i values),es)) /\
   stmt_state_rel H ctx func ce cx es s_vvs /\
