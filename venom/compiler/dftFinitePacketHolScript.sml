@@ -10,7 +10,7 @@ Ancestors
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
-  dftPacketCallRecordFrame
+  dftPacketCallRecordFrame dftPacketCallRecordJoin
   dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation
   dftPacketCallFreshReplay
   dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
