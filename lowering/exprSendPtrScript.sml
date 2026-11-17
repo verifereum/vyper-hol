@@ -158,7 +158,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  (metis_tac[])
 QED
 
 Theorem send_call_ghost_inv:
@@ -213,7 +213,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  qexistsl_tac [`0w`, `aw`, `0w`, `SOME (w2n gw)`, `0`, `0`, `vw`] >> simp[]
 QED
 
 Theorem send_call_ghost_inv_at:
@@ -959,7 +959,8 @@ Resume send_expr_sim_ptr[normal]:
     w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
                NONE => 0 | SOME g => g)` by
     (Cases_on `has_gas` >> gvs[eval_operand_def, op_taint_def] >>
-     gvs[LENGTH_EQ_NUM_compute, ext_call_kwarg_def, evaluate_type_def] >>
+     gvs[LENGTH_EQ_NUM_compute, vyperInterpreterTheory.ext_call_kwarg_def,
+         vyperValueTheory.evaluate_type_def] >>
      imp_res_tac uint256_typed_dest >> simp[]) >>
   `dest_AddressV to_v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) to_v))` by
     metis_tac[address_typed_dest] >>
