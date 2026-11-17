@@ -412,7 +412,8 @@ Proof
   fs[vyperTypeExprResultTheory.expr_result_typed_def,
      vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
      vyperTypeInvariantsTheory.value_result_typed_def] >>
-  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tyv` >>
+  rename1 `evaluate_type env.type_defs (expr_type e) = SOME tyv` >>
+  `evaluate_type (get_tenv cx) (expr_type e) = SOME tyv` by metis_tac[] >>
   drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
     metis_tac[eval_expr_int_literal_agrees] >>
@@ -436,12 +437,11 @@ Proof
       irule vyperTypeBuiltinsTheory.well_typed_binop_success_type >>
       goal_assum (drule_at Any) >> simp[] >>
       qexistsl_tac [`ty`, `expr_type e`, `get_tenv cx`, `tvt`, `tyv`, `ty`] >> simp[]) >>
-  qexists_tac `tyv` >> simp[] >>
   irule augassign_binop_frag_typed >> simp[] >> conj_tac
   >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
       Cases_on `expr_int_literal e` >> gvs[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`expr_type e`, `tvt`, `tyv`] >> simp[]
+  qexists_tac `expr_type e` >> simp[]
 QED
 
 Theorem augassign_storage_store_post_path:
@@ -974,6 +974,7 @@ QED
 
 Resume compile_augassign_toplevel_case[binop_ready]:
   rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` >>
+  `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_word] >>
   `expr_post H2 ctx func cenv cx e
      ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
         with gas_obs := []) s1 s2 t (ee with gas_obs := []) v rhs_op u` by
@@ -982,7 +983,7 @@ Resume compile_augassign_toplevel_case[binop_ready]:
        (qspec_then `H2` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   `eval_operand rhs_op u = SOME (typed_val_to_w256 tv2 v)` by
-    (irule expr_val_rel_typed >> fs[expr_post_def] >>
+    (irule expr_val_rel_typed >> fs[expr_post_def, post_value_type_word] >>
      goal_assum (drule_at Any) >> simp[]) >>
   `eval_operand (Var out) u = SOME (typed_val_to_w256 tvt v0)` by
     (irule eval_operand_frame >> simp[] >>
