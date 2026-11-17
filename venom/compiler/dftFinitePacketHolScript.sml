@@ -48,7 +48,7 @@ Ancestors
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative dftPacketReturnRowSupply
-  dftPacketReturnParentReplay dftPacketRootedAlignment
+  dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
   dftPacketBlockRootedOperational dftPacketRootedPlainStop
