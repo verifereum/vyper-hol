@@ -37,9 +37,7 @@ Proof
      all_tac
      >>~- ([`EVERY (\q. FST q = out) _`],
        qmatch_goalsub_abbrev_tac `update_var out value s` >>
-       qexists_tac `[(out,value)]` >> simp[])
-     >>~- ([`x.inst_opcode = BUMP`],
-       qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[]) >>
+       qexists_tac `[(out,value)]` >> simp[]) >>
      qexists_tac `[]` >> simp[]) >>
   `dft_gas_swap_pair x i` by metis_tac[dft_gas_swap_pair_sym] >>
   `EVERY (\q. ~MEM (Var (FST q)) i.inst_operands /\
