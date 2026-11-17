@@ -116,7 +116,8 @@ Resume source_primitive_decoder_reentry_ptr[bytes]:
     (simp[val_wf_def] >> decide_tac) >>
   `val_footprint (BaseTV (BytesT (Dynamic m))) (vyperValue$BytesV bs) <=
     abi_decode_bytes_copy_size m` by
-    (simp[val_footprint_def] >> mp_tac (Q.SPEC `m` abi_decoder_bytes_copy_size) >> decide_tac) >>
+    (simp[val_footprint_def] >>
+     mp_tac (Q.INST [`n` |-> `m`] abi_decoder_bytes_copy_size) >> decide_tac) >>
   `!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
     val_in_memory (BaseTV (BytesT (Dynamic m))) (vyperValue$BytesV bs) d mem` by
     (rpt strip_tac >> irule clean_footprint_val_in_memory_robust >>
