@@ -3,14 +3,16 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendShape
-  dftGasPrefixProvider
+  dftPacketBlockAppendSemantics dftPacketBlockAppendNative
+  dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
+  dftPacketCallLocalPreservation dftPacketCallPathGeometry
   dftPacketCalleeAlignment
+  dftPacketCallFreshEntry
   dftPacketClosedRowNative
   dftPacketClosedRows
   dftPacketCommonOracle
@@ -32,27 +34,27 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketOrdinaryTrace
+  dftPacketLiteralRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
-  dftPacketPseudoAdvance
-  dftPacketPseudoCursor
-  dftPacketRefinementBoundary
+  dftPacketPreterminalAgreement
+  dftPacketPreterminalGeometry dftPacketPseudoAdvance
+  dftPacketPseudoCursor dftPacketPseudoSegment
+  dftPacketPseudoHistory dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
-  dftPacketReturnLocal
+  dftPacketPreterminalRows
+  dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
-  dftPacketRootedPlainStop
-  dftPacketRowAlignment
+  dftPacketRootedEntryContext dftPacketRootedOperational
+  dftPacketCompletePlanOperational dftPacketRootedPlainStop
+  dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
-  dftPacketBlockTableSplice
-  dftPacketTerminalPhi
-  dftPacketSuccessorObservation
-  dftPacketExistingPathRows
-  dftPacketCallInsertionConservation
+  dftPacketBlockTableSplice dftPacketTerminalPhi
+  dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation
