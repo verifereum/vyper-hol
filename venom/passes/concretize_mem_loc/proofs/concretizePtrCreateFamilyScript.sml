@@ -82,31 +82,45 @@ Proof
 QED
 
 Theorem ptr_create_family_call_completion[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\ ptr_request_shell rq rq' /\
+  rq.cr_kind = DelegateMessageCall /\
   consume_call_outcome rq ro rz s = (w,u) /\
-  consume_call_outcome rq rt rz t = (v,z) ==>
+  consume_call_outcome rq' rt rz t = (v,z) ==>
   w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
 Proof
   strip_tac >>
-  drule_all ptr_create_family_current_stores >> strip_tac >>
   `ptr_request_history (record_request rq s.vs_requests)
-     (record_request rq t.vs_requests)` by
+     (record_request rq' t.vs_requests)` by
     (irule ptr_request_record >> fs[ptr_history_content_def]) >>
+  `rq'.cr_kind = DelegateMessageCall /\ rq.cr_static = rq'.cr_static` by
+    (fs[ptr_request_shell_def] >>
+     qpat_x_assum `_ = rq'` (SUBST1_TAC o SYM) >> simp[]) >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
      ptr_core_shared_def, ptr_shared_fields_def] >>
   gvs[consume_call_outcome_eq] >>
-  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+  Cases_on `t.vs_outcomes` >>
+  gvs[take_outcome_def, computed_precompile_def, failed_outcome_def,
+      adopt_outcome_def, adopt_outcome_deletions_def] >>
+  gvs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def,
+       contract_storage_def, contract_transient_def,
+       storage_agree_except_def, word_agree_except_def] >>
+  rename1 `outcome.co_success` >>
+  Cases_on `rq'.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
        ptr_core_shared_def, ptr_shared_fields_def,
        contract_storage_def, contract_transient_def,
        storage_agree_except_def, word_agree_except_def]
 QED
 
 Theorem ptr_create_family_delegate_request[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t ==>
-  venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F
+  venom_call_request s addr 0w ao az F with
+    <|cr_accounts := t.vs_accounts; cr_tStorage := t.vs_transient|> =
+  venom_call_request t addr 0w at az F
 Proof
-  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
+  strip_tac >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
      ptr_core_shared_def, ptr_shared_fields_def] >>
   simp[venom_call_request_def]
@@ -155,7 +169,7 @@ QED
 
 Theorem ptr_create_family_delegate_mixed_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
   inst.inst_opcode = DELEGATECALL /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) (at:bytes32) (az:bytes32)
@@ -166,19 +180,25 @@ Theorem ptr_create_family_delegate_mixed_execution[local]:
         (step_taint inst s u tn) f g u z
 Proof
   strip_tac >>
-  `venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F` by
+  `venom_call_request s addr 0w ao az F with
+     <|cr_accounts := t.vs_accounts; cr_tStorage := t.vs_transient|> =
+   venom_call_request t addr 0w at az F` by
     (irule ptr_create_family_delegate_request >> metis_tac[]) >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
   Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
     cr_kind := DelegateMessageCall) (w2n rt) (w2n rz) t` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
+  Cases_on `consume_call_outcome (venom_call_request s addr 0w ao az F with
     cr_kind := DelegateMessageCall) (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome _ (w2n rt) _ t = (wt,zt)` >>
   rename1 `consume_call_outcome _ (w2n ro) _ s = (ws,us)` >>
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
   `ws = wt /\ us.vs_returndata = zt.vs_returndata /\ ptr_history_content tn us zt` by
-    (drule_all ptr_create_family_call_completion >> simp[]) >>
+    (irule ptr_create_family_call_completion >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[ptr_request_shell_def, venom_call_request_def] >>
+     fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+        ptr_core_shared_def, ptr_shared_fields_def]) >>
   gvs[Excl "consume_call_outcome_eq"] >>
   `ptr_mixed_vars births positions TG tn f g us zt` by
     (irule ptr_mixed_vars_fields >>
@@ -196,7 +216,7 @@ QED
 
 Theorem ptr_create_family_taint[local]:
   taint_ok fn tn inst s /\ MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  (MEM inst.inst_opcode [CREATE; CREATE2] ==> tn.t_stor = {} /\ tn.t_trans = {}) /\
   (!off len j. MEM (off,len) (source_memory_read_ranges inst s) /\ j < len ==>
      off + j NOTIN tn.t_mem) /\
   (!op. MEM op inst.inst_operands ==> op_taint tn op = {})
@@ -423,8 +443,6 @@ Proof
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (irule ptr_create_family_endpoint_taint >> rpt (goal_assum (drule_at Any))) >>
   `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by simp[] >>
-  `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
-    (drule_all ptr_create_family_taint >> simp[]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
       a.po_state at.po_state /\
    ptr_history_content a.po_taint a.po_state at.po_state /\
