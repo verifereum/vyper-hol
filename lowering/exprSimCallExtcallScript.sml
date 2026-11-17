@@ -17,8 +17,9 @@ Proof
     (simp[EVERY_MEM] >> rpt strip_tac >> irule expr_sim_below_mem >>
      qexists_tac `args` >> simp[] >> irule expr_sim_below_mono >>
      goal_assum (drule_at Any) >> simp[expr_size_def]) >>
-  irule (cj 2 (SPEC_ALL compile_extcall_case)) >> rpt conj_tac >>
-  TRY (simp[] >> NO_TAC) >> rpt strip_tac >>
+  irule (cj 2 (SPEC_ALL compile_extcall_case)) >> rpt conj_tac
+  >~ [`_.ce_func_mutability`] >- simp[] >>
+  rpt strip_tac >>
   irule exprs_case_every_ok >>
   fs[EVERY_MEM] >> metis_tac[MEM_TAKE, MEM_DROP_IMP]
 QED
