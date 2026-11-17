@@ -365,7 +365,9 @@ Definition well_typed_builtin_app_def:
      ((ty = BaseT (BytesT (Dynamic n)) /\ ?bd. HD ts = BaseT (BytesT bd)) \/
       (ty = BaseT (StringT n) /\ ?m. HD ts = BaseT (StringT m)))) /\
   well_typed_builtin_app ty (Uint2Str n) ts =
-    (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\ (?k. HD ts = BaseT (UintT k)) /\ 78 <= n) /\
+    (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\
+     (?k. HD ts = BaseT (UintT k) /\
+          LENGTH (num_to_dec_string (2 ** k - 1)) <= n)) /\
   well_typed_builtin_app ty (MakeArray NONE bd) ts =
     ((?tys. ty = TupleT tys /\ arg_types_fit ts tys) /\
      compatible_bound bd (LENGTH ts)) /\
