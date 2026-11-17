@@ -179,12 +179,13 @@ Proof
       not_fresh_at sm x)` by
     (conj_tac >> rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> fs[cs_extends_def] >> metis_tac[]) >>
-  `32+32*word_size m < 2 ** 64` by
-    fs[expr_body_pre_def,allocLimitsTheory.alloc_limits_expr_def] >>
   `type_memory_bytes cenv (BaseT (BytesT (Dynamic m))) = 32+32*word_size m` by
     (POP_ASSUM_LIST (K all_tac) >>
      simp_tac bool_ss [type_memory_bytes_def,vfmConstantsTheory.word_size_def] >>
      decide_tac) >>
+  `32+32*word_size m < 2 ** 64` by
+    fs[expr_body_pre_def,allocLimitsTheory.alloc_limits_expr_def,
+       allocLimitsTheory.type_alloc_ok_def,is_word_type_def] >>
   `n <= 32*word_size m` by
     (irule LESS_EQ_TRANS >> qexists_tac `m` >>
      simp[valueTypingMemoryPropsTheory.word_size_capacity]) >>
