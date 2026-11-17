@@ -45,7 +45,8 @@ val EVAL_FRAME_IH_TAC = evalWalkLib.IH_TAC {stop = K false,
      lock_if_nr_def, unlock_if_nr_def]};
 
 val EVAL_FRAME_STEP = evalWalkLib.STEP {net = eval_frame_net, at = RAND_CONV,
-  unfolds = [switch_BoolV_def, ignore_bind_def],
+  unfolds = [switch_BoolV_def, ignore_bind_def,
+    vyperCreateTheory.eval_create_operands_def],
   intros = [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
