@@ -36,7 +36,7 @@ Ancestors
   stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline stateRelProjStorage bodyFullUnwrap assignEffectfulIndexPhysical
   immutableDeployPhysicalSource bodyFullStructLitPhysical stmtSimLogCompose
-  exprSimMemDefs valueCopyBytes bodyMemSnapshotSourceLocation aggregateEvaluatedLayout placeStore valueEncodingProps venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
+  exprSimMemDefs valueCopyBytes bodyMemSnapshotSourceLocation aggregateEvaluatedLayout fragGasOriginPtr fragGasSeqPtr exprPtrUnwrapCopyEdges instMemFrontier wordLoadStorePtr bodyFullUnwrapRun emitHelperProps localPtrsProps venomExecProofs venomInst vyperLookup pred_set rich_list emitHelper placeStore valueEncodingProps memSafeRun venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
 Libs
   monadsyntax
 
@@ -1875,6 +1875,198 @@ Proof
   qpat_x_assum `!aid off sz i. _` (qspecl_then [`aid`,`b`,`n`,`i`] mp_tac) >>
   impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> simp[]
 QED
+
+Theorem body_assign_field_store_joint_frame:
+  emit_void MSTORE [Var dst;op] su = ((),sf) /\ fn_has_code su sf func /\
+  fn_inst_ids_distinct func /\ ~z.vs_halted /\
+  z.vs_current_bb = su.cs_current_bb /\
+  z.vs_inst_idx = LENGTH su.cs_current_insts /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
+  lookup_var p z = SOME w0 /\ lookup_var dst z = SOME (w0 + n2w off) /\
+  eval_operand op z = SOME (typed_val_to_w256 ftv v) /\ op_taint tn op = {} /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  fields_layout flds fs /\ struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
+  store_lays_out ftv ftv v /\ off = struct_field_offset flds fld /\
+  off + 32 <= sz /\ lo <= w2n w0 /\ ptr_covers G tn dst z 32 /\
+  local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  P H0 /\
+  (!H. P H ==> stmt_state_rel H ctx func cenv cx es z /\
+     ghost_inv_at (DF H) lo d cenv cx es G tn z) /\
+  (!mem. mem_agree_outside
+      (tn.t_mem DIFF {i | w2n w0 + off <= i /\ i < w2n w0 + off + 32})
+      (mstore (w2n w0 + off) (typed_val_to_w256 ftv v) z).vs_memory mem ==>
+    val_in_memory entry.type (StructV (AFUPDKEY fld (K v) vals)) (w2n w0) mem) /\
+  alloca_history func z /\ return_buf_frame d cenv su z /\
+  alloca_frame c0 es0 sa s0 cenv es z /\
+  (!aid a n i. FLOOKUP s0.vs_allocas aid = SOME (a,n) /\ aid < sa.cs_next_id /\
+    (!name b cap. local_region c0 es0.scopes s0 name b cap ==>
+      a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tn.t_mem ==>
+    i IN tn0.t_mem) ==>
+  ?t tf.
+    t = (mstore (w2n w0 + off) (typed_val_to_w256 ftv v) z) with
+      vs_inst_idx := SUC z.vs_inst_idx /\
+    tf = step_taint (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z
+      (mstore (w2n w0 + off) (typed_val_to_w256 ftv v) z) tn /\
+    step_prov PG G (mk_inst su.cs_next_id MSTORE [Var dst;op] [])
+      (mstore (w2n w0 + off) (typed_val_to_w256 ftv v) z) = G /\
+    (!H. P H ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (z,G,tn) [] (OK t,G,tf) /\
+      stmt_state_rel H ctx func cenv cx
+        (es with scopes := pre ++ (sc |+ (id,entry with
+          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
+      ghost_inv_at (DF H) lo d cenv cx
+        (es with scopes := pre ++ (sc |+ (id,entry with
+          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) G tf t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+    return_buf_frame d cenv sf t /\ alloca_history func t /\
+    alloca_frame c0 es0 sa s0 cenv
+      (es with scopes := pre ++ (sc |+ (id,entry with
+        <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
+    t.vs_allocas = z.vs_allocas /\ t.vs_alloca_next = z.vs_alloca_next /\
+    (!x. lookup_var x t = lookup_var x z) /\
+    tf.t_var = tn.t_var /\ tf.t_mem = tn.t_mem DIFF
+      {i | w2n w0 + off <= i /\ i < w2n w0 + off + 32} /\
+    (!aid a n i. FLOOKUP s0.vs_allocas aid = SOME (a,n) /\ aid < sa.cs_next_id /\
+      (!name b cap. local_region c0 es0.scopes s0 name b cap ==>
+        a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tf.t_mem ==>
+      i IN tn0.t_mem)
+Proof
+  strip_tac >> qpat_x_assum `off = _` SUBST_ALL_TAC >>
+  qabbrev_tac `off = struct_field_offset flds fld` >>
+  `stmt_state_rel H0 ctx func cenv cx es z /\
+   ghost_inv_at (DF H0) lo d cenv cx es G tn z` by metis_tac[] >>
+  `local_ptrs_rel func cenv es.scopes z /\ alloca_inv z` by
+    metis_tac[stmt_state_rel_local_ptrs_alloca] >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `w2n w0 + sz <= z.vs_alloca_next` by
+    (fs[local_ptrs_rel_def] >> first_x_assum drule_all >> simp[]) >>
+  `z.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_alloca_room,alloca_room_next_lt] >>
+  `w2n (w0 + n2w off) = w2n w0 + off` by
+    (irule buffer_offset_no_wrap >> qexists_tac `sz` >> simp[]) >>
+  drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`,`G`,`su.cs_next_id`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `tf.t_var = tn.t_var` >>
+  qabbrev_tac `t = (mstore (w2n w0 + off) (typed_val_to_w256 ftv v) z) with
+    vs_inst_idx := SUC z.vs_inst_idx` >>
+  `sf.cs_current_bb = su.cs_current_bb /\
+   sf.cs_current_insts = su.cs_current_insts ++
+     [mk_inst su.cs_next_id MSTORE [Var dst;op] []] /\
+   sf.cs_next_var = su.cs_next_var` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emit_void_def,comp_bind_def,comp_ignore_bind_def,fresh_id_def,
+          emit_def,comp_return_def] >> strip_tac >> gvs[]) >>
+  `t.vs_allocas = z.vs_allocas /\ t.vs_alloca_next = z.vs_alloca_next /\
+   (!x. lookup_var x t = lookup_var x z)` by
+    simp[Abbr `t`,mstore_def,lookup_var_def] >>
+  qexistsl_tac [`t`,`tf`] >> gvs[Abbr `t`,Abbr `tf`] >>
+  conj_tac >- suspend "family" >>
+  conj_tac >- simp[mstore_def] >>
+  conj_tac >- suspend "return" >>
+  conj_tac >- suspend "history" >>
+  conj_tac >- suspend "frame" >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Resume body_assign_field_store_joint_frame[family]:
+  gen_tac >> disch_tac >>
+  `stmt_state_rel H ctx func cenv cx es z /\
+   ghost_inv_at (DF H) lo d cenv cx es G tn z` by metis_tac[] >>
+  conj_tac >- suspend "edge" >>
+  conj_tac >- (simp[stmt_state_rel_inst_idx,Abbr `off`] >>
+    drule_all stmt_state_rel_write_field >> simp[arithmeticTheory.ADD_COMM]) >>
+  suspend "ghost"
+QED
+
+Resume body_assign_field_store_joint_frame[edge]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `allocas_from lo z` by fs[ghost_inv_at_def] >>
+  `?bb. lookup_block z.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb z.vs_inst_idx =
+      SOME (mk_inst su.cs_next_id MSTORE [Var dst;op] [])` by
+    (drule emitted_insts_emit_void >> strip_tac >>
+     drule emit_void_same_blocks >> simp[same_blocks_def] >> strip_tac >>
+     drule_all fn_has_code_same_block >> strip_tac >>
+     qexists_tac `bb` >> simp[] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `ptr_inst_ok (DF H) lo 0 ctx func G tn
+    (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z` by
+    (irule ptr_inst_ok_mstore_tainted >> simp[]) >>
+  `step_inst_base (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z =
+    OK (mstore (off + w2n w0) (typed_val_to_w256 ftv v) z)` by
+    (qspecl_then [`Var dst`,`op`] mp_tac step_MSTORE >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  `inst_mem_below_frontier (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z /\
+   inst_dload_in_section (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z /\
+   (mk_inst su.cs_next_id MSTORE [Var dst;op] []).inst_opcode <> INVOKE /\
+   ~is_terminator (mk_inst su.cs_next_id MSTORE [Var dst;op] []).inst_opcode` by
+    (simp[mk_inst_def,is_terminator_def,below_frontier_MSTORE,
+      eval_operand_def,inst_dload_in_section_def] >> decide_tac) >>
+  drule_all straight_line_origin_ptr_edge >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> simp[] >> strip_tac >>
+  `~((mstore (off + w2n w0) (typed_val_to_w256 ftv v) z) with
+      vs_inst_idx := SUC z.vs_inst_idx).vs_halted` by simp[mstore_def] >>
+  metis_tac[gas_origin_ptr_path_rules,APPEND]
+QED
+
+Resume body_assign_field_store_joint_frame[ghost]:
+  qmatch_goalsub_abbrev_tac `ghost_inv_at (DF H) lo d cenv cx ee G tf t` >>
+  `t.vs_allocas = z.vs_allocas /\ t.vs_alloca_next = z.vs_alloca_next /\
+   t.vs_memory = (mstore (off + w2n w0) (typed_val_to_w256 ftv v) z).vs_memory /\
+   (!x. lookup_var x t = lookup_var x z)` by
+    simp[Abbr `t`,mstore_def,lookup_var_def] >>
+  `allocas_from lo t` by (fs[ghost_inv_at_def,allocas_from_def] >> metis_tac[]) >>
+  `stor_taint_ok_at (DF H) tf t` by
+    (fs[ghost_inv_at_def,stor_taint_ok_at_def] >>
+     simp[Abbr `tf`,Abbr `t`,mstore_def,contract_storage_def,contract_transient_def,
+          step_taint_def,imm_taint_def,mk_inst_def]) >>
+  `local_region cenv es.scopes z id (w2n w0) sz` by simp[local_region_def] >>
+  simp[Abbr `ee`] >>
+  irule (body_full_local_scope_ghost_post |> Q.INST [`n` |-> `sz`]) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`G`,`func`,`sa`,`tn`] >> simp[op_taint_def] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Abbr `t`] >>
+      irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Resume body_assign_field_store_joint_frame[return]:
+  irule return_buf_frame_frame >> goal_assum (drule_at Any) >>
+  simp[mstore_def,lookup_var_def]
+QED
+
+Resume body_assign_field_store_joint_frame[history]:
+  `step_inst_base (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z =
+    OK (mstore (off + w2n w0) (typed_val_to_w256 ftv v) z)` by
+    (qspecl_then [`Var dst`,`op`] mp_tac step_MSTORE >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  `run_inst_seq [mk_inst su.cs_next_id MSTORE [Var dst;op] []] z =
+    OK (mstore (off + w2n w0) (typed_val_to_w256 ftv v) z)` by
+    simp[run_inst_seq_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    [mk_inst su.cs_next_id MSTORE [Var dst;op] []]` by
+    simp[mk_inst_def,is_terminator_def] >>
+  drule_all emitted_alloca_history >> simp[arithmeticTheory.ADD1]
+QED
+
+Resume body_assign_field_store_joint_frame[frame]:
+  `local_region cenv es.scopes z id (w2n w0) sz` by simp[local_region_def] >>
+  irule alloca_frame_region_write >> goal_assum (drule_at Any) >> simp[] >>
+  drule find_containing_scope_structure >> strip_tac >>
+  `id IN FDOM sc` by fs[FLOOKUP_DEF] >>
+  simp[ABSORPTION_RWT] >>
+  rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  decide_tac
+QED
+
+Finalise body_assign_field_store_joint_frame
 
 Theorem restored_header_witness[local]:
   !a n old mem. ?mix.
