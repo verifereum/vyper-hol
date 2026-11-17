@@ -120,7 +120,7 @@ Theorem fmp_source_dalloca[local]:
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  gvs[dalloca_no_wrap_def] >>
+  gvs[unitTransformDefsTheory.dalloca_no_wrap_def] >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w,
        w2n_n2w] >>
   simp[w2n_add_2]

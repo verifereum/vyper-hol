@@ -1197,7 +1197,7 @@ Proof
    a.vs_initial_fmp = v.vs_initial_fmp /\ a.vs_fmp = v.vs_fmp` by
     gvs[stateFrameTheory.execution_frame_def] >>
   `dalloca_no_wrap inst a ==> dalloca_no_wrap inst v` by
-    (simp[dalloca_no_wrap_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+    (simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   conj_tac
   >- (drule_all supply_inst_mem_ranges_cong >> simp[mem_corr_def]) >>
   simp[call_corr_def] >> strip_tac >>
@@ -1296,7 +1296,7 @@ Proof
   Cases_on `MEM inst.inst_opcode [PHI; JMP; JNZ]`
   >- (`inst_mem_ranges next v = []` by
         (irule supply_inst_mem_ranges_empty >> gvs[]) >>
-      gvs[mem_corr_def, call_corr_def, dalloca_no_wrap_def,
+      gvs[mem_corr_def, call_corr_def, unitTransformDefsTheory.dalloca_no_wrap_def,
           supply_state_agree_def, stateFrameTheory.execution_frame_def]) >>
   `next = inst` by
     (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
@@ -1387,7 +1387,7 @@ Proof
   `inst_mem_ranges inst' v = []` by
     (irule supply_inst_mem_ranges_empty >> gvs[]) >>
   qexistsl [`inst`, `a`] >>
-  gvs[mem_corr_def, call_corr_def, dalloca_no_wrap_def, supply_state_agree_def,
+  gvs[mem_corr_def, call_corr_def, unitTransformDefsTheory.dalloca_no_wrap_def, supply_state_agree_def,
       stateFrameTheory.execution_frame_def]
 QED
 

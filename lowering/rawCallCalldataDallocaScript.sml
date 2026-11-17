@@ -81,7 +81,8 @@ Proof
      ho_match_mp_tac ci_mono_bind >> simp[UNCURRY, ci_mono_comp_return]) >>
   simp[compile_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  `sb = st7` by (Cases_on `rcf.rcf_max_outsize = 0` >> gvs[]) >>
+  rename1 `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = (_, finish_st)` >>
+  `sb = finish_st` by (Cases_on `rcf.rcf_max_outsize = 0` >> gvs[]) >>
   drule msg_data_to_memory_dalloca >> strip_tac >>
   qexists_tac `sm` >> qexists_tac `i` >> simp[] >>
   `ci_mono sa st1` by
@@ -99,13 +100,10 @@ Proof
   `ci_mono st3 st4` by
     (qpat_x_assum `compile_raw_call_outbuf _ _ = _` (irule o
        MATCH_MP ci_mono_eq) >> simp[ci_mono_compile_raw_call_outbuf]) >>
-  `ci_mono st5 st6` by
+  `ci_mono st5 finish_st` by
     (qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`
        (irule o MATCH_MP ci_mono_eq) >>
      simp[ci_mono_compile_raw_call_finish]) >>
-  `ci_mono st6 st7` by
-    (qpat_x_assum `emit_void SETFMP _ _ = _` (irule o
-       MATCH_MP ci_mono_eq) >> simp[ci_mono_emit_void]) >>
   gvs[ci_mono_def] >> metis_tac[cs_extends_trans]
 QED
 
@@ -138,12 +136,8 @@ Proof
      compile_call compile_expr cenv ann ty target args dflt st` by
     (rpt gen_tac >>
      simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-          expr_type_def] >>
-     CONV_TAC (DEPTH_CONV ETA_CONV) >>
-     irule compile_call_callback_contract >>
-     irule expr_child_callback_agrees >>
-     rpt strip_tac >> drule call_callback_child_bound >>
-     simp[expr_size_def]) >>
+          expr_type_def, compile_call_child_calls] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
   strip_tac >> Cases_on `args` >> gvs[] >>
   drule compile_raw_call_calldata_dalloca >> strip_tac >>
   simp[EXISTS_MEM] >> qexists_tac `i` >> simp[] >>

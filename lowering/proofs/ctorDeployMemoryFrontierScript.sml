@@ -27,7 +27,7 @@ Ancestors
   vyperCompiler venomWf venomExecSemantics venomInst venomState
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
   unitTransformDefs lowerDloadDefs ctorDeployDefs deployUnitProducers
-  o1PassContract
+  o1PassContract rawReachableFmp ctxLookupAgree
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
@@ -201,13 +201,17 @@ Proof
 QED
 
 (* raw_unit_memory_ok from a memory-safe run, with
-   alloca_frontier_inv_from k as the frontier bound. *)
+   alloca_frontier_inv_from k as the frontier bound.  With no DALLOCA and
+   no free-memory-pointer opcode the pointer never moves, so the entry
+   state's pointer at or above its initial one gives the pointer facts. *)
 Theorem lowered_unit_raw_memory_ok_from:
   !k ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     vs.vs_alloca_next = k /\ k + unit_alloca_budget ctx < dimword (:256) /\
+    ~ctx_has_dalloca ctx /\ EVERY pre_fmp_ops ctx.ctx_functions /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     (!fuel. mem_safe_blocks fuel ctx fn
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                           vs_inst_idx := 0 |>))
@@ -222,8 +226,15 @@ Proof
   >~ [`reachability_closed _ _`]
   >- (irule alloca_frontier_inv_from_closed >> simp[])
   >~ [`fn_entry_inv _ _ _ _`]
-  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
-  rw[alloca_frontier_inv_from_def] >> decide_tac
+  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[])
+  >- (rw[alloca_frontier_inv_from_def] >> decide_tac) >>
+  rpt strip_tac >>
+  drule_all raw_reachable_fmp_fixed >> strip_tac >>
+  drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >>
+     metis_tac[active_inst_mem_fn_insts]) >>
+  simp[dalloca_no_wrap_def]
 QED
 
 (* Every reachable DLOAD/DLOADBYTES offset, added to the length of the code
@@ -275,8 +286,7 @@ Proof
 QED
 
 (* The pointer discipline and taint bound from a pointer-safe run, with
-   the pointer parameters ptr_ok_check (in lowering_context_ok) finds.
-   ptr_ok_check vouches for them only in a unit without DALLOCA. *)
+   the pointer parameters ptr_ok_check (in lowering_context_ok) finds. *)
 Theorem lowered_unit_ptr_taint:
   !D lo ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\

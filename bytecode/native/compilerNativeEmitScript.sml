@@ -33,6 +33,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -41,6 +42,7 @@ val () = holbuild_extra_deps
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle",
+   "../upstream-fixes/oracle",
    "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
@@ -203,6 +205,9 @@ val suite_fixtures = [
     "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested", "d06_int_default_constant"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",
@@ -255,7 +260,9 @@ val suite_fixtures = [
     "ifexp_string", "ifexp_struct", "uint2str_arg"]),
   ("raw-calls", [
     "rc01_stmt_nooutsize", "rc02_outsize_ret", "rc03_value_gas", "rc04_static",
-    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
+    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc10_msgdata",
+    "rc11_msgdata_outsize", "rc12_msgdata_gas", "rc13_msgdata_value",
+    "rc14_msgdata_rof", "rc15_msgdata_static", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
   ("../tests/fixtures/load_timing", [
@@ -264,7 +271,10 @@ val suite_fixtures = [
     "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
-    "slice_storage_bytes", "slice_string_lit"])];
+    "slice_storage_bytes", "slice_string_lit"]),
+  ("upstream-fixes", [
+    "uf5236_ifexp_nested_narrow", "uf5256_tuple_widen_bytes",
+    "uf5298_int_to_decimal_bound", "uf5331_ifexp_narrow_string"])];
 
 
 (* The compilation each oracle is compared with: Python's O1 without the final
@@ -1293,6 +1303,19 @@ fun def_deps i = List.mapPartial (fn k => Redblackmap.peek (def_index, k))
 fun pp_defn tm = PP.pp_to_string 100 (EmitML.pp_defn_as_ML []) tm;
 fun pp_term tm = PP.pp_to_string 100 (EmitML.pp_term_as_ML [] EmitML.RIGHT) tm;
 val failed = ref 0;
+(* A value whose HOL type is monomorphic gets that type written out.  Its ML
+   expression can have a type the value restriction leaves ungeneralised
+   (all_capabilities = K T), which only a later use fixes, and a use in a
+   later structure can't. *)
+fun annotate_val [i] text = let
+      val (k, eqs) = Vector.sub (def_vec, i)
+      val l = lhs (snd (strip_forall (hd eqs)))
+      val prefix = "val " ^ ml_name "c" k ^ " ="
+    in if is_const l andalso null (type_vars_in_term l) andalso String.isPrefix prefix text
+       then "val " ^ ml_name "c" k ^ " : " ^ ml_ty (type_of l) ^ " =" ^
+            String.extract (text, size prefix, NONE)
+       else text end
+  | annotate_val _ text = text;
 fun group_text group = let
   val t0 = Time.now ()
   val r = group_text0 group
@@ -1301,14 +1324,20 @@ in if dt > 0.5 then pr ("slow group " ^ Real.toString dt ^ "s: " ^
      String.concatWith " " (map (show o #1 o fn i => Vector.sub (def_vec, i)) group) ^ "\n") else ();
    r end
 and group_text0 group =
-  (pp_defn (list_mk_conj (List.concat (map (#2 o fn i => Vector.sub (def_vec, i)) group))) ^ "\n\n")
+  (annotate_val group (pp_defn (list_mk_conj (List.concat (map (#2 o fn i => Vector.sub (def_vec, i)) group)))) ^ "\n\n")
   handle e => (failed := !failed + 1;
                pr ("PRINT FAIL " ^ String.concatWith " " (map (show o #1 o fn i => Vector.sub (def_vec, i)) group) ^
                    ": " ^ General.exnMessage e ^ "\n"); "");
 val def_groups = sccs (Vector.length def_vec) def_deps;
 val () = pr ("def groups: " ^ Int.toString (length def_groups) ^ ", largest " ^
   Int.toString (List.foldl Int.max 0 (map length def_groups)) ^ "\n");
-val defs_text = String.concat (map group_text def_groups);
+(* Poly/ML 5.9.2 doesn't finish compiling a structure of more than about
+   2300 functions, so the definitions go in structures of chunk_size groups,
+   each opening the ones before it. *)
+val chunk_size = 500;
+fun chunks l = if length l <= chunk_size then [l]
+               else List.take (l, chunk_size) :: chunks (List.drop (l, chunk_size));
+val def_chunks = chunks (map group_text def_groups);
 val fixtures_text =
   "val fixtures = [\n" ^ String.concatWith ",\n" (map (fn (h, tm) =>
     "  (" ^ Lib.mlquote h ^ ", fn () => " ^ pp_term tm ^ ")") fixture_terms) ^ "]\n";
@@ -1324,9 +1353,15 @@ val output_dir =
 val generated_path = OS.Path.concat (output_dir, module_name ^ "ML.sml");
 val () = pr ("print failures: " ^ Int.toString (!failed) ^ "\n");
 val () = if !failed = 0 then () else raise Fail "EmitML could not print some equations";
+fun chunk_name n = module_name ^ "ML_" ^ Int.toString n;
+fun structure_text name n body =
+  "structure " ^ name ^ " = struct\nlocal open compilerNativeRuntime " ^
+  String.concatWith " " (List.tabulate (n, chunk_name)) ^ "\nin\n\n" ^ body ^ "end\nend;\n\n";
 val () = let val o' = TextIO.openOut generated_path in
   TextIO.output (o', "(* Generated by compilerNativeEmitScript.sml.  Do not edit. *)\n" ^
-    "structure " ^ module_name ^ "ML = struct\nopen compilerNativeRuntime\n\n" ^
-    datatype_text ^ lits_text ^ "\n" ^ String.concatWith "\n" (rev (!indexed_decls)) ^ "\n\n" ^
-    defs_text ^ fixtures_text ^ entries_text ^ "end\n");
+    String.concat (Lib.mapi (fn n => fn texts => structure_text (chunk_name n) n
+      ((if n = 0 then datatype_text ^ lits_text ^ "\n" ^
+                      String.concatWith "\n" (rev (!indexed_decls)) ^ "\n\n"
+        else "") ^ String.concat texts)) def_chunks) ^
+    structure_text (module_name ^ "ML") (length def_chunks) (fixtures_text ^ entries_text));
   TextIO.closeOut o' end;

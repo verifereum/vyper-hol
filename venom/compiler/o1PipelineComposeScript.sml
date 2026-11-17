@@ -282,9 +282,20 @@ QED
 (* ===== Source shape ===== *)
 
 Theorem raw_opcode_ok_not_raw_fmp[local]:
-  raw_opcode_ok op ==> ~is_raw_fmp_opcode op
+  raw_opcode_ok op /\ op <> DALLOCA ==> ~is_raw_fmp_opcode op
 Proof
   Cases_on `op` >> simp[raw_opcode_ok_def, is_raw_fmp_opcode_def]
+QED
+
+(* The source's only FMP operations are its DALLOCAs. *)
+Theorem source_no_raw_fmp_ops:
+  o1_source_unit_ok u /\ ~ctx_has_dalloca u.cu_context /\
+  MEM fn u.cu_context.ctx_functions ==>
+  no_raw_fmp_ops fn
+Proof
+  rw[o1_source_unit_ok_def, ctx_has_dalloca_def, no_raw_fmp_ops_def,
+     EVERY_MEM, EXISTS_MEM] >>
+  metis_tac[raw_opcode_ok_not_raw_fmp]
 QED
 
 Theorem source_pre_fmp_ops:
@@ -294,14 +305,6 @@ Proof
   rw[o1_source_unit_ok_def, pre_fmp_ops_def, EVERY_MEM] >>
   `raw_opcode_ok inst.inst_opcode` by metis_tac[] >>
   Cases_on `inst.inst_opcode` >> fs[raw_opcode_ok_def, pre_fmp_opcode_def]
-QED
-
-Theorem source_no_raw_fmp_ops:
-  o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
-  no_raw_fmp_ops fn
-Proof
-  rw[o1_source_unit_ok_def, no_raw_fmp_ops_def, EVERY_MEM] >>
-  metis_tac[raw_opcode_ok_not_raw_fmp]
 QED
 
 Theorem source_fmp_free:
@@ -334,9 +337,8 @@ Proof
   drule_all source_member_shape >> strip_tac >>
   simp[o1_fn_shape_def] >> rpt conj_tac
   >- gvs[unit_label_refs_ok_def, EVERY_MEM]
-  >- (rpt strip_tac >> drule_all source_no_raw_fmp_ops >>
-      simp[no_raw_fmp_ops_def] >> qexists_tac `inst` >>
-      simp[is_raw_fmp_opcode_def])
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[])
   >- metis_tac[source_entry_shape]
   >> strip_tac >> drule_all source_internal_shape >> simp[]
 QED
@@ -451,9 +453,9 @@ QED
 
 (* The walk's input is at row 0: SimplifyCFG's pre-walk run makes every
    function a MakeSSA input (the source has no PHI and definite
-   assignment), both pre-walk runs keep the source's freedom from raw FMP
-   operations and its unset FMP conventions, and DretDesugar is the
-   identity. *)
+   assignment), both pre-walk runs keep the source's unset FMP conventions
+   and, when it has no DALLOCA, its freedom from raw FMP operations, and
+   DretDesugar is the identity. *)
 Theorem o1_pre_walk_rows:
   run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit s =
     SOME (unit', s') /\
@@ -462,7 +464,8 @@ Theorem o1_pre_walk_rows:
   o1_source_unit_ok unit /\ unit_defs_reach_uses unit /\
   unit_fmp_unsealed unit ==>
   EVERY (o1_fn_row 0) unit'.cu_context.ctx_functions /\
-  EVERY no_raw_fmp_ops unit'.cu_context.ctx_functions /\
+  (~ctx_has_dalloca unit.cu_context ==>
+   EVERY no_raw_fmp_ops unit'.cu_context.ctx_functions) /\
   EVERY fmp_sig_no_param unit'.cu_context.ctx_functions
 Proof
   strip_tac >> drule o1_pre_walk_runs >> strip_tac >>
@@ -488,8 +491,9 @@ Proof
      >- (fs[o1_source_unit_ok_def, EVERY_MEM] >> rpt strip_tac >>
          res_tac >> gvs[raw_opcode_ok_def]) >>
      qexists_tac `unit.cu_context` >> fs[o1_ctx_shape_def, EVERY_MEM]) >>
-  `EVERY no_raw_fmp_ops mid.cu_context.ctx_functions` by
-    (mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
+  `~ctx_has_dalloca unit.cu_context ==>
+   EVERY no_raw_fmp_ops mid.cu_context.ctx_functions` by
+    (strip_tac >> mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
                      `pass` |-> `CFP_Simple VP_SimplifyCFG`,
                      `view` |-> `any_view`, `P` |-> `no_raw_fmp_ops`]
                ctx_pass_stage_every) >>

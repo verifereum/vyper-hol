@@ -7,7 +7,7 @@ Ancestors
   irSupply unitShapeDefs unitTransformDefs o1ContractSimplifyCfg
 
 Theorem o1_code_end_pipeline_from_walk:
-  (!rpolicy stage D vs_out.
+  (!rpolicy stage D fmp vs_out.
     (!k. k < LENGTH o1_fn_passes ==>
       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
         (stage k) (stage (SUC k))) /\
@@ -21,30 +21,33 @@ Theorem o1_code_end_pipeline_from_walk:
     (!k. k <= 3 ==> EVERY no_raw_fmp_ops (stage k).ctx_functions) /\
     dead_wf D /\ o1_run_state_ok vs_out /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
-    ?vi. gas_variant vi vs_out /\
+    ?vi. raw_variant fmp vi vs_out /\
       (o1_inv D 0 (stage 0) vi /\
        mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
          s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
          (stage 1) vi /\
        (!f i. MEM f (stage 1).ctx_functions /\ MEM i (fn_insts f) ==>
-         ~MEM (Label "code_end") i.inst_operands) ==>
+         ~MEM (Label "code_end") i.inst_operands) /\
+       fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
        ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D
          (stage 0) (stage (LENGTH o1_fn_passes)) vi vs_out /\
        o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs_out /\
        code_end_offset_ok (raw_reachable vs_out) (stage (LENGTH o1_fn_passes)))) ==>
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  unit_entry_no_params unit /\
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit ==>
-  !D vs_out. dead_wf D /\ o1_run_state_ok vs_out /\
+  !D fmp vs_out. dead_wf D /\ o1_run_state_ok vs_out /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. raw_variant fmp vs_in vs_out /\
       (o1_pre_walk_inv D unit.cu_context vs_in /\
        mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
          s.vs_code = vs_in.vs_code /\ s.vs_data_section = vs_in.vs_data_section)
          unit.cu_context vs_in /\
        (!f i. MEM f unit.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
-         ~MEM (Label "code_end") i.inst_operands) ==>
+         ~MEM (Label "code_end") i.inst_operands) /\
+       fmp_variant_room (SOME fmp) out.po_unit.cu_context vs_out ==>
        ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D
          unit.cu_context out.po_unit.cu_context vs_in vs_out /\
        o1_lowered_inv out.po_unit.cu_context vs_out /\
@@ -56,6 +59,8 @@ Proof
   `ir_supply_inst_ok (init_ir_supply unit)` by
     simp[irSupplyTheory.init_ir_supply_inst_ok] >>
   drule_all o1_pre_walk_rows >> strip_tac >>
+  `EVERY no_raw_fmp_ops pre.cu_context.ctx_functions` by
+    (qpat_x_assum `~ctx_has_dalloca _ ==> _` irule >> first_assum ACCEPT_TAC) >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   mp_tac (Q.INST [`unit` |-> `pre`,
     `fcg` |-> `fcg_analyze pre.cu_context`] o1_ctx_shape_prune) >>
@@ -68,8 +73,8 @@ Proof
   (impl_tac >- metis_tac[o1_prune_every, unit_labels_wf_namespace]) >>
   disch_then (qx_choose_then `stage` strip_assume_tac) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!rpolicy stage D vs_out. _`
-    (qspecl_then [`rpolicy`, `stage`, `D`, `vs_out`] mp_tac) >>
+  qpat_x_assum `!rpolicy stage D fmp vs_out. _`
+    (qspecl_then [`rpolicy`, `stage`, `D`, `fmp`, `vs_out`] mp_tac) >>
   simp[] >>
   disch_then (qx_choose_then `vi` strip_assume_tac) >>
   qexists_tac `vi` >> simp[] >> strip_tac >>
@@ -77,7 +82,7 @@ Proof
 QED
 
 Resume o1_code_end_pipeline_from_walk[forward]:
-  `o1_run_state_ok vi` by metis_tac[gas_variant_run_state_ok] >>
+  `o1_run_state_ok vi` by metis_tac[raw_variant_run_state_ok] >>
   `ctx_sim_fuel I D unit.cu_context pre.cu_context vi vi /\
    o1_walk_src_inv D pre.cu_context vi` by metis_tac[] >>
   `o1_walk_src_inv D (stage 0) vi` by

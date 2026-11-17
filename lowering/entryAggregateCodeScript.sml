@@ -23,8 +23,8 @@ Proof
 QED
 
 Theorem entry_code_multi_exprs:
-  !es cenv. (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  !es cenv. (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_multi_exprs cfn cenv es)
 Proof
@@ -37,8 +37,8 @@ Proof
 QED
 
 Theorem entry_code_multi_vvs:
-  !es cenv. (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  !es cenv. (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_multi_vvs cfn cenv es)
 Proof
@@ -50,8 +50,8 @@ Proof
 QED
 
 Theorem entry_code_make_tuple:
-  !es tys cenv buf off. (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  !es tys cenv buf off. (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_make_tuple cfn cenv es tys buf off)
 Proof
@@ -66,8 +66,8 @@ Proof
 QED
 
 Theorem entry_code_make_array_elems:
-  !es cenv et sz hl buf idx. (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  !es cenv et sz hl buf idx. (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_make_array_elems cfn cenv es et sz hl buf idx)
 Proof
@@ -80,8 +80,8 @@ Proof
 QED
 
 Theorem entry_code_make_array:
-  (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_make_array cfn cenv es et sz hl buf)
 Proof
@@ -92,8 +92,8 @@ Proof
 QED
 
 Theorem entry_code_struct_lit:
-  !fs cenv ty buf off. (!name e ce et. MEM (name,e) fs ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  !fs cenv ty buf off. (!name e et. MEM (name,e) fs ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_struct_lit cfn cenv ty fs buf off)
 Proof
@@ -175,8 +175,8 @@ Proof
 QED
 
 Theorem entry_code_subscript:
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et base_e)) /\
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et idx_e)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et base_e)) /\
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et idx_e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_subscript cfn cenv ret_ty ty base_e idx_e)
 Proof
@@ -207,8 +207,8 @@ QED
 Finalise entry_code_subscript
 
 Theorem entry_code_get_target_ptr:
-  !bt cenv. (!e ce et. MEM e (target_indices bt) ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  !bt cenv. (!e et. MEM e (target_indices bt) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_get_target_ptr cfn cenv bt)
 Proof

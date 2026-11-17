@@ -20,8 +20,8 @@ Proof
 QED
 
 Theorem entry_code_dispatch_array[local]:
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty (MakeArray o' b) args)
 Proof
@@ -51,7 +51,7 @@ QED
 
 Theorem entry_code_dispatch_unary[local]:
   supported_builtin_form tops ret_ty bi [a] /\
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et a)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a])
 Proof
@@ -87,8 +87,8 @@ QED
 
 Theorem entry_code_dispatch_binary[local]:
   supported_builtin_form tops ret_ty bi [a;b] /\
-  (!e ce et. MEM e [a;b] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e [a;b] ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b])
 Proof
@@ -99,12 +99,12 @@ Proof
   rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  `!e ce et. e = a \/ e = b ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn ce et e)` by
+  `!e et. e = a \/ e = b ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
     (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
   pop_assum (fn th => map_every (fn e =>
     imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`]) >>
-  qpat_x_assum `!e ce et. _ ==> entry_preserves_code _ _`
+  qpat_x_assum `!e et. _ ==> entry_preserves_code _ _`
     (fn th => map_every (fn e =>
       imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`]) >>
   map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
@@ -118,8 +118,8 @@ QED
 
 Theorem entry_code_dispatch_ternary[local]:
   supported_builtin_form tops ret_ty bi [a;b;c] /\
-  (!e ce et. MEM e [a;b;c] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e [a;b;c] ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c])
 Proof
@@ -129,8 +129,8 @@ Proof
   rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-  `!e ce et. e = a \/ e = b \/ e = c ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn ce et e)` by
+  `!e et. e = a \/ e = b \/ e = c ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
     (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
   pop_assum (fn th => map_every (fn e =>
     imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`, `c`]) >>
@@ -141,8 +141,8 @@ QED
 
 Theorem entry_code_dispatch_quaternary[local]:
   supported_builtin_form tops ret_ty bi [a;b;c;d] /\
-  (!e ce et. MEM e [a;b;c;d] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e [a;b;c;d] ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c;d])
 Proof
@@ -152,8 +152,8 @@ Proof
   rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-  `!e ce et. e = a \/ e = b \/ e = c \/ e = d ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn ce et e)` by
+  `!e et. e = a \/ e = b \/ e = c \/ e = d ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
     (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
   pop_assum (fn th => map_every (fn e =>
     imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`, `c`, `d`]) >>
@@ -163,8 +163,8 @@ QED
 
 Theorem entry_code_builtin_dispatch_body:
   supported_builtin_form tops ret_ty bi args /\
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
 Proof
@@ -219,7 +219,7 @@ Proof
 QED
 
 Theorem entry_code_dispatch_convert[local]:
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et a)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_type_builtin_dispatch_body cfn cenv vv_ty ty Convert ret_ty [a])
 Proof
@@ -253,7 +253,7 @@ Proof
 QED
 
 Theorem entry_code_dispatch_type_abi[local]:
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et a)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_type_builtin_dispatch_body cfn cenv vv_ty ty (AbiEncode F (SOME mid)) ret_ty [a]) /\
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
@@ -270,8 +270,8 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
-  qpat_x_assum `!ce et. entry_preserves_code _ (cfn ce et _)`
-    (qspecl_then [`cenv`, `expr_type a`] (fn th =>
+  qpat_x_assum `!et. entry_preserves_code _ (cfn cenv et _)`
+    (qspec_then `expr_type a` (fn th =>
       imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
   qpat_x_assum `entry_preserves_code _ (lower_value _ _ _ _)`
     (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
@@ -284,8 +284,8 @@ QED
 
 Theorem entry_code_type_builtin_dispatch_body:
   supported_type_builtin_form tops vv_ty tb ret_ty args /\
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
 Proof
@@ -295,8 +295,8 @@ Proof
   simp[supported_type_builtin_form_def] >> rpt strip_tac
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert _ _`]
   >- (irule entry_code_dispatch_convert >> metis_tac[listTheory.MEM]) >>
-  `!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (cfn ce et a)` by metis_tac[listTheory.MEM] >>
+  `!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (cfn cenv et a)` by metis_tac[listTheory.MEM] >>
   drule entry_code_dispatch_type_abi >> strip_tac >> gvs[] >>
   Cases_on `o'` >> gvs[]
 QED

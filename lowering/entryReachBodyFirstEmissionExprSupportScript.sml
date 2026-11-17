@@ -487,10 +487,11 @@ Proof
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (qspecl_then [`cfn`, `ce`, `args`, `p1`,
-                  `TAKE (LENGTH args) (ce.ce_func_param_types (nsid_to_string fid))`]
-        mp_tac first_emission_stage_intcall_args >>
-      impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
+  >- (ho_match_mp_tac first_emission_stage_intcall_args >>
+      first_assum ACCEPT_TAC) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_stage_intcall_args >>
+      first_assum ACCEPT_TAC) >>
   gen_tac >> Cases_on `n > 0` >> simp[]
   >- (Cases_on `return_buf` >> simp_tac (srw_ss()) [LET_THM]
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
@@ -903,8 +904,6 @@ Resume first_emission_raw_calldata[raw_calldata_outbuf]:
   map_every qx_gen_tac [`p`, `s`] >> PairCases_on `p` >> simp_tac (srw_ss()) [] >>
   irule comp_bind_labels >> reverse conj_tac
   >- simp[compile_raw_call_finish_labels] >>
-  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> reverse conj_tac
-  >- simp[emit_void_labels] >>
   rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
   simp[cs_extends_refl, loweringShapeDefsTheory.added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
