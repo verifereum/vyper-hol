@@ -281,7 +281,8 @@ Proof
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
-     qexists_tac `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)` >>
+     qexistsl_tac [`gas_cap`,
+       `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)`] >>
      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
   `write_memory_with_expansion (w2n rp)
       (TAKE (w2n cap) outcome.co_returnData) s = s with vs_memory := t.vs_memory` by
