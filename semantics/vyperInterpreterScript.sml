@@ -1872,7 +1872,8 @@ Definition evaluate_def:
     (case kind of
      | CreateFromBlueprint raw_args => do
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
-         code_size <- check_create_blueprint has_salt prefix;
+         code_size <- check_create_blueprint has_salt
+           (blueprint_literal_offset cx has_salt es) prefix;
          results <- eval_expr_results cx (DROP (if has_salt then 4 else 3) es);
          suffix <- read_results cx results;
          eval_create cx kind has_salt rof (MAP expr_type es)

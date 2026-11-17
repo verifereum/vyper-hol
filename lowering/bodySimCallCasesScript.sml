@@ -12,7 +12,7 @@
 Theory bodySimCallCases
 Ancestors
   bodySimExprCases
-  list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
+  list bodySim exprSimHyps exprSimMapDefs vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
   bodySimCallExtcall bodySimCallIntcall bodySimCallRawCall
   bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert
@@ -151,7 +151,7 @@ Theorem body_create_case:
     (!raw_args s'' prefix t s'3' code_size t'.
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
-       check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
+       check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix s'3' = (INL code_size,t') ==>
        body_results_ok cx (DROP (if has_salt then 4 else 3) es)) /\
     (!raw_args.
        kind = CreateFromBlueprint raw_args ==>
@@ -173,8 +173,9 @@ Theorem body_create_case:
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_intro >> conj_tac >- gvs[] >> simp[] >>
-  rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  rw[body_expr_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      exprSimMapDefsTheory.expr_map_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED

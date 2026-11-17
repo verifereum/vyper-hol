@@ -620,7 +620,7 @@ QED
 Theorem scope_pop_effect_call_helpers[simp]:
   scope_pop_effect (eval_send cx has_gas vs) /\
   scope_pop_effect (eval_ext_call cx static skip_check sig opts vs) /\
-  scope_pop_effect (check_create_blueprint has_salt vs)
+  scope_pop_effect (check_create_blueprint has_salt literal_offset vs)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
