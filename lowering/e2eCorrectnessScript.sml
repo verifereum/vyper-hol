@@ -841,24 +841,27 @@ Proof
   decide_tac
 QED
 
-(* ADMISSION: raw-variant bridge for the generic call link.  Waits for its
-   proof. *)
+(* Raw-variant bridge for the generic call link. *)
 Theorem raw_variant_opt_entry_calldata_bound:
   !tops bc am tx prog prog' cp es fmp vs.
     call_state_rel tops bc am tx es /\
     raw_variant fmp vs (opt_entry_state prog prog' cp es) ==>
     LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64
 Proof
-  cheat
+  rpt strip_tac >>
+  drule raw_variant_call_ctx >> strip_tac >>
+  gvs[opt_entry_state_def, entry_venom_state_def,
+      call_state_rel_def, evm_state_ok_def,
+      vfmCalldataBoundTheory.calldata_bounded_def] >>
+  metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]
 QED
 
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
+(* Dispatch reads the function name and arguments from the transaction. *)
 Theorem dispatched_vyper_call_code_update:
   dispatched_vyper_call tops (tx with code := c) calldata ret <=>
   dispatched_vyper_call tops tx calldata ret
 Proof
-  cheat
+  simp[dispatched_vyper_call_def]
 QED
 
 (* ADMISSION: transport from the optimized code's transaction back to tx,
