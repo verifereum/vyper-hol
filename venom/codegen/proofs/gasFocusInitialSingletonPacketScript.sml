@@ -344,12 +344,53 @@ Resume focus_initial_singleton_packet[cut_observation]:
   strip_tac >>
   `FOLDR (dft_exec_cons (fuel-1) C7) OK (TAKE q bb.bb_instructions)
       (root_entry with vs_gas_readings := gs ++ tail) = OK v` by
-    (qpat_x_assum `!tail'. rooted_eval _ _ _ _ = _` (qspec_then `tail` mp_tac) >>
+    ((qpat_x_assum `!tail'. rooted_eval _ _ _ _ = _` (qspec_then `tail` mp_tac) >>
      simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`] >>
      Cases_on `FOLDR (dft_exec_cons (fuel-1) C7) OK (TAKE q bb.bb_instructions)
        ((root_entry with vs_gas_readings := gs ++ tail) with vs_inst_idx := 0)` >>
-     simp[]) >>
-  FAIL_TAC "native fold"
+     simp[] >> (gvs[]))) >>
+  `bb.bb_instructions = TAKE q bb.bb_instructions ++
+      HD bt.bb_instructions::DROP (SUC q) bb.bb_instructions` by
+    metis_tac[TAKE_DROP_SUC, APPEND, APPEND_ASSOC] >>
+  `?later. bt.bb_instructions = HD bt.bb_instructions::later` by
+    (Cases_on `bt.bb_instructions` >> gvs[get_instruction_def]) >>
+  `trace_gas (trace_block [] 1 (fuel-1) C7 root_sf
+       (bb with bb_instructions := TAKE q bb.bb_instructions)
+       (root_entry with vs_gas_readings := gs ++ tail)) =
+     ZIP (MAP (\i. ([],1,i.inst_id))
+       (FILTER (\i. i.inst_opcode = GAS) (TAKE q bb.bb_instructions)),gs)` by
+    (irule dftGasSourcePrefixTheory.noninvoke_prefix_trace_keys >>
+     rpt (first_assum (irule_at Any)) >> simp[EVERY_MEM] >>
+     gvs[EVERY_MEM]) >>
+  `ALL_DISTINCT (MAP (\i. (([],1,i.inst_id):gas_event))
+      (FILTER (\i. i.inst_opcode = GAS) (TAKE q bb.bb_instructions)))` by
+    (qpat_x_assum `ALL_DISTINCT (MAP (\i. ([],1,i.inst_id)) (FILTER _ bb.bb_instructions))` mp_tac >>
+     qspecl_then [`q`,`bb.bb_instructions`] (fn th =>
+       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [GSYM th]))) listTheory.TAKE_DROP >>
+     simp[FILTER_APPEND_DISTRIB, MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  drule_at (Pat `trace_gas source = _`)
+    dftGasFromListReplayBoundaryTheory.trace_agrees_lookup_fill >>
+  disch_then (qspecl_then [`[]`,`[]`] mp_tac) >>
+  simp[EVERY_MEM, dftGasFromListTraceDefsTheory.trace_gas_def] >>
+  strip_tac >>
+  irule (Q.INST [`ps` |-> `[]`, `scheduled` |-> `[]`,
+    `post` |-> `DROP (SUC q) bb.bb_instructions`, `be` |-> `root_entry`]
+    (SPEC_ALL dft_packet_native_observation_success)) >>
+  simp[] >> rpt (first_assum (irule_at Any)) >>
+  qexistsl_tac [`fuel-1`,`q`] >>
+  simp[TAKE_TAKE] >>
+  qpat_assum `trace_agrees _ (trace_block _ _ _ _ _ _ _)` (irule_at Any) >>
+  simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def,
+    dftGasFromListTraceDefsTheory.trace_agrees_def,
+    dftGasFromListTraceDefsTheory.trace_gas_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  qpat_assum `bb.bb_instructions = TAKE _ _ ++ _` (fn th =>
+    qpat_assum `EVERY (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions`
+      (mp_tac o PURE_ONCE_REWRITE_RULE [th])) >>
+  simp_tac (srw_ss()) [EVERY_APPEND, EVERY_DEF] >> strip_tac >>
+  qpat_assum `bb.bb_instructions = TAKE _ _ ++ _` (fn th =>
+    pure_rewrite_tac[GSYM th]) >> simp[] >>
+  metis_tac[APPEND, APPEND_ASSOC]
 QED
 
 Finalise focus_initial_singleton_packet
