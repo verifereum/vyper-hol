@@ -13,7 +13,6 @@ Theory bodyMemAugAssignAttrStorage
 Ancestors
   fragGasSeqAbort
   supportedExprTraverse allocLimitsProps
-  bodySimStmtCases
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemEmitOpFrame allocaFootprint instMemFrontier memSafeRun

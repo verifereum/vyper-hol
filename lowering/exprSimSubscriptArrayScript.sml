@@ -717,7 +717,9 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
     (`well_typed_expr env obj /\
       (!id vt. FLOOKUP env.var_types id = SOME vt ==>
         ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz))` by
-       fs[expr_body_pre_def, expr_sim_inv_def] >>
+       (qpat_assum `expr_body_pre cenv cx env obj es` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[expr_body_pre_def, expr_sim_inv_def]) >>
      drule_all exprReasonOperandTheory.compile_expr_reason_uniform >>
      disch_then (qspec_then `ty` mp_tac) >>
      simp[exprReasonOperandTheory.reason_uniform_shape_def] >> strip_tac >>
@@ -833,9 +835,11 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
        vyperTypeInvariantsTheory.runtime_place_typed_def,
        vyperStateTheory.place_type_value_def, vyperStateTheory.return_def] >>
   disch_then drule >> strip_tac >>
-  `env.type_defs = get_tenv cx` by fs[expr_body_pre_def, expr_sim_inv_def,
+  `env.type_defs = get_tenv cx` by
+    (qpat_assum `expr_sim_inv cenv cx env es_end` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[expr_sim_inv_def,
       vyperTypeInvariantsTheory.env_consistent_def,
-      vyperTypeInvariantsTheory.env_context_consistent_def] >>
+      vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   gvs[contextTheory.vv_location_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   qpat_assum `eval_expr cx idx _ = _`
     (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac exprSimSourceTheory.expr_body_pre_runtime_typed) >>
@@ -1695,15 +1699,20 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
     (simp[eval_expr_subscript_copied_bind, vyperStateTheory.bind_assoc] >>
      simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.return_def]) >>
   pop_assum (fn th => pure_rewrite_tac[th]) >>
-  `!res out. expr_exit (res : value + exception) out =
-    (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) out)` by
-    (map_every qx_gen_tac [`res`, `out`] >>
+  `(\(H : (bool # 256 word # type_value) list # num list)
+      (res : value + exception) ee out.
+      expr_exit res out /\ halt_exit H cx ee res out) =
+    (\(H : (bool # 256 word # type_value) list # num list)
+      (res : value + exception) ee out.
+      ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) out /\
+        halt_exit H cx ee (INR exc : eval_result + exception) out)` by
+    (simp[FUN_EQ_THM] >> map_every qx_gen_tac [`H`, `res`, `ee`, `out`] >>
      Cases_on `res` >- simp[] >>
-     simp[] >> rename1 `expr_exit (INR exc) out` >>
+     simp[exprSimDefsTheory.halt_exit_def] >> rename1 `expr_exit (INR exc) out` >>
      mp_tac (Q.ISPECL [`Value`, `INR exc : value + exception`] exprSimDefsTheory.expr_exit_success_map) >>
      simp[] >> metis_tac[]) >>
   pop_assum (fn eq => qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
-    (assume_tac o PURE_REWRITE_RULE [eq])) >>
+    (assume_tac o CONV_RULE (RAND_CONV (REWR_CONV eq)) o BETA_RULE)) >>
   qpat_assum `gas_marked_exec _ _ (vyperState$bind _ _) _ _ (INL (Value _)) _ _`
     (mp_then (Pos hd) mp_tac (BETA_RULE
       (framed_array_index_outcome_compose

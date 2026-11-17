@@ -10,7 +10,7 @@ Theory compilerNativeEmit
 Ancestors compileVyper evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
   evalCompilerSubsetAbiExternalCalls evalCompilerSubsetAbiExternal evalCompilerSubsetAbiInternalCalls
   evalCompilerSubsetBuiltins evalCompilerSubsetControlDeploy evalCompilerSubsetScalars evalCompilerSubsetState
-  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram
+  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram asmOptimizer
 Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
@@ -33,6 +33,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -41,13 +42,15 @@ val () = holbuild_extra_deps
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle",
+   "../upstream-fixes/oracle",
    "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
 fun pr s = TextIO.print s;
 
-(* ---------- fixtures: the hand-written program each python-o1-no-asm-opt
-   oracle file is compiled from ---------- *)
+(* ---------- fixtures: the hand-written program each main-corpus oracle
+   file (python-o1-no-asm-opt/NAME.hex and python-o1-asm-opt/NAME.hex) is
+   compiled from ---------- *)
 val fixtures = [
   ("EMPTY", "empty.hex"),
   ("account_items_program", "account_items.hex"),
@@ -202,6 +205,9 @@ val suite_fixtures = [
     "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested", "d06_int_default_constant"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",
@@ -263,14 +269,25 @@ val suite_fixtures = [
     "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
-    "slice_storage_bytes", "slice_string_lit"])];
+    "slice_storage_bytes", "slice_string_lit"]),
+  ("upstream-fixes", [
+    "uf5236_ifexp_nested_narrow", "uf5256_tuple_widen_bytes",
+    "uf5298_int_to_decimal_bound", "uf5331_ifexp_narrow_string"])];
 
 
-(* Every fixture as (its .hex path under bytecode/, the program compiled). *)
+(* The compilation each oracle is compared with: Python's O1 without the final
+   assembly optimizer, and with it (python-o1-asm-opt). *)
+fun no_asm_opt p = ``compile_vyper (K SOME) (o1_policy all_capabilities) ^p``;
+fun asm_opt p = ``compile_vyper asm_opt_finalizer (o1_policy all_capabilities) ^p``;
+
+(* Every fixture as (its .hex path under bytecode/, the compilation of its
+   program).  The main corpus is also compared with the asm-opt oracles. *)
 val all_fixtures =
-  map (fn (p, h) => ("python-o1-no-asm-opt/" ^ h, program_term p)) fixtures @
+  map (fn (p, h) => ("python-o1-no-asm-opt/" ^ h, no_asm_opt (program_term p))) fixtures @
+  map (fn (p, h) => ("python-o1-asm-opt/" ^ h, asm_opt (program_term p))) fixtures @
   List.concat (map (fn (suite, names) => let val dir = suite ^ "/oracle" in
-      map (fn n => (dir ^ "/" ^ n ^ ".hex", memoryStoreWitnessLib.program ("../" ^ dir) n)) names end)
+      map (fn n => (dir ^ "/" ^ n ^ ".hex",
+                    no_asm_opt (memoryStoreWitnessLib.program ("../" ^ dir) n))) names end)
     suite_fixtures);
 val () = pr ("fixtures: " ^ Int.toString (length all_fixtures) ^ "\n");
 
@@ -1014,6 +1031,9 @@ val instance_natives = [
   ((("list", "ALL_DISTINCT"), numSyntax.num), "hn_ALL_DISTINCT_num"),
   ((("list", "nub"), string_ty), "hn_nub_str"), ((("list", "nub"), numSyntax.num), "hn_nub_num")];
 val instance_natives_used : string list ref = ref [];
+(* The constant behind each coerced use's raw text, so that the definition
+   order (def_deps) still sees the dependency. *)
+val coerced_consts : (string, key) Redblackmap.dict ref = ref (Redblackmap.mkDict String.compare);
 fun string_const c =
   if is_constructor c orelse is_case_const c then c else let
     val gty = type_of (generic (key c))
@@ -1030,7 +1050,9 @@ fun string_const c =
     val theta = match_type gty (type_of c)
   in case coercion theta false gty of
        NONE => c
-     | SOME f => raw (type_of c) ("(" ^ f ^ " " ^ ml_const_name c ^ ")")
+     | SOME f => let val text = "(" ^ f ^ " " ^ ml_const_name c ^ ")"
+       in coerced_consts := Redblackmap.insert (!coerced_consts, text, key c);
+          raw (type_of c) text end
   end handle HOL_ERR _ => c;
 fun is_string_cons c = is_const c andalso same_const c listSyntax.cons_tm andalso
   type_of c = (char_ty --> string_ty --> string_ty);
@@ -1121,10 +1143,10 @@ fun normalise eqs =
 val normal_defs = map (fn (k, eqs) => (eq_owner := show k; (k, normalise eqs))) (rev (!defs));
 (* A program translated from JSON can hold record literals, so it goes through
    the same normalisation as an equation's right-hand side. *)
-val fixture_terms = map (fn (h, p) =>
+val fixture_terms = map (fn (h, tm) =>
     (eq_owner := h;
      (h, lits EmitML.RIGHT (parens (guard_eq (rename_vars (strings (record_literals (eta_full
-       ``compile_vyper (K SOME) (o1_policy all_capabilities) ^p``)))))))))
+       tm)))))))))
   all_fixtures;
 val entry_terms = map (fn (name, tm) =>
     (name, lits EmitML.RIGHT (rename_vars (strings (eta_full tm))))) entries;
@@ -1269,8 +1291,13 @@ val () = EmitML.is_int_literal_hook := (fn _ => false);
 val def_index = List.foldl (fn ((i, (k, _)), d) => Redblackmap.insert (d, k, i))
   (Redblackmap.mkDict key_cmp) (Lib.enumerate 0 normal_defs);
 val def_vec = Vector.fromList normal_defs;
-fun def_deps i = List.mapPartial (fn c => Redblackmap.peek (def_index, key c))
-  (List.concat (map (find_terms is_const o rhs) (#2 (Vector.sub (def_vec, i)))));
+fun dep_keys tm =
+  map key (find_terms is_const tm) @
+  List.mapPartial (fn v => Redblackmap.peek (!coerced_consts,
+                             String.extract (fst (dest_var v), 1, NONE)))
+    (find_terms is_raw_var tm);
+fun def_deps i = List.mapPartial (fn k => Redblackmap.peek (def_index, k))
+  (List.concat (map (dep_keys o rhs) (#2 (Vector.sub (def_vec, i)))));
 fun pp_defn tm = PP.pp_to_string 100 (EmitML.pp_defn_as_ML []) tm;
 fun pp_term tm = PP.pp_to_string 100 (EmitML.pp_term_as_ML [] EmitML.RIGHT) tm;
 val failed = ref 0;

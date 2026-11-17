@@ -65,6 +65,7 @@ Theorem bytestring_calldata_full_run_resources:
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory /\
       (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
     mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+    (!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     ghost_kept_at lo cenv es sa G tn s HG tm /\
     locals_kept cenv es es s t /\ pure_frame cenv func es sa s t /\
@@ -196,6 +197,10 @@ Proof
      qpat_assum `tn1.t_mem = tn.t_mem` mp_tac >>
      qpat_assum `local_region cenv es.scopes s name b len` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >> metis_tac[]) >>
+  `!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem` by
+    (qpat_assum `tn1.t_mem = tn.t_mem` (fn eq =>
+       qpat_assum `!i. i < lo /\ i IN tm.t_mem ==> i IN tn1.t_mem`
+         (ACCEPT_TAC o REWRITE_RULE[eq]))) >>
   `locals_kept cenv es es s t` by
     (irule locals_kept_regions >> rpt strip_tac >> metis_tac[]) >>
   `pure_frame cenv func es sa s t` by
