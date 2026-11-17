@@ -102,16 +102,22 @@ Proof
   strip_tac >> drule_all take_call_outcome_storage_suffix >> simp[]
 QED
 
-(* Actual computed calls consume one outcome but record no request. *)
+(* Computed calls consume at most one outcome and record no request. *)
 Theorem computed_outcome_suffix_client:
   take_call_outcome gas_cap target data value st = (res,st') /\
   st.outcomes = SOME os /\
   computed_precompile (call_outcome_request target data value st) ==>
   st'.outcomes = SOME (DROP 1 os) /\ st'.requests = st.requests
 Proof
-  strip_tac >> drule_all take_call_outcome_suffix >> strip_tac >>
-  gvs[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
-  metis_tac[take_outcome_rest, SND]
+  Cases_on `os` >> strip_tac
+  >- gvs[take_call_outcome_exhausted] >>
+  rename1 `head::tail` >> gvs[take_call_outcome_def, take_request_outcome_def] >>
+  pairarg_tac >>
+  `rest = tail` by
+    (mp_tac (Q.INST
+       [`rq` |-> `call_outcome_request target data value st with cr_gas := gas_cap`,
+        `os` |-> `head::tail`] take_outcome_rest) >> simp[]) >>
+  gvs[AllCaseEqs(), record_request_def]
 QED
 
 Theorem successful_adoption_storage_client:
@@ -141,8 +147,7 @@ QED
 
 (* Focused existing real-helper CV observations: ordinary success installs
    slot 8; static/failed bad-account payloads retain slot 4; rejected guard
-   consumes; exhausted/computed outcomes retain
-   the respective traces. The fixture expectations are unchanged. *)
+   consumes an outcome. *)
 Theorem focused_actual_boundary_snapshots:
   outcome_test_take_adopt 9w [1w] (SOME 5)
     [outcome_test_outcome T 17; outcome_test_outcome F 0] 17 8w 2 2 1 /\
@@ -157,14 +162,20 @@ Proof
 QED
 
 Theorem focused_computed_exhausted_snapshots:
-  outcome_test_take_adopt 9w [] (SOME 0) [] 3 4w 1 2 0 /\
+  SND (take_call_outcome NONE 9w [] (SOME 0)
+    (outcome_test_state with outcomes := SOME [])) =
+    (outcome_test_state with outcomes := SOME []) /\
+  SND (take_call_outcome NONE 1w [] NONE
+    (outcome_test_state with outcomes := SOME [])) =
+    (outcome_test_state with outcomes := SOME []) /\
   outcome_test_take_adopt 2w [] (SOME 0)
     [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 0 /\
   outcome_test_take_adopt 2w [] (SOME 0)
     [outcome_test_outcome T 17; outcome_test_outcome T 17] 3 4w 1 1 1 /\
-  outcome_test_take_adopt 1w [] NONE [] 3 4w 1 1 0 /\
+  outcome_test_take_adopt 1w [] NONE
+    [outcome_test_outcome T 17] 3 4w 1 1 0 /\
   outcome_test_take_adopt 6w (REPLICATE 63 0w ++ [1w]) (SOME 0)
     [outcome_test_outcome T 17] 3 4w 1 1 0
 Proof
-  ACCEPT_TAC outcome_exhausted_computed_cv
+  simp[outcome_exhausted_computed_cv]
 QED
