@@ -1,0 +1,293 @@
+Theory gasFocusInitialSingletonCut
+Ancestors
+  gasFocusInitialRowReplay dftPacketNativeSlice dftGasSourcePrefix
+  dftGasFromListRestore dftGasPrefixProvider gasEvents venomExecProofs
+  dftIndexedExec venomExecSemantics venomInst venomState
+  list rich_list arithmetic
+
+Theorem focus_initial_singleton_cut:
+  !F C sf entry bb ps xs sp q.
+  lookup_block entry.vs_current_bb sf.fn_blocks = SOME bb /\
+  bb.bb_instructions = ps ++ xs /\
+  EVERY (\i. is_pseudo i.inst_opcode) ps /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) xs /\
+  phi_prefix_length bb.bb_instructions = LENGTH ps /\
+  eval_phis entry bb.bb_instructions = OK sp /\
+  q < LENGTH xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+    (TAKE q xs) ==>
+  let z = TAKE q xs;
+      levels = [(sf,[(bb,1,z)],NONE)];
+      E = MAP (\i. (sf.fn_name,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z);
+      K = MAP (\i. ([],1,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z);
+      row_eval = (\F C owner (bb,e,z) s.
+        case eval_phis s bb.bb_instructions of
+          OK sp =>
+           (gas_events_block (F-e) C owner
+             (bb with bb_instructions :=
+               TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions ++ z)
+             (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions),
+            FOLDR (dft_exec_cons (F-e) C) OK z
+             (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+        | other => ([],other));
+      plan_eval = (\F C owner plan entry.
+        FOLDL (\(es,r) row.
+          case r of
+            OK s => (es ++ FST (row_eval F C owner row s), SND (row_eval F C owner row s))
+          | other => (es,other)) ([],OK entry) plan);
+      call_setup = (\C c s.
+        case decode_invoke c of
+          NONE => Error "invoke: bad operand format"
+        | SOME (nm,ops) =>
+          case lookup_function nm C.ctx_functions of
+            NONE => Error "invoke: function not found"
+          | SOME callee =>
+            case eval_operands ops s of
+              NONE => Error "invoke: undefined argument"
+            | SOME args =>
+              case setup_callee callee args s of
+                NONE => Error "invoke: empty function"
+              | SOME cs => OK cs);
+      rooted_eval = (\F C levels entry.
+        FOLDL (\(prior,r) (sf,plan,call).
+          case r of
+            OK ent =>
+             (prior ++ FST (plan_eval F C sf.fn_name plan ent),
+              case SND (plan_eval F C sf.fn_name plan ent) of
+                OK caller =>
+                  (case call of NONE => OK caller | SOME c => call_setup C c caller)
+              | other => other)
+          | other => (prior,other)) ([],OK entry) levels);
+      plan_ok = (\F C sf a plan entry.
+        plan <> [] /\
+        MAP (\(bb,e,z). e) plan = GENLIST (\r. a + SUC r) (LENGTH plan) /\
+        (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
+          e <= F /\ MEM bb sf.fn_blocks /\
+          (if SUC r < LENGTH plan then
+            bb.bb_instructions <> [] /\
+            EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
+            is_terminator (LAST bb.bb_instructions).inst_opcode /\
+            ~MEM (LAST bb.bb_instructions).inst_opcode [RET;RETFMP;DRET] /\
+            z = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions
+           else
+            LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+            z = TAKE (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+            EVERY (\i. ~is_terminator i.inst_opcode) z)) /\
+        (!r bb e z es s.
+          r < LENGTH plan /\ EL r plan = (bb,e,z) /\
+          plan_eval F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
+          lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+          (0 < r ==> ~s.vs_halted)));
+      levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
+        levels <> [] /\ LENGTH paths = LENGTH levels /\
+        LENGTH incoming = LENGTH levels /\
+        HD paths = root_path /\ HD incoming = root_depth /\
+        FST (HD levels) = root_fn /\
+        (!i sf plan call.
+          i < LENGTH levels /\ EL i levels = (sf,plan,call) ==>
+          plan <> [] /\
+          (!prior ent.
+            rooted_eval F C (TAKE i levels) root_entry = (prior,OK ent) ==>
+            plan_ok F C sf (EL i incoming) plan ent) /\
+          (if SUC i < LENGTH levels then
+            ?c nm ops bb e z.
+              call = SOME c /\ LAST plan = (bb,e,z) /\
+              c = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+              c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
+              lookup_function nm C.ctx_functions = SOME (FST (EL (SUC i) levels)) /\
+              EL (SUC i) incoming = e /\
+              EL (SUC i) paths = (e,c.inst_id)::EL i paths
+           else call = NONE)))
+  in !gs tail.
+    1 <= F /\ LENGTH gs = LENGTH E ==>
+    let R = entry with vs_gas_readings := gs ++ tail in
+      levels_ok F C levels [[]] [0] sf R [] 0 /\
+      (?extra. E = FST (rooted_eval F C levels R) ++ extra) /\
+      (!ev u. rooted_eval F C levels R = (ev,OK u) ==>
+        ev = E /\ u.vs_gas_readings = tail /\
+        (!tail'. rooted_eval F C levels
+          (entry with vs_gas_readings := gs ++ tail') =
+            (E,OK (u with vs_gas_readings := tail'))) /\
+        ?before after.
+          dftGasFromListTraceDefs$trace_blocks [] 0 F C sf R =
+            before ++ [(([],1,(EL q xs).inst_id),sf,EL q xs,u)] ++ after /\
+          dftGasFromListTraceDefs$trace_gas before = ZIP (K,gs)) /\
+      (!ev r. rooted_eval F C levels R = (ev,r) /\ ~(?u. r = OK u) ==>
+        run_blocks F C sf R = r /\ gas_events_blocks F C sf R = ev)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss [combinTheory.LET_FORALL_ELIM, combinTheory.S_DEF,
+    combinTheory.o_DEF, combinTheory.C_DEF] >> BETA_TAC >>
+  map_every (fn v => qx_gen_tac v >> disch_tac)
+    [`z`,`levels`,`E`,`keys`,`row_eval`,`plan_eval`,`call_setup`,
+     `rooted_eval`,`plan_ok`,`levels_ok`] >>
+  qx_gen_tac `gs` >> qx_gen_tac `tail` >> strip_tac >>
+  qx_gen_tac `R` >> disch_tac >> markerLib.REABBREV_TAC >>
+  conj_tac >- suspend "levels" >>
+  suspend "execution"
+QED
+
+Resume focus_initial_singleton_cut[levels]:
+  simp[Abbr `levels_ok`, Abbr `levels`, Abbr `rooted_eval`,
+       Abbr `plan_ok`, Abbr `plan_eval`, Abbr `z`,
+       DROP_APPEND, LENGTH_TAKE, EVERY_TAKE, EVERY_MEM, Abbr `R`] >>
+  gvs[EVERY_MEM] >> metis_tac[lookup_block_MEM]
+QED
+
+Resume focus_initial_singleton_cut[execution]:
+  rename1 `1 <= fuel` >>
+  `!rs. eval_phis (entry with vs_gas_readings := rs) bb.bb_instructions =
+     OK (sp with vs_gas_readings := rs)` by
+    (gen_tac >> mp_tac (Q.INST [`s` |-> `entry`, `insts` |-> `bb.bb_instructions`,
+       `gs` |-> `rs`] eval_phis_restore) >>
+     Cases_on `eval_phis (entry with vs_gas_readings := rs) bb.bb_instructions` >>
+     simp[restore_rel_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\
+     i.inst_opcode <> INVOKE /\ ~is_pseudo i.inst_opcode) z` by
+    (`EVERY (\i. ~is_pseudo i.inst_opcode) z` by
+       (simp[Abbr `z`] >> irule EVERY_TAKE >> simp[]) >>
+     qpat_x_assum `EVERY (\i. ~is_terminator i.inst_opcode /\ _) z` mp_tac >>
+     qpat_x_assum `EVERY (\i. ~is_pseudo i.inst_opcode) z` mp_tac >>
+     simp[NoAsms, EVERY_MEM] >> metis_tac[]) >>
+  qabbrev_tac `be = sp with vs_inst_idx := LENGTH ps` >>
+  qabbrev_tac `cut = bb with bb_instructions := ps ++ z` >>
+  `!rs. rooted_eval fuel C levels (entry with vs_gas_readings := rs) =
+    (gas_events_block (fuel-1) C sf.fn_name cut (be with vs_gas_readings := rs),
+     FOLDR (dft_exec_cons (fuel-1) C) OK z (be with vs_gas_readings := rs))` by
+    (gen_tac >> map_every (fn v => qpat_x_assum v kall_tac)
+       [`Abbrev (levels_ok = _)`, `Abbrev (plan_ok = _)`, `Abbrev (call_setup = _)`] >>
+     simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`,
+       Abbr `levels`, Abbr `cut`, Abbr `be`, TAKE_APPEND] >>
+     Cases_on `FOLDR (dft_exec_cons (fuel-1) C) OK z
+       (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := rs|>)` >> gvs[]) >>
+  map_every (fn v => qpat_x_assum v kall_tac)
+    [`Abbrev (levels_ok = _)`, `Abbrev (plan_ok = _)`,
+     `Abbrev (rooted_eval = _)`, `Abbrev (plan_eval = _)`,
+     `Abbrev (row_eval = _)`, `Abbrev (call_setup = _)`, `Abbrev (levels = _)`] >>
+  simp[Abbr `R`] >>
+  `!rs. gas_events_block (fuel-1) C sf.fn_name cut (be with vs_gas_readings := rs) =
+    gas_events_block (fuel-1) C sf.fn_name
+      <|bb_label := be.vs_current_bb;
+        bb_instructions := REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ z|>
+      (be with vs_gas_readings := rs)` by
+    (gen_tac >> irule gas_events_block_suffix_cong >> qexists_tac `z` >>
+     simp[Abbr `be`, Abbr `cut`, DROP_APPEND]) >>
+  qspecl_then [`fuel-1`,`C`,`sf.fn_name`,`be`] mp_tac
+    focus_initial_unvisited_row_replay >>
+  disch_then (qspecl_then [`z`,`gs`] mp_tac) >>
+  simp[GSYM EVERY_CONJ, Abbr `E`] >> disch_tac >>
+  first_assum (qspec_then `tail` strip_assume_tac) >>
+  conj_tac >- suspend "successful" >>
+  suspend "stopped"
+QED
+
+Resume focus_initial_singleton_cut[successful]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >>
+  strip_tac >> conj_tac
+  >- (gen_tac >> conj_tac
+      >- (qpat_x_assum `!tail. (?extra. _) /\ _` (qspec_then `tail'` mp_tac) >>
+          strip_tac >>
+          qpat_x_assum `!tail'. FOLDR _ _ _ _ = _`
+            (qspec_then `tail'` assume_tac) >>
+          qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >>
+          simp[NoAsms]) >>
+      first_x_assum irule) >>
+  suspend "trace"
+QED
+
+Resume focus_initial_singleton_cut[trace]:
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`!tail. (?extra. _) /\ _`, `!rs. rooted_eval _ _ _ _ = _`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) z` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  qspecl_then [`q`,`be with vs_gas_readings := gs ++ tail`,`u`] mp_tac
+    (Q.INST [`bb` |-> `bb`, `fuel` |-> `fuel-1`, `C` |-> `C`,
+      `p` |-> `[]`, `d` |-> `1`, `fn` |-> `sf`] native_trace_block_prefix_split) >>
+  simp[Abbr `be`, Abbr `z`, DROP_APPEND] >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  `get_instruction bb u.vs_inst_idx = SOME (EL q xs)` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (qspecl_then [`[]`,`fuel-1`,`sf`,`1`,`C`] strip_assume_tac) >>
+  qexists_tac `dftGasFromListTraceDefs$trace_block [] 1 (fuel-1) C sf cut
+    (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` >>
+  `dftGasFromListTraceDefs$trace_gas
+    (dftGasFromListTraceDefs$trace_block [] 1 (fuel-1) C sf cut
+      (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)) =
+    ZIP (keys,gs)` by suspend "trace_keys" >>
+  suspend "trace_embed"
+QED
+
+Resume focus_initial_singleton_cut[trace_keys]:
+  qspecl_then [`TAKE q xs`,`sp with vs_inst_idx := LENGTH ps`,`cut`,`u`,
+    `gs`,`tail`,`fuel-1`,`C`,`sf`,`[]`,`1`] mp_tac
+    noninvoke_prefix_trace_keys >>
+  simp[Abbr `cut`, Abbr `keys`, DROP_APPEND] >>
+  (impl_tac >- (gvs[EVERY_MEM] >> metis_tac[])) >> simp[]
+QED
+
+Resume focus_initial_singleton_cut[trace_embed]:
+  `fuel = SUC (fuel-1)` by decide_tac >>
+  `lookup_block (entry with vs_gas_readings := gs ++ tail).vs_current_bb
+    sf.fn_blocks = SOME bb` by simp[] >>
+  pop_assum (mp_then Any mp_tac dftGasFromListTraceDefsTheory.trace_blocks_enter) >>
+  disch_then (qspecl_then [`sp with vs_gas_readings := gs ++ tail`,
+    `[]`,`fuel-1`,`0`,`C`] mp_tac) >>
+  simp[NoAsms] >>
+  (impl_tac >- simp[]) >>
+  qpat_x_assum `fuel = SUC _` (fn th => rewrite_tac[GSYM th]) >>
+  strip_tac >>
+  simp[Abbr `cut`, TAKE_APPEND, APPEND_ASSOC] >>
+  simp[TAKE_LENGTH_TOO_LONG] >>
+  qmatch_goalsub_abbrev_tac `pref ++ [visit] ++ suffix = _` >>
+  qexists_tac `suffix` >> simp[]
+QED
+
+Resume focus_initial_singleton_cut[stopped]:
+  rpt gen_tac >> strip_tac >>
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`!tail. (?extra. _) /\ _`, `!u. FOLDR _ _ _ _ = OK u ==> _`,
+     `!rs. rooted_eval _ _ _ _ = _`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) z` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  qspecl_then [`z`,`be with vs_gas_readings := gs ++ tail`,`LENGTH ps`]
+    mp_tac native_prefix_cut >>
+  simp[Abbr `be`] >>
+  disch_then (qspecl_then [`fuel-1`,`C`,`sf`,`[]`,`1`,`DROP q xs`,
+    `bb`,`mk_inst 0 STOP [] []`] strip_assume_tac) >>
+  `LENGTH ps - (q + LENGTH ps) = 0` by decide_tac >>
+  qabbrev_tac `whole = bb with bb_instructions :=
+    REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z ++ DROP q xs` >>
+  `exec_block (fuel-1) C bb
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   exec_block (fuel-1) C whole
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule exec_block_same_suffix >> simp[Abbr `whole`, Abbr `z`, DROP_APPEND] >> simp[]) >>
+  `gas_events_block (fuel-1) C sf.fn_name bb
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   gas_events_block (fuel-1) C sf.fn_name whole
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule gas_events_block_suffix_cong >> qexists_tac `xs` >>
+     simp[Abbr `whole`, Abbr `z`, DROP_APPEND] >> simp[]) >>
+  `gas_events_block (fuel-1) C sf.fn_name
+     (bb with bb_instructions := REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z)
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>) =
+   gas_events_block (fuel-1) C sf.fn_name
+     <|bb_label := sp.vs_current_bb;
+       bb_instructions := REPLICATE (LENGTH ps) (mk_inst 0 STOP [] []) ++ z|>
+     (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` by
+    (irule gas_events_block_suffix_cong >> qexists_tac `z` >> simp[DROP_APPEND]) >>
+  Cases_on `FOLDR (dft_exec_cons (fuel-1) C) OK z
+    (sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>)` >>
+  gvs[] >> suspend "stopped_lift"
+
+QED
+
+Resume focus_initial_singleton_cut[stopped_lift]:
+  markerLib.RESUME_TAC >>
+  Cases_on `fuel` >> gvs[] >>
+  simp[Once run_blocks_def, Once gas_events_blocks_def] >> gvs[]
+QED
+
+Finalise focus_initial_singleton_cut
