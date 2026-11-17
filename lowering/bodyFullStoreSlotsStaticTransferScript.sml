@@ -92,7 +92,7 @@ Proof
       source_memory_write_ranges_def]
 QED
 
-Theorem slots_readonly_step_frame[local]:
+Theorem slots_readonly_step_frame:
   MEM inst.inst_opcode [ASSIGN; ADD; MUL; EQ; LT; ISZERO; SHR; MLOAD; JMP; JNZ] ==>
   (!u. step_inst fuel ctx inst s = OK u ==> u.vs_requests = s.vs_requests) /\
   (!u. step_inst fuel ctx inst s <> Halt u)

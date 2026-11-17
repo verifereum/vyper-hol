@@ -75,9 +75,10 @@ Proof
       fs[compileEnvTheory.is_abi_dynamic_def, compileEnvTheory.is_bytestring_type_def] >>
       rename1 `BytesT len` >> Cases_on `len` >>
       fs[compileEnvTheory.is_abi_dynamic_def, compileEnvTheory.is_bytestring_type_def]) >>
-  TRY (rename1 `ArrayT elem len` >> suspend "array" >> NO_TAC) >>
-  TRY (rename1 `TupleT tys` >> suspend "tuple" >> NO_TAC) >>
-  TRY (rename1 `StructT nsid` >> suspend "struct" >> NO_TAC) >>
+  all_tac
+  >~ [`ArrayT elem len`] >- suspend "array"
+  >~ [`TupleT tys`] >- suspend "tuple"
+  >~ [`StructT nsid`] >- suspend "struct" >>
   qpat_x_assum `is_abi_dynamic _ _` mp_tac >>
   simp[Once compileEnvTheory.is_abi_dynamic_def]
 QED
