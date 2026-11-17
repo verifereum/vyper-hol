@@ -37,7 +37,7 @@ Ancestors
   exprSimAbiEncodeExecFrame
   exprSimAbiEncodeCallerFrame exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
   exprSimAbiEncodeStateTransport
-  bodyFullUnwrapSlotPost bodyInvNoDalloca
+  bodyFullUnwrapSlotPost bodyInvNoDalloca stateRelProj
   logEmitStep rawLogPtrInst instMemFrontier venomInst venomExecSemantics
   ptrDiscipline ptrSafeRun emitHelper fragExec rich_list
   abiBuiltinAllocation abiEncoderAppend abiEncoderAllocationShape
@@ -6632,7 +6632,228 @@ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 *)
 Resume compile_log_frag_full[logged_outcome_post]:
-  cheat
+`!aid row. FLOOKUP t.vs_allocas aid = SOME row ==>
+ FLOOKUP packed.vs_allocas aid = SOME row /\
+ FLOOKUP prepared.vs_allocas aid = SOME row /\
+ FLOOKUP encoded.vs_allocas aid = SOME row` by
+ (qpat_assum `!aid row. FLOOKUP t.vs_allocas aid = SOME row ==>
+   FLOOKUP ta.vs_allocas aid = SOME row` mp_tac >>
+  qpat_assum `packed.vs_allocas = ta.vs_allocas` mp_tac >>
+  qpat_assum `!aid e. FLOOKUP packed.vs_allocas aid = SOME e ==>
+   FLOOKUP prepared.vs_allocas aid = SOME e` mp_tac >>
+  qpat_assum `!aid row. FLOOKUP prepared.vs_allocas aid = SOME row ==>
+   FLOOKUP encoded.vs_allocas aid = SOME row` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+`!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+ aid < sm.cs_next_id ==>
+ off + sz <= t.vs_alloca_next /\
+ (off + sz <= w2n bw \/ w2n bw + cap <= off) /\
+ (off + sz <= w2n out_bw \/
+  w2n out_bw + LENGTH (enc enc_ty enc_val) <= off) /\
+ (!slot b k. slot IN window_alloca_sites func (frag_ids s3 s4) /\
+   FLOOKUP encoded.vs_allocas slot = SOME (b,k) ==>
+   off + sz <= b \/ b + k <= off)` by
+ (rpt gen_tac >> strip_tac >>
+  `aid < topic_sa.cs_next_id /\ aid < s2.cs_next_id /\
+   aid < s3.cs_next_id` by decide_tac >>
+  `FLOOKUP tp.vs_allocas aid = SOME (off,sz)` by
+   (qpat_assum `tp.vs_allocas = t.vs_allocas`
+     (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `FLOOKUP packed.vs_allocas aid = SOME (off,sz) /\
+   FLOOKUP prepared.vs_allocas aid = SOME (off,sz) /\
+   FLOOKUP encoded.vs_allocas aid = SOME (off,sz)` by
+   (qpat_assum `!aid row. FLOOKUP t.vs_allocas aid = SOME row ==> _`
+     (qspecl_then [`aid`,`(off,sz)`] match_mp_tac) >> first_assum ACCEPT_TAC) >>
+  `off + sz <= t.vs_alloca_next` by
+   (qpat_assum `alloca_inv t`
+     (mp_tac o CONJUNCT2 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
+    simp_tac bool_ss [venomMemDefsTheory.alloca_next_valid_def] >>
+    disch_then (qspecl_then [`aid`,`off`,`sz`] match_mp_tac) >>
+    first_assum ACCEPT_TAC) >>
+  Q.SUBGOAL_THEN `off + sz <= w2n bw \/ w2n bw + cap <= off` ASSUME_TAC
+  >-
+   (qpat_assum `!aid b len. aid < topic_sa.cs_next_id /\ _ ==> _`
+     (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+    (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >>
+    metis_tac[]) >>
+  Q.SUBGOAL_THEN `off + sz <= w2n out_bw \/ w2n out_bw + outcap <= off` ASSUME_TAC
+  >-
+   (qpat_assum `!aid b len. aid < s2.cs_next_id /\ _ ==> _`
+     (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+    (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >>
+    metis_tac[]) >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- decide_tac
+  >- decide_tac >>
+  rpt gen_tac >> strip_tac >>
+  `aid <> slot` by
+   (qpat_assum `slot IN window_alloca_sites func (frag_ids s3 s4)` mp_tac >>
+    simp_tac (srw_ss()) [abiEncoderWindowContractTheory.window_alloca_sites_def,
+      abiEncoderPropsTheory.frag_ids_def, pred_setTheory.GSPECIFICATION] >>
+    strip_tac >> decide_tac) >>
+  qpat_assum `alloca_inv encoded`
+   (mp_tac o CONJUNCT1 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
+  simp_tac bool_ss [venomMemDefsTheory.allocas_non_overlapping_def] >>
+  disch_then (qspecl_then [`aid`,`slot`,`off`,`sz`,`b`,`k`] match_mp_tac) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC) >>
+suspend "logged_old_memory"
+QED
+
+Resume compile_log_frag_full[logged_old_memory]:
+`!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+ aid < sm.cs_next_id ==>
+ mem_bytes_at off sz fin.vs_memory = mem_bytes_at off sz t.vs_memory` by
+ (rpt gen_tac >> strip_tac >>
+  qpat_assum `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+    aid < sm.cs_next_id ==> off + sz <= t.vs_alloca_next /\ _`
+   (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `mem_bytes_at off sz packed.vs_memory = mem_bytes_at off sz ta.vs_memory` by
+   (qpat_assum `typed_copy_state_frame s1 (w2n bw) cap ta packed`
+     (mp_tac o CONJUNCT2 o CONJUNCT2 o REWRITE_RULE
+       [typedMemoryCopyTheory.typed_copy_state_frame_def]) >>
+    simp_tac bool_ss [typedMemoryCopyTheory.typed_copy_frame_def] >>
+    strip_tac >> first_x_assum irule >> decide_tac) >>
+  `mem_bytes_at off sz encoded.vs_memory =
+   mem_bytes_at off sz prepared.vs_memory` by
+   (irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >>
+    rpt gen_tac >> strip_tac >>
+    mp_tac (Q.INST
+     [`ids` |-> `window_alloca_sites func (frag_ids s3 s4)`,
+      `outs` |-> `[(w2n (out_bw:bytes32),LENGTH (enc enc_ty enc_val))]`,
+      `s` |-> `prepared`,`t` |-> `encoded`,`lo` |-> `off`,`n` |-> `sz`,
+      `a` |-> `i`]
+     (SPEC_ALL exprSimAbiEncodeFrameTransferTheory.abi_encode_registered_protected_byte)) >>
+    (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      simp_tac (srw_ss()) [EVERY_DEF] >> decide_tac])) >>
+    disch_then ACCEPT_TAC) >>
+  qpat_assum `mem_bytes_at off sz encoded.vs_memory =
+    mem_bytes_at off sz prepared.vs_memory` mp_tac >>
+  qpat_assum `mem_bytes_at off sz packed.vs_memory =
+    mem_bytes_at off sz ta.vs_memory` mp_tac >>
+  qpat_assum `prepared.vs_memory = packed.vs_memory` mp_tac >>
+  qpat_assum `ta.vs_memory = t.vs_memory` mp_tac >>
+  simp_tac (srw_ss()) [Abbr `fin`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+suspend "logged_old_taint"
+QED
+
+Resume compile_log_frag_full[logged_old_taint]:
+`!aid off sz i. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+ aid < sm.cs_next_id /\ off <= i /\ i < off + sz /\ i IN tnenc.t_mem ==>
+ i IN tn1.t_mem` by
+ (rpt gen_tac >> strip_tac >>
+  qpat_assum `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+    aid < sm.cs_next_id ==> off + sz <= t.vs_alloca_next /\ _`
+   (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `i IN tnprep.t_mem` by
+   (qpat_assum `!i. (i < w2n out_bw \/
+      w2n out_bw + LENGTH (enc enc_ty enc_val) <= i) /\ _ ==>
+      (i IN tnenc.t_mem <=> i IN tnprep.t_mem)`
+     (qspec_then `i` mp_tac) >>
+    (impl_tac >- (conj_tac >- decide_tac >> rpt strip_tac >>
+      qpat_assum `!slot b k. slot IN window_alloca_sites func (frag_ids s3 s4) /\
+        FLOOKUP encoded.vs_allocas slot = SOME (b,k) ==>
+        off + sz <= b \/ b + k <= off` drule_all >>
+      decide_tac)) >>
+    disch_then (fn th => qpat_assum `i IN tnenc.t_mem` (ACCEPT_TAC o EQ_MP th))) >>
+  `i < packed.vs_alloca_next` by decide_tac >>
+  `i IN tnpacked.t_mem` by
+   (qpat_assum `!i. i IN tnprep.t_mem <=> _` (qspec_then `i` mp_tac) >>
+    qpat_assum `i < packed.vs_alloca_next` mp_tac >>
+    qpat_assum `i IN tnprep.t_mem` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> fs[] >> decide_tac) >>
+  `i IN tna.t_mem` by
+   (qpat_assum `!j. j < w2n bw \/ w2n bw + cap <= j ==>
+     (j IN tnpacked.t_mem <=> j IN tna.t_mem)`
+     (qspec_then `i` mp_tac) >>
+    (impl_tac >- decide_tac) >>
+    disch_then (fn th => qpat_assum `i IN tnpacked.t_mem` (ACCEPT_TAC o EQ_MP th))) >>
+  qpat_assum `!i. i IN tna.t_mem ==> i IN tn1.t_mem \/ _`
+   (qspec_then `i` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> decide_tac) >>
+suspend "logged_finish_frames"
+QED
+
+Resume compile_log_frag_full[logged_finish_frames]:
+qpat_assum `wb_frame cenv es mid sa s0 t`
+ (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+`stmt_state_rel (storage_trace_horizon es.storage_trace)
+ ctx func cenv cx es s0` by
+ (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+   (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> first_assum ACCEPT_TAC) >>
+`alloca_frame cenv es sa s0 cenv (done_es with gas_obs := []) fin` by
+ (match_mp_tac (Q.INST
+   [`H` |-> `storage_trace_horizon es.storage_trace`, `ctx` |-> `ctx`,
+    `func` |-> `func`, `cx` |-> `cx`]
+   (INST_TYPE [alpha |-> ``:256``]
+    (SPEC_ALL stmtSimDefsTheory.alloca_frame_of_mem_frame))) >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- (qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+       (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]))
+  >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
+   (qpat_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+     FLOOKUP t.vs_allocas aid = SOME b`
+     (qspecl_then [`aid`,`(off,sz)`] match_mp_tac) >> first_assum ACCEPT_TAC) >>
+  `aid < sm.cs_next_id` by decide_tac >>
+  `mem_bytes_at off sz fin.vs_memory = mem_bytes_at off sz t.vs_memory` by
+   (qpat_assum `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+     aid < sm.cs_next_id ==> mem_bytes_at _ _ fin.vs_memory = _`
+     (qspecl_then [`aid`,`off`,`sz`] match_mp_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `mem_bytes_at off sz fin.vs_memory = mem_bytes_at off sz t.vs_memory`
+   (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz t.vs_memory = _`
+   (qspecl_then [`aid`,`off`,`sz`] match_mp_tac) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC) >>
+`!aid off sz i.
+ FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+ (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+   off + sz <= b \/ b + sz' <= off) /\
+ off <= i /\ i < off + sz /\ i IN tnenc.t_mem ==> i IN tn0.t_mem` by
+ (rpt gen_tac >> strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
+   (qpat_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+     FLOOKUP t.vs_allocas aid = SOME b`
+     (qspecl_then [`aid`,`(off,sz)`] match_mp_tac) >> first_assum ACCEPT_TAC) >>
+  `aid < sm.cs_next_id` by decide_tac >>
+  `i IN tn1.t_mem` by
+   (qpat_assum `!aid off sz i. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
+     (qspecl_then [`aid`,`off`,`sz`,`i`] match_mp_tac) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1`
+   (mp_tac o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ghost_kept_at_def]) >>
+  disch_then (qspecl_then [`aid`,`off`,`sz`,`i`] match_mp_tac) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC) >>
+suspend "logged_finish_post"
+QED
+
+Resume compile_log_frag_full[logged_finish_post]:
+`stmt_state_rel post_H ctx func cenv cx (done_es with gas_obs := []) fin` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx (done_es with gas_obs := []) fin`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`storage_well_formed_on cx (done_es with gas_obs := []) (FST post_H)` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   storage_well_formed_on cx (done_es with gas_obs := []) (FST H)`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`ghost_inv_at (DF post_H) lo d cenv cx
+ (done_es with gas_obs := []) Genc tnenc fin` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Genc tnenc fin`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+qexists_tac `cenv` >>
+simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
+rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Historical receiver proof retained (inactive).
@@ -7671,7 +7892,57 @@ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 *)
 Resume compile_log_frag_full[empty_outcome_post]:
-  cheat
+qpat_assum `wb_frame cenv es mid sa s0 t`
+ (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+`stmt_state_rel (storage_trace_horizon es.storage_trace)
+ ctx func cenv cx es s0` by
+ (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+   (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> first_assum ACCEPT_TAC) >>
+`fin.vs_memory = t.vs_memory` by
+ (qpat_assum `tp.vs_memory = t.vs_memory`
+   (fn th => simp_tac (srw_ss()) [Abbr `fin`,th])) >>
+`alloca_frame cenv es sa s0 cenv (done_es with gas_obs := []) fin` by
+ (match_mp_tac (Q.INST
+   [`H` |-> `storage_trace_horizon es.storage_trace`, `ctx` |-> `ctx`,
+    `func` |-> `func`, `cx` |-> `cx`]
+   (INST_TYPE [alpha |-> ``:256``]
+    (SPEC_ALL stmtSimDefsTheory.alloca_frame_of_mem_frame))) >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+  >- (qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+       (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]))
+  >- first_assum ACCEPT_TAC >>
+  qpat_assum `fin.vs_memory = t.vs_memory`
+   (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+`!aid off sz i.
+ FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+ (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+   off + sz <= b \/ b + sz' <= off) /\
+ off <= i /\ i < off + sz /\ i IN tnp.t_mem ==> i IN tn0.t_mem` by
+ (qpat_assum `tnp.t_mem = tn1.t_mem`
+   (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1`
+   (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ghost_kept_at_def])) >>
+suspend "empty_finish_post"
+QED
+
+Resume compile_log_frag_full[empty_finish_post]:
+`stmt_state_rel post_H ctx func cenv cx (done_es with gas_obs := []) fin` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx (done_es with gas_obs := []) fin`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`storage_well_formed_on cx (done_es with gas_obs := []) (FST post_H)` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   storage_well_formed_on cx (done_es with gas_obs := []) (FST H)`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`ghost_inv_at (DF post_H) lo d cenv cx
+ (done_es with gas_obs := []) Gp tnp fin` by
+ (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
+   ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Gp tnp fin`
+   (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+qexists_tac `cenv` >>
+simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
+rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Historical receiver proof retained (inactive).
