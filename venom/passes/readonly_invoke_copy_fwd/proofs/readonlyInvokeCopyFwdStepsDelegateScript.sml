@@ -61,6 +61,9 @@ Proof
    s.vs_pending_deletions = t.vs_pending_deletions` by
     (irule ricf_frame_concrete_inputs >>
      fs[ricf_cert_core_def, ricf_live_boundary_core_def] >> metis_tac[]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+       taint_agree_def, ld_shared_agree_def] >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_joint_local_fields_def] >>
   `LENGTH maps = LENGTH stk` by
     fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_live_stack_agree_def] >>
@@ -73,6 +76,9 @@ Proof
   rename1 `consume_call_outcome rq (w2n ro) (w2n rz) s = (w,r)` >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) t` >>
   rename1 `consume_call_outcome rq (w2n ro) (w2n rz) t = (z,u)` >>
+  `s.vs_outcomes <> [] /\ t.vs_outcomes <> []` by
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_delegatecall_def, LET_THM, Abbr`rq`, Excl "consume_call_outcome_eq"]) >>
   `s1 = update_var out w r` by
     gvs[exec_delegatecall_def, LET_THM, Abbr`rq`, Excl "consume_call_outcome_eq"] >>
   `!gam. MEM gam (MAP ricf_site_triples maps) ==>

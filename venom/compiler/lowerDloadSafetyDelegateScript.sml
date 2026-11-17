@@ -193,6 +193,10 @@ Theorem ld_delegate_observed_effect:
     ss.vs_inst_idx = f.lf_src.vs_inst_idx /\ ts.vs_inst_idx = f.lf_tgt.vs_inst_idx
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `f.lf_tgt.vs_outcomes <> []` by
+    (Cases_on `f.lf_tgt.vs_outcomes = []` >>
+     fs[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"]) >>
+  `f.lf_src.vs_outcomes <> []` by fs[ld_nonghost_def] >>
   drule_at Any ld_delegate_execution >>
   disch_then (qspecl_then [`tn`,`f.lf_src`,`ao`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>

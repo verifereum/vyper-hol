@@ -84,7 +84,7 @@ Proof
   qabbrev_tac `rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w,r)` >>
-  `?out. inst.inst_outputs = [out] /\ u = update_var out w r` by
+  `?out. inst.inst_outputs = [out] /\ u = update_var out w r /\ s.vs_outcomes <> []` by
     (gvs[exec_ext_call_def, Abbr `rq1`, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
      metis_tac[]) >>
   `((computed_precompile rq1 /\ computed_precompile rq2 /\
@@ -128,25 +128,9 @@ Proof
        ricf_execution_write_ranges) >>
      (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
      decide_tac) >>
-  `!z v. consume_call_outcome rq2 (w2n ro') (w2n rs) t = (z,v) ==>
-    step_inst fuel Ct inst t = OK (update_var out z v)` by
-    (rpt gen_tac >> strip_tac >>
-     `rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)` by simp[Abbr `rq2`] >>
-     qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
-     pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
-       (fn th => pure_rewrite_tac[GSYM th]) >>
-     qpat_assum `consume_call_outcome rq2 _ _ t = (z,v)`
-       (fn th => pure_rewrite_tac[th]) >> simp[Excl "consume_call_outcome_eq"]) >>
-  `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
-   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
-    simp[Abbr `rq1`, Abbr `rq2`, venom_call_request_def] >>
-  qabbrev_tac `source_off = w2n ro` >>
-  qabbrev_tac `target_off = w2n ro'` >>
-  qabbrev_tac `output_size = w2n rs` >>
-  mp_tac (Q.INST [`ro` |-> `source_off`, `ro'` |-> `target_off`,
-    `rs` |-> `output_size`] ricf_execution_consume_call_next) >>
-  (impl_tac >- (gvs[Abbr `source_off`, Abbr `target_off`, Abbr `output_size`,
-    MEM, is_terminator_def, Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
+  mp_tac (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``, gamma |-> ``:256``]
+    ricf_execution_ext_call_next) >>
+  (impl_tac >- (gvs[Abbr `rq1`, Abbr `rq2`,
+    Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
   simp[]
 QED
