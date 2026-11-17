@@ -28,20 +28,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-(* ADMISSION: moves the deploy certificate to any free-memory pointer.
-   Waits for its proof. *)
-Theorem deploy_unit_execution_correct_with_fmp:
-  !shadow_ctx marks tops runtime_bc am tx dunit vs fmp.
-    o1_source_unit_ok dunit /\
-    vs.vs_fmp = vs.vs_initial_fmp /\
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit vs ==>
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit (vs with <| vs_fmp := fmp; vs_initial_fmp := fmp |>)
-Proof
-  cheat
-QED
-
 (* ADMISSION: moves the deploy certificate to any call outcomes, for a call-free constructor.
    Waits for its proof. *)
 Theorem deploy_unit_execution_correct_with_outcomes:
