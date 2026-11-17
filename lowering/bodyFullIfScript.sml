@@ -631,7 +631,7 @@ Resume compile_if_stmt_frag_full[entry]:
      frag_reachable ctx func (jump_to (if b then tl else el) t) fn inst s ==>
      dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H
          (mid with scopes := FEMPTY :: mid.scopes).storage_trace ==>
        stmt_state_rel H ctx func cenv cx

@@ -155,7 +155,7 @@ QED
 Resume stmt_frag_full_cons_env[tail]:
   `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   `mid with gas_obs := [] = mid` by
     gvs[evaluation_state_component_equality] >>
   `eval_stmt cx stmt

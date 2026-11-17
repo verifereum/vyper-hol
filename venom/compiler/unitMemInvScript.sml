@@ -22,7 +22,7 @@
  * (mem_inv_codegen_obligations).
  *
  * TOP-LEVEL:
- *   inst_mem_ranges, mem_inv, dalloca_no_wrap, raw_mem_ok, static_mem_ok,
+ *   inst_mem_ranges, mem_inv, raw_mem_ok, static_mem_ok,
  *   lowered_mem_ok, step_write_footprint   - definitions
  *   raw_unit_memory_ok_mem_inv              - S3's statement is the raw phase
  *   mem_inv_raw_reachable                   - the witness is raw_reachable
@@ -38,10 +38,6 @@ Ancestors
   contextRawReachable unitTransformDefs stackPlanTypes codegenRel arithmetic
 
 (* ===== Definitions ===== *)
-
-(* dalloca_no_wrap moved to unitTransformDefs, under raw_unit_memory_ok;
-   this name keeps its users' references. *)
-Theorem dalloca_no_wrap_def = unitTransformDefsTheory.dalloca_no_wrap_def;
 
 Definition inst_mem_ranges_def:
   inst_mem_ranges inst s =

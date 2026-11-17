@@ -680,7 +680,7 @@ Proof
     (rpt strip_tac >>
      drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `si`, `sm`, `shadow_si`, `shadow_sm`,
