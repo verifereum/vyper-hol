@@ -8,6 +8,7 @@
 Theory bodyBinopFamiliesMemory
 Ancestors
   bodyBinopFragMemory
+  exprBopBytes valueEncodingProofs valueEncodingBitwise option
   exprSimBinopFrag exprSimArith exprSimCompare exprBopBitwise exprBopFlag
   exprBopShift exprBopStraight exprBopSimDefs exprBopSimProps exprSimBopTyped
   exprSimOps exprSimHyps exprSimHypsDefs exprSimProps exprSimDefs
@@ -874,4 +875,133 @@ Proof
   rpt strip_tac >>
   irule binop_frag_word_typed_mem >>
   Cases_on `bop = Exp` >> gvs[] >> metis_tac[]
+QED
+
+Theorem binop_frag_bytes_bitwise_mem:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  LENGTH xs = n /\ LENGTH ys = n /\ n <= 32 ==>
+  binop_frag_mem_post (expr_val_rel cx (BaseT (BytesT (Fixed n))))
+    ctx func cenv cx bop ty (BaseT (BytesT (Fixed n))) bl el tys
+    (BytesV xs) (BytesV ys) (word_of_bytes_be xs) (word_of_bytes_be ys) es
+Proof
+  strip_tac >> drule_all bop_result_bytes_bitwise >> strip_tac >>
+  irule (Q.INST [`v` |-> `BytesV bs`, `w` |-> `word_of_bytes_be bs`]
+    binop_frag_mem_post_success) >>
+  rpt conj_tac
+  >- metis_tac[straight_fresh_compile_bitwise]
+  >- first_assum ACCEPT_TAC
+  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+          is_word_type_def, typed_bytes_word] >>
+  rpt strip_tac >> drule_all compile_bitwise_run >> simp[]
+QED
+
+Theorem binop_frag_bytes_shift_mem:
+  (bop = ShL \/ bop = ShR) /\ LENGTH bs = 32 /\
+  within_int_bound (Unsigned 256) i ==>
+  binop_frag_mem_post (expr_val_rel cx (BaseT (BytesT (Fixed 32))))
+    ctx func cenv cx bop (BaseT (BytesT (Fixed 32)))
+    (BaseT (BytesT (Fixed 32))) bl el tys
+    (BytesV bs) (IntV i) (word_of_bytes_be bs) (i2w i) es
+Proof
+  strip_tac >> drule_all bop_result_bytes_shift >> strip_tac >>
+  irule (Q.INST [`v` |-> `BytesV out`, `w` |-> `word_of_bytes_be out`]
+    binop_frag_mem_post_success) >>
+  rpt conj_tac
+  >- metis_tac[straight_fresh_compile_shift]
+  >- first_assum ACCEPT_TAC
+  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+          is_word_type_def, typed_bytes_word] >>
+  rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
+QED
+
+Theorem binop_frag_bytes_augshift_mem:
+  (bop = ShL \/ bop = ShR) /\ LENGTH bs = 32 /\ LENGTH amount = 32 ==>
+  binop_frag_mem_post (expr_val_rel cx (BaseT (BytesT (Fixed 32))))
+    ctx func cenv cx bop (BaseT (BytesT (Fixed 32)))
+    (BaseT (BytesT (Fixed 32))) bl el tys
+    (BytesV bs) (BytesV amount) (word_of_bytes_be bs) (word_of_bytes_be amount) es
+Proof
+  strip_tac >> drule_all bop_result_bytes_augshift >> strip_tac >>
+  irule (Q.INST [`v` |-> `BytesV out`, `w` |-> `word_of_bytes_be out`]
+    binop_frag_mem_post_success) >>
+  rpt conj_tac
+  >- metis_tac[straight_fresh_compile_shift]
+  >- first_assum ACCEPT_TAC
+  >- simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
+          is_word_type_def, typed_bytes_word] >>
+  rpt strip_tac >> drule_all compile_shift_run >> simp[is_signed_type_def]
+QED
+
+Theorem binop_frag_bytes_typed_mem:
+  MEM bop [And;Or;XOr;ShL;ShR] /\
+  well_typed_binop ann bop (BaseT (BytesT (Fixed m))) t2 /\
+  evaluate_type tenv (BaseT (BytesT (Fixed m))) = SOME tv1 /\
+  evaluate_type tenv t2 = SOME tv2 /\
+  value_has_type tv1 v1 /\ value_has_type tv2 v2 /\
+  (bop = ShL \/ bop = ShR ==>
+    (?i. v2 = IntV i /\ 0 <= i) \/ t2 = BaseT (BytesT (Fixed 32))) ==>
+  binop_frag_mem_post (expr_val_rel cx ann)
+    ctx func cenv cx bop (BaseT (BytesT (Fixed m))) ann bl el tys
+    v1 v2 (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es
+Proof
+  strip_tac >>
+  Cases_on `bop = And \/ bop = Or \/ bop = XOr`
+  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def,
+          optionTheory.IF_EQUALS_OPTION] >>
+      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
+      simp[typed_bytes_word] >> irule binop_frag_bytes_bitwise_mem >> simp[]) >>
+  `bop = ShL \/ bop = ShR` by gvs[] >>
+  Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+  >- (gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
+      simp[typed_bytes_word] >> irule binop_frag_bytes_augshift_mem >> simp[]) >>
+  `ann = BaseT (BytesT (Fixed 32)) /\ m = 32 /\ is_int_type t2` by
+    gvs[well_typed_binop_def] >>
+  gvs[] >>
+  drule_all int_type_value >> strip_tac >> gvs[] >>
+  `within_int_bound (Unsigned 256) i` by
+    (Cases_on `is_signed_type t2` >> gvs[] >>
+     metis_tac[within_int_bound_unsigned_256]) >>
+  gvs[vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
+  Cases_on `v1` >> gvs[value_has_type_def] >>
+  simp[typed_bytes_word, typed_val_to_w256_word_value, word_value_def,
+       val_to_w256_def] >>
+  irule binop_frag_bytes_shift_mem >> simp[]
+QED
+
+Theorem augassign_binop_frag_typed_mem:
+  well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn /\
+  type_bits ty MOD 8 = 0 /\
+  (bop = Exp ==>
+    (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
+    (!n. bl = SOME n ==> v1 = IntV n) /\
+    (!n. el = SOME n ==> v2 = IntV n)) /\
+  (bop = ShL \/ bop = ShR ==>
+    (?i. v2 = IntV i /\ 0 <= i) \/
+    (ty = BaseT (BytesT (Fixed 32)) /\
+     ?bs. v2 = BytesV bs /\ LENGTH bs = 32)) /\
+  evaluate_type (get_tenv cx) ty = SOME tv1 /\ value_has_type tv1 v1 /\
+  evaluate_type (get_tenv cx) t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
+  binop_frag_mem_post (expr_val_rel cx ty)
+    ctx func cenv cx bop ty ty bl el tys v1 v2
+    (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es
+Proof
+  strip_tac >> drule_all well_typed_binop_augassign_word >> strip_tac
+  >- (`word_value v1 /\ word_value v2` by metis_tac[word_value_type_typed] >>
+      `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+        (rpt strip_tac >> gvs[word_value_type_def]) >>
+      simp[typed_val_to_w256_word_value] >>
+      irule binop_frag_mem_rel >> conj_tac
+      >- metis_tac[word_value_type_word] >>
+      rewrite_tac[GSYM binop_frag_val_mem_def] >>
+      irule binop_frag_word_typed_mem >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  irule (Q.INST [`t2` |-> `t2`, `tenv` |-> `get_tenv cx`,
+                 `tv1` |-> `tv1`, `tv2` |-> `tv2`]
+    binop_frag_bytes_typed_mem) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `bop = ShL \/ bop = ShR ==> _` drule >>
+  strip_tac >- metis_tac[] >>
+  qpat_x_assum `bop = ShL \/ bop = ShR` strip_assume_tac >>
+  gvs[well_typed_binop_def] >> metis_tac[int_type_value]
 QED
