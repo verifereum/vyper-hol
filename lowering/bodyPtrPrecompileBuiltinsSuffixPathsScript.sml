@@ -62,6 +62,7 @@ Theorem computed_emitted_suffix_paths:
   not_fresh_at sm src /\ not_fresh_at sm dst /\
   eval_operand (Var src) s = SOME wi /\ eval_operand (Var dst) s = SOME wo /\
   computed_precompile (venom_call_request s target 0w wi insz T) /\
+  s.vs_outcomes <> [] /\
   ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s (w2n outsz) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
@@ -151,9 +152,11 @@ Theorem computed_suffix_failure_path:
   inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sm sb) s G' tn' /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?t n j. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t /\
+  ?t n j. run_inst_seq (emitted_insts sm sb) s =
+      Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
       gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-        (Abort Revert_abort (t with vs_inst_idx := j))
+        (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+          (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule_all computed_suffix_failure >> strip_tac >>
   drule computed_suffix_shape >> strip_tac >>
@@ -174,12 +177,15 @@ Theorem computed_suffix_oracle_failure_path:
   inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sm sb) s G' tn' /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?t n j. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t /\
+  ?t n j. run_inst_seq (emitted_insts sm sb) s =
+      Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
       gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-        (Abort Revert_abort (t with vs_inst_idx := j))
+        (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+          (t with vs_inst_idx := j))
 Proof
   strip_tac >>
-  `?t. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t` by
+  `?t. run_inst_seq (emitted_insts sm sb) s =
+     Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t` by
     (irule computed_suffix_oracle_failure >> metis_tac[]) >>
   drule computed_suffix_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
