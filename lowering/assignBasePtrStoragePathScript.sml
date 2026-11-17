@@ -1,39 +1,10 @@
 (* Counted storage-copy instructions. Loaded words may carry dead-byte taint. *)
 Theory assignBasePtrStoragePath
 Ancestors
-  wordLoadStorePtr assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
+  bodyPtrSignedConvertLoad wordLoadStorePtr assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
   typedCopyLoopHeaderPtr fragGasPathPtr fragGasSeqPtr fragExecPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
   stateFrame finite_map pred_set words combin decoderGhostFramePtr arithmetic list
-
-Theorem assign_base_mload_counted:
-  !s fn bb id src tmp a tn G ctx D PG.
-    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst id MLOAD [Var src] [tmp]) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
-    lookup_var src s = SOME a ==>
-    gas_path_ptr D 0 ctx fn PG G tn s 0
-      (step_prov PG G (mk_inst id MLOAD [Var src] [tmp])
-        (update_var tmp (mload (w2n a) s) s))
-      (step_taint (mk_inst id MLOAD [Var src] [tmp]) s
-        (update_var tmp (mload (w2n a) s) s) tn)
-      (OK ((update_var tmp (mload (w2n a) s) s) with
-        vs_inst_idx := SUC s.vs_inst_idx))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s =
-   OK (update_var tmp (mload (w2n a) s) s)` by
-    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
-  `ptr_inst_ok D 0 0 ctx fn G tn
-     (mk_inst id MLOAD [Var src] [tmp]) s` by
-    (irule ptr_inst_ok_mload >> simp[]) >>
-  irule (SRULE [mk_inst_def, is_terminator_def]
-    (Q.INST [`n` |-> `0`, `lo` |-> `0`,
-      `i` |-> `mk_inst id MLOAD [Var src] [tmp]`] gas_path_ptr_step)) >>
-  simp[GSYM mk_inst_def] >> goal_assum (drule_at Any) >> simp[] >>
-  irule (cj 1 gas_path_ptr_rules) >> simp[update_var_def]
-QED
 
 Theorem assign_base_mload_ghost:
   !PG G tn s id src tmp a.
@@ -241,7 +212,7 @@ Theorem assign_base_storage_load_counted:
          FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all assign_base_mload_counted >>
+  drule_all mload_counted_path >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
   drule assign_base_mload_ghost >>
