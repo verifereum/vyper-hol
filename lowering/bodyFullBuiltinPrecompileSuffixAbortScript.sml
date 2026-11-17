@@ -1,6 +1,6 @@
 Theory bodyFullBuiltinPrecompileSuffixAbort
 Ancestors
-  bodyFullBuiltinPrecompileSuffixPath bodySimFull
+  bodyFullBuiltinPrecompileSuffixPath bodySimFull exprSimHash
   bodyPtrPrecompileBuiltinsSuffix bodyPtrPrecompileBuiltinsSuffixGhost
   fragGasSeqPtr fragExecMem fragExec instMemFrontier memSafeRun
   venomInstProofs venomExecSemantics venomInst venomState instIdxIndep
@@ -172,7 +172,9 @@ Proof
     (drule_then strip_assume_tac) >>
   `inst_seq_ptr (DF H) lo ctx func PG G tn [gi;ci] s
      (step_prov PG G gi u) (step_taint gi s u tn)` by
-    (irule suffix_abort_checked >> simp[] >> metis_tac[]) >>
+    (irule suffix_abort_checked >> simp[] >>
+     qexistsl [`addr`,`an`,`cv`,`dst`,`gv`,`id`,`rn`,`src`,`wi`] >>
+     simp[arithmeticTheory.ADD_COMM]) >>
   `run_inst_seq_mem_ok [gi;ci] s` by
     (simp[Once run_inst_seq_mem_ok_def, below_frontier_no_ranges,
        inst_dload_in_section_def, mk_inst_def] >>
@@ -180,27 +182,37 @@ Proof
      simp[run_inst_seq_mem_ok_last, below_frontier_STATICCALL,
        inst_dload_in_section_def, mk_inst_def, eval_operand_def,
        lookup_var_def, FLOOKUP_UPDATE, update_var_def] >>
-     gvs[eval_operand_def, lookup_var_def, wordsTheory.dimword_def]) >>
+     gvs[eval_operand_def, lookup_var_def, wordsTheory.dimword_def] >>
+     pure_rewrite_tac[GSYM mk_inst_def] >>
+     simp[below_frontier_STATICCALL, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, arithmeticTheory.ADD_COMM]) >>
   drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
   `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
       step_prov PG G gi u, step_taint gi s u tn)` by
-    (drule_all straight_line_origin_ptr_edge >>
-     gvs[run_inst_seq_mem_ok_def, inst_seq_ptr_def, mk_inst_def,
-       is_terminator_def]) >>
+    (`gi.inst_opcode <> INVOKE /\ ~is_terminator gi.inst_opcode /\
+      inst_mem_below_frontier gi s /\ inst_dload_in_section gi s /\
+      ptr_inst_ok (DF H) lo 0 ctx func G tn gi s` by
+       gvs[run_inst_seq_mem_ok_def, inst_seq_ptr_def, mk_inst_def,
+         is_terminator_def] >>
+     drule_all straight_line_origin_ptr_edge >>
+     disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+     simp[mk_inst_def]) >>
   qabbrev_tac `w = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   `~w.vs_halted /\ lookup_block w.vs_current_bb func.fn_blocks = SOME bb /\
    get_instruction bb w.vs_inst_idx = SOME ci` by
     (drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
      `step_inst 0 ctx gi s = OK u` by simp[step_inst_non_invoke, mk_inst_def] >>
+     `~is_terminator gi.inst_opcode` by simp[mk_inst_def, is_terminator_def] >>
      drule_all step_preserves_halted >> drule_all step_preserves_control_flow >>
      gvs[Abbr `w`, mk_inst_def, is_terminator_def]) >>
   `ptr_inst_ok (DF H) lo 0 ctx func (step_prov PG G gi u)
      (step_taint gi s u tn) ci w` by
-    gvs[inst_seq_ptr_def, Abbr `w`] >>
+    gvs[inst_seq_ptr_def, Abbr `w`, step_inst_inst_idx_indep,
+      exec_result_map_def, mk_inst_def, is_terminator_def] >>
   `step_inst_base ci w = Abort a (t with vs_inst_idx := SUC s.vs_inst_idx)` by
-    simp[Abbr `w`, step_inst_inst_idx_indep, mk_inst_def,
-      is_terminator_def, exec_result_map_def] >>
+    (gvs[mk_inst_def, Abbr `w`] >>
+     simp[step_inst_inst_idx_indep, is_terminator_def, exec_result_map_def]) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
      (w,step_prov PG G gi u,step_taint gi s u tn) []
      (Abort a (t with vs_inst_idx := SUC s.vs_inst_idx),
@@ -212,5 +224,5 @@ Proof
        ptr_safe_step_def, gas_count_step_def, gas_events_step_def,
        mk_inst_def, exit_result_def, mem_safe_step_non_invoke]) >>
   drule (cj 2 gas_origin_ptr_path_rules) >> simp[] >>
-  disch_then irule >> first_assum ACCEPT_TAC
+  disch_then irule >> gvs[]
 QED
