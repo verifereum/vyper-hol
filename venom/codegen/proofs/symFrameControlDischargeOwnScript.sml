@@ -2,6 +2,7 @@
 Theory symFrameControlDischargeOwn
 Ancestors
   symFrameControlOwn symControlTerminalOwn symControlRetOwn symControlTerminalDischargeOwn
+  symControlRetDischargeOwn
   symControlForwardContinuationOwn asmSymModeOwn asmSymBridge
   codegenSymRel codegenSymOwnRel spillWordBounds
 
