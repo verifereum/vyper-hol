@@ -18,7 +18,7 @@ Ancestors
   codegenSymRel fnFrameSteps fnFrameSinglePred fnEntryParams fnFrameBoundary asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symShuffleSim reorderStages codegenSymOwnRel symFrameBoundaryPairing
+  dfgDefs symShuffleSim reorderStages codegenSymOwnRel symFrameBoundaryPairing symFrameBoundaryNumeric
 
 (* Symbolic kinds at the boundary depend on the defining instruction,
    not on the concrete word used to represent a label. *)
@@ -176,14 +176,20 @@ Definition scratch_labels_store_def:
     scratch_labels_store (scratch_store_labels labs off sv) xs
 End
 
+Theorem scratch_labels_store_fold[local]:
+  !xs labs. scratch_labels_store labs xs =
+    FOLDL (\acc p. scratch_store_labels acc (FST p) (SND p)) labs xs
+Proof
+  Induct >> simp[scratch_labels_store_def] >>
+  Cases_on `h` >> simp[scratch_labels_store_def]
+QED
+
 Theorem scratch_labels_store_outside:
   !xs labs b.
     EVERY (\p. ~in_mem_range (FST p) 32 b) xs ==>
     FLOOKUP (scratch_labels_store labs xs) b = FLOOKUP labs b
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_store_labels_outside]
+  simp[scratch_labels_store_fold, scratch_fold_outside]
 QED
 
 Theorem scratch_labels_store_preserves_saved:
@@ -192,9 +198,7 @@ Theorem scratch_labels_store_preserves_saved:
     (mem_sval_at (scratch_labels_store labs xs) old saved <=>
      mem_sval_at labs old saved)
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_store_labels_preserves_saved]
+  simp[scratch_labels_store_fold, scratch_fold_preserves_saved]
 QED
 
 Theorem scratch_labels_store_saved:
@@ -205,14 +209,7 @@ Theorem scratch_labels_store_saved:
     !off sv. MEM (off,sv) xs ==>
       mem_sval_at (scratch_labels_store labs xs) off sv
 Proof
-  Induct >> simp[scratch_labels_store_def] >>
-  gen_tac >> PairCases_on `h` >> rw[scratch_labels_store_def]
-  >- (gvs[] >> rename1 `~MEM off (MAP FST xs)` >>
-      `EVERY (\p. off + 32 <= FST p \/ FST p + 32 <= off) xs` by
-        (simp[listTheory.EVERY_MEM] >>
-         metis_tac[listTheory.MEM_MAP, pairTheory.FST]) >>
-      metis_tac[scratch_labels_store_preserves_saved, scratch_store_labels_at]) >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  simp[scratch_labels_store_fold, scratch_fold_saved]
 QED
 
 Theorem sym_steps_two:
