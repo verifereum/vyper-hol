@@ -25,7 +25,8 @@ Proof
   rename1 `MEM decl (FST (SND (classify_functions tops)))` >>
   PairCases_on `decl` >>
   drule_all entry_classified_internal_support >> strip_tac >>
-  Cases_on `decl5` >> gvs[]
+  gvs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
+  metis_tac[supportedExprsTheory.supported_expr_def]
 QED
 
 Theorem entry_code_build_getter[local]:
