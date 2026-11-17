@@ -38,7 +38,7 @@ Theorem intcall_entry_full_fmp_room:
   setup_callee callee argv t = SOME setup ==>
   fmp_room ctx callee setup
 Proof
-  rw[intcall_entry_full_def, intcall_entry_def] >>
+  rw[intcall_entry_full_def] >>
   qpat_x_assum `lookup_function lbl _ = SOME callee` mp_tac >>
   qpat_x_assum `setup_callee callee argv t = SOME setup` mp_tac >>
   qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
@@ -49,12 +49,12 @@ Proof
   qpat_x_assum `decode_invoke inst' = _` mp_tac >>
   qpat_x_assum `eval_operands arg_ops t = _` mp_tac >>
   qpat_x_assum `eval_operands arg_ops' t = _` mp_tac >>
-  qpat_x_assum `!callee setup use_trans nkeys imm_len lbl' ce params has_rb
+  qpat_x_assum `!callee setup use_trans nkeys imm_len dflts lbl' ce params has_rb
     is_nr key trans view ctor imm_len' ss' rt. _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!use_trans nkeys imm_len lbl' ce params has_rb
+  qpat_x_assum `!use_trans nkeys imm_len dflts lbl' ce params has_rb
     is_nr key trans view ctor imm_len' ss' rt. _`
-    (qspecl_then [`F`, `\x:string. 0`, `0`] mp_tac) >>
+    (qspecl_then [`F`, `\x:string. 0`, `0`, `([]:expr list)`] mp_tac) >>
   simp[] >>
   qabbrev_tac `pack = set_internal_package_target cenv.ce_target
     (package_internal_fn tops F (\x:string. 0) cenv.ce_is_ctor 0

@@ -1,7 +1,7 @@
 (* Callee-exit memory framing, independent of the copy execution. *)
 Theory internalReturnMemoryExitFrame
 Ancestors
-  internalReturnBoundaryCommonMem intCallReturnMem intCallResult
+  internalReturnMemoryFrame intCallReturnMem intCallResult
   loweringSlice instIdxIndep stmtSimReturn loweringStateRelDefs
   compileEnv venomState vyperState bodySim exprLoweringProps stateRelProj
 
