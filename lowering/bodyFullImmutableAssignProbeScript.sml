@@ -12,8 +12,10 @@ Ancestors
 Libs
   bodyConstNameLib
 
-Theorem body_assign_immutable_word_full_probe:
-  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es nsid.
+(* UNPROVED GOAL. This quotation records the requested statement; it creates
+   no theorem or admission. The completed store lemmas are in the ancestors. *)
+val body_assign_immutable_word_full_goal =
+  ``!cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es nsid.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
@@ -61,9 +63,12 @@ Theorem body_assign_immutable_word_full_probe:
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
-Proof
-  rpt gen_tac >> strip_tac >>
+      (eval_stmt cx (Assign (BaseTarget t) e)) es``;
+
+(* The proof prefix parsed and reached the unfolded joint outcome in this
+   session. It is retained as a tactic value, not applied as a proof. *)
+val body_assign_immutable_word_full_prefix : tactic =
+rpt gen_tac >> strip_tac >>
   qpat_x_assum `t = TopLevelNameTarget nsid` SUBST_ALL_TAC >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
   `well_typed_expr env e` by
@@ -82,5 +87,4 @@ Proof
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac
-QED
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac;

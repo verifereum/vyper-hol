@@ -1,40 +1,13 @@
 (* The concrete instruction boundary of the constructor store probe. *)
 Theory bodyFullImmutableStoreRunProbe
 Ancestors
+  exprPtrCtorImmStore exprPtrUnwrapScalarEdges
   bodyFullImmutableStoreProbe fragGasSeqPtr bodyFullUnwrapRun immutableWordExecution
   context exprLoweringProps bodyPtrDefs loweringPosts stmtSimDefs loweringStateRelDefs
   ptrDiscipline ptrSafeRun codegenRel contextCodegenRel memLocDefs
   venomState venomExecSemantics venomInstProofs venomInst fragExec fragExecMem
   unitTransformDefs memSafeRun
   compileEnv emitHelper list finite_map pred_set arithmetic words
-
-Theorem immutable_istore_check:
-  eval_operand addr s = SOME a /\ eval_operand op s = SOME w /\
-  op_prov G addr = NONE /\ op_taint tn addr = {} /\ op_taint tn op = {} /\
-  w2n a + 32 <= lo /\ allocas_from lo s /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D lo fuel ctx fn G tn (mk_inst iid ISTORE [addr;op] []) s
-Proof
-  strip_tac >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def,
-       fixed_source_write_range_def, mem_write_ops_def] >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
-       istore_def, mstore_def] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem immutable_address_add_check:
-  eval_operand region s = SOME 0w /\ eval_operand off s = SOME a /\
-  op_taint tn region = {} /\ op_taint tn off = {} /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D lo fuel ctx fn G tn (mk_inst iid ADD [region;off] [tmp]) s
-Proof
-  strip_tac >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def,
-       step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def,
-       update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
-QED
 
 Theorem immutable_istore_mem_run:
   eval_operand addr s = SOME a /\ eval_operand op s = SOME w /\
@@ -59,7 +32,7 @@ Theorem immutable_istore_ptr_run:
 Proof
   strip_tac >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst iid ISTORE [addr;op] []) s` by
-    (irule immutable_istore_check >> simp[]) >>
+    (irule ptr_inst_ok_istore >> simp[]) >>
   mp_tac (Q.INST [`addr` |-> `addr`, `op` |-> `op`, `a` |-> `a`,
     `w` |-> `w`, `s` |-> `s`, `tn` |-> `tn`, `iid` |-> `iid`,
     `PG` |-> `PG`, `G` |-> `G`] (SPEC_ALL immutable_istore_execution)) >>
@@ -117,7 +90,7 @@ Proof
   `step_inst_base (mk_inst iid ADD [region;off] [tmp]) s = OK u` by
     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, WORD_ADD_0] >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst iid ADD [region;off] [tmp]) s` by
-    (irule immutable_address_add_check >> simp[]) >>
+    (irule ptr_inst_ok_copy_arith >> simp[]) >>
   `op_prov G1 (Var tmp) = NONE` by
     (gvs[] >> irule step_prov_out_none >> simp[mk_inst_def] >>
      irule out_prov_arith_none >> simp[mk_inst_def]) >>
