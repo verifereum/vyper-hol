@@ -422,7 +422,7 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
     (irule log_head_admissible >> qexists_tac `args` >> fs[GSYM log_args_res_ok_def, SF ETA_ss]) >>
   `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ssm`, `x`,

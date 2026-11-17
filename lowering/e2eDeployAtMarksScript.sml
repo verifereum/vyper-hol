@@ -24,7 +24,7 @@ Ancestors
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
   ctorDeployLoweringSource
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
-  o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
+  o1PipelineCorrect o1PipelineCompose o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
 
 Theorem deploy_exempt_result_rel[local]:
@@ -62,8 +62,14 @@ Proof
   strip_tac >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
+  `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
+    (rw[listTheory.EVERY_MEM] >> irule source_pre_fmp_ops >> metis_tac[]) >>
+  `vs.vs_initial_fmp = vs.vs_fmp` by
+    (qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
+     disch_then (mp_tac o AP_TERM
+       ``\s:venom_state. s.vs_initial_fmp = s.vs_fmp``) >>
+     simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
     decide_tac >>
   rpt conj_tac
@@ -165,7 +171,6 @@ Proof
   >- (disj2_tac >> irule deploy_exempt_result_rel >> first_assum ACCEPT_TAC) >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vs`, `tail`]
     mp_tac deploy_unit_exit_safe_runs >>
   impl_tac >- fs[] >> strip_tac >>

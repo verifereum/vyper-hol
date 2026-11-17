@@ -169,8 +169,7 @@ Proof
       >- (rpt strip_tac >> irule fmp_process_block_valid >>
           simp[fmp_stack_valid_def, fmp_empty_reclaim_state_def] >>
           metis_tac[fmp_transfer_dalloca_output, venomInstTheory.fn_insts_def]) >>
-      irule fmp_df_boundary_update_valid >>
-      simp[fmp_init_valid, fmp_stack_valid_def, fmp_empty_reclaim_state_def]) >>
+      simp[fmp_init_valid]) >>
   metis_tac[fmp_transfer_dalloca_output, venomInstTheory.fn_insts_def]
 QED
 

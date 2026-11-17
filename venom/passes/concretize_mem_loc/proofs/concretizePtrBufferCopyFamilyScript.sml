@@ -17,7 +17,7 @@ Ancestors
   concretizePtrDeletedGapHistory concretizePtrExecutedCoverage
   unitShapeDefs venomWf cfgWf o1PassContract
   concretizeStepStructure concretizeStepShape concretizePtrDeletedGaps
-  concretizePtrOrdinaryNext concretizePtrTaggedSupport
+  concretizePtrOrdinaryNext concretizePtrTaggedSupport frameResolvedTrace
   concretizePtrLedgerProbe concretizePtrReturnTransport
   concretizePtrOperationalOpcodes finite_map concretizePtrAllocationSize
   contextCodegenRel unitLabelMapIdentity opcodeClass venomExecProps memSafeRun
@@ -179,7 +179,8 @@ QED
 
 Theorem ptr_buffer_copy_range_owner[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_write_ops a.po_inst = SOME ops /\
@@ -187,43 +188,48 @@ Theorem ptr_buffer_copy_range_owner[local]:
   ptr_value_transport births positions (op_prov TG ops.iao_ofst) {} d dt /\
   (!aid pos sz. FLOOKUP positions (Allocation aid) = SOME (pos,sz) ==>
     pos + sz < dimword(:256)) ==>
-  ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+  ptr_paired_write_owner (dyn_floor C vs) lo positions (\x. w2n dt + (x-w2n d))
     {x | w2n d <= x /\ x < w2n d + len}
     (tokens,registry,births,PT,TG,saved,entries)
 Proof
   strip_tac >>
   simp[ptr_paired_write_owner_def] >> gen_tac >> strip_tac >>
   `len <> 0` by decide_tac >>
-  `ptr_ledger_erases births TG a.po_prov` by
-    (irule ptr_source_ownership_prov_erases >> metis_tac[]) >>
+  `ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov` by
+    (drule_all ptr_source_ownership_prov_erases >> simp[]) >>
   drule_all ptr_source_write_owner_cases >> strip_tac
   >- (`op_prov TG ops.iao_ofst = NONE` by
         (drule ptr_owner_op_projection >>
          disch_then (qspec_then `ops.iao_ofst` strip_assume_tac) >>
          Cases_on `op_prov TG ops.iao_ofst` >>
-         gvs[ptr_owner_project_def] >>
+         gvs[ptr_owner_erases_def] >>
          fs[finite_mapTheory.FLOOKUP_DEF]) >>
-      gvs[ptr_value_transport_scalar_empty] >> disj1_tac >> decide_tac) >>
-  fs[] >>
-  `MEM token tokens` by (irule ptr_source_ownership_live_prov >> metis_tac[]) >>
-  `FLOOKUP births (token,aid) = SOME (b,sz)` by
-    (fs[ptr_ledger_erases_def] >>
-     qpat_x_assum `!v. FLOOKUP a.po_prov v = _`
-       (qspec_then `v` mp_tac) >> simp[]) >>
-  qpat_x_assum `ops' = ops` SUBST_ALL_TAC >>
-  qpat_x_assum `ptr_value_transport _ _ _ _ _ _` mp_tac >>
-  asm_simp_tac (srw_ss()) [op_prov_def, ptr_value_transport_def] >> strip_tac >>
-  `pos + sz < dimword(:256)` by metis_tac[] >>
-  `w2n dt = pos + (w2n d - b)` by
-    (irule ptr_closed_relocation_value >> simp[] >>
-     qexists_tac `sz` >> simp[] >> decide_tac) >>
-  disj2_tac >> qexistsl_tac [`token`,`aid`,`b`,`sz`,`pos`,`x-b`] >>
-  simp[] >> decide_tac
+      gvs[ptr_value_transport_scalar_empty] >> disj1_tac >> decide_tac)
+  >- (fs[] >>
+      `MEM token tokens` by (irule ptr_source_ownership_live_prov >> metis_tac[]) >>
+      `FLOOKUP births (token,aid) = SOME (b,sz)` by
+        (qpat_x_assum `ptr_ledger_erases _ _ _ _` mp_tac >>
+         simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
+         disch_then (qspec_then `v` mp_tac o CONJUNCT1) >> gvs[]) >>
+      qpat_x_assum `ops' = ops` SUBST_ALL_TAC >>
+      qpat_x_assum `ptr_value_transport _ _ _ _ _ _` mp_tac >>
+      asm_simp_tac (srw_ss()) [op_prov_def, ptr_value_transport_def] >> strip_tac >>
+      `pos + sz < dimword(:256)` by metis_tac[] >>
+      `w2n dt = pos + (w2n d - b)` by
+        (irule ptr_closed_relocation_value >> simp[] >>
+         qexists_tac `sz` >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`aid`,`b`,`sz`,`pos`,`x-b`] >>
+      simp[] >> decide_tac) >>
+  fs[] >> qpat_x_assum `ops' = ops` SUBST_ALL_TAC >>
+  `dt = d` by gvs[op_prov_def, ptr_value_transport_scalar_empty] >>
+  `dyn_floor C vs <= x` by decide_tac >>
+  simp[]
 QED
 
 Theorem ptr_buffer_copy_write_event[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  dyn_floor C a.po_state = dyn_floor C vs /\ ptr_discipline lo C vs /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
   ~in_revert_forward a.po_fn a.po_state /\
   ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
@@ -254,7 +260,7 @@ Proof
      simp[] >> fs[MEM] >> metis_tac[]) >>
   `ptr_ledger_write_pair C Ct (\x. w2n dt + (x-w2n d)) a z at zt` by
     (irule ptr_buffer_copy_write_pair >> metis_tac[]) >>
-  `ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+  `ptr_paired_write_owner (dyn_floor C a.po_state) lo positions (\x. w2n dt + (x-w2n d))
     (range_bytes (step_writes a.po_inst a.po_state z.po_state))
     (tokens,registry,births,PT,TG,saved,entries)` by
     (asm_rewrite_tac[] >> irule ptr_buffer_copy_range_owner >>
@@ -275,16 +281,16 @@ Proof
   simp[ptr_paired_write_def, EL_APPEND_EQN] >> metis_tac[]
 QED
 
-Theorem ptr_paired_prefix_buffer_copy[local]:
+Theorem ptr_paired_prefix_buffer_copy_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -307,7 +313,10 @@ Proof
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -330,8 +339,6 @@ Proof
      `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
        (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
            EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-     `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-       (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
      `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
        (rpt strip_tac >> irule ptr_source_tagged_var_support >>
         rpt (goal_assum (drule_at Any))) >>
@@ -457,8 +464,9 @@ Proof
   `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
    taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+        EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
   `op_taint a.po_taint dop = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >> metis_tac[]) >>
   `ptr_value_transport births positions (op_prov TG dop) {} d dt` by
@@ -489,14 +497,15 @@ Proof
   fs[] >> simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >> metis_tac[]
 QED
 
-Theorem ptr_paired_buffer_copy_prefix_normalize:
+
+Theorem ptr_paired_buffer_copy_prefix_normalize_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -524,7 +533,7 @@ Theorem ptr_paired_buffer_copy_prefix_normalize:
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_paired_prefix_buffer_copy >> strip_tac >>
+  drule_all ptr_paired_prefix_buffer_copy_static >> strip_tac >>
   `fn_inst_wf z.po_fn` by
     (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
@@ -541,5 +550,44 @@ Proof
     `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
     `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws ++ extra`] >>
   simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+
+Theorem ptr_paired_buffer_copy_prefix_normalize:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_buffer_copy_prefix_normalize_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 

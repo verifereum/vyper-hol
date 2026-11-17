@@ -7,13 +7,14 @@ Theorem ld_live_scratch_separation_floor:
   allocas_non_overlapping t /\ alloca_next_valid t /\ allocas_from f t /\
   f <= t.vs_alloca_next /\ t.vs_alloca_next < dimword (:256) /\
   (id NOTIN A ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (id NOTIN A ==> t.vs_alloca_next + 32 <= fl) /\ t.vs_alloca_next <= fl /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt + sz <= f \/
     (?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME (bt,sz))) ==>
   ?p. f <= p /\ p + 32 < dimword (:256) /\
     ((FLOOKUP t.vs_allocas id = NONE /\ p = t.vs_alloca_next) \/
       FLOOKUP t.vs_allocas id = SOME (p,32)) /\
-    (!aa bb. ((aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb) ==>
+    (!aa bb. ((aa=bb /\ aa<lo) \/ (aa=bb /\ fl <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb) ==>
       bb < p \/ p + 32 <= bb)
 Proof
   strip_tac >> Cases_on `id IN A`
@@ -23,6 +24,7 @@ Proof
         metis_tac[alloca_next_valid_def, allocas_from_def] >>
       qexists_tac `p` >> simp[] >>
       rpt gen_tac >> strip_tac
+      >- decide_tac
       >- decide_tac >>
       gvs[ld_site_bytes_def] >>
       first_x_assum drule >> disch_then drule >> strip_tac
@@ -34,7 +36,8 @@ Proof
     metis_tac[ld_alloc_account_scratch_absent] >>
   qexists_tac `t.vs_alloca_next` >> simp[] >>
   rpt gen_tac >> strip_tac
-  >- decide_tac >>
+  >- decide_tac
+  >- (`t.vs_alloca_next + 32 <= fl` by metis_tac[] >> decide_tac) >>
   gvs[ld_site_bytes_def] >>
   first_x_assum drule >> disch_then drule >> strip_tac
   >- decide_tac >>
@@ -47,13 +50,14 @@ Theorem ld_live_scratch_separation:
   allocas_non_overlapping t /\ alloca_next_valid t /\ allocas_from lo t /\
   lo <= t.vs_alloca_next /\ t.vs_alloca_next < dimword (:256) /\
   (id NOTIN A ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (id NOTIN A ==> t.vs_alloca_next + 32 <= fl) /\ t.vs_alloca_next <= fl /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt + sz <= lo \/
     (?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME (bt,sz))) ==>
   ?p. lo <= p /\ p + 32 < dimword (:256) /\
     ((FLOOKUP t.vs_allocas id = NONE /\ p = t.vs_alloca_next) \/
       FLOOKUP t.vs_allocas id = SOME (p,32)) /\
-    (!aa bb. ((aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb) ==>
+    (!aa bb. ((aa=bb /\ aa<lo) \/ (aa=bb /\ fl <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb) ==>
       bb < p \/ p + 32 <= bb)
 Proof
   strip_tac >> irule ld_live_scratch_separation_floor >>

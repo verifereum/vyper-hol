@@ -42,10 +42,10 @@ Proof
   strip_tac >>
   `raw_shape_free_program tops` by
     metis_tac[loweringShapeSourceTheory.supported_program_raw_shape_free_program] >>
-  `o1_source_unit_ok unit` by
-    (fs[e2eDefsTheory.source_typing_ok_def] >>
-     drule_all lower_vyper_runtime_unit_source_unit_ok >> simp[]) >>
-  metis_tac[o1PipelineCorrectTheory.o1_source_unit_ok_no_dalloca]
+  irule o1PipelineCorrectTheory.every_no_dalloca >>
+  fs[e2eDefsTheory.source_typing_ok_def] >>
+  drule_all loweringShapeSourceTheory.lower_vyper_runtime_unit_no_dalloca_checked >>
+  simp[]
 QED
 
 Theorem registration_fmp_room_necessary:
@@ -227,7 +227,7 @@ Proof
      simp[fcgDefsTheory.fcg_path_def, venomInstTheory.ctx_fn_names_def] >>
      metis_tac[lookup_function_mem]) >>
   reverse conj_tac
-  >- (fs[lowering_context_ok_def] >> decide_tac) >>
+  >- metis_tac[lowering_context_ok_alloca_budget] >>
   simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> conj_tac
   >- (rpt strip_tac >>
       `reachable_fcg_acyclic ctx (fcg_analyze ctx)` by

@@ -7,7 +7,7 @@ Ancestors
 
 (* A saved allocation has an occurrence owner among the suspended frames. *)
 Theorem readonly_saved_allocation_owner:
-  !U stk. occurrence_saved_ok B U stk /\ MEM f stk /\
+  !U stk. occurrence_saved_ok (dimword (:256)) B U stk /\ MEM f stk /\
     FLOOKUP f.cf_state.vs_allocas aid = SOME q ==>
     ?owner. MEM owner (MAP (\u. u.of_owner) U) /\
             FLOOKUP B (owner,aid) = SOME q
@@ -110,7 +110,7 @@ Theorem readonly_reachable_static:
   MEM inst (fn_insts fn)
 Proof
   strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
   `active_inst fn inst s` by
     (gvs[Once frame_reachable_cases] >> metis_tac[]) >>
   `MEM inst (fn_insts fn)` by

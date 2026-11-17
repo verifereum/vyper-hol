@@ -407,8 +407,5 @@ Proof
   >- (rpt strip_tac >>
       `b + sz <= s.vs_alloca_next` by metis_tac[] >>
       `i IN tn.t_mem` by (first_x_assum irule >> simp[]) >>
-      metis_tac[]) >>
-  rpt strip_tac >>
-  `i IN tn.t_mem` by (first_x_assum irule >> simp[]) >>
-  metis_tac[]
+      metis_tac[])
 QED

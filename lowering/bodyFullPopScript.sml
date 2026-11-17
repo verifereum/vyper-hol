@@ -790,7 +790,16 @@ Proof
     (load ++ (chunk ++ (store ++ tail))) (s with vs_inst_idx := k) H tm` by
     metis_tac[inst_seq_ptr_uniform_append] >>
   qexistsl_tac [`u'`, `H`, `tm`] >>
-  conj_tac >- metis_tac[run_inst_seq_append] >>
+  conj_tac >- (qpat_assum `memory_pop_insts (Var p) id esz x0 x1 x2 x3 x4 x5 x6 = _`
+      SUBST1_TAC >>
+    qpat_assum `run_inst_seq load s = OK s1`
+      (mp_then Any (qspec_then `chunk ++ (store ++ tail)` SUBST1_TAC)
+        run_inst_seq_append) >>
+    qpat_assum `run_inst_seq chunk s1 = OK u`
+      (mp_then Any (qspec_then `store ++ tail` SUBST1_TAC) run_inst_seq_append) >>
+    qpat_assum `run_inst_seq store u = OK s2`
+      (mp_then Any (qspec_then `tail` SUBST1_TAC) run_inst_seq_append) >>
+    first_assum ACCEPT_TAC) >>
   conj_tac >- (gen_tac >> first_x_assum (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
   fs[op_prov_def] >> metis_tac[]
 QED
@@ -1715,6 +1724,8 @@ Resume pop_vv_full_of_target[memory_suffix]:
   >- (PURE_REWRITE_TAC [exprSimVVFrameTheory.vv_post_inst_idx] >>
       qpat_assum `fin = mid with scopes := updated_scopes`
         (fn th => PURE_REWRITE_TAC [th]) >>
+      qpat_assum `Abbrev (result = _)`
+        (fn th => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
       irule (pop_memory_live_suffix_post |>
         Q.INST [`e` |-> `Pop ann bt`] |>
         SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
@@ -1750,6 +1761,7 @@ Resume pop_vv_full_of_target[memory_suffix]:
         (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
   conj_tac >- suspend "memory_ghost" >>
   conj_tac >- suspend "memory_pointer" >>
+  conj_tac >- simp[Abbr `result`, NoAsms] >>
   simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
   conj_tac >- suspend "memory_buffer" >>
   irule ghost_kept_at_clean_suffix >>
@@ -2431,6 +2443,7 @@ Resume pop_vv_full_of_target[storage_positive]:
   conj_tac >- simp[] >> conj_tac >- simp[nested_pop_suffix_def] >>
   conj_tac >- suspend "storage_history" >> conj_tac >- simp[] >>
   conj_tac >- suspend "storage_ghost" >> conj_tac >- suspend "storage_pointer" >>
+  conj_tac >- simp[Abbr `result`, NoAsms] >>
   Cases_on `tr` >> simp[contextTheory.vv_location_def,contextTheory.mk_ptr_def] >>
   irule ghost_kept_at_clean_suffix >>
   qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1` (irule_at Any) >>
@@ -2486,7 +2499,8 @@ Resume pop_vv_full_of_target[storage_vv]:
   PURE_REWRITE_TAC [exprSimVVFrameTheory.vv_post_inst_idx] >>
   irule nested_pop_suffix_vv_post >>
   qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[Abbr `result`] >> qexists_tac `last_slot` >> simp[]
+  simp[Abbr `result`, vv_place_ptr_def, contextTheory.mk_ptr_def,
+    slot_loc_def, eval_operand_def]
 QED
 
 Resume pop_vv_full_of_target[storage_history]:

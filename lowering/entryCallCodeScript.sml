@@ -30,8 +30,8 @@ QED
 
 Theorem entry_code_stage_intcall_args:
   !args flags tys.
-    (!e ce ty. MEM e args ==>
-      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+    (!e ty. MEM e args ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stage_intcall_args cfn cenv args flags tys)
 Proof
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem entry_code_ext_call_kwarg:
-  (!ce ty. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  (!ty. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_ext_call_kwarg cfn cenv rt k e)
 Proof
@@ -69,8 +69,8 @@ Proof
 QED
 
 Theorem entry_code_ext_call_kwargs:
-  !es ks. (!e ce ty. MEM e es ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+  !es ks. (!e ty. MEM e es ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_ext_call_kwargs cfn cenv rt ks es)
 Proof
@@ -178,15 +178,22 @@ Proof
 QED
 
 Theorem entry_code_intcall:
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) /\
+  (!e et. MEM e (omitted_defaults cenv (nsid_to_string fid) (LENGTH args)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (cfn (cenv_without_defaults cenv (nsid_to_string fid)) et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty (IntCall fid) args default_ret)
 Proof
   strip_tac >>
   `!flags tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stage_intcall_args cfn cenv args flags tys)`
-    by simp[entry_code_stage_intcall_args] >>
+    by (irule entry_code_stage_intcall_args >> simp[] >> metis_tac[]) >>
+  `!flags tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stage_intcall_args cfn (cenv_without_defaults cenv (nsid_to_string fid))
+       (omitted_defaults cenv (nsid_to_string fid) (LENGTH args)) flags tys)`
+    by (irule entry_code_stage_intcall_args >> simp[] >> metis_tac[]) >>
   rw[entry_preserves_code_def, compile_call_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   fs[entry_preserves_code_def] >>
@@ -197,14 +204,15 @@ Proof
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_multi_op)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_void)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_store_multi_results) >>
-  qpat_x_assum `!flags tys st x st'. _` drule_all >> strip_tac >>
+  rpt (qpat_x_assum `!flags tys st x st'. _` (fn th =>
+    drule_all th >> strip_tac)) >>
   metis_tac[]
 QED
 
 Theorem entry_code_ext_call_args:
   !tys es.
-    (!e ce ty. MEM e es ==>
-      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+    (!e ty. MEM e es ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv ty e)) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_ext_call_args cfn cenv kw_es tys es)
 Proof
@@ -219,8 +227,8 @@ Proof
 QED
 
 Theorem entry_code_extcall:
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty (ExtCall static skip (fname, tys, rt) opts)
       args default_ret)
@@ -244,7 +252,7 @@ Proof
       (compile_ext_call_kwargs cfn cenv rt opts (DROP (LENGTH tys) t))` by
     (irule entry_code_ext_call_kwargs >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
   fs[entry_preserves_code_def] >>
-  qpat_x_assum `!e ce et. e = h \/ MEM e t ==> _` kall_tac >>
+  qpat_x_assum `!e et. e = h \/ MEM e t ==> _` kall_tac >>
   `entry_code_pred (\i. i.inst_opcode <> DALLOCA) st3` by metis_tac[] >>
   Cases_on `gas_opt` >> fs[optionTheory.option_case_def] >>
   rpt IF_CASES_TAC >> fs[] >>
@@ -257,8 +265,8 @@ Proof
 QED
 
 Theorem entry_code_send:
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty (Send hasgas) args default_ret)
 Proof
@@ -278,7 +286,7 @@ Proof
      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
        (lower_value cfn cenv et e)` by
     (rpt strip_tac >> irule entry_code_lower_value >> gvs[]) >>
-  qpat_x_assum `!e ce et. _ ==> _` kall_tac >>
+  qpat_x_assum `!e et. _ ==> entry_preserves_code _ (cfn _ _ _)` kall_tac >>
   fs[entry_preserves_code_def] >>
   Cases_on `t'` >> gvs[] >>
   gvs[AllCaseEqs()] >>
@@ -294,15 +302,19 @@ QED
 
 Theorem entry_code_supported_call:
   supported_effect_expr tops (Call source_ty ct args default_ret) /\
-  (!e ce et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) /\
+  (!fid e et. ct = IntCall fid /\
+    MEM e (omitted_defaults cenv (nsid_to_string fid) (LENGTH args)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (cfn (cenv_without_defaults cenv (nsid_to_string fid)) et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty ct args default_ret)
 Proof
   Cases_on `ct` >> Cases_on `default_ret` >>
   simp[supported_effect_expr_def] >> rpt strip_tac
   >~ [`compile_call _ _ _ _ (IntCall _) _ _`]
-    >- (irule entry_code_intcall >> simp[])
+    >- (irule entry_code_intcall >> simp[] >> metis_tac[])
   >~ [`compile_call _ _ _ _ (ExtCall _ _ p _) _ _`]
     >- (PairCases_on `p` >> irule entry_code_extcall >> simp[]) >>
   irule entry_code_send >> simp[]

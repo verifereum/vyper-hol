@@ -127,6 +127,23 @@ Resume literal_buffer_full_vv[posts]:
   simp[ptr_vv_ok_def, ptr_mem_ok_def, ptr_buf_ok_def,
        read_result_def, return_def, eval_operand_def, lookup_var_def,
        op_prov_def] >>
+  reverse conj_tac
+  >- (strip_tac >>
+      drule_all (SIMP_RULE (srw_ss() ++ ARITH_ss) []
+        literal_bytelike_alloca_mem) >> strip_tac >>
+      mp_tac (SIMP_RULE (srw_ss() ++ ARITH_ss) []
+        (Q.SPECL [`func`, `cenv`, `cx`, `es`, `bs`, `sa`, `sb`,
+                  `buf`, `s0`, `ctx`]
+          (INST_TYPE [alpha |-> ``:256``] literal_bytelike_run))) >>
+      (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
+      simp[vv_own_def, base_ptr_def, read_result_def, return_def,
+           eval_operand_def, lookup_var_def] >>
+      disj1_tac >> qexists_tac `sa.cs_next_id` >>
+      simp[] >> qx_genl_tac [`name`, `lb`, `lsz`] >> strip_tac >>
+      qpat_x_assum `!name a len. local_region _ _ t name a len ==> _`
+        (qspecl_then [`name`, `lb`, `lsz`]
+          (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def])) >>
+      gvs[loweringStateRelDefsTheory.local_region_def, lookup_var_def]) >>
   rpt strip_tac >> irule val_in_memory_footprint_agree >>
   simp[] >> qexists_tac `t.vs_memory` >>
   reverse conj_tac >- metis_tac[] >>

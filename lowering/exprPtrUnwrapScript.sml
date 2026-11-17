@@ -7,8 +7,6 @@
  *
  * TOP-LEVEL:
  *   expr_sim_ptr_of_vv -- expr_vv_sim_ptr gives expr_sim_ptr
- *   expr_vv_sim_ptr_stack -- expr_sim_ptr gives expr_vv_sim_ptr when
- *     compile_expr leaves a stack value
  *)
 Theory exprPtrUnwrap
 Ancestors
@@ -210,13 +208,3 @@ Resume expr_sim_ptr_of_vv[unwrap]:
   goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >> simp[]
 QED
 Finalise expr_sim_ptr_of_vv
-
-Theorem expr_vv_sim_ptr_stack:
-  !d ctx PG func cenv cx ty e es.
-    expr_sim_ptr d ctx PG func cenv cx ty e es /\
-    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
-    expr_vv_sim_ptr d ctx PG func cenv cx ty e es
-Proof
-  metis_tac[exprStackPtrTheory.expr_vv_sim_stack_ptr]
-QED

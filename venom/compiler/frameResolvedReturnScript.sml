@@ -14,6 +14,8 @@ Proof
   gvs[resolved_config_ok_def, resolved_stack_ok_def] >>
   `post.vs_allocas = f.cf_state.vs_allocas` by
     (drule return_bind_cache >> simp[]) >>
+  `post.vs_initial_fmp = f.cf_state.vs_initial_fmp` by
+    (drule ctxLookupAgreeHelpersTheory.bind_outputs_initial_fmp >> simp[]) >>
   simp[] >> metis_tac[resolved_frame_restrict]
 QED
 

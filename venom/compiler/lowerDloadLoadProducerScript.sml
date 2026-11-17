@@ -27,16 +27,18 @@ Theorem ld_load_semantic_backward:
   allocas_non_overlapping t0 /\ alloca_next_valid t0 /\ allocas_from lo t0 /\
   lo <= t0.vs_alloca_next /\ t0.vs_alloca_next < dimword (:256) /\
   (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 <= dyn_floor CS s) /\
+  t0.vs_alloca_next <= dyn_floor CS s /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt + sz <= lo \/
     (?j. j NOTIN keys /\ FLOOKUP t0.vs_allocas j = SOME (bt,sz))) /\
-  ld_byte_rel (\aa bb. (aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb)
+  ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
     tn.t_mem un.t_mem (\aa. read_memory aa 1 s) (\bb. read_memory bb 1 t0) ==>
   ?z. step_inst fuel CS inst s = OK z /\
     ld_owned_vars V E (ld_set_prov AG [out] NONE)
       (ld_set_prov (ld_set_prov AH [bv] NONE) [out] NONE)
       (step_taint inst s z tn) u z t /\
-    ld_byte_rel (\aa bb. (aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb)
+    ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
       (step_taint inst s z tn).t_mem u.t_mem
       (\aa. read_memory aa 1 z) (\bb. read_memory bb 1 t) /\
     ld_alloc_account keys d0 (a.inst_id INSERT A) z t /\
@@ -48,7 +50,7 @@ Proof
   disch_then (qspecl_then [`fuel`] strip_assume_tac) >>
   `!v. off = Var v ==> v <> av` by metis_tac[] >>
   drule_all ld_live_load_memory >>
-  disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >> gvs[] >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >> gvs[] >>
   drule_all (SRULE [] ld_load_completed_account) >> strip_tac >>
   simp[] >>
   ho_match_mp_tac (Q.INST [`n` |-> `4`] ld_load_prefix_live_representation) >>

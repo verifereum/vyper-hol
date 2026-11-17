@@ -254,7 +254,7 @@ Theorem compile_slice_case = exprSimSliceTheory.compile_slice_case
 
 Theorem compile_extract32_case = exprSimExtract32Theory.compile_extract32_case
 
-(* uint2str(x): with buf the buffer (32 + 32 * word_size n bytes, n >= 78
+(* uint2str(x): with buf the buffer (32 + 32 * word_size n bytes,
    by typing) and i digits stored so far, the k-th digit from the right
    (k < i) sits at buf + n + 31 - k, written by MSTORE at buf + n - k,
    whose zero bytes all lie below the digits stored before it.  The length
