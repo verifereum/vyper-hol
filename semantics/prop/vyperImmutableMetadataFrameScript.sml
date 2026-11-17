@@ -194,10 +194,15 @@ Proof
   metis_tac[eval_metadata_frame_with_results]
 QED
 
-Theorem eval_expr_results_immutable_metadata_frame:
-  eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st'
+Theorem eval_create_operands_immutable_metadata_frame:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (res,st') ==> immutable_metadata_frame st st'
 Proof
-  metis_tac[eval_metadata_frame_with_results]
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[raise_def] >>
+  metis_tac[eval_create_preserves_scopes_immutables, immutable_metadata_frame_eq]
 QED
 
 Theorem eval_expr_immutable_metadata_frame:
