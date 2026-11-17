@@ -32,6 +32,7 @@ Ancestors
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedOperational
+  dftPacketRootedPlainStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
