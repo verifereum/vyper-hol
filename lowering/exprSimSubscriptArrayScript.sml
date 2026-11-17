@@ -717,7 +717,9 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
     (`well_typed_expr env obj /\
       (!id vt. FLOOKUP env.var_types id = SOME vt ==>
         ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz))` by
-       fs[expr_body_pre_def, expr_sim_inv_def] >>
+       (qpat_assum `expr_body_pre cenv cx env obj es` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[expr_body_pre_def, expr_sim_inv_def]) >>
      drule_all exprReasonOperandTheory.compile_expr_reason_uniform >>
      disch_then (qspec_then `ty` mp_tac) >>
      simp[exprReasonOperandTheory.reason_uniform_shape_def] >> strip_tac >>
@@ -833,9 +835,11 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
        vyperTypeInvariantsTheory.runtime_place_typed_def,
        vyperStateTheory.place_type_value_def, vyperStateTheory.return_def] >>
   disch_then drule >> strip_tac >>
-  `env.type_defs = get_tenv cx` by fs[expr_body_pre_def, expr_sim_inv_def,
+  `env.type_defs = get_tenv cx` by
+    (qpat_assum `expr_sim_inv cenv cx env es_end` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[expr_sim_inv_def,
       vyperTypeInvariantsTheory.env_consistent_def,
-      vyperTypeInvariantsTheory.env_context_consistent_def] >>
+      vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   gvs[contextTheory.vv_location_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   qpat_assum `eval_expr cx idx _ = _`
     (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac exprSimSourceTheory.expr_body_pre_runtime_typed) >>
