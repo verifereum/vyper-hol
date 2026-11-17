@@ -50,6 +50,7 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
+  dftPacketBlockTableSplice
   dftPacketTerminalPhi
   dftPacketSuccessorObservation
   dftPacketExistingPathRows
