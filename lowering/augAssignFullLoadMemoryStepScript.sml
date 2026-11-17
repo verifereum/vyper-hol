@@ -6,6 +6,12 @@ Ancestors
   venomExecSemantics venomInstProofs venomInst venomState stateFrame
   loweringStateRelDefs compileEnv finite_map words pred_set list arithmetic
 
+val load_steps = LIST_CONJ (List.filter (fn th =>
+  let val guard = #1 (dest_imp (#2 (strip_forall (concl th))))
+  in List.exists (fn opc => aconv (rhs guard) opc)
+       [``MLOAD``, ``SLOAD``, ``TLOAD``]
+  end) (CONJUNCTS step_inst_base_opcode_eqs));
+
 Theorem augassign_mload_joint_step:
   !K DF lo explicit ctx func PG sa arg a s G tn old sb.
   let x = STRING #"%" (toString sa.cs_next_var);
@@ -59,7 +65,7 @@ Proof
       goal_assum (drule_at Any) >>
       simp[Abbr `i`, mk_inst_def, is_terminator_def,
         below_frontier_MLOAD, inst_dload_in_section_other,
-        step_inst_base_opcode_eqs, exec_read1_def, Abbr `raw`] >>
+        load_steps, exec_read1_def, Abbr `raw`] >>
       qexistsl_tac [`sa`,`sb`] >> simp[Abbr `x`, mk_inst_def]) >>
   `op_taint tn1 (Var x) = {} /\ tn1.t_mem = tn.t_mem /\
    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
