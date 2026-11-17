@@ -214,6 +214,8 @@ Proof
   strip_tac >>
   `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
     metis_tac[layout_cut_safe_whole_run] >>
+  `(ctx_has_dalloca C ==> ?eom. max_live_eom C' = SOME eom /\
+      eom <= w2n vs0.vs_initial_fmp)` by simp[] >>
   drule_all layout_stage_selected_run_fuel >> strip_tac >>
   qexists `r'` >> simp[] >> rpt strip_tac >>
   irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
