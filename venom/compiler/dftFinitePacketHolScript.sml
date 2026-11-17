@@ -38,6 +38,8 @@ Ancestors
   dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
+  dftPacketPseudoHistory
+  dftPacketPseudoPrefixFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketReturnLocal
