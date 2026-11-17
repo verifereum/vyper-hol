@@ -4,7 +4,8 @@ Ancestors
   bodyImmutableAugAssignFacts bodyImmutableAugAssignExec augAssignPlaceSourceMemory
   augAssignPlaceSourcePrefix vyperTypeEnv vyperTypeInvariants vyperTypeValues
   stmtSimAugAssignPlaceMemory stmtSimAugAssign gasContext vyperInterpreter
-  loweringPosts vyperState
+  loweringPosts vyperState exprBopBytes bodyBinopFragMemory
+  bodyBinopFamiliesMemory valueEncodingProps exprSimProps exprSimSource
 
 Theorem immutable_augassign_root_replay:
   get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE /\
@@ -77,8 +78,11 @@ Theorem immutable_augassign_rhs_source_typed:
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
        value_has_type tv v)
 Proof
-  strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
-  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >> simp[] >>
+  strip_tac >> drule_all aug_place_rhs_typed_memory_source >>
+  disch_then (qspecl_then [`func`,`ctx`] strip_assume_tac) >>
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >> simp[] >>
   qmatch_asmsub_abbrev_tac `gas_admissible (vyperState$bind a k) _ es` >>
   Cases_on `k rhs ee` >> rename1 `k rhs ee = (res,ff)` >>
   `stmt_res_ok lctx res` by
@@ -92,7 +96,7 @@ Proof
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       tv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >>
   qpat_x_assum `k rhs ee = _` mp_tac >>
   simp[Abbr `k`, bind_def, lift_sum_def] >>
@@ -120,27 +124,24 @@ Theorem immutable_augassign_rhs_source:
   (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
        value_has_type tv v)
 Proof
-  strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
-  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >> simp[] >>
-  qmatch_asmsub_abbrev_tac `gas_admissible (vyperState$bind a k) _ es` >>
-  Cases_on `k rhs ee` >> rename1 `k rhs ee = (res,ff)` >>
-  `stmt_res_ok lctx res` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gas_admissible_def] >> disch_then (qspec_then `gs` mp_tac) >>
-     simp[bind_def, Abbr `a`] >> metis_tac[]) >>
-  irule aug_place_bop_write_result_ok >> simp[] >>
-  goal_assum (drule_at Any) >>
-  qexistsl [`ff`, `ImmutablePlace src id []`] >>
-  `!bs. cur <> BytesV bs` by (Cases_on `cur` >> gvs[loweringSliceTheory.word_value_def]) >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
-    case evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      tv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
-  simp[] >>
-  qpat_x_assum `k rhs ee = _` mp_tac >>
-  simp[Abbr `k`, bind_def, lift_sum_def] >>
-  Cases_on `evaluate_binop
-    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-    tv bop cur rhs` >> simp[return_def, raise_def]
+  strip_tac >>
+  `((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs)` by
+    metis_tac[word_value_not_bytes] >>
+  drule_all immutable_augassign_rhs_source_typed >>
+  disch_then (qspecl_then [`func`,`ctx`] strip_assume_tac) >>
+  `well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    metis_tac[stmtSimAugAssignPlaceTheory.aug_place_typing] >>
+  `word_value_type ty /\ word_value_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_word_value] >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  strip_tac >> gvs[] >>
+  `binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty;expr_type e] cur rhs ee` by
+    (rewrite_tac[binop_frag_val_mem_def] >>
+     irule binop_frag_mem_word >>
+     gvs[typed_val_to_w256_word_value] >>
+     metis_tac[word_value_type_word,word_value_type_typed]) >>
+  simp[]
 QED

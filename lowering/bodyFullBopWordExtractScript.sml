@@ -299,9 +299,17 @@ Proof
   drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `fin`, `mid`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  `post_value_type cenv e1 = expr_type e1 /\
+   post_value_type cenv e2 = expr_type e2` by
+    (conj_tac >> irule post_value_type_word >> first_assum ACCEPT_TAC) >>
   `eval_operand x t = SOME (typed_val_to_w256 tv1 v1) /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2)` by
-    (gvs[expr_post_def, post_value_type_word] >>
+    (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
+       (assume_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
+        REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _`
+       (assume_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
+        REWRITE_RULE [expr_post_def]) >> fs[] >>
      metis_tac[expr_val_rel_typed]) >>
   `eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (irule eval_operand_frame >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -317,5 +325,5 @@ Proof
       run_inst_seq (emitted_insts s2 sb) u = OK r /\
       expr_val_rel cx ann v op r` by
     (irule compile_bytes_binop_run >> simp[] >> metis_tac[]) >>
-  simp[]
+  simp[] >> qexists_tac `B` >> simp[]
 QED
