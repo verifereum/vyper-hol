@@ -129,6 +129,13 @@ End
 
 val () = cv_auto_trans record_request_def;
 
+Theorem record_request_changed:
+  record_request rq rqs <> rqs
+Proof
+  simp[record_request_def] >> strip_tac >>
+  pop_assum (mp_tac o AP_TERM ``LENGTH:call_request list -> num``) >> simp[]
+QED
+
 (* A failed CREATE keeps its effects on the creator (its nonce); a failed
  * message call, delegate or not, has none. *)
 Definition adopt_outcome_def:
