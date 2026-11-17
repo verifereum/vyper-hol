@@ -181,6 +181,44 @@ Proof
   `MAP (\f. FLAT (THE (FLOOKUP out (a,f)))) ds =
    MAP (\f. FLAT (THE (FLOOKUP tab (a,f)))) ds` by
     (irule MAP_CONG >> simp[]) >>
+  `!i q hh ss dd ee rr. 0 < i /\ i < L /\
+    FLOOKUP calls (DROP (SUC i) b,FST (EL i b),SND (EL i b)) =
+      SOME (q,hh,ss,dd,ee,rr) ==> q = EL i inds` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!i. i < L ==> ?sfi tfi. _`
+       (qspec_then `i` (drule_then strip_assume_tac)) >>
+     `i <> 0` by decide_tac >>
+     qpat_x_assum `if i = 0 then _ else _` mp_tac >>
+     simp[] >> strip_tac >>
+     qpat_assum `FLOOKUP calls _ = SOME (q,hh,ss,dd,ee,rr)` mp_tac >>
+     qpat_assum `FLOOKUP calls _ = SOME (EL i inds,_,_,_,_,_)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `!i sfi tfi inci enti ord ri ni. 0 < i /\ i < L /\
+    FLOOKUP acts (DROP i b) = SOME (sfi,tfi,inci,enti,ord,ri,ni) ==>
+    ord = EL i orders` by
+    (rpt gen_tac >> strip_tac >>
+     `i-1 < L /\ SUC (i-1) = i` by decide_tac >>
+     qpat_assum `!i. i < L ==> ?sfi tfi. _`
+       (qspec_then `i-1` (drule_then strip_assume_tac)) >>
+     qpat_assum `FLOOKUP acts (DROP (SUC (i-1)) b) = _` mp_tac >>
+     qpat_assum `FLOOKUP acts (DROP i b) = _` mp_tac >>
+     qpat_assum `SUC (i-1) = i` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `!i. i < L /\ (a,e) = (DROP (SUC i) b,FST (EL i b)) ==>
+    LENGTH rows = LENGTH xs /\ EL i inds < LENGTH xs /\
+    (EL (EL i inds) xs).inst_id = SND (EL i b)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!i. i < L ==> ?sfi tfi. _`
+       (qspec_then `i` (drule_then strip_assume_tac)) >>
+     qpat_assum `FLOOKUP blocks (a,e) = _` mp_tac >>
+     qpat_assum `FLOOKUP blocks (DROP (SUC i) b,FST (EL i b)) = _` mp_tac >>
+     qpat_assum `FLOOKUP tab (a,e) = _` mp_tac >>
+     qpat_assum `FLOOKUP tab (DROP (SUC i) b,FST (EL i b)) = _` mp_tac >>
+     qpat_assum `LENGTH rowi = LENGTH xsi` mp_tac >>
+     qpat_assum `EL i inds < LENGTH xsi` mp_tac >>
+     qpat_assum `(EL (EL i inds) xsi).inst_id = _` mp_tac >>
+     qpat_assum `(a,e) = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
   `(d,cid)::p <> a` by metis_tac[] >>
   ntac 6 (conj_tac >- simp[FLOOKUP_UPDATE]) >>
   rpt gen_tac >> strip_tac >>
@@ -192,21 +230,71 @@ Proof
   >- (pop_assum strip_assume_tac >>
       drule_all call_suffix_child >> strip_tac >>
       `i < L` by metis_tac[] >>
-      qpat_assum `!i. i < L ==> ?sfi tfi. _`
-        (qspec_then `i` (drule_then strip_assume_tac)) >>
-      `FST (EL i b) = e /\ SND (EL i b) = selected_cid` by
-        metis_tac[pairTheory.FST,pairTheory.SND] >>
       `0 < i` by
         (Cases_on `i` >-
           (qpat_x_assum `_ = DROP 0 b` mp_tac >>
            pure_rewrite_tac[DROP_0] >> metis_tac[]) >> simp[]) >>
-      qpat_assum `!i. i < L ==> ?sfi tfi. _`
-        (qspec_then `i-1` mp_tac) >>
-      (impl_tac >- decide_tac) >> strip_tac >>
-      `SUC (i-1) = i` by decide_tac >>
-      qpat_x_assum `!i. i < L ==> ?sfi tfi. _` kall_tac >>
-      qpat_x_assum `!r. r < LENGTH xsi /\ _ ==> _` kall_tac >>
-      qpat_x_assum `!r. r < LENGTH xsi' /\ _ ==> _` kall_tac >>
-      gvs[] >> FAIL_TAC "live child") >>
-  FAIL_TAC "offpath child"
+      `FST (EL i b) = e /\ SND (EL i b) = selected_cid` by
+        metis_tac[pairTheory.FST,pairTheory.SND] >>
+      `qi = EL i inds` by metis_tac[] >>
+      `child_order = EL i orders` by metis_tac[] >>
+      `FLOOKUP tab (DROP (SUC i) b,FST (EL i b)) = SOME rows` by metis_tac[] >>
+      `EL i inds < LENGTH rows` by metis_tac[] >>
+      qpat_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)`
+        (qspecl_then [`i`,`rows`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)` kall_tac >>
+      qpat_assum `FLOOKUP out (DROP (SUC i) b,FST (EL i b)) = _` mp_tac >>
+      qpat_assum `a = DROP (SUC i) b` mp_tac >>
+      qpat_assum `FST (EL i b) = e` mp_tac >>
+      qpat_assum `(e,selected_cid)::a = DROP i b` mp_tac >>
+      qpat_assum `qi = EL i inds` mp_tac >>
+      qpat_assum `child_order = EL i orders` mp_tac >>
+      qpat_assum `EL i inds < LENGTH rows` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+      gvs[EL_LUPDATE]) >>
+  `!f. FLOOKUP out ((e,selected_cid)::a,f) =
+        FLOOKUP tab ((e,selected_cid)::a,f)` by
+    (gen_tac >> qpat_assum `!a e. _`
+       (qspecl_then [`(e,selected_cid)::a`,`f`] mp_tac) >>
+     (impl_tac >-
+       (conj_tac >- metis_tac[pairTheory.PAIR_EQ] >>
+        rpt strip_tac >>
+        `SUC i <= LENGTH b` by metis_tac[LESS_EQ] >>
+        metis_tac[pairTheory.PAIR_EQ])) >> simp[]) >>
+  `MAP (\f. FLAT (THE (FLOOKUP out ((e,selected_cid)::a,f)))) child_order =
+   MAP (\f. FLAT (THE (FLOOKUP tab ((e,selected_cid)::a,f)))) child_order` by
+    (irule MAP_CONG >> simp[]) >>
+  `EL qi (THE (FLOOKUP out (a,e))) = EL qi rows` suffices_by metis_tac[] >>
+  Cases_on `?i. i < L /\ (a,e) = (DROP (SUC i) b,FST (EL i b))`
+  >- (pop_assum strip_assume_tac >>
+      `EL i inds < LENGTH xs /\ LENGTH rows = LENGTH xs /\
+       (EL (EL i inds) xs).inst_id = SND (EL i b)` by metis_tac[] >>
+      `qi <> EL i inds` by
+        (strip_tac >>
+         `selected_cid = SND (EL i b)` by metis_tac[] >>
+         `i < LENGTH b /\ a = DROP (SUC i) b /\ e = FST (EL i b)` by
+           (qpat_assum `i < L` mp_tac >>
+            qpat_assum `L = LENGTH b` mp_tac >>
+            qpat_assum `(a,e) = _` mp_tac >>
+            POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+         `DROP i b = EL i b::DROP (SUC i) b` by metis_tac[DROP_CONS_EL] >>
+         `(e,selected_cid)::a = DROP i b` by metis_tac[pairTheory.PAIR] >>
+         `i <= LENGTH b` by decide_tac >> metis_tac[]) >>
+      `FLOOKUP tab (DROP (SUC i) b,FST (EL i b)) = SOME rows` by metis_tac[] >>
+      qpat_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)`
+        (qspecl_then [`i`,`rows`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)` kall_tac >>
+      qpat_assum `FLOOKUP out (DROP (SUC i) b,FST (EL i b)) = _` mp_tac >>
+      qpat_assum `(a,e) = _` mp_tac >>
+      qpat_assum `qi <> EL i inds` mp_tac >>
+      qpat_assum `qi < LENGTH xs` mp_tac >>
+      qpat_assum `LENGTH rows = LENGTH xs` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+      gvs[EL_LUPDATE]) >>
+  `FLOOKUP out (a,e) = FLOOKUP tab (a,e)` by
+    (qpat_assum `!a e. _` (qspecl_then [`a`,`e`] mp_tac) >>
+     (impl_tac >- metis_tac[pairTheory.PAIR_EQ]) >> simp[]) >>
+  simp[]
 QED
