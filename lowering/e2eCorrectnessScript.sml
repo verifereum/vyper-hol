@@ -235,19 +235,18 @@ Theorem e2e_vyper_to_evm_states:
          ctx ctx' vs_in vs_out /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
           venom_frame_rel es r es' (run_context fuel ctx' vs_out)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
              call_result_rel_at gobs tops am tx es r es')
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   Cases_on `source_exempt tops (call_external (SOME vs_in.vs_outcomes) gobs am tx)`
-  >- (disj2_tac >> disj2_tac >>
-      irule source_exempt_call_result_rel >> gvs[]) >>
+  >- (disj2_tac >> irule source_exempt_call_result_rel >> gvs[]) >>
   gvs[] >>
   drule_all external_call_result_rel_terminates >> strip_tac >>
   qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
