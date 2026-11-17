@@ -18,6 +18,9 @@ Ancestors
   tupleLoadProps fragExec fragGasOriginPtrLoop
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
+  tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr
+  assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
+  tupleTargetStoreProps vyperLookup
 
 val _ = Parse.hide "body";
 
@@ -946,6 +949,232 @@ QED
 Finalise body_assign_tuple_nonlocal_write_ready
 
 (* A source that is a widened aggregate call. *)
+(* One local write, at the current source scope, retains the tuple snapshot. *)
+Theorem body_assign_tuple_local_head_full_path:
+  compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [op] sa = ((),sb) /\
+  assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (INL (),es') /\
+  tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty entry.type /\
+  tuple_target_layout es.scopes (BaseTarget (NameTarget id)) ty entry.type v /\
+  find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+  lookup_var p s = SOME dw /\ local_ptrs_reserved cenv sa /\
+  local_region cenv es.scopes s id (w2n dw) cap /\
+  type_memory_size entry.type <= cap /\ lo <= w2n dw /\
+  ptr_covers G tn p s (type_memory_size entry.type) /\
+  w2n dw + type_memory_size entry.type < dimword (:256) /\
+  w2n dw + type_memory_size entry.type <= s.vs_alloca_next /\
+  value_has_type entry.type v /\ val_wf entry.type v /\
+  (if is_word_type ty then
+     eval_operand op s = SOME (typed_val_to_w256 entry.type v) /\ op_taint tn op = {}
+   else ?xs sw. op = Var xs /\ not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
+     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+       val_in_memory entry.type v (w2n sw) mem) /\
+     ptr_covers G tn xs s (type_memory_size entry.type) /\
+     w2n sw + type_memory_size entry.type < dimword (:256) /\
+     w2n sw + type_memory_size entry.type <= s.vs_alloca_next /\
+     (w2n sw + type_memory_size entry.type <= w2n dw \/
+      w2n dw + type_memory_size entry.type <= w2n sw)) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  (b + type_memory_size (TupleTV tvs) <= w2n dw \/
+   w2n dw + type_memory_size entry.type <= b) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b mem) ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    typed_copy_state_frame sa (w2n dw) (type_memory_size entry.type) s t /\
+    (!H D d. stmt_state_rel H ctx func cenv cx es s /\
+      ghost_inv_at D lo d cenv cx es G tn s ==>
+      stmt_state_rel H ctx func cenv cx es' t /\
+      ghost_inv_at D lo d cenv cx es' Gf tf t) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!name a len. local_region cenv es'.scopes t name a len <=>
+      local_region cenv es.scopes s name a len) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b mem) /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size entry.type) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+      (!name a len. local_region cenv es.scopes s name a len ==>
+        off + sz <= a \/ a + len <= off) ==>
+      mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory /\
+      (!i. off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `cenv.ce_var_type id = SOME ty /\
+   evaluate_type (get_tenv cx) ty = SOME entry.type /\
+   type_memory_bytes cenv ty = type_memory_size entry.type /\
+   entry.assignable /\
+   (is_word_type ty ==> store_lays_out entry.type entry.type v)` by
+    (gvs[tuple_target_aligned_local,tuple_target_layout_local]) >>
+  `es' = es with scopes := pre ++
+     (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest` by
+    (drule_all tuple_target_local_assignment >> simp[]) >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  drule_all tuple_store_local_singleton_code >> strip_tac >>
+  `?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    val_in_memory entry.type v (w2n dw) t.vs_memory /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+      val_in_memory entry.type v (w2n dw) mem) /\
+    typed_copy_state_frame sa (w2n dw) (type_memory_size entry.type) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size entry.type) ==>
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x))` by
+    (Cases_on `is_word_type ty`
+     >- suspend "word" >>
+     qpat_x_assum `if is_word_type ty then _ else _` mp_tac >>
+     asm_rewrite_tac[] >>
+     disch_then (qx_choose_then `xs` (qx_choose_then `sw`
+       (map_every assume_tac o CONJUNCTS))) >>
+     qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
+     `type_widens_to (get_tenv cx) ty ty` by simp[type_widens_to_refl] >>
+     qpat_x_assum `(if is_word_type ty then _ else _) sa = _` mp_tac >>
+     asm_rewrite_tac[] >> disch_tac >>
+     Q.SUBGOAL_THEN `type_memory_size entry.type = 0 \/
+       w2n sw + type_memory_size entry.type <= s.vs_alloca_next` assume_tac
+     >- simp[] >>
+     Q.SUBGOAL_THEN `type_memory_size entry.type = 0 \/
+       w2n dw + type_memory_size entry.type <= s.vs_alloca_next` assume_tac
+     >- simp[] >>
+     drule_all body_full_memory_store_path >>
+     disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+     qexistsl_tac [`t`,`Gf`,`tf`] >> simp[]) >>
+  suspend "post"
+QED
+
+Resume body_assign_tuple_local_head_full_path[word]:
+  qpat_x_assum `if is_word_type ty then _ else _` mp_tac >>
+  asm_rewrite_tac[] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `store_lays_out entry.type entry.type v` by metis_tac[] >>
+  `type_memory_size entry.type = 32` by fs[store_lays_out_def] >>
+  qpat_x_assum `(if is_word_type ty then _ else _) sa = _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    metis_tac[emit_void_same_blocks,same_blocks_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst sa.cs_next_id MSTORE [Var p;op] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qabbrev_tac `u = mstore (w2n dw) (typed_val_to_w256 entry.type v) s` >>
+  qabbrev_tac `ins = mk_inst sa.cs_next_id MSTORE [Var p;op] []` >>
+  qabbrev_tac `tf = step_taint ins s u tn` >>
+  `step_prov PG G ins u = G /\ tf.t_var = tn.t_var /\
+   tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+   tf.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` by
+    (simp[Abbr `tf`,Abbr `ins`,Abbr `u`] >>
+     irule mstore_ghost_frame >> simp[]) >>
+  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`,`G`,`tf`] >>
+  conj_tac
+  >- (gen_tac >>
+      `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+         step_prov PG G ins u,step_taint ins s u tn)` by
+        (qunabbrev_tac `ins` >>
+         irule (Q.INST [`i` |-> `mk_inst sa.cs_next_id MSTORE [Var p;op] []`]
+           fragGasSeqPtrTheory.straight_line_origin_ptr_edge |>
+           SIMP_RULE (srw_ss()) []) >>
+         simp[venomInstTheory.is_terminator_def,
+           below_frontier_MSTORE,eval_operand_def,Abbr `u`,
+           venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+           venomExecSemanticsTheory.exec_write2_def] >>
+         gvs[exprPtrUnwrapCopyEdgesTheory.ptr_inst_ok_mstore_tainted]) >>
+      `~u.vs_halted` by simp[Abbr `u`,mstore_def] >>
+      qpat_x_assum `gas_origin_ptr_edge _ _ _ _` mp_tac >>
+      simp[] >> strip_tac >>
+      drule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
+      disch_then (qspec_then `[]` (irule o SRULE [])) >>
+      irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]) >>
+  conj_tac
+  >- (simp[Abbr `u`] >> fs[store_lays_out_def]) >>
+  conj_tac
+  >- (simp[Abbr `u`] >> rpt strip_tac >>
+      irule store_lays_out_robust_ptr >> goal_assum (drule_at Any) >> simp[]) >>
+  `tf.t_imm = tn.t_imm` by
+    (simp[Abbr `tf`,Abbr `ins`] >>
+     irule (cj 3 decoderGhostFramePtrTheory.step_taint_nonmemory_frame) >> simp[]) >>
+  simp[Abbr `u`,typed_copy_mstore_state_frame,mstore_def,
+    write_memory_with_expansion_def,lookup_var_def,op_taint_def]
+QED
+
+Resume body_assign_tuple_local_head_full_path[post]:
+  qexistsl_tac [`t`,`Gf`,`tf`] >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
+        (qspec_then `D` assume_tac) >>
+      drule_all body_assign_tuple_local_copy_snapshot_post >>
+      asm_rewrite_tac[] >> strip_tac >> simp[]) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    fs[typed_copy_state_frame_def,venom_state_component_equality] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (drule tuple_target_local_domain_frame >>
+      disch_then (qspec_then `v` assume_tac) >>
+      simp[] >> rpt gen_tac >>
+      `local_region cenv
+        (pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
+        t name a len <=> local_region cenv es.scopes t name a len` by
+        metis_tac[tupleMemoryFrameTheory.local_region_scopes_domain] >>
+      asm_rewrite_tac[] >> irule local_region_lookup_cong >>
+      rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size entry.type) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
+     simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (drule val_footprint_le >> strip_tac >>
+      `!i. b <= i /\ i < b + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) ==>
+        ~(w2n dw <= i /\ i < w2n dw + type_memory_size entry.type)` by
+        (rpt strip_tac >> decide_tac) >>
+      qpat_assum `!mem. _ ==> val_in_memory (TupleTV tvs) _ b mem`
+        (mp_then (Pos (el 5)) mp_tac robust_val_in_memory_exterior_frame) >>
+      disch_then (qspecl_then [`tf.t_mem`, `t.vs_memory`,
+        `{i | w2n dw <= i /\ i < w2n dw + type_memory_size entry.type}`] mp_tac) >>
+      simp[]) >>
+  conj_tac >- (rpt strip_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _`
+    (qspecl_then [`id`,`w2n dw`,`cap`] mp_tac) >>
+  asm_rewrite_tac[] >> disch_tac >> conj_tac
+  >- (qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
+      simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
+      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  rpt strip_tac >>
+  `~(w2n dw <= i /\ i < w2n dw + type_memory_size entry.type)` by decide_tac >>
+  metis_tac[]
+QED
+
+Finalise body_assign_tuple_local_head_full_path
+
 Theorem body_assign_tuple_widened_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
