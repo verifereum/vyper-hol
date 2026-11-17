@@ -326,8 +326,8 @@ Theorem well_typed_binop_shift_supported:
   supported_binop op (expr_type a) (expr_type b) lb ne \/
   (supported_nonnegative_literal b /\ ~is_uint_type (expr_type b))
 Proof
-  rpt strip_tac >>
-  Cases_on `expr_type a = BaseT (BytesT (Fixed 32))`
+  rw[] >>
+  (Cases_on `expr_type a = BaseT (BytesT (Fixed 32))`
   >- (disj1_tac >>
       Cases_on `expr_type b = BaseT (BytesT (Fixed 32))`
       >- gvs[supported_binop_def] >>
@@ -343,7 +343,7 @@ Proof
     by metis_tac[well_formed_unsigned_signed] >>
   gvs[well_typed_binop_def, supported_binop_def, builtin_operands_ok_def,
       shift_amount_ok_def, nonneg_int_literal_supported] >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 (* Row 38: == and != never take aggregates; bytestrings (row 36), flags
