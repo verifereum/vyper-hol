@@ -8,7 +8,9 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
-  bodyFullAnnAssignWord bodyInvNoDalloca loweringPosts
+  bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
+  bodyDeclCopyMemory vyperTypeInvariants allocLimits
+  bodyInvNoDalloca loweringPosts
   vyperTypeCallGraph supportedExprTraverse
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimSource
@@ -234,7 +236,41 @@ Theorem body_annassign_widened_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by
+    gvs[type_stmt_annassign, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_full_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by fs[supported_stmt_annassign] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
+       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    fs[stmt_exprs_ok_def, alloc_limits_stmt_def, type_alloc_ok_def] >>
+  irule annassign_widened_full_execution >>
+  conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_installation_post >>
+  conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_assign_path >>
+  simp[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all annassign_full_declared_rhs_pre >> strip_tac >>
+  drule_all declare_local_memory_types_mem >> strip_tac >>
+  simp[] >> metis_tac[body_expr_full_ok_def]
 QED
 
 (* Any other declared type. *)
