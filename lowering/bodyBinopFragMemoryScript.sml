@@ -280,7 +280,8 @@ Theorem binop_frag_mem_post_success:
 Proof
   strip_tac >> irule binop_frag_mem_post_straight >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  strip_tac >> disj1_tac >> qexistsl_tac [`v`, `w`] >> simp[]
+  strip_tac >> disj1_tac >> qexistsl_tac [`v`, `w`] >> simp[] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem binop_frag_mem_straight:
@@ -307,7 +308,8 @@ Proof
   irule binop_frag_mem_post_straight >>
   conj_tac >- first_assum ACCEPT_TAC >>
   strip_tac >> first_x_assum drule >> strip_tac
-  >- (disj1_tac >> qexistsl_tac [`v`, `val_to_w256 v`] >> simp[]) >>
+  >- (disj1_tac >> qexistsl_tac [`v`, `val_to_w256 v`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
   disj2_tac >> metis_tac[]
 QED
 
