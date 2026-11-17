@@ -83,7 +83,12 @@ Proof
    (!id t. FLOOKUP tenv.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz))` by
     metis_tac[expr_body_pre_def, expr_sim_inv_def] >>
-  drule_all compile_expr_result_type_options >> strip_tac >>
+  `vv_type vv = expr_type e \/ vv_type vv = lowered_value_type cenv e` by
+    (drule_all compile_expr_reason_uniform >>
+     simp[reason_uniform_shape_def] >> strip_tac >>
+     first_x_assum (qspec_then `expr_type e` strip_assume_tac) >>
+     first_x_assum drule >> Cases_on `vv` >>
+     gvs[reason_result_shape_def, vv_type_def] >> metis_tac[]) >>
   Cases_on `lowered_value_type cenv e = expr_type e` >- gvs[] >>
   `(?n s. e = Literal (BaseT (StringT n)) (StringL s)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
