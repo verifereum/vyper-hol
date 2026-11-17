@@ -911,25 +911,16 @@ Theorem sym_selected_prefix_paired:
     LIST_REL (\sv w. sval_conc lo sv = SOME w) srest rest /\
     LENGTH localtop = LENGTH mid.as_stack
 Proof
-  strip_tac >>
-  `asm_block_at p (cs with as_stack := top).as_pc
-    (execute_plan initial_fmp (iops ++ rops))` by simp[] >>
-  drule_all deepResidualSimTheory.selected_prefix_prepared_sim_marked >>
-  disch_then (qspec_then `build_offset_to_pc p` mp_tac) >>
-  simp[] >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by
-    gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (iops ++ rops))` by
-    metis_tac[] >>
-  drule_all sym_selected_prefix_sim_marked >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  drule_all sym_prepared_prefix_endpoint >> strip_tac >>
-  drule_all sym_prepared_emit_localize >> strip_tac >>
-  rename1 `sym_steps p env _ ss = SymOK ready` >>
-  rename1 `asm_steps _ _ _ _ _ = AsmOK mid` >>
-  rename1 `ready.sym_stack = localtop ++ srest` >>
-  qexistsl [`mid`, `ready`, `localtop`] >> simp[] >>
-  metis_tac[symInstKindsTheory.spill_region_labels_outside_closure]
+  strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  irule (REWRITE_RULE [sym_steps_mode_def, asmSymBridgeTheory.asm_sym_rel_core_canonical]
+    (Q.INST [`allow_own` |-> `F`,
+      `lo` |-> `SND (compute_label_offsets p)`,
+      `code_ok` |-> `asm_data_env_ok p env`]
+      symInstPrefixOwnTheory.sym_selected_prefix_paired_mode_conditional)) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all asm_sym_steps_lockstep >> simp[]) >>
+  qexistsl [`nl`, `opc`, `operands`, `prepared`, `ps`, `r`] >>
+  gvs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem sym_frame_suffix_compose:
@@ -943,9 +934,10 @@ Theorem sym_frame_suffix_compose:
   (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
     FLOOKUP final.sym_mem_labels b = FLOOKUP labs0 b)
 Proof
-  strip_tac >> conj_tac >- simp[sym_steps_add] >>
-  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[NoAsms, sym_frame_inv_def] >> metis_tac[]
+  simp[sym_frame_inv_def] >> strip_tac >>
+  drule_all (REWRITE_RULE [sym_steps_mode_def] (Q.INST
+    [`allow_own` |-> `F`] symInstPrefixPairOwnTheory.sym_frame_suffix_compose_mode_core)) >>
+  simp[]
 QED
 
 Theorem sym_log_name_dispatch:
