@@ -13,7 +13,7 @@ Ancestors
   dftPacketCallLocalPreservation
   dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure
   dftPacketCalleeInitialization
-  dftPacketCallPathGeometry dftPacketCalleeAlignment
+  dftPacketCallReplayPreservation dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry
   dftPacketClosedRowNative
   dftPacketClosedRows
@@ -37,9 +37,9 @@ Ancestors
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketLiteralRowExtend
-  dftPacketOrdinaryTrace
+  dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
-  dftPacketPreterminalAgreement dftPacketPreterminalGeometry dftPacketPseudoAdvance
+  dftPacketPreterminalAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry dftPacketPseudoAdvance
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame
