@@ -20,7 +20,7 @@ Ancestors
   dftPacketCutExtension
   dftPacketEntryReplay
   dftPacketFillingBoundary
-  dftPacketFreshCut
+  dftPacketFreshCut dftPacketFreshRootSuccessSplit
   dftPacketFreshChildStop
   dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
   dftPacketBlockFreshEntry dftPacketKeyMap
