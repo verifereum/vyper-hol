@@ -25,6 +25,7 @@
  *)
 Theory codegenLabelDisciplined
 Ancestors
+  codegenSymbolicTerminalOwn
   codegenEntryFacts
   symFnStep symFnSimSpec codegenAsmStaticWf codegenSymRel codegenEntrySim
   codegenEntryRel asmSymBridge asmSymSem fnSimSpec frameRel
