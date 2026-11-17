@@ -1640,6 +1640,65 @@ QED
 
 Finalise append_nested_storage_cont_framed
 
+Theorem append_nested_suffix_frame_post[local]:
+  alloca_frame cenv es sa s0 cenv mid t /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  (!aid off sz i.
+    FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+    (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+      off + sz <= b \/ b + sz' <= off) /\
+    off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 f (mid,t,G,tn)
+    (\H res ee Gf tf u. ?cenv''.
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee Gf tf u /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+         op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv mid sm t cenv'' ee u /\ tf.t_mem SUBSET tn.t_mem) R ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 f (mid,t,G,tn)
+    (\H res ee Gf tf u. ?cenv''.
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee Gf tf u /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+         op_taint tf (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 cenv'' ee u /\
+      (!aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn0.t_mem)) R
+Proof
+  strip_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at (Pos last)) >> simp[] >>
+  rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[] >>
+  conj_tac >- (irule stmtSimDefsTheory.alloca_frame_trans >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!aid off sz i. _` irule >>
+  conj_tac >- (qexistsl_tac [`aid`, `off`, `sz`] >> simp[] >>
+    first_assum ACCEPT_TAC) >>
+  fs[pred_setTheory.SUBSET_DEF]
+QED
+
 Theorem append_nested_after_target_full[local]:
   supported_stmt (cx_tops cx) bindings (Append bt e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
@@ -2101,15 +2160,15 @@ Resume append_nested_after_target_full[memory]:
      rpt (pop_assum kall_tac) >>
      simp[compileEnvTheory.word_scale_def, compileEnvTheory.elem_size_in_location_def,
           compileEnvTheory.is_slot_addressed_def]) >>
-  drule_all append_nested_memory_cont_full >>
-  disch_then (qspecl_then [`shadow_ctx`, `RetQ`] mp_tac) >>
-  DISCH_THEN (fn th =>
-    irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-    irule_at (Pos last) th) >>
-  simp[] >> rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[] >>
-  conj_tac >- (irule stmtSimDefsTheory.alloca_frame_trans >>
-    goal_assum (drule_at Any) >> simp[]) >>
-  fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+  irule append_nested_suffix_frame_post >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `sm` >>
+  reverse conj_tac
+  >- (irule (SRULE [] append_nested_memory_cont_full) >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >> simp[] >>
+      conj_tac >- (qexistsl_tac [`b`, `p`, `sz`] >> simp[]) >>
+      conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
+      FAIL_TAC "layout witnesses") >>
+  decide_tac
 QED
 
 Resume append_nested_after_target_full[storage]:
