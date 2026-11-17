@@ -142,7 +142,8 @@ Proof
   qpat_x_assum `IS_SOME (eval_operands _ t)` mp_tac >>
   simp[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_EXISTS] >>
   rpt strip_tac >> gvs[step_inst_non_invoke,
-    step_inst_base_opcode_eqs]
+    step_inst_base_opcode_eqs] >>
+  gvs[exec_ext_call_abort_iff]
 QED
 
 Theorem ricf_execution_noninvoke_abort:
@@ -175,6 +176,20 @@ Proof
   Cases_on `inst.inst_opcode = CALL`
   >- (drule_all ricf_abort_call >> disch_then (qspec_then `Ct` strip_assume_tac) >>
       metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [STATICCALL;DELEGATECALL]`
+  >- (drule ricf_abort_frame_observations >> strip_tac >>
+      qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+      fs[MEM] >>
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs(),
+        exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+      rpt strip_tac >> gvs[] >>
+      `IS_SOME (eval_operands inst.inst_operands t)` by
+        (simp[eval_operands_IS_SOME_EVERY] >> rpt conj_tac >>
+         metis_tac[optionTheory.IS_SOME_DEF]) >>
+      qpat_x_assum `IS_SOME (eval_operands _ t)` mp_tac >>
+      simp[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_EXISTS] >>
+      rpt strip_tac >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+        exec_ext_call_abort_iff, exec_delegatecall_abort_iff]) >>
   Cases_on `MEM inst.inst_opcode [ASSERT;ASSERT_UNREACHABLE]`
   >- (drule_all ricf_execution_assert_abort >>
       disch_then (qspec_then `Ct` strip_assume_tac) >> metis_tac[]) >>
