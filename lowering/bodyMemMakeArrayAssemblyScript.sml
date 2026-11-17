@@ -79,10 +79,6 @@ Proof
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
-  MATCH_MP_TAC (SRULE [] (Q.INST
-    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
-  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
-    fs[expr_body_pre_def]) >>
   simp[aggregate_tuple_action_mem] >>
   drule aggregate_outcome_source_run_mem >> strip_tac >>
   irule aggregate_outcome_map_mem >> goal_assum (drule_at Any) >>
@@ -194,10 +190,6 @@ Proof
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
-  MATCH_MP_TAC (SRULE [] (Q.INST
-    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
-  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
-    fs[expr_body_pre_def]) >>
   `eval_expr cx (Builtin (ArrayT et n) (MakeArray (SOME et) n) es) =
     bind (eval_exprs cx es) (return o (\vs. Value (ArrayV (make_array_value tv n vs))))` by
     (irule aggregate_array_action_mem >> simp[]) >>

@@ -93,10 +93,6 @@ Resume body_struct_lit_widened_flat_mem[fields]:
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >>
   conj_tac >- gvs[fragGasModeTheory.gas_marked_path_def] >>
-  MATCH_MP_TAC (SRULE [] (Q.INST
-    [`R` |-> `\H res ee r. expr_exit res r`] aggregate_outcome_no_halt_mem)) >>
-  conj_tac >- (rpt gen_tac >> irule eval_expr_calls_no_halt >>
-    fs[expr_body_pre_def]) >>
   rewrite_tac[aggregate_struct_action_mem] >>
   drule aggregate_outcome_source_run_mem >> strip_tac >>
   irule aggregate_outcome_map_mem >>
