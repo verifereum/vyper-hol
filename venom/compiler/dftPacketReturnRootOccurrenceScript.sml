@@ -56,14 +56,15 @@ Proof
   rename1 `lookup_block _ _ = SOME bb` >>
   Cases_on `eval_phis s bb.bb_instructions`
   >~ [`eval_phis _ _ = OK sp`]
-  >- (drule_all trace_blocks_enter >> strip_tac >>
-      qmatch_asmsub_abbrev_tac `exec_block fuel C bb start` >>
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      simp[Once (cj 3 trace_defs)] >> disch_tac >>
+      qabbrev_tac `start = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
       Cases_on `MEM ((p,d,id),fn,i,t) (trace_block p (SUC D) fuel C fn bb start)`
       >- (drule trace_block_region >>
           simp[block_region_def] >> strip_tac
-          >- (gvs[] >>
+          >- (gvs[ADD_CLAUSES] >>
               drule_all return_trace_block_endpoint >> strip_tac >>
-              gvs[] >> simp[Once run_blocks_def]) >>
+              gvs[] >> simp[Once (cj 3 trace_defs), Once run_blocks_def, Abbr `start`]) >>
           `LENGTH p = LENGTH (extra ++ (SUC D,call_id)::p)` by metis_tac[] >>
           gvs[]) >>
       Cases_on `exec_block fuel C bb start` >> gvs[] >>
@@ -71,9 +72,9 @@ Proof
       Cases_on `post.vs_halted` >> gvs[] >>
       `LAST (trace_blocks p (SUC D) fuel C fn post) = ((p,d,id),fn,i,t) /\
        run_blocks fuel C fn post = IntRet ir out` by
-        (first_x_assum irule >> simp[ADD_CLAUSES] >> metis_tac[]) >>
+        (first_x_assum irule >> fs[ADD_CLAUSES]) >>
       `trace_blocks p (SUC D) fuel C fn post <> []` by
         (strip_tac >> gvs[]) >>
-      simp[LAST_APPEND_NOT_NIL, Once run_blocks_def, Abbr `start`]) >>
+      simp[Once (cj 3 trace_defs), LAST_APPEND_NOT_NIL, Once run_blocks_def, Abbr `start`]) >>
   qpat_x_assum `MEM _ _` mp_tac >> simp[Once (cj 3 trace_defs)]
 QED
