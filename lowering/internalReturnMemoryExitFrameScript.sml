@@ -3,7 +3,7 @@ Theory internalReturnMemoryExitFrame
 Ancestors
   internalReturnBoundaryCommonMem intCallReturnMem intCallResult
   loweringSlice instIdxIndep stmtSimReturn loweringStateRelDefs
-  compileEnv venomState vyperState bodySim exprLoweringProps
+  compileEnv venomState vyperState bodySim exprLoweringProps stateRelProj
 
 (* No old-local pointer preservation premise is needed: the source scopes
    are cleared before framing.  ce_imm_alloca = NONE likewise removes the
@@ -54,7 +54,8 @@ Proof
      (ee with scopes := [])
      (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
     (irule immutables_rel_mem_agree >> qexists_tac `t` >>
-     fs[stmt_state_rel_def, state_rel_def] >> rpt strip_tac >>
+     imp_res_tac stmt_state_rel_state_rel >>
+     imp_res_tac state_rel_immutables_rel >> fs[] >> rpt strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> fs[regions_disjoint_def] >> metis_tac[]) >>
   `stmt_state_rel H ctx func cenv cx (ee with scopes := [])
@@ -74,7 +75,8 @@ Proof
           intret_vals_match_def] >>
      reverse conj_tac >- fs[Abbr `pre`] >>
      qexistsl_tac [`pre`, `(return_unlock_state cenv pre).vs_inst_idx`] >>
-     fs[stmt_state_rel_def, venom_state_component_equality]) >>
+     simp[venom_state_component_equality] >>
+     metis_tac[stmt_state_rel_state_rel]) >>
   gen_tac >>
   `((ee with gas_obs := tail) with scopes := []) =
     ((ee with scopes := []) with gas_obs := tail)` by

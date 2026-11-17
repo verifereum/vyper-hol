@@ -11,6 +11,7 @@ Ancestors
   internalReturnImmutableTypes internalReturnMemoryInputs
   internalReturnMemoryExitFrame bodyFullMemorySameTypeStore
   typedCopyOriginPtrBase typedMemoryCopy vyperTypeEnvPreservation loweringStateRelDefs
+  stateRelProj
   gasExemptCert exprSimDefs
   intCallReturnMem stmtSimReturn intCallResult
   loweringSlice instIdxIndep vyperStorageTrace vyperStatePreservation
@@ -472,10 +473,13 @@ Proof
     (fs[ghost_inv_at_def, return_buf_ptr_def] >> gvs[]) >>
   `((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
      ~t.vs_call_ctx.cc_static) /\ expr_val_rel cx ty v (Var src) t` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+    (fs[expr_post_def] >>
+     imp_res_tac stmt_state_rel_state_rel >>
+     imp_res_tac state_rel_call_ctx_rel >> fs[call_ctx_rel_def]) >>
   `w2n bw + type_memory_size tv <= t.vs_alloca_next` by decide_tac >>
   `t.vs_alloca_next < dimword (:256)` by
-    (fs[expr_post_def, stmt_state_rel_def, alloca_room_def] >> decide_tac) >>
+    (fs[expr_post_def] >>
+     metis_tac[stmt_state_rel_alloca_room, alloca_room_next_lt]) >>
   `w2n a + val_store_size tv v < dimword (:256)` by decide_tac >>
   mp_tac (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
                   `G` |-> `G1`, `tn` |-> `tn1`]
