@@ -1278,6 +1278,33 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+(* Widen only the interpreted bytestring representation, at the same address. *)
+Theorem intcall_args_bytestring_widen:
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\
+  evaluate_type tenv dty = SOME dtv /\ value_has_type stv v /\
+  val_in_memory stv v a mem ==>
+  value_has_type dtv v /\ val_wf dtv v /\
+  type_memory_size dtv <= MAX 32 (type_memory_bytes cenv dty) /\
+  val_in_memory dtv v a mem
+Proof
+  strip_tac >>
+  `value_has_type dtv v` by
+    (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+     strip_tac >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  reverse conj_tac
+  >- (irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  qpat_x_assum `is_bytestring_type dty` mp_tac >>
+  simp[exprSimConvertBytesTheory.bytestring_type_cases] >>
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def,
+    valueEncodingTheory.type_memory_size_def, compileEnvTheory.type_memory_bytes_def,
+    vfmConstantsTheory.word_size_def]
+QED
+
 Theorem intcall_args_stage_full:
   !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
