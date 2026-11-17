@@ -5733,24 +5733,25 @@ Theorem sym_abort_frame_sim_deep:
         venom_asm_terminal_rel vs' as' /\
         sym_terminal (sym_steps prog env n ss)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `?m. sym_terminal (sym_steps prog env m ss)` by
-    (Cases_on `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE`
-     >- (drule_all sym_abort_conditional_terminal_exists >> simp[]) >>
-     Cases_on `vs.vs_call_ctx.cc_static /\
-       MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; LOG]`
-     >- (qpat_x_assum `vs.vs_call_ctx.cc_static /\ _` strip_assume_tac >>
-         Cases_on `inst.inst_opcode = LOG`
-         >- (drule_all sym_abort_static_log_terminal_exists >> simp[]) >>
-         `MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL]` by
-           gvs[listTheory.MEM] >>
-         drule_all sym_abort_static_regular_terminal_exists >> simp[]) >>
-     `MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
-       (drule opcodeClassTheory.step_inst_abort_opcodes >> fs[listTheory.MEM] >> metis_tac[]) >>
-     drule_all sym_abort_regular_terminal_exists >> simp[]) >>
-  drule_all gen_inst_abort_frame_sim_deep >>
-  disch_then (qx_choose_then `n` (qx_choose_then `out` assume_tac)) >>
-  irule sym_abort_terminal_counts_join >> metis_tac[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  gnvs[] >>
+  drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)
+    (GEN_ALL (SRULE [asm_sym_rel_core_canonical,
+                      asm_sym_step_rel_core_canonical,
+                      GSYM sym_frame_inv_def, sym_steps_mode_def]
+      (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+               `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`]
+        (SPEC_ALL symControlTerminalOwnTheory.sym_abort_frame_sim_deep_mode_conditional)))) >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then assume_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `cs.as_pc < LENGTH prog /\ EL cs.as_pc prog = ai` by
+        gvs[asm_block_at_def] >>
+      drule_all asm_sym_step >> simp[]) >>
+  conj_tac >- metis_tac[sym_code_label_dest] >>
+  metis_tac[asm_sym_steps_lockstep]
 QED
 
 Theorem sym_pop_pushed_steps:
@@ -5774,22 +5775,14 @@ Theorem sym_pop_pushed_frame_sim:
     sym_frame_inv p env ctx cp fn ret srest labs0 ps cs' ss' /\
     cs'.as_pc = cs.as_pc + 1
 Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 _ cs ss` >>
-  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := SNOC op ps.ps_stack) ss` by fs[sym_frame_inv_def] >>
-  `?sv stk. ss.sym_stack = sv :: stk` by
-    (fs[sym_kinds_ok_def, listTheory.REVERSE_SNOC, listTheory.LIST_REL_CONS1] >>
-     gvs[]) >>
-  `asm_block_at p ss.sym_base.as_pc [AsmOp "POP"]` by metis_tac[asm_sym_rel_pc] >>
-  drule_all sym_pop_pushed_steps >> disch_then (qspec_then `env` assume_tac) >>
+  rpt gen_tac >> strip_tac >> fs[sym_frame_inv_def] >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "POP"]` by
+    metis_tac[asm_sym_rel_pc] >>
+  drule_all symControlGasOwnTheory.sym_pop_pushed_kinds_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
   drule_all asm_sym_steps_lockstep >> strip_tac >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  conj_tac
-  >- (simp[sym_frame_inv_def] >> conj_tac
-      >- (irule sym_kinds_ok_pop >> metis_tac[]) >>
-      fs[sym_frame_inv_def]) >>
-  imp_res_tac asm_sym_rel_pc >> gvs[]
+  qexistsl [`cs'`, `ss'`] >> simp[] >>
+  metis_tac[asm_sym_rel_pc]
 QED
 
 Theorem sym_gas_emit_pc:
@@ -5821,10 +5814,15 @@ Theorem sym_gas_optimistic_frame_sim:
     sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
-  strip_tac >> drule gasFrameSimTheory.gas_optimistic_cases >> strip_tac
-  >- (gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
-  `dist < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
-  drule_all sym_do_swap_frame_sim >> simp[]
+  strip_tac >> fs[sym_frame_inv_def] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by
+    metis_tac[asm_sym_rel_pc] >>
+  drule_all symControlGasOwnTheory.sym_gas_optimistic_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl [`cs'`, `ss'`] >> simp[] >> conj_tac
+  >- metis_tac[sym_frame_region_labels_transfer] >>
+  metis_tac[asm_sym_rel_pc, arithmeticTheory.ADD_COMM]
 QED
 
 Theorem sym_gas_live_plan_frame_sim:
