@@ -480,8 +480,6 @@ QED
 Triviality exec_ext_call_not_terminal[local,simp]:
   (!inst (s:venom_state) gas addr value ao asz ro rs is_static s'.
      exec_ext_call inst s gas addr value ao asz ro rs is_static <> Halt s') /\
-  (!inst (s:venom_state) gas addr value ao asz ro rs is_static a s'.
-     exec_ext_call inst s gas addr value ao asz ro rs is_static <> Abort a s') /\
   (!inst (s:venom_state) gas addr value ao asz ro rs is_static v s'.
      exec_ext_call inst s gas addr value ao asz ro rs is_static <> IntRet v s')
 Proof
@@ -493,8 +491,6 @@ QED
 Triviality exec_delegatecall_not_terminal[local,simp]:
   (!inst (s:venom_state) gas addr ao asz ro rs s'.
      exec_delegatecall inst s gas addr ao asz ro rs <> Halt s') /\
-  (!inst (s:venom_state) gas addr ao asz ro rs a s'.
-     exec_delegatecall inst s gas addr ao asz ro rs <> Abort a s') /\
   (!inst (s:venom_state) gas addr ao asz ro rs v s'.
      exec_delegatecall inst s gas addr ao asz ro rs <> IntRet v s')
 Proof
@@ -835,7 +831,8 @@ Proof
   imp_res_tac exec_ext_call_preserves_alloca_fields >>
   imp_res_tac exec_delegatecall_preserves_alloca_fields >>
   imp_res_tac exec_create_preserves_alloca_fields >>
-  gvs[exec_create_abort_iff, halt_state_def, set_returndata_def]
+  gvs[exec_ext_call_abort_iff, exec_delegatecall_abort_iff,
+      exec_create_abort_iff, halt_state_def, set_returndata_def]
 QED
 
 Triviality step_inst_base_sstore_alloca_fields[local]:
