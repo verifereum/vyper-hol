@@ -62,14 +62,18 @@ Proof
     (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   `?G' tn'. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sm sl) s G' tn'` by
     (irule bodyPtrPrecompileBuiltinsEmittedSuffixTheory.computed_emitted_suffix_checked >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`dst`,`insz`,`outsz`,`Var dst`,`src`,`target`,`wi`,`wo`] >>
+     simp[arithmeticTheory.ADD_COMM]) >>
   `?t n j. run_inst_seq (emitted_insts sm sl) s =
        Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
      gas_path_ptr D lo ctx fn PG G tn s n G' tn'
        (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
          (t with vs_inst_idx := j))` by
     (irule computed_suffix_oracle_failure_path >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`insz`,`Var src`,`Var dst`,`outsz`,`Var dst`,`target`,`wi`,`wo`] >>
+     simp[]) >>
   qexistsl [`t`,`n`,`j`,`G'`,`tn'`] >> simp[] >>
   `!u. run_inst_seq (emitted_insts sm sl) s <> OK u` by simp[] >>
   drule run_inst_seq_append_err >> simp[]
@@ -130,6 +134,7 @@ Proof
   `isPREFIX (emitted_insts sm sl) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   `ptr_covers G tn dst s (w2n (32w:256 word))` by simp[wordsTheory.dimword_def] >>
+  `s.vs_outcomes <> []` by simp[] >>
   drule_all computed_emitted_suffix_paths >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?q. run_inst_seq (emitted_insts sm sl) s = OK q` by
