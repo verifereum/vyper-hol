@@ -3,6 +3,28 @@ Theory internalReturnMemoryInputs
 Ancestors
   assignBasePtrBoundary bodyDeclCopyMemory exprSimMemDefs loweringPosts
   bodyPtrDefs ptrDiscipline venomExecSemantics venomState
+  exprSimHypsDefs vyperTypeEvalSoundness vyperTypeSystem vyperTypeCallGraph
+  vyperTypeExprSoundness vyperTypeInvariants
+
+Theorem return_value_typed:
+  expr_sim_inv cenv cx env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := g) =
+    (INL v, es') ==>
+  ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+       value_has_type tv v
+Proof
+  rw[expr_sim_inv_def] >>
+  `well_typed_expr env e` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `call_evaluation_safe cx (int_calls_expr e)`
+    by gvs[int_calls_stmt_def, int_calls_expr_def] >>
+  mp_tac (Q.INST [`st` |-> `es with gas_obs := g`, `res` |-> `INL v`,
+                  `st'` |-> `es'`] eval_expr_read_type_sound) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >>
+  gvs[value_runtime_typed_def, env_consistent_def,
+      env_context_consistent_def]
+QED
 
 (* Capacity coverage and the actual source-read bound are distinct facts.
    Neither asserts that the entire source capacity is below the frontier. *)

@@ -20,7 +20,7 @@ Ancestors
   fragGasOriginPtrExec fragGasOriginPtr fragGasPathPtr gasPathPtrExec
   fragGasPathMem fragGasPath fragGasSeqMem fragExecMem fragExec
   bodyDeclMemoryCore bodyDeclCopyMemory exprSimBufferStore exprSimMemDefs
-  exprSimProps exprSimHyps exprSimHypsDefs exprSimWordArgs returnValueTyped
+  exprSimProps exprSimHyps exprSimHypsDefs exprSimWordArgs
   valueTypingMemoryProps tupleTargetStoreRun instMemFrontier valueCopy
   exprOperandVar stmtLoweringMono externalEntryShape
   bodySimFull bodySim bodyPtrDefs gasOutcomeFullCompose gasOutcomeFull
