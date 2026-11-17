@@ -53,9 +53,13 @@ val body_ind = evaluate_ind
           body_results_full_ok cx es`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV);
 
+val full_case_simps =
+  [push_function_def, return_def, vyperContextTheory.evaluation_context_accfupds,
+   pairTheory.PAIR_EQ, sumTheory.INL_11];
+
 fun full_case th =
-  rpt strip_tac >> fs[push_function_def, return_def] >>
-  irule (SIMP_RULE (srw_ss()) [push_function_def, return_def] th) >>
+  rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
+  irule (SIMP_RULE bool_ss full_case_simps th) >>
   asm_rewrite_tac[];
 
 Theorem body_sim_full_mutual:
