@@ -80,9 +80,9 @@ Proof
   `step_inst fuel Ct inst t = exec_delegatecall inst t gas addr ao' az ro' rs` by
     simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   `rq = venom_call_request t addr 0w ao' az F with
-    cr_kind := DelegateMessageCall` by
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` by
     simp[Abbr `rq`, venom_call_request_def] >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq (w2n ro) (w2n rs) s = (w,r)` >>
@@ -95,7 +95,7 @@ Proof
      qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_delegatecall_def, LET_THM] >>
      qpat_assum `rq = venom_call_request t addr 0w ao' az F with
-       cr_kind := DelegateMessageCall`
+       <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      simp[Excl "consume_call_outcome_eq"]) >>
   `source_memory_write_ranges inst s = [(w2n ro,w2n rs)]` by
