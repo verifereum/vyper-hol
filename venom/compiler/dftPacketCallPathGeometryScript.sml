@@ -169,19 +169,44 @@ Proof
          `qi <= EL i inds` by metis_tac[] >>
          `FLOOKUP tab (DROP (SUC i) b,FST (EL i b)) = SOME rows` by
            metis_tac[] >>
-         qpat_assum `!i rowi. _`
-           (qspecl_then [`i`,`rows`] (drule_then assume_tac)) >>
+         qpat_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)`
+           (qspecl_then [`i`,`rows`] mp_tac) >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qpat_x_assum `!i rowi. _ ==> FLOOKUP out _ = SOME (LUPDATE _ _ rowi)` kall_tac >>
          gvs[dft_packet_row_prefix_splice]) >>
      `FLOOKUP out (a,e) = SOME rows` by
        (qpat_x_assum `!a e. _` (qspecl_then [`a`,`e`] mp_tac) >>
-        simp[] >> metis_tac[]) >> simp[]) >>
+        (impl_tac >- (conj_tac >- simp[] >> metis_tac[])) >>
+        simp[]) >> simp[]) >>
   `MAP (\f. FLAT (THE (FLOOKUP out (a,f)))) ds =
    MAP (\f. FLAT (THE (FLOOKUP tab (a,f)))) ds` by
     (irule MAP_CONG >> simp[]) >>
-  simp[FLOOKUP_UPDATE] >>
+  `(d,cid)::p <> a` by metis_tac[] >>
+  ntac 6 (conj_tac >- simp[FLOOKUP_UPDATE]) >>
   rpt gen_tac >> strip_tac >>
-  `(e,selected_cid)::a <> b` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+  `(e,selected_cid)::a <> b` by (strip_tac >> fs[]) >>
   `(a,e,selected_cid) <> (p,d,cid)` by
     (strip_tac >> gvs[]) >>
-  simp[] >> FAIL_TAC "selected child cell"
+  ntac 2 (conj_tac >- (rw[FLOOKUP_UPDATE] >> gvs[])) >>
+  Cases_on `?i. i <= LENGTH b /\ (e,selected_cid)::a = DROP i b`
+  >- (pop_assum strip_assume_tac >>
+      drule_all call_suffix_child >> strip_tac >>
+      `i < L` by metis_tac[] >>
+      qpat_assum `!i. i < L ==> ?sfi tfi. _`
+        (qspec_then `i` (drule_then strip_assume_tac)) >>
+      `FST (EL i b) = e /\ SND (EL i b) = selected_cid` by
+        metis_tac[pairTheory.FST,pairTheory.SND] >>
+      `0 < i` by
+        (Cases_on `i` >-
+          (qpat_x_assum `_ = DROP 0 b` mp_tac >>
+           pure_rewrite_tac[DROP_0] >> metis_tac[]) >> simp[]) >>
+      qpat_assum `!i. i < L ==> ?sfi tfi. _`
+        (qspec_then `i-1` mp_tac) >>
+      (impl_tac >- decide_tac) >> strip_tac >>
+      `SUC (i-1) = i` by decide_tac >>
+      qpat_x_assum `!i. i < L ==> ?sfi tfi. _` kall_tac >>
+      qpat_x_assum `!r. r < LENGTH xsi /\ _ ==> _` kall_tac >>
+      qpat_x_assum `!r. r < LENGTH xsi' /\ _ ==> _` kall_tac >>
+      gvs[] >> FAIL_TAC "live child") >>
+  FAIL_TAC "offpath child"
 QED
