@@ -50,7 +50,7 @@ Ancestors
   ctorDeployDeadSectionFrame ctorDeployDeadSection immSectionDead
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
   bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
-  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
+  contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist
 Libs
   monadsyntax
 
@@ -2594,4 +2594,63 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_sensitivity_fixed:
+  (!v a mem dirty.
+     well_formed_type_value tv /\
+     (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+     (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+     !j. j < type_memory_size tv /\ a + j IN dirty ==>
+       mem_dead_bytes mem a tv (a+j)) ==>
+  !n v a mem dirty.
+     well_formed_type_value (ArrayTV tv (Fixed n)) /\
+     (value_has_type (ArrayTV tv (Fixed n)) v \/
+      v = default_value (ArrayTV tv (Fixed n))) /\
+     val_wf (ArrayTV tv (Fixed n)) v /\
+     (!m. mem_agree_outside dirty mem m ==>
+       val_in_memory (ArrayTV tv (Fixed n)) v a m) ==>
+     !j. j < type_memory_size (ArrayTV tv (Fixed n)) /\ a+j IN dirty ==>
+       mem_dead_bytes mem a (ArrayTV tv (Fixed n)) (a+j)
+Proof
+  disch_tac >> rpt gen_tac >> disch_tac >>
+  `?kvs. v = ArrayV (SArrayV kvs) /\ sparse_has_type tv n kvs` by
+    (Cases_on `v` >> gvs[value_has_type_def, default_value_def] >>
+     rename1 `ArrayV arr` >> Cases_on `arr` >>
+     gvs[value_has_type_def]) >>
+  `well_formed_type_value tv` by fs[well_formed_type_value_def] >>
+  `!m. mem_agree_outside dirty mem m ==>
+       val_in_memory (ArrayTV tv (Fixed n)) (ArrayV (SArrayV kvs)) a m`
+    by metis_tac[] >>
+  qpat_x_assum `well_formed_type_value (ArrayTV _ _) /\ _` kall_tac >>
+  gvs[type_memory_size_def] >> rpt strip_tac >>
+  `0 < type_memory_size tv` by
+    (Cases_on `type_memory_size tv = 0` >> gvs[]) >>
+  `j DIV type_memory_size tv < n` by simp[DIV_LT_X] >>
+  `j = j DIV type_memory_size tv * type_memory_size tv +
+       j MOD type_memory_size tv /\ j MOD type_memory_size tv < type_memory_size tv`
+    by metis_tac[DIVISION] >>
+  qpat_x_assum `!m. mem_agree_outside dirty mem m ==> _`
+    (assume_tac o SRULE [Once val_in_memory_def]) >>
+  `?w. (value_has_type tv w \/ w = default_value tv) /\ val_wf tv w /\
+       (!m. mem_agree_outside dirty mem m ==>
+         val_in_memory tv w (a + (j DIV type_memory_size tv) * type_memory_size tv) m)` by
+    (Cases_on `ALOOKUP kvs (j DIV type_memory_size tv)`
+     >- (qexists_tac `default_value tv` >>
+         simp[val_wf_default_value_proof] >> metis_tac[]) >>
+     rename1 `ALOOKUP kvs _ = SOME w` >>
+     `value_has_type tv w` by metis_tac[sparse_has_type_lookup] >>
+     qexists_tac `w` >>
+     simp[value_has_type_val_wf] >> metis_tac[kvs_in_memory_lookup, MULT_COMM]) >>
+  `a + (j DIV type_memory_size tv) * type_memory_size tv +
+     j MOD type_memory_size tv = a+j` by decide_tac >>
+  `mem_dead_bytes mem (a + (j DIV type_memory_size tv) * type_memory_size tv)
+      tv (a+j)` by
+    (first_x_assum
+       (qspecl_then [`w`, `a + (j DIV type_memory_size tv) * type_memory_size tv`,
+                    `mem`, `dirty`] mp_tac) >>
+     (impl_tac >- metis_tac[]) >>
+     disch_then (qspec_then `j MOD type_memory_size tv` mp_tac) >>
+     qpat_assum `a + _ + _ = a+j` (fn th => rewrite_tac[th]) >> simp[]) >>
+  simp[mem_dead_bytes_def] >> metis_tac[MULT_COMM]
 QED
