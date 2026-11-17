@@ -282,3 +282,19 @@ Proof
   >- suspend "head_edge" >>
   gvs[]
 QED
+
+Resume store_slots_relabel_checked_prefix[tail_inputs]:
+  simp[] >> conj_tac >- metis_tac[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. SUC i < _ ==> _` (qspec_then `SUC i` mp_tac) >>
+      gvs[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i u. _` (qspecl_then [`SUC i`,`u`] mp_tac) >>
+  simp[]
+QED
+
+Resume store_slots_relabel_checked_prefix[head_edge]:
+  Cases_on `ys` >> gvs[]
+QED
+
+Finalise store_slots_relabel_checked_prefix
