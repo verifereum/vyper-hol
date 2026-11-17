@@ -5,6 +5,7 @@ Ancestors
   planExec codegenSymRel asmSymSem doSwapSim genBlockSim symEmitSim fnFrameDeepInst
   symEmitStoreOwn symInstPiecesFacts symInstNamedOwn symInstAssertOwn
   symInstEmissionOwn symInstLocalizeCore
+  symInstAssertPrepareOwn symInstAssertSuffixOwn
 
 Theorem sym_phi_dup_rename:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
@@ -1189,30 +1190,16 @@ Theorem sym_assert_unreachable_frame_prepare[local]:
     asm_block_at prog ready.sym_base.as_pc
       [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl]
 Proof
-  strip_tac >>
-  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
-   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
-    (drule allocMonoTheory.fresh_label_spill_base >> simp[] >> strip_tac >>
-     gvs[allocMonoTheory.release_dead_spills_spill_base,
-       allocMonoTheory.release_dead_spills_next_offset] >>
-     metis_tac[allocMonoTheory.emit_input_plan_spill_base,
-       allocMonoTheory.reorder_plan_spill_base]) >>
-  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
-   asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
-    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
-      stackOpSimTheory.asm_block_at_append] >>
-  `emit_input_plan inst.inst_opcode [cond] nl ps = (iops,prepared)` by simp[] >>
-  drule_at (Pat `step_inst _ _ _ _ = _`) sym_frame_selected_prefix_paired >>
-  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
-  goal_assum (drule_at Any) >>
-  gvs[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
-    planExecTheory.exec_stack_op_def, stackOpSimTheory.asm_block_at_append] >> metis_tac[]
+  strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[NoAsms, sym_frame_inv_def] >> strip_tac >>
+  `!n cs ss ss'. asm_sym_rel prog env cs ss /\ sym_steps prog env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      asm_sym_rel prog env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
+  drule_all (REWRITE_RULE [sym_steps_mode_def, asmSymBridgeTheory.asm_sym_rel_core_canonical]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`]
+      symInstAssertPrepareOwnTheory.sym_assert_unreachable_frame_prepare_mode_core)) >> simp[]
 QED
 
 Theorem sym_assert_fresh_release_kinds[local]:
@@ -1245,23 +1232,11 @@ Theorem sym_assert_unreachable_prepared_suffix[local]:
     sym_kinds_ok cplan fn ret srest (release_dead_spills nl p3) full
 Proof
   strip_tac >>
-  `INDEX_OF (AsmLabel lbl) prog = SOME (ready.sym_base.as_pc + 3)` by
-    (drule_at (Pat `asm_block_at _ _ _`) asm_static_block_label_index >>
-     disch_then (qspecl_then [`lbl`, `3`] mp_tac) >> simp[]) >>
-  drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_assertion_prepared_run >>
-  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ ready`)) >>
-  disch_then (drule_at (Pat `step_inst _ _ _ vs = _`)) >>
-  simp[] >> disch_then (qspecl_then [`stack_pop 1 arranged.ps_stack`, `nl`, `lbl`] mp_tac) >>
-  (impl_tac >- gvs[venomMemPropsTheory.eval_operand_with_memory,
-    genFrameSimTheory.operand_val_memory_update]) >> strip_tac >>
-  rename1 `sym_steps prog env 3 ready = SymOK full` >>
-  `sym_kinds_ok cplan fn ret srest
-    (release_dead_spills nl (arranged with ps_stack := stack_pop 1 arranged.ps_stack)) full`
-    by metis_tac[] >>
-  drule_all sym_assert_fresh_release_kinds >> strip_tac >>
-  qexists `full` >> simp[]
+  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets prog)) sv = SOME w)
+    localtop mid.as_stack` by gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  drule_all (REWRITE_RULE [sym_steps_mode_def] (Q.INST
+    [`allow_own` |-> `F`, `slo` |-> `SND (compute_label_offsets prog)`]
+    symInstAssertSuffixOwnTheory.sym_assert_unreachable_prepared_suffix_mode_core)) >> simp[]
 QED
 
 Theorem sym_assert_unreachable_inst_symbolic_run:
