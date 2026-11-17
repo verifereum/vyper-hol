@@ -10,7 +10,7 @@ Theorem fmp_dalloca_head_fresh[local]:
   MEM out vars /\ runner <> out /\
   fmp_lower_inst infos ctx runner sp inst = SOME (head,sp') ==>
   ?plus31 mask aligned ai ni mi bi.
-    head = [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+    head = [mk_inst ai ADD [size_op;Lit 31w] [plus31];
       mk_inst ni NOT [Lit 31w] [mask];
       mk_inst mi AND [Var plus31;Var mask] [aligned];
       mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] /\
@@ -36,7 +36,7 @@ Theorem fmp_dalloca_indexed_suffix:
     SOME (code,leftover,sp') ==>
   ?plus31 mask aligned ai ni mi bi tail.
     DROP (if (lbl,idx) IN FDOM plan then 1 else 0) code =
-      [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+      [mk_inst ai ADD [size_op;Lit 31w] [plus31];
        mk_inst ni NOT [Lit 31w] [mask];
        mk_inst mi AND [Var plus31;Var mask] [aligned];
        mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] ++ tail /\
