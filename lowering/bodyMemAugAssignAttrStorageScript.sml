@@ -653,10 +653,12 @@ Resume compile_augassign_attr_storage_mem_typed[binop]:
      [ty; expr_type e] v0 v
      (typed_val_to_w256 ftv v0) (typed_val_to_w256 etv v)
      (ee with gas_obs := [])` by
-    (irule augassign_binop_frag_typed_mem >> simp[] >>
-     qexistsl_tac [`expr_type e`, `ftv`, `etv`] >> simp[] >>
-     strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
-     Cases_on `expr_int_literal e` >> gvs[]) >>
+    (irule augassign_binop_frag_typed_mem >> simp[] >> conj_tac
+     >- (strip_tac >>
+         gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+         Cases_on `expr_int_literal e` >> gvs[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `expr_type e` >> simp[]) >>
   `expr_post H2 ctx func cenv cx e
      ((es with storage_trace :=
          es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
@@ -1010,7 +1012,7 @@ Theorem compile_augassign_attr_storage_mem[local]:
             bop e)) es
 Proof
   rpt strip_tac >> irule compile_augassign_attr_storage_mem_typed >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem body_augassign_attr_storage_mem:
