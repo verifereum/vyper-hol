@@ -2,25 +2,27 @@ Theory dftFinitePacketHol
 Ancestors
   dftFinitePacket
   dftFinitePacketReachability
-  dftPacketBlockRootedAppend dftPacketBlockCutAggregate
-  dftPacketBlockAppendSemantics
+  dftPacketBlockRootedAppend
+  dftPacketBlockCutAggregate dftPacketBlockAppendSemantics
   dftPacketBlockAppendNative dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
-  dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
+  dftPacketCallRecordFrame
+  dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation
+  dftPacketCallFreshReplay
+  dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry dftPacketClosedRowNative
-  dftPacketClosedRows
+  dftPacketClosedRows dftPacketClosedBodyBoundary
   dftPacketCommonOracle
   dftPacketCutExtension
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
   dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence
-  dftPacketFreshRow
+  dftPacketFreshChildOccurrence dftPacketFreshRow dftPacketFreshSingletonNormalize
   dftPacketBlockFreshEntry dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -32,19 +34,20 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend
-  dftPacketOrdinaryTrace
+  dftPacketLiteralRowExtend
+  dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
   dftPacketCallFreshCaller dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoHistory
-  dftPacketPseudoCutFrame
-  dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
+  dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
+  dftPacketPseudoHistoryFrame
+  dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
-  dftPacketReturnNative
+  dftPacketReturnNative dftPacketReturnRowSupply
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
@@ -58,5 +61,5 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation
-  dftPacketFreshCutGeometry
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry
+  dftPacketChangedCallerSuccess
