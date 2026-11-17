@@ -91,6 +91,22 @@ Proof
       combinTheory.APPLY_UPDATE_THM, storage_agree_def]
 QED
 
+(* A pending deletion erases any earlier update of the deleted account. *)
+Theorem process_deletions_update_mem:
+  !dels accs a x.
+    MEM a dels ==>
+    process_deletions dels (update_account a x accs) =
+    process_deletions dels accs
+Proof
+  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
+  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
+  strip_tac >>
+  `(h =+ empty_account_state) ((a =+ x) accs) =
+   (a =+ x) ((h =+ empty_account_state) accs)` by
+    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
+  simp[]
+QED
+
 Theorem transient_agree_refl[simp]:
   !cx t. transient_agree H cx.txn.target t t
 Proof
