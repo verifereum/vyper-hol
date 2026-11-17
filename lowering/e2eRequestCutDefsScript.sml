@@ -21,8 +21,9 @@
  *     (raw_safe_rq_upto: every reachable raw state that has made at most k
  *     requests, k = recorded_outcomes_count obs_pre, so the states up to and
  *     including the one making the k-th request), and termination is gone.
- *     The raw run's k-th request is stated through a reachable state
- *     (raw_reachable) instead of a final state.  The cut facts are claimed
+ *     The raw run's k-th request is stated through the reachable state
+ *     (raw_reachable) whose step issues it, instead of a final state.  The
+ *     cut facts are claimed
  *     only when rq is not a computed precompile: at a precompile outcome the
  *     states with at most k requests run on past obs_pre, into storage reads
  *     that H need not cover.
@@ -51,11 +52,18 @@
  * (B) Outcome index.  The k-th recorded request's outcome was claimed to be
  *     EL (recorded_outcomes_count obs_pre) vs.vs_outcomes, but take_outcome
  *     consumes an entry for computed precompiles too while record_request
- *     skips them.  Now: requests are indexed by recorded_outcomes_count
- *     obs_pre, outcomes by storage_outcomes_count obs_pre (every
- *     StorageOutcome, one per take_outcome), and the outcome is exactly the
- *     entry at that index, or failed_outcome once the list is exhausted.
- *     Scope: GATED.  ECRecover, ECAdd, ECMul and Sha256 are admitted builtins
+ *     skips them; and the builtins ECRecover, ECAdd, ECMul and Sha256 take
+ *     one through precompile_call_success (vyperInterpreterScript.sml:
+ *     1336-1345) with no trace event at all, so no count over obs_pre is
+ *     the index (an earlier draft counted every StorageOutcome; witness:
+ *     `p: uint256[2] = ecadd([1, 2], [1, 2])` then
+ *     `return extcall I(a).g()`, whose call reads entry 1 after zero
+ *     StorageOutcomes).  Now: requests are indexed by
+ *     recorded_outcomes_count obs_pre, and the outcome is read from the raw
+ *     state s whose step issues request k, before its take_outcome: HD
+ *     s.vs_outcomes, or failed_outcome rq when s.vs_outcomes = [].  The step
+ *     is not an INVOKE, so no builtin runs between s and the take.
+ *     Scope: GATED.  The four builtins are admitted
  *     (supportedExprFormsScript.sml:115-117) and take an oracle entry.
  *
  * (C) Closed world.  Staging (vyper_call_staging) is the v3 text, which takes
@@ -226,17 +234,6 @@ Definition recorded_outcomes_count_def:
       observations)
 End
 
-(* ===== (B) Outcome index ===== *)
-
-(* The oracle entries a trace has taken: one per StorageOutcome, as
-   take_outcome consumes one for every request, computed precompiles
-   included (recorded_outcomes_count counts only the recorded requests). *)
-Definition storage_outcomes_count_def:
-  storage_outcomes_count observations =
-    LENGTH (FILTER (\observation. case observation of
-      StorageOutcome rq outcome => T | _ => F) observations)
-End
-
 (* ===== (A) Request cut ===== *)
 
 (* s has made at most k external-call requests: the states up to and
@@ -317,12 +314,12 @@ End
 
 (* The same marking supplies the unit certificate and request alignment.
    The shadow is chosen by the program, before am, tx, ret and vs.  At each
-   outcome whose preceding trace obs_pre is a valid horizon for H: the
-   outcome is the oracle entry at the number of outcomes taken before it
-   (or the failure once they run out); and for a recorded request, the
-   source's k-th request (k = recorded_outcomes_count obs_pre) is rq, the
-   raw run is safe up to the request cut k, and its k-th request agrees
-   with rq. *)
+   outcome whose preceding trace obs_pre is a valid horizon for H and whose
+   request rq is recorded: the source's k-th request
+   (k = recorded_outcomes_count obs_pre) is rq, the raw run is safe up to
+   the request cut k, and the reachable raw state s whose step issues the
+   raw k-th request makes one that agrees with rq, and the outcome is the
+   oracle entry s is about to take (or the failure once none is left). *)
 Definition s1_request_prefix_def:
   s1_request_prefix tops <=>
     !rpolicy unit.
@@ -358,21 +355,23 @@ Definition s1_request_prefix_def:
                outcome.co_accounts = rq.cr_accounts /\
                outcome.co_tStorage = rq.cr_tStorage) /\
             (~computed_precompile rq ==>
-               outcome =
-                 (if storage_outcomes_count obs_pre < LENGTH vs.vs_outcomes
-                  then EL (storage_outcomes_count obs_pre) vs.vs_outcomes
-                  else failed_outcome rq) /\
                recorded_outcomes_count obs_pre < LENGTH rqs /\
                EL (recorded_outcomes_count obs_pre) rqs = rq /\
                raw_safe_rq_upto
                  (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
                  0 (recorded_outcomes_count obs_pre) unit.cu_context vs /\
-               ?fn inst s.
+               ?fn inst s fuel s'.
                  raw_reachable vs unit.cu_context fn inst s /\
-                 recorded_outcomes_count obs_pre < LENGTH s.vs_requests /\
+                 inst.inst_opcode <> INVOKE /\
+                 LENGTH s.vs_requests = recorded_outcomes_count obs_pre /\
+                 step_inst fuel unit.cu_context inst s = OK s' /\
+                 recorded_outcomes_count obs_pre < LENGTH s'.vs_requests /\
                  request_agree H
                    (initial_evaluation_context am.sources am.layouts tx NONE)
-                   rq (EL (recorded_outcomes_count obs_pre) s.vs_requests))
+                   rq (EL (recorded_outcomes_count obs_pre) s'.vs_requests) /\
+                 outcome =
+                   (if s.vs_outcomes = [] then failed_outcome rq
+                    else HD s.vs_outcomes))
 End
 
 (* ===== Staging and the closed world (C) ===== *)
@@ -435,8 +434,8 @@ End
    excludes it.  The contract existed before the transaction, so no frame's
    self-destruct deletes it (run_call_to_delete), and the caller's call never
    ends in an exempt error either: the source adopts callee outcomes before
-   it decodes.  Computed precompiles are allowed: s1_request_prefix indexes
-   outcomes by every StorageOutcome. *)
+   it decodes.  Computed precompiles are allowed: s1_request_prefix reads
+   each outcome from the raw state that issues its request. *)
 Definition vyper_closed_world_def:
   vyper_closed_world fin policy tops runtime_bc am tx H es <=>
     regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
@@ -530,21 +529,23 @@ Theorem call_guard_gas_link:
                 outcome.co_accounts = rq.cr_accounts /\
                 outcome.co_tStorage = rq.cr_tStorage) /\
              (~computed_precompile rq ==>
-                outcome =
-                  (if storage_outcomes_count obs_pre < LENGTH vs.vs_outcomes
-                   then EL (storage_outcomes_count obs_pre) vs.vs_outcomes
-                   else failed_outcome rq) /\
                 recorded_outcomes_count obs_pre < LENGTH rqs /\
                 EL (recorded_outcomes_count obs_pre) rqs = rq /\
                 raw_safe_rq_upto
                   (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                   0 (recorded_outcomes_count obs_pre) unit.cu_context vs /\
-                (?fn inst s.
+                (?fn inst s fuel s'.
                    raw_reachable vs unit.cu_context fn inst s /\
-                   recorded_outcomes_count obs_pre < LENGTH s.vs_requests /\
+                   inst.inst_opcode <> INVOKE /\
+                   LENGTH s.vs_requests = recorded_outcomes_count obs_pre /\
+                   step_inst fuel unit.cu_context inst s = OK s' /\
+                   recorded_outcomes_count obs_pre < LENGTH s'.vs_requests /\
                    request_agree H
                      (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE)
-                     rq (EL (recorded_outcomes_count obs_pre) s.vs_requests)) /\
+                     rq (EL (recorded_outcomes_count obs_pre) s'.vs_requests) /\
+                   outcome =
+                     (if s.vs_outcomes = [] then failed_outcome rq
+                      else HD s.vs_outcomes)) /\
                 ctx_rq_upto
                   (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                   (recorded_outcomes_count obs_pre)
