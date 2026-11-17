@@ -1,6 +1,6 @@
 (* Discharged relocated/own emission interfaces and stack restoration. *)
 Theory symEmitOwn
-Ancestors symEmitSourceOwn symEmitSim symEmitFrameOwn asmSymForwardOwn asmSymOwnStep
+Ancestors symEmitDischargeOwn symEmitSourceOwn symEmitSim symEmitFrameOwn asmSymForwardOwn asmSymOwnStep
   fnPlanPlaceRevertPostamble asmSymBridge codegenSymRel list
 
 Theorem sym_emit_restore_stack_mode:

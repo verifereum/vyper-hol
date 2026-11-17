@@ -1,6 +1,6 @@
 Theory symBumpInstSim
 Ancestors
-  symInstPieces symPostfixSim symEmitSim deepInstSim deepResidualSim
+  symInstPieces symPostfixSim symEmitSim deepInstSim deepResidualSim symBumpRunOwn
   genBlockSim stackPlanGen planExec codegenSymRel asmSymBridge asmSymSem
   fnPlanPrefix genFrameSim allocMono venomWf fnBlockPlanStaticRegion
 
