@@ -8,11 +8,98 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
+  bodyFullAnnAssignWord bodyInvNoDalloca
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimSource
+  supportedStmtTraverse vyperTypeArgFits
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
 
 val _ = Parse.hide "body";
+
+Theorem type_stmt_annassign[local]:
+  type_stmt env ret_ty (AnnAssign id typ e) =
+    (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
+        type_widens_to env.type_defs (expr_type e) typ /\
+        id NOTIN FDOM env.var_types
+     then SOME (extend_local env id typ T) else NONE)
+Proof
+  simp[Once type_stmt_def]
+QED
+
+Theorem supported_stmt_annassign[local]:
+  supported_stmt tops bindings (AnnAssign id typ e) =
+    (supported_place_type tops typ /\
+     (supported_copy_types typ (expr_type e) \/
+      arg_type_fits (expr_type e) typ) /\ supported_expr tops e)
+Proof
+  simp[Once supported_stmt_def]
+QED
+
+Theorem annassign_full_declared_rhs_pre[local]:
+  body_stmt_safe tops (AnnAssign id typ e) /\
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
+  stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+  declare_local cenv id typ st = (c,st1) ==>
+  body_inv tops ctx c cx /\ expr_body_pre c cx env e es
+Proof
+  strip_tac >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `same_frame cenv c` by
+    (drule_then irule declare_local_same_frame >> simp[]) >>
+  `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+  `stmt_exprs_ok c (AnnAssign id typ e)` by
+    metis_tac[annassign_declare_exprs_ok] >>
+  `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule body_annassign_rhs_pre >> metis_tac[]
+QED
+
+Theorem annassign_word_full_source[local]:
+  (!tenv s'' tyv t.
+    tenv = get_tenv cx /\
+    lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+      (INL tyv,t) ==> body_expr_full_ok cx e) /\
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AnnAssign id typ e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+  stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+  is_word_type typ ==>
+  well_typed_expr env e /\ expr_type e = typ /\
+  id NOTIN FDOM env.var_types /\ cenv.ce_alloca_locals /\
+  supported_expr tops e /\ expr_body_pre cenv cx env e es /\
+  body_expr_full_ok cx e /\
+  ?tyv. evaluate_type (get_tenv cx) typ = SOME tyv
+Proof
+  strip_tac >>
+  `well_typed_expr env e /\ expr_type e = typ /\
+   id NOTIN FDOM env.var_types` by
+    (gvs[type_stmt_annassign, AllCaseEqs()] >>
+     metis_tac[type_widens_to_word]) >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `supported_expr tops e` by fs[supported_stmt_annassign] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[body_annassign_rhs_pre] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    (drule expr_body_pre_type_evaluates >>
+     simp[optionTheory.IS_SOME_EXISTS]) >>
+  `body_expr_full_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  simp[] >> metis_tac[]
+QED
 
 (* A word local. *)
 Theorem body_annassign_word_full:
@@ -42,7 +129,37 @@ Theorem body_annassign_word_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule_all annassign_word_full_source >> strip_tac >>
+  drule supported_expr_body_calls >> strip_tac >>
+  rw[stmt_frag_full_def] >>
+  fs[stmt_env_def, declare_stmt_local_def, gas_shadow_stmt_def,
+     comp_bind_def, comp_ignore_bind_def, comp_return_def,
+     pairTheory.pair_case_thm] >>
+  Cases_on `declare_local cenv id (expr_type e) sa` >>
+  Cases_on `declare_local cenv id (expr_type e) shadow_sa` >>
+  gvs[] >>
+  Cases_on `compile_stmt q lctx ret_ty (AnnAssign id (expr_type e) e) r` >>
+  Cases_on `compile_stmt q' lctx ret_ty
+              (AnnAssign id (expr_type e) (gas_shadow_expr e)) r'` >>
+  gvs[] >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
+     fs[ce_locals_declared_def] >> metis_tac[]) >>
+  `body_stmt_safe tops (AnnAssign id (expr_type e) e)` by
+    simp[body_stmt_safe_def, supported_stmt_expr_exists_def,
+         int_calls_stmt_def, GSYM expr_has_evm_run_def, EVERY_CONJ] >>
+  drule_all annassign_full_declared_rhs_pre >> strip_tac >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv' cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+     Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
+       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
+  drule_all annassign_word_full_execution >> simp[]
 QED
 
 (* A memory local whose source is stored at its own layout. *)
