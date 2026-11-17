@@ -11,7 +11,7 @@ Ancestors
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCallLocalPreservation dftPacketCallRecords dftPacketCallRowStructure dftPacketCalleeStructure dftPacketCalleeInitialization dftPacketCallReplayPreservation
-  dftPacketCallFreshReplay
+  dftPacketCallFreshReplay dftPacketCallReplayJoin
   dftPacketCallOldReplay dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry dftPacketClosedRowNative
   dftPacketClosedRows dftPacketClosedBodyBoundary
