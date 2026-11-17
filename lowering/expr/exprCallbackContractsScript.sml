@@ -335,18 +335,27 @@ Proof
   strip_tac >> simp[lower_value_def]
 QED
 
+Theorem compile_create_ctor_args_callback_contract:
+  ∀es. expr_callbacks_agree f g cenv es ⇒
+    compile_create_ctor_args f cenv es = compile_create_ctor_args g cenv es
+Proof
+  Induct >> simp[compile_create_ctor_args_def] >> rpt strip_tac >>
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def] >>
+  simp[]
+QED
+
 Theorem compile_create_ctor_tuple_callback_contract:
   expr_callbacks_agree f g cenv es ⇒
   compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es
 Proof
-  strip_tac >> drule compile_multi_vvs_callback_contract >>
+  strip_tac >> drule compile_create_ctor_args_callback_contract >>
   simp[compile_create_ctor_tuple_def]
 QED
 
 Theorem compile_create_blueprint_args_callback_contract:
   expr_callbacks_agree f g cenv es ⇒
-  compile_create_blueprint_args f cenv raw es =
-  compile_create_blueprint_args g cenv raw es
+  compile_create_blueprint_args f cenv raw later_es es =
+  compile_create_blueprint_args g cenv raw later_es es
 Proof
   strip_tac >>
   `compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es` by
