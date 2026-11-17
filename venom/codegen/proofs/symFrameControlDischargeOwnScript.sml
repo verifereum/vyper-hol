@@ -3,7 +3,7 @@ Theory symFrameControlDischargeOwn
 Ancestors
   symFrameControlOwn symControlTerminalOwn symControlRetOwn symControlTerminalDischargeOwn
   symControlRetDischargeOwn
-  symControlForwardContinuationOwn asmSymModeOwn asmSymBridge
+  symControlForwardContinuationOwn symControlForwardDischargeOwn asmSymModeOwn asmSymBridge
   codegenSymRel codegenSymOwnRel spillWordBounds
 
 Theorem sym_gas_frame_sim_deep_own:
