@@ -10,7 +10,8 @@
  *)
 Theory symFrameInvoke
 Ancestors
-  symFrameInvokeSupport symFrameInvokePrefixOwn
+  symFrameInvokeSupport symFrameInvokePrefixOwn symFrameInvokeEntryAssembly
+  symFrameInvokeTerminalSource symFrameInvokeReturnSource symFrameInvokeSourceOwn
   symInvokeEntryFacts symInvokeEntryOwn asmSymOwnStep
   symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
@@ -1702,31 +1703,23 @@ Theorem sym_invoke_enter_callee_paired:
         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all fnFrameDeepInvokeTheory.invoke_enter_callee_marked >> strip_tac >>
-  `ops = iops ++ rops ++
-    ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)` by
-    simp[APPEND_ASSOC] >>
-  drule_all sym_invoke_selected_entry_facts >> strip_tac >>
+  irule sym_invoke_enter_callee_paired_local >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule sym_invoke_callee_sim >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`st.as_code`, `env`] assume_tac) >>
   rename1 `generate_context_plan ctx = SOME cplan` >>
-  `fn_shape_ok callee` by
-    (gvs[unit_shape_ok_def, EVERY_MEM] >> metis_tac[MEM_EL]) >>
-  `EL j cplan.cp_regions = EL j cplan.cp_regions` by simp[] >>
-  drule_all sym_invoke_callee_code_label >> strip_tac >>
-  `MEM (AsmLabel nm) prog` by metis_tac[] >>
-  `emit_input_plan INVOKE arg_ops nl ps = (iops,prepared) /\
-   reorder_plan dfg arg_ops prepared = (rops,arranged) /\
-   LENGTH arg_ops <= 16 /\ LENGTH args = LENGTH arg_ops /\
-   arranged.ps_stack = stack_pop (LENGTH arg_ops) arranged.ps_stack ++ arg_ops /\
-   EVERY (\op. op <> dead_stack_marker /\
-     !at. operand_equiv dfg op at ==> at <> dead_stack_marker) arg_ops` by
-    metis_tac[] >>
-  drule_all sym_invoke_selected_entry_pair >> strip_tac >>
-  `scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ (saved_sym ++ srest)` by
-    simp[APPEND_ASSOC] >>
-  drule_all sym_invoke_callee_sim >> strip_tac >>
-  qexistsl [`j`, `iops`, `prepared`, `rops`, `arranged`, `ret_lbl`, `ret_off`,
-    `post`, `mid`, `saved`, `cas`, `pc`, `sms`, `scas`, `saved_sym`] >>
-  simp[]
+  `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env st.as_code
+     ctx cplan fn ret srest labs0 ps st ss` by
+    simp[sym_invoke_frame_own_canonical] >>
+  drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (symFrameInvokePrefixOwnTheory.sym_invoke_enter_callee_prefix_own
+      |> Q.SPEC `F` |> PURE_REWRITE_RULE [COND_CLAUSES]) >>
+  disch_then drule_all >>
+  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical,
+    asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
 (* Source-level halting outcome: select one paired call, then compose. *)
@@ -1798,8 +1791,10 @@ Proof
   disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
   disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
   disch_then drule_all >> strip_tac >>
-  qpat_x_assum `!v. run_blocks _ _ _ _ = Halt v ==> _` drule >> strip_tac >>
-  drule_all sym_invoke_halt_compose >> simp[]
+  drule_all (sym_invoke_source_halt_local
+    |> SPEC_ALL |> Q.INST [`allow_own` |-> `F`]
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[]
 QED
 
 Theorem sym_invoke_source_abort:
@@ -1871,10 +1866,10 @@ Proof
   disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
   disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
   disch_then drule_all >> strip_tac >>
-  qpat_x_assum `!a v. run_blocks _ _ _ _ = Abort a v ==> _` drule >>
-  disch_then (qx_choose_then `n` (qx_choose_then `fin`
-    (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
-  drule_all sym_invoke_abort_compose >> simp[]
+  drule_all (sym_invoke_source_abort_local
+    |> SPEC_ALL |> Q.INST [`allow_own` |-> `F`]
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[]
 QED
 
 Theorem sym_invoke_source_ok:
@@ -1952,46 +1947,47 @@ Proof
   disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
   disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
   disch_then drule_all >> strip_tac >>
-  qpat_x_assum `!rv v. run_blocks _ _ _ _ = IntRet rv v ==> _` drule >> strip_tac >>
-  drule_all fnFrameBoundaryInvokeTheory.invoke_plan_decompose >> strip_tac >>
-  rename1 `codegen_context_obligations Inv ctx cplan` >>
-  rename1 `asm_steps lo o2pc prog n cas = AsmOK asr` >>
-  `fn_return_state_rel ctx cplan callee rvs mid asr` by
-    (qpat_x_assum `fn_return_state_rel _ _ _ _ _ asr` mp_tac >>
-     simp[fn_return_state_rel_def]) >>
-  qpat_x_assum `ctx = _` kall_tac >>
-  qpat_x_assum `lo = _` (fn loeq =>
-    qpat_x_assum `o2pc = _` (fn pceq =>
-      gvs[] >> assume_tac loeq >> assume_tac pceq)) >>
-  rename1 `asm_sym_rel prog env asr ssr` >>
-  drule_all sym_invoke_return_source_facts >> strip_tac >>
-  `ssr.sym_stack = MAP Val (REVERSE ret'.iret_values) ++ (saved_sym ++ srest)` by
-    simp[APPEND_ASSOC] >>
-  `!b. context_spill_byte cplan b /\
-       ~closure_spill_byte ctx cplan (EL j ctx.ctx_functions).fn_name b ==>
-       FLOOKUP ssr.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b` by simp[] >>
-  drule_at (Pat `fresh_label _ _ = _`) sym_invoke_return_frame_from_callee >>
-  disch_then drule_all >> strip_tac >>
-  `asm_block_at prog asr.as_pc
-    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))` by
-    (qpat_x_assum `asr.as_pc = _` SUBST1_TAC >>
-     drule fnFrameBoundaryInvokeTheory.invoke_return_block >>
-     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) (pops ++ opts)` by
-    simp[EVERY_APPEND] >>
-  drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ called _ _`)
-    (sym_invoke_return_frame_numeric
-      |> Q.INST [`final` |-> `release_dead_spills nl swapped`]
-      |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >>
-  disch_then drule_all >> strip_tac >>
-  `fin.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp
-    (iops ++ rops ++ [SOPushLabel ret_lbl;
-      SOPushLabel (EL j ctx.ctx_functions).fn_name; SOEmit "JUMP";
-      SOLabel ret_lbl] ++ pops ++ opts))` by
-    (fs[execute_plan_def, exec_stack_op_def] >> decide_tac) >>
-  drule_at (Pat `fin.as_pc = _`) sym_invoke_ok_compose >>
-  disch_then drule_all >> metis_tac[arithmeticTheory.ADD_COMM]
+  rename1 `generate_context_plan ctx = SOME cplan` >>
+  `LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by
+    (qpat_x_assum `LENGTH (compute_operands inst) <= LENGTH (SND _).ps_stack` mp_tac >>
+     qpat_x_assum `emit_input_plan _ _ _ _ = _` mp_tac >> simp[]) >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env mid.as_code
+     ctx cplan fn ret srest labs0 arranged mid sms` by
+    simp[sym_invoke_frame_own_canonical] >>
+  drule sym_invoke_canonical_lockstep >>
+  disch_then (qspecl_then [`mid.as_code`, `env`] assume_tac) >>
+  `!rv v. run_blocks fuel ctx (EL j ctx.ctx_functions) cvs = IntRet rv v ==>
+    ?n a s. asm_steps (SND (compute_label_offsets prog)) o2pc prog n cas = AsmOK a /\
+      a.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 /\
+      a.as_stack = REVERSE rv.iret_values ++ (saved ++ rest) /\
+      fn_return_state_rel ctx cplan (EL j ctx.ctx_functions) v cas a /\
+      sym_steps_mode F prog env mid.as_code n scas = SymOK s /\
+      asm_sym_rel_own (SND (compute_label_offsets prog)) prog env mid.as_code a s /\
+      s.sym_stack = MAP Val (REVERSE rv.iret_values) ++ (saved_sym ++ srest) /\
+      (!b. context_spill_byte cplan b /\
+        ~closure_spill_byte ctx cplan (EL j ctx.ctx_functions).fn_name b ==>
+        FLOOKUP s.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b) /\
+      (!b. b IN FDOM s.sym_mem_labels ==> context_spill_byte cplan b)` by
+    (rpt gen_tac >> strip_tac >> fs[] >>
+     qpat_x_assum `!rv v. run_blocks _ _ _ _ = IntRet rv v ==> _` drule >>
+     strip_tac >>
+     imp_res_tac asmOwnCodeInvariantTheory.asm_steps_code_preserved >>
+     rename1 `sym_steps prog env nret scas = SymOK sret` >>
+     rename1 `asm_steps _ _ prog nret cas = AsmOK aret` >>
+     qexistsl [`nret`, `aret`, `sret`] >>
+     gvs[sym_steps_mode_def, asm_sym_rel_own_canonical, APPEND_ASSOC]) >>
+  qpat_x_assum `EL j ctx.ctx_functions = callee` SUBST_ALL_TAC >>
+  rule_assum_tac (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    (sym_invoke_source_ok_local |> SPEC_ALL |> Q.INST [`allow_own` |-> `F`]
+      |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  disch_then (drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ arranged _ _`)) >>
+  disch_then (drule_at (Pos hd)) >>
+  disch_then (drule_at (Pat `sym_steps _ _ _ _ = SymOK _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ arranged _ _`)) >>
+  disch_then drule_all >>
+  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical] >> metis_tac[]
 QED
 
 Theorem sym_invoke_frame_sim_deep:
