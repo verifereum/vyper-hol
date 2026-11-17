@@ -521,7 +521,11 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
-      (FST (SND (classify_functions tops)))` by simp[Abbr `ifns`] >>
+      (order_internals (deploy_internal_order (SOME cf) ints) ints)` by
+    simp[Abbr `ifns`] >>
+  `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
+      (FST (SND (classify_functions tops)))` by
+    simp[PERM_order_deploy_internals] >>
   drule_all deploy_internal_package_certificates >> strip_tac >>
   qpat_x_assum `ifns = _` kall_tac >>
   `EVERY (\d. ~compiler_label (FST d) /\
@@ -550,7 +554,8 @@ Proof
                `"__deploy"`,
                `MAP (set_internal_package_target rpolicy.rpol_target o
                      package_internal_fn tops T (K global_nonreentrant_slot) T
-                       (imm_len tops)) ints`,
+                       (imm_len tops))
+                 (order_internals (deploy_internal_order (SOME cf) ints) ints)`,
                `()`, `st_final`, `()`, `post`,
                `ctx`, `data`, `UNIV`] mp_tac extract_context_fuel_stable >>
   impl_tac >- (

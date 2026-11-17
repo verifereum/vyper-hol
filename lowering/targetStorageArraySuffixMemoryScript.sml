@@ -40,7 +40,7 @@ Proof
   disch_then (qspecl_then [`H`, `if tr then tload w s else sload w s`,
     `s`, `ctx`, `func`, `cenv`, `cx`, `es`] mp_tac) >>
   impl_tac
-  >- (Cases_on `tr` >> simp[step_inst_base_def, exec_read1_def, step_SLOAD]) >>
+  >- (Cases_on `tr` >> simp[step_inst_base_opcode_eqs, exec_read1_def, step_SLOAD]) >>
   strip_tac >> qexists `t` >> simp[] >> gvs[update_var_def]
 QED
 

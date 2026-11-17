@@ -31,8 +31,7 @@ Theorem deploy_prefix_no_dalloca:
     (rpolicy, dunit, dout, prog, cplan) /\ deploy_source_ok tops am tx ==>
   ~ctx_has_dalloca dunit.cu_context
 Proof
-  strip_tac >> drule_all deploy_unit_shape_ok >> strip_tac >>
-  simp[o1_source_unit_ok_no_dalloca]
+  strip_tac >> drule_all deploy_unit_shape_ok >> simp[]
 QED
 
 val _ = export_theory();

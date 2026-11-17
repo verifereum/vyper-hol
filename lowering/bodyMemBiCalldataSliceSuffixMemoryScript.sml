@@ -255,16 +255,16 @@ Proof
 QED
 
 Theorem calldata_slice_seq_mem:
-  !func cenv cx es n start_op sa sb buf_op s ctx wa.
+  !func cenv cx es n m start_op sa sb buf_op s ctx wa.
     compile_slice_calldata start_op (Lit (n2w n))
-      (32 + 32 * word_size n) sa = (buf_op,sb) /\
+      (32 + 32 * word_size m) sa = (buf_op,sb) /\
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    32 + 32 * word_size n < dimword (:256) /\ 0 < n /\
+    32 + 32 * word_size m < dimword (:256) /\ n <= m /\ 0 < n /\
     eval_operand start_op s = SOME wa /\
     (!x. start_op = Var x ==> not_fresh_at sa x) /\
     MEM (mk_inst (sa.cs_next_id + 7) ALLOCA
-      [Lit (n2w (32 + 32 * word_size n))]
+      [Lit (n2w (32 + 32 * word_size m))]
       [STRING #"%" (toString (sa.cs_next_var + 6))]) (fn_insts func) ==>
     run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
@@ -322,12 +322,12 @@ Proof
   qx_gen_tac `mid` >> strip_tac >>
   `local_ptrs_reserved cenv s2` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `MEM (mk_inst s2.cs_next_id ALLOCA [Lit (n2w (32 + 32 * word_size n))]
+  `MEM (mk_inst s2.cs_next_id ALLOCA [Lit (n2w (32 + 32 * word_size m))]
      [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func)` by
     (qpat_assum `s2.cs_next_id = _` SUBST1_TAC >>
      qpat_assum `s2.cs_next_var = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s2`, `s3`, `buf`,
-               `32 + 32 * word_size n`, `pre`, `ctx`] mp_tac
+               `32 + 32 * word_size m`, `pre`, `ctx`] mp_tac
     literal_alloc_buffer_run >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
@@ -336,13 +336,15 @@ Proof
      qpat_assum `run_inst_seq (emitted_insts s2 s3) pre = OK t`
        (fn th => rewrite_tac[th]) >> simp[]) >>
   pop_assum SUBST_ALL_TAC >>
-  `w2n w + (32 + 32 * word_size n) <= t.vs_alloca_next` by
+  `w2n w + (32 + 32 * word_size m) <= t.vs_alloca_next` by
     (`alloca_inv t` by fs[stmt_state_rel_def] >>
      fs[alloca_inv_def, alloca_next_valid_def] >>
      first_x_assum drule >> simp[]) >>
-  `n <= 32 * word_size n` by simp[valueTypingMemoryPropsTheory.word_size_capacity] >>
+  `n <= 32 * word_size m` by
+    (irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `m` >>
+     simp[valueTypingMemoryPropsTheory.word_size_capacity]) >>
   `n < dimword (:256)` by
-    (qpat_x_assum `32 + 32 * word_size n < dimword (:256)` mp_tac >>
+    (qpat_x_assum `32 + 32 * word_size m < dimword (:256)` mp_tac >>
      qpat_x_assum `n <= _` mp_tac >> simp[]) >>
   `w2n w + 32 < dimword (:256)` by
     (qpat_x_assum `w2n w + _ < dimword (:256)` mp_tac >> simp[]) >>

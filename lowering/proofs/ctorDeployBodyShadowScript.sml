@@ -77,7 +77,8 @@ Theorem lower_vyper_deploy_unit_ctor_run[local]:
   run_deploy_lowering T rpolicy bc (imm_len tops) args 0
     (MAP (set_internal_package_target rpolicy.rpol_target o
           package_internal_fn tops T (K global_nonreentrant_slot) T
-            (imm_len tops)) ints)
+            (imm_len tops))
+      (order_internals (deploy_internal_order (SOME cf) ints) ints))
     cenv0 body pay nr nkey ut "__deploy" = SOME dunit
 Proof
   simp[lower_vyper_deploy_unit_def, GSYM imm_len_def] >>
@@ -132,13 +133,16 @@ Proof
   `supported_program tops` by fs[deploy_source_ok_def] >>
   qabbrev_tac `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) T
-        (imm_len tops)) ints` >>
+        (imm_len tops))
+      (order_internals (deploy_internal_order (SOME cf) ints) ints)` >>
   `EVERY internal_fn_shape_ok ifns /\
    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))` by
-    (irule deploy_internal_package_certificates >> simp[Abbr `ifns`] >>
-     qexistsl_tac [`imm_len tops`, `T`, `K global_nonreentrant_slot`,
-       `rpolicy.rpol_target`, `tops`, `T`] >> simp[]) >>
+    (qspecl_then [`tops`, `rpolicy.rpol_target`, `T`,
+       `K global_nonreentrant_slot`, `T`, `imm_len tops`,
+       `order_internals (deploy_internal_order (SOME cf) ints) ints`, `ifns`]
+       mp_tac deploy_internal_package_certificates >>
+     simp[Abbr `ifns`, PERM_order_deploy_internals]) >>
   `run_deploy_lowering T rpolicy runtime_bc (imm_len tops) pos_args 0 ifns
      cenv0 body pay nr nkey ut "__deploy" = SOME dunit` by
     (simp[Abbr `ifns`] >> irule lower_vyper_deploy_unit_ctor_run >>

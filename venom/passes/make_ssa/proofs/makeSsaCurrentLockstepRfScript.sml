@@ -56,6 +56,6 @@ Proof
        eval_operand op' s' = eval_operand op s)
        inst.inst_operands inst'.inst_operands` by
     (irule LIST_REL_op_rename_eval >> fs[inst_pair_def]) >>
-  fs[inst_pair_def, dalloca_no_wrap_def] >> rpt strip_tac >>
+  fs[inst_pair_def, unitTransformDefsTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
   gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]
 QED
