@@ -254,38 +254,77 @@ Proof
   drule_all ld_joint_delegatecall_operands >>
   disch_then (qx_choose_then `di_target` (qx_choose_then `dr_target` assume_tac)) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
+    (qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[exec_delegatecall_def, AllCaseEqs(), consume_call_outcome_eq,
+          venom_call_request_def, computed_precompile_def,
+          update_var_def, record_request_def] >> rpt strip_tac >> gvs[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (fs[taint_within_upto_def] >> metis_tac[]) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    fs[ld_joint_boundary_def] >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts /\
+   transient_agree_except D s.vs_transient t.vs_transient` by
+    metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe] >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
-    fs[ld_joint_boundary_def, ld_shared_agree_def] >>
-  qabbrev_tac `rq = venom_call_request s daval 0w dival dzval F with
+    fs[ld_joint_boundary_def, ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  qabbrev_tac `rq1 = venom_call_request s daval 0w dival dzval F with
                       cr_kind := DelegateMessageCall` >>
-  `venom_call_request t daval 0w di_target dzval F with
-     cr_kind := DelegateMessageCall = rq` by
-    simp[Abbr `rq`, venom_call_request_def] >>
-  Cases_on `consume_call_outcome rq (w2n drval) (w2n dnval) s` >>
-  rename1 `consume_call_outcome rq _ _ s = (w1,r1)` >>
+  qabbrev_tac `rq2 = venom_call_request t daval 0w di_target dzval F with
+                      cr_kind := DelegateMessageCall` >>
+  `request_agree_except D rq1 rq2` by
+    simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
+         venom_call_request_def, call_request_component_equality] >>
+  `~computed_precompile rq1 /\ ~computed_precompile rq2 /\
+   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
+    simp[Abbr `rq1`, Abbr `rq2`, venom_call_request_def, computed_precompile_def] >>
+  Cases_on `consume_call_outcome rq1 (w2n drval) (w2n dnval) s` >>
+  rename1 `consume_call_outcome rq1 _ _ s = (w1,r1)` >>
   `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
-    (fs[Abbr `rq`, exec_delegatecall_def,
+    (fs[Abbr `rq1`, exec_delegatecall_def,
         Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  drule_at (Pat `consume_call_outcome _ _ _ _ = _`) consume_call_outcome_state_transport >>
-  disch_then (qspec_then `t` mp_tac) >> simp[Excl "consume_call_outcome_eq"] >>
-  disch_then (qspec_then `w2n dr_target` strip_assume_tac) >>
-  qexistsl_tac [`w1`,`r1`,`rq`,`w2n drval`,`w2n dr_target`,`w2n dnval`] >>
+  Cases_on `consume_call_outcome rq2 (w2n dr_target) (w2n dnval) t` >>
+  rename1 `consume_call_outcome rq2 _ _ t = (w2,r2)` >>
+  `LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
+    fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  drule_all ld_consume_call_outcome_masked_observation >> strip_tac >>
+  drule_all ld_consume_call_outcome_shared >> strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2` by
+    (qpat_x_assum `ld_shared_agree _ _ (tn with <|t_stor := _; t_trans := _|>) _ _`
+       mp_tac >>
+     Cases_on `r1.vs_accounts = s.vs_accounts` >>
+     Cases_on `r1.vs_transient = s.vs_transient` >>
+     simp[ld_shared_agree_def, word_agree_except_def,
+        Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  `r1.vs_logs = r2.vs_logs /\
+   r1.vs_pending_deletions = r2.vs_pending_deletions` by
+    fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  qexistsl_tac [`out`,`w1`,`r1`,`r2`,`rq1`,`rq2`,
+                `w2n drval`,`w2n dr_target`,`w2n dnval`] >>
   simp[Excl "consume_call_outcome_eq"] >>
-  conj_tac >- simp[Abbr `rq`, computed_precompile_def] >>
+  conj_tac
+  >- (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >>
+      gvs[venom_state_component_equality]) >>
+  conj_tac
+  >- (qpat_x_assum `consume_call_outcome rq2 _ _ t = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >>
+      gvs[venom_state_component_equality]) >>
   conj_tac
   >- (simp[step_inst_non_invoke, Excl "consume_call_outcome_eq"] >>
       asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs,
                                Excl "consume_call_outcome_eq"] >>
-      simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"]) >>
-  conj_tac
-  >- simp[request_agree_except_def, accounts_agree_except_def,
-          transient_agree_except_def, storage_agree_except_def,
-          word_agree_except_def] >>
+      simp[exec_delegatecall_def, Abbr `rq2`, Excl "consume_call_outcome_eq"]) >>
   simp[source_memory_write_ranges_def, fixed_source_write_range_def]
 QED
 
@@ -327,8 +366,9 @@ Theorem ld_joint_delegatecall_next:
 Proof
   strip_tac >> drule_all ld_joint_delegatecall_execute >>
   disch_then (qx_choose_then `out` (qx_choose_then `w`
-    (qx_choose_then `r` (qx_choose_then `rq` (qx_choose_then `ro`
-      (qx_choose_then `ro'` (qx_choose_then `rs` assume_tac))))))) >>
+    (qx_choose_then `r1` (qx_choose_then `r2` (qx_choose_then `rq1`
+      (qx_choose_then `rq2` (qx_choose_then `ro`
+        (qx_choose_then `ro'` (qx_choose_then `rs` assume_tac))))))))) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
@@ -358,7 +398,7 @@ Proof
     suspend "environment" >>
   `new_site_bytes s s1 = {}` by
     (simp[new_site_bytes_def, update_var_def] >>
-     qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
      simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
   `ld_joint_geometry sites X lo (a::MAP (\x. x.of_owner) U)` by
     fs[ld_joint_boundary_def, ld_joint_frame_def] >>
@@ -374,16 +414,21 @@ Proof
   qexists_tac `target` >> simp[] >>
   irule ld_joint_external_update_next >>
   qpat_assum `s1 = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
-  conj_tac >- simp[Abbr `target`, update_var_def] >>
   conj_tac
-  >- (qexistsl_tac [`r.vs_accounts`,`s.vs_vars |+ (out,w)`,`r.vs_logs`,
-         `r.vs_memory`,`r.vs_outcomes`,`r.vs_pending_deletions`,
-         `r.vs_returndata`,`record_request rq s.vs_requests`,`r.vs_transient`] >>
+  >- (simp[Abbr `target`, update_var_def] >>
+      qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac
+  >- (qexistsl_tac [`r1.vs_accounts`,`s.vs_vars |+ (out,w)`,`r1.vs_logs`,
+         `r1.vs_memory`,`r1.vs_outcomes`,`r1.vs_pending_deletions`,
+         `r1.vs_returndata`,`record_request rq1 s.vs_requests`,`r1.vs_transient`] >>
       simp[update_var_def] >>
-      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
       simp[venom_state_fupdcanon, venom_state_component_equality]) >>
   conj_tac
-  >- (simp[Abbr `target`, update_var_def, venom_state_component_equality]) >>
+  >- (simp[Abbr `target`, update_var_def] >>
+      qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >>
+      simp[venom_state_fupdcanon, venom_state_component_equality]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[]
 QED
 
@@ -392,14 +437,18 @@ Resume ld_joint_delegatecall_next[environment]:
   conj_tac >- simp[occurrence_out_def, out_prov_def] >>
   qexistsl_tac [`t`,`w`] >> simp[Abbr `target`, update_var_def] >>
   conj_tac
-  >- (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  >- (qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   metis_tac[ld_joint_environment]
 QED
 
 Resume ld_joint_delegatecall_next[memory]:
   simp[step_taint_def, mem_taint_def, step_writes_def,
        range_bytes_def, update_var_def, Abbr `target`] >>
-  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
   `ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by fs[ld_joint_boundary_def] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
   disch_then irule >> simp[] >> conj_tac
@@ -418,7 +467,8 @@ QED
 Resume ld_joint_delegatecall_next[dyn]:
   simp[step_taint_def, mem_taint_def, step_writes_def,
        range_bytes_def, update_var_def, Abbr `target`] >>
-  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
   `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
    lo <= dyn_floor C vs /\
    !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
@@ -434,13 +484,8 @@ Resume ld_joint_delegatecall_next[dyn]:
 QED
 
 Resume ld_joint_delegatecall_next[shared]:
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
-    fs[ld_joint_boundary_def] >>
-  simp[ld_shared_agree_def, step_taint_def, imm_taint_def,
-       update_var_def, Abbr `target`, word_agree_except_def] >>
-  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
-  fs[ld_shared_agree_def, word_agree_except_def] >>
-  simp[record_request_def, LIST_REL_APPEND]
+  fs[ld_shared_agree_def, step_taint_def, imm_taint_def,
+     store_taint_def, adopt_reset_def, update_var_def, Abbr `target`]
 QED
 
 Finalise ld_joint_delegatecall_next
