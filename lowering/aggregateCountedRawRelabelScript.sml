@@ -521,9 +521,10 @@ Proof
      simp[raw_pack_dret_control] >> gvs[]) >>
   simp[halt_state_def, revert_state_def, set_returndata_def] >>
   gvs[exec_create_abort_iff, exec_create_not_IntRet,
-      exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+      exec_ext_call_abort_iff, exec_delegatecall_abort_iff,
+      opcodeClassTheory.exec_call_helpers_not_intret] >>
   simp[halt_state_def, set_returndata_def] >>
-  metis_tac[exec_write2_not_exit, exit_result_def]
+  gvs[exec_write2_def, AllCaseEqs()]
 QED
 
 Theorem frag_relabel_exit_edge_raw:
