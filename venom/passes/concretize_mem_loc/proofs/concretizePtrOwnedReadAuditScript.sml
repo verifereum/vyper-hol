@@ -166,7 +166,8 @@ Proof
   `post.vs_returndata = [byte] /\
    post.vs_memory = (write_memory_with_expansion 0 [byte] s).vs_memory /\
    post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp` by
-    (gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
   `source_memory_write_ranges inst s = [(0,2)]` by
     simp[source_memory_write_ranges_def] >>
   `step_writes inst s post = [(0,1)]` by simp[step_writes_def] >>
@@ -421,12 +422,13 @@ Resume ptr_paired_owned_read_recovery_static[target_frame]:
     (rpt gen_tac >> strip_tac >>
      `j < LENGTH done /\ w < EL j done` by
        (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
-     irule ptr_paired_actual_protected_write_exclusion_static >>
-     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `FLOOKUP positions (Allocation _) = _`)) >>
-     goal_assum (drule_at (Pat `FLOOKUP (ptr_owner_view _ endpoint).cf_state.vs_allocas _ = _`)) >>
-     goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `ml_used_gen _ _ _ _`)) >>
+     drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       ptr_paired_actual_protected_write_exclusion_static >>
+     disch_then (drule_at (Pat `FLOOKUP positions (Allocation _) = _`)) >>
+     disch_then (drule_at (Pat `FLOOKUP (ptr_owner_view _ endpoint).cf_state.vs_allocas _ = _`)) >>
+     disch_then (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `ml_used_gen _ _ _ _`)) >>
+     disch_then irule >>
      simp[ADD1] >> metis_tac[]) >>
   drule ptr_chrono_history_end >> strip_tac >>
   `LENGTH ht-1 < LENGTH ht /\ EL (LENGTH ht-1) ht = at` by
