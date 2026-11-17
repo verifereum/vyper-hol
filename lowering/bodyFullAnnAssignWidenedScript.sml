@@ -298,65 +298,35 @@ Theorem annassign_widened_full_execution:
   body_inv tops ctx old cx /\ supported_expr tops e /\
   type_widens_to env.type_defs (expr_type e) typ /\
   ~is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
-  ~(lowered_value_type ce e = expr_type e \/
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type ce e) /\
-    arg_type_fits (lowered_value_type ce e) (expr_type e)) /\
   type_memory_bytes old typ < 2 ** 64 /\
-  body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx (expr_type e) e es /\
-  stmt_env old lctx ret_ty (AnnAssign id typ e) sa = (ce,sf) /\
-  stmt_env old lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)) shadow_sa = (ce,shadow_sf) /\
   FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
-  gas_shadow_state sa shadow_sa /\ gas_shadow_state sf shadow_sf /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
-  MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
-  (!H. dead_lo_ok H (DF H) lo old cx) /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved old sa /\ ret_pc_ok old sa s0 /\
-  (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  ~block_is_terminated sa /\
-  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
-  return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func old cx es s0 /\ storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d old cx es G0 tn0 s0) /\
-  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
-    (eval_stmt cx (AnnAssign id typ e)) (es,s0,G0,tn0)
-    (\H res ee G tn t. ?c.
-      stmt_lands lctx sf res t /\ ~t.vs_halted /\
-      (res = INL () ==> ~block_is_terminated sf /\ c = ce) /\
-      cenv_top_ext old c ee.scopes /\ stmt_state_rel H ctx func c cx ee t /\
-      storage_well_formed_on cx ee (FST H) /\ return_buf_frame d c sf t /\
-      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d c cx ee G tn t /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-      (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t.vs_allocas aid = SOME ent) /\
-      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-        op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-      alloca_frame old es sa s0 c ee t /\
-      (!aid off len i.
-        FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
-        (!name a cap. local_region old es.scopes s0 name a cap ==>
-          off+len <= a \/ a+cap <= off) /\
-        off <= i /\ i < off+len /\ i IN tn.t_mem ==> i IN tn0.t_mem))
-    (\H res ee gt rr.
-      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt rr) /\
-      halt_exit H cx ee res rr /\
-      (ctx_has_dalloca ctx ==> !s. (rr = Halt s \/ ?ir. rr = IntRet ir s) ==> allocas_below_fmp s))
+  (!sa ce r. declare_local old id typ sa = (ce,r) ==>
+    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      ce cx (expr_type e) e es /\
+    ~(lowered_value_type ce e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e))) ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ old
+    (stmt_env old lctx ret_ty (AnnAssign id typ e))
+    (stmt_env old lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   strip_tac >>
   qpat_x_assum `!H0 ctx func ce cx mid s sa sf xs p sw dw src_loc dty sty stv dtv v n sz aid0 start lo explicit PG G tn. compile_assign_value _ _ _ _ _ _ _ _ _ _ = _ /\ _ ==> _`
     (mk_asm "dispatch") >>
   qpat_x_assum `!H D lo d ctx func old ce cx es mid out sa b sf s0 s t G0 tn0 G tn Gf tf id p sz w inst n tyv v sc rest lctx. _`
     (mk_asm "install") >>
+  rewrite_tac[stmt_frag_full_def] >>
+  map_every qx_gen_tac [`st0`,`sa`,`sf`,`shadow_sa`,`shadow_sf`,`s0`,`G0`,`tn0`,`ce`] >>
+  strip_tac >>
   `old.ce_alloca_locals /\ ~ctx_has_dalloca ctx` by
     (conj_tac >- fs[body_inv_def] >> drule body_inv_no_dalloca >> simp[]) >>
   drule_all annassign_full_prefix_parts >> strip_tac >>
+  qpat_x_assum `!sa ce r. declare_local _ _ _ _ = _ ==> _` drule >>
+  strip_tac >>
   drule_all declare_local_memory_types_mem >> strip_tac >>
   `type_memory_bytes ce typ = type_memory_bytes old typ` by simp[] >>
   `ce.ce_func_return_type = build_func_return_type tops /\
@@ -560,7 +530,9 @@ Resume annassign_widened_full_execution[pure]:
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   simp_tac (srw_ss()) [] >>
   qpat_x_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _` drule >>
-  simp[ADD_COMM] >> strip_tac >> first_assum MATCH_ACCEPT_TAC)
+  simp[ADD_COMM] >> strip_tac >>
+  pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[ADD_COMM])
 QED
 
 Finalise annassign_widened_full_execution
