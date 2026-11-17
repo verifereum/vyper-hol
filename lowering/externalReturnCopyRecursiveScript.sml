@@ -10,52 +10,6 @@ Ancestors
   vyperTypeSystem vyperTyping vyperValue entryDecodeProps finite_map list pair
   structFieldsProps vyperTypeABI vyperTypeExprSoundness typedCopyDomain
 
-Theorem return_copy_word_run_seq[local]:
-  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
-  is_word_type dty /\
-  (!x. dst = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME a /\ eval_operand dst s = SOME d ==>
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  same_blocks sa sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb) /\
-  run_inst_seq (emitted_insts sa sb) s =
-    OK (mstore (w2n d) (mload (w2n a) s)
-      (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s) s))
-Proof
-  strip_tac >>
-  `!w. eval_operand dst
-       (update_var (STRING #"%" (toString sa.cs_next_var)) w s) = SOME d` by
-    (Cases_on `dst` >> gvs[eval_operand_def, update_var_def, lookup_var_def] >>
-     rpt strip_tac >>
-     `s' <> STRING #"%" (toString sa.cs_next_var)` by
-       (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
-     simp[FLOOKUP_UPDATE]) >>
-  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_store_memory_typed_def] >>
-  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_var_def, fresh_id_def, emit_def, comp_return_def] >> strip_tac >>
-  gvs[] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1] >>
-  simp[mk_inst_def, is_terminator_def, run_inst_seq_def] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[eval_operand_def, exec_read1_def, exec_write2_def, lookup_var_update_var]
-QED
-
-Theorem return_copy_word_raw_frag[local]:
-  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
-  is_word_type dty /\
-  (!x. dst = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s0 = SOME a /\ eval_operand dst s0 = SOME d ==>
-  frag_exec ctx sa sb (\s. s = s0)
-    (\t. t = (mstore (w2n d) (mload (w2n a) s0)
-      (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s0) s0))
-      with vs_inst_idx := LENGTH sb.cs_current_insts) (\r. F)
-Proof
-  strip_tac >> drule_all return_copy_word_run_seq >> strip_tac >>
-  irule frag_exec_run_inst_seq >> gvs[same_blocks_def] >> simp[]
-QED
-
 Theorem return_copy_word_layout[local]:
   is_word_type ty /\ evaluate_type tenv ty = SOME tv ==>
   type_memory_size tv = 32
