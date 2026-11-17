@@ -1539,7 +1539,8 @@ Theorem ec_suffix_failure[local]:
   (!z. op = Var z ==> not_fresh_at sm z) /\
   precompile_result (venom_call_request s target 0w wi insz T).cr_target
     (venom_call_request s target 0w wi insz T).cr_data = SOME NONE ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
   strip_tac >> irule computed_suffix_failure >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -1555,7 +1556,8 @@ Theorem ec_suffix_oracle_failure[local]:
   (!z. op = Var z ==> not_fresh_at sm z) /\
   (target = 6w \/ target = 7w) /\
   (s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
   strip_tac >> irule computed_suffix_oracle_failure >>
   simp[] >>
@@ -1689,7 +1691,8 @@ Theorem ec_points_run:
   case vfmExecution$ecmul
     (w2n (mem_word_at (w2n point) s.vs_memory),
      w2n (mem_word_at (w2n point+32) s.vs_memory)) (w2n wscalar) of
-    NONE => ?t. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort t
+    NONE => ?t. run_inst_seq (emitted_insts sf sb) s =
+      Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
   | SOME (x,y) =>
       if (?co rest. s.vs_outcomes = co::rest /\ co.co_success) then
         ?t. run_inst_seq (emitted_insts sf sb) s = OK t /\
@@ -1697,7 +1700,8 @@ Theorem ec_points_run:
             (es with outcomes := SOME (DROP 1 s.vs_outcomes))
             (Value (mk_ec_result (x,y)))
             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t
-      else ?t. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort t) /\
+      else ?t. run_inst_seq (emitted_insts sf sb) s =
+        Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t) /\
   (!p1 p2 sf res sb func cenv cx es s point point2 lo v1 v2 e.
   compile_ecadd_points p1 p2 sf = (res,sb) /\
   stmt_state_rel H ctx func cenv cx es s /\
@@ -1716,7 +1720,8 @@ Theorem ec_points_run:
      w2n (mem_word_at (w2n point+32) s.vs_memory))
     (w2n (mem_word_at (w2n point2) s.vs_memory),
      w2n (mem_word_at (w2n point2+32) s.vs_memory)) of
-    NONE => ?t. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort t
+    NONE => ?t. run_inst_seq (emitted_insts sf sb) s =
+      Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
   | SOME (x,y) =>
       if (?co rest. s.vs_outcomes = co::rest /\ co.co_success) then
         ?t. run_inst_seq (emitted_insts sf sb) s = OK t /\
@@ -1724,7 +1729,8 @@ Theorem ec_points_run:
             (es with outcomes := SOME (DROP 1 s.vs_outcomes))
             (Value (mk_ec_result (x,y)))
             (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t
-      else ?t. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort t)
+      else ?t. run_inst_seq (emitted_insts sf sb) s =
+        Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t)
 Proof
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -1845,11 +1851,14 @@ Resume ec_points_run[suffix]:
   `(!z. ip = Var z ==> not_fresh_at sm z) /\
    (!z. op = Var z ==> not_fresh_at sm z)` by
     (conj_tac >> rpt strip_tac >> gvs[]) >>
+  `st.vs_outcomes = s.vs_outcomes` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   qmatch_goalsub_abbrev_tac `option_CASE result` >>
   Cases_on `result`
   >- (qmatch_asmsub_rename_tac `eval_operand ip st = SOME wi` >>
       qmatch_asmsub_rename_tac `eval_operand op st = SOME po` >>
-      `?u. run_inst_seq (emitted_insts sm sb) st = Abort Revert_abort u` by
+      `?u. run_inst_seq (emitted_insts sm sb) st =
+         Abort (if st.vs_outcomes = [] then ExHalt_abort else Revert_abort) u` by
         (irule ec_suffix_failure >>
          goal_assum (drule_at (Pat `(_ : operand # compile_state) = _`)) >> simp[] >>
          gvs[venomCallOracleDefsTheory.venom_call_request_def,
@@ -1862,14 +1871,13 @@ Resume ec_points_run[suffix]:
       disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
   qmatch_goalsub_rename_tac `option_CASE (SOME r)` >>
   PairCases_on `r` >> simp[] >>
-  `st.vs_outcomes = s.vs_outcomes` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
   reverse (Cases_on `?co rest. s.vs_outcomes = co::rest /\ co.co_success`)
   >- (simp[] >>
       `st.vs_outcomes = [] \/
        ?co rest. st.vs_outcomes = co::rest /\ ~co.co_success` by
         (Cases_on `s.vs_outcomes` >> gvs[] >> metis_tac[]) >>
-      `?u. run_inst_seq (emitted_insts sm sb) st = Abort Revert_abort u` by
+      `?u. run_inst_seq (emitted_insts sm sb) st =
+         Abort (if st.vs_outcomes = [] then ExHalt_abort else Revert_abort) u` by
         (irule ec_suffix_oracle_failure >>
          simp[] >>
          goal_assum (drule_at (Pat `(_ : operand # compile_state) = _`)) >>
