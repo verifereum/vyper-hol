@@ -302,7 +302,18 @@ Proof
   metis_tac[well_formed_integer_type]
 QED
 
-(* Rows 34 and 35 (narrow): shifts take an integer, << only a 256-bit one;
+Theorem well_typed_binop_bitwise_supported:
+  well_typed_binop ty op t1 t2 /\ well_formed_type tenv t1 /\
+  MEM op [And;Or;XOr] ==>
+  supported_binop op t1 t2 lb ne \/ is_flag_type t1
+Proof
+  rw[] >> gvs[well_typed_binop_def, supported_binop_def] >>
+  Cases_on `?m. t1 = BaseT (BytesT (Fixed m))`
+  >- gvs[well_formed_type_def, evaluate_type_def, IS_SOME_COND] >>
+  metis_tac[well_formed_integer_type, is_bool_type_def]
+QED
+
+(* Rows 34 and 35 (narrow): integer << requires a 256-bit LHS;
    a non-negative literal amount of signed type (row 33) remains. *)
 Theorem well_typed_binop_shift_supported:
   well_typed_binop ty op (expr_type a) (expr_type b) /\
@@ -312,6 +323,15 @@ Theorem well_typed_binop_shift_supported:
   (supported_nonnegative_literal b /\ ~is_uint_type (expr_type b))
 Proof
   rpt strip_tac >>
+  Cases_on `expr_type a = BaseT (BytesT (Fixed 32))`
+  >- (disj1_tac >>
+      Cases_on `expr_type b = BaseT (BytesT (Fixed 32))`
+      >- gvs[supported_binop_def] >>
+      `is_int_type (expr_type b)` by
+        gvs[well_typed_binop_def] >>
+      `supported_integer_type (expr_type b)` by
+        metis_tac[well_formed_integer_type] >>
+      gvs[supported_binop_def]) >>
   `is_int_type (expr_type a)` by gvs[well_typed_binop_def] >>
   `supported_integer_type (expr_type a)`
     by metis_tac[well_formed_integer_type] >>

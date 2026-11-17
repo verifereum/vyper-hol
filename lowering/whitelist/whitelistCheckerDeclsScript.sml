@@ -476,13 +476,16 @@ QED
 Theorem type_stmt_augassign_word_target:
   type_stmt env ret (AugAssign ty bt op e) = SOME env' ==>
   type_place_target env bt = SOME (Type ty) /\
-  (supported_word_type ty \/ is_flag_type ty)
+  (supported_word_type ty \/ is_flag_type ty \/
+   ?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)))
 Proof
   simp[type_stmt_def, well_typed_target_def] >> strip_tac >>
   Cases_on `ty` >> gvs[supported_word_type_def] >>
   TRY (rename1 `BaseT b` >> Cases_on `b`) >> gvs[supported_word_type_def] >>
   imp_res_tac assignable_int_width >> Cases_on `op` >>
-  gvs[well_typed_binop_def]
+  gvs[well_typed_binop_def] >>
+  gvs[assignable_type_def, well_formed_type_def, evaluate_type_def,
+      AllCaseEqs()]
 QED
 
 Theorem nonneg_int_literal_supported[local]:
@@ -507,6 +510,9 @@ Proof
   gvs[well_typed_binop_def, supported_binop_def, supported_numeric_type_def,
       supported_integer_type_def, supported_unsigned_type_def,
       supported_word_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+       gvs[assignable_type_def, well_formed_type_def, evaluate_type_def,
+           AllCaseEqs()]) >>
   imp_res_tac assignable_int_width >> gvs[supported_int_width_def] >>
   TRY (irule nonneg_int_literal_supported >> simp[]) >>
   gvs[augassign_operand_ok_def] >>

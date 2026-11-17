@@ -50,12 +50,19 @@ Definition supported_binop_def:
     | UnsafeSub => supported_integer_type ty
     | UnsafeMul => supported_integer_type ty
     | UnsafeDiv => supported_integer_type ty
-    | And => supported_integer_type ty \/ ty = BaseT BoolT
-    | Or => supported_integer_type ty \/ ty = BaseT BoolT
-    | XOr => supported_integer_type ty \/ ty = BaseT BoolT
-    | ShR => supported_integer_type ty /\ supported_unsigned_type rhs_ty
-    | ShL => (ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
-        supported_unsigned_type rhs_ty
+    | And => supported_integer_type ty \/ ty = BaseT BoolT \/
+        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
+    | Or => supported_integer_type ty \/ ty = BaseT BoolT \/
+        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
+    | XOr => supported_integer_type ty \/ ty = BaseT BoolT \/
+        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
+    | ShR => (supported_integer_type ty /\ supported_unsigned_type rhs_ty) \/
+        (ty = BaseT (BytesT (Fixed 32)) /\
+         (supported_integer_type rhs_ty \/ rhs_ty = ty))
+    | ShL => ((ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
+              supported_unsigned_type rhs_ty) \/
+        (ty = BaseT (BytesT (Fixed 32)) /\
+         (supported_integer_type rhs_ty \/ rhs_ty = ty))
     | Eq => supported_word_type ty
     | NotEq => supported_word_type ty
     | Lt => supported_numeric_type ty
