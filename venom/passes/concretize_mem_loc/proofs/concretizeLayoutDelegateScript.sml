@@ -69,6 +69,10 @@ Proof
     fs[concretize_local_obs_def, dead_result_rel_def] >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[relocation_env_def] >>
   `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
+  `s.vs_outcomes <> []` by
+    (Cases_on `s.vs_outcomes = []` >>
+     fs[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   drule delegate_success_envelope >> strip_tac >>
   qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
   `venom_call_request t addr 0w offT sz F with
