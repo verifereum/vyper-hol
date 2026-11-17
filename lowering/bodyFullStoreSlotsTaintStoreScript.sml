@@ -1,7 +1,7 @@
 Theory bodyFullStoreSlotsTaintStore
 Ancestors
   assignBasePtrWordStore fragGasCopyLoop bodyFullStoreSlotsRetired
-  fragGasSeqPtr fragGasOriginPtr fragExecMem exprLoweringProps
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr fragExecMem exprLoweringProps
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState
   venomInst ptrDiscipline contextCodegenRel codegenRel unitTransformDefs
   memSafeRun
@@ -23,7 +23,11 @@ Proof
     (Cases_on `tr` >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]) >>
   simp[run_inst_seq_def, inst_seq_ptr_def] >>
   conj_tac
-  >- (irule assign_base_ptr_inst_ok_storage_word >> Cases_on `tr` >> simp[]) >>
+  >- (irule ptr_inst_ok_restore_ctx >>
+      conj_tac >- (Cases_on `tr` >> simp[mk_inst_def]) >>
+      conj_tac >- simp[] >>
+      irule assign_base_ptr_inst_ok_storage_word >>
+      Cases_on `tr` >> simp[ctx_has_dalloca_def]) >>
   qpat_x_assum `eval_operand addr s = SOME slot`
     (mp_then (Pos (el 2)) mp_tac assign_base_storage_word_ghost) >>
   disch_then (qspec_then `if tr then TSTORE else SSTORE` mp_tac) >>
