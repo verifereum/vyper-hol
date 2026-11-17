@@ -4,27 +4,6 @@ Ancestors lowerDloadPtrCall lowerDloadPtrRel ptrDiscipline venomExecSemantics
   lowerDloadPtrResidualInterfaces lowerDloadPtrPhi
   venomCallOracleProps venomCallOracleDefs extCallOracle
 
-(* With empty source masks both runs see identical shared stores. *)
-Theorem dload_delegate_full_stores:
-  dload_shared_store tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
-Proof
-  `!a b:bytes32. word_agree_except {} a b <=> a = b` by
-    simp[word_agree_except_bits, fcpTheory.CART_EQ] >>
-  strip_tac >> fs[dload_shared_store_def] >>
-  `!a. (s.vs_accounts a).storage = (t.vs_accounts a).storage /\
-       s.vs_transient a = t.vs_transient a` by
-    (gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
-     gvs[storage_agree_except_def, key_taint_def, FUN_EQ_THM]) >>
-  conj_tac
-  >- (simp[FUN_EQ_THM] >> gen_tac >>
-      first_x_assum (qspec_then `x` strip_assume_tac) >>
-      qpat_x_assum `!a. _ with storage := _ = _ /\ _`
-        (qspec_then `x` strip_assume_tac) >>
-      qpat_x_assum `(s.vs_accounts x).storage = _` (fn th => fs[GSYM th])) >>
-  simp[FUN_EQ_THM] >> metis_tac[]
-QED
-
 Theorem dload_delegate_scalar_safety:
   i.inst_opcode = DELEGATECALL /\
   i.inst_operands = [gas;addr;a;sz;r;rs] /\ MEM op [gas;addr;sz;rs] /\
@@ -51,7 +30,7 @@ Theorem dload_delegate_scalar_equal:
   i.inst_opcode = DELEGATECALL /\
   i.inst_operands = [gas;addr;a;sz;r;rs] /\ MEM op [gas;addr;sz;rs] /\
   ptr_use_ok P pv i /\ FDOM G SUBSET pv /\ taint_ok f tn i s /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) ==>
   eval_operand op s = eval_operand op t
@@ -65,48 +44,46 @@ Proof
   drule scalar_operand_equal >> disch_then irule >> metis_tac[]
 QED
 
-(* Both runs consume the shared oracle with one delegate request; the only
-   caller-local effects are the relocated return-buffer write and each run's
-   own request log. *)
+(* Both runs consume the shared oracle with one delegate request, so they
+   take the same outcome.  Each run's accounts are its own unless the outcome
+   is adopted, as for CALL. *)
 Theorem dload_delegate_exec_success:
-  dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  dload_equal_environment s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i s gas addr ao az ro rz = OK s' ==>
-  ?output u out rq.
-    i.inst_outputs = [out] /\ s' = update_var out output u /\
-    exec_delegatecall i t gas addr bo az tr rz =
-      OK (update_var out output (t with <|
-        vs_returndata := u.vs_returndata;
-        vs_accounts := u.vs_accounts;
-        vs_logs := u.vs_logs;
-        vs_memory := (write_memory_with_expansion (w2n tr)
-                         (TAKE (w2n rz) u.vs_returndata) t).vs_memory;
-        vs_transient := u.vs_transient;
-        vs_pending_deletions := u.vs_pending_deletions;
-        vs_outcomes := u.vs_outcomes;
-        vs_requests := record_request rq t.vs_requests |>))
+  ?t'. exec_delegatecall i t gas addr bo az tr rz = OK t' /\
+    dload_equal_environment s' t' /\
+    (!out. MEM out i.inst_outputs ==> lookup_var out s' = lookup_var out t')
 Proof
-  strip_tac >> drule_all dload_delegate_full_stores >> strip_tac >>
+  strip_tac >>
   `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes /\
    s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[dload_equal_environment_def, venom_state_component_equality] >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
                       cr_kind := DelegateMessageCall` >>
-  `venom_call_request t addr 0w bo az F with
-     cr_kind := DelegateMessageCall = rq` by
-    simp[Abbr `rq`, venom_call_request_def] >>
+  qabbrev_tac `rr = venom_call_request t addr 0w bo az F with
+                      cr_kind := DelegateMessageCall` >>
+  `rq.cr_kind = rr.cr_kind /\ rq.cr_value = rr.cr_value /\
+   rq.cr_target = rr.cr_target /\ rq.cr_data = rr.cr_data` by
+    simp[Abbr `rq`, Abbr `rr`, venom_call_request_def] >>
+  drule_all dload_take_outcome_observations >>
+  disch_then (qspec_then `s.vs_outcomes` strip_assume_tac) >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
-  rename1 `consume_call_outcome rq _ _ s = (w1,r1)` >>
-  `?out. i.inst_outputs = [out] /\ s' = update_var out w1 r1` by
+  rename1 `consume_call_outcome rq _ _ s = (w,ss)` >>
+  Cases_on `consume_call_outcome rr (w2n tr) (w2n rz) t` >>
+  rename1 `consume_call_outcome rr _ _ t = (v,tt)` >>
+  `w = v /\ dload_equal_environment ss tt` by
+    (Cases_on `t.vs_call_ctx.cc_static` >>
+     gvs[consume_call_outcome_eq] >>
+     gvs[dload_equal_environment_def, venom_state_component_equality,
+         adopt_outcome_def, adopt_outcome_deletions_def,
+         Abbr `rq`, Abbr `rr`, venom_call_request_def]) >>
+  `?out. i.inst_outputs = [out] /\ s' = update_var out w ss` by
     (fs[Abbr `rq`, exec_delegatecall_def,
         Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  drule_at (Pat `consume_call_outcome _ _ _ _ = _`)
-    consume_call_outcome_state_transport >>
-  disch_then (qspec_then `t` mp_tac) >> simp[Excl "consume_call_outcome_eq"] >>
-  disch_then (qspec_then `w2n tr` strip_assume_tac) >>
-  qexistsl [`w1`,`r1`,`rq`] >>
-  asm_simp_tac (srw_ss()) [exec_delegatecall_def,
-                           Excl "consume_call_outcome_eq"] >>
-  simp[venom_state_component_equality]
+  qexists_tac `update_var out v tt` >>
+  gvs[exec_delegatecall_def, Abbr `rq`, Abbr `rr`,
+      Excl "consume_call_outcome_eq", update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE, dload_equal_environment_def,
+      venom_state_component_equality]
 QED

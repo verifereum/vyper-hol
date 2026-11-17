@@ -5,6 +5,10 @@
       "sha256": "6b0e0743c886234793cd3761eb27854cf9db08c9b6c6ea1fe92c0d3391a4cd97"
     },
     {
+      "path": "bytecode/patches/5236-ternary-arm-widening.patch",
+      "sha256": "3308be91acb86cda5948465db571a6682ecd813707a00cb10d5aa252b323c2b7"
+    },
+    {
       "path": "bytecode/patches/5239-declared-variable-type.patch",
       "sha256": "d1091e373ce08a9b814bd6fca18bdf260345d6d277e14b6774a8c14a32b6f3dd"
     },
@@ -13,16 +17,48 @@
       "sha256": "492183e866961daed3a7df71f3e459770375e29493722c9195a3b89ad84c3690"
     },
     {
+      "path": "bytecode/patches/5256-tuple-widening-layout.patch",
+      "sha256": "6a94324bcca7a1bee0f0e59d83d438813ffc54d700914a4be3216f37ccb28992"
+    },
+    {
+      "path": "bytecode/patches/5274-base-ptr-all-uses.patch",
+      "sha256": "b6e17c04e28f0f44a4f50021450ebfd286c7c234adecd4fc16d2a910d94d485e"
+    },
+    {
       "path": "bytecode/patches/5280-target-subscript-overlap.patch",
       "sha256": "d651564fb4f4c80622200381c597798cbbd40a0d53f75f90cd6482e64d6d3a8c"
     },
     {
       "path": "bytecode/patches/5282-assign-rhs-snapshot.patch",
-      "sha256": "3b27fc33f684182ec094a6d143478af20b87764939d2598d9049b3f4632565d9"
+      "sha256": "1a7c9bf3e9bf4d38f8a44358b9fb784d7009e5be15d9c4166c942475a39683c6"
+    },
+    {
+      "path": "bytecode/patches/5295-concat-buffer-bound.patch",
+      "sha256": "13fbf240506c65720c33d0ff27801ae92e3f10f746f22ffd54757d5c70ccfb6a"
+    },
+    {
+      "path": "bytecode/patches/5297-base-ptr-ret-reads.patch",
+      "sha256": "66ecbc017c3b66a10b60499fa9795e87e6fc73d1f7356516964bbe90db1cc9b0"
+    },
+    {
+      "path": "bytecode/patches/5298-int-decimal-clamp.patch",
+      "sha256": "e832ce6510a8c564438cdddb603a7ed23310e394ea03101d680fd98ddef99716"
+    },
+    {
+      "path": "bytecode/patches/5322-signed-empty-bytestring.patch",
+      "sha256": "b43ad502b7d3f4429297e11aed6686fa553bb66b78da7165d76fb0759e983056"
+    },
+    {
+      "path": "bytecode/patches/5331-ternary-arm-buffer.patch",
+      "sha256": "44b6fa6137a3ebd95aa3545249f5117ce4bb34a82db6258aaa1d035d852ea585"
     },
     {
       "path": "bytecode/patches/5332-immutable-runtime-length.patch",
       "sha256": "a4cb5d959ab4495c53c7c7d0f42b736be54958084318d3d7da4dc26140c4c67e"
+    },
+    {
+      "path": "bytecode/patches/5333-memory-bytestring-payload.patch",
+      "sha256": "8daa08fbd5eac251e296374b2a4a65c8fd27199eb3e514ce5ad35e0d6eeb8360"
     },
     {
       "path": "bytecode/patches/5336-dft-abort-order.patch",

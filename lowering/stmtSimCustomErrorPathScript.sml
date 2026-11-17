@@ -144,7 +144,8 @@ Resume compile_raise_custom_error_ready_frag[stored_tuple_tail]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  strip_tac >> gvs[] >>
+  disch_then (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
     qpat_assum `!tail. eval_exprs _ _ _ = _`

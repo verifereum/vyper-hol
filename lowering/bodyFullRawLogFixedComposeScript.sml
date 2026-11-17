@@ -301,7 +301,7 @@ Proof
     qpat_x_assum `MEM i (fn_insts f)` mp_tac >>
     qpat_x_assum `MEM f ctx.ctx_functions` mp_tac >>
     rpt (pop_assum kall_tac) >>
-    simp[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[])) >>
+    simp[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[])) >>
   strip_tac >>
   asm_x "alloc_endpoint" kall_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qdata _` >>
@@ -446,8 +446,12 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
      (impl_tac >- simp[]) >> strip_tac >>
      asm_x "tail_endpoint" kall_tac >>
      asm_x "static_tail_endpoint" kall_tac >>
-     irule raw_log_fixed_child_tail_input >> gvs[] >>
-     rpt conj_tac >> metis_tac[]) >>
+     irule raw_log_fixed_child_tail_input >>
+     qpat_assum `ptr_covers Gu tnu p u 32` (irule_at Any) >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ RawLog _ _) _` (irule_at Any) >>
+     qpat_assum `!tail. bind (eval_expr _ _) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >>
+     gvs[] >> rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?word. _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>

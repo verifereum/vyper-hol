@@ -3,7 +3,7 @@
  * 32 bytes per DLOAD, is bounded by the region's size on top of the unit's
  * alloca budget; and the constructor epilogue returns the runtime code plus
  * the immutables.  run_deploy_lowering checks that the runtime code's length
- * plus these stays below 2^256.
+ * plus these stays below 2^254; the exports retain the weaker word bound.
  * TOP-LEVEL: deploy_imm_budget_ok.
  * Helpers: run_deploy_lowering_imm_budget, deploy_imm_alloca_budget_ok (the
  * bound without the runtime code, which the memory pieces use).
@@ -19,10 +19,10 @@ Theorem run_deploy_lowering_imm_budget[local]:
   LENGTH runtime_bc + immutables_len + unit_alloca_budget unit.cu_context +
     32 * ctx_dload_count unit.cu_context < dimword (:256)
 Proof
-  simp[run_deploy_lowering_def] >>
-  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  fs[ctx_dload_count_def, rich_listTheory.FILTER_FLAT,
-     rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o, combinTheory.o_DEF]
+  strip_tac >> drule run_deploy_lowering_static_headroom >>
+  simp[ctx_dload_count_def, rich_listTheory.FILTER_FLAT,
+       rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o, combinTheory.o_DEF,
+       wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >> decide_tac
 QED
 
 Theorem deploy_imm_budget_ok:

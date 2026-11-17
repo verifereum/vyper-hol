@@ -232,9 +232,8 @@ Resume mapping_slot_full_run[kept]:
   conj_tac >- metis_tac[] >>
   conj_tac >- (rpt strip_tac >>
     `i < s.vs_alloca_next` by (res_tac >> decide_tac) >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >>
-    `i < s.vs_alloca_next` by (res_tac >> decide_tac) >> metis_tac[]) >>
-  rpt strip_tac >> `i < s.vs_alloca_next` by decide_tac >> metis_tac[]
+  rpt strip_tac >>
+  `i < s.vs_alloca_next` by (res_tac >> decide_tac) >> metis_tac[]
 QED
 Resume mapping_slot_full_run[runtime]:
   conj_tac >- (simp_tac (srw_ss()) [] >> metis_tac[]) >>

@@ -17,6 +17,7 @@ Theorem current_target_entry_prefix_initial:
       MEM x (EL j bb.bb_instructions).inst_outputs ==> IS_SOME (lookup_var x st))
 Proof
   strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
   drule_all make_ssa_current_fn_first_block_no_phi >> strip_tac >>
   drule make_ssa_current_fn_entry_label >> strip_tac >>
   `fn_entry_state fn' st` by gvs[fn_entry_state_def] >>

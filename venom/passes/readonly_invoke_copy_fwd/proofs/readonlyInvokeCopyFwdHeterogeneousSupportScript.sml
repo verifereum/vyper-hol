@@ -70,7 +70,7 @@ Theorem ricf_heterogeneous_support_actual_next:
   ricf_heterogeneous_support_origins vs C a fn U stk
     (occurrence_sites_step a B inst s') E
 Proof
-  strip_tac >> drule occ_frame_reachable_annotation >> strip_tac >>
+  strip_tac >> drule occ_frame_reachable_annotation_static >> strip_tac >>
   fs[occurrence_annotation_ok_def] >>
   metis_tac[ricf_heterogeneous_support_next]
 QED

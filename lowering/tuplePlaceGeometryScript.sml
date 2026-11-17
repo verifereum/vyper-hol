@@ -123,16 +123,6 @@ Proof
   drule tuple_place_step_rank >> decide_tac
 QED
 
-Theorem tuple_place_path_append:
-  !p tv q k u. mem_path_offset tv (p ++ q) = SOME (k,u) ==>
-    ?a mid b. mem_path_offset tv p = SOME (a,mid) /\
-      mem_path_offset mid q = SOME (b,u) /\ k = a+b
-Proof
-  Induct >> simp[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_ASSOC]
-QED
-
 Definition tuple_place_no_tuple_step_def:
   tuple_place_no_tuple_step tv p <=>
     !pre sb rest k ts. p = pre ++ sb::rest ==>
@@ -186,7 +176,7 @@ Proof
       disch_then (qspec_then `p` mp_tac) >> simp[] >> metis_tac[]) >>
   Cases_on `?r. p = q ++ r`
   >- (pop_assum strip_assume_tac >> gvs[] >>
-      drule tuple_place_path_append >> strip_tac >> gvs[] >>
+      drule mem_path_offset_append_decompose >> strip_tac >> gvs[] >>
       drule tuple_place_path_rank >> strip_tac >> gvs[]) >>
   irule tuple_place_paths_apart >> goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
