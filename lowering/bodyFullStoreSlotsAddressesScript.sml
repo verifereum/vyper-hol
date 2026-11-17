@@ -106,6 +106,9 @@ Proof
    q1.vs_inst_idx = LENGTH b.cs_current_insts` by
     simp[Abbr `q1`,eval_operand_def,lookup_var_def,update_var_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q1)` by
+    (simp[Abbr `q1`,allocas_below_fmp_def,update_var_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `w` |-> `x+y`]
     store_address_binop_uniform)) >>
   disch_then (qspecl_then [`explicit`,`PG`,`G1`] strip_assume_tac) >>
@@ -200,6 +203,11 @@ Proof
   `not_fresh_at s2 counter /\ (!x. dst = Var x ==> not_fresh_at s2 x)` by
     metis_tac[typed_copy_emit_op_mono, exprLoweringPropsTheory.ci_mono_def,
       freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    (qpat_x_assum `store_copy_normalize s t = s` mp_tac >>
+     simp[stmtSimStoreCopyTheory.store_copy_normalize_def,
+       venom_state_component_equality,allocas_below_fmp_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   drule_all store_scaled_address_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`,`Gf`] strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> not_fresh_at s2 x` by
