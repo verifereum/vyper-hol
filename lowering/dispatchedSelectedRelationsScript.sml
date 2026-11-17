@@ -135,7 +135,8 @@ Resume dispatched_selected_actual_endpoint_relations[state]:
       initial_state_def, initial_evaluation_context_def] >>
   `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
   simp[storage_rel_def, transient_rel_def, contract_storage_def,
-       contract_transient_def, logs_rel_def, accounts_rel_def]
+       contract_transient_def, logs_rel_def, accounts_rel_def,
+       accounts_agree_def, transient_agree_def]
 QED
 
 Resume dispatched_selected_actual_endpoint_relations[immutables]:

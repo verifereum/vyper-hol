@@ -85,7 +85,11 @@ Proof
      >- (irule supported_names_internal_names_distinct >>
          fs[supported_program_def, supported_declaration_names_def]) >>
      metis_tac[supported_program_runtime_bodies_shape_ok]) >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[o1_source_unit_ok_no_dalloca] >>
+  `raw_shape_free_program tops` by
+    metis_tac[supported_program_raw_shape_free_program] >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (irule every_no_dalloca >> fs[source_typing_ok_def] >>
+     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   qabbrev_tac `pkg = set_external_package_target rpolicy.rpol_target
     (package_external_fn tops T (K global_nonreentrant_slot)
       (mut, F, lookup_raw_return_or_F (NONE : num option)
