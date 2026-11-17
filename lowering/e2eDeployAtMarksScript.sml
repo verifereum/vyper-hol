@@ -26,6 +26,7 @@ Ancestors
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
   o1PipelineCorrect o1PipelineCompose o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
+  compilePhasesProps asmOptNonemptyFinalizer
 
 Theorem deploy_exempt_result_rel[local]:
   deploy_source_exempt tops src ==>
@@ -171,7 +172,14 @@ Theorem deploy_correct_at_tail[local]:
        (gas_explicit marks vs.vs_gas_readings ++ tail) am txp [(NONE, tops)] [])
 Proof
   strip_tac >>
-  drule compile_vyper_runtime_nonempty >> strip_tac >>
+  `runtime_bc <> []` by
+    (fs[compile_vyper_def] >>
+     drule compile_vyper_with_success_phases >> strip_tac >>
+     qpat_x_assum `fin IN accepted_finalizers`
+       (strip_assume_tac o SRULE [asmOptimizerTheory.accepted_finalizers_def]) >>
+     gvs[finalize_codegen_def, AllCaseEqs()] >>
+     metis_tac[codegenAsmProgOkTheory.codegen_assembly_nonempty,
+               codegen_assembly_finalizer_nonempty]) >>
   drule_all deploy_entry_facts >> strip_tac >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
   `load_contract (SOME vs.vs_outcomes)
