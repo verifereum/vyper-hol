@@ -33,7 +33,7 @@ Ancestors
   asmOptNonemptyFinalizer o1SymStaticData o1SymStaticPipeline
   venomPipelineDriverProps venomCompilerWf venomWf o1LabelFlowCompose
   stepWriteFootprint deployUnitProducers ctorDeployInitcodeAsm
-  immutableCodeLayout codegenEncodingWf unitMemInv
+  immutableCodeLayout codegenEncodingWf unitMemInv deployFrameReplay
 
 Theorem compile_vyper_runtime_phases_asm_opt[local]:
   compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
