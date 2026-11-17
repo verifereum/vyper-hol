@@ -628,6 +628,14 @@ Proof
      vyperCreateFrameTheory.check_create_blueprint_result_state])
 QED
 
+Theorem eval_create_operands_scope_pop_effect[simp]:
+  scope_pop_effect
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >> simp[eval_create_operands_def] >>
+  ho_match_mp_tac scope_pop_effect_bind >> simp[]
+QED
+
 Theorem eval_send_scope_effect[local]:
   (!st x middle.
     type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st = (INL x,middle) ==>
@@ -763,16 +771,7 @@ Resume eval_mutual_scope_pop_effect_results[ExtCall]:
 QED
 
 Resume eval_mutual_scope_pop_effect_results[Create]:
-  Cases_on `kind` >> Cases_on `has_salt` >> gvs[] >>
-  `TAKE (LENGTH es - 2) (DROP 2 es) = DROP 2 es` by
-    metis_tac[LENGTH_DROP, TAKE_LENGTH_ID] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `DROP (LENGTH es - 2) (DROP 2 es) = []` by
-    metis_tac[LENGTH_DROP, DROP_LENGTH_NIL] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  simp_tac (srw_ss()) [Once evaluate_def] >>
-  rpt POP_EFFECT_BIND_STEP >>
-  simp_tac (srw_ss()) [LET_THM, LENGTH_DROP, GSYM arithmeticTheory.SUB_PLUS] >>
+  rewrite_tac[Once evaluate_def] >>
   rpt POP_EFFECT_BIND_STEP
 QED
 
@@ -824,12 +823,6 @@ Theorem eval_mutual_scope_pop_effect:
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
   (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect_results]
-QED
-
-Theorem eval_expr_results_scope_pop_effect:
-  scope_pop_effect (eval_expr_results cx es)
 Proof
   metis_tac[eval_mutual_scope_pop_effect_results]
 QED
@@ -946,12 +939,12 @@ Proof
   simp[eval_mutual_scope_pop_effect_results]
 QED
 
-Theorem eval_expr_results_preserves_scopes_dom:
-  eval_expr_results cx es st = (res,st') ==>
+Theorem eval_create_operands_preserves_scopes_dom:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results]
+  simp[]
 QED
 
 Theorem eval_exprs_preserves_var_in_scope:
