@@ -8,7 +8,8 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
-  bodyFullAnnAssignWord bodyInvNoDalloca
+  bodyFullAnnAssignWord bodyInvNoDalloca loweringPosts
+  vyperTypeCallGraph supportedExprTraverse
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimSource
   supportedStmtTraverse vyperTypeArgFits
