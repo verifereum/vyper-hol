@@ -727,19 +727,17 @@ Theorem static_write_fault_step:
 Proof
   rpt strip_tac >>
   fs[asm_block_at_def] >>
-  `asm_step lo o2pc (AsmOp name) st =
-   AsmFault (st with as_returndata := [])` by
-    (gvs[LENGTH_EQ_NUM_compute] >>
-     simp[asm_step_def, asm_step_op_def,
-          asm_step_arith_def, asm_step_compare_def,
-          asm_step_bitwise_def, asm_step_memory_def,
-          asm_step_control_def, asm_step_extcall_def,
-          asm_sstore_def, asm_tstore_def, asm_selfdestruct_def,
-          asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def,
-          asm_consume_call_outcome_def]) >>
+  gvs[LENGTH_EQ_NUM_compute] >>
   `1 = SUC 0` by simp[] >>
   pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_steps_def] >>
+  simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def,
+       asm_sstore_def, asm_tstore_def, asm_selfdestruct_def,
+       asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def,
+       asm_consume_call_outcome_def] >>
+  rw[] >>
   gvs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
 QED
 
@@ -861,7 +859,7 @@ Resume gen_inst_ext_fault_frame_sim_deep[exhausted_call]:
     gvs[MEM, venom_to_evm_name_def, inst_wf_def] >>
   `mid.as_outcomes = []` by fs[venom_asm_rel_def, frame_view_def] >>
   irule terminal_exhausted_call_fault_step >> simp[] >>
-  qexistsl_tac [`vals`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`] >>
+  qexistsl_tac [`name`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`, `vals`] >>
   gvs[APPEND_ASSOC]
 QED
 
@@ -894,9 +892,10 @@ Resume gen_inst_ext_fault_frame_sim_deep[static]:
   `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE;
      CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL]` by fs[] >>
   `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
-    (irule abort_frame_arranged_stack >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    (irule abort_frame_arranged_stack >> simp[] >> conj_tac
      >- (qexists `dfg` >> gvs[]) >>
-     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> gvs[] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     gvs[MEM] >> metis_tac[]) >>
   `LENGTH vals = LENGTH inst.inst_operands` by metis_tac[logEmitSimTheory.eval_operands_length] >>
   `mid.as_call_ctx = vs.vs_call_ctx /\ mid.as_outcomes = vs.vs_outcomes` by
     fs[venom_asm_rel_def, frame_view_def] >>
