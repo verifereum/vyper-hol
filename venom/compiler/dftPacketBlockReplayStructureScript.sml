@@ -110,3 +110,64 @@ Proof
         (drule_then strip_assume_tac) >> simp[dft_packet_row_prefix_splice]) >>
   `FLOOKUP out (a,e) = FLOOKUP tab (a,e)` by metis_tac[] >> simp[]
 QED
+
+Theorem dft_packet_block_closed_frame:
+  !(acts:((num # num) list,
+      ir_function # ir_function # num # venom_state # num list #
+      exec_result option # bytes32 list option) fmap) acts'
+    (blocks:(((num # num) list # num),
+      basic_block # basic_block # instruction list # instruction list #
+      instruction list # num list # venom_state # num #
+      (venom_state # num) option # num # exec_result # bool #
+      bytes32 list option) fmap)
+    p d (tab:(((num # num) list # num),'v list list) fmap) out A A'.
+    (p,SUC d) NOTIN FDOM blocks /\
+    (!i. i < LENGTH p ==>
+      ?bb bt ps xs ys rho hin h be hbe pos b0.
+        FLOOKUP blocks (DROP (SUC i) p,FST (EL i p)) =
+          SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hbe),pos,OK b0,F,NONE)) /\
+    (!a sf tf inc entry order res nrest.
+      FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+      (res = NONE <=> MEM a (GENLIST (\i. DROP i p) (SUC (LENGTH p))))) /\
+    (!a. a <> p ==> FLOOKUP acts' a = FLOOKUP acts a) /\
+    (!a e. (a,e) <> (p,SUC d) /\
+      (!i. i < LENGTH p ==> (a,e) <> (DROP (SUC i) p,FST (EL i p))) ==>
+      FLOOKUP out (a,e) = FLOOKUP tab (a,e)) /\
+    A = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP tab (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+    A' = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP out (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts' a))))))))) ==>
+    (!a e bb bt ps xs ys rho hin h body pos front brest.
+      FLOOKUP blocks (a,e) =
+        SOME (bb,bt,ps,xs,ys,rho,hin,h,body,pos,front,T,brest) ==>
+      FLOOKUP out (a,e) = FLOOKUP tab (a,e)) /\
+    (!a sf tf inc entry order r8 nrest.
+      FLOOKUP acts a = SOME (sf,tf,inc,entry,order,SOME r8,nrest) ==>
+      FLOOKUP acts' a = SOME (sf,tf,inc,entry,order,SOME r8,nrest) /\
+      (!e. FLOOKUP out (a,e) = FLOOKUP tab (a,e)) /\ A' a = A a)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      `(a,e) IN FDOM blocks` by metis_tac[FLOOKUP_DEF,optionTheory.NOT_SOME_NONE] >>
+      qpat_x_assum `!a e. _ ==> FLOOKUP out _ = _` irule >>
+      rpt strip_tac >> gvs[] >>
+      qpat_x_assum `!i. i < LENGTH p ==> ?bb bt ps xs ys rho hin h be hbe pos b0. _`
+        (drule_then strip_assume_tac) >> gvs[]) >>
+  rpt gen_tac >> disch_tac >>
+  `~MEM a (GENLIST (\i. DROP i p) (SUC (LENGTH p)))` by
+    (qpat_x_assum `!a sf tf inc entry order res nrest. _`
+      (drule_then mp_tac) >> simp[]) >>
+  `!i. i <= LENGTH p ==> a <> DROP i p` by
+    (qpat_x_assum `~MEM a _` mp_tac >>
+     simp[MEM_GENLIST,LESS_EQ_IFF_LESS_SUC] >> metis_tac[]) >>
+  `a <> p` by
+    (qpat_assum `!i. i <= LENGTH p ==> a <> DROP i p`
+      (qspec_then `0` mp_tac) >> pure_rewrite_tac[DROP_0] >> metis_tac[ZERO_LESS_EQ]) >>
+  `FLOOKUP acts' a = FLOOKUP acts a` by metis_tac[] >>
+  `!e. FLOOKUP out (a,e) = FLOOKUP tab (a,e)` by
+    (gen_tac >> qpat_x_assum `!a e. _ ==> FLOOKUP out _ = _` irule >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!i. i <= LENGTH p ==> a <> DROP i p`
+       (qspec_then `SUC i` mp_tac) >> gvs[]) >>
+  simp[]
+QED
