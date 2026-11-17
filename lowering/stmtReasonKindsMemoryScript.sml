@@ -7,10 +7,9 @@
    supported_reason_code tell them apart. *)
 Theory stmtReasonKindsMemory
 Ancestors
-  bodySimStmtFacts
   stmtReasonMemKindMemory stmtReasonStorageKindMemory stmtReasonCodeKindMemory
   stmtReasonCtorCodeKindMemory
-  bodySim exprSimHyps allocLimits supportedStmts
+  bodySimStmtFacts bodySim exprSimHyps allocLimits supportedStmts
   exprSimMemDefs exprSimProps stmtSimReason stmtSimReasonExpr context
   valueEncoding vfmConstants vyperValue
   vyperTypeSystem vyperAST compileEnv words arithmetic

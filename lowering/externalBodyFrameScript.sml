@@ -1,13 +1,12 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  bodySimStmtFacts
   entryDispatchProps constSubst supportedGetterProps externalRawReturnType
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
-  fragExec bodySim bodySimEntry
+  fragExec bodySim bodySimEntry bodySimStmtFacts
   loweringHalt stmtLoweringMono exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering exprLowering
   e2eDefs supportedProgram supportedProgramProps supportedDecls supportedNames

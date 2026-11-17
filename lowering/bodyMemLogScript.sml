@@ -1,10 +1,9 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): log. *)
 Theory bodyMemLog
 Ancestors
-  bodySimStmtFacts
   allocLimitsProps exprSimSource
   bodyMemoryPreds stmtLogMemory bodySimLogArgs
-  exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySim
+  exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySimStmtFacts bodySim
   supportedExprs supportedExprTraverse supportedStmtTraverse supportedStmts
   supportedProgram vyperTypeCallGraph vyperTypeSystem vyperTypeExprResult
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness

@@ -1,9 +1,8 @@
 (* Proof-only typing and layout boundaries for aggregate storage assignment. *)
 Theory bodyMemAssignTopCopyFacts
 Ancestors
-  bodySimStmtFacts
   supportedExprTraverse allocLimits allocLimitsProps
-  bodyMemAssignTopCopyIndex bodyMemAssignTopWord exprSimHyps
+  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtFacts exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
   bodySim bodyExprPreFacts exprSimHypsDefs stmtSimDefs bodyStorageMetadata

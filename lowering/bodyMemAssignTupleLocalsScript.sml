@@ -3,8 +3,8 @@
    body_assign_tuple_locals (bodySimStmtCases). *)
 Theory bodyMemAssignTupleLocals
 Ancestors
-  bodySimStmtFacts
   bodyMemoryPreds bodyMemAssignTupleLocalsPrep bodyMemAssignTupleLocalsOutcome
+  bodySimStmtFacts
   bodySim bodyExprPreFacts vyperTypeSystem vyperTypeInvariants
   exprSimHyps exprSimHypsDefs exprSimDefs valueEncoding finite_map list
   valueTypingMemoryProps vyperTypeValues vyperTyping vyperTypeDefaults
