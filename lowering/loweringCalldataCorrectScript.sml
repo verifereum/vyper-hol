@@ -125,6 +125,7 @@ Theorem lower_vyper_runtime_unit_memory_ok_dispatched:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
     call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
@@ -164,6 +165,7 @@ Theorem lower_vyper_runtime_unit_reverts_memory_ok:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
     gas_path_mem unit.cu_context func

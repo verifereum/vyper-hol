@@ -267,7 +267,8 @@ Proof
   simp[supported_append_target_def, supported_target_pure_def,
        supported_expr_exists_def,
        call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
-  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_evm_run,
+  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_halt,
+            supported_expr_no_evm_run,
             supported_expr_no_call_operand_effects, supported_expr_def,
             expr_has_evm_run_def, supported_pure_main_calls]
 QED
@@ -328,6 +329,7 @@ Theorem supported_callable_storage_syntax:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
+  ~supported_exprs_exists expr_halt_root defaults /\
   ~supported_exprs_exists expr_evm_run_root defaults /\
   EVERY (\c. FST c = NONE /\
              IS_SOME (supported_function_decl tops c Internal))
