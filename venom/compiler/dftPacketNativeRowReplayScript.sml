@@ -4,6 +4,37 @@ Ancestors
   gasOracleReplay gasEvents frameGasEvents stateEquiv
   venomExecSemantics venomState venomInst list rich_list arithmetic
 
+Theorem native_plain_step[local]:
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+  step_inst f C i s = OK u ==>
+  u.vs_gas_readings = s.vs_gas_readings /\
+  !tail. step_inst f C i (s with vs_gas_readings := tail) =
+    OK (u with vs_gas_readings := tail)
+Proof
+  strip_tac >>
+  `gas_replay_at 0 (step_inst_base i) s` by
+    (irule gas_base_non_gas >> simp[]) >>
+  gvs[gas_replay_at_def, step_inst_def] >>
+  reverse conj_tac
+  >- (gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
+      Cases_on `step_inst_base i (s with vs_gas_readings := tail)` >>
+      simp[lift_result_def]) >>
+  first_x_assum (qspec_then `[]` mp_tac) >>
+  Cases_on `step_inst_base i (s with vs_gas_readings := [])` >>
+  simp[lift_result_def]
+QED
+
+Theorem native_gas_step[local]:
+  i.inst_opcode = GAS /\
+  step_inst f C i (s with vs_gas_readings := w::tail) = OK u ==>
+  u.vs_gas_readings = tail /\
+  !tail'. step_inst f C i (s with vs_gas_readings := w::tail') =
+    OK (u with vs_gas_readings := tail')
+Proof
+  simp[step_inst_def] >> strip_tac >>
+  gvs[step_inst_base_def, exec_gas_def, AllCaseEqs()] >> simp[]
+QED
+
 Theorem native_replay_list[local]:
   !pre kgss ess ks s eb tb tail.
   EVERY (\i. ~is_terminator i.inst_opcode) pre /\
@@ -90,8 +121,126 @@ Resume native_replay_list[success]:
   qpat_x_assum `!tail v. _` kall_tac >>
   qpat_x_assum `!tail. ?extra. _` kall_tac >>
   gen_tac >> pure_rewrite_tac[dft_exec_cons_def] >> asm_rewrite_tac[] >> strip_tac >>
+  qpat_x_assum `_ = OK u`
+    (assume_tac o SRULE []) >>
   qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _` drule >> strip_tac >>
-  FAIL_TAC "success compose"
+  `extra = []` by (
+    qpat_x_assum `FLAT ess0 = _` mp_tac >> simp[]) >>
+  qpat_x_assum `FLAT ess0 = _` kall_tac >>
+  simp[] >> conj_tac
+  >- (once_rewrite_tac[gas_events_defs] >> simp[]) >>
+  conj_tac
+  >- (once_rewrite_tac[trace_defs] >>
+      simp[GSYM trace_gas_def, APPEND_ASSOC] >>
+      once_rewrite_tac[GSYM APPEND_ASSOC] >> simp[] >>
+      irule ZIP_APPEND >> simp[] >>
+      `MAP LENGTH kss = MAP LENGTH rows` by simp[MAP_EQ_LIST_REL] >>
+      simp[LENGTH_FLAT]) >>
+  gen_tac >>
+  qpat_assum `!tail'. step_inst _ _ _ _ = _ /\ _`
+    (qspec_then `FLAT rows ++ tail'` strip_assume_tac) >>
+  qpat_assum `!tail'. FOLDR _ _ _ _ = _ /\ _`
+    (qspec_then `tail'` strip_assume_tac) >>
+  fs[APPEND_ASSOC] >> once_rewrite_tac[gas_events_defs] >>
+  simp[APPEND_ASSOC]
 QED
 
 Finalise native_replay_list
+
+Theorem dft_packet_native_row_replay:
+  bb.bb_instructions = ps ++ xs /\ be.vs_inst_idx = LENGTH ps /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) xs /\ k <= LENGTH xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+  LENGTH ms = LENGTH xs /\ LENGTH ess = LENGTH xs /\ LENGTH ks = LENGTH xs /\
+  LIST_REL (\m es. LENGTH m = LENGTH es) ms ess /\
+  LIST_REL (\m keys. LENGTH m = LENGTH keys) ms ks /\
+  (!q. q < k ==>
+    ((EL q xs).inst_opcode = GAS ==>
+      EL q ess = [(sf.fn_name,(EL q xs).inst_id)] /\
+      EL q ks = [(a,e,(EL q xs).inst_id)] /\ ?slot. EL q ms = [slot]) /\
+    ((EL q xs).inst_opcode <> GAS /\ (EL q xs).inst_opcode <> INVOKE ==>
+      EL q ms = [] /\ EL q ess = [] /\ EL q ks = [])) /\
+  (!q pg rest u ws.
+    q < k /\ (EL q xs).inst_opcode = INVOKE /\
+    LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) pg /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL q ms) ws /\
+    FOLDR (dft_exec_cons f C) OK (TAKE q xs)
+      (be with vs_gas_readings := FLAT pg ++ rest) = OK u ==>
+    (!tail. ?extra. EL q ess = gas_events_step f C sf.fn_name (EL q xs)
+      (u with vs_gas_readings := ws ++ tail) ++ extra) /\
+    (!tail v. step_inst f C (EL q xs) (u with vs_gas_readings := ws ++ tail) = OK v ==>
+      gas_events_step f C sf.fn_name (EL q xs) (u with vs_gas_readings := ws ++ tail) = EL q ess /\
+      v.vs_gas_readings = tail /\
+      trace_gas (trace_step a e f C sf (EL q xs) (u with vs_gas_readings := ws ++ tail)) =
+        ZIP (EL q ks,ws) /\
+      (!tail'. step_inst f C (EL q xs) (u with vs_gas_readings := ws ++ tail') =
+        OK (v with vs_gas_readings := tail') /\
+        gas_events_step f C sf.fn_name (EL q xs) (u with vs_gas_readings := ws ++ tail') = EL q ess))) /\
+  LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k ms) kgss ==>
+  (?extra. FLAT (TAKE k ess) =
+    gas_events_block f C sf.fn_name
+      <|bb_label := be.vs_current_bb; bb_instructions :=
+        REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+      (be with vs_gas_readings := FLAT kgss ++ tail) ++ extra) /\
+  (!u. FOLDR (dft_exec_cons f C) OK (TAKE k xs)
+      (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+    gas_events_block f C sf.fn_name
+      <|bb_label := be.vs_current_bb; bb_instructions :=
+        REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+      (be with vs_gas_readings := FLAT kgss ++ tail) = FLAT (TAKE k ess) /\
+    u.vs_gas_readings = tail /\
+    trace_gas (trace_block a e f C sf
+      (bb with bb_instructions := TAKE (LENGTH ps + k) bb.bb_instructions)
+      (be with vs_gas_readings := FLAT kgss ++ tail)) =
+      ZIP (FLAT (TAKE k ks),FLAT kgss) /\
+    (!tail'. FOLDR (dft_exec_cons f C) OK (TAKE k xs)
+        (be with vs_gas_readings := FLAT kgss ++ tail') =
+          OK (u with vs_gas_readings := tail') /\
+      gas_events_block f C sf.fn_name
+        <|bb_label := be.vs_current_bb; bb_instructions :=
+          REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+        (be with vs_gas_readings := FLAT kgss ++ tail') = FLAT (TAKE k ess)))
+Proof
+  strip_tac >> irule native_replay_list >>
+  simp[DROP_APPEND, TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+  `LENGTH kgss = k` by metis_tac[LIST_REL_LENGTH, LENGTH_TAKE, LESS_EQ_REFL] >>
+  reverse conj_tac
+  >- (conj_tac >- simp[] >>
+      gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+      first_x_assum (qspec_then `n` mp_tac) >>
+      simp[EL_TAKE] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  rpt gen_tac >> strip_tac >>
+  `q < LENGTH xs /\ q < LENGTH ms /\ q < LENGTH kgss` by simp[] >>
+  `q <= k` by simp[] >>
+  fs[EL_TAKE, TAKE_TAKE_T] >>
+  `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+     (TAKE q ms) (TAKE q kgss)` by
+    (drule LIST_REL_TAKE >> disch_then (qspec_then `q` mp_tac) >>
+     simp[TAKE_TAKE_T]) >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL q ms) (EL q kgss)` by
+    (qpat_x_assum `LIST_REL _ (TAKE k ms) kgss` mp_tac >>
+     simp[LIST_REL_EL_EQN, EL_TAKE] >> metis_tac[]) >>
+  Cases_on `(EL q xs).inst_opcode = INVOKE`
+  >- (qpat_x_assum `!q pg rest u ws. _`
+        (qspecl_then [`q`, `TAKE q kgss`, `rest`, `u`, `EL q kgss`] mp_tac) >>
+      (impl_tac >- simp[]) >>
+      simp[visit_gas_def] >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  qpat_x_assum `!q. q < k ==> _` (qspec_then `q` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `(EL q xs).inst_opcode = GAS`
+  >- suspend "gas" >> suspend "plain"
+QED
+
+Resume dft_packet_native_row_replay[gas]:
+  fs[] >>
+  qpat_x_assum `LIST_REL _ (EL q ms) (EL q kgss)` mp_tac >> simp[] >> strip_tac >>
+  simp[gas_events_step_plain, trace_step_noninvoke, trace_gas_def, visit_gas_def] >>
+  rpt gen_tac >> strip_tac >> drule_all native_gas_step >> simp[]
+QED
+
+Resume dft_packet_native_row_replay[plain]:
+  fs[] >>
+  simp[gas_events_step_plain, trace_step_noninvoke, trace_gas_def, visit_gas_def] >>
+  rpt gen_tac >> strip_tac >> drule_all native_plain_step >> simp[]
+QED
+
+Finalise dft_packet_native_row_replay
