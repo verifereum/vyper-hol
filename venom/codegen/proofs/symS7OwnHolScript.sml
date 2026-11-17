@@ -10,5 +10,5 @@ Ancestors
   symFrameBoundaryEntryPackaging symFrameBoundaryNumeric symFrameBoundaryOwn
   symFrameBoundaryPairing symFrameBoundaryPhiPackaging symFrameInvokeSupport
   symInstAssertOwn symInstAssignOwn symInstLogOwn symInstNamedOwn symInstPhiOwn
-  symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
+  symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
   symInvokeEntryFacts symInvokeEntryOwn
