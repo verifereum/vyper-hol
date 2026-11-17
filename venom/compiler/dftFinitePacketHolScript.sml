@@ -3,14 +3,15 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendSemantics
-  dftGasPrefixProvider
+  dftPacketBlockAppendSemantics dftPacketBlockAppendNative
+  dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCalleeAlignment
+  dftPacketCallFreshEntry
   dftPacketClosedRowNative
   dftPacketClosedRows
   dftPacketCommonOracle
@@ -20,6 +21,7 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshChildStop
   dftPacketFreshRow
+  dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -31,24 +33,30 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
+  dftPacketLiteralRowExtend
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
-  dftPacketPseudoAdvance
+  dftPacketPreterminalAgreement dftPacketPreterminalGeometry dftPacketPseudoAdvance
   dftPacketPseudoCursor
-  dftPacketRefinementBoundary
+  dftPacketPseudoHistory
+  dftPacketPseudoReplayFrame
+  dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
+  dftPacketReturnActivation
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
-  dftPacketRootedPlainStop
+  dftPacketRootedEntryContext dftPacketRootedOperational
+  dftPacketCompletePlanOperational dftPacketRootedPlainStop
+  dftPacketRootedSegmentStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
-  dftPacketTerminalPhi
-  dftPacketSuccessorObservation
+  dftPacketBlockTableSplice dftPacketTerminalPhi
+  dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
+  dftPacketCallPathInsertion
