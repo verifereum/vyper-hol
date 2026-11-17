@@ -593,9 +593,7 @@ Theorem runtime_body_joint_from_start:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       (((!tail.
-           ~(source_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-             call_outcomes_storage_ok am tx vs.vs_outcomes
+           ~(call_storage_ok am tx vs.vs_outcomes
                (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
         ?(H : (bool # bytes32 # type_value) list # num list)
            leaf leaf_pg leaf_g leaf_tn finish.
@@ -704,9 +702,7 @@ Theorem lower_vyper_runtime_unit_body_joint:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       (((!tail.
-           ~(source_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-             call_outcomes_storage_ok am tx vs.vs_outcomes
+           ~(call_storage_ok am tx vs.vs_outcomes
                (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
         ?(H : (bool # bytes32 # type_value) list # num list)
            leaf leaf_pg leaf_g leaf_tn finish.
@@ -808,9 +804,7 @@ Theorem lower_vyper_runtime_unit_run_bounded:
       initial_venom_state_rel tops am tx vs /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
       (!marks.
-         source_storage_ok am tx vs.vs_outcomes
-           (gas_explicit marks vs.vs_gas_readings) /\
-         call_outcomes_storage_ok am tx vs.vs_outcomes
+         call_storage_ok am tx vs.vs_outcomes
            (gas_explicit marks vs.vs_gas_readings)) /\
       (!marks. ~source_exempt tops
          (call_external (SOME vs.vs_outcomes)

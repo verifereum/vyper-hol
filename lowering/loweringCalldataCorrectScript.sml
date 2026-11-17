@@ -99,9 +99,7 @@ Theorem lower_vyper_runtime_unit_memory_ok_dispatched:
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
-    source_storage_ok am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
-    call_outcomes_storage_ok am tx vs.vs_outcomes
+    call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
     ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -187,9 +185,7 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok_dispatched:
     code_layout_valid vs /\
     ~ctx_has_dalloca unit.cu_context /\
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
-    source_storage_ok am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
-    call_outcomes_storage_ok am tx vs.vs_outcomes
+    call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
     ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
