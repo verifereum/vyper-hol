@@ -242,7 +242,7 @@ QED
 Theorem taint_agree_external_clean_shared:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   ptr_discipline lo C vs /\
-  MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] /\
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
   taint_agree D X tn s t ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
@@ -883,8 +883,9 @@ Proof
 QED
 
 Theorem taint_agree_exec_delegatecall:
-  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  taint_agree D X tn s t /\
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off) (w2n sz) t /\
   exec_delegatecall inst s (gas:256 word) (addr:256 word) (off:256 word)
     (sz:256 word) (ro:256 word) (rs:256 word) = OK s' ==>
@@ -910,7 +911,7 @@ Proof
   Cases_on `consume_call_outcome rq2 (w2n ro) (w2n rs) t` >>
   rename1 `consume_call_outcome rq2 _ _ t = (w2,u)` >>
   `request_agree_except D rq1 rq2` by
-    simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def, venom_call_request_def,
+    fs[Abbr `rq1`, Abbr `rq2`, request_agree_except_def, venom_call_request_def,
       accounts_agree_except_def, transient_agree_except_def,
       storage_agree_except_def, word_agree_except_def] >>
   qpat_assum `consume_call_outcome rq1 _ _ s = _`
@@ -926,10 +927,17 @@ Proof
   qexistsl_tac [`w`, `r`, `u`] >> simp[Excl "consume_call_outcome_eq"] >>
   qmatch_asmsub_abbrev_tac `taint_agree D X mask r u` >>
   qmatch_goalsub_abbrev_tac `taint_agree D X final` >>
-  `final = mask with t_var := set_var_taint mask.t_var [out] {}` by
-    (simp[Abbr `final`, Abbr `mask`, taint_component_equality] >> fs[]) >>
-  pop_assum SUBST1_TAC >> irule taint_agree_update_var >>
-  simp[word_agree_except_def, Excl "consume_call_outcome_eq"]
+  qabbrev_tac `mask0 = tn with t_mem := final.t_mem` >>
+  `final = mask0 with t_var := set_var_taint mask0.t_var [out] {}` by
+    simp[Abbr `final`, Abbr `mask0`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  irule taint_agree_update_var >>
+  simp[word_agree_except_def, Excl "consume_call_outcome_eq"] >>
+  qpat_x_assum `taint_agree D X mask r u` mp_tac >>
+  simp[Abbr `mask`, Abbr `mask0`, Abbr `final`,
+       taint_agree_def, ld_shared_agree_def, op_taint_def,
+       Excl "consume_call_outcome_eq"] >>
+  rpt IF_CASES_TAC >> simp[word_agree_except_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem taint_agree_delegatecall_mask:
@@ -955,7 +963,7 @@ QED
 Theorem taint_agree_delegatecall_ok:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   o1_ctx_shape C /\ MEM fn C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\ taint_within D C vs /\
   taint_agree D X tn s t /\
   (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
                off <= i /\ i < off + len ==> i NOTIN X) /\
@@ -965,12 +973,6 @@ Theorem taint_agree_delegatecall_ok:
 Proof
   strip_tac >>
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  `tn.t_stor = {} /\ tn.t_trans = {} /\
-   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (irule taint_agree_external_clean_shared >>
-     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >> simp[]) >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -986,6 +988,17 @@ Proof
    read_memory (w2n ao) (w2n as_) t` by
     (first_x_assum irule >>
      gvs[source_memory_read_ranges_def, memory_range_of_operands_def]) >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts /\
+   transient_agree_except D s.vs_transient t.vs_transient` by
+    (irule taint_agree_request_snapshots >>
+     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     simp[step_inst_base_opcode_eqs] >>
+     qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK s'` mp_tac >>
+     simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+     pairarg_tac >> simp[AllCaseEqs(), update_var_def] >> strip_tac >>
+     gvs[consume_call_outcome_eq, computed_precompile_def,
+         record_request_def]) >>
   drule_all taint_agree_exec_delegatecall >> strip_tac >> gvs[] >>
   `step_taint inst s (update_var out w r) tn =
      (tn with t_mem := tn.t_mem DIFF
