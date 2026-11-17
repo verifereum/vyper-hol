@@ -169,7 +169,10 @@ Theorem layout_selected_empty_induction[local]:
       r = Abort Revert_abort fin /\ fin.vs_returndata = [] ==>
       tfin.vs_returndata = [])
 Proof
-  strip_tac >> ho_match_mp_tac decorated_step_strongind >> rpt conj_tac
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    (irule layout_cut_safe_whole_run >> metis_tac[]) >>
+  ho_match_mp_tac decorated_step_strongind >> rpt conj_tac
   >- suspend "base"
   >- (rpt strip_tac >> gvs[])
   >- suspend "invoke_exit"
@@ -180,6 +183,262 @@ Proof
   >- (rpt strip_tac >> gvs[])
   >> suspend "run_exit"
 QED
+
+Resume layout_selected_empty_induction[base]:
+  rpt strip_tac >> gvs[] >>
+  Cases_on `i.inst_opcode = REVERT`
+  >- (irule layout_canonical_ordinary_revert_empty >> metis_tac[]) >>
+  `j.inst_opcode <> REVERT /\ j.inst_opcode <> INVOKE` by
+    (fs[layout_canonical_step_witness_def] >>
+     Cases_on `i.inst_opcode = ALLOCA` >>
+     gvs[concretize_inst_with_positions_def, AllCaseEqs(),
+         mk_assign_inst_def, mk_nop_inst_def]) >>
+  fs[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_nonrevert_revert_empty]
+QED
+Resume layout_selected_empty_induction[invoke_exit]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `joint_segment C q' w qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  `layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path)
+     ass qend q n i s j t` by
+    (simp[layout_canonical_ES_def, layout_base_lookahead_def] >> metis_tac[]) >>
+  `j = i /\ ?out ct phase.
+    lookup_function name C'.ctx_functions = SOME out /\
+    (?args'. eval_operands ops t = SOME args' /\ setup_callee out args' t = SOME ct) /\
+    layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path)
+      ass qend q' (n+1) fn s'' out ct /\
+    layout_driver_indexed (MAP FST path) ass phase /\ ~phase.lop_pending /\
+    phase.lop_config = q /\ phase.lop_cursor = n /\
+    layout_ordinary_entry D lo vs0 C C' q0 (MAP FST path) (MAP SND path)
+      qend phase s t /\ control_agree s t` by
+    (irule layout_canonical_call_entry >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `selected_segment C q0 path (phase.lop_cursor+1) q' w qe` by
+    (`selected_segment C q0 path phase.lop_cursor phase.lop_config [(NONE,q')] q' /\
+      selected_segment C q0 path
+        (phase.lop_cursor + LENGTH ([(NONE,q')]:(origin_event option # joint_config) list)) q' w qe` by
+       (irule selected_segment_parts >> gvs[joint_segment_def]) >> fs[]) >>
+  fs[step_inst_def, AllCaseEqs()] >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+Resume layout_selected_empty_induction[block_next]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `finite_step C i s (OK post)` by metis_tac[decorated_execution_erases] >>
+  `step_inst fuel C i s = OK post` by
+    (irule finite_block_step_fuel_inv >> simp[] >>
+     qexists `bb` >> simp[]) >>
+  `?j. layout_canonical_step_witness D lo vs0 C C' q0 (MAP FST path)
+      (MAP SND path) ass qend q n i s j t (INL g) /\
+      (i.inst_opcode <> NOP ==> get_instruction bb' t.vs_inst_idx = SOME j)` by
+    metis_tac[layout_canonical_block_witness_step] >>
+  `joint_segment C q w qe /\ joint_segment C q' w' qe'` by
+    metis_tac[decorated_execution_segment] >>
+  `selected_segment C q0 path n q w qe /\
+   selected_segment C q0 path (n+LENGTH w+1) q' w' qe'` by
+    (`joint_segment C qe ([(ev,q')]++w') qe'` by
+       gvs[joint_segment_def, decoration_consumes_def] >>
+     `selected_segment C q0 path n q w qe /\
+      selected_segment C q0 path (n+LENGTH w) qe ([(ev,q')]++w') qe'` by
+       (irule selected_segment_parts >> fs[APPEND_ASSOC]) >>
+     `joint_segment C qe [(ev,q')] q'` by
+       gvs[joint_segment_def, decoration_consumes_def] >>
+     drule_all selected_segment_parts >> simp[] >> metis_tac[]) >>
+  `layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path)
+     ass qend q n i s j t` by
+    (simp[layout_canonical_ES_def] >>
+     conj_tac >- (irule layout_base_lookahead_next >> metis_tac[]) >>
+     metis_tac[]) >>
+  `selected_simulation_contract_fuel C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_EB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
+  `?rs. step_inst fuel C' j t = rs /\ finite_step C' j t rs /\
+    events_OS C C'
+      (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+      q n qe (n+LENGTH w) i s j t (OK post) rs` by
+    (simp[GSYM selected_step_match_fuel_def] >>
+     irule (cj 1 selected_simulation_induction_fuel) >> metis_tac[]) >>
+  fs[events_OS_def] >>
+  `?tp. rs = OK tp` by
+    (Cases_on `rs` >>
+     gvs[layout_deferred_OS_def, layout_canonical_OS_def, layout_canonical_result_def]) >>
+  gvs[] >>
+  Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
+  >- suspend "forward" >>
+  `?b tb. layout_canonical_block_witness D lo vs0 C C' q0 (MAP FST path)
+      (MAP SND path) ass qend q' (n+LENGTH w+1) bb
+      (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb (INL b) /\
+    layout_paired_prefix_alias bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
+    tb = (if i.inst_opcode = NOP then t else tp with vs_inst_idx := SUC t.vs_inst_idx) /\
+    (!k rb. step_inst k C' j t = OK tp /\ exec_block k C' bb' tb = rb ==>
+      exec_block k C' bb' t = rb)` by
+    (irule layout_canonical_prefix_next_ordinary >> simp[] >> metis_tac[]) >>
+  `exec_block fuel C bb (post with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort fin` by
+    (qpat_x_assum `exec_block fuel C bb s = _` mp_tac >> simp[Once exec_block_def]) >>
+  `exec_block fuel C' bb' tb = Abort Revert_abort tfin` by
+    (Cases_on `i.inst_opcode = NOP` >- gvs[] >>
+     gvs[] >> qpat_x_assum `exec_block fuel C' bb' t = _` mp_tac >>
+     simp[Once exec_block_def]) >>
+  first_x_assum irule >> qexistsl [`bb'`, `fuel`, `b`, `tb`] >> gvs[]
+QED
+Resume layout_selected_empty_induction[forward]:
+  `g.lop_origin.lbo_source = bb /\ g.lop_origin.lbo_target = bb'` by
+    fs[layout_canonical_block_witness_def,
+       concretizeLayoutPairedEntryTheory.layout_paired_ordinary_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (fs[layout_canonical_block_witness_def, decoration_entry_def] >>
+     Cases_on `q` >> gvs[decoration_at_def]) >>
+  `?jidx term opd ops opn ptr_op len.
+    revert_forward_pair bb s.vs_inst_idx jidx /\
+    get_instruction bb jidx = SOME term /\ term.inst_operands = [ptr_op;len] /\
+    i.inst_operands = [opd;ops;opn]` by
+    (fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
+     gvs[] >> metis_tac[]) >>
+  `step_inst_base i s = OK post` by
+    (gvs[step_inst_non_invoke]) >>
+  `?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 (MAP FST path) (MAP SND path)
+      ass qend n F (INL g) post tpost /\ tfin.vs_returndata = []` by
+    (irule layout_forward_block_revert_empty >> gvs[] >> metis_tac[]) >>
+  simp[]
+QED
+Resume layout_selected_empty_induction[block_exit]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `finite_step C i s (Abort Revert_abort fin)` by metis_tac[decorated_execution_erases] >>
+  `step_inst fuel C i s = Abort Revert_abort fin` by
+    (irule finite_block_step_fuel_inv >> simp[] >> qexists `bb` >> simp[]) >>
+  `i.inst_opcode <> NOP` by
+    (strip_tac >> qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once decorated_step_cases, step_inst_base_def]) >>
+  drule_all layout_canonical_block_witness_step >> strip_tac >>
+  `layout_base_lookahead C q0 path q n i s` by
+    (irule layout_base_lookahead_exit >>
+     qexistsl [`d`, `qe`, `Abort Revert_abort fin`, `w`] >> simp[]) >>
+  `layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path)
+    ass qend q n i s j t` by (simp[layout_canonical_ES_def] >> metis_tac[]) >>
+  `selected_simulation_contract_fuel C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_EB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
+  `?rs. step_inst fuel C' j t = rs /\ finite_step C' j t rs /\
+    events_OS C C'
+      (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+      q n qe (n+LENGTH w) i s j t (Abort Revert_abort fin) rs` by
+    (simp[GSYM selected_step_match_fuel_def] >>
+     irule (cj 1 selected_simulation_induction_fuel) >> metis_tac[]) >>
+  fs[events_OS_def] >>
+  `?ts. rs = Abort Revert_abort ts` by
+    (Cases_on `i.inst_opcode = INVOKE` >> Cases_on `rs` >>
+     gvs[layout_deferred_OS_def, layout_canonical_OS_def, layout_canonical_result_def,
+         dead_result_rel_def]) >>
+  gvs[] >>
+  `ts = tfin` by
+    (qpat_x_assum `exec_block fuel C' bb' t = _` mp_tac >>
+     simp[Once exec_block_def]) >>
+  gvs[] >> first_x_assum irule >> metis_tac[]
+QED
+Resume layout_selected_empty_induction[run_next]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all layout_canonical_run_block_entry_prefix >> strip_tac >>
+  rule_assum_tac (PURE_REWRITE_RULE[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC]) >>
+  drule_all (PURE_REWRITE_RULE[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC] selected_run_next_children) >>
+  strip_tac >>
+  `?h. fuel' = SUC h /\ exec_block h C bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK s''` by
+    (irule finite_run_block_fuel_inv >> conj_tac
+     >- (qexistsl [`fn`, `Abort Revert_abort fin`, `s`] >> simp[]) >>
+     metis_tac[decorated_execution_erases]) >>
+  gvs[] >>
+  `selected_simulation_contract_fuel C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_EB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
+  `?rb. run_block_non_phis h' C' bb'
+    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = rb /\
+    finite_block C' bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) rb /\
+    events_OB C C'
+      (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+      q n (JointConfig stk PG G tn fn i si oms om hs h) (n+LENGTH w)
+      bb (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) (OK s'') rb` by
+    (simp[GSYM selected_block_match_fuel_def] >>
+     irule (cj 2 selected_simulation_induction_fuel) >> metis_tac[]) >>
+  fs[events_OB_def] >>
+  `?v. rb = OK v` by
+    (Cases_on `rb` >> gvs[layout_canonical_OB_def, layout_canonical_result_def]) >>
+  gvs[] >>
+  `layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend
+    (EL (n+(LENGTH w+1)) (q0::MAP SND path)) (n+(LENGTH w+1)) fn s'' fn' v` by
+    (irule (PURE_REWRITE_RULE[GSYM arithmeticTheory.ADD_ASSOC] layout_canonical_run_continue) >>
+     simp[] >> metis_tac[]) >>
+  `~v.vs_halted` by metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
+  `run_blocks h' C fn s'' = Abort Revert_abort fin /\
+   run_blocks h' C' fn' v = Abort Revert_abort tfin` by
+    (conj_tac
+     >- (qpat_x_assum `run_blocks (SUC h') C fn s = _` mp_tac >>
+         simp[Once run_blocks_def, run_block_def]) >>
+     qpat_x_assum `run_blocks (SUC h') C' fn' t = _` mp_tac >>
+     simp[Once run_blocks_def, run_block_def]) >>
+  first_x_assum irule >> simp[] >>
+  fs[selected_run_def] >> metis_tac[]
+QED
+Resume layout_selected_empty_induction[run_exit]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all layout_canonical_run_block_entry_prefix >> strip_tac >>
+  `?h. fuel = SUC h /\ exec_block h C bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = Abort Revert_abort fin` by
+    (irule finite_run_block_fuel_inv >> conj_tac
+     >- (qexistsl [`fn`, `Abort Revert_abort fin`, `s`] >> simp[]) >>
+     metis_tac[decorated_execution_erases]) >> gvs[] >>
+  `selected_simulation_contract_fuel C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_EB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path (MAP FST path) (MAP SND path) ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend))` by
+    (irule layout_canonical_simulation_contract_fuel >> simp[] >> metis_tac[]) >>
+  `?rb. run_block_non_phis h C' bb'
+    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = rb /\
+    finite_block C' bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) rb /\
+    events_OB C C'
+      (layout_canonical_OB D lo vs0 C C' q0 (MAP FST path) (MAP SND path) ass qend)
+      q n qe (n+LENGTH w)
+      bb (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      bb' (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+      (Abort Revert_abort fin) rb` by
+    (simp[GSYM selected_block_match_fuel_def] >>
+     irule (cj 2 selected_simulation_induction_fuel) >> metis_tac[]) >>
+  fs[events_OB_def] >>
+  `?ts. rb = Abort Revert_abort ts` by
+    (Cases_on `rb` >> gvs[layout_canonical_OB_def, layout_canonical_result_def,
+      dead_result_rel_def]) >> gvs[] >>
+  `run_block_non_phis h C' bb'
+    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = Abort Revert_abort tfin` by
+    (qpat_x_assum `run_blocks (SUC h) C' fn' t = _` mp_tac >>
+     simp[Once run_blocks_def, run_block_def] >>
+     Cases_on `exec_block h C' bb'
+       (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)` >> simp[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+Finalise layout_selected_empty_induction
 
 Theorem layout_stage_selected_run_fuel_revert_empty:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
