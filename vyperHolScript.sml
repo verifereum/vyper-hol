@@ -60,8 +60,17 @@ Ancestors
      statement reason theories *)
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
-  stmtReasonKindsMemory stmtSimAssignPlace stmtSimAugAssignPlaceStorage
+  stmtReasonKindsMemory stmtSimAugAssignPlaceStorage
   stmtSimIfCounted stmtSimRaise stmtSimSeqMem
+  (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
+  immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
+  immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
+  immutableAssignCompose immutableAssignOpen
+  assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
+  assignPlaceEmptyCompose assignPlaceContinuation assignPlaceCallerFacts
+  assignPlaceGasCompose assignPlaceStoreReady
+  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
+  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
@@ -74,8 +83,11 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
-  (* body induction: custom-error rows, admitted until the gate admits them *)
-  bodyCustomErrorCases
+  (* body induction: custom-error raise and assert pieces *)
+  bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
+  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
+  (* bytecode: a passing operand-stack checker excludes frame overflow *)
+  stackBoundSoundness

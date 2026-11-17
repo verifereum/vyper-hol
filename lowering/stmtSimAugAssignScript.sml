@@ -24,10 +24,10 @@
 Theory stmtSimAugAssign
 Ancestors
   targetPlaceSim
-  exprBopSimDefs exprBopSimProps
+  exprBopSimDefs exprBopSimProps exprBopBytes
   exprSimSource gasContext gasExemptCert gasSummary gasSummaryCompose
   fragGasMode fragGasPath fragGasPathMem fragGasSeq gasCount
-  exprSimName exprSimNameWord
+  exprSimName exprSimNameWord exprSimMemoryPath exprSimProps
   stmtSimProps
   exprSimHypsDefs
   stmtSimDefs
@@ -289,16 +289,179 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
 
+Theorem augassign_local_typed_word:
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME entry.type /\
+  value_has_type entry.type entry.value /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_scopes id es.scopes = SOME entry /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  ?w. lookup_var p s = SOME w /\
+      mload (w2n w) s = typed_val_to_w256 entry.type entry.value
+Proof
+  strip_tac >>
+  `?w. lookup_var p s = SOME w /\
+       memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  qexists_tac `w` >> simp[] >>
+  `val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    metis_tac[memoryValueEncodingTheory.memory_value_rel_val_in_memory] >>
+  metis_tac[val_in_memory_word_type, valueEncodingPropsTheory.mem_word_at_eq_mload]
+QED
+
+Theorem augassign_name_post_typed:
+  emit_op MLOAD [Var p] sa = (Var out,sb) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME entry.type ==>
+  expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+    (es with gas_obs := []) entry.value (Var out)
+    (update_var out (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `out = STRCAT "%" (toString sa.cs_next_var)` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def] >>
+  `not_local_ptr cenv (es with gas_obs := []).scopes out` by
+    (gvs[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+    (update_var out (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule stmt_state_rel_update_var >> simp[] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`,
+                            `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[]) >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE, locals_kept_mem] >>
+  rpt strip_tac >>
+  `STRING #"%" (toString sa.cs_next_var) <> x` by
+    (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
+QED
+
+Theorem augassign_local_load_typed:
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  is_word_type ty /\ lookup_scopes id es.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) ty = SOME entry.type /\
+  value_has_type entry.type entry.value /\
+  emit_op MLOAD [Var p] sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H0 ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_exec F (ctx,func) (eval_target_place cx (NameTarget id))
+        (es,s0) [] (INL (MemoryPlace id [])) es (OK t) /\
+      (!H. stmt_state_rel H ctx func cenv cx es s0 /\
+           storage_well_formed_on cx es (FST H) ==>
+           expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+             (es with gas_obs := []) entry.value op t) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      local_ptrs_reserved cenv sb /\
+      (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+      (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  strip_tac >> drule_all augassign_local_typed_word >> strip_tac >>
+  `eval_operand (Var p) s0 = SOME w` by simp[eval_operand_def] >>
+  drule_all emit_mload_marked_path >> strip_tac >>
+  drule_all emit_mload_endpoint >> strip_tac >>
+  qexists_tac `(update_var (STRING #"%" (toString sa.cs_next_var))
+    (mload (w2n w) s0) s0) with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_explicit_def] >>
+      conj_tac
+      >- (gen_tac >> irule (cj 1 eval_target_place_local) >> simp[]) >>
+      qpat_x_assum `!ctx. gas_marked_path _ _ _ _ _ _`
+        (qspec_then `ctx` mp_tac) >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> suspend "post") >>
+  simp[update_var_def] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+      gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_var_def, fresh_id_def, emit_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_var_def, fresh_id_def, emit_def, lookup_var_def,
+          FLOOKUP_UPDATE, not_fresh_at_def]) >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def, not_fresh_at_def]
+QED
+
+Resume augassign_local_load_typed[post]:
+  `op = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_var_def, fresh_id_def, emit_def] >>
+  `expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+    (es with gas_obs := []) entry.value op
+    (update_var (STRING #"%" (toString sa.cs_next_var))
+      (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (gvs[] >> irule augassign_name_post_typed >> simp[] >> metis_tac[]) >>
+  gvs[update_var_def]
+QED
+
+Finalise augassign_local_load_typed
+
 (* ===== The operator ===== *)
 
-(* The types the type checker allows for x op= e, with op neither in nor
-   not in (type_stmt), are word_value_types. *)
-Theorem well_typed_binop_augassign_word:
-  !ty bop t2.
-    well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
-    word_value_type ty /\ word_value_type t2
+Theorem well_typed_binop_augassign_is_word:
+  well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn /\
+  evaluate_type tenv ty = SOME tv1 ==>
+  is_word_type ty /\ is_word_type t2
 Proof
-  Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
+  strip_tac >> drule_all well_typed_binop_augassign_word >> strip_tac
+  >- metis_tac[word_value_type_word] >>
+  Cases_on `bop` >>
+  gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def,
+      is_word_type_def, optionTheory.IF_EQUALS_OPTION] >>
+  Cases_on `t2` >> gvs[is_int_type_def, is_word_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_int_type_def, is_word_type_def]
+QED
+
+(* The shared operator contract keeps the source type's word encoding. *)
+Theorem augassign_binop_frag_typed:
+  well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn /\
+  type_bits ty MOD 8 = 0 /\
+  (bop = Exp ==>
+    (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
+    (!n. bl = SOME n ==> v1 = IntV n) /\
+    (!n. el = SOME n ==> v2 = IntV n)) /\
+  (bop = ShL \/ bop = ShR ==>
+    (?i. v2 = IntV i /\ 0 <= i) \/
+    (ty = BaseT (BytesT (Fixed 32)) /\
+     ?bs. v2 = BytesV bs /\ LENGTH bs = 32)) /\
+  evaluate_type (get_tenv cx) ty = SOME tv1 /\ value_has_type tv1 v1 /\
+  evaluate_type (get_tenv cx) t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
+  binop_frag_post (expr_val_rel cx ty)
+    ctx func cenv cx bop ty ty bl el tys v1 v2
+    (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es
+Proof
+  strip_tac >> drule_all well_typed_binop_augassign_word >> strip_tac
+  >- (`word_value v1 /\ word_value v2` by metis_tac[word_value_type_typed] >>
+      `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+        (rpt strip_tac >> gvs[word_value_type_def]) >>
+      simp[typed_val_to_w256_word_value] >>
+      irule binop_frag_words_rel >> conj_tac
+      >- metis_tac[word_value_type_word] >>
+      rewrite_tac[GSYM binop_frag_def] >>
+      irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `ty = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+  `(bop = ShL \/ bop = ShR ==>
+      (?i. v2 = IntV i /\ 0 <= i) \/
+      t2 = BaseT (BytesT (Fixed 32)))` by
+    (rpt strip_tac >> (Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+     >- simp[] >>
+     `is_int_type t2` by gvs[well_typed_binop_def] >>
+     drule_all int_type_value >> strip_tac >> gvs[])) >>
+  irule binop_frag_bytes_typed >> simp[] >>
+  qexistsl_tac [`t2`, `get_tenv cx`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem word_value_not_bytes:
@@ -473,9 +636,10 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
-(* The checked augmented operand satisfies the ordinary builtin gate too. *)
+(* Ordinary expressions retain their integer-only shift operand gate. *)
 Theorem augassign_builtin_operands:
-  augassign_operand_ok ty bop e ==>
+  augassign_operand_ok ty bop e /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) ==>
   builtin_operands_ok ty (Bop bop) [lhs; e]
 Proof
   Cases_on `bop` >>
@@ -490,7 +654,7 @@ QED
 Theorem augassign_operand_ok_operands:
   augassign_operand_ok ty bop e ==>
   (bop = Exp ==> nonneg_int_literal e) /\
-  (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+  (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e)
 Proof
   Cases_on `bop` >> simp[augassign_operand_ok_def] >>
   Cases_on `e` >> simp[power_exponent_ok_def] >>
@@ -546,6 +710,22 @@ Proof
   qexistsl_tac [`ty`, `get_tenv cx`] >> simp[word_value_type_word]
 QED
 
+Theorem augassign_current_store_layout_typed:
+  expr_sim_inv cenv cx env ee /\ FLOOKUP env.var_types id = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME etv /\ is_word_type ty /\
+  value_has_type etv w ==>
+  !current. lookup_scopes id ee.scopes = SOME current ==>
+    store_lays_out etv current.type w
+Proof
+  strip_tac >> rpt strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME current.type` by
+    metis_tac[expr_sim_inv_local] >>
+  `current.type = etv` by gvs[] >> simp[] >>
+  irule store_lays_out_typed >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`ty`, `get_tenv cx`] >> simp[]
+QED
+
 Theorem augassign_write_admissible:
   lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
   gas_admissible (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
@@ -575,7 +755,117 @@ Proof
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
+Theorem augassign_compare_not_bytes:
+  well_typed_binop ty bop ty t2 /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  ((bop = Eq \/ bop = NotEq) ==> !bs. v <> BytesV bs)
+Proof
+  strip_tac >> strip_tac >>
+  gvs[well_typed_binop_def, vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem augassign_operand_types:
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP env.var_types id = SOME ty /\
+  lookup_scopes id es.scopes = SOME entry /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  expr_sim_inv cenv cx env ee /\
+  evaluate_type (get_tenv cx) ty = SOME entry.type /\
+  value_has_type entry.type entry.value /\
+  is_word_type ty /\ is_word_type (expr_type e) /\
+  ?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
+        value_has_type tv2 v
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by
+    metis_tac[expr_sim_inv_local] >>
+  `value_has_type entry.type entry.value` by
+    metis_tac[expr_sim_inv_def, lookup_scopes_state_well_typed_value_has_type] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+  fs[vyperTypeExprResultTheory.expr_result_typed_def,
+     vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+     value_result_typed_def] >>
+  metis_tac[well_typed_binop_augassign_is_word]
+QED
+
+Theorem augassign_shift_operand:
+  eval_expr cx e es = (INL raw, es1) /\
+  read_result cx raw es1 = (INL v, es2) /\
+  evaluate_type tenv (expr_type e) = SOME tv /\ value_has_type tv v /\
+  (shift_amount_ok e \/ augassign_shift_amount_ok ty e) ==>
+  (?i. v = IntV i /\ 0 <= i) \/
+  (ty = BaseT (BytesT (Fixed 32)) /\
+   ?bs. v = BytesV bs /\ LENGTH bs = 32)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `shift_amount_ok e`
+  >- metis_tac[eval_expr_shift_amount] >>
+  gvs[augassign_shift_amount_ok_def] >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
 Theorem augassign_binop_ready:
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP env.var_types id = SOME ty /\
+  lookup_scopes id es.scopes = SOME entry /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==>
+    shift_amount_ok e \/ augassign_shift_amount_ok ty e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  expr_sim_inv cenv cx env ee /\
+  (!w. bop_result cx ty bop [ty; expr_type e] entry.value v est = INL w ==>
+       value_has_type entry.type w) /\
+  ?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
+    binop_frag_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
+      (if bop = Exp then expr_int_literal e else NONE)
+      [ty; expr_type e] entry.value v
+      (typed_val_to_w256 entry.type entry.value) (typed_val_to_w256 tv2 v) est
+Proof
+  strip_tac >>
+  drule_all augassign_operand_types >> strip_tac >> simp[] >>
+  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` >>
+  `well_formed_type env.type_defs ty` by
+    metis_tac[expr_body_pre_var_types_well_formed] >>
+  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
+  drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
+  `!n. expr_int_literal e = SOME n ==> v = IntV n` by
+    metis_tac[eval_expr_int_literal_agrees] >>
+  `(bop = ShL \/ bop = ShR ==>
+      (?i. v = IntV i /\ 0 <= i) \/
+      (ty = BaseT (BytesT (Fixed 32)) /\
+       ?bs. v = BytesV bs /\ LENGTH bs = 32))` by
+    metis_tac[augassign_shift_operand] >>
+  conj_tac
+  >- (gen_tac >>
+      `bop_result cx ty bop [ty; expr_type e] entry.value v est =
+       case evaluate_binop
+         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+         entry.type bop entry.value v of
+           INL w => INL w | INR err => INR (Error err)` by
+        (irule bop_result_augassign >>
+         metis_tac[augassign_compare_not_bytes]) >>
+      pop_assum SUBST1_TAC >>
+      simp[AllCaseEqs()] >> strip_tac >>
+      irule well_typed_binop_success_type >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`ty`, `expr_type e`, `get_tenv cx`, `entry.type`, `tv2`, `ty`] >> simp[]) >>
+  irule augassign_binop_frag_typed >> simp[] >> conj_tac
+  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+      Cases_on `expr_int_literal e` >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `expr_type e` >> simp[]
+QED
+
+Theorem augassign_binop_ready_word:
+  word_value_type ty /\ word_value_type (expr_type e) /\
   expr_body_pre cenv cx env e es /\
   FLOOKUP env.var_types id = SOME ty /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -591,8 +881,6 @@ Theorem augassign_binop_ready:
     [ty; expr_type e] entry.value v est
 Proof
   strip_tac >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `evaluate_type (get_tenv cx) ty = SOME entry.type` by
     metis_tac[expr_sim_inv_local] >>
@@ -1030,13 +1318,14 @@ Proof
   simp[] >> metis_tac[]
 QED
 *)
-Theorem compile_augassign_local_case:
+Theorem compile_augassign_local_case_typed:
   !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     FLOOKUP env.var_types id = SOME ty /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    (bop = ShL \/ bop = ShR ==>
+      shift_amount_ok e \/ augassign_shift_amount_ok ty e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
@@ -1046,18 +1335,16 @@ Proof
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all expr_sim_inv_local >> strip_tac >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
-  `is_word_type ty` by metis_tac[word_value_type_word] >>
   `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_is_word] >>
   `value_has_type entry.type entry.value` by
     metis_tac[expr_sim_inv_def, lookup_scopes_state_well_typed_value_has_type] >>
-  `word_value entry.value` by metis_tac[word_value_type_typed] >>
   drule_all augassign_local_code_parts >> strip_tac >> gvs[] >>
   suspend "code_and_outcome"
 QED
 
-Resume compile_augassign_local_case[code_and_outcome]:
+Resume compile_augassign_local_case_typed[code_and_outcome]:
   `cs_extends sa s1` by
     metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
@@ -1077,7 +1364,7 @@ Resume compile_augassign_local_case[code_and_outcome]:
          vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-  drule_all (INST_TYPE [beta |-> ``:256``] augassign_local_load) >> strip_tac >> gvs[] >>
+  drule_all (INST_TYPE [beta |-> ``:256``] augassign_local_load_typed) >> strip_tac >> gvs[] >>
   `gas_marked_path F ctx func s0 0 (OK t)` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
        mp_tac >> simp[gas_marked_exec_def]) >>
@@ -1088,7 +1375,7 @@ Resume compile_augassign_local_case[code_and_outcome]:
   suspend "rhs_outcome"
 QED
 
-Resume compile_augassign_local_case[rhs_outcome]:
+Resume compile_augassign_local_case_typed[rhs_outcome]:
   `expr_sim ctx func cenv cx ty e (es with gas_obs := [])` by
     (irule expr_sim_case_apply >> simp[] >> conj_tac
      >- (qexists_tac `env` >> simp[]) >>
@@ -1121,7 +1408,7 @@ Resume compile_augassign_local_case[rhs_outcome]:
   qexists_tac `t` >> simp[]
 QED
 
-Resume compile_augassign_local_case[rhs_summary]:
+Resume compile_augassign_local_case_typed[rhs_summary]:
   qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
               (es with gas_obs := []) t marks`
@@ -1150,7 +1437,7 @@ Resume compile_augassign_local_case[rhs_summary]:
   gvs[halt_exit_def]
 QED
 
-Resume compile_augassign_local_case[rhs_normal]:
+Resume compile_augassign_local_case_typed[rhs_normal]:
   gvs[] >> rename1 `gas_marked_exec _ _ _ _ _ _ ee (OK u)` >>
   first_assum (qspec_then `H1` mp_tac) >> impl_tac >- simp[] >>
   strip_tac >> gvs[] >>
@@ -1182,29 +1469,29 @@ Resume compile_augassign_local_case[rhs_normal]:
   suspend "binop_ready"
 QED
 
-Resume compile_augassign_local_case[binop_ready]:
+Resume compile_augassign_local_case_typed[binop_ready]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
-  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_type_result) >>
   strip_tac >> gvs[] >>
   `expr_post H1 ctx func cenv cx (Name ty id) es sa s1 s0
      (es with gas_obs := []) entry.value (Var out) t /\
    expr_post H1 ctx func cenv cx e (es with gas_obs := []) s1 s2 t
      (ee with gas_obs := []) v rhs_op u` by metis_tac[] >>
-  `eval_operand (Var out) t = SOME (val_to_w256 entry.value) /\
-   eval_operand rhs_op u = SOME (val_to_w256 v)` by
-    (conj_tac >> irule expr_val_rel_word >>
+  `eval_operand (Var out) t = SOME (typed_val_to_w256 entry.type entry.value) /\
+   eval_operand rhs_op u = SOME (typed_val_to_w256 tv2 v)` by
+    (conj_tac >> irule expr_val_rel_typed >>
      fs[expr_post_def] >> goal_assum (drule_at Any) >>
-     simp[expr_type_def, word_value_type_word]) >>
-  `eval_operand (Var out) u = SOME (val_to_w256 entry.value)` by
+     simp[expr_type_def]) >>
+  `eval_operand (Var out) u = SOME (typed_val_to_w256 entry.type entry.value)` by
     (irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
   `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_def, binop_frag_words_def]) >>
+  qpat_x_assum `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `Var out`, `rhs_op`, `res_op`, `u`]
     mp_tac) >>
   impl_tac
@@ -1217,15 +1504,15 @@ Resume compile_augassign_local_case[binop_ready]:
   strip_tac >- suspend "operator_normal" >> suspend "operator_exit"
 QED
 
-Resume compile_augassign_local_case[operator_normal]:
-  gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
+Resume compile_augassign_local_case_typed[operator_normal]:
+  gvs[] >> rename1 `expr_val_rel cx ty result res_op s` >>
   `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
     (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by gvs[AllCaseEqs()] >>
@@ -1238,7 +1525,7 @@ Resume compile_augassign_local_case[operator_normal]:
   suspend "write_safe"
 QED
 
-Resume compile_augassign_local_case[write_safe]:
+Resume compile_augassign_local_case_typed[write_safe]:
   drule_all write_place_local_gas_obs >>
   disch_then (qspec_then `[]` strip_assume_tac) >> gvs[] >>
   `expr_sim_inv cenv cx env (ee with gas_obs := [])` by simp[] >>
@@ -1254,9 +1541,9 @@ Resume compile_augassign_local_case[write_safe]:
      metis_tac[local_word_pointer_live]) >>
   `!current. lookup_scopes id (ee with gas_obs := []).scopes = SOME current ==>
      store_lays_out entry.type current.type result` by
-    (drule_all augassign_current_store_layout >> simp[]) >>
+    (drule_all augassign_current_store_layout_typed >> simp[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 entry.type result)` by
-    simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+    (irule expr_val_rel_typed >> simp[] >> metis_tac[]) >>
   `local_ptrs_reserved cenv s3` by
     metis_tac[local_ptrs_reserved_next_var] >>
   qspecl_then [`H1`, `ctx`, `func`, `cenv`, `cx`, `lctx`,
@@ -1270,7 +1557,7 @@ Resume compile_augassign_local_case[write_safe]:
   suspend "store_post"
 QED
 
-Resume compile_augassign_local_case[store_post]:
+Resume compile_augassign_local_case_typed[store_post]:
   `alloca_frame cenv (ee with gas_obs := []) s2 u cenv
       (ee with gas_obs := []) s` by
     (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >> simp[] >>
@@ -1355,14 +1642,14 @@ Resume compile_augassign_local_case[store_post]:
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Resume compile_augassign_local_case[operator_exit]:
+Resume compile_augassign_local_case_typed[operator_exit]:
   `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
     (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v`
@@ -1379,7 +1666,23 @@ Resume compile_augassign_local_case[operator_exit]:
   simp[halt_exit_def]
 QED
 
-Finalise compile_augassign_local_case
+Finalise compile_augassign_local_case_typed
+
+Theorem compile_augassign_local_case:
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
+      (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
+Proof
+  rpt strip_tac >> irule compile_augassign_local_case_typed >>
+  simp[] >> metis_tac[]
+QED
 
 (* compile_augassign_local_case for an operand with no internal call. *)
 Theorem compile_augassign_local_stmt_frag:
@@ -1393,5 +1696,5 @@ Theorem compile_augassign_local_stmt_frag:
 Proof
   rpt strip_tac >> drule augassign_operand_ok_operands >> strip_tac >>
   fs[expr_sim_pre_body, expr_sim_ok_case] >>
-  irule (Q.SPEC `T` compile_augassign_local_case) >> simp[] >> metis_tac[]
+  irule (Q.SPEC `T` compile_augassign_local_case_typed) >> simp[] >> metis_tac[]
 QED
