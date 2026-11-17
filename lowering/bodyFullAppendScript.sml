@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  memoryPlaceStorePost
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
   bodyFullMemoryFrames bodyFullMemoryCopy typedCopyOriginPtrBase
   robustCopyTransportPtr typedMemoryCopy loweringStateRelDefs
@@ -830,35 +831,15 @@ Theorem append_nested_robust_path_assign:
       q IN tm) ==>
     (!m. mem_agree_outside tm' mem' m ==> val_in_memory tv result b m)
 Proof
-  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  qabbrev_tac `hybrid = GENLIST
-    (\q. HD (mem_bytes_at q 1
-      (if b+k <= q /\ q < b+k+type_memory_size ltv then mem else m)))
-    (MAX (LENGTH mem) (LENGTH m))` >>
-  `!q. mem_bytes_at q 1 hybrid = mem_bytes_at q 1
-    (if b+k <= q /\ q < b+k+type_memory_size ltv then mem else m)` by
-    (gen_tac >> irule LIST_EQ >>
-     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
-     simp[valueEncodingProofsTheory.EL_mem_bytes_at, Abbr `hybrid`,
-          EL_GENLIST, GSYM EL] >>
-     Cases_on `b+k <= q /\ q < b+k+type_memory_size ltv` >>
-     simp[] >> Cases_on `q < LENGTH mem` >>
-     Cases_on `q < LENGTH m` >> simp[]) >>
-  `mem_agree_outside tm mem hybrid` by
-    (rw[mem_agree_outside_def] >>
-     Cases_on `b+k <= i /\ i < b+k+type_memory_size ltv`
-     >- simp[] >>
-     `i < b+k \/ b+k+type_memory_size ltv <= i` by decide_tac >>
-     `i NOTIN tm'` by metis_tac[] >>
-     fs[mem_agree_outside_def] >> metis_tac[]) >>
-  `val_in_memory tv a b hybrid` by metis_tac[] >>
-  irule place_store_path_assign >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at (Pat `mem_path_offset _ _ = _`)) >>
-  qexistsl_tac [`old`, `v`] >> simp[] >>
-  rpt strip_tac >>
-  `~(b+k <= q /\ q < b+k+type_memory_size ltv)` by decide_tac >>
-  simp[]
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (SRULE [] (Q.INST
+    [`entry` |-> `<|assignable := T; type := tv; value := a; popped := []|>`,
+     `entry'` |-> `<|assignable := T; type := tv; value := result; popped := []|>`,
+     `ptv` |-> `ltv`, `off` |-> `b`]
+    memoryPlaceStorePostTheory.memory_place_replace_robust)) >>
+  simp[vyperStateTheory.replace_memory_entry_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem append_nested_robust_array_project:
