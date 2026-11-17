@@ -247,7 +247,44 @@ Resume focus_retained_row_replay[observations_ok]:
      simp[get_instruction_def, EL_APPEND_EQN] >>
      Cases_on `step_inst (fuel-d) C7 (EL a xs) v` >>
      simp[Once gas_events_block_def, get_instruction_def]) >>
-  FAIL_TAC "single"
+  `dftGasFromListTraceDefs$trace_gas
+    (dftGasFromListTraceDefs$trace_block p d (fuel-d) C7 sf
+      <|bb_label := be.vs_current_bb; bb_instructions :=
+        REPLICATE (a + be.vs_inst_idx) (mk_inst 0 STOP [] []) ++ [EL a xs]|> v) =
+    dftGasFromListTraceDefs$visit_gas ((p,d,(EL a xs).inst_id),sf,EL a xs,v) ++
+    dftGasFromListTraceDefs$trace_gas
+      (dftGasFromListTraceDefs$trace_step p d (fuel-d) C7 sf (EL a xs) v)` by
+    (once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+     simp[get_instruction_def, EL_APPEND_EQN] >>
+     Cases_on `step_inst (fuel-d) C7 (EL a xs) v` >>
+     simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+       get_instruction_def, dftGasFromListTraceDefsTheory.trace_gas_def,
+       MAP_APPEND, FLAT_APPEND]) >>
+  `LENGTH (FLAT (TAKE a ks)) = LENGTH (FLAT front) /\
+   LENGTH (EL a ks) = LENGTH g` by
+    (`MAP LENGTH ms = MAP LENGTH ks` by
+       simp[MAP_EQ_EVERY2, LIST_REL_LENGTH] >>
+     `MAP LENGTH (TAKE a ms) = MAP LENGTH front` by
+       (simp[MAP_EQ_EVERY2] >>
+        conj_tac >- (qpat_assum `LIST_REL _ (TAKE a ms) front` (mp_tac o MATCH_MP LIST_REL_LENGTH) >> simp[]) >>
+        irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+        simp[] >> metis_tac[LIST_REL_LENGTH]) >>
+     `LENGTH (EL a ms) = LENGTH (EL a ks)` by
+       (gvs[LIST_REL_EL_EQN]) >>
+     drule LIST_REL_LENGTH >> gvs[LENGTH_FLAT, MAP_TAKE]) >>
+  `(?extra. EL a ess = gas_events_step (fuel-d) C7 sf.fn_name (EL a xs) v ++ extra) /\
+   (!w. step_inst (fuel-d) C7 (EL a xs) v = OK w ==>
+     gas_events_step (fuel-d) C7 sf.fn_name (EL a xs) v = EL a ess /\
+     w.vs_gas_readings = tail /\
+     dftGasFromListTraceDefs$visit_gas ((p,d,(EL a xs).inst_id),sf,EL a xs,v) ++
+     dftGasFromListTraceDefs$trace_gas
+       (dftGasFromListTraceDefs$trace_step p d (fuel-d) C7 sf (EL a xs) v) = ZIP (EL a ks,g))` by
+    suspend "contribution" >>
+  gvs[] >> rpt strip_tac >>
+  gvs[dft_exec_cons_def, AllCaseEqs()] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  qpat_x_assum `dftGasFromListTraceDefs$visit_gas _ ++ _ = _` SUBST1_TAC >>
+  irule ZIP_APPEND >> simp[]
 QED
 
 Finalise focus_retained_row_replay
