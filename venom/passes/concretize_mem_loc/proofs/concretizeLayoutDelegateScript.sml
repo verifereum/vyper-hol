@@ -21,7 +21,8 @@ Theorem delegate_success_envelope:
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) = OK post ==>
   ?out w p. inst.inst_outputs = [out] /\
     consume_call_outcome (venom_call_request s addr 0w off sz F with
-      cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) s = (w,p) /\
+      <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>)
+      (w2n ro) (w2n rs) s = (w,p) /\
     post = update_var out w p
 Proof
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
@@ -70,7 +71,8 @@ Proof
   `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
   drule delegate_success_envelope >> strip_tac >>
   qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
-  `venom_call_request t addr 0w offT sz F with cr_kind := DelegateMessageCall = rq` by
+  `venom_call_request t addr 0w offT sz F with
+     <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |> = rq` by
     simp[Abbr `rq`, venom_call_request_def] >>
   `!M. request_agree_except M rq rq` by
     simp[request_agree_except_def, accounts_agree_except_def,

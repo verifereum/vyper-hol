@@ -20,7 +20,7 @@ QED
 Theorem dload_ext_call_success_footprint:
   exec_ext_call inst s gas addr value ao az ro rz st = OK t ==>
   t.vs_requests = record_request
-    (venom_call_request s addr value ao az st) s.vs_requests /\
+    (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gas)) s.vs_requests /\
   t.vs_allocas = s.vs_allocas /\
   t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_immutables = s.vs_immutables
@@ -359,10 +359,10 @@ Theorem dload_exec_ext_call_environment:
       t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
 Proof
   strip_tac >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gs))
     (w2n rs) (w2n rz) s` >>
   rename1 `consume_call_outcome _ _ _ s = (w,ss)` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st)
+  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st with cr_gas := SOME (w2n gt))
     (w2n rt) (w2n rz) t` >>
   rename1 `consume_call_outcome _ _ _ t = (v,tt)` >>
   `s.vs_call_ctx = t.vs_call_ctx` by
@@ -424,10 +424,10 @@ Theorem dload_exec_ext_call_memory_match:
       {a | w2n rt <= a /\ a < w2n rt + MIN (w2n rz) (LENGTH s1.vs_returndata)}) s1 t1
 Proof
   strip_tac >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gs))
     (w2n rs) (w2n rz) s` >>
   rename1 `consume_call_outcome _ _ _ s = (w,ss)` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st)
+  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st with cr_gas := SOME (w2n gt))
     (w2n rt) (w2n rz) t` >>
   rename1 `consume_call_outcome _ _ _ t = (v,tt)` >>
   qpat_x_assum `exec_ext_call _ s _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -465,10 +465,10 @@ Proof
     metis_tac[dload_equal_environment_call_ctx] >>
   `s.vs_outcomes = t.vs_outcomes` by
     metis_tac[dload_equal_environment_outcomes] >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gs))
     (w2n rs) (w2n rz) s` >>
   rename1 `consume_call_outcome _ _ _ s = (w,ss)` >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st)
+  Cases_on `consume_call_outcome (venom_call_request t addr value bo bz st with cr_gas := SOME (w2n gt))
     (w2n rt) (w2n rz) t` >>
   rename1 `consume_call_outcome _ _ _ t = (v,tt)` >>
   qpat_x_assum `exec_ext_call _ s _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -481,5 +481,5 @@ Proof
   pure_rewrite_tac[dload_shared_store_update_vars] >>
   irule dload_consume_call_shared_store >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  simp[venom_call_request_def]
+  simp[venom_call_request_def, computed_precompile_def]
 QED

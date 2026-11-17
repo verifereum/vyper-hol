@@ -151,7 +151,7 @@ Theorem audit_call_clipped_byte:
   eval_operand v s = SOME value /\ eval_operand ao s = SOME aoff /\
   eval_operand az s = SOME asize /\ eval_operand ro s = SOME 0w /\
   eval_operand rz s = SOME 2w /\
-  rq = venom_call_request s addr value aoff asize st /\
+  rq = (venom_call_request s addr value aoff asize st with cr_gas := SOME (w2n gas)) /\
   take_outcome rq s.vs_outcomes = (outcome,rest) /\
   outcome.co_returnData = [byte] /\
   exec_ext_call inst s gas addr value aoff asize (0w:bytes32) (2w:bytes32) st = OK post ==>

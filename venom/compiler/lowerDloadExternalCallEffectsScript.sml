@@ -42,8 +42,8 @@ Theorem ld_exec_ext_call_effect:
     ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> (
-  qabbrev_tac `rq = venom_call_request s addr value ao az st` >>
-  qabbrev_tac `rq' = venom_call_request t addr value at az st` >>
+  qabbrev_tac `rq = venom_call_request s addr value ao az st with cr_gas := SOME (w2n gs)` >>
+  qabbrev_tac `rq' = venom_call_request t addr value at az st with cr_gas := SOME (w2n gt)` >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
   Cases_on `consume_call_outcome rq' (w2n rt) (w2n rz) t` >>
   rename1 `consume_call_outcome rq (w2n ro) (w2n rz) s = (w,ss0)` >>

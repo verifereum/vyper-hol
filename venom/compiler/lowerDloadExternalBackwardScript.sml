@@ -14,9 +14,9 @@ Theorem ld_exec_ext_call_backward:
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     exec_ext_call i s gas addr value offS sz (roS:bytes32) rs static =
       OK (update_var out w rS) /\
-    consume_call_outcome (venom_call_request s addr value offS sz static)
+    consume_call_outcome (venom_call_request s addr value offS sz static with cr_gas := SOME (w2n gas))
       (w2n roS) (w2n rs) s = (w,rS) /\
-    consume_call_outcome (venom_call_request t addr value offT sz static)
+    consume_call_outcome (venom_call_request t addr value offT sz static with cr_gas := SOME (w2n gas))
       (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
@@ -25,8 +25,8 @@ Theorem ld_exec_ext_call_backward:
       (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
 Proof
   strip_tac >>
-  qabbrev_tac `rqS = venom_call_request s addr value offS sz static` >>
-  qabbrev_tac `rqT = venom_call_request t addr value offT sz static` >>
+  qabbrev_tac `rqS = venom_call_request s addr value offS sz static with cr_gas := SOME (w2n gas)` >>
+  qabbrev_tac `rqT = venom_call_request t addr value offT sz static with cr_gas := SOME (w2n gas)` >>
   `rqS.cr_kind = rqT.cr_kind /\ rqS.cr_value = rqT.cr_value /\
    rqS.cr_target = rqT.cr_target /\ rqS.cr_data = rqT.cr_data` by
     simp[Abbr `rqS`, Abbr `rqT`, venom_call_request_def] >>
@@ -109,9 +109,9 @@ Theorem ld_exec_delegatecall_backward_extract:
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     exec_delegatecall i s gas addr offS sz (roS:bytes32) rs = OK (update_var out w rS) /\
     consume_call_outcome (venom_call_request s addr 0w offS sz F with
-      cr_kind := DelegateMessageCall) (w2n roS) (w2n rs) s = (w,rS) /\
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n roS) (w2n rs) s = (w,rS) /\
     consume_call_outcome (venom_call_request t addr 0w offT sz F with
-      cr_kind := DelegateMessageCall) (w2n roT) (w2n rs) t = (w,rT) /\
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
       (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
@@ -122,9 +122,9 @@ Proof
   `s.vs_outcomes = t.vs_outcomes` by
     gvs[lowerDloadSharedStateTheory.ld_shared_state_def] >>
   qabbrev_tac `rqS = venom_call_request s addr 0w offS sz F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   qabbrev_tac `rqT = venom_call_request t addr 0w offT sz F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   `rqS.cr_kind = rqT.cr_kind /\ rqS.cr_value = rqT.cr_value /\
    rqS.cr_target = rqT.cr_target /\ rqS.cr_data = rqT.cr_data` by
     simp[Abbr `rqS`, Abbr `rqT`, venom_call_request_def] >>
@@ -180,9 +180,9 @@ Theorem ld_call_step_backward:
   ?out w rS rT.
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     step_inst fuel CS i s = OK (update_var out w rS) /\
-    consume_call_outcome (venom_call_request s addr value offS sz static)
+    consume_call_outcome (venom_call_request s addr value offS sz static with cr_gas := SOME (w2n gas))
       (w2n roS) (w2n rs) s = (w,rS) /\
-    consume_call_outcome (venom_call_request t addr value offT sz static)
+    consume_call_outcome (venom_call_request t addr value offT sz static with cr_gas := SOME (w2n gas))
       (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
@@ -246,9 +246,9 @@ Theorem ld_delegatecall_step_backward_extract:
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     step_inst fuel CS i s = OK (update_var out w rS) /\
     consume_call_outcome (venom_call_request s addr 0w offS sz F with
-      cr_kind := DelegateMessageCall) (w2n roS) (w2n rs) s = (w,rS) /\
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n roS) (w2n rs) s = (w,rS) /\
     consume_call_outcome (venom_call_request t addr 0w offT sz F with
-      cr_kind := DelegateMessageCall) (w2n roT) (w2n rs) t = (w,rT) /\
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
       (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
