@@ -87,6 +87,7 @@ QED
 
 Theorem ricf_cert_exec_create:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
+  s.vs_outcomes <> [] /\
   un.t_stor = {} /\ un.t_trans = {} /\ inst.inst_outputs = [out] /\
   w2n sz <= 2 * max_code_size /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t ==>
@@ -101,6 +102,9 @@ Theorem ricf_cert_exec_create:
       (update_var out w r) (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+       taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   `venom_create_request s value off sz salt =
      venom_create_request t value off' sz salt` by
     (irule ricf_create_request_agree >>
@@ -306,6 +310,7 @@ QED
 
 Theorem ricf_cert_exec_ext_call:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
+  s.vs_outcomes <> [] /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
   (computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) \/
@@ -331,6 +336,10 @@ Theorem ricf_cert_exec_ext_call:
       (update_var out w r) (update_var out w u)
 Proof
   strip_tac >> (
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+       taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `((computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) /\
     computed_precompile (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)) /\
     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_target =
