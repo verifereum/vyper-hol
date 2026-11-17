@@ -652,8 +652,19 @@ Proof
   OUTCOMES_SUFFIX_TAC >> simp[outcomes_suffix_def]
 QED
 
+Theorem outcomes_suffix_create_operands:
+  outcomes_suffix
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >>
+  simp_tac bool_ss [eval_create_operands_def, LET_THM] >>
+  rpt (outcomes_suffix_step
+    (outcomes_suffix_create :: outcomes_suffix_base_facts))
+QED
+
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
+  (outcomes_suffix_create_operands :: outcomes_suffix_create ::
+   outcomes_suffix_ext_call :: outcomes_suffix_send ::
    outcomes_suffix_raw_call :: outcomes_suffix_precompile_call_success ::
    outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
@@ -894,17 +905,11 @@ Proof
   metis_tac[eval_outcomes_suffix_with_results]
 QED
 
-Theorem eval_expr_results_outcomes_suffix:
-  outcomes_suffix (eval_expr_results cx es)
-Proof
-  metis_tac[eval_outcomes_suffix_with_results]
-QED
-
-Theorem eval_expr_results_outcome_suffix:
-  eval_expr_results cx es st = (res,st') ==>
+Theorem eval_create_operands_outcome_suffix:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,st') ==>
     outcome_suffix st.outcomes st'.outcomes
 Proof
-  metis_tac[eval_expr_results_outcomes_suffix, outcomes_suffix_result]
+  metis_tac[outcomes_suffix_create_operands, outcomes_suffix_result]
 QED
 
 Definition outcomes_NONE_frame_def:
