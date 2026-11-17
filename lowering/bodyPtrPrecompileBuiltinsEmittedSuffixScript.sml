@@ -1,6 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsEmittedSuffix
 Ancestors bodyPtrPrecompileBuiltinsRuntime bodyPtrPrecompileBuiltinsSuffix
-          exprSimPrecompiles compileEnv loweringStateRelDefs ptrDiscipline
+          exprSimPrecompiles exprSimHash compileEnv loweringStateRelDefs ptrDiscipline
+          venomExecSemantics venomInst venomState
 
 Theorem computed_emitted_suffix_checked:
   (do gas <- emit_op GAS [];
@@ -40,7 +41,13 @@ Proof
            finite_mapTheory.FLOOKUP_UPDATE, exec_ext_call_def] >>
          gvs[eval_operand_def, lookup_var_def]) >>
       qexistsl_tac [`step_prov PG G gi u`, `step_taint gi s u tn`] >>
-      irule suffix_abort_checked >> simp[Abbr `gi`, Abbr `ci`] >> metis_tac[]) >>
+      qpat_x_assum `emitted_insts sm sb = _` SUBST1_TAC >>
+      irule suffix_abort_checked >> simp[Abbr `gi`, Abbr `ci`] >>
+      qexistsl_tac [`target`, `insz`,
+        `STRING #"%" (toString (sm.cs_next_var+1))`, `dst`,
+        `STRING #"%" (toString sm.cs_next_var)`, `sm.cs_next_id`,
+        `outsz`, `src`, `wi`] >>
+      simp[arithmeticTheory.ADD_COMM]) >>
   drule_all computed_call_prefix >> strip_tac >>
   simp[] >> irule suffix_checked >> simp[] >>
   simp[venomInstTheory.mk_inst_def] >> metis_tac[]
