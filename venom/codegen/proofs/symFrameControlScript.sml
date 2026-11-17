@@ -3318,27 +3318,16 @@ Theorem sym_rf_preparation_stack_sim:
     LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top' /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
-         ~MEM (SORestore off) (ins ++ ros)` by
-    (fs[listTheory.EVERY_MEM] >>
-     metis_tac[strongPrefixSimTheory.is_simple_stack_op_def]) >>
-  `(apply_prefix_ops fmp lo ins (ps with ps_spilled := FEMPTY)).ps_stack = ps1.ps_stack` by
-    (irule emit_input_plan_spill_free_stack_replay >>
-     simp[] >> fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
-  `LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
-     (apply_prefix_ops fmp lo (ins ++ ros) (ps with ps_spilled := FEMPTY)).ps_stack
-     ps2.ps_stack` by
-    (rewrite_tac[planAlignTheory.apply_prefix_ops_append] >>
-     irule reorder_plan_spill_free_kind_replay >>
-     simp[] >> fs[listTheory.MEM_APPEND] >>
-     qexistsl [`inputs`, `ps1`] >> simp[] >>
-     irule listTheory.EVERY2_refl >> simp[]) >>
-  drule_all sym_spill_free_stack_only_prefix_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  fs[sym_kinds_ok_def] >>
-  irule list_rel_op_kind_transport >>
-  metis_tac[listTheory.LIST_REL_REVERSE]
+  match_mp_tac symControlForwardPrepareOwnTheory.sym_rf_preparation_stack_sim_conditional >>
+  rewrite_tac[GSYM control_reorder_place_def] >> rpt conj_tac
+  >- MATCH_ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- MATCH_ACCEPT_TAC list_rel_op_kind_transport
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC control_reorder_place_spill_free_kind_replay)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC reorder_restore_no_restore_identity)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC do_swap_no_restore_shallow) >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 Theorem assign_output_op_kind:
@@ -3347,13 +3336,7 @@ Theorem assign_output_op_kind:
   inst.inst_outputs = [out] /\ ~is_label_operand rhs ==>
   (op_kind_ok fn ret rhs sv <=> op_kind_ok fn ret (Var out) sv)
 Proof
-  strip_tac >>
-  `ssa_form fn` by fs[codegen_ready_fn_def] >>
-  `dfg_get_def (dfg_build_function fn) out = SOME inst` by
-    metis_tac[fnFrameStepsRevertForwardTheory.dfg_build_function_ssa_def,
-              listTheory.MEM] >>
-  drule_all fnFrameStepsRevertForwardTheory.normalize_operand_codegen_assign >>
-  metis_tac[op_kind_ok_normalize_operand]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.assign_output_op_kind
 QED
 
 Theorem assign_prepared_stack_op_kind:
@@ -3363,9 +3346,7 @@ Theorem assign_prepared_stack_op_kind:
   LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [rhs])) top ==>
   LIST_REL (op_kind_ok fn ret) (REVERSE (stack_push (Var out) tail)) top
 Proof
-  Cases_on `top` >>
-  simp[stackModelTheory.stack_push_def] >>
-  metis_tac[assign_output_op_kind]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.assign_prepared_stack_op_kind
 QED
 
 Theorem simple_do_swap_replay_wf:
@@ -3402,16 +3383,7 @@ Theorem simple_prefix_equal_stack_replay:
   (apply_prefix_ops fmp lo ops qs).ps_stack =
     (apply_prefix_ops fmp lo ops ps).ps_stack
 Proof
-  Induct >> simp[mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
-  Cases_on `h` >>
-  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
-      mixedPrefixSimTheory.apply_prefix_op_def,
-      strongPrefixSimTheory.apply_simple_op_def] >>
-  Cases_on `o'` >>
-  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
-      mixedPrefixSimTheory.apply_prefix_op_def,
-      strongPrefixSimTheory.apply_simple_op_def]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.simple_prefix_equal_stack_replay
 QED
 
 Theorem sym_simple_prefix_stack_sim:
@@ -3429,12 +3401,7 @@ Theorem sym_simple_prefix_stack_sim:
     LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top' /\
     (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `(apply_prefix_ops fmp lo ops (ps with ps_spilled := FEMPTY)).ps_stack = ps'.ps_stack` by
-    metis_tac[simple_prefix_equal_stack_replay, plan_state_accfupds] >>
-  drule_all sym_spill_free_stack_only_prefix_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  fs[sym_kinds_ok_def] >> metis_tac[]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.sym_simple_prefix_stack_sim
 QED
 
 Theorem assign_postfix_simple_replay_wf:
@@ -3508,15 +3475,7 @@ Theorem rf_assign_preparation_stack_facts:
   prefix_wf (lo:string |-> num) (LENGTH ps.ps_stack) (ins ++ ros) /\
   ps2.ps_stack = stack_pop 1 ps2.ps_stack ++ [rhs]
 Proof
-  strip_tac >> rpt conj_tac
-  >- metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple]
-  >- (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
-      qexistsl_tac [`dfg`, `[rhs]`, `nl`, `ASSIGN`, `ps1`, `ps2`] >>
-      simp[] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
-  `!op. MEM op [rhs] /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by simp[] >>
-  `LENGTH [rhs] <= 16` by simp[] >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_preparation_arranged >> simp[]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.rf_assign_preparation_stack_facts
 QED
 
 Theorem sym_assign_prepared_stack_sim:
@@ -3530,8 +3489,7 @@ Theorem sym_assign_prepared_stack_sim:
   LIST_REL (op_kind_ok fn ret)
     (REVERSE (ps2 with ps_stack := stack_push (Var out) tail).ps_stack) top
 Proof
-  rpt gen_tac >> strip_tac >> simp[] >>
-  irule assign_prepared_stack_op_kind >> metis_tac[]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.sym_assign_prepared_stack_sim
 QED
 
 Theorem sym_rf_suffix_preparation_execution:
@@ -3594,13 +3552,7 @@ Theorem rf_assign_postfix_simple:
          ~MEM (SORestore off) (pops ++ opts)) ==>
   EVERY is_simple_stack_op (pops ++ opts)
 Proof
-  strip_tac >>
-  irule fnFrameStepsRevertForwardTheory.spill_free_postfix_simple >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`dfg`, `~halting`, `inst`,
-    `if MEM out nl then [] else [Var out]`, `nl`, `~MEM out nl`,
-    `term`, `ps`, `ps8`, `ps9`] >>
-  Cases_on `halting` >> Cases_on `MEM out nl` >> gvs[]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.rf_assign_postfix_simple
 QED
 
 Theorem sym_plan_runs_compose:
@@ -3608,7 +3560,7 @@ Theorem sym_plan_runs_compose:
   sym_steps p env (LENGTH (execute_plan fmp ops2)) mid = SymOK final ==>
   sym_steps p env (LENGTH (execute_plan fmp (ops1 ++ ops2))) ss = SymOK final
 Proof
-  simp[stackOpSimTheory.execute_plan_append, sym_steps_add]
+  MATCH_ACCEPT_TAC symControlForwardPrepareOwnTheory.sym_plan_runs_compose
 QED
 
 Theorem sym_rf_assign_plan_execution:
@@ -3702,9 +3654,8 @@ Theorem label_flow_noncopy_operand_not_code_end:
   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> CODECOPY /\
   MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
 Proof
-  strip_tac >> fs[label_flow_ok_def] >>
-  first_x_assum (qspecl_then [`fn`, `inst`] mp_tac) >>
-  simp[] >> metis_tac[]
+  MATCH_ACCEPT_TAC (SRULE []
+    (Q.INST [`allow_own` |-> `F`] (SPEC_ALL label_flow_noncopy_operand_not_code_end_mode)))
 QED
 
 Theorem ordinary_noncopy_operand_word_kind:
@@ -3717,10 +3668,8 @@ Theorem ordinary_noncopy_operand_word_kind:
   op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
   ?w. sv = Val w
 Proof
-  strip_tac >> Cases_on `op` >>
-  gvs[op_kind_ok_def, is_label_operand_def] >>
-  drule_all frameViewFactsTheory.ordinary_operand_not_retpc >>
-  drule_all label_flow_noncopy_operand_not_code_end >> metis_tac[]
+  MATCH_ACCEPT_TAC (SRULE []
+    (Q.INST [`allow_own` |-> `F`] (SPEC_ALL ordinary_noncopy_operand_word_kind_mode)))
 QED
 
 Theorem terminal_operand_word_kind:
@@ -3732,14 +3681,8 @@ Theorem terminal_operand_word_kind:
   MEM op (compute_operands inst) /\ op <> dead_stack_marker /\
   op_kind_ok fn ret op sv ==> ?w. sv = Val w
 Proof
-  strip_tac >>
-  `MEM op inst.inst_operands /\ ~is_label_operand op /\
-   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
-   inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
-   inst.inst_opcode <> DRET /\ inst.inst_opcode <> CODECOPY` by
-    (gvs[listTheory.MEM, compute_operands_def] >>
-     gvs[label_positions_ok_def, listTheory.EVERY_MEM]) >>
-  drule_all ordinary_noncopy_operand_word_kind >> simp[]
+  MATCH_ACCEPT_TAC (SRULE []
+    (Q.INST [`allow_own` |-> `F`] (SPEC_ALL terminal_operand_word_kind_mode)))
 QED
 
 Theorem word_prepared_symbolic_stack:
@@ -3749,22 +3692,10 @@ Theorem word_prepared_symbolic_stack:
   cs.as_stack = values ++ rest /\ LENGTH values = LENGTH operands ==>
   ?suffix. ss.sym_stack = MAP Val values ++ suffix
 Proof
-  strip_tac >> fs[sym_kinds_ok_def, listTheory.REVERSE_APPEND] >>
-  qpat_assum `LIST_REL _ _ top`
-    (mp_then Any (qspec_then `LENGTH operands` mp_tac)
-       rich_listTheory.EVERY2_TAKE) >>
-  simp[] >> strip_tac >>
-  `TAKE (LENGTH operands) (REVERSE operands) = REVERSE operands` by
-    metis_tac[listTheory.TAKE_LENGTH_ID, listTheory.LENGTH_REVERSE] >>
-  `TAKE (LENGTH operands) top = MAP Val values` by
-    (irule word_kind_prefix_concretization >>
-     conj_tac
-     >- (qexistsl [`fn`, `REVERSE operands`, `ret`] >>
-         gvs[listTheory.MEM_REVERSE, listTheory.TAKE_APPEND1] >> gvs[]) >>
-     qexistsl [`SND (compute_label_offsets p)`, `rest`,
-               `DROP (LENGTH operands) top ++ srest`] >>
-     gvs[asm_sym_rel_def]) >>
-  metis_tac[listTheory.TAKE_DROP, listTheory.APPEND_ASSOC]
+  MATCH_ACCEPT_TAC (SRULE [asm_sym_rel_core_canonical]
+    (Q.INST [`code_ok` |-> `asm_data_env_ok p env`,
+             `lo` |-> `SND (compute_label_offsets p)`]
+      (SPEC_ALL word_prepared_symbolic_stack_core)))
 QED
 
 Theorem arranged_word_prepared_symbolic_stack:
@@ -3779,19 +3710,10 @@ Theorem arranged_word_prepared_symbolic_stack:
   mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack /\
   ?suffix. ss.sym_stack = MAP Val values ++ suffix
 Proof
-  strip_tac >>
-  `mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack` by
-    (irule (emitSimTheory.arranged_eval_operands_stack |> Q.INST
-       [`operands` |-> `REVERSE operands`] |> SRULE []) >>
-     conj_tac >- gvs[listTheory.EVERY_MEM] >>
-     qexistsl [`lo`, `ps`, `tail`, `vs`] >> gvs[]) >>
-  simp[] >> irule word_prepared_symbolic_stack >>
-  conj_tac
-  >- (qexistsl [`mid with as_stack := mid.as_stack ++ rest`, `env`, `p`,
-        `DROP (LENGTH operands) mid.as_stack ++ rest`] >> gvs[]) >>
-  qexistsl [`cplan`, `fn`, `operands`, `ps`, `ret`, `srest`, `tail`] >>
-  gvs[] >> metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
-                     listTheory.LENGTH_REVERSE]
+  MATCH_ACCEPT_TAC (SRULE [asm_sym_rel_core_canonical]
+    (Q.INST [`code_ok` |-> `asm_data_env_ok p env`,
+             `lo` |-> `SND (compute_label_offsets p)`]
+      (SPEC_ALL arranged_word_prepared_symbolic_stack_core)))
 QED
 
 Theorem sym_frame_entry_selected_prefix_sim_marked:
@@ -3869,9 +3791,7 @@ Theorem terminal_operands_not_retpc:
      INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
   MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x
 Proof
-  strip_tac >> irule frameViewFactsTheory.ordinary_operand_not_retpc >>
-  conj_tac >- gvs[listTheory.MEM] >>
-  qexists `inst` >> gvs[compute_operands_def, listTheory.MEM]
+  MATCH_ACCEPT_TAC symControlTerminalPrepareOwnTheory.terminal_operands_not_retpc
 QED
 
 Theorem terminal_arranged_word_stack:
@@ -4024,11 +3944,7 @@ Theorem assert_selected_prefix_decompose:
     arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
     arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule_all genBlockSimTheory.assert_plan_decompose >> strip_tac >>
-  rename1 `emit_input_plan ASSERT [cond] nl ps = (iops,prepared)` >>
-  rename1 `reorder_plan dfg [cond] prepared = (rops,arranged)` >>
-  conj_tac >- simp[] >> qexistsl [`iops`, `prepared`, `rops`, `arranged`] >>
-  gvs[allocMonoTheory.release_dead_spills_spill_base, allocMonoTheory.release_dead_spills_next_offset]
+  MATCH_ACCEPT_TAC symControlTerminalPrepareOwnTheory.assert_selected_prefix_decompose
 QED
 
 Theorem assert_unreachable_selected_prefix_decompose:
@@ -4042,13 +3958,7 @@ Theorem assert_unreachable_selected_prefix_decompose:
     arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
     arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule_all genBlockSimTheory.assert_unreachable_plan_decompose >> strip_tac >>
-  rename1 `emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared)` >>
-  rename1 `reorder_plan dfg [cond] prepared = (rops,arranged)` >>
-  rename1 `fresh_label "reachable" _ = (endlabel,after)` >>
-  conj_tac >- simp[] >> qexistsl [`iops`, `prepared`, `rops`, `arranged`, `endlabel`] >>
-  gvs[allocMonoTheory.release_dead_spills_spill_base, allocMonoTheory.release_dead_spills_next_offset,
-      fresh_label_def, plan_state_component_equality]
+  MATCH_ACCEPT_TAC symControlTerminalPrepareOwnTheory.assert_unreachable_selected_prefix_decompose
 QED
 
 Theorem sym_conditional_abort_frame_prefix_deep:
