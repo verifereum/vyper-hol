@@ -2,9 +2,6 @@
  * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7, over the
  * accepted finalizers; vyper_call_correct_identity and
  * vyper_call_correct_asm_opt are its two cases),
- * vyper_call_correct_at_marks (the call theorem at fixed gas marks),
- * call_pipeline_gas_link (admission: the guarded fillings of the frame's gas
- * readings select raw entry states; the call twin of deploy_pipeline_gas_link),
  * e2e_vyper_to_evm (admission-free generic §8.1 composition),
  * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs).
  * e2e_deploy_correctness (the §5.11 admission) is in e2eDeployCorrectness.
@@ -21,22 +18,22 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  loweringCalldataCorrect callPremiseDispatch
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout asmOptimizer
+  sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
   vyperInterpreter
   compileEnv loweringStateRelDefs compileVyper
   venomInst
-  sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
   vyperStorageFootprint fragGasPathMem fragExecMem fragGasOrigin fragGasMode
   fragExec memSafeRun venomExecProofs unitShapeDefs
   staticAbortDefs codegenStaticAbort o1PipelineMemoryLoweredAbort runtimeLabelEntry
   list
 
-val _ = Parse.hide "tops";
 
 (* =====================================================================
    Call-Level Correctness (Main Theorem)
@@ -763,9 +760,38 @@ QED
 
 *)
 
+Theorem gas_variant_outcomes:
+  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_call_ctx:
+  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_initial_venom_state_rel:
+  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
+  initial_venom_state_rel tops am tx si
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  gvs[initial_venom_state_rel_def, venom_env_rel_def]
+QED
+
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* The call theorem at one fixed gas marking, then at every guarded filling of
    the frame's gas readings through the gas link. *)
+
+Theorem gas_readings_rel_mono[local]:
+  !readings P Q.
+    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
+    gas_readings_rel readings Q T
+Proof
+  rw[gas_readings_rel_def] >> metis_tac[]
+QED
 
 Theorem call_at_horizon_composition[local]:
   run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
@@ -847,20 +873,19 @@ Proof
     (qpat_x_assum `fn_entry_label fn = _` mp_tac >>
      Cases_on `fn.fn_blocks` >>
      simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >> strip_tac >>
-     rename1 `first_bb.bb_label = "__entry"` >>
-     qexists_tac `first_bb` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+     qexists_tac `h` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
      irule no_phis_phi_prefix_length_zero >>
      fs[o1_source_unit_ok_def, listTheory.EVERY_MEM] >>
      rpt strip_tac >>
      `MEM inst (fn_insts fn)` by
-       (irule lookup_block_fn_insts >> qexists_tac `first_bb` >>
+       (irule lookup_block_fn_insts >> qexists_tac `h` >>
         qexists_tac `"__entry"` >> simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm]) >>
      metis_tac[raw_opcode_ok_def, listTheory.MEM]) >>
   conj_tac
   >- (qexists_tac `SUC fuel` >>
       simp[run_context_def, run_function_def] >>
       simp[fragExecTheory.run_blocks_run_from_no_phi]) >>
-  qx_gen_tac `block_fuel` >> Cases_on `block_fuel` >- simp[Once mem_safe_blocks_def] >>
+  gen_tac >> Cases_on `fuel'` >- simp[Once mem_safe_blocks_def] >>
   `eval_phis
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
     bb.bb_instructions = OK
@@ -1001,6 +1026,7 @@ QED
    entry state carrying the S4 facts and the selected-run certificate.  The
    raw state, marks and tail are chosen inside each filling.  The only
    admission on vyper_call_correct_identity's path. *)
+(* HELD ADMISSION SEQ-4994: call-side gas synchronization; gas-link track owns removal. *)
 Theorem call_pipeline_gas_link:
   !policy tops deploy_bc runtime_bc rpolicy unit out prog cp am tx ret es r es'.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -1093,7 +1119,10 @@ Proof
   qpat_x_assum `_ /\ _ ==> ?vs marks tail. _` mp_tac >>
   impl_tac >- fs[] >> strip_tac >>
   gvs[] >>
-  drule_all vyper_call_correct_at_marks >> strip_tac >> gvs[]
+  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `ret`, `es`,
+               `rpolicy`, `unit`, `out`, `prog`, `cp`, `vs`, `marks`] mp_tac
+    vyper_call_correct_at_marks >>
+  impl_tac >- fs[] >> strip_tac >> gvs[]
 QED
 
 Theorem vyper_call_correct_identity:
@@ -1102,7 +1131,7 @@ Theorem vyper_call_correct_identity:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1133,8 +1162,8 @@ Proof
         gvs[entry_venom_state_def]) >>
      `initial_venom_state_rel tops am tx vs` by
        metis_tac[gas_variant_initial_venom_state_rel] >>
-     irule lower_vyper_runtime_unit_correct >>
-     gvs[] >> qexists_tac `rpolicy` >> fs[]) >>
+     irule lower_vyper_runtime_unit_correct_dispatched >>
+     qexists_tac `rpolicy` >> gvs[]) >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `unit`,
                `out`, `prog`, `cplan`, `am`, `tx`, `ret`, `es`, `r`, `es'`] mp_tac
     call_pipeline_gas_link >>
@@ -1155,7 +1184,7 @@ Theorem vyper_call_correct_asm_opt:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1168,7 +1197,7 @@ QED
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
    O1 final assembly).  The optimizer's case excludes, for now, programs that
    read their own code. *)
-Theorem vyper_call_correct:
+Theorem vyper_call_correct_dispatched:
   !fin policy tops deploy_bc runtime_bc am tx ret es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
@@ -1176,7 +1205,7 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1244,4 +1273,141 @@ Proof
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   goal_assum $ drule_at Any
+QED
+
+(* ===== Every calldata ===== *)
+
+(* Calldata that dispatches to nothing (no fallback, a short head, or
+   arguments the decoder rejects) makes the compiled contract revert with
+   empty returndata, or run out of resources: the identity finalizer. *)
+Theorem vyper_call_reverts_identity:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  (* HELD ADMISSION SEQ-4945: e2e composition of SEQ-4940/SEQ-4942 through the identity finalizer *)
+  cheat
+QED
+
+(* The same under the final assembly optimizer, which excludes, for now,
+   programs that read their own code. *)
+Theorem vyper_call_reverts_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  (* HELD ADMISSION SEQ-4951: asm_opt case of vyper_call_reverts; needs the asm_opt S7 *)
+  cheat
+QED
+
+(* Both accepted finalizers. *)
+Theorem vyper_call_reverts:
+  !fin policy tops deploy_bc runtime_bc am tx es.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+  >- (drule_all vyper_call_reverts_identity >> simp[])
+  >> `~program_reads_self_code tops` by fs[] >>
+  drule_all vyper_call_reverts_asm_opt >> simp[]
+QED
+
+(* The declared return type of the external entry f, which fixes how the
+   call's return bytes encode the source result.  Every f that
+   calldata_dispatch returns is found by lookup_function, so the NoneT
+   default is never read there. *)
+Definition external_return_type_def:
+  external_return_type tops f =
+    case vyperInterpreter$lookup_function NONE f External tops of
+      SOME (_, _, _, _, ret, _) => ret
+    | NONE => NoneT
+End
+
+(* What the call does for the calldata tx carries: revert with empty
+   returndata when it dispatches to nothing, else the source result of
+   the external call it dispatches to. *)
+Definition calldata_result_rel_def:
+  calldata_result_rel tops am tx es r es' <=>
+    case calldata_dispatch tops tx.calldata of
+      NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
+    | SOME (f, vals) =>
+        call_result_rel tops (external_return_type tops f) am
+          (tx with <| function_name := f; args := vals |>) es r es'
+End
+
+(* TOP-LEVEL: compiler correctness for a single external call, for every
+   calldata and both accepted finalizers (Python's -O none and O1 final
+   assembly; the optimizer's case excludes, for now, programs that read
+   their own code): the compiled contract does what the source does with
+   the call the calldata dispatches to (tx supplies only the environment:
+   sender, target, value, block), and reverts with empty returndata when it
+   dispatches to nothing. *)
+Theorem vyper_call_correct:
+  !fin policy tops deploy_bc runtime_bc am tx es.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    (!f vals.
+       calldata_dispatch tops
+         (buffer_to_list (FST (HD es.contexts)).msgParams.data) =
+         SOME (f, vals) ==>
+       ?mut args dflts ret body.
+         vyperInterpreter$lookup_function NONE f External tops =
+           SOME (mut, F, args, dflts, ret, body))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       calldata_result_rel tops am tx es r es')
+Proof
+  rpt strip_tac >> simp[calldata_result_rel_def] >>
+  `tx.calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
+    gvs[call_state_rel_def] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `calldata_dispatch tops
+              (buffer_to_list (FST (HD es.contexts)).msgParams.data)` >>
+  gvs[]
+  >- (drule_all vyper_call_reverts >> simp[]) >>
+  rename1 `_ = SOME fv` >> PairCases_on `fv` >>
+  first_x_assum (qspecl_then [`fv0`, `fv1`] mp_tac) >> simp[] >> strip_tac >>
+  qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`,
+               `tx with <| function_name := fv0; args := fv1 |>`, `ret`, `es`]
+    mp_tac vyper_call_correct_dispatched >>
+  impl_tac >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant] >>
+  strip_tac >> simp[external_return_type_def] >> metis_tac[]
 QED
