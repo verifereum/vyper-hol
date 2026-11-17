@@ -31,15 +31,15 @@ Proof
        vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
        vfmTypesTheory.sum_CASE_rator] >>
   IF_CASES_TAC
-  >- (Cases_on `take_call_outcome gas_cap addr data NONE st` >>
-      rename1 `take_call_outcome _ _ _ _ = (answer,st1)` >>
+  >- (Cases_on `take_call_outcome (OPTION_BIND gas dest_NumV) addr data NONE st` >>
+      rename1 `take_call_outcome _ _ _ _ _ = (answer,st1)` >>
       `machine_frame st st1` by
         (irule take_call_outcome_transport >> conj_tac
          >- simp[machine_frame_def] >>
          conj_tac >- simp[machine_frame_def] >>
          goal_assum (drule_at Any)) >>
       Cases_on `answer` >> simp[]
-      >- (rename1 `take_call_outcome _ _ _ _ = (INL ro,_)` >>
+      >- (rename1 `take_call_outcome _ _ _ _ _ = (INL ro,_)` >>
           PairCases_on `ro` >>
           drule take_call_outcome_success >> strip_tac >>
           gvs[call_outcome_request_def, adopt_call_outcome_equation] >>
@@ -48,7 +48,7 @@ Proof
           Cases_on `flags.rcf_max_outsize = 0` >>
           simp[] >> strip_tac >> gvs[machine_frame_def]) >>
       strip_tac >> gvs[]) >>
-  Cases_on `run_raw_call cx flags addr data 0 gas st.accounts st.tStorage` >>
+  Cases_on `run_raw_call cx flags addr data 0 (forwarded_gas default_evm_gas_limit gas) st.accounts st.tStorage` >>
   simp[] >>
   rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
   PairCases_on `call_result` >>
@@ -81,7 +81,7 @@ Theorem machine_frame_static_oracle:
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   Cases_on `take_call_outcome gas_cap target data NONE st` >>
-  rename1 `take_call_outcome _ _ _ _ = (answer,st1)` >>
+  rename1 `take_call_outcome _ _ _ _ _ = (answer,st1)` >>
   `machine_frame st st1` by
     (irule take_call_outcome_transport >>
      conj_tac >- simp[machine_frame_def] >>
