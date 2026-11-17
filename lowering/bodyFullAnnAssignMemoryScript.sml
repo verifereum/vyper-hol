@@ -123,3 +123,52 @@ Proof
   qexistsl_tac [`Gf`, `out`, `INL ()`, `t`, `tf`] >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
+
+(* The raw RHS is still executed in the empty branch.  Its full exceptional
+   post is forwarded, rather than replaced by expr_exit alone. *)
+Theorem annassign_memory_full_empty_rhs_bind[local]:
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  (!gs tv ee. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) ==>
+    tv = Value (default_value tyv)) /\
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (eval_expr cx e) (es,s,G,tn) P
+    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
+  (!H res ee G1 tn1 u. P H res ee G1 tn1 u ==> ?tv. res = INL tv) /\
+  (!marks tv mid G1 tn1 u.
+    (!tail. eval_expr cx e
+      (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
+        (INL tv,mid with gas_obs := tail)) /\
+    storage_trace_domain cx st0 mid.storage_trace /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      P H (INL tv) mid G1 tn1 u) ==>
+    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+      (new_variable id tyv (default_value tyv)) (mid,u,G1,tn1) Q R) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (eval_stmt cx (AnnAssign id typ e)) (es,s,G,tn) Q R
+Proof
+  strip_tac >> drule eval_annassign_action >>
+  disch_then (qspecl_then [`id`, `e`] SUBST1_TAC) >>
+  once_rewrite_tac[bind_assoc] >> irule gas_outcome_full_bind_all >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  BETA_TAC >> rpt conj_tac
+  >~ [`storage_trace_frame (eval_expr _ _)`]
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >~ [`!v. storage_trace_frame (bind (read_result _ v) _)`]
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.storage_trace_frame_new_variable]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_result >>
+      qexistsl_tac [`mid`, `t`, `v`] >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_result >> simp[]) >>
+  rpt strip_tac >>
+  `?tv. res = INL tv` by
+    (fs[vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  gvs[] >>
+  `tv = Value (default_value tyv)` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  gvs[read_result_def, bind_return] >> first_x_assum irule >>
+  qexistsl_tac [`marks`, `Value (default_value tyv)`] >> simp[]
+QED
