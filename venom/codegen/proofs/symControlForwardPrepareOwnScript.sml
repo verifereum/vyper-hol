@@ -245,3 +245,245 @@ Proof
   irule list_rel_op_kind_transport >> metis_tac[listTheory.LIST_REL_REVERSE]
   end)
 QED
+
+val rf_bundle_tm = fst (dest_imp (snd (strip_forall
+  (concl reorder_one_spill_free_kind_replay_conditional))));
+val _ = Parse.temp_overload_on ("rf_B", rf_bundle_tm);
+
+Theorem assign_output_op_kind:
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs ==>
+  (op_kind_ok fn ret rhs sv <=> op_kind_ok fn ret (Var out) sv)
+Proof
+  strip_tac >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  `dfg_get_def (dfg_build_function fn) out = SOME inst` by
+    metis_tac[fnFrameStepsRevertForwardTheory.dfg_build_function_ssa_def,
+              listTheory.MEM] >>
+  drule_all fnFrameStepsRevertForwardTheory.normalize_operand_codegen_assign >>
+  metis_tac[op_kind_ok_normalize_operand]
+QED
+
+Theorem assign_prepared_stack_op_kind:
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [rhs])) top ==>
+  LIST_REL (op_kind_ok fn ret) (REVERSE (stack_push (Var out) tail)) top
+Proof
+  Cases_on `top` >> simp[stackModelTheory.stack_push_def] >>
+  metis_tac[assign_output_op_kind]
+QED
+
+Theorem simple_do_swap_replay_wf_conditional:
+  rf_B ==>
+  do_swap d ps = (ops,ps') /\ d < LENGTH ps.ps_stack /\
+  EVERY is_simple_stack_op ops ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  apply_prefix_ops fmp lo ops ps = ps'
+Proof
+  disch_then (fn bundle => let
+    val shallow = cj 7 bundle
+    val prefix_facts = cj 8 bundle
+  in
+    strip_tac >>
+    `!off. ~MEM (SORestore off) ops` by
+      (fs[listTheory.EVERY_MEM] >>
+       metis_tac[strongPrefixSimTheory.is_simple_stack_op_def]) >>
+    `d <= 16` by metis_tac[shallow] >>
+    metis_tac[prefix_facts, planAlignTheory.do_swap_align]
+  end)
+QED
+
+Theorem optimistic_simple_replay_wf_conditional:
+  rf_B ==>
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') /\
+  EVERY is_simple_stack_op ops ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  apply_prefix_ops fmp lo ops ps = ps'
+Proof
+  disch_then (fn bundle => let
+    val swap_rule = MP (SPEC_ALL simple_do_swap_replay_wf_conditional) bundle
+  in
+    simp[optimistic_swap_plan_def] >>
+    rpt (IF_CASES_TAC >> simp[]) >>
+    Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >>
+    simp[] >> rpt strip_tac >> gvs[] >>
+    simp[mixedPrefixSimTheory.apply_prefix_ops_def, prefixExecTheory.prefix_wf_def] >>
+    metis_tac[swap_rule, planAlignTheory.stack_get_depth_bound]
+  end)
+QED
+
+Theorem simple_prefix_equal_stack_replay:
+  !ops ps qs fmp lo.
+  EVERY is_simple_stack_op ops /\ qs.ps_stack = ps.ps_stack ==>
+  (apply_prefix_ops fmp lo ops qs).ps_stack =
+    (apply_prefix_ops fmp lo ops ps).ps_stack
+Proof
+  Induct >> simp[mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
+  Cases_on `h` >>
+  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def] >>
+  Cases_on `o'` >>
+  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def]
+QED
+
+Theorem sym_simple_prefix_stack_sim:
+  !ops lo ps ps' ss top srest fn ret cp p fmp env.
+  EVERY is_simple_stack_op ops /\
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  (apply_prefix_ops fmp lo ops ps).ps_stack = ps'.ps_stack /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp ops) ==>
+  ?ss' top'.
+    sym_steps p env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(apply_prefix_ops fmp lo ops (ps with ps_spilled := FEMPTY)).ps_stack = ps'.ps_stack` by
+    metis_tac[simple_prefix_equal_stack_replay, plan_state_accfupds] >>
+  drule_all sym_spill_free_stack_only_prefix_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  fs[sym_kinds_ok_def] >> metis_tac[]
+QED
+
+Theorem assign_postfix_simple_replay_wf_conditional:
+  rf_B ==>
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) ==>
+  prefix_wf lo (LENGTH ps.ps_stack) (pops ++ opts) /\
+  (apply_prefix_ops fmp lo (pops ++ opts) ps).ps_stack =
+    (release_dead_spills nl ps9).ps_stack
+Proof
+  disch_then (fn bundle => let
+    val optimistic_rule = MP (SPEC_ALL optimistic_simple_replay_wf_conditional) bundle
+  in
+    strip_tac >> Cases_on `MEM out nl`
+    >- (`pops = [] /\ ps8 = ps` by
+          (Cases_on `halting` >> gvs[stackPlanOpsTheory.popmany_plan_def]) >>
+        gvs[] >> drule_all optimistic_rule >>
+        disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+        gvs[stackModelTheory.stack_push_def, arithmeticTheory.ADD1]) >>
+    gvs[] >> Cases_on `halting`
+    >- gvs[mixedPrefixSimTheory.apply_prefix_ops_def, prefixExecTheory.prefix_wf_def] >>
+    `stack_get_depth (Var out) ps.ps_stack = SOME 0` by
+      simp[stackModelTheory.stack_push_def, listTheory.REVERSE_SNOC,
+           stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def] >>
+    `popmany_plan [Var out] ps =
+       ([SOPop 1],ps with ps_stack := stack_pop 1 ps.ps_stack)` by
+      metis_tac[regularPostfixSimTheory.popmany_plan_top_singleton] >>
+    gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
+        mixedPrefixSimTheory.apply_prefix_op_def,
+        strongPrefixSimTheory.apply_simple_op_def,
+        prefixExecTheory.prefix_wf_def, prefixExecTheory.stack_op_wf_def,
+        stackModelTheory.stack_push_def, stackModelTheory.stack_pop_def]
+  end)
+QED
+
+Theorem sym_assign_postfix_stack_sim_conditional:
+  rf_B ==>
+  !ps out tail halting nl pops ps8 dfg inst term opts ps9 (lo:string |-> num) ss top srest fn ret cp p fmp env.
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (pops ++ opts)) ==>
+  ?ss' top'.
+    sym_steps p env (LENGTH (execute_plan fmp (pops ++ opts))) ss = SymOK ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (release_dead_spills nl ps9).ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  disch_then (fn bundle => let
+    val postfix_rule = MP (SPEC_ALL assign_postfix_simple_replay_wf_conditional) bundle
+  in
+    rpt gen_tac >> strip_tac >> rename1 `context_spill_byte cp0` >>
+    drule_all postfix_rule >>
+    disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+    irule sym_simple_prefix_stack_sim >> simp[] >>
+    conj_tac >- (qexists_tac `cp0` >> simp[]) >>
+    qexistsl_tac [`lo`, `ps`] >> simp[]
+  end)
+QED
+
+Theorem rf_assign_preparation_stack_facts:
+  emit_input_plan ASSIGN [rhs] nl ps = (ins,ps1) /\
+  reorder_plan dfg [rhs] ps1 = (ros,ps2) /\
+  ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  (!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)) ==>
+  EVERY is_simple_stack_op (ins ++ ros) /\
+  prefix_wf (lo:string |-> num) (LENGTH ps.ps_stack) (ins ++ ros) /\
+  ps2.ps_stack = stack_pop 1 ps2.ps_stack ++ [rhs]
+Proof
+  strip_tac >> rpt conj_tac
+  >- metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple]
+  >- (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
+      qexistsl_tac [`dfg`, `[rhs]`, `nl`, `ASSIGN`, `ps1`, `ps2`] >>
+      simp[] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  `!op. MEM op [rhs] /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by simp[] >>
+  `LENGTH [rhs] <= 16` by simp[] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_preparation_arranged >> simp[]
+QED
+
+Theorem sym_assign_prepared_stack_sim:
+  !ps2 tail rhs fn inst out ret ss top srest.
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  ps2.ps_stack = tail ++ [rhs] /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top ==>
+  LIST_REL (op_kind_ok fn ret)
+    (REVERSE (ps2 with ps_stack := stack_push (Var out) tail).ps_stack) top
+Proof
+  rpt gen_tac >> strip_tac >> simp[] >>
+  irule assign_prepared_stack_op_kind >> metis_tac[]
+QED
+
+Theorem rf_assign_postfix_simple:
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  (!off. ~MEM (SOSpill off) (pops ++ opts) /\
+         ~MEM (SORestore off) (pops ++ opts)) ==>
+  EVERY is_simple_stack_op (pops ++ opts)
+Proof
+  strip_tac >>
+  irule fnFrameStepsRevertForwardTheory.spill_free_postfix_simple >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`dfg`, `~halting`, `inst`,
+    `if MEM out nl then [] else [Var out]`, `nl`, `~MEM out nl`,
+    `term`, `ps`, `ps8`, `ps9`] >>
+  Cases_on `halting` >> Cases_on `MEM out nl` >> gvs[]
+QED
+
+Theorem sym_plan_runs_compose:
+  sym_steps p env (LENGTH (execute_plan fmp ops1)) ss = SymOK mid /\
+  sym_steps p env (LENGTH (execute_plan fmp ops2)) mid = SymOK final ==>
+  sym_steps p env (LENGTH (execute_plan fmp (ops1 ++ ops2))) ss = SymOK final
+Proof
+  simp[stackOpSimTheory.execute_plan_append, sym_steps_add]
+QED
