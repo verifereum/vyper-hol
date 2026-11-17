@@ -598,7 +598,8 @@ Resume compile_augassign_local_mem[binop]:
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def]) >>
+    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def,
+                          binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `Var out`, `rhs_op`, `res_op`, `u`]
     mp_tac) >>
   impl_tac

@@ -23,8 +23,8 @@ Libs
 (* binop_frag_words on a memory-checked path: the operator's fragment from
    operands x and y holding w1 and w2 runs memory-safely and keeps the
    allocation history. *)
-Definition binop_frag_mem_def:
-  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+Definition binop_frag_mem_post_def:
+  binop_frag_mem_post post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !st0 sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
@@ -41,11 +41,10 @@ Definition binop_frag_mem_def:
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
                  bop_result cx ann bop tys v1 v2 es0 = INL v /\
-                 word_value v /\
+                 post v op s /\
                  (!H. valid_horizon cx st0 H es0.storage_trace ==>
                    stmt_state_rel H ctx func cenv cx es0 s /\
                    storage_well_formed_on cx es0 (FST H)) /\
-                 eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
                  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -57,6 +56,37 @@ Definition binop_frag_mem_def:
                  s0.vs_alloca_next <= s.vs_alloca_next) \/
          (exit_result r /\ expr_exit (bop_result cx ann bop tys v1 v2 es0) r))
 End
+
+Definition binop_frag_mem_def:
+  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+    binop_frag_mem_post
+      (\v op s. word_value v /\ eval_operand op s = SOME (val_to_w256 v))
+      ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+End
+
+Theorem binop_frag_mem_post_mono:
+  binop_frag_mem_post p ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es /\
+  (!v op s. p v op s ==> q v op s) ==>
+  binop_frag_mem_post q ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  pure_rewrite_tac[binop_frag_mem_post_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!st0 sa sb x y op s0. _`
+    (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `r` >> simp[] >> metis_tac[]
+QED
+
+Theorem binop_frag_mem_rel:
+  is_word_type ann /\
+  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es ==>
+  binop_frag_mem_post (expr_val_rel cx ann)
+    ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  simp[binop_frag_mem_def] >> strip_tac >>
+  irule binop_frag_mem_post_mono >> goal_assum (drule_at Any) >>
+  simp[expr_val_rel_def, typed_val_to_w256_word_value]
+QED
 
 (* A slice of non-ALLOCA instructions, passed over with the allocations
    unchanged, keeps the allocation history. *)
@@ -109,17 +139,18 @@ QED
    any operand words.  A straight_fresh fragment writes only through
    fresh_write_op opcodes, so it passes the memory checks from any state
    and leaves the allocations as they were. *)
-Theorem binop_frag_mem_straight:
-  !ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
+Theorem binop_frag_mem_post_straight:
+  !post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
     (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
-     (?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\ word_value v /\
+     (?v w. bop_result cx ann bop tys v1 v2 es0 = INL v /\
+          (!op ss. eval_operand op ss = SOME w ==> post v op ss) /\
           !x y sa sb op ss.
             compile_binop bop x y ty bl el sa = (op, sb) /\
             fresh_vars_wrt sa ss /\
             eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2 ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-                  eval_operand op ss' = SOME (val_to_w256 v)) \/
+                  eval_operand op ss' = SOME w) \/
      (?m. bop_result cx ann bop tys v1 v2 es0 = INR (Error (RuntimeError m)) /\
           !x y sa sb op ss.
             compile_binop bop x y ty bl el sa = (op, sb) /\
@@ -127,9 +158,9 @@ Theorem binop_frag_mem_straight:
             eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2 ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+    binop_frag_mem_post post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_mem_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_mem_post_def] >> rpt gen_tac >>
   strip_tac >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>
@@ -181,13 +212,13 @@ Proof
       qspecl_then [`emitted_insts sa sb`, `sa`, `s0`, `target`]
         mp_tac run_inst_seq_writes_fresh >>
       (impl_tac >- simp[]) >> strip_tac >>
-      `eval_operand op target = SOME (val_to_w256 v)` by
+      `eval_operand op target = SOME w` by
         (fs[vars_ext_def] >>
          qpat_x_assum `target = ss' with vs_vars := _` SUBST1_TAC >>
          simp[eval_operand_vars_ext]) >>
       `eval_operand op
          (target with vs_inst_idx := LENGTH sb.cs_current_insts) =
-       SOME (val_to_w256 v)` by
+       SOME w` by
         (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]) >>
       `target.vs_allocas = s0.vs_allocas /\ target.vs_memory = s0.vs_memory /\
        target.vs_halted = s0.vs_halted /\
@@ -220,9 +251,54 @@ Proof
   simp[exit_result_def, expr_exit_def]
 QED
 
+Theorem binop_frag_mem_post_success:
+  (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
+  bop_result cx ann bop tys v1 v2 es = INL v /\
+  (!op s. eval_operand op s = SOME w ==> post v op s) /\
+  (!x y sa sb op ss.
+    compile_binop bop x y ty bl el sa = (op,sb) /\
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME w1 /\
+    eval_operand y ss = SOME w2 ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+          eval_operand op ss' = SOME w) ==>
+  binop_frag_mem_post post ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es
+Proof
+  strip_tac >> irule binop_frag_mem_post_straight >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> disj1_tac >> qexistsl_tac [`v`, `w`] >> simp[]
+QED
+
+Theorem binop_frag_mem_straight:
+  !ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
+    (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
+    (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
+     (?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\ word_value v /\
+          !x y sa sb op ss.
+            compile_binop bop x y ty bl el sa = (op, sb) /\
+            fresh_vars_wrt sa ss /\
+            eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2 ==>
+            ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+                  eval_operand op ss' = SOME (val_to_w256 v)) \/
+     (?m. bop_result cx ann bop tys v1 v2 es0 = INR (Error (RuntimeError m)) /\
+          !x y sa sb op ss.
+            compile_binop bop x y ty bl el sa = (op, sb) /\
+            fresh_vars_wrt sa ss /\
+            eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2 ==>
+            ?ss'. run_inst_seq (emitted_insts sa sb) ss =
+                    Abort Revert_abort ss')) ==>
+    binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+Proof
+  rpt gen_tac >> strip_tac >> simp[binop_frag_mem_def] >>
+  irule binop_frag_mem_post_straight >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> first_x_assum drule >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`v`, `val_to_w256 v`] >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
 (* bop_normal_prefix_summary (exprBopSimProps) on the memory-checked path,
    carrying the allocation history. *)
-Theorem bop_normal_prefix_summary_mem:
+Theorem bop_normal_prefix_summary_rel_mem:
   gas_marked_exec T (ctx, func)
     (do r <- eval_expr cx e1; read_result cx r od)
     (es, s0) left (INL v1) mid (OK t) /\
@@ -248,7 +324,7 @@ Theorem bop_normal_prefix_summary_mem:
   (!z. y = Var z ==> not_fresh_at s2 z) /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\
-  binop_frag_mem ctx func cenv cx bop (expr_type e1) ann bl el
+  binop_frag_mem_post (expr_val_rel cx ann) ctx func cenv cx bop (expr_type e1) ann bl el
     [expr_type e1; expr_type e2] v1 v2
     (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2)
     (fin with gas_obs := []) ==>
@@ -321,8 +397,8 @@ Proof
      simp[]) >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_mem _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_mem_def]) >>
+  qpat_x_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `gas_marked_exec T (ctx, func)
@@ -350,15 +426,67 @@ Proof
       `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
         metis_tac[bop_marked_scopes_dom] >>
       qexists_tac `v` >> gvs[] >>
-      irule expr_post_bop >>
+      irule expr_post_bop_rel >>
       qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
       qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[]) >>
   metis_tac[bop_result_gas_obs]
 QED
 
+Theorem bop_normal_prefix_summary_mem:
+  gas_marked_exec T (ctx, func)
+    (do r <- eval_expr cx e1; read_result cx r od)
+    (es, s0) left (INL v1) mid (OK t) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e1)
+      (sa, s1, x) (es, s0) left (v1, mid, t)) /\
+  gas_marked_exec T (ctx, func)
+    (do r <- eval_expr cx e2; read_result cx r od)
+    (mid with gas_obs := [], t) right (INL v2) fin (OK u) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e2)
+      (s1, s2, y) (mid with gas_obs := [], t) right (v2, fin, u)) /\
+  (?H. valid_horizon cx st0 H fin.storage_trace) /\
+  gas_admissible
+    (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx r od) expr_res_ok es /\
+  compile_binop bop x y (expr_type e1) bl el s2 = (op, sb) /\
+  fn_has_code s2 sb func /\ is_word_type ann /\
+  is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+  evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
+  (!z. y = Var z ==> not_fresh_at s2 z) /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+  sa.cs_next_id <= s1.cs_next_id /\
+  binop_frag_mem ctx func cenv cx bop (expr_type e1) ann bl el
+    [expr_type e1; expr_type e2] v1 v2
+    (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2)
+    (fin with gas_obs := []) ==>
+  gas_summary_at T (ctx, func) (left ++ right)
+    (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx r od) (es, s0)
+    (\res ee ss. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      ?v. res = INL v /\
+      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+        es sa sb s0 ee v op ss /\
+      ss.vs_current_bb = sb.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit res r)
+Proof
+  strip_tac >> irule bop_normal_prefix_summary_rel_mem >> simp[] >>
+  qexistsl_tac [`bl`, `el`, `fin`, `mid`, `s1`, `s2`, `t`,
+                `u`, `v1`, `v2`, `x`, `y`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`?H. valid_horizon cx st0 H fin.storage_trace`]
+  >- (qexists_tac `H` >> simp[]) >>
+  irule binop_frag_mem_rel >> simp[]
+QED
+
 (* compile_bop_typed_sim (exprSimBopTyped) for expr_sim_mem. *)
-Theorem compile_bop_typed_sim_mem:
+Theorem compile_bop_rel_sim_mem:
   !ctx func cenv cx ty ann bop e1 e2 es tv1 tv2.
     ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
     ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
@@ -387,7 +515,7 @@ Theorem compile_bop_typed_sim_mem:
        expr_sim_mem ctx func cenv cx (expr_type e1) e2 es1 /\
        !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
          (es1 with gas_obs := gs2) = (INL v2, es2) ==>
-         binop_frag_mem ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_mem_post (expr_val_rel cx ann) ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2
@@ -443,7 +571,7 @@ Proof
   suspend "left_exempt"
 QED
 
-Resume compile_bop_typed_sim_mem[left_normal]:
+Resume compile_bop_rel_sim_mem[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
     (drule_then strip_assume_tac) >>
@@ -522,7 +650,7 @@ Resume compile_bop_typed_sim_mem[left_normal]:
       >> suspend "right_exit") >>
   suspend "right_exempt"
 QED
-Resume compile_bop_typed_sim_mem[left_exit]:
+Resume compile_bop_rel_sim_mem[left_exit]:
   Cases_on `res`
   >- (qpat_x_assum `(\res ee r. _) _ _ _`
         (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac o
@@ -537,11 +665,11 @@ Resume compile_bop_typed_sim_mem[left_exit]:
   disj2_tac >> gnvs[] >> rpt strip_tac >>
   first_x_assum drule >> simp[]
 QED
-Resume compile_bop_typed_sim_mem[left_exempt]:
+Resume compile_bop_rel_sim_mem[left_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule (REWRITE_RULE [ETA_AX] bop_first_exempt_cert) >> metis_tac[]
 QED
-Resume compile_bop_typed_sim_mem[right_normal]:
+Resume compile_bop_rel_sim_mem[right_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> ?v. _`
     (drule_then strip_assume_tac) >>
@@ -595,7 +723,7 @@ Resume compile_bop_typed_sim_mem[right_normal]:
   drule_all (Q.INST [`mid` |-> `es_end`, `fin` |-> `es_end'`,
                      `left` |-> `marks`, `right` |-> `marks'`]
                (SIMP_RULE bool_ss [PULL_EXISTS]
-                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_mem))) >>
+                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_rel_mem))) >>
   rewrite_tac[gas_summary_at_def] >>
   disch_then (qx_choose_then `out` (qx_choose_then `end_es`
     (qx_choose_then `end_r` strip_assume_tac))) >>
@@ -612,7 +740,7 @@ Resume compile_bop_typed_sim_mem[right_normal]:
   qexistsl_tac [`out`, `end_es`, `end_r`] >>
   fs[halt_exit_def] >> metis_tac[]
 QED
-Resume compile_bop_typed_sim_mem[right_exit]:
+Resume compile_bop_rel_sim_mem[right_exit]:
   Cases_on `res`
   >- (qpat_x_assum `(\res ee r. _) _ _ _`
         (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac o
@@ -629,12 +757,57 @@ Resume compile_bop_typed_sim_mem[right_exit]:
   disj2_tac >> gnvs[] >> rpt strip_tac >>
   first_x_assum drule >> simp[]
 QED
-Resume compile_bop_typed_sim_mem[right_exempt]:
+Resume compile_bop_rel_sim_mem[right_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
   irule_at Any (REWRITE_RULE [ETA_AX] bop_second_exempt_cert) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
 QED
-Finalise compile_bop_typed_sim_mem
+Finalise compile_bop_rel_sim_mem
+
+Theorem compile_bop_typed_sim_mem:
+  !ctx func cenv cx ty ann bop e1 e2 es tv1 tv2.
+    ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+    ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
+    is_word_type ann /\
+    is_word_type (expr_type e1) /\
+    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+    is_word_type (expr_type e2) /\
+    evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e2 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!x y sa sb op.
+       compile_binop bop x y (expr_type e1)
+         (if bop = Exp then expr_int_literal e1 else NONE)
+         (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    expr_sim_mem ctx func cenv cx (expr_type e1) e1 es /\
+    (!gs1 v1 es1. (do result <- eval_expr cx e1; read_result cx result od)
+        (es with gas_obs := gs1) = (INL v1, es1) ==>
+       expr_sim_mem ctx func cenv cx (expr_type e1) e2 es1 /\
+       !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
+         (es1 with gas_obs := gs2) = (INL v2, es2) ==>
+         binop_frag_mem ctx func cenv cx bop (expr_type e1) ann
+           (if bop = Exp then expr_int_literal e1 else NONE)
+           (if bop = Exp then expr_int_literal e2 else NONE)
+           [expr_type e1; expr_type e2] v1 v2
+           (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es2) ==>
+    expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> strip_tac >> irule compile_bop_rel_sim_mem >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`tv1`, `tv2`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
+  rpt gen_tac >> strip_tac >> irule binop_frag_mem_rel >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
 
 (* compile_bop_sim (exprSimBopTyped) for expr_sim_mem: operands of word
    values, held in their plain words. *)

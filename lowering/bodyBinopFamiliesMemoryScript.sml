@@ -232,7 +232,8 @@ Theorem binop_frag_decimal_transfer_mem:
     binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
-  rpt gen_tac >> simp[binop_frag_val_mem_def, binop_frag_mem_def] >> strip_tac >> rpt gen_tac >>
+  rpt gen_tac >> simp[binop_frag_val_mem_def, binop_frag_mem_def,
+                     binop_frag_mem_post_def] >> strip_tac >> rpt gen_tac >>
   strip_tac >>
   first_x_assum (qspecl_then [`st0`, `sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
   (impl_tac >- gvs[expr_res_ok_def, val_to_w256_def]) >>

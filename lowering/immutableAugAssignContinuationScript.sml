@@ -70,7 +70,8 @@ Proof
     (irule stmtSimAugAssignTheory.bop_result_augassign >> simp[] >>
      metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def]) >>
+    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def,
+                          binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac
   >- (gvs[] >> rename1 `gas_marked_path T ctx func s 0 (OK t)` >>
