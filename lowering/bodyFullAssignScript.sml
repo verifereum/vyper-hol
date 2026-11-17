@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState evalExprObservedRegion
+  sum venomState
 
 val _ = Parse.hide "body";
 
