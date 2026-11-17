@@ -262,7 +262,8 @@ Theorem scfg_ctrl_ext_call:
     (exec_ext_call i s gas addr v ao az ro rz static)
 Proof
   Cases_on `consume_call_outcome
-    (venom_call_request s addr v ao az static) (w2n ro) (w2n rz) s` >>
+    (venom_call_request s addr v ao az static with cr_gas := SOME (w2n gas))
+    (w2n ro) (w2n rz) s` >>
   drule scfg_ctrl_consume_outcome >> strip_tac >>
   simp[exec_ext_call_def, scfg_ctrl_call_request] >>
   rpt (PURE_TOP_CASE_TAC >>
@@ -283,7 +284,8 @@ Theorem scfg_ctrl_delegatecall:
     (exec_delegatecall i s gas addr ao az ro rz)
 Proof
   Cases_on `consume_call_outcome
-    (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)
+    (venom_call_request s addr 0w ao az F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>)
     (w2n ro) (w2n rz) s` >>
   drule scfg_ctrl_consume_outcome >> strip_tac >>
   simp[exec_delegatecall_def, scfg_ctrl_call_request] >>
