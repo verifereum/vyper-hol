@@ -4,7 +4,7 @@
 Theory bodyMemAssignTupleLocals
 Ancestors
   bodyMemoryPreds bodyMemAssignTupleLocalsPrep bodyMemAssignTupleLocalsOutcome
-  bodySimStmtCases
+  bodySimStmtFacts
   bodySim bodyExprPreFacts vyperTypeSystem vyperTypeInvariants
   exprSimHyps exprSimHypsDefs exprSimDefs valueEncoding finite_map list
   valueTypingMemoryProps vyperTypeValues vyperTyping vyperTypeDefaults
@@ -21,7 +21,7 @@ Theorem expr_body_pre_eval_gas[local]:
     expr_sim_inv cenv cx env es' /\
     !v. res = INL v ==> value_runtime_typed env (expr_type e) v
 Proof
-  rpt gen_tac >> strip_tac >> irule bodySimStmtCasesTheory.expr_body_pre_eval >>
+  rpt gen_tac >> strip_tac >> irule bodySimStmtFactsTheory.expr_body_pre_eval >>
   qexists_tac `es with gas_obs := gs` >> fs[]
 QED
 

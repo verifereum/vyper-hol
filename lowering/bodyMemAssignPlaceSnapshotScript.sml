@@ -2,6 +2,7 @@
    traverse the target, then store the captured value. *)
 Theory bodyMemAssignPlaceSnapshot
 Ancestors
+  bodySimStmtFacts
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   bodyMemAssignSnapshot
   bodyAssignPlace exprSimMemDefs exprSimHypsDefs exprSimHyps
