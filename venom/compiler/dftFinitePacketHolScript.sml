@@ -14,6 +14,7 @@ Ancestors
   dftPacketEntryReplay
   dftPacketFillingBoundary
   dftPacketFreshCut
+  dftPacketFreshChildStop
   dftPacketFreshRow
   dftPacketKeyMap
   dftPacketKeySubstitution
@@ -31,6 +32,7 @@ Ancestors
   dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedOperational
+  dftPacketRootedPlainStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
