@@ -205,49 +205,6 @@ Proof
   gvs[gas_marked_exec_def]
 QED
 
-Theorem eval_expr_int_literal_agrees_mem_src[local]:
-  !cx e es tv es' v es'' n.
-    eval_expr cx e es = (INL tv, es') /\
-    read_result cx tv es' = (INL v, es'') /\
-    expr_int_literal e = SOME n ==> v = IntV n
-Proof
-  rpt gen_tac >> Cases_on `e` >>
-  simp[expr_int_literal_def] >>
-  rename1 `Literal ty lit` >> Cases_on `lit` >>
-  simp[expr_int_literal_def, Once evaluate_def, return_def,
-       read_result_def, evaluate_literal_def] >>
-  rpt strip_tac >> gvs[read_result_def, return_def]
-QED
-
-Theorem well_formed_type_bits_mem_src[local]:
-  !tenv ty. well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
-Proof
-  rpt gen_tac >> Cases_on `ty` >> simp[type_bits_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[type_bits_def, well_formed_type_def, evaluate_type_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
-Theorem eval_expr_shift_amount_mem_src[local]:
-  !cx e es tv es' v es'' tenv vt.
-    eval_expr cx e es = (INL tv, es') /\
-    read_result cx tv es' = (INL v, es'') /\
-    evaluate_type tenv (expr_type e) = SOME vt /\ value_has_type vt v /\
-    shift_amount_ok e ==> ?i. v = IntV i /\ 0 <= i
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `is_uint_type (expr_type e)`
-  >- (gvs[is_uint_type_def] >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      Cases_on `v` >> gvs[value_has_type_def]) >>
-  `nonneg_int_literal e` by gvs[shift_amount_ok_def] >>
-  Cases_on `e` >> gvs[nonneg_int_literal_def, int_literal_value_def] >>
-  rename1 `Literal ty lit` >> Cases_on `lit` >>
-  gvs[int_literal_value_def, AllCaseEqs()] >>
-  `expr_int_literal (Literal ty (IntL i)) = SOME i` by simp[expr_int_literal_def] >>
-  drule_all eval_expr_int_literal_agrees_mem_src >> strip_tac >> simp[]
-QED
-
 
 Theorem stmt_state_rel_gas_obs_mem_src[local]:
   stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
@@ -710,7 +667,7 @@ Theorem augassign_field_address_bound_mem[local]:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME wbase /\ lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ fields_layout fields fs /\
-  ALOOKUP fs fld = SOME ftv /\ word_value_type ty /\
+  ALOOKUP fs fld = SOME ftv /\ is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME ftv ==>
   w2n (wbase + n2w (struct_field_offset fields fld)) + 32 <= s.vs_alloca_next
 Proof
@@ -724,7 +681,7 @@ Proof
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
     gvs[type_memory_size_def] >>
-  `type_memory_size ftv = 32` by metis_tac[word_value_type_memory_size] >>
+  `type_memory_size ftv = 32` by metis_tac[word_tv_memory_size] >>
   drule_all body_field_address_no_wrap >>
   drule_all body_field_region_frontier >> simp[]
 QED
@@ -737,7 +694,7 @@ Theorem augassign_attr_local_load_mem[local]:
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   fields_layout fields fs /\ struct_has_type fs vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
-  word_value_type ty /\ evaluate_type (get_tenv cx) ty = SOME ftv /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME ftv /\
   value_has_type ftv fv /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
@@ -768,7 +725,7 @@ Proof
     (irule augassign_field_address_bound_mem >> metis_tac[]) >>
   `mload (w2n (w0 + n2w (struct_field_offset fields fld))) s0 =
     typed_val_to_w256 ftv fv` by
-    (irule stmt_state_rel_field_word >> metis_tac[word_value_type_word]) >>
+    (irule stmt_state_rel_field_word >> metis_tac[]) >>
   drule_all augassign_field_add_path_mem >> strip_tac >>
   rename1 `gas_marked_path T ctx func s0 0 (OK t1)` >>
   `w2n (w0 + n2w (struct_field_offset fields fld)) + 32 <= t1.vs_alloca_next` by
@@ -784,7 +741,7 @@ Proof
 QED
 
 (* The store uses the live local region after RHS/operator evaluation. *)
-Theorem assign_attr_local_word_store_path_mem:
+Theorem assign_attr_local_store_layout_path_mem:
   emit_void MSTORE [dst; op] st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
@@ -797,8 +754,7 @@ Theorem assign_attr_local_word_store_path_mem:
   eval_operand op s = SOME (typed_val_to_w256 ftv v) /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   fields_layout fields fs /\ struct_has_type fs vals /\
-  ALOOKUP fs fld = SOME ftv /\ word_value_type ty /\
-  evaluate_type (get_tenv cx) ty = SOME ftv /\ store_lays_out ftv ftv v ==>
+  ALOOKUP fs fld = SOME ftv /\ store_lays_out ftv ftv v ==>
   ?t. stmt_state_rel H ctx func cenv cx
         (es with scopes := pre ++
           (env |+ (id, entry with
@@ -808,22 +764,23 @@ Theorem assign_attr_local_word_store_path_mem:
       (!x. lookup_var x t = lookup_var x s) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
-  `w2n (wbase + n2w (struct_field_offset fields fld)) + 32 <= s.vs_alloca_next` by
-    (irule augassign_field_address_bound_mem >> metis_tac[]) >>
+  `type_memory_size ftv = 32` by fs[stmtSimDeclStoreTheory.store_lays_out_def] >>
+  `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> simp[type_memory_size_def] >> decide_tac) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
   `w2n (wbase + n2w (struct_field_offset fields fld)) =
      w2n wbase + struct_field_offset fields fld` by
-    ( `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
-        (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-         first_x_assum drule_all >> simp[type_memory_size_def] >> decide_tac) >>
-      `s.vs_alloca_next < dimword (:256)` by
-        metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
-      drule_all body_field_address_no_wrap >> simp[]) >>
+    (drule_all body_field_address_no_wrap >> simp[]) >>
+  `w2n (wbase + n2w (struct_field_offset fields fld)) + 32 <= s.vs_alloca_next` by
+    (drule_all body_field_region_frontier >> simp[]) >>
   drule_all stmt_state_rel_write_field >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -855,6 +812,37 @@ Proof
   qexists_tac `u with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, gas_marked_path_def] >>
   simp[Abbr `u`, lookup_var_def, mstore_def]
+QED
+
+Theorem assign_attr_local_word_store_path_mem:
+  emit_void MSTORE [dst; op] st = ((),st') /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
+  lookup_var p s = SOME wbase /\
+  eval_operand dst s = SOME (wbase + n2w (struct_field_offset fields fld)) /\
+  eval_operand op s = SOME (typed_val_to_w256 ftv v) /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  fields_layout fields fs /\ struct_has_type fs vals /\
+  ALOOKUP fs fld = SOME ftv /\ word_value_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME ftv /\ store_lays_out ftv ftv v ==>
+  ?t. stmt_state_rel H ctx func cenv cx
+        (es with scopes := pre ++
+          (env |+ (id, entry with
+            <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
+      ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+      t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >> irule assign_attr_local_store_layout_path_mem >>
+  simp[] >> metis_tac[word_value_type_word]
 QED
 
 Theorem stmt_state_rel_scopes_gas_obs_mem[local]:
@@ -904,27 +892,15 @@ Proof
   metis_tac[]
 QED
 
-Theorem well_typed_binop_augassign_word_mem_src[local]:
-  !ty bop t2.
-    well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
-    (word_value_type ty /\ word_value_type t2) \/
-    ((?m. ty = BaseT (BytesT (Fixed m))) /\ MEM bop [And;Or;XOr;ShL;ShR])
-Proof
-  rpt gen_tac >> Cases_on `bop` >>
-  SIMP_TAC std_ss [well_typed_binop_def, word_value_type_def,
-    is_numeric_type_def] >>
-  rpt strip_tac >>
-  metis_tac[is_bool_type_def]
-QED
-
-Theorem compile_augassign_attr_local_mem:
+Theorem compile_augassign_attr_local_mem_typed:
   (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
   expr_body_pre cenv cx env e es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
   ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
     fld = SOME (ty,fsz) /\
   (bop = Exp ==> nonneg_int_literal e) /\
-  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  (bop = ShL \/ bop = ShR ==>
+    shift_amount_ok e \/ augassign_shift_amount_ok ty e) /\
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty0 (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
@@ -934,8 +910,8 @@ Proof
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
   drule_all expr_sim_inv_local >> strip_tac >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word_mem_src] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_is_word] >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by metis_tac[] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   `cenv.ce_var_type id = SOME (StructT sid)` by
@@ -1016,7 +992,7 @@ Proof
   irule (cj 1 augassign_attr_place_reads_mem_src) >> simp[] >> metis_tac[]
 QED
 
-Resume compile_augassign_attr_local_mem[rhs_summary]:
+Resume compile_augassign_attr_local_mem_typed[rhs_summary]:
   qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
               (es with gas_obs := []) t marks`
@@ -1042,7 +1018,7 @@ Resume compile_augassign_attr_local_mem[rhs_summary]:
   fs[exprSimDefsTheory.halt_exit_def]
 QED
 
-Resume compile_augassign_attr_local_mem[rhs_normal]:
+Resume compile_augassign_attr_local_mem_typed[rhs_normal]:
   gvs[] >> rename1 `gas_marked_exec _ _ _ _ _ _ ee (OK u)` >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (qspec_then `H1` mp_tac) >> impl_tac >- simp[] >>
@@ -1075,45 +1051,45 @@ Resume compile_augassign_attr_local_mem[rhs_normal]:
      metis_tac[]) >>
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
-  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_type_result) >>
   strip_tac >> gvs[] >>
   rename1 `value_has_type etv v` >>
   drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
-    metis_tac[eval_expr_int_literal_agrees_mem_src] >>
-  `(bop = ShL \/ bop = ShR ==> ?i. v = IntV i /\ 0 <= i)` by
-    metis_tac[eval_expr_shift_amount_mem_src] >>
+    metis_tac[eval_expr_int_literal_agrees] >>
+  `(bop = ShL \/ bop = ShR ==>
+     (?i. v = IntV i /\ 0 <= i) \/
+     (ty = BaseT (BytesT (Fixed 32)) /\
+      ?bs. v = BytesV bs /\ LENGTH bs = 32))` by
+    metis_tac[augassign_shift_operand] >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
-  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits_mem_src] >>
-  `binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
+  `binop_frag_mem_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
      (if bop = Exp then expr_int_literal e else NONE)
-     [ty; expr_type e] fv v (ee with gas_obs := [])` by
+     [ty; expr_type e] fv v
+     (typed_val_to_w256 ftv fv) (typed_val_to_w256 etv v)
+     (ee with gas_obs := [])` by
     suspend "typed_dispatch" >>
   suspend "operator"
 QED
 
-Resume compile_augassign_attr_local_mem[operator]:
-  `word_value fv` by metis_tac[word_value_type_typed] >>
-  `eval_operand (Var out) t = SOME (val_to_w256 fv)` by
-    simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+Resume compile_augassign_attr_local_mem_typed[operator]:
   `post_value_type cenv e = expr_type e` by
-    (irule loweringPostsTheory.post_value_type_word >>
-     metis_tac[word_value_type_word]) >>
+    (irule loweringPostsTheory.post_value_type_word >> simp[]) >>
   `expr_post H1 ctx func cenv cx e (es with gas_obs := []) s1 s2 t
      (ee with gas_obs := []) v rhs u` by metis_tac[] >>
-  `eval_operand rhs u = SOME (val_to_w256 v)` by
-    (irule expr_val_rel_word >> fs[expr_post_def] >>
-     goal_assum (drule_at Any) >> simp[word_value_type_word]) >>
-  `eval_operand (Var out) u = SOME (val_to_w256 fv)` by
+  `eval_operand rhs u = SOME (typed_val_to_w256 etv v)` by
+    (irule expr_val_rel_typed >> fs[expr_post_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand (Var out) u = SOME (typed_val_to_w256 ftv fv)` by
     (irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
   `not_fresh_at s2 out /\ not_fresh_at s2 dv /\ local_ptrs_reserved cenv s2` by
     metis_tac[not_fresh_at_mono, local_ptrs_reserved_next_var] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def,
-                          binop_frag_mem_post_def]) >>
+  qpat_x_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `Var out`, `rhs`, `res_op`, `u`]
     mp_tac) >>
   impl_tac
@@ -1127,8 +1103,8 @@ Resume compile_augassign_attr_local_mem[operator]:
   strip_tac >- suspend "operator_normal" >> suspend "operator_exit"
 QED
 
-Resume compile_augassign_attr_local_mem[operator_normal]:
-  gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
+Resume compile_augassign_attr_local_mem_typed[operator_normal]:
+  gvs[] >> rename1 `expr_val_rel cx ty result res_op s` >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx ee s /\
        storage_well_formed_on cx ee (FST H)` by
@@ -1146,7 +1122,7 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop fv v of INL x => INL x | INR err => INR (Error err)` by
     (irule bop_result_augassign >> simp[] >>
-     metis_tac[word_value_not_bytes]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop fv v = INL result` by gvs[AllCaseEqs()] >>
@@ -1168,7 +1144,7 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
        well_typed_binop_success_type) >> simp[]) >>
   `store_lays_out ftv ftv result` by
     (irule store_lays_out_typed >> simp[] >>
-     qexistsl_tac [`ty`, `get_tenv cx`] >> simp[word_value_type_word]) >>
+     qexistsl_tac [`ty`, `get_tenv cx`] >> simp[]) >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x s = SOME w` by
     (rpt strip_tac >>
@@ -1201,11 +1177,11 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
         simp[]) >>
      fs[eval_operand_def] >> metis_tac[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 ftv result)` by
-    simp[typed_val_to_w256_word_value] >>
+    (irule expr_val_rel_typed >> simp[]) >>
   suspend "store"
 QED
 
-Resume compile_augassign_attr_local_mem[store]:
+Resume compile_augassign_attr_local_mem_typed[store]:
   `!(H:(bool # bytes32 # type_value) list # num list).
        stmt_state_rel H ctx func cenv cx ee s ==>
        ?t2. stmt_state_rel H ctx func cenv cx
@@ -1216,10 +1192,10 @@ Resume compile_augassign_attr_local_mem[store]:
             t2.vs_accounts = s.vs_accounts /\
             t2.vs_transient = s.vs_transient /\
             t2.vs_requests = s.vs_requests /\ t2.vs_call_ctx = s.vs_call_ctx` by
-    (gen_tac >> strip_tac >> drule_all assign_attr_local_word_store_path_mem >>
+    (gen_tac >> strip_tac >> drule_all assign_attr_local_store_layout_path_mem >>
      strip_tac >> metis_tac[]) >>
   `stmt_state_rel H1 ctx func cenv cx ee s` by metis_tac[] >>
-  drule_all assign_attr_local_word_store_path_mem >> strip_tac >>
+  drule_all assign_attr_local_store_layout_path_mem >> strip_tac >>
   rename1 `gas_marked_path T ctx func s 0 (OK last)` >>
   `gas_marked_path T ctx func u 0 (OK last)` by
     (drule_all gas_marked_path_then >> simp[]) >>
@@ -1239,7 +1215,7 @@ Resume compile_augassign_attr_local_mem[store]:
   qx_gen_tac `H` >> strip_tac >> suspend "post"
 QED
 
-Resume compile_augassign_attr_local_mem[post]:
+Resume compile_augassign_attr_local_mem_typed[post]:
   `valid_horizon cx st0 H ee.storage_trace` by
     (qpat_x_assum `valid_horizon _ _ H _` mp_tac >> simp[]) >>
   `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
@@ -1320,13 +1296,13 @@ Resume compile_augassign_attr_local_mem[post]:
   >- first_assum ACCEPT_TAC
 QED
 
-Resume compile_augassign_attr_local_mem[operator_exit]:
+Resume compile_augassign_attr_local_mem_typed[operator_exit]:
   `bop_result cx ty bop [ty; expr_type e] fv v (ee with gas_obs := []) =
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
     (irule bop_result_augassign >> simp[] >>
-     metis_tac[word_value_not_bytes]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     ftv bop fv v`
@@ -1344,890 +1320,30 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
 QED
 
 
-Theorem int_type_byte_width_mem_src[local]:
-  !tenv ty tv. is_int_type ty /\ evaluate_type tenv ty = SOME tv ==>
-    type_bits ty MOD 8 = 0
+Resume compile_augassign_attr_local_mem_typed[typed_dispatch]:
+  irule (Q.INST [`t2` |-> `expr_type e`, `tv1` |-> `ftv`, `tv2` |-> `etv`]
+    augassign_binop_frag_typed_mem) >> simp[] >>
+  strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+  Cases_on `expr_int_literal e` >> gvs[]
+QED
+
+Finalise compile_augassign_attr_local_mem_typed[local]
+
+Theorem compile_augassign_attr_local_mem:
+  (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP env.var_types id = SOME (StructT sid) /\
+  ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+    fld = SOME (ty,fsz) /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+  stmt_frag_mem d ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty0 (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
-  rpt gen_tac >> Cases_on `ty` >>
-  FULL_SIMP_TAC std_ss [is_int_type_def] >>
-  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
-  FULL_SIMP_TAC std_ss [is_int_type_def, evaluate_type_def,
-    type_bits_def, AllCaseEqs(), vyperASTTheory.base_type_distinct,
-    vyperASTTheory.base_type_11, LET_THM]
+  strip_tac >> irule compile_augassign_attr_local_mem_typed >> simp[]
 QED
-
-Theorem int_type_value_mem_src[local]:
-  !tenv ty tv v.
-    is_int_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
-    ?i. v = IntV i /\ 0 < type_bits ty /\ type_bits ty <= 256 /\
-      type_to_int_bound ty = SOME (if is_signed_type ty then Signed (type_bits ty)
-        else Unsigned (type_bits ty)) /\
-      within_int_bound (if is_signed_type ty then Signed (type_bits ty)
-        else Unsigned (type_bits ty)) i
-Proof
-  rpt gen_tac >> Cases_on `ty` >>
-  FULL_SIMP_TAC std_ss [is_int_type_def] >>
-  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
-  FULL_SIMP_TAC std_ss [is_int_type_def, evaluate_type_def,
-    type_bits_def, AllCaseEqs(), vyperASTTheory.base_type_distinct,
-    vyperASTTheory.base_type_11, LET_THM] >>
-  rpt strip_tac >> qpat_x_assum `BaseTV _ = tv` (SUBST_ALL_TAC o SYM) >>
-  Cases_on `v` >>
-  FULL_SIMP_TAC std_ss [value_has_type_def, type_bits_def,
-    is_signed_type_def, type_to_int_bound_def, within_int_bound_def,
-    vyperValueTheory.value_distinct, vyperValueTheory.value_11] >>
-  decide_tac
-QED
-
-
-Theorem word_value_type_value_cases_mem_src[local]:
-  !tenv t tv v.
-    word_value_type t /\ evaluate_type tenv t = SOME tv /\ value_has_type tv v ==>
-    (?n i. t = BaseT (UintT n) /\ tv = BaseTV (UintT n) /\ v = IntV i /\
-      0 < n /\ n <= 256 /\ within_int_bound (Unsigned n) i) \/
-    (?n i. t = BaseT (IntT n) /\ tv = BaseTV (IntT n) /\ v = IntV i /\
-      1 < n /\ n <= 256 /\ within_int_bound (Signed n) i) \/
-    (?d. t = BaseT DecimalT /\ tv = BaseTV DecimalT /\ v = DecimalV d /\
-      within_int_bound (Signed 168) d) \/
-    (?b. t = BaseT BoolT /\ tv = BaseTV BoolT /\ v = BoolV b) \/
-    (?nsid m k. t = FlagT nsid /\ tv = FlagTV m /\ v = FlagV k /\ m <= 256)
-Proof
-  rpt gen_tac >> Cases_on `t` >>
-  FULL_SIMP_TAC std_ss [word_value_type_def, is_numeric_type_def,
-    is_int_type_def, is_bool_type_def, is_flag_type_def,
-    vyperASTTheory.type_distinct] >>
-  (TRY (rename1 `evaluate_type tenv (BaseT bt) = SOME tv` >> Cases_on `bt`)) >>
-  FULL_SIMP_TAC std_ss [is_int_type_def, is_bool_type_def,
-    evaluate_type_def, AllCaseEqs(), LET_THM,
-    vyperASTTheory.type_distinct, vyperASTTheory.type_11,
-    vyperASTTheory.base_type_distinct, vyperASTTheory.base_type_11] >>
-  rpt strip_tac >>
-  first_x_assum (SUBST_ALL_TAC o SYM) >>
-  Cases_on `v` >>
-  FULL_SIMP_TAC std_ss [value_has_type_def, within_int_bound_def,
-    vyperValueTheory.value_distinct, vyperValueTheory.value_11] >>
-  qexists_tac `m` >> asm_rewrite_tac[]
-QED
-
-Theorem decimal_type_value_mem_src[local]:
-  !tenv tv v. evaluate_type tenv (BaseT DecimalT) = SOME tv /\
-    value_has_type tv v ==> ?d. v = DecimalV d /\ within_int_bound (Signed 168) d
-Proof
-  rpt strip_tac >>
-  `word_value_type (BaseT DecimalT)` by
-    (SIMP_TAC std_ss [word_value_type_def, is_numeric_type_def]) >>
-  drule_all word_value_type_value_cases_mem_src >>
-  SIMP_TAC std_ss [vyperASTTheory.type_distinct, vyperASTTheory.type_11,
-    vyperASTTheory.base_type_distinct, vyperASTTheory.base_type_11] >>
-  metis_tac[]
-QED
-
-Theorem within_int_bound_unsigned_256_mem_src[local]:
-  !u n i. (u = Unsigned n \/ u = Signed n) /\ n <= 256 /\
-    within_int_bound u i /\ 0 <= i ==> within_int_bound (Unsigned 256) i
-Proof
-  rpt strip_tac >> qpat_x_assum `u = _` SUBST_ALL_TAC >>
-  FULL_SIMP_TAC std_ss [within_int_bound_def, LET_THM]
-  >- (`2 ** n <= 2 ** 256` by
-        (irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> asm_rewrite_tac[] >> decide_tac) >>
-      `Num i < 2 ** 256` suffices_by (SIMP_TAC std_ss []) >>
-      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
-  Cases_on `n = 0`
-  >- (FULL_SIMP_TAC std_ss [] >> EVAL_TAC) >>
-  FULL_SIMP_TAC std_ss [integerTheory.INT_NOT_LT] >>
-  `~(i < 0)` by intLib.ARITH_TAC >>
-  qpat_x_assum `if i < 0 then _ else _` mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >>
-  `2 ** (n - 1) <= 2 ** 256` by
-    (irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> decide_tac) >>
-  `Num i < 2 ** 256` suffices_by (SIMP_TAC std_ss []) >>
-  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
-QED
-
-
-Theorem binop_frag_int_arith_mem_src[local]:
-  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
-    MEM bop [Add; Sub; Mul; Div; Mod] /\ is_int_type ty /\
-    evaluate_type tenv ty = SOME tv /\
-    value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac int_type_value_mem_src >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac int_type_value_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >>
-  Cases_on `bop` >> fs[]
-  >~ [`binop_frag_val_mem _ _ _ _ Div`] >- (irule compile_divmod_sim_mem >> simp[])
-  >~ [`binop_frag_val_mem _ _ _ _ Mod`] >- (irule compile_divmod_sim_mem >> simp[]) >>
-  irule compile_checked_sim_mem >> simp[]
-QED
-
-Theorem binop_frag_decimal_arith_mem_src[local]:
-  !ctx func cenv cx bop bl el tys v1 v2 es0 tenv tv.
-    MEM bop [Add; Sub; Mul; Div; Mod] /\
-    evaluate_type tenv (BaseT DecimalT) = SOME tv /\
-    value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) (BaseT DecimalT) bl el
-      tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`tenv`, `tv`, `v1`] mp_tac decimal_type_value_mem_src >>
-  qspecl_then [`tenv`, `tv`, `v2`] mp_tac decimal_type_value_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  Cases_on `MEM bop [Mul; Div]`
-  >- (irule compile_decimal_mul_div_sim_mem >> simp[]) >>
-  irule compile_decimal_add_sub_mod_sim_mem >> simp[] >>
-  Cases_on `bop` >> fs[]
-QED
-
-Theorem binop_frag_unsafe_typed_mem_src[local]:
-  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
-    MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
-    is_int_type ty /\ type_bits ty MOD 8 = 0 /\
-    evaluate_type tenv ty = SOME tv /\
-    value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac int_type_value_mem_src >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac int_type_value_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >>
-  irule compile_unsafe_sim_mem >> simp[]
-QED
-
-Theorem binop_frag_compare_typed_mem_src[local]:
-  !ctx func cenv cx bop ty ann bl el tys v1 v2 es0 tenv tv.
-    MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE; Min; Max] /\ word_value_type ty /\
-    evaluate_type tenv ty = SOME tv /\
-    value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
-Proof
-  rpt strip_tac >>
-  `word_value v1 /\ (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
-   !m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
-       m <= 256` by
-    (qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac
-       word_value_type_value_cases_mem_src >>
-     asm_rewrite_tac[] >> rpt strip_tac >>
-     gvs[word_value_def, is_uint256_def]) >>
-  Cases_on `bop = Min \/ bop = Max`
-  >- (irule compile_minmax_sim_mem >> metis_tac[]) >>
-  irule compile_compare_sim_mem >> gvs[] >> metis_tac[]
-QED
-
-Theorem binop_frag_bitwise_typed_mem_src[local]:
-  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
-    (bop = And \/ bop = Or \/ bop = XOr) /\ word_value_type ty /\
-    evaluate_type tenv ty = SOME tv /\
-    value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >> irule compile_bitwise_sim_mem >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases_mem_src >>
-  qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac word_value_type_value_cases_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >> gvs[type_to_int_bound_def, word_value_def]
-QED
-
-Theorem binop_frag_shift_typed_mem_src[local]:
-  !ctx func cenv cx bop ty t2 bl el tys v1 v2 es0 tenv tv1 tv2 i2.
-    (bop = ShL \/ bop = ShR) /\ is_int_type ty /\ type_bits ty = 256 /\
-    is_int_type t2 /\ v2 = IntV i2 /\ 0 <= i2 /\
-    evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`tenv`, `ty`, `tv1`, `v1`] mp_tac int_type_value_mem_src >>
-  qspecl_then [`tenv`, `t2`, `tv2`, `v2`] mp_tac int_type_value_mem_src >>
-  asm_rewrite_tac[] >> rpt strip_tac >>
-  `within_int_bound (Unsigned 256) i2` by
-    (Cases_on `is_signed_type t2` >> fs[] >>
-     metis_tac[within_int_bound_unsigned_256_mem_src]) >>
-  irule compile_shift_sim_mem >> gvs[]
-QED
-
-Theorem binop_frag_shr_narrow_mem_src[local]:
-  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    bop = ShR /\ type_bits t1 < 256 /\ ~(?i. v2 = IntV i /\ i < 0) /\
-    ann = t1 /\ is_int_type t1 /\ is_int_type t2 /\
-    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  qspecl_then [`tenv`, `ann`, `tv1`, `v1`] mp_tac int_type_value_mem_src >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  qspecl_then [`tenv`, `t2`, `tv2`, `v2`] mp_tac int_type_value_mem_src >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  gvs[] >>
-  rename1 `value_has_type tv2 (IntV i2)` >>
-  `0 <= i2` by intLib.ARITH_TAC >>
-  `within_int_bound (Unsigned 256) i2` by
-    (Cases_on `is_signed_type t2` >> fs[] >>
-     metis_tac[within_int_bound_unsigned_256_mem_src]) >>
-  `type_bits ann <= 256` by decide_tac >>
-  `?v. bop_result cx ann ShR tys (IntV i) (IntV i2) es0 = INL v /\
-       word_value v /\ val_to_w256 v =
-         (if is_signed_type ann
-          then word_asr (val_to_w256 (IntV i)) (w2n (val_to_w256 (IntV i2)))
-          else word_lsr (val_to_w256 (IntV i)) (w2n (val_to_w256 (IntV i2))))` by
-    (irule exprBopShiftTheory.bop_result_shr >> simp[] >>
-     qexists_tac `type_bits ann` >> simp[]) >>
-  irule binop_frag_val_mem_straight >>
-  (conj_tac >- metis_tac[exprBopShiftTheory.straight_fresh_compile_shift]) >>
-  disch_tac >>
-  disj1_tac >> qexists_tac `v` >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`) exprBopShiftTheory.compile_shift_run >>
-  disch_then (qspecl_then [`ss`, `val_to_w256 (IntV i)`, `val_to_w256 (IntV i2)`] mp_tac) >>
-  simp[]
-QED
-
-Theorem binop_frag_shift_572_mem_src[local]:
-  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    (bop = ShL \/ bop = ShR) /\ (?i. v2 = IntV i /\ 0 <= i) /\
-    well_typed_binop ann bop t1 t2 /\ word_value_type t1 /\
-    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def, word_value_type_def]
-  >- (irule binop_frag_shift_typed_mem_src >> simp[is_int_type_def, type_bits_def] >>
-      metis_tac[])
-  >- (irule binop_frag_shift_typed_mem_src >> simp[is_int_type_def, type_bits_def] >>
-      metis_tac[]) >>
-  `type_bits ann <= 256` by
-    (qspecl_then [`tenv`, `ann`, `tv1`, `v1`] mp_tac int_type_value_mem_src >>
-     simp[] >> metis_tac[]) >>
-  Cases_on `type_bits ann = 256`
-  >- (irule binop_frag_shift_typed_mem_src >> simp[] >> metis_tac[]) >>
-  irule binop_frag_shr_narrow_mem_src >> simp[] >>
-  `type_bits ann < 256` by decide_tac >> metis_tac[integerTheory.INT_NOT_LE]
-QED
-
-
-Theorem bop_result_power_mem_src[local]:
-  !cx ann tys a b es u. type_to_int_bound ann = SOME u ==>
-    bop_result cx ann Exp tys (IntV a) (IntV b) es =
-      if b < 0 then INR (Error (RuntimeError "Exp~"))
-      else if within_int_bound u (a ** Num b) then INL (IntV (a ** Num b))
-      else INR (Error (RuntimeError "bounded_int_op bound"))
-Proof
-  rpt strip_tac >>
-  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-       bounded_int_op_def] >>
-  Cases_on `b < 0` >> simp[] >>
-  Cases_on `within_int_bound u (a ** Num b)` >> simp[]
-QED
-
-
-
-Theorem pow_search_midpoint_mem_src[local]:
-  !lo hi fuel. lo + 1 < hi /\ hi - lo <= 2 ** SUC fuel ==>
-    lo <= (lo + hi) DIV 2 /\ (lo + hi) DIV 2 <= hi /\
-    (lo + hi) DIV 2 - lo <= 2 ** fuel /\
-    hi - (lo + hi) DIV 2 <= 2 ** fuel
-Proof
-  rpt gen_tac >> rewrite_tac[arithmeticTheory.EXP] >>
-  SPEC_TAC (``2 ** fuel``, ``n:num``) >> gen_tac >> strip_tac >>
-  qspec_then `2` mp_tac arithmeticTheory.DIVISION >> simp[] >>
-  disch_then (qspec_then `lo + hi` mp_tac) >>
-  simp[Once arithmeticTheory.ADD_COMM] >>
-  strip_tac >>
-  `((hi + lo) MOD 2) < 2` by simp[] >> decide_tac
-QED
-
-Theorem largest_pow_base_search_bounds_mem_src[local]:
-  !fuel e L lo hi.
-    lo ** e < L /\ L <= hi ** e /\ lo <= hi /\ hi-lo <= 2 ** fuel ==>
-    let u = largest_pow_base_search fuel e L lo hi in
-      u ** e < L /\ L <= (u+1) ** e
-Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- (simp[largest_pow_base_search_def] >>
-      `hi <= lo + 1` by gvs[] >>
-      `hi ** e <= (lo + 1) ** e` by
-        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> simp[]) >>
-  simp[Once largest_pow_base_search_def] >>
-  Cases_on `hi <= lo + 1`
-  >- (`hi ** e <= (lo + 1) ** e` by
-        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> simp[]) >>
-  `lo + 1 < hi` by decide_tac >>
-  drule_all pow_search_midpoint_mem_src >> strip_tac >>
-  `lo + hi = hi + lo` by decide_tac >>
-  fs[] >>
-  Cases_on `((hi + lo) DIV 2) ** e < L` >> simp[] >>
-  first_x_assum irule >> simp[]
-QED
-
-
-Theorem largest_pow_base_bounds_mem_src[local]:
-  !e bits signed. 0 < e ==>
-    let u = largest_pow_base e bits signed in
-      u ** e < 2 ** (bits - if signed then 1 else 0) /\
-      2 ** (bits - if signed then 1 else 0) <= (u+1) ** e
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[largest_pow_base_def] >>
-  irule (SIMP_RULE std_ss [LET_THM] largest_pow_base_search_bounds_mem_src) >>
-  simp[arithmeticTheory.ZERO_EXP] >>
-  mp_tac (Q.SPECL [`e`, `1`, `2 ** (bits - if signed then 1 else 0)`]
-    arithmeticTheory.EXP_BASE_LEQ_MONO_IMP) >> simp[]
-QED
-
-Theorem largest_pow_base_threshold_mem_src[local]:
-  !e bits signed k. 0 < e ==>
-    (k <= largest_pow_base e bits signed <=>
-     k ** e < 2 ** (bits - if signed then 1 else 0))
-Proof
-  rpt strip_tac >> drule largest_pow_base_bounds_mem_src >>
-  disch_then (qspecl_then [`bits`, `signed`] mp_tac) >> simp[] >> strip_tac >>
-  eq_tac >> strip_tac
-  >- (`k ** e <= largest_pow_base e bits signed ** e` by
-        simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
-  spose_not_then assume_tac >>
-  `largest_pow_base e bits signed + 1 <= k` by decide_tac >>
-  `(largest_pow_base e bits signed + 1) ** e <= k ** e` by
-    simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac
-QED
-
-Theorem largest_pow_base_lt_limit_mem_src[local]:
-  !e bits signed. 0 < e ==>
-    largest_pow_base e bits signed < 2 ** (bits - if signed then 1 else 0)
-Proof
-  rpt strip_tac >>
-  drule largest_pow_base_threshold_mem_src >>
-  disch_then (qspecl_then [`bits`, `signed`,
-    `2 ** (bits - if signed then 1 else 0)`] mp_tac) >>
-  `2 ** (bits - if signed then 1 else 0) <=
-   (2 ** (bits - if signed then 1 else 0)) ** e` by
-    (mp_tac (Q.SPECL [`e`, `1`, `2 ** (bits - if signed then 1 else 0)`]
-       arithmeticTheory.EXP_BASE_LEQ_MONO_IMP) >> simp[]) >> decide_tac
-QED
-
-
-
-Theorem square_power_two_even_mem_src[local]:
-  !k b:num. b * b = 2 ** k ==> EVEN k
-Proof
-  completeInduct_on `k` >> rpt strip_tac >>
-  Cases_on `k` >- simp[] >>
-  `EVEN (b * b)` by
-    (asm_rewrite_tac[] >> simp[arithmeticTheory.EVEN_EXP_IFF]) >>
-  `EVEN b` by fs[arithmeticTheory.EVEN_MULT] >>
-  qpat_x_assum `EVEN b` (mp_tac o REWRITE_RULE [arithmeticTheory.EVEN_EXISTS]) >>
-  disch_then (qx_choose_then `c` assume_tac) >>
-  Cases_on `n`
-  >- (gvs[arithmeticTheory.EXP, GSYM arithmeticTheory.EXP_2,
-          arithmeticTheory.EXP_BASE_MULT] >> decide_tac) >>
-  rename1 `EVEN (SUC (SUC j))` >>
-  `c * c = 2 ** j` by
-    (gvs[arithmeticTheory.EXP, GSYM arithmeticTheory.EXP_2,
-         arithmeticTheory.EXP_BASE_MULT] >> decide_tac) >>
-  `EVEN j` by (first_x_assum irule >> simp[] >> qexists_tac `c` >> pure_asm_rewrite_tac[arithmeticTheory.EXP_2] >> REFL_TAC) >>
-  simp[arithmeticTheory.EVEN]
-QED
-
-Theorem pow_two_odd_exponent_mem_src[local]:
-  !a e k:num. 0 < a /\ a ** e = 2 ** k /\ ODD k ==> ODD e
-Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  `EVEN e` by fs[arithmeticTheory.ODD_EVEN] >>
-  qpat_x_assum `EVEN e`
-    (mp_tac o REWRITE_RULE [arithmeticTheory.EVEN_EXISTS]) >>
-  disch_then (qx_choose_then `n` assume_tac) >>
-  `a ** n * a ** n = 2 ** k` by
-    (`2 * n = n + n` by decide_tac >>
-     qpat_x_assum `a ** e = _` mp_tac >>
-     pure_asm_rewrite_tac[arithmeticTheory.EXP_ADD] >>
-     disch_then ACCEPT_TAC) >>
-  drule square_power_two_even_mem_src >>
-  fs[arithmeticTheory.ODD_EVEN]
-QED
-
-Theorem byte_width_odd_predecessor_mem_src[local]:
-  !bits:num. 0 < bits /\ bits MOD 8 = 0 ==> ODD (bits - 1)
-Proof
-  rpt strip_tac >>
-  qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
-  disch_then (qspec_then `bits` assume_tac) >>
-  `EVEN bits` by
-    (rewrite_tac[arithmeticTheory.EVEN_EXISTS] >>
-     qexists_tac `4 * (bits DIV 8)` >> decide_tac) >>
-  Cases_on `bits` >> fs[arithmeticTheory.EVEN, arithmeticTheory.ODD_EVEN]
-QED
-
-
-Theorem unsigned_literal_exponent_guard_mem_src[local]:
-  !a:int e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ 0 <= a ==>
-    (Num a <= largest_pow_base e bits F <=>
-     within_int_bound (Unsigned bits) (a ** e))
-Proof
-  rpt strip_tac >>
-  `0 < e` by decide_tac >>
-  drule largest_pow_base_threshold_mem_src >>
-  disch_then (qspecl_then [`bits`, `F`, `Num a`] mp_tac) >>
-  `a = &(Num a)` by simp[] >>
-  pop_assum SUBST_ALL_TAC >>
-  simp[within_int_bound_def, GSYM integerTheory.INT_POW]
-QED
-
-Theorem literal_exponent_typed_shortcut_mem_src[local]:
-  !bits s a e. 0 < bits /\ bits MOD 8 = 0 /\
-    within_int_bound (if s then Signed bits else Unsigned bits) a /\
-    (e = 0 \/ e = 1) ==>
-    within_int_bound (if s then Signed bits else Unsigned bits) (a ** e)
-Proof
-  rpt gen_tac >>
-  `a ** 1 = a /\ a ** 0 = 1` by
-    (Cases_on `a` >> simp[integerTheory.INT_POW_NEG]) >>
-  rpt strip_tac >> gvs[] >> Cases_on `s` >>
-  simp[within_int_bound_def] >>
-  `8 <= bits` by
-    (qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
-     disch_then (qspec_then `bits` mp_tac) >>
-     Cases_on `bits DIV 8` >> simp[] >> decide_tac) >>
-  gvs[within_int_bound_def, arithmeticTheory.ONE_LT_EXP]
-QED
-
-Theorem unsigned_power_upper_word_mem_src[local]:
-  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 ==>
-    w2n (n2w (largest_pow_base e bits F) : bytes32) =
-      largest_pow_base e bits F
-Proof
-  rpt strip_tac >>
-  `0 < e` by decide_tac >>
-  drule largest_pow_base_lt_limit_mem_src >>
-  disch_then (qspecl_then [`bits`, `F`] mp_tac) >> simp[] >> strip_tac >>
-  `2 ** bits <= 2 ** 256` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
-  `largest_pow_base e bits F < 2 ** 256` by decide_tac >>
-  fs[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
-QED
-
-Theorem signed_literal_exponent_guard_mem_src[local]:
-  !a:int e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
-    (let u = largest_pow_base e bits T in
-     let l = if (u+1)**e = 2**(bits-1) then -&(u+1) else -&u in
-       (l <= a /\ a <= &u <=> within_int_bound (Signed bits) (a ** e)))
-Proof
-  rpt strip_tac >> simp_tac bool_ss [LET_THM] >>
-  `0 < e` by decide_tac >>
-  qabbrev_tac `u = largest_pow_base e bits T` >>
-  Cases_on `0 <= a`
-  >- (`a = &(Num a)` by simp[] >> pop_assum SUBST_ALL_TAC >>
-      qspec_then `e` mp_tac largest_pow_base_threshold_mem_src >>
-      simp[] >> disch_then (qspecl_then [`bits`, `T`, `Num a`] mp_tac) >>
-      simp[within_int_bound_def, GSYM integerTheory.INT_POW, Abbr `u`] >>
-      strip_tac >> IF_CASES_TAC >> simp[] >> intLib.ARITH_TAC) >>
-  `a < 0` by intLib.ARITH_TAC >>
-  `a = -&(Num (-a))` by (simp[] >> intLib.ARITH_TAC) >>
-  pop_assum SUBST_ALL_TAC >>
-  qabbrev_tac `m = Num (-a)` >>
-  `0 < m` by (fs[Abbr `m`] >> intLib.ARITH_TAC) >>
-  `(-&m:int) <= &u` by intLib.ARITH_TAC >>
-  `0 < m ** e` by simp[] >>
-  simp[within_int_bound_def, vyperMiscTheory.int_exp_num] >>
-  `ODD (bits - 1)` by metis_tac[byte_width_odd_predecessor_mem_src] >>
-  `((u + 1) ** e = 2 ** (bits - 1)) ==> ODD e` by
-    (strip_tac >> irule pow_two_odd_exponent_mem_src >>
-     qexistsl_tac [`u + 1`, `bits - 1`] >> simp[]) >>
-  `m <= u <=> m ** e < 2 ** (bits - 1)` by
-    (simp[Abbr `u`, largest_pow_base_threshold_mem_src]) >>
-  Cases_on `EVEN e`
-  >- (`~((u + 1) ** e = 2 ** (bits - 1))` by
-        metis_tac[arithmeticTheory.ODD_EVEN] >> simp[]) >>
-  simp[] >> IF_CASES_TAC
-  >- (qpat_x_assum `(u + 1) ** e = _`
-        (fn th => once_rewrite_tac[GSYM th]) >>
-      simp[arithmeticTheory.EXP_EXP_LE_MONO]) >>
-  `2 ** (bits - 1) <= (u + 1) ** e` by
-    (qspec_then `e` mp_tac largest_pow_base_bounds_mem_src >> simp[] >>
-     disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[Abbr `u`]) >>
-  Cases_on `m <= u` >- (simp[] >> decide_tac) >>
-  `u + 1 <= m` by decide_tac >>
-  `(u + 1) ** e <= m ** e` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
-  simp[] >> decide_tac
-QED
-
-Theorem signed_power_upper_word_mem_src[local]:
-  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
-    w2i (n2w (largest_pow_base e bits T) : bytes32) =
-      &(largest_pow_base e bits T)
-Proof
-  rpt strip_tac >> `0 < e` by decide_tac >>
-  drule largest_pow_base_lt_limit_mem_src >>
-  disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[] >> strip_tac >>
-  `2 ** (bits - 1) <= 2 ** 255` by
-    (simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
-  `largest_pow_base e bits T < 2 ** 255` by decide_tac >>
-  irule integer_wordTheory.w2i_n2w_pos >> fs[wordsTheory.INT_MIN_def]
-QED
-
-Theorem signed_power_lower_word_mem_src[local]:
-  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
-    (let u = largest_pow_base e bits T in
-     let l = if (u+1)**e = 2**(bits-1) then -&(u+1) else -&u in
-       w2i (i2w l : bytes32) = l)
-Proof
-  rpt strip_tac >> `0 < e` by decide_tac >>
-  drule largest_pow_base_lt_limit_mem_src >>
-  disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[] >> strip_tac >>
-  `2 ** (bits - 1) <= 2 ** 255` by
-    (simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
-  `largest_pow_base e bits T < 2 ** 255` by decide_tac >>
-  simp_tac bool_ss [LET_THM] >> IF_CASES_TAC >>
-  irule integer_wordTheory.w2i_i2w >>
-  fs[wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def] >> intLib.ARITH_TAC
-QED
-
-
-Theorem integer_power_word_mem_src[local]:
-  !a:int n. (n2w (w2n (i2w a : bytes32) ** n) : bytes32) = i2w (a ** n)
-Proof
-  gen_tac >> Induct >>
-  simp[arithmeticTheory.EXP, integerTheory.INT_POW,
-       GSYM wordsTheory.word_mul_n2w, integer_wordTheory.word_i2w_mul] >>
-  EVAL_TAC
-QED
-
-Theorem literal_exponent_value_word_mem_src[local]:
-  !bits signed b. 0 < bits /\ bits <= 256 /\
-    within_int_bound (if signed then Signed bits else Unsigned bits) b /\ 0 <= b ==>
-    w2n (i2w b : bytes32) = Num b
-Proof
-  rpt strip_tac >>
-  `~(b < 0)` by intLib.ARITH_TAC >>
-  `Num b < 2 ** bits` by
-    (Cases_on `signed` >> gvs[within_int_bound_def] >>
-     `2 ** (bits - 1) <= 2 ** bits` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
-     decide_tac) >>
-  `2 ** bits <= 2 ** 256` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
-  `Num b < 2 ** 256` by decide_tac >>
-  `b = &(Num b)` by simp[] >> pop_assum SUBST_ALL_TAC >>
-  fs[integer_wordTheory.i2w_pos, wordsTheory.w2n_n2w, wordsTheory.dimword_def]
-QED
-
-Theorem literal_exponent_exp_word_mem_src[local]:
-  !bits signed a b. 0 < bits /\ bits <= 256 /\
-    within_int_bound (if signed then Signed bits else Unsigned bits) b /\ 0 <= b ==>
-    word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)
-Proof
-  rpt strip_tac >>
-  drule_all literal_exponent_value_word_mem_src >> strip_tac >>
-  simp[wordsTheory.word_exp_def, integer_power_word_mem_src]
-QED
-
-
-Theorem emit_op_exp_mem_src[local]:
-  !x y vx vy sa op sb ss.
-    emit_op Exp [x;y] sa = (op,sb) /\
-    eval_operand x ss = SOME vx /\ eval_operand y ss = SOME vy /\
-    fresh_vars_wrt sa ss ==>
-    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-      eval_operand op ss' = SOME (word_exp vx vy) /\
-      same_blocks sa sb /\ fresh_vars_wrt sb ss' /\
-      (!op w. eval_operand op ss = SOME w ==> eval_operand op ss' = SOME w) /\
-      (!a. a < LENGTH ss.vs_memory ==> EL a ss'.vs_memory = EL a ss.vs_memory) /\
-      LENGTH ss'.vs_memory = LENGTH ss.vs_memory
-Proof
-  rw[] >> irule emit_op_pure2_correct >> gvs[] >>
-  goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
-  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def, mk_inst_def]
-QED
-
-Theorem assert_exp_after_prefix_mem_src[local]:
-  !sa sc sd sb ss sg ok x y vx vy op P.
-    sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
-    run_inst_seq (emitted_insts sa sc) ss = OK sg /\
-    fresh_vars_wrt sc sg /\ eval_operand ok sg = SOME (bool_to_word P) /\
-    eval_operand x sg = SOME vx /\ eval_operand y sg = SOME vy /\
-    emit_void ASSERT [ok] sc = ((),sd) /\
-    emit_op Exp [x;y] sd = (op,sb) ==>
-    (P ==> ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-                  eval_operand op ss' = SOME (word_exp vx vy)) /\
-    (~P ==> ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `P` >> fs[]
-  >- (`1w <> (0w:bytes32)` by simp[wordsTheory.WORD_EQ, wordsTheory.dimword_def] >>
-      drule_all emit_void_ASSERT_ok_full >> strip_tac >> gvs[] >>
-      drule_all emit_op_exp_mem_src >> strip_tac >>
-      imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
-      drule_all run_inst_seq_chain >> strip_tac >>
-      qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
-      qpat_x_assum `run_inst_seq (emitted_insts sc sd) _ = _` kall_tac >>
-      drule_all run_inst_seq_chain >> strip_tac >>
-      qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
-      metis_tac[]) >>
-  drule_all emit_void_ASSERT_revert >> strip_tac >>
-  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
-  drule_all run_inst_seq_chain >> strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
-  qpat_x_assum `run_inst_seq (emitted_insts sa sc) _ = _` kall_tac >>
-  `!s. run_inst_seq (emitted_insts sa sd) ss <> OK s` by simp[] >>
-  drule_all run_inst_seq_chain_err >> strip_tac >>
-  metis_tac[]
-QED
-
-Theorem power_bool_word_guard_mem_src[local]:
-  (!P. bool_to_word (bool_to_word P = 0w) = bool_to_word (~P)) /\
-  (!P Q. bool_to_word P && bool_to_word Q = bool_to_word (P /\ Q))
-Proof
-  conj_tac
-  >- (gen_tac >> Cases_on `P` >>
-      simp[bool_to_word_def, wordsTheory.WORD_EQ, wordsTheory.dimword_def]) >>
-  rpt gen_tac >> Cases_on `P` >> Cases_on `Q` >>
-  simp[bool_to_word_def]
-QED
-
-Theorem signed_power_guard_prefix_mem_src[local]:
-  !sa s1 s2 s3 s4 sc ss x y lo hi below ge above le ok vx vy.
-    emit_op SLT [x;Lit lo] sa = (below,s1) /\
-    emit_op ISZERO [below] s1 = (ge,s2) /\
-    emit_op SGT [x;Lit hi] s2 = (above,s3) /\
-    emit_op ISZERO [above] s3 = (le,s4) /\
-    emit_op AND [ge;le] s4 = (ok,sc) /\
-    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME vx /\
-    eval_operand y ss = SOME vy ==>
-    ?sg. sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
-      run_inst_seq (emitted_insts sa sc) ss = OK sg /\
-      fresh_vars_wrt sc sg /\ eval_operand x sg = SOME vx /\
-      eval_operand y sg = SOME vy /\
-      eval_operand ok sg = SOME
-        (bool_to_word (bool_to_word (vx < lo) = 0w) &&
-         bool_to_word (bool_to_word (vx > hi) = 0w))
-Proof
-  rpt gen_tac >> strip_tac >>
-  chain_step (elim_lit 2 emit_op_SLT_correct) >>
-  chain_step emit_op_ISZERO_correct_mem >>
-  chain_step (elim_lit 2 emit_op_SGT_correct) >>
-  chain_step emit_op_ISZERO_correct_mem >>
-  chain_step emit_op_AND_correct >>
-  forward_all_evals >>
-  rename1 `eval_operand ok sg = SOME (_ && _)` >>
-  qexists_tac `sg` >> simp[]
-QED
-
-Theorem unsigned_power_guard_prefix_mem_src[local]:
-  !sa s1 sc ss x y hi above ok vx vy.
-    emit_op GT [x;Lit hi] sa = (above,s1) /\
-    emit_op ISZERO [above] s1 = (ok,sc) /\
-    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME vx /\
-    eval_operand y ss = SOME vy ==>
-    ?sg. sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
-      run_inst_seq (emitted_insts sa sc) ss = OK sg /\
-      fresh_vars_wrt sc sg /\ eval_operand x sg = SOME vx /\
-      eval_operand y sg = SOME vy /\
-      eval_operand ok sg = SOME (bool_to_word (bool_to_word (w2n vx > w2n hi) = 0w))
-Proof
-  rpt gen_tac >> strip_tac >>
-  chain_step (elim_lit 2 emit_op_GT_correct) >>
-  chain_step emit_op_ISZERO_correct_mem >>
-  forward_all_evals >>
-  rename1 `eval_operand ok sg = SOME (bool_to_word _)` >>
-  qexists_tac `sg` >> simp[]
-QED
-
-Theorem compile_safe_pow_exponent_run_mem_src:
-  !x y ty a b sa op sb ss.
-    0 < type_bits ty /\ type_bits ty <= 256 /\ type_bits ty MOD 8 = 0 /\
-    within_int_bound (if is_signed_type ty then Signed (type_bits ty)
-                      else Unsigned (type_bits ty)) a /\
-    within_int_bound (if is_signed_type ty then Signed (type_bits ty)
-                      else Unsigned (type_bits ty)) b /\ 0 <= b /\
-    compile_safe_pow x y ty NONE (SOME b) sa = (op,sb) /\
-    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w a) /\
-    eval_operand y ss = SOME (i2w b) ==>
-    (0 <= b /\ within_int_bound
-       (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
-       (a ** Num b) ==>
-     ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-           eval_operand op ss' = SOME (i2w (a ** Num b))) /\
-    (~(0 <= b /\ within_int_bound
-       (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
-       (a ** Num b)) ==>
-     ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `Num b = 0 \/ Num b = 1`
-  >- suspend "shortcut"
-  >> Cases_on `is_signed_type ty`
-  >- suspend "signed"
-  >> suspend "unsigned"
-QED
-
-Resume compile_safe_pow_exponent_run_mem_src[shortcut]:
-  `within_int_bound
-     (if is_signed_type ty then Signed (type_bits ty) else Unsigned (type_bits ty))
-     (a ** Num b)` by metis_tac[literal_exponent_typed_shortcut_mem_src] >>
-  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
-    metis_tac[literal_exponent_exp_word_mem_src] >>
-  simp[] >>
-  fs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> fs[]) >>
-  `eval_operand (Lit 1w) ss = SOME (1w:bytes32)` by simp[eval_operand_def] >>
-  `1w <> (0w:bytes32)` by simp[wordsTheory.WORD_EQ, wordsTheory.dimword_def] >>
-  drule_all emit_void_ASSERT_ok_full >> strip_tac >> gvs[] >>
-  chain_step emit_op_exp_mem_src >>
-  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
-  drule_all run_inst_seq_chain >> strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
-  metis_tac[]
-QED
-
-Resume compile_safe_pow_exponent_run_mem_src[signed]:
-  `1 < Num b` by decide_tac >>
-  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
-    metis_tac[literal_exponent_exp_word_mem_src] >>
-  `w2i (i2w a : bytes32) = a` by
-    (irule vyperArithTheory.w2i_i2w_within_signed >>
-     qexists_tac `type_bits ty` >> fs[]) >>
-  qspecl_then [`Num b`, `type_bits ty`] mp_tac signed_power_upper_word_mem_src >>
-  impl_tac >- simp[] >> disch_tac >>
-  qspecl_then [`Num b`, `type_bits ty`] mp_tac signed_power_lower_word_mem_src >>
-  impl_tac >- simp[] >> simp_tac bool_ss [LET_THM] >> disch_tac >>
-  qspecl_then [`a`, `Num b`, `type_bits ty`] mp_tac signed_literal_exponent_guard_mem_src >>
-  impl_tac >- simp[] >> simp_tac bool_ss [LET_THM] >> disch_tac >>
-  gvs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  drule_all signed_power_guard_prefix_mem_src >> strip_tac >>
-  qpat_x_assum `eval_operand ok sg = SOME _` mp_tac >>
-  simp[power_bool_word_guard_mem_src, integer_wordTheory.WORD_LTi,
-       integer_wordTheory.WORD_GTi, integerTheory.INT_NOT_LT,
-       integerTheory.int_gt] >> disch_tac >>
-  drule_all assert_exp_after_prefix_mem_src >>
-  simp[]
-QED
-Resume compile_safe_pow_exponent_run_mem_src[unsigned]:
-  `1 < Num b` by decide_tac >>
-  `word_exp (i2w a : bytes32) (i2w b) = i2w (a ** Num b)` by
-    metis_tac[literal_exponent_exp_word_mem_src] >>
-  `0 <= a` by fs[within_int_bound_def] >>
-  `w2n (i2w a : bytes32) = Num a` by
-    (irule literal_exponent_value_word_mem_src >>
-     simp[] >> qexistsl_tac [`type_bits ty`, `F`] >> fs[]) >>
-  qspecl_then [`Num b`, `type_bits ty`] mp_tac unsigned_power_upper_word_mem_src >>
-  impl_tac >- simp[] >> disch_tac >>
-  qspecl_then [`a`, `Num b`, `type_bits ty`] mp_tac unsigned_literal_exponent_guard_mem_src >>
-  impl_tac >- simp[] >> disch_tac >>
-  gvs[compile_safe_pow_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  drule_all unsigned_power_guard_prefix_mem_src >> strip_tac >>
-  qpat_x_assum `eval_operand ok sg = SOME _` mp_tac >>
-  simp[power_bool_word_guard_mem_src] >> disch_tac >>
-  drule_all assert_exp_after_prefix_mem_src >>
-  simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS] >>
-  metis_tac[arithmeticTheory.NOT_LESS_EQUAL]
-QED
-Finalise compile_safe_pow_exponent_run_mem_src[local]
-
-
-Theorem straight_fresh_pow_exponent_mem_src[local]:
-  !x y ty b. straight_fresh (compile_safe_pow x y ty NONE (SOME b))
-Proof
-  rw[compile_safe_pow_def, LET_THM] >>
-  rpt (FIRST [irule straight_fresh_bind >> conj_tac,
-              irule straight_fresh_ignore_bind >> conj_tac,
-              gen_tac >> BETA_TAC,
-              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
-              irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC])
-QED
-
-Theorem binop_frag_pow_exponent_mem_src[local]:
-  !ctx func cenv cx ann t1 t2 b tys v1 es0 tenv tv1 tv2.
-    well_typed_binop ann Exp t1 t2 /\ 0 <= b /\
-    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 (IntV b) ==>
-    binop_frag_val_mem ctx func cenv cx Exp t1 ann NONE (SOME b)
-      tys v1 (IntV b) es0
-Proof
-  rpt gen_tac >> disch_tac >>
-  `is_int_type t1 /\ is_int_type t2` by gvs[well_typed_binop_def] >>
-  qspecl_then [`tenv`, `t1`, `tv1`, `v1`] mp_tac int_type_value_mem_src >>
-  qspecl_then [`tenv`, `t2`, `tv2`, `IntV b`] mp_tac int_type_value_mem_src >>
-  (impl_tac >- gvs[]) >> strip_tac >>
-  (impl_tac >- gvs[]) >> strip_tac >>
-  gvs[well_typed_binop_def] >>
-  rename1 `binop_frag_val_mem _ _ _ _ Exp _ _ _ _ _ (IntV a) _ _` >>
-  `type_bits ann MOD 8 = 0` by metis_tac[int_type_byte_width_mem_src] >>
-  drule_then assume_tac bop_result_power_mem_src >>
-  irule binop_frag_val_mem_straight >> conj_tac
-  >- simp[compile_binop_def, straight_fresh_pow_exponent_mem_src] >>
-  `~(b < 0)` by intLib.ARITH_TAC >>
-  Cases_on `within_int_bound
-    (if is_signed_type ann then Signed (type_bits ann) else Unsigned (type_bits ann))
-    (a ** Num b)`
-  >- (simp[word_value_def] >> strip_tac >> rpt gen_tac >>
-      simp[compile_binop_def, valueEncodingTheory.val_to_w256_def] >> strip_tac >>
-      drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`)
-        compile_safe_pow_exponent_run_mem_src >> simp[] >> metis_tac[]) >>
-  simp[] >> strip_tac >> rpt gen_tac >>
-  simp[compile_binop_def, valueEncodingTheory.val_to_w256_def] >> strip_tac >>
-  drule_at (Pat `compile_safe_pow _ _ _ _ _ _ = _`)
-    compile_safe_pow_exponent_run_mem_src >> simp[] >> metis_tac[]
-QED
-
-
-Theorem binop_frag_augassign_typed_mem_src[local]:
-  !ctx func cenv cx bop ty t2 el tys v1 v2 es0 tenv tv1 tv2.
-    well_typed_binop ty bop ty t2 /\ type_bits ty MOD 8 = 0 /\
-    (bop = Exp ==> (?n. el = SOME n /\ 0 <= n) /\
-      (!n. el = SOME n ==> v2 = IntV n)) /\
-    (bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i) /\
-    word_value_type ty /\ word_value_type t2 /\
-    evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem ctx func cenv cx bop ty ty NONE el tys v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `bop = ExpMod` >- gvs[well_typed_binop_def] >>
-  Cases_on `bop = Exp`
-  >- (gvs[] >> irule binop_frag_pow_exponent_mem_src >> metis_tac[]) >>
-  Cases_on `MEM bop [Add; Sub; Mul; Div; Mod]`
-  >- (`t2 = ty` by
-        (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
-      qpat_x_assum `t2 = ty` SUBST_ALL_TAC >>
-      `tv2 = tv1` by gvs[] >> pop_assum SUBST_ALL_TAC >>
-      Cases_on `ty = BaseT DecimalT`
-      >- (gvs[] >> irule binop_frag_decimal_arith_mem_src >> simp[] >>
-          qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
-      `is_int_type ty` by (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
-      irule binop_frag_int_arith_mem_src >> simp[] >>
-      qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
-  Cases_on `MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv]`
-  >- (`t2 = ty /\ is_int_type ty` by
-        (Cases_on `bop` >> gvs[well_typed_binop_def]) >>
-      gvs[] >> irule binop_frag_unsafe_typed_mem_src >> simp[] >>
-      qexistsl_tac [`tenv`, `tv1`] >> simp[]) >>
-  Cases_on `bop = ShL \/ bop = ShR`
-  >- (irule binop_frag_shift_572_mem_src >> metis_tac[]) >>
-  Cases_on `bop = In \/ bop = NotIn`
-  >- gvs[well_typed_binop_def, word_value_type_def] >>
-  `t2 = ty` by (Cases_on `bop` >> gvs[well_typed_binop_def]) >> gvs[] >>
-  Cases_on `bop = And \/ bop = Or \/ bop = XOr`
-  >- (irule binop_frag_bitwise_typed_mem_src >> metis_tac[]) >>
-  irule binop_frag_compare_typed_mem_src >>
-  `MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE; Min; Max]` by
-    (Cases_on `bop` >> gvs[]) >> metis_tac[]
-QED
-
-Theorem expr_int_literal_value_mem_src[local]:
-  !e. expr_int_literal e = int_literal_value e
-Proof
-  Cases >> simp[expr_int_literal_def, int_literal_value_def] >>
-  rename1 `Literal ty lit` >> Cases_on `lit` >>
-  simp[expr_int_literal_def, int_literal_value_def]
-QED
-
-Resume compile_augassign_attr_local_mem[typed_dispatch]:
-  irule binop_frag_augassign_typed_mem_src >> simp[] >> conj_tac
-  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value_mem_src] >>
-      Cases_on `expr_int_literal e` >> gvs[]) >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `etv`] >> simp[]
-QED
-
-Finalise compile_augassign_attr_local_mem[local]
 
 Theorem body_augassign_attr_local_mem:
   !cx ty id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -2287,7 +1403,7 @@ Proof
                    (nsid_to_string sid)) fld = SOME (ty,fsz)` by
     metis_tac[attribute_type_struct_field_mem_src, expr_sim_inv_def] >>
   drule_all augassign_attr_conditional_ih_mem_src >> strip_tac >>
-  irule compile_augassign_attr_local_mem >> simp[] >>
+  irule compile_augassign_attr_local_mem_typed >> simp[] >>
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`

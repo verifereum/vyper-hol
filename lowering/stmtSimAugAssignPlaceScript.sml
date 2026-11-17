@@ -6,6 +6,7 @@
  *)
 Theory stmtSimAugAssignPlace
 Ancestors
+  exprBopBytes
   valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
@@ -79,6 +80,20 @@ Proof
   strip_tac >> gvs[] >>
   imp_res_tac stmtSimAugAssignTheory.augassign_operand_ok_operands >>
   metis_tac[well_typed_binop_augassign_word]
+QED
+
+Theorem aug_place_typing_word:
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' ==>
+  is_word_type ty /\ is_word_type (expr_type e)
+Proof
+  strip_tac >> drule aug_place_typing >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[well_typed_binop_augassign_is_word]
 QED
 
 Theorem aug_place_code_parts:
@@ -203,12 +218,15 @@ Proof
   drule eval_expr_read_INL >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> rhs = IntV n` by
     metis_tac[eval_expr_int_literal_agrees] >>
-  `(bop = ShL \/ bop = ShR ==> ?i. rhs = IntV i /\ 0 <= i)` by
-    (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+  `(bop = ShL \/ bop = ShR ==>
+      (?i. rhs = IntV i /\ 0 <= i) \/
+      (ty = BaseT (BytesT (Fixed 32)) /\
+       ?bs. rhs = BytesV bs /\ LENGTH bs = 32))` by
+    (strip_tac >> irule augassign_shift_operand >> metis_tac[]) >>
   `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
     (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
      Cases_on `expr_int_literal e` >> gvs[]) >>
-  irule exprSimBinopFragTheory.binop_frag_word_typed >> simp[] >> metis_tac[]
+  irule augassign_binop_frag_typed >> simp[] >> metis_tac[]
 QED
 
 Theorem aug_place_bop_res_ok:

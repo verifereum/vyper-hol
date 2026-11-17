@@ -2230,7 +2230,7 @@ QED
 
 (* ===== Augmented assignments ===== *)
 
-(* x op= e on a local: stmtSimAugAssign's compile_augassign_local_case,
+(* x op= e on a local: stmtSimAugAssign's compile_augassign_local_case_typed,
    the operand's internal calls allowed. *)
 Theorem body_augassign_local[local]:
   !cx ty id bop e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
@@ -2289,12 +2289,12 @@ Proof
     (first_x_assum irule >> metis_tac[eval_target_place_local]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
   drule augassign_operand_ok_operands >> strip_tac >>
-  irule (Q.SPEC `F` compile_augassign_local_case) >> simp[] >> metis_tac[]
+  irule (Q.SPEC `F` compile_augassign_local_case_typed) >> simp[] >> metis_tac[]
 QED
 
 (* x.f op= e on a field of a local struct: stmtSimAugAssignAttr's
-   compile_augassign_attr_local_case.  The typing makes f's type a word
-   (well_typed_binop_augassign_word), and x.f is read wherever
+   compile_augassign_attr_local_case_typed.  The typing validates f's type,
+   and x.f is read wherever
    expr_sim_inv holds (augassign_attr_local_place), which gives e's
    judgment. *)
 Theorem body_augassign_attr_local[local]:
@@ -2368,9 +2368,10 @@ Proof
      first_x_assum irule >> metis_tac[]) >>
   `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
   `(bop = Exp ==> nonneg_int_literal e) /\
-   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
+   (bop = ShL \/ bop = ShR ==>
+     shift_amount_ok e \/ augassign_shift_amount_ok ty e)` by
     metis_tac[augassign_operand_ok_operands] >>
-  irule compile_augassign_attr_local_case >> simp[] >> metis_tac[]
+  irule compile_augassign_attr_local_case_typed >> simp[] >> metis_tac[]
 QED
 
 (* self.x op= e on a word storage or transient variable:
@@ -2481,7 +2482,7 @@ Proof
 QED
 
 (* self.x.f op= e on a word field of a storage or transient struct:
-   stmtSimAugAssignAttrStorage's compile_augassign_attr_storage_case.  The
+   stmtSimAugAssignAttrStorage's compile_augassign_attr_storage_case_typed.  The
    supported subset puts the struct in tops with a slot and the typing finds
    its declaration, as for body_assign_attr_storage; x.f's slot is read
    wherever expr_sim_inv holds, which gives e's judgment. *)
@@ -2577,9 +2578,10 @@ Proof
      first_x_assum irule >> metis_tac[]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
   `(bop = Exp ==> nonneg_int_literal e) /\
-   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
+   (bop = ShL \/ bop = ShR ==>
+     shift_amount_ok e \/ augassign_shift_amount_ok ty e)` by
     metis_tac[augassign_operand_ok_operands] >>
-  irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
+  irule compile_augassign_attr_storage_case_typed >> simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL (#637 augmented assignment): the targets other than a local, a

@@ -56,6 +56,51 @@ Proof
   drule_all immutable_augassign_forced >> simp[ignore_bind_def, bind_assoc, SF ETA_ss]
 QED
 
+Theorem immutable_augassign_rhs_source_typed:
+  expr_body_pre cenv cx env e es /\
+  type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
+  type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv cur /\ ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) /\
+  gas_admissible
+    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        tv bop cur rhs)) (write_place cx (ImmutablePlace src id []))))
+    (stmt_res_ok lctx) es /\
+  vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL rhs,ee) ==>
+  expr_sim_inv cenv cx env ee /\
+  ?tvrhs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  binop_frag_mem_post (expr_val_rel cx ty) ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) [ty;expr_type e] cur rhs
+    (typed_val_to_w256 tv cur) (typed_val_to_w256 tvrhs rhs) ee /\
+  expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs ee) /\
+  (!v. bop_result cx ty bop [ty;expr_type e] cur rhs ee = INL v ==>
+       value_has_type tv v)
+Proof
+  strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >> simp[] >>
+  qmatch_asmsub_abbrev_tac `gas_admissible (vyperState$bind a k) _ es` >>
+  Cases_on `k rhs ee` >> rename1 `k rhs ee = (res,ff)` >>
+  `stmt_res_ok lctx res` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def] >> disch_then (qspec_then `gs` mp_tac) >>
+     simp[bind_def, Abbr `a`] >> metis_tac[]) >>
+  irule aug_place_bop_write_result_ok >> simp[] >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`ff`, `ImmutablePlace src id []`] >>
+  `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
+    case evaluate_binop
+      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+      tv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `k rhs ee = _` mp_tac >>
+  simp[Abbr `k`, bind_def, lift_sum_def] >>
+  Cases_on `evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    tv bop cur rhs` >> simp[return_def, raise_def]
+QED
+
 Theorem immutable_augassign_rhs_source:
   expr_body_pre cenv cx env e es /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\

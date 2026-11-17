@@ -23,7 +23,7 @@ Ancestors
   exprSimUnopProps fragExec gasExemptCert vyperStorageTrace gasOutcomeFull
   vyperStorageFootprint exprSimDefs contextRawReachable unitMemInv
   exprSimExtract32Post bodyFullGhostFrame stmtSimDefs bodyPtrHashBuiltinsGhostCompose
-  bodyFullBopWordLayout bodyFullBopWordOperands bodyFullBopWordSuffix
+  bodyFullBopWordLayout bodyFullBopWordOperands bodyFullBopWordSuffix bodyFullBopWordExtract
   bodyFullBopRestWordCompose exprSimBopRestWordFacts
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   bodyFullBopBytestringCuts bodyFullBopBytestringChild bodyFullBopBytestringPost
@@ -1055,6 +1055,58 @@ Finalise bop_bytestring_eqne_sim_full
 
 (* The rest, as exprSimBopRestWord's compile_bop_rest_word_case leaves it:
    in and not in on an array of words that is not a literal. *)
+Theorem bop_bytes_sim_full[local]:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 e2 es.
+    (?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
+    MEM bop [And;Or;XOr;ShL;ShR] /\
+    body_exprs_full_ok cx [e1; e2] /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `is_word_type ann /\ is_word_type (expr_type e1) /\
+   is_word_type (expr_type e2)` by
+    (Cases_on `bop` >>
+     gvs[well_typed_binop_def, is_int_type_def, is_word_type_def]) >>
+  `post_value_type cenv (Builtin ann (Bop bop) [e1;e2]) = ann` by
+    simp[post_value_type_word, expr_type_def] >>
+  simp[] >>
+  drule_all bop_full_layout >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  `!st st'. eval_expr cx (Builtin ann (Bop bop) [e1;e2]) st <>
+     (INR HaltException,st')` by
+    (rpt gen_tac >> irule eval_expr_calls_no_halt >> gvs[expr_body_pre_def]) >>
+  qsuff_tac `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)`
+  >- suspend "exit_transport" >>
+  irule (SRULE [LET_THM] bop_operands_full_cps) >>
+  simp[] >>
+  qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
+    `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
+  simp[] >>
+  rpt gen_tac >> strip_tac >> simp[] >>
+  mp_tac (SRULE [LET_THM] bop_bytes_suffix_extract) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (SRULE [LET_THM] bop_suffix_full) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[Abbr `Q`, expr_type_def]
+QED
+
+Resume bop_bytes_sim_full[exit_transport]:
+  core_exit_transport
+QED
+
+Finalise bop_bytes_sim_full
+
 Theorem bop_rest_word_sim_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
@@ -1075,7 +1127,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
     fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  drule_all rest_word_typed_membership >> strip_tac >>
+  drule_all rest_word_typed_membership >> strip_tac
+  >- (irule bop_bytes_sim_full >> metis_tac[]) >>
   irule compile_rest_word_membership_full >> metis_tac[]
 QED
 

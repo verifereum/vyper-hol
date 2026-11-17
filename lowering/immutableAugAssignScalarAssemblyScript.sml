@@ -50,7 +50,7 @@ Proof
   irule immutable_augassign_root_source_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
-  irule_at Any immutable_augassign_scalar_suffix_mem >>
+  irule_at Any immutable_augassign_scalar_suffix_mem_typed >>
   qpat_assum `lower_value _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_binop _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >> simp[] >>
@@ -61,9 +61,10 @@ Proof
 QED
 
 Resume immutable_augassign_scalar_assembly[suffix_preparation]:
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_word] >>
-  `word_value iv` by metis_tac[exprSimSourceTheory.word_value_type_typed] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_is_word] >>
+  `((bop = Eq \/ bop = NotEq) ==> !bs. iv <> BytesV bs)` by
+    metis_tac[stmtSimAugAssignTheory.augassign_compare_not_bytes] >>
   `type_memory_size tv = 32` by
     metis_tac[bodyImmutableAugAssignStoreTheory.immutable_augassign_word_encoding] >>
   `type_bits ty MOD 8 = 0` by
@@ -77,12 +78,10 @@ Resume immutable_augassign_scalar_assembly[suffix_preparation]:
      simp[] >> qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >>
      metis_tac[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
-  simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  simp[] >>
   (conj_tac >- metis_tac[stmtSimDeclMemTheory.emit_void_nonterminator_open,
                         venomInstTheory.is_terminator_def]) >>
   (conj_tac >- fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
-  `is_word_type (expr_type e)` by
-    metis_tac[exprSimSourceTheory.word_value_type_word] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[exprSimHypsTheory.expr_body_pre_type_evaluates] >>
   `gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by

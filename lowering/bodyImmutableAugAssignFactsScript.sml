@@ -42,8 +42,14 @@ Proof
   `~cx_const_name cx (NONE,id)` by
     (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
      strip_tac >> gvs[]) >>
+  `well_formed_type (get_tenv cx) ity` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+     metis_tac[well_formed_vtype_def]) >>
+  `?tv. evaluate_type (get_tenv cx) ity = SOME tv` by
+    fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
   fs[expr_sim_inv_def, bare_globals_layout_def, body_inv_def] >>
-  metis_tac[exprSimSourceTheory.word_value_type_word]
+  metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_is_word,
+            well_formed_vtype_def, well_formed_type_def]
 QED
 
 Theorem immutable_augassign_source_prefix:

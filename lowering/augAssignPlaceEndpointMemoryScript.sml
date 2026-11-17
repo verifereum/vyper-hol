@@ -94,6 +94,9 @@ Theorem aug_place_memory_endpoint:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule aug_place_typing >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by
+    fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  drule_all aug_place_typing_word >> strip_tac >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
     (assume_tac o SRULE [] o Q.SPEC `mid.gas_obs`) >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
@@ -164,7 +167,7 @@ Proof
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
-  irule aug_place_loaded_memory_suffix >> simp[] >> conj_tac
+  irule aug_place_loaded_memory_suffix_typed >> simp[] >> conj_tac
   >- (goal_assum (drule_at (Pat `supported_stmt`)) >>
       goal_assum (drule_at (Pat `supported_target_info`)) >>
       goal_assum (drule_at (Pat `type_stmt`)) >>

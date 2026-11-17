@@ -193,34 +193,33 @@ Resume immutable_deploy_augassign_frag[rhs_normal]:
   `well_formed_type (get_tenv cx) ity` by
     (fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
      metis_tac[assignable_type_well_formed]) >>
+  `((bop = Eq \/ bop = NotEq) ==> !bs. v0 <> BytesV bs)` by
+    metis_tac[augassign_compare_not_bytes] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`,`ee with gas_obs := []`,`ctx`] strip_assume_tac) >>
   `expr_res_ok (bop_result cx ity bop [ity;expr_type e] v0 v ee)` by
     (`expr_res_ok (bop_result cx ity bop [ity;expr_type e] v0 v
        (ee with gas_obs := []))` suffices_by simp[] >>
-     `word_value v0` by metis_tac[exprSimSourceTheory.word_value_type_typed] >>
-     irule immutable_augassign_binop_admissible >> metis_tac[]) >>
+     irule immutable_augassign_binop_admissible_typed >> metis_tac[]) >>
   suspend "binop_ready"
 QED
 
 Resume immutable_deploy_augassign_frag[binop_ready]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
-  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  `is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_is_word] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_type_result) >>
   strip_tac >> gvs[] >>
   `expr_post H2 ctx func cenv cx e (es with gas_obs := [])
      s1 s2 t (ee with gas_obs := []) v rhs_op u` by metis_tac[] >>
   qpat_assum `expr_post H2 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `word_value v0` by metis_tac[exprSimSourceTheory.word_value_type_typed] >>
-  `eval_operand (Var out) t = SOME (val_to_w256 v0)` by
-    simp[typed_val_to_w256_word_value] >>
-  `is_word_type (expr_type e)` by
-    metis_tac[exprSimSourceTheory.word_value_type_word] >>
-  `eval_operand rhs_op u = SOME (val_to_w256 v)` by
-    (qspecl_then [`cx`,`expr_type e`,`v`,`rhs_op`,`u`] mp_tac expr_val_rel_word >>
+  `eval_operand (Var out) t = SOME (typed_val_to_w256 tv v0)` by simp[] >>
+  `eval_operand rhs_op u = SOME (typed_val_to_w256 tv2 v)` by
+    (irule expr_val_rel_typed >> simp[] >>
      fs[expr_post_def] >> metis_tac[]) >>
-  `eval_operand (Var out) u = SOME (val_to_w256 v0)` by
+  `eval_operand (Var out) u = SOME (typed_val_to_w256 tv v0)` by
     (irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`s1`,`t`] >> gvs[expr_post_def]) >>
   `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
@@ -229,10 +228,8 @@ Resume immutable_deploy_augassign_frag[binop_ready]:
     fs[expr_post_def] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def,gas_marked_path_exec,gas_path_normal] >>
-  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_def,
-                           exprBopSimDefsTheory.binop_frag_words_def,
-                           exprBopSimDefsTheory.binop_frag_post_def]) >>
+  qpat_x_assum `binop_frag_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_post_def]) >>
   disch_then (qspecl_then [`st0`,`s2`,`s3`,`Var out`,`rhs_op`,`res_op`,`u`] mp_tac) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
@@ -241,18 +238,18 @@ Resume immutable_deploy_augassign_frag[binop_ready]:
 QED
 
 Resume immutable_deploy_augassign_frag[operator_normal]:
-  gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
+  gvs[] >> rename1 `expr_val_rel cx ity result res_op s` >>
   `bop_result cx ity bop [ity;expr_type e] v0 v ee =
      case evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
+    (irule bop_result_augassign >> simp[]) >>
   `evaluate_binop
      (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
      tv bop v0 v = INL result` by gvs[AllCaseEqs()] >>
   `value_has_type tv result` by simp[] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 tv result)` by
-    simp[typed_val_to_w256_word_value] >>
+    (irule expr_val_rel_typed >> simp[]) >>
   `stmt_state_rel H2 ctx func cenv cx (ee with gas_obs := []) s /\
    storage_well_formed_on cx (ee with gas_obs := []) (FST H2)` by
     (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
@@ -340,7 +337,7 @@ Resume immutable_deploy_augassign_frag[operator_exit]:
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
+    (irule bop_result_augassign >> simp[]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v`

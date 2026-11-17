@@ -196,6 +196,39 @@ Proof
   metis_tac[immutable_write_place_gas_obs]
 QED
 
+Theorem immutable_augassign_binop_admissible_typed:
+  (!gs. eval_target_place cx (TopLevelNameTarget nsid) (es with gas_obs := gs) =
+          (INL p,es with gas_obs := gs) /\
+        read_place cx p (es with gas_obs := gs) = (INL v0,es with gas_obs := gs) /\
+        place_type_value cx p (es with gas_obs := gs) = (INL tv,es with gas_obs := gs)) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ((bop = Eq \/ bop = NotEq) ==> !bs. v0 <> BytesV bs) /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible (eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e))
+    (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) ==>
+  expr_res_ok (bop_result cx ty bop [ty;expr_type e] v0 v ee)
+Proof
+  strip_tac >>
+  `bop_result cx ty bop [ty;expr_type e] v0 v ee =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+     tv bop v0 v of INL w => INL w | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    tv bop v0 v` >- simp[expr_res_ok_def] >>
+  rename1 `_ = INR err` >>
+  `eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e)
+     (es with gas_obs := gs) = (INR (Error err),ee)` by
+    (first_assum (qspec_then `gs` strip_assume_tac) >>
+     drule_all immutable_augassign_rhs_normal >>
+     disch_then (qspecl_then [`ty`,`bop`] mp_tac) >>
+     simp[lift_sum_def,bind_def,raise_def]) >>
+  `stmt_res_ok lctx (INR (Error err))` by metis_tac[gas_admissible_result] >>
+  gvs[stmt_res_ok_def,expr_res_ok_def]
+QED
+
 Theorem immutable_augassign_binop_admissible:
   (!gs. eval_target_place cx (TopLevelNameTarget nsid) (es with gas_obs := gs) =
           (INL p,es with gas_obs := gs) /\

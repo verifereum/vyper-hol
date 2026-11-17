@@ -111,7 +111,8 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   drule_all immutable_augassign_root_metadata >> strip_tac >>
   drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
-  `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
+  `is_word_type ty` by
+    metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_is_word] >>
   `FLOOKUP env.bare_globals (src,id) = SOME ty` by
     (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >> metis_tac[]) >>

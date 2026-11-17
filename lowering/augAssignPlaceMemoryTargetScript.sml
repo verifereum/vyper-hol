@@ -71,7 +71,7 @@ Proof
   drule_all aug_place_target_memory_live >> strip_tac >>
   drule_all aug_place_memory_access_ready >> strip_tac >>
   `is_word_type ty` by
-    (drule aug_place_typing >> metis_tac[exprSimSourceTheory.word_value_type_word]) >>
+    (drule_all aug_place_typing_word >> simp[]) >>
   `w2n w + 32 <= s.vs_alloca_next` by
     (irule aug_place_memory_word_frontier >> metis_tac[]) >>
   simp[] >> drule_all augassign_field_read_path_mem >> strip_tac >>
@@ -211,6 +211,6 @@ Proof
   simp[target_post_def, place_readable_def] >> strip_tac >>
   drule_all aug_place_memory_type_read >> strip_tac >>
   `is_word_type ty` by
-    (drule aug_place_typing >> metis_tac[exprSimSourceTheory.word_value_type_word]) >>
+    (drule_all aug_place_typing_word >> simp[]) >>
   drule_all aug_place_memory_read_typed >> simp[]
 QED

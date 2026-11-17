@@ -59,7 +59,9 @@ Theorem aug_place_storage_endpoint:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule aug_place_typing >> strip_tac >>
-  `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    (`expr_sim_inv cenv cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     drule_all stmtSimAugAssignPlaceTheory.aug_place_typing_word >> simp[]) >>
   `type_bits ty MOD 8 = 0` by
     metis_tac[vyperTypeSystemTheory.assignable_type_well_formed,
               stmtSimAugAssignTheory.well_formed_type_bits] >>
@@ -141,7 +143,7 @@ Proof
   >- (irule aug_place_reads_suffix >> simp[] >>
       qexists_tac `Q` >> simp[] >>
       goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
-      irule aug_place_loaded_storage_static_suffix >> simp[] >>
+      irule aug_place_loaded_storage_static_suffix_typed >> simp[] >>
       conj_tac >- gvs[] >>
       goal_assum (drule_at (Pat `emit_void`)) >>
       goal_assum (drule_at (Pat `lower_value`)) >>
@@ -154,7 +156,7 @@ Proof
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
-  irule aug_place_loaded_storage_suffix >> simp[] >>
+  irule aug_place_loaded_storage_suffix_typed >> simp[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- gvs[] >> conj_tac
   >- (goal_assum (drule_at (Pat `lower_value`)) >>
