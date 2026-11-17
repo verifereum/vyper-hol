@@ -123,6 +123,7 @@ Proof
      simp[step_inst_base_opcode_eqs, eval_operand_def,
           Excl "consume_call_outcome_eq"]) >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  Cases_on `s.vs_outcomes = []` >>
   simp[step_inst_base_opcode_eqs, eval_operand_def, exec_ext_call_def,
        Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"]
