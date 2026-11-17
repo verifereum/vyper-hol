@@ -1,0 +1,15 @@
+(* Symbolic S7 own-code proofs. New companion theories are rooted here. *)
+Theory symS7OwnHol
+Ancestors
+  asmOwnCodeInvariant asmSymExceptionalOwn asmSymForwardOwn
+  asmSymModeInterfaceOwn asmSymModeOwn asmSymOwnStep asmSymRelocLabelsOwn
+  codegenEntrySymbolicOwn codegenSymbolicTerminalOwn
+  symBodyAlgebra symBumpOwn symBumpRunOwn symControlPrefixOwn
+  symEmitCodeEndOwn symEmitCodecopyOwn symEmitDischargeOwn symEmitFrameOwn
+  symEmitNamedOwn symEmitOwn symEmitSourceOwn symEmitStoreOwn
+  symFrameBoundaryEntryPackaging symFrameBoundaryNumeric symFrameBoundaryOwn
+  symFrameBoundaryPairing symFrameBoundaryPhiPackaging symFrameInvokeSupport
+  symFrameInvokePrefixOwn symFrameInvokeEntryAssembly symFrameInvokeTerminalSource symInstAssertOwn symInstAssertPrepareOwn symInstAssertSuffixOwn symInstAssignOwn symInstLogOwn symInstNamedOwn symInstPhiOwn
+  symInstEmissionOwn symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
+  symInvokeEntryFacts symInvokeEntryOwn
+  symGeneratedAssignOwn symGeneratedZeroOwn

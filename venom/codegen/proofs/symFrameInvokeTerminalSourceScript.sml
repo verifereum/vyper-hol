@@ -1,9 +1,9 @@
 (* Terminal INVOKE outcomes share the selected call and its paired count.
- * The support import is redirected atomically by the owner assembly join.
+ * Lower support and entry-prefix theories keep source assembly acyclic.
  *)
 Theory symFrameInvokeTerminalSource
 Ancestors
-  symFrameInvoke fnFrameBoundaryInvoke
+  symFrameInvokeSupport symFrameInvokePrefixOwn fnFrameBoundaryInvoke
 
 Theorem sym_invoke_source_halt_local:
   asm_steps lo o2pc prog k st = AsmOK cas /\
