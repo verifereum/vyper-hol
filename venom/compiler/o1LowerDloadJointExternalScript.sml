@@ -826,6 +826,11 @@ Proof
      gvs[MEM] >> simp[step_inst_non_invoke] >>
      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
      simp[AllCaseEqs()] >> metis_tac[]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ld_joint_boundary_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `inst.inst_opcode = CALL ==> ~(s.vs_call_ctx.cc_static /\ value <> 0w)` by
     (strip_tac >>
      qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
