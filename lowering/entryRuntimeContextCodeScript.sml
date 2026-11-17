@@ -42,12 +42,6 @@ Proof
   `EXISTS external_has_defaults ext_fns = F` by fs[EXISTS_MEM, EVERY_MEM] >>
   qpat_x_assum `(if EXISTS external_has_defaults _ then _ else _) = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  `(!P f. EVERY P (MAP f (order_internals (runtime_internal_order tops int_fns)
-                              int_fns)) <=> EVERY P (MAP f int_fns)) /\
-   (!P f g. EVERY P (MAP f (MAP g (order_internals
-              (runtime_internal_order tops int_fns) int_fns))) <=>
-            EVERY P (MAP f (MAP g int_fns)))`
-    by simp[EVERY_MAP, EVERY_MEM] >>
   drule entry_code_packaged_internals >>
   disch_then (qspec_then `pol.rpol_target` mp_tac) >>
   drule entry_code_packaged_fallback >>
@@ -56,7 +50,7 @@ Proof
   drule_at (Pos (el 2)) entry_code_run_lowering >>
   disch_then (qspec_then `f` mp_tac) >>
   (impl_tac >- (simp[] >> irule entry_code_generate_runtime >>
-               gvs[MAP_COMPOSE])) >>
+               gvs[MAP_COMPOSE, EVERY_MAP, EVERY_MEM])) >>
   simp[combinTheory.o_DEF]
 QED
 
