@@ -373,10 +373,11 @@ Proof
     (!n b sz'. local_region old es.scopes s0 n b sz' ==>
                off + sz <= b \/ b + sz' <= off) /\
     off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem` by
-    (irule bodySimFullTheory.alloca_taint_kept_trans >>
+    (match_mp_tac (GEN_ALL bodySimFullTheory.alloca_taint_kept_trans) >>
      goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
-     qexistsl_tac [`a`, `tna`] >>
-     fs[bodyPtrDefsTheory.ghost_kept_at_def]) >>
+     qexistsl_tac [`tna`, `a`] >>
+     fs[bodyPtrDefsTheory.ghost_kept_at_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
   `aid <> aid0` by decide_tac >>
@@ -385,7 +386,8 @@ Proof
   `i IN tn1.t_mem` by
     (qpat_x_assum `!i. ~_ ==> _` (qspec_then `i` mp_tac) >>
      impl_tac >- decide_tac >> simp[]) >>
-  first_x_assum irule >> qexistsl_tac [`aid`, `off`, `sz`] >> simp[]
+  first_x_assum irule >> simp[] >> qexistsl_tac [`aid`, `off`, `sz`] >>
+  simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem annassign_word_full_installation_post:
