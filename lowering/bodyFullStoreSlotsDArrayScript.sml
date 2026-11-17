@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsDArray
 Ancestors
-  bodyFullStoreSlotsElements bodyFullStoreSlotsAddresses
+  bodyFullStoreSlotsElements bodyFullStoreSlotsAddresses bodyFullStoreSlotsFrame
   bodyFullStoreSlotsOffset bodyFullStoreSlotsTaintStore bodyFullStoreSlotsTaintFold
   typedCopyOriginPtrDynArray fragGasOriginPtrDead placeStoreSlots
 
@@ -194,6 +194,8 @@ Proof
        ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `eval_operand (Lit 1w) q = SOME 1w /\ op_taint u (Lit 1w) = {}` by
     simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `w` |-> `x+y`]
     store_address_binop_uniform)) >>
   disch_then (qspecl_then [`explicit`,`PG`,`H`] strip_assume_tac) >>
@@ -285,6 +287,8 @@ Proof
       ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `not_fresh_at b x /\ (!p. dst = Var p ==> not_fresh_at b p)` by
     metis_tac[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   drule_all store_slots_dyn_addresses_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `not_fresh_at e lv` by
@@ -476,6 +480,8 @@ Resume compile_store_slots_dynarray_origin_ptr_path[payload]:
 QED
 
 Resume compile_store_slots_dynarray_origin_ptr_path[execute_payload]:
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   asm_x "elements" (qspecl_then [`\i. EL i l`,`LENGTH l`,`data`,`slot`,
     `Var (STRING #"%" (toString sa.cs_next_var))`,`tr`,`sc`,`se`,`func`,
     `q`,`sw+32w`,`dw+1w`,`u`,`H`,`ctx`,`lo`,`explicit`,`PG`] mp_tac) >>
@@ -518,6 +524,9 @@ Resume compile_store_slots_dynarray_origin_ptr_path[header]:
   `allocas_from lo t` by
     (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
   `~t.vs_call_ctx.cc_static` by metis_tac[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp,
+              store_slots_fold_allocas_below_fmp] >>
   drule_all storage_tainted_word_store_origin_ptr >>
   disch_then (qspecl_then [`explicit`,`PG`,`Gf`] assume_tac) >>
   suspend "join"
