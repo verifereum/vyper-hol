@@ -4,7 +4,7 @@ Ancestors
   venomExecProofs venomExecSemantics venomWf venomInst venomState
   finite_map list rich_list arithmetic sorting
 
-Theorem return_order_indices[local]:
+Theorem return_order_indices:
   order <> [] /\ order = GENLIST (\i. inc + SUC i) (LENGTH order) /\
   i < LENGTH order ==>
   EL i order = inc + SUC i /\
@@ -25,7 +25,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem return_order_row_shape[local]:
+Theorem return_order_row_shape:
   wf_function sf /\ wf_function tf /\
   lookup_block in_state.vs_current_bb sf.fn_blocks = SOME bb /\
   lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
