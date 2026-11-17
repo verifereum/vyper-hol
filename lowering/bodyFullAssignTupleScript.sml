@@ -872,6 +872,79 @@ Proof
   simp[Abbr `u`,tstore_def,sstore_def,lookup_var_def,op_taint_def,ptr_covers_def]
 QED
 
+(* Source observations supply the dead-slot frame for a nonlocal tuple head. *)
+Theorem body_assign_tuple_nonlocal_write_ready:
+  tuple_target_aligned cenv cx g ty tv /\
+  (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
+  assign_tuple_targets cx g v es = (INL (),es') ==>
+  ?bt tr slot obs ee.
+    g = BaseTarget bt /\ ee = es with storage_trace := obs /\
+    eval_target_place cx bt es = (INL (StoragePlace tr slot tv),ee) /\
+    write_storage_slot cx tr slot tv v ee = (INL (),es') /\
+    encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
+    ~cx.txn.is_static /\ es'.scopes = es.scopes /\
+    (!st0 H. valid_horizon cx st0 H es'.storage_trace ==>
+      !u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem)
+Proof
+  simp[tupleTargetStorePropsTheory.tuple_target_aligned_def] >> strip_tac >> gvs[]
+  >- suspend "scalar" >>
+  suspend "field"
+QED
+
+Resume body_assign_tuple_nonlocal_write_ready[scalar]:
+  drule_all tupleTargetStorePropsTheory.tuple_target_toplevel_place >>
+  disch_then (qspec_then `es` assume_tac) >>
+  drule_all tupleTargetStorePropsTheory.tuple_target_storage_assignment >> strip_tac >>
+  `~cx.txn.is_static` by
+    (CCONTR_TAC >> fs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  drule_all stmtSimAssignStorageFactsTheory.encode_value_word_typed >> strip_tac >>
+  drule tupleTargetStorePropsTheory.tuple_target_storage_scope_frame >> strip_tac >>
+  qexistsl [`tr`, `n2w k`, `es.storage_trace ++ [StorageRoot tr k tv]`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr k tv]).storage_trace` by
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+       vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`write_storage_slot cx tr (n2w k) tv v`, `INL ()`, `es'`] >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
+  `MEM (tr,n2w k,tv) (FST H)` by
+    (qpat_x_assum `valid_horizon _ _ _ (es with storage_trace := _).storage_trace` mp_tac >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def,
+       vyperStorageFootprintTheory.storage_observations_ok_def,
+       vyperStorageFootprintTheory.storage_trace_regions_def, EVERY_APPEND]) >>
+  `type_slot_size tv = 1` by metis_tac[exprSimUnwrapTheory.word_type_slot_size] >>
+  metis_tac[accountsRelPropsTheory.storage_dead_update_word_region]
+QED
+
+Resume body_assign_tuple_nonlocal_write_ready[field]:
+  qmatch_asmsub_abbrev_tac `struct_field_slot fs fld = SOME (off,tv)` >>
+  drule_all tupleTargetStorePropsTheory.tuple_target_field_place >>
+  disch_then (qspec_then `es` assume_tac) >>
+  drule_all tupleTargetStorePropsTheory.tuple_target_storage_assignment >> strip_tac >>
+  `~cx.txn.is_static` by
+    (CCONTR_TAC >> fs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  drule_all stmtSimAssignStorageFactsTheory.encode_value_word_typed >> strip_tac >>
+  drule tupleTargetStorePropsTheory.tuple_target_storage_scope_frame >> strip_tac >>
+  qexistsl [`tr`, `n2w k + n2w off`,
+    `es.storage_trace ++ [StorageRoot tr k (StructTV fs)]`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr k (StructTV fs)]).storage_trace` by
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+       vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`write_storage_slot cx tr (n2w k + n2w off) tv v`, `INL ()`, `es'`] >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
+  `MEM (tr,n2w k,StructTV fs) (FST H)` by
+    (qpat_x_assum `valid_horizon _ _ _ (es with storage_trace := _).storage_trace` mp_tac >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def,
+       vyperStorageFootprintTheory.storage_observations_ok_def,
+       vyperStorageFootprintTheory.storage_trace_regions_def, EVERY_APPEND]) >>
+  `type_slot_size tv = 1` by metis_tac[exprSimUnwrapTheory.word_type_slot_size] >>
+  metis_tac[accountsRelPropsTheory.storage_dead_update_struct_word_field]
+QED
+
+Finalise body_assign_tuple_nonlocal_write_ready
+
 (* A source that is a widened aggregate call. *)
 Theorem body_assign_tuple_widened_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
