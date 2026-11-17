@@ -367,8 +367,9 @@ Resume annassign_other_typed_full_execution[success]:
    qmatch_asmsub_abbrev_tac `new_variable id dtv v _ = (INL (),out)` >>
    `mid with gas_obs := [] = mid` by
      (qpat_assum `mid.gas_obs = []` (fn th => simp[GSYM th, NoAsms])) >>
-   qpat_x_assum `new_variable id dtv v _ = (INL (),out)`
-     (assume_tac o ASM_REWRITE_RULE []) >>
+   qpat_assum `mid with gas_obs := [] = mid` (fn eq =>
+     qpat_x_assum `new_variable id dtv v _ = (INL (),out)`
+       (assume_tac o PURE_REWRITE_RULE [eq])) >>
    `mid.scopes = sc::rest` by fs[] >>
    `out = mid with scopes :=
       (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest`
@@ -382,8 +383,21 @@ Resume annassign_other_typed_full_execution[success]:
     inst.inst_opcode = ALLOCA` by simp[Abbr `inst`, venomInstTheory.mk_inst_def, NoAsms] >>
    `inst.inst_id < a.cs_next_id \/ b.cs_next_id <= inst.inst_id` by fs[] >>
    `FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,type_memory_size dtv)` by fs[] >>
-   drule_all annassign_other_typed_rhs_resources >>
-   disch_then (qx_choosel_then [`xs`,`sw`] strip_assume_tac) >>
+   `?xs sw.
+      op = Var xs /\ lookup_var xs t = SOME sw /\ not_fresh_at b xs /\
+      ptr_covers G1 tn1 xs t (type_memory_size stv) /\
+      (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+        val_in_memory stv v (w2n sw) mem) /\
+      w2n sw + type_memory_size stv < dimword (:256) /\
+      (type_memory_size stv = 0 \/
+        w2n sw + type_memory_size stv <= t.vs_alloca_next) /\
+      expr_val_at cenv' cx (expr_type e) a b mid v (Var xs) t /\
+      (w2n sw + type_memory_size stv <= w2n w \/
+        w2n w + type_memory_size dtv <= w2n sw)` by
+     (irule (INST_TYPE [``:'a`` |-> ``:256``] annassign_other_typed_rhs_resources) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`ctx`,`es`,`func`] >>
+      qexistsl_tac [`inst`,`p`,`entry`,`type_memory_size dtv`] >> fs[]) >>
    FAIL_TAC "rhs adapter")
 QED
 
