@@ -83,7 +83,8 @@ Theorem layout_canonical_base_nonterm_pending:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -115,8 +116,6 @@ Proof
   `MEM fn C.ctx_functions /\ MEM i (fn_insts fn) /\ fn_ptr_ok P fn` by
     (drule_all layout_canonical_ordinary_environment >> strip_tac >> simp[]) >>
   `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
-  `i.inst_opcode <> DALLOCA` by
-    (strip_tac >> fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `i.inst_opcode <> MEMTOP /\ i.inst_opcode <> GETFMP /\
    i.inst_opcode <> SETFMP /\ i.inst_opcode <> FMP_PARAM` by
     (qpat_x_assum `fn_ptr_ok P fn` mp_tac >> simp[fn_ptr_ok_def] >>
@@ -131,16 +130,8 @@ Proof
   Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
   >- (drule_all layout_canonical_external_pending >> simp[]) >>
   drule_all layout_base_opcode_cases >> disch_tac >>
-  `MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE;
-      TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE;
-      MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE;
-      SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
-    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])` by
-    (qpat_x_assum `MEM i.inst_opcode _ \/ _` mp_tac >>
-     asm_simp_tac bool_ss [MEM]) >>
   irule layout_canonical_ordinary_nonterm_pending >>
-  pure_asm_rewrite_tac[] >> metis_tac[]
+  pure_asm_rewrite_tac[] >> metis_tac[o1PassContractTheory.o1_run_state_ok_def]
 QED
 
 Theorem layout_canonical_base_nonterm_success_headroom_static:
