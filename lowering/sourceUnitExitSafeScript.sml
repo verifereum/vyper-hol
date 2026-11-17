@@ -109,9 +109,7 @@ Theorem source_unit_exit_ptr_safe_horizons:
   !marks tops ret am tx unit vs func.
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    source_storage_ok am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
-    call_outcomes_storage_ok am tx vs.vs_outcomes
+    call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
     ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
