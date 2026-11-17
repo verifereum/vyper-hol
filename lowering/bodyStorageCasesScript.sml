@@ -267,7 +267,8 @@ Proof
   simp[supported_append_target_def, supported_target_pure_def,
        supported_expr_exists_def,
        call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
-  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_evm_run,
+  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_halt,
+            supported_expr_no_evm_run,
             supported_expr_no_call_operand_effects, supported_expr_def,
             expr_has_evm_run_def, supported_pure_main_calls]
 QED
