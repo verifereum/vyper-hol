@@ -169,14 +169,6 @@ Proof
   irule reverse_two_operands >> simp[]
 QED
 
-val log_bridge_core_tm = let
-  val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
-  val core = fst (dest_imp body)
-  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars core) of
-      [v] => v | _ => raise Fail ("missing bridge parameter " ^ n)
-in list_mk_abs (params @ [named "cs", named "ss"], core) end;
-val _ = Parse.temp_overload_on ("bridge_core", log_bridge_core_tm);
-
 Theorem sym_log_inst_symbolic_run_mode_core:
   (!n cs ss ss'. bridge_core lo code_ok cs ss /\
     sym_steps_mode allow_own prog env own n ss = SymOK ss' ==>
