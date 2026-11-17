@@ -2,13 +2,35 @@
 Theory exprBopBytes
 Ancestors
   exprBopBitwise exprBopShift exprBopStraight exprBopSimDefs exprBopSimProps
-  exprSimProps exprSimBinopFrag loweringPosts exprLowering compileEnv
+  exprSimProps exprSimBinopFrag exprSimHypsDefs loweringPosts exprLowering compileEnv
   vyperValueOperation vyperContext vyperValue vyperTyping
   valueEncoding valueEncodingProofs valueEncodingBitwise
   fragGasFresh varsExt freshWrites
   venomState venomExecSemantics list rich_list words byte integer integer_word
 Libs
   wordsLib
+
+(* Fixed-byte widths are checked when their types are evaluated. *)
+Theorem well_typed_binop_augassign_word:
+  !ty bop t2.
+    well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
+    (word_value_type ty /\ word_value_type t2) \/
+    ((?m. ty = BaseT (BytesT (Fixed m))) /\
+     MEM bop [And; Or; XOr; ShL; ShR])
+Proof
+  Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
+QED
+
+Theorem well_typed_binop_augassign_word_value:
+  well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv cur /\ word_value cur ==>
+  word_value_type ty /\ word_value_type t2
+Proof
+  strip_tac >> drule_all well_typed_binop_augassign_word >> strip_tac
+  >- simp[] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `cur` >> gvs[value_has_type_def, loweringSliceTheory.word_value_def]
+QED
 
 Theorem bop_result_bytes_bitwise:
   (bop = And \/ bop = Or \/ bop = XOr) /\

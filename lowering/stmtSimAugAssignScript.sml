@@ -306,7 +306,7 @@ Proof
   qexists_tac `w` >> simp[] >>
   `val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
     metis_tac[memoryValueEncodingTheory.memory_value_rel_val_in_memory] >>
-  metis_tac[val_in_memory_word_type, mem_word_at_eq_mload]
+  metis_tac[val_in_memory_word_type, valueEncodingPropsTheory.mem_word_at_eq_mload]
 QED
 
 Theorem augassign_name_post_typed:
@@ -406,17 +406,6 @@ Finalise augassign_local_load_typed
 
 (* ===== The operator ===== *)
 
-(* Fixed-byte widths are checked when their types are evaluated. *)
-Theorem well_typed_binop_augassign_word:
-  !ty bop t2.
-    well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
-    (word_value_type ty /\ word_value_type t2) \/
-    ((?m. ty = BaseT (BytesT (Fixed m))) /\
-     MEM bop [And; Or; XOr; ShL; ShR])
-Proof
-  Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
-QED
-
 Theorem well_typed_binop_augassign_is_word:
   well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn /\
   evaluate_type tenv ty = SOME tv1 ==>
@@ -457,7 +446,15 @@ Proof
       >- metis_tac[word_value_type_word] >>
       rewrite_tac[GSYM binop_frag_def] >>
       irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
-  gvs[] >> irule binop_frag_bytes_typed >> simp[] >>
+  gvs[] >>
+  `(bop = ShL \/ bop = ShR ==>
+      (?i. v2 = IntV i /\ 0 <= i) \/
+      t2 = BaseT (BytesT (Fixed 32)))` by
+    (rpt strip_tac >> Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+     >- simp[] >>
+     `is_int_type t2` by gvs[well_typed_binop_def] >>
+     drule_all int_type_value >> strip_tac >> gvs[]) >>
+  irule binop_frag_bytes_typed >> simp[] >>
   qexistsl_tac [`t2`, `get_tenv cx`, `tv1`, `tv2`] >> simp[]
 QED
 
