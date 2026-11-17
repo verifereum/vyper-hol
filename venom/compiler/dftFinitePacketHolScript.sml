@@ -23,7 +23,7 @@ Ancestors
   dftPacketFreshCut
   dftPacketFreshRootSuccessSplit dftPacketFreshChildStop dftPacketFreshSingletonStop
   dftPacketFreshChildOccurrence dftPacketFreshRow
-  dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
+  dftPacketFreshSingletonNormalize dftPacketFreshSingletonNative dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
@@ -45,7 +45,7 @@ Ancestors
   dftPacketPreterminalRows
   dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
-  dftPacketReturnRecordFrame
+  dftPacketTraceCallProvenance dftPacketReturnRecordFrame
   dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
