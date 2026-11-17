@@ -127,8 +127,8 @@ Proof
     qexists_tac `[(out,vv)]` >>
     Cases_on `eval_operand aa s` >> gvs[Abbr `vv`]) >>
   all_tac >>~- ([`x.inst_opcode = NOP`], qexists_tac `[]` >> simp[]) >>
+  (* INITIAL_FMP: INVOKE keeps vs_initial_fmp *)
   qpat_x_assum `_ = OK r` (strip_assume_tac o SRULE [AllCaseEqs()]) >>
   gvs[] >>
-  qmatch_goalsub_abbrev_tac `update_var next value2 (update_var ptr value1 _)` >>
-  qexists_tac `[(ptr,value1);(next,value2)]` >> simp[]
+  qexists_tac `[(out,s.vs_initial_fmp)]` >> simp[]
 QED

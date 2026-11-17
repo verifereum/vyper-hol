@@ -7,7 +7,7 @@ Ancestors
   whitelistForIterImmLoop whitelistForIterImmFrag
   bodySimDeclCases whitelistForIterDynFrag whitelistForIterDynLoop
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
-  bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
+  bodySim allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayLoop
   vyperTyping fragExec compileEnv supportedStmts supportedStmtTraverse

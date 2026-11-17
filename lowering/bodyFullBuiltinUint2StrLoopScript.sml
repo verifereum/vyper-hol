@@ -35,7 +35,7 @@ Theorem u2s_loop_joint_given_cond:
     (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
     fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
-    not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ 78 <= n /\ X < dimword(:256) /\
+    not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ LENGTH (num_to_dec_string X) <= n /\ X < dimword(:256) /\
     b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
     u2s_digits a b n X x str s /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -69,6 +69,7 @@ Theorem u2s_loop_joint_given_cond:
 Proof
   disch_then (mk_asm "cond") >>
   completeInduct_on `x` >> rpt gen_tac >> strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   asm "cond" drule >> disch_then drule_all >>
   disch_then (qx_choose_then `c` (qx_choose_then `Gc`
     (qx_choose_then `tnc` strip_assume_tac))) >>

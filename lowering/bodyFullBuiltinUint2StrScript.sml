@@ -138,12 +138,15 @@ Resume uint2str_builtin_sim_full[compose]:
      (impl_tac >- first_assum ACCEPT_TAC) >> BETA_TAC >> strip_tac >> gvs[]) >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  `?X. v = IntV (&X) /\ X < dimword(:256) /\
+  `?X. v = IntV (&X) /\ X < 2 ** k /\ X < dimword(:256) /\
        eval_operand op t = SOME (n2w X) /\ expr_sim_inv cenv cx env mid` by
     (irule (at_horizon_named "H" uint2str_operand_endpoint) >>
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl_tac [`s0.vs_gas_readings`, `marks`, `mid`] >> simp[]) >>
   qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    metis_tac[vyperTypeBuiltinsTheory.uint2str_width_bound,
+              arithmeticTheory.LESS_EQ_TRANS] >>
   suspend "suffix"
 QED
 

@@ -85,14 +85,6 @@ P2 is ported. These still differ from the oracle with it:
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
 
-## Bytestring conversion (vyperlang/vyper#5322), not #5127
-
-These oracles predate the bytestring conversion fix in vyperlang/vyper#5322.
-They remain out of parity until regenerated with that fix.
-
-- `conversions/bys16_to_dec`
-- `conversions/bys32_to_i8`
-
 ## Pop receiver copy (vyperlang/vyper#5280), not #5127
 
 - `load_timing/nested_retained_pop`: the pinned compiler's

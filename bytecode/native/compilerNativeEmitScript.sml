@@ -33,6 +33,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -41,6 +42,7 @@ val () = holbuild_extra_deps
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle",
+   "../upstream-fixes/oracle",
    "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
@@ -203,6 +205,9 @@ val suite_fixtures = [
     "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested", "d06_int_default_constant"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",
@@ -264,7 +269,10 @@ val suite_fixtures = [
     "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
-    "slice_storage_bytes", "slice_string_lit"])];
+    "slice_storage_bytes", "slice_string_lit"]),
+  ("upstream-fixes", [
+    "uf5236_ifexp_nested_narrow", "uf5256_tuple_widen_bytes",
+    "uf5298_int_to_decimal_bound", "uf5331_ifexp_narrow_string"])];
 
 
 (* The compilation each oracle is compared with: Python's O1 without the final

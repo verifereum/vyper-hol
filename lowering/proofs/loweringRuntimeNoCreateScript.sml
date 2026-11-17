@@ -6,13 +6,17 @@ Ancestors
   supportedDecls compileVyper vyperCompiler context unitShapeDefs venomInst list pair
 
 Theorem compile_runtime_stmts_no_create:
+  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+    ce.ce_func_defaults /\
   ~supported_stmts_expr_exists expr_shape_root ss /\
   EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmts ce lc ty ss st)))
 Proof
-  `!ce ty e st. ~supported_expr_exists expr_shape_root e ==>
+  `!ce ty e st.
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults /\
+    ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
@@ -21,7 +25,7 @@ Proof
                     `R` |-> `expr_shape_root`] compile_expr_opcode_every) >> simp[]) >>
   mp_tac (Q.INST [`P` |-> `\opc. opc <> CREATE /\ opc <> CREATE2`,
                   `R` |-> `expr_shape_root`] compile_stmts_opcode_every_from_expr) >>
-  simp[]
+  simp[expr_shape_root_def]
 QED
 
 Theorem run_lowering_no_create:
