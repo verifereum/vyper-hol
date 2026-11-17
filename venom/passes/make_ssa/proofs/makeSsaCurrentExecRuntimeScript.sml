@@ -757,16 +757,9 @@ Proof
   fs[state_rel_def, execution_frame_def, halt_state_def, set_returndata_def]
 QED
 
-(* Existing no-Abort facts in passSharedFrame and ssaRenamedSim are local. *)
-Theorem current_exec_ext_call_not_abort:
-  exec_ext_call inst st gas addr value ao as_ ro rs is_static <> Abort reason t
-Proof
-  rw[exec_ext_call_def] >> gvs[AllCaseEqs()]
-QED
-
 Theorem current_exec_simple_abort_pair:
   MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
-                       SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
+                       SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
                        RETURNDATACOPY] /\
   inst_pair sg inst inst' /\ state_rel sg st st' /\
   step_inst_base inst' st' = Abort reason t' ==>
@@ -777,11 +770,12 @@ Proof
   `eval_operands inst'.inst_operands st' = eval_operands inst.inst_operands st` by
     metis_tac[eval_operands_rel] >>
   `st'.vs_call_ctx = st.vs_call_ctx /\ st'.vs_memory = st.vs_memory /\
-   st'.vs_returndata = st.vs_returndata` by fs[state_rel_def, execution_frame_def] >>
+   st'.vs_returndata = st.vs_returndata /\ st'.vs_outcomes = st.vs_outcomes` by
+    fs[state_rel_def, execution_frame_def] >>
   fs[MEM] >>
   qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
   strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
-  gvs[current_exec_ext_call_not_abort, exec_write2_def, exec_create_abort_iff,
+  gvs[exec_ext_call_abort_iff, exec_delegatecall_abort_iff, exec_write2_def, exec_create_abort_iff,
       AllCaseEqs()] >>
   rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >> simp[] >>
   fs[state_rel_def, execution_frame_def, halt_state_def, revert_state_def,
@@ -926,7 +920,7 @@ Theorem current_exec_noninvoke_abort_pair:
 Proof
   strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
   `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
-                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
+                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
                         RETURNDATACOPY]` by
     (drule step_inst_base_abort_opcodes >> simp[MEM] >> metis_tac[]) >>
   drule_all current_exec_simple_abort_pair >> simp[]

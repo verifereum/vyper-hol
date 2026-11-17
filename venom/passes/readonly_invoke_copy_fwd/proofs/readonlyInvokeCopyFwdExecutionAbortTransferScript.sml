@@ -15,6 +15,7 @@ Theorem ricf_abort_frame_observations[local]:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H certificates E sites maps targets tn ==>
   s.vs_call_ctx = t.vs_call_ctx /\ s.vs_returndata = t.vs_returndata /\
+  s.vs_outcomes = t.vs_outcomes /\
   (!op. IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))
 Proof
   strip_tac >>
@@ -30,6 +31,11 @@ Proof
   >- (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
       drule taint_agree_frame >>
       disch_then (mp_tac o Q.AP_TERM `\st. st.vs_returndata`) >>
+      simp[ricf_opaque_view_def]) >>
+  conj_tac
+  >- (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
+      drule taint_agree_frame >>
+      disch_then (mp_tac o Q.AP_TERM `\st. st.vs_outcomes`) >>
       simp[ricf_opaque_view_def]) >>
   metis_tac[ricf_opaque_frame_operand_defined]
 QED
