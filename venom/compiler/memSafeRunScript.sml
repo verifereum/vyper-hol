@@ -568,12 +568,20 @@ Theorem mem_safe_raw_unit_memory_ok:
     raw_unit_memory_ok ctx vs
 Proof
   rw[raw_unit_memory_ok_def, codegen_reachability_package_def] >>
-  qexists_tac `\c f i s. mem_safe_point c f i s /\ J c f i s` >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         (J c f i s /\ raw_reachable vs c f i s)` >>
   rpt conj_tac
-  >- (irule reachability_closed_conj >> simp[mem_safe_point_closed])
-  >- (irule fn_entry_inv_conj >> simp[] >>
-      irule mem_safe_point_entry >> simp[] >>
-      drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+  >- (irule (BETA_RULE (Q.SPECL
+        [`mem_safe_point`, `\c f i s. J c f i s /\ raw_reachable vs c f i s`]
+        reachability_closed_conj)) >> simp[mem_safe_point_closed] >>
+      irule reachability_closed_conj >> simp[raw_reachable_closed])
+  >- (irule (BETA_RULE (Q.ISPECL
+        [`mem_safe_point`, `\c f i s. J c f i s /\ raw_reachable vs c f i s`]
+        fn_entry_inv_conj)) >> conj_tac
+      >- (irule mem_safe_point_entry >> simp[] >>
+          drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+      irule fn_entry_inv_conj >> simp[] >>
+      rw[fn_entry_inv_def] >> metis_tac[raw_reachable_rules]) >>
   metis_tac[mem_safe_point_mem]
 QED
 
