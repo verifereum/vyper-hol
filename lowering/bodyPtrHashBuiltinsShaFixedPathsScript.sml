@@ -41,10 +41,10 @@ Theorem hash_sha256_bytesm_abort_path:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
-      (Abort Revert_abort (t with vs_inst_idx := j))
+      (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule hash_sha256_fixed_parts >> strip_tac >>
@@ -86,6 +86,9 @@ Resume hash_sha256_bytesm_abort_path[call]:
 QED
 
 Resume hash_sha256_bytesm_abort_path[compose]:
+  `t.vs_outcomes = s.vs_outcomes` by
+    (qpat_assum `a.vs_outcomes = s.vs_outcomes` mp_tac >>
+     qpat_assum `a = _` SUBST1_TAC >> simp[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
     simp[mk_inst_def, is_terminator_def] >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
@@ -94,7 +97,7 @@ Resume hash_sha256_bytesm_abort_path[compose]:
      qexistsl_tac [`G2`, `tn2`] >> gvs[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
     (drule_all hash_sha256_alloc_tail_nonterminators >> simp[]) >>
-  `?u. run_inst_seq (emitted_insts sm sb) t = Abort Revert_abort u /\
+  `?u. run_inst_seq (emitted_insts sm sb) t = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u /\
        t' = u with vs_inst_idx := s.vs_inst_idx+2` by
     (qpat_x_assum `run_inst_seq (emitted_insts sm sb) a = _` mp_tac >>
      qpat_assum `a = _` SUBST1_TAC >> simp[run_inst_seq_inst_idx] >>
@@ -225,10 +228,10 @@ Theorem hash_sha256_word_abort_path:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
-      (Abort Revert_abort (t with vs_inst_idx := j))
+      (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j))
 Proof
   rewrite_tac[hash_sha256_word_bytesm] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

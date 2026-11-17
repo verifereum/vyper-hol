@@ -239,7 +239,7 @@ Theorem sha_bytes_abort_ptr_at:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   fn_has_code sa sb fn /\ run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -324,11 +324,12 @@ Resume sha_bytes_abort_ptr_at[call]:
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]) >>
   drule_all sha_alloc_abort_ptr_at >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
-  rename1 `run_inst_seq (emitted_insts sm sb) a = Abort Revert_abort tail` >>
+  rename1 `run_inst_seq (emitted_insts sm sb) a = Abort _ tail` >>
   suspend "compose"
 QED
 
 Resume sha_bytes_abort_ptr_at[compose]:
+  `t.vs_outcomes = s.vs_outcomes` by fs[Abbr `a`] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
     simp[mk_inst_def, is_terminator_def] >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
@@ -342,7 +343,7 @@ Resume sha_bytes_abort_ptr_at[compose]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[markerTheory.Abbrev_def]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
     (drule_all hash_sha256_alloc_tail_nonterminators >> simp[]) >>
-  `?u. run_inst_seq (emitted_insts sm sb) t = Abort Revert_abort u /\
+  `?u. run_inst_seq (emitted_insts sm sb) t = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u /\
        tail = u with vs_inst_idx := s.vs_inst_idx+2` by
     (qpat_x_assum `run_inst_seq (emitted_insts sm sb) a = _` mp_tac >>
      simp[Abbr `a`, run_inst_seq_inst_idx] >>
