@@ -13,4 +13,4 @@ Ancestors
   symInstEmissionOwn symInstLocalizeCore symInstPiecesFacts symInstPrefixOwn symInstPrefixPairOwn symInstStoreInitOwn
   symInvokeEntryFacts symInvokeEntryOwn
   symGeneratedAssignOwn symGeneratedZeroOwn
-  symFrameControlFacts
+  symFrameControlFacts symControlReorderOwn
