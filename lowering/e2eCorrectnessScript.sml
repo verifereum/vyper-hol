@@ -2279,8 +2279,6 @@ Proof
   qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`,
                `tx with <| function_name := fv0; args := fv1 |>`, `ret`, `es`]
     mp_tac vyper_call_correct_dispatched >>
-  impl_tac
-  >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant,
-         calldata_calls_within_def] >>
+  impl_tac >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant] >>
   strip_tac >> simp[external_return_type_def] >> metis_tac[]
 QED

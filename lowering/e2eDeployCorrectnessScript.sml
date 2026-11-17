@@ -263,10 +263,6 @@ Proof
   `K SOME rpolicy prog = SOME prog` by simp[] >>
   `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
     by metis_tac[deploy_txp_identity] >>
-  `!gobs. deploy_source_calls_within (2 ** 64) tops am tx
-      (MAP SND (call_trace es)) gobs` by
-    (irule deploy_source_calls_within_call_free >>
-     fs[deploy_state_rel_def]) >>
   drule deploy_raw_fmp_exists >>
   disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
   drule_all deploy_unit_execution_correct_raw_fmp >>
