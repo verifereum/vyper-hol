@@ -35,6 +35,7 @@ Ancestors
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
+  dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
   dftPacketRefinementBoundary
