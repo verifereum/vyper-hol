@@ -3,6 +3,7 @@ Ancestors
   compilerFirstEmission stmtLowering exprLowering compileEnv fragExec rich_list context
   builtinSimple builtinMath builtinMisc builtinHashing builtinBytes
   exprLoweringProps exprSimUnwrap builtinAbi builtinCreate
+  entryReachBodyFirstEmissionExprSupport
 Libs
   monadsyntax
 
@@ -2201,7 +2202,7 @@ Proof
 QED
 
 Theorem ctor_expr_callback_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b. cfn env ty e a = (x,b) ==>
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b. cfn env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -2219,14 +2220,14 @@ Theorem ctor_expr_callback_first_emission:
        i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `expr_size e < bound` >>
+  Cases_on `expr_size e + cenv_defaults_size env < bound` >>
   simp[exprCallBoundsTheory.expr_child_callback_def] >>
   metis_tac[ctor_invalid_callback_first_emission]
 QED
 
 Theorem ctor_builtin_callback_first_emission:
   (!args env rt ty bi a.
-    list_size expr_size args < bound ==> !x b. dispatch env rt ty bi args a = (x,b) ==>
+    list_size expr_size args + cenv_defaults_size env < bound ==> !x b. dispatch env rt ty bi args a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -2245,14 +2246,14 @@ Theorem ctor_builtin_callback_first_emission:
        i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size env < bound` >>
   simp[exprCallBoundsTheory.builtin_child_callback_def] >>
   metis_tac[ctor_invalid_callback_first_emission]
 QED
 
 Theorem ctor_type_callback_first_emission:
   (!args env vt ty tb rt a.
-    list_size expr_size args < bound ==> !x b. dispatch env vt ty tb rt args a = (x,b) ==>
+    list_size expr_size args + cenv_defaults_size env < bound ==> !x b. dispatch env vt ty tb rt args a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -2271,7 +2272,7 @@ Theorem ctor_type_callback_first_emission:
        i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size env < bound` >>
   simp[exprCallBoundsTheory.type_child_callback_def] >>
   metis_tac[ctor_invalid_callback_first_emission]
 QED
@@ -2337,7 +2338,7 @@ Proof
 QED
 
 Theorem ctor_guarded_ifexp_first_emission:
-  (!e env ty a. expr_size e < expr_size (IfExp ann cond yes no) ==>
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==>
     !x b. compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -2348,7 +2349,7 @@ Theorem ctor_guarded_ifexp_first_emission:
        i.inst_opcode <> PHI))) ==>
   !a x b.
     compile_expr_body
-      (expr_child_callback (expr_size (IfExp ann cond yes no)) compile_expr)
+      (expr_child_callback bound compile_expr)
       cb ct env ty (IfExp ann cond yes no) a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -2661,7 +2662,7 @@ QED
 Finalise ctor_scalar_dispatch_first_emission
 
 Theorem ctor_guarded_scalar_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -2851,7 +2852,7 @@ QED
 Finalise ctor_bytes_precompile_dispatch_first_emission
 
 Theorem ctor_guarded_bytes_precompile_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3048,7 +3049,7 @@ QED
 Finalise ctor_bop_dispatch_first_emission
 
 Theorem ctor_guarded_bop_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3329,7 +3330,7 @@ Proof
 QED
 
 Theorem ctor_guarded_uint2str_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3354,7 +3355,7 @@ Proof
 QED
 
 Theorem ctor_guarded_as_wei_value_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3425,7 +3426,7 @@ Proof
 QED
 
 Theorem ctor_attribute_body_guarded_first_emission:
-  (!e env ty a. expr_size e < expr_size (Attribute ann base_e fld) ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3434,7 +3435,7 @@ Theorem ctor_attribute_body_guarded_first_emission:
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
   !a x b. compile_expr_body
-    (expr_child_callback (expr_size (Attribute ann base_e fld)) compile_expr)
+    (expr_child_callback bound compile_expr)
     bfn tfn env ty (Attribute ann base_e fld) a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3577,7 +3578,7 @@ Proof
 QED
 
 Theorem ctor_subscript_body_guarded_first_emission:
-  (!e env ty a. expr_size e < expr_size (Subscript ann base_e idx_e) ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3586,7 +3587,7 @@ Theorem ctor_subscript_body_guarded_first_emission:
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
   !a x b. compile_expr_body
-    (expr_child_callback (expr_size (Subscript ann base_e idx_e)) compile_expr)
+    (expr_child_callback bound compile_expr)
     bfn tfn env ty (Subscript ann base_e idx_e) a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -3633,7 +3634,7 @@ QED
 Theorem ctor_structlit_body_guarded_first_emission:
   !env ty ann nm flds a x b.
     compile_expr_body
-      (expr_child_callback (expr_size (StructLit ann nm flds)) compile_expr)
+      (expr_child_callback bound compile_expr)
       bfn tfn env ty (StructLit ann nm flds) a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4201,7 +4202,7 @@ Proof
 QED
 
 Theorem ctor_guarded_abi_encode_type_dispatch_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4397,7 +4398,7 @@ Proof
 QED
 
 Theorem ctor_guarded_send_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4423,7 +4424,7 @@ Proof
 QED
 
 Theorem ctor_guarded_real_system_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4451,7 +4452,7 @@ Proof
 QED
 
 Theorem ctor_selfdestruct_call_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4554,118 +4555,8 @@ Proof
   simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
 QED
 
-Theorem ctor_fresh_vars_first_emission[local]:
-  !n a x b. fresh_vars n a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  Induct >> rewrite_tac[emitHelperTheory.fresh_vars_def]
-  >- (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]) >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (simp[fresh_var_def] >> rpt strip_tac >> gvs[] >>
-      irule cs_extends_same_block >> simp[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[] >>
-  simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
-QED
-
-Theorem ctor_emit_multi_op_first_emission[local]:
-  !opc ops n. opc <> PHI ==> !a x b. emit_multi_op opc ops n a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[emitHelperTheory.emit_multi_op_def] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[ctor_fresh_vars_first_emission] >>
-  gen_tac >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      irule (cj 1 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
-QED
-
-Theorem ctor_store_multi_results_first_emission[local]:
-  !buf ops offset a x b. store_multi_results buf ops offset a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  gen_tac >> Cases >> gen_tac >> rewrite_tac[Once store_multi_results_def]
-  >- (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]) >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-  ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- simp[cs_appends_emit_helpers] >>
-  irule ctor_ci_mono_appends >> simp[ci_mono_store_multi_results]
-QED
-
-Theorem ctor_int_call_first_emission:
-  (!e. MEM e args ==> !ety a x b. cfn env ety e a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !rt ty func_id def a x b. compile_call cfn env rt ty (IntCall func_id) args def a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  strip_tac >> ntac 4 gen_tac >>
-  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (Cases_on `returns_count > 0` >> simp[]
-      >- (ho_match_mp_tac first_emission_bind >> conj_tac
-          >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_alloc_buffer_first_emission]) >>
-          simp[cs_extends_refl]) >>
-      Cases_on `return_buf_size > 0` >> simp[cs_extends_refl] >>
-      ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_alloc_buffer_first_emission]) >>
-      simp[cs_extends_refl]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_stage_intcall_args_first_emission >> metis_tac[]) >>
-  gen_tac >> Cases_on `returns_count > 0` >> simp[]
-  >- (Cases_on `return_buf` >> simp[]
-      >- (ho_match_mp_tac first_emission_bind >> conj_tac
-          >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-              irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-          simp[cs_extends_refl]) >>
-      ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (rpt gen_tac >> strip_tac >>
-          drule_at (Pos last) ctor_emit_multi_op_first_emission >> simp[]) >>
-      gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_store_multi_results_first_emission] >>
-      simp[cs_extends_refl]) >>
-  Cases_on `return_buf` >> simp[] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      irule (cj 2 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[cs_extends_refl] >> rpt gen_tac >> strip_tac >>
-  qspec_then `INVOKE` mp_tac (cj 2 first_emission_emit_helpers) >>
-  simp[] >> disch_then drule >> metis_tac[]
-QED
-
 Theorem ctor_guarded_int_call_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4686,7 +4577,7 @@ Proof
   strip_tac >> dxrule ctor_expr_callback_first_emission >> disch_tac >>
   simp_tac (srw_ss()) [Once compile_expr_body_def, LET_THM] >>
   rpt gen_tac >> disch_tac >>
-  drule_at (Pos last) ctor_int_call_first_emission >>
+  drule_at (Pos last) first_emission_intcall >>
   disch_then irule >> metis_tac[]
 QED
 
@@ -4869,7 +4760,7 @@ Proof
 QED
 
 Theorem ctor_guarded_raw_call_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -4895,7 +4786,7 @@ Proof
 QED
 
 Theorem ctor_guarded_raw_call_calldata_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -5076,7 +4967,7 @@ Proof
 QED
 
 Theorem ctor_guarded_ext_call_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
@@ -5321,7 +5212,7 @@ QED
 Finalise ctor_create_call_first_emission
 
 Theorem ctor_guarded_create_call_expr_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
@@ -5345,7 +5236,7 @@ Proof
 QED
 
 Theorem ctor_guarded_type_body_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
@@ -5376,7 +5267,7 @@ Proof
 QED
 
 Theorem ctor_guarded_builtin_body_first_emission:
-  (!e env ty a. expr_size e < bound ==> !x b.
+  (!e env ty a. expr_size e + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
@@ -5401,14 +5292,14 @@ Proof
       drule_at (Pos last) ctor_guarded_uint2str_dispatch_first_emission >> disch_then irule >> metis_tac[])
   >~ [`AsWeiValue _`] >- (rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_guarded_as_wei_value_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`ECRecover`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> simp[] >> metis_tac[])
-  >~ [`ECAdd`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> simp[] >> metis_tac[])
-  >~ [`ECMul`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> simp[] >> metis_tac[])
-  >~ [`MethodId`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> simp[] >> metis_tac[])
-  >~ [`Slice _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> simp[] >> metis_tac[])
+  >~ [`ECRecover`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
+  >~ [`ECAdd`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
+  >~ [`ECMul`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
+  >~ [`MethodId`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
+  >~ [`Slice _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
   >> rpt gen_tac >> strip_tac >>
   drule_at (Pos last) ctor_guarded_scalar_dispatch_first_emission >>
-  disch_then irule >> simp[] >> metis_tac[]
+  disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ctor_target_callback_first_emission:
@@ -5500,35 +5391,35 @@ Proof
 QED
 
 Theorem ctor_guarded_expr_body_first_emission:
-  !e.
-  (!e' env ty a. expr_size e' < expr_size e ==> !x b.
+  !e bound.
+  (!e' env ty a. expr_size e' + cenv_defaults_size env < bound ==> !x b.
     compile_expr env ty e' a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
-  (!args env rt ty bi a. list_size expr_size args < expr_size e ==> !x b.
+  (!args env rt ty bi a. list_size expr_size args + cenv_defaults_size env < bound ==> !x b.
     compile_builtin_dispatch env rt ty bi args a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
-  (!args env vt ty tb rt a. list_size expr_size args < expr_size e ==> !x b.
+  (!args env vt ty tb rt a. list_size expr_size args + cenv_defaults_size env < bound ==> !x b.
     compile_type_builtin_dispatch env vt ty tb rt args a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
   !env ty a x b.
-    compile_expr_body (expr_child_callback (expr_size e) compile_expr)
-      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
-      (type_child_callback (expr_size e) compile_type_builtin_dispatch) env ty e a = (x,b) ==>
+    compile_expr_body (expr_child_callback bound compile_expr)
+      (builtin_child_callback bound compile_builtin_dispatch)
+      (type_child_callback bound compile_type_builtin_dispatch) env ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  gen_tac >> strip_tac >> Cases_on `e`
+  ntac 2 gen_tac >> strip_tac >> Cases_on `e`
   >~ [`IfExp _ _ _ _`] >- (rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_guarded_ifexp_first_emission >> disch_then irule >> metis_tac[])
   >~ [`Attribute _ _ _`] >- (rpt gen_tac >> strip_tac >>
@@ -5588,9 +5479,9 @@ Proof
   ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
   simp_tac (srw_ss()) [Once compile_expr_raw_def] >>
   simp_tac (srw_ss()) [SF ETA_ss] >> rpt gen_tac >> strip_tac
-  >- (drule_at (Pos last) ctor_guarded_expr_body_first_emission >> disch_then irule >> metis_tac[])
-  >- (drule_at (Pos last) ctor_guarded_builtin_body_first_emission >> disch_then irule >> metis_tac[]) >>
-  drule_at (Pos last) ctor_guarded_type_body_first_emission >> disch_then irule >> metis_tac[]
+  >- (drule_at (Pos last) ctor_guarded_expr_body_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
+  >- (drule_at (Pos last) ctor_guarded_builtin_body_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  drule_at (Pos last) ctor_guarded_type_body_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ctor_compile_expr_first_emission:
