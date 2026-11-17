@@ -424,7 +424,7 @@ Resume ld_runner_exec_clause_fuel_revert_empty_conditional[ok]:
      gvs[] >> fs[is_terminator_def]) >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS]
     (SRULE [] (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
-      ld_joint_noncall_continue))) >>
+      ld_joint_noncall_continue_static))) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -489,13 +489,13 @@ Resume ld_runner_exec_clause_fuel_revert_empty_conditional[ret]:
      drule occ_frame_reachable_annotation >> simp[]) >>
   `MEM i (fn_insts fn)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
-  `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
-    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
-        o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
+  `pre_fmp_opcode i.inst_opcode /\ no_dret fn` by
+    (fs[fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+        o1_fn_shape_def, pre_fmp_ops_def] >> metis_tac[]) >>
   `i.inst_opcode = RET` by
     (drule step_inst_intret_opcodes >>
      fs[no_dret_def, EVERY_MEM] >> strip_tac >>
-     gvs[is_raw_fmp_opcode_def]) >>
+     gvs[pre_fmp_opcode_def]) >>
   drule_all (SRULE [] (Q.INST
     [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] ld_runner_ret_endpoint)) >> strip_tac >>
   fs[Abbr `RR`] >> metis_tac[]

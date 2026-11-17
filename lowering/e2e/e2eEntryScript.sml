@@ -131,7 +131,12 @@ Theorem entry_venom_state_source_environment:
   venom_env_rel tx (entry_venom_state prog cp es)
 Proof
   rw[call_state_rel_def, tx_block_fields_rel_def] >>
-  simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def]
+  simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def] >>
+  gen_tac >>
+  Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
+  `tx.block_number - (n + 1) < 256` by decide_tac >>
+  simp[listTheory.EL_TAKE, listTheory.LENGTH_TAKE_EQ] >>
+  rw[] >> gvs[] >> decide_tac
 QED
 
 (* Creation status is read from transaction-original accounts, not a saved
