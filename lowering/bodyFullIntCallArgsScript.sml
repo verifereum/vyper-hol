@@ -11,7 +11,7 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
-  exprReasonOperand typedMemoryCopy
+  exprReasonOperand typedMemoryCopy wideningZeroLayout
   exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
@@ -1305,6 +1305,80 @@ Proof
   rpt strip_tac >>
   irule gasExemptCertTheory.gas_exempt_cert_error_value >>
   first_assum ACCEPT_TAC
+QED
+
+(* Zero physical layout is rigid under widening.  Consequently this is the
+   actual empty-copy compiler branch, with the unwrap endpoint and all of its
+   allocation history and taints retained, not an independent execution. *)
+Theorem intcall_args_aggregate_store_zero:
+  compile_store_memory cenv op (Var aq) dty sty cu = ((),cs) /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME rty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  type_memory_size rty = 0 /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  value_has_type dtv v /\ val_wf dtv v /\ alloca_history func z /\
+  ~z.vs_halted /\ z.vs_current_bb = cu.cs_current_bb /\
+  z.vs_inst_idx = LENGTH cu.cs_current_insts /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (t,G1,tn1) [] (OK z,G',tn')) ==>
+  ?wt wG wtn nw.
+    nw <= MAX 32 (type_memory_bytes cenv dty) /\
+    typed_copy_state_frame cu (w2n aw) nw z wt /\
+    ~wt.vs_halted /\ wt.vs_current_bb = cs.cs_current_bb /\
+    wt.vs_inst_idx = LENGTH cs.cs_current_insts /\ alloca_history func wt /\
+    wtn.t_stor = tn'.t_stor /\ wtn.t_trans = tn'.t_trans /\ wtn.t_imm = tn'.t_imm /\
+    (!p. not_fresh_at cu p ==> FLOOKUP wG p = FLOOKUP G' p /\
+      op_taint wtn (Var p) = op_taint tn' (Var p)) /\
+    (!i. ~(w2n aw <= i /\ i < w2n aw + nw) ==>
+      (i IN wtn.t_mem <=> i IN tn'.t_mem)) /\
+    (!rt. evaluate_type (get_tenv cx) dty = SOME rt ==>
+      value_has_type rt v /\ val_wf rt v /\
+      type_memory_size rt <= MAX 32 (type_memory_bytes cenv dty) /\
+      (!mem. mem_agree_outside wtn.t_mem wt.vs_memory mem ==>
+        val_in_memory rt v (w2n aw) mem)) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK wt,wG,wtn))
+Proof
+  strip_tac >>
+  `sty = dty` by metis_tac[wideningZeroLayoutTheory.type_widens_to_zero_layout] >>
+  gvs[] >>
+  `cs = cu` by
+    gvs[contextTheory.compile_store_memory_def, contextPropsTheory.compile_copy_memory_zero,
+        compileEnvTheory.comp_return_def] >>
+  gvs[] >> qexistsl_tac [`z`, `G'`, `tn'`, `0`] >>
+  simp[typedMemoryCopyTheory.typed_copy_state_frame_refl,
+       valueEncodingProofsTheory.return_zero_wf_memory]
+QED
+
+(* Widen only the interpreted bytestring representation, at the same address. *)
+Theorem intcall_args_bytestring_widen:
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\
+  evaluate_type tenv dty = SOME dtv /\ value_has_type stv v /\
+  val_in_memory stv v a mem ==>
+  value_has_type dtv v /\ val_wf dtv v /\
+  type_memory_size dtv <= MAX 32 (type_memory_bytes cenv dty) /\
+  val_in_memory dtv v a mem
+Proof
+  strip_tac >>
+  `value_has_type dtv v` by
+    (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+     strip_tac >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  reverse conj_tac
+  >- (irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  qpat_x_assum `is_bytestring_type dty` mp_tac >>
+  simp[exprSimConvertBytesTheory.bytestring_type_cases] >>
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def,
+    valueEncodingTheory.type_memory_size_def, compileEnvTheory.type_memory_bytes_def,
+    vfmConstantsTheory.word_size_def]
 QED
 
 Theorem intcall_args_stage_full:
