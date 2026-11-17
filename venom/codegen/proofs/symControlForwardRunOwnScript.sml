@@ -1,7 +1,7 @@
 (* Forwarded-revert continuations, shared by both symbolic execution modes. *)
 Theory symControlForwardRunOwn
 Ancestors
-  symControlForwardPrepareOwn symControlForwardCopyExecutionOwn symControlTerminalSafetyOwn
+  symControlForwardStackOwn symControlForwardPrepareOwn symControlForwardCopyExecutionOwn symControlTerminalSafetyOwn
   symFrameControlFacts codegenSymRel codegenSymOwnRel asmSymBridge[qualified,ignore_grammar]
   fnFrameStepsRevertForwardDeep asmSplice asmSpliceOwn asmSymOwnCode
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
@@ -23,6 +23,15 @@ val _ = Parse.temp_overload_on ("rf_L", ``\allow_own prog env own lo code_ok.
     sym_steps_mode allow_own prog env own n ss = SymOK ss' ==>
     ?cs'. asm_steps lo (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
       bridge_core lo code_ok cs' ss'``);
+val control_bridge_result_tm = let
+  val body = lhs (concl asmSymBridgeTheory.asm_sym_step_rel_core_canonical)
+  val rel = ``asm_sym_rel p env``
+  val r = mk_var ("R", type_of rel)
+  val body = subst [rel |-> r] body
+  fun named n = case List.filter (fn v => fst (dest_var v) = n) (free_vars body) of
+      [v] => v | _ => raise Fail ("missing result parameter " ^ n)
+in list_mk_abs ([r, named "sr", named "cr"], body) end;
+val _ = Parse.temp_overload_on ("bridge_result", control_bridge_result_tm);
 val _ = Parse.temp_overload_on ("rf_T", ``\allow_own prog env own lo code_ok.
   !cs ss ai cr.
     bridge_core lo code_ok cs ss /\ asm_block_at prog cs.as_pc [ai] /\
@@ -39,10 +48,7 @@ Theorem sym_revert_operand_kind_mode:
   inst.inst_opcode = REVERT /\ MEM op inst.inst_operands /\ ~is_label_operand op /\
   op_kind_ok fn ret op sv ==> ?w. sv = Val w
 Proof
-  strip_tac >>
-  `op <> dead_stack_marker` by
-    (strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
-  drule_all ordinary_noncopy_operand_word_kind_mode >> simp[]
+  ACCEPT_TAC symControlForwardStackOwnTheory.sym_revert_operand_kind_mode
 QED
 
 Theorem sym_revert_prepared_stack_core:
@@ -56,12 +62,8 @@ Theorem sym_revert_prepared_stack_core:
   ?suffix. ss.sym_stack = MAP Val [dst;sz] ++ suffix
 Proof
   strip_tac >>
-  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
-  rename1 `op_kind_ok fn ret dop sd` >>
-  rename1 `op_kind_ok fn ret zop szv` >>
-  `(?w. sd = Val w) /\ (?w. szv = Val w)` by
-    (conj_tac >> irule sym_revert_operand_kind_mode >> metis_tac[listTheory.MEM]) >>
-  gvs[asmSymSemTheory.sval_conc_def]
+  drule_all sym_revert_source_stack_words_mode >> strip_tac >>
+  gvs[asmSymBridgeTheory.sval_conc_def]
 QED
 
 Theorem sym_revert_prepared_terminal_mode_conditional:
@@ -84,18 +86,22 @@ Proof
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   `dop <> dead_stack_marker /\ zop <> dead_stack_marker` by
     (rpt strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
-  `?d z residual. stk = d :: z :: residual /\
-    operand_val current lo dop = SOME d /\ operand_val current lo zop = SOME z` by
-    (irule emitSimTheory.asm_stack_top2_from_plan >> simp[] >>
-     qexists `tail` >> simp[]) >>
-  gvs[] >> rename1 `cs.as_stack = dst :: sz :: remaining` >>
-  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by simp[] >>
-  drule_all sym_revert_prepared_stack_core >> strip_tac >>
+  `?remaining. cs.as_stack = dst :: sz :: remaining` by
+    (`?d z residual. stk = d :: z :: residual /\
+      operand_val current lo dop = SOME d /\ operand_val current lo zop = SOME z` by
+       (irule emitSimTheory.asm_stack_top2_from_plan >> simp[] >>
+        qexists `tail` >> simp[]) >> gvs[]) >>
+  `?suffix. ss.sym_stack = MAP Val [dst;sz] ++ suffix` by
+    (drule_all sym_revert_source_stack_words_mode >> strip_tac >>
+     gvs[asmSymBridgeTheory.sval_conc_def]) >>
   irule sym_terminal_opcode_transfer_mode_conditional >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`[dst;sz]`, `code_ok`, `AsmRevert out`, `cs`, `lo`, `"REVERT"`, `suffix`] >>
   simp[asm_op_arity_def, asm_op_arity_table_def, asm_op_mem_reads_def,
-       asmSemTheory.log_table_def]
+       asmSemTheory.log_table_def] >>
+  conj_tac
+  >- (qpat_x_assum `rf_T _ _ _ _ _ _` mp_tac >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem sym_plan_stack_rel_inst_idx:
@@ -204,5 +210,6 @@ Proof
     gvs[venom_asm_terminal_rel_def] >>
   drule_all sym_assign_success_state >> strip_tac >>
   qexistsl [`st'`,`ss'`,`stk'`,`top'`] >>
-  gvs[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx, venom_asm_terminal_rel_def]
+  gvs[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx, venom_asm_terminal_rel_def] >>
+  conj_tac >- (qexists `m` >> simp[]) >> first_assum ACCEPT_TAC
 QED
