@@ -13,16 +13,15 @@ val load_steps = LIST_CONJ (List.filter (fn th =>
   end) (CONJUNCTS step_inst_base_opcode_eqs));
 
 Theorem augassign_storage_load_joint_step:
-  !K DF lo explicit ctx func PG sa arg slot s G tn old sb tr.
-  let x = STRING #"%" (toString sa.cs_next_var);
-      opc = (if tr then TLOAD else SLOAD);
-      i = mk_inst sa.cs_next_id opc [arg] [x];
-      w = (if tr then tload slot s else sload slot s);
-      raw = update_var x w s;
-      u = raw with vs_inst_idx := SUC s.vs_inst_idx;
-      G1 = step_prov PG G i raw;
-      tn1 = step_taint i s raw tn
-  in
+  !K DF lo explicit ctx func PG sa arg slot s G tn old sb tr x opc i w raw u G1 tn1.
+    x = STRING #"%" (toString sa.cs_next_var) /\
+    opc = (if tr then TLOAD else SLOAD) /\
+    i = mk_inst sa.cs_next_id opc [arg] [x] /\
+    w = (if tr then tload slot s else sload slot s) /\
+    raw = update_var x w s /\
+    u = (raw with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G1 = step_prov PG G i raw /\
+    tn1 = step_taint i s raw tn /\
     emit_op opc [arg] sa = (old,sb) /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
@@ -45,7 +44,10 @@ Theorem augassign_storage_load_joint_step:
     (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s /\
          FLOOKUP G1 q = FLOOKUP G q /\ op_taint tn1 (Var q) = op_taint tn (Var q))
 Proof
-  rpt gen_tac >> simp_tac bool_ss [LET_THM] >>
+  rpt gen_tac >>
+  simp_tac bool_ss [GSYM AND_IMP_INTRO] >>
+  ntac 8 (disch_then SUBST1_TAC) >>
+  pure_rewrite_tac [AND_IMP_INTRO] >>
   qabbrev_tac `x = STRING #"%" (toString sa.cs_next_var)` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id (if tr then TLOAD else SLOAD) [arg] [x]` >>
   qabbrev_tac `raw = update_var x (if tr then tload slot s else sload slot s) s` >>
