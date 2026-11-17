@@ -81,9 +81,6 @@ Proof
   >- (drule_all budget_step_outcomes >>
       Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` >>
       fs[] >> strip_tac >> simp[] >>
-      conj_tac
-      >- (`0 < LENGTH p.bp_state.vs_outcomes` by simp[LENGTH_NIL] >>
-          fs[LENGTH_DROP] >> decide_tac) >>
       pure_rewrite_tac[DROP_DROP_T] >>
       AP_THM_TAC >> AP_TERM_TAC >> decide_tac)
   >- (drule enters_block_preserves_outcomes >> strip_tac >>
