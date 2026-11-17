@@ -16,7 +16,7 @@ Theorem ricf_located_event_source_write_range_exclusion:
   icf_is_alloca di /\
   MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sv] /\
   fn_inst_ids_distinct fn /\ occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   FLOOKUP B (a,ai.inst_id) = SOME (sb,z) /\ 0 < z /\
   e.rfe_index <= j /\ j < LENGTH (EL b fn.fn_blocks).bb_instructions /\
@@ -28,7 +28,7 @@ Theorem ricf_located_event_source_write_range_exclusion:
     ~(off <= sb+k /\ sb+k < off+len)
 Proof
   strip_tac >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G` by
     gvs[occurrence_annotation_ok_def] >>
   `!ops. mem_write_ops (EL j (EL b fn.fn_blocks).bb_instructions) = SOME ops ==>
      op_prov G ops.iao_ofst <> SOME (sb,z)` by
@@ -48,7 +48,7 @@ Theorem ricf_located_event_reachable_source_write_exclusion:
   icf_is_alloca di /\
   MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sv] /\
   fn_inst_ids_distinct fn /\ occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   FLOOKUP B (a,ai.inst_id) = SOME (sb,z) /\ 0 < z /\
   e.rfe_index <= j /\ j < LENGTH (EL b fn.fn_blocks).bb_instructions /\

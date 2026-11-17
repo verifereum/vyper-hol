@@ -93,13 +93,14 @@ Proof
   first_x_assum irule >> fs[] >> metis_tac[]
 QED
 
-Theorem layout_request_base_certificate_fuel:
+Theorem layout_request_base_certificate_fuel_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> ?eom.
+    max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -122,7 +123,7 @@ Proof
   `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
     simp[layout_cut_safe_whole_run] >>
   match_mp_tac layout_request_base_lift_fuel >> conj_tac
-  >- (drule_all layout_canonical_base_certificate_fuel >>
+  >- (drule_all layout_canonical_base_certificate_fuel_headroom_static >>
       simp[selected_base_certificate_fuel_def, selected_step_match_fuel_def, events_OS_def] >>
       metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
@@ -138,13 +139,13 @@ Proof
   >> metis_tac[layout_request_state_fields]
 QED
 
-Resume layout_request_base_certificate_fuel[success]:
+Resume layout_request_base_certificate_fuel_headroom_static[success]:
   rename1 `step_inst_base i s = OK post` >>
   rename1 `step_inst_base j t = OK tpost` >>
   Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
   >- (Cases_on `a`
       >- (drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-            layout_canonical_external_success_requests >>
+            layout_canonical_external_success_requests_headroom_static >>
           simp[] >> strip_tac >>
           metis_tac[layout_request_state_def]) >>
       rename1 `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (INR g)` >>
@@ -156,4 +157,35 @@ Resume layout_request_base_certificate_fuel[success]:
   metis_tac[layout_request_nonexternal_success]
 QED
 
-Finalise layout_request_base_certificate_fuel
+Finalise layout_request_base_certificate_fuel_headroom_static
+
+Theorem layout_request_base_certificate_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> ?eom.
+    max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (!inst s a post. step_inst_base inst s = Abort a post ==>
+    post.vs_requests = s.vs_requests) ==>
+  selected_base_certificate_fuel C C' q0 path
+    (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
+    (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_request_base_certificate_fuel_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

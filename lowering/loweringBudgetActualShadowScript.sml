@@ -15,7 +15,8 @@ Theorem lower_budget_actual_shadow_context:
            package_external_fn tops T (K global_nonreentrant_slot)) exts /\
     ips =
       MAP (set_internal_package_target rpolicy.rpol_target o
-           package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints /\
+           package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+        (order_internals (runtime_internal_order tops ints) ints) /\
     fall =
       set_fallback_package_target rpolicy.rpol_target
         (package_fallback_fn tops T (K global_nonreentrant_slot) fb) /\

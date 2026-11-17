@@ -31,7 +31,7 @@ Theorem ld_phis_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
@@ -60,7 +60,7 @@ Theorem ld_phis_certificate_backward:
       owner IN live /\ other IN live /\ owner <> other /\
       ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
       (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (tn with t_var := phis_taint s.vs_prev_bb tn ins).t_mem
       (un with t_var := phis_taint t.vs_prev_bb un ins).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
@@ -109,7 +109,7 @@ Proof
      disch_then SUBST1_TAC >> simp[]) >>
   `ld_frame_embedding E L H s' t'` by metis_tac[ld_frame_embedding_vars_transport] >>
   `ld_alloc_account keys d A s' t'` by metis_tac[ld_alloc_account_vars_transport] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
     metis_tac[ld_byte_rel_vars_transport] >>
   dxrule ld_vars_restore_normalize >> disch_then SUBST_ALL_TAC >>

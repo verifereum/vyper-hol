@@ -103,6 +103,8 @@ Theorem unwrap_code_copy_runtime_origin_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v z G' tn'.
     read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) [] (OK z, G', tn') /\
@@ -270,6 +272,18 @@ Proof
      irule allocated_vv_at >> simp[eval_operand_def, lookup_var_def, log_local_region_inst_idx] >>
      qexistsl [`type_memory_size rty`, `sb.cs_next_id`, `w2n w`, `w`] >>
      gvs[lookup_var_def] >> metis_tac[]) >>
+  `vv_own cenv cx (post_value_type cenv e) sb cs'' ee (Value v)
+    (LocatedValue (post_value_type cenv e) (mk_ptr (Var root) LocMemory))
+    (z with vs_inst_idx := LENGTH cs''.cs_current_insts)` by
+    (qpat_assum `copy_runtime_frame mid allocst _ z` mp_tac >>
+     qpat_assum `allocst = _` (fn th => rewrite_tac[th]) >> disch_tac >>
+     drule_all code_copy_allocation_site >> strip_tac >>
+     simp[vv_own_def, mk_ptr_def, vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def, eval_operand_def, lookup_var_def,
+          log_local_region_inst_idx] >> rpt strip_tac >> gvs[] >>
+     disj1_tac >>
+     qpat_assum `FLOOKUP z.vs_allocas sb.cs_next_id = SOME _` (irule_at Any) >>
+     gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
   simp[] >>
   conj_tac >-
@@ -365,6 +379,8 @@ Theorem unwrap_code_copy_ctor_origin_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v z G' tn'.
     read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) [] (OK z, G', tn') /\
@@ -582,6 +598,20 @@ Proof
      irule allocated_vv_at >> simp[eval_operand_def, lookup_var_def, log_local_region_inst_idx] >>
      qexistsl [`type_memory_size rty`, `sb.cs_next_id`, `w2n w`, `w`] >>
      gvs[lookup_var_def] >> metis_tac[]) >>
+  `vv_own cenv cx (expr_type e) sb cs'' ee (Value v)
+    (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory))
+    (z with vs_inst_idx := LENGTH cs''.cs_current_insts)` by
+    (`stmt_state_rel H0 ctx func cenv cx ee z` by
+       (fs[expr_post_def] >> metis_tac[]) >>
+     qpat_assum `copy_runtime_frame mid allocst _ z` mp_tac >>
+     qpat_assum `allocst = _` (fn th => rewrite_tac[th]) >> disch_tac >>
+     drule_all code_copy_allocation_site >> strip_tac >>
+     simp[vv_own_def, mk_ptr_def, vyperStateTheory.read_result_def,
+          vyperStateTheory.return_def, eval_operand_def, lookup_var_def,
+          log_local_region_inst_idx] >> rpt strip_tac >> gvs[] >>
+     disj1_tac >>
+     qpat_assum `FLOOKUP z.vs_allocas sb.cs_next_id = SOME _` (irule_at Any) >>
+     gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
   simp[] >>
   conj_tac >-
@@ -696,6 +726,12 @@ Theorem unwrap_code_copy_origin_ptr:
     ghost_kept_at lo cenv ee sb G tn s G' tn'
 Proof
   strip_tac >> Cases_on `cenv.ce_is_ctor`
-  >- (drule_all unwrap_code_copy_ctor_origin_ptr >> simp[]) >>
-  drule_all unwrap_code_copy_runtime_origin_ptr >> simp[]
+  >- (drule_all unwrap_code_copy_ctor_origin_ptr >>
+      disch_then (qspecl_then [`explicit`,`PG`]
+        (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+      qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[]) >>
+  drule_all unwrap_code_copy_runtime_origin_ptr >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+  qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[]
 QED

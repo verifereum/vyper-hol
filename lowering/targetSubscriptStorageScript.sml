@@ -628,7 +628,7 @@ Proof
   `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >> metis_tac[]
 QED
 
-Theorem target_storage_array_path_fields[local]:
+Theorem target_storage_array_path_fields:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
       (if tr then LocTransient else LocStorage)) sa = (dst,sb) /\

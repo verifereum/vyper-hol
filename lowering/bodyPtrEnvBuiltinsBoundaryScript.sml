@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsBoundary
 Ancestors
   bodyPtrDefs representationCleanPtr exprSimLen exprSimProps
   vyperValue vyperTyping valueEncoding loweringPosts venomState
-  exprLowering compileEnv bodyPtrPreds bodySim exprOpenFirstOperand exprPtrUnwrap
+  exprLowering compileEnv bodyPtrPreds bodySim exprOpenFirstOperand exprPtrUnwrap exprStackPtr
 
 Theorem ptr_mem_ok_header_clean:
   ptr_mem_ok cx ty v op G tn s /\
@@ -101,7 +101,7 @@ Proof
   strip_tac >> simp[body_expr_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_ptr d ctx PG func cenv cx ty e es` by metis_tac[] >>
-  conj_tac >- simp[] >> irule expr_vv_sim_ptr_stack >> metis_tac[]
+  conj_tac >- simp[] >> irule expr_vv_sim_stack_ptr >> metis_tac[]
 QED
 
 Theorem body_expr_ptr_of_vv:

@@ -13,9 +13,8 @@ Ancestors
   emitHelperProps compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState finite_map arithmetic
 
-(* H moved the arm's obligations: the root's vv_post needs the arm's
-   value placed (vv_at) when it is not a word, and the root is pure only
-   when the selected arm is. *)
+(* A nonword arm retains both its placement and place pointer; the root
+   is pure only when the selected arm is. *)
 Theorem ifexp_arm_finish_full:
   (* the root's premises *)
   stmt_state_rel H ctx func cenv cx es s0 /\ return_buf_frame d cenv sa s0 /\
@@ -36,6 +35,8 @@ Theorem ifexp_arm_finish_full:
   expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   (~is_word_type t ==>
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~is_word_type t ==>
+   vv_place_ptr cenv cx ee u tv (LocatedValue t (mk_ptr op LocMemory))) /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   expr_store_bound cx t v op u /\
   u.vs_current_bb = sd.cs_current_bb /\
@@ -154,35 +155,11 @@ Proof
       irule (SRULE [vyperASTTheory.expr_type_def]
         (Q.INST [`e` |-> `IfExp t c a b`] ifexp_root_vv_post_of_expr_post_read)) >>
       conj_tac
-      >- (strip_tac >>
-          `vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u`
-            by fs[] >>
-          `sa.cs_next_id <= sc.cs_next_id` by decide_tac >>
-          qpat_x_assum `local_ptrs_reserved cenv sa` mp_tac >>
-          qpat_x_assum `!x. not_fresh_at sa x ==> x <> rv` mp_tac >>
-          qpat_x_assum `sa.cs_next_id <= sc.cs_next_id` mp_tac >>
-          qpat_x_assum `sd.cs_next_id <= sb.cs_next_id` mp_tac >>
-          qpat_x_assum `eval_operand op u = SOME w` mp_tac >>
-          qpat_x_assum `vv_at cenv cx t sc sd ee tv _ u` mp_tac >>
-          rpt (pop_assum kall_tac) >> rpt strip_tac >>
-          qabbrev_tac `ss = jump_to xl (update_var rv w u with vs_inst_idx := k)` >>
-          `ss.vs_allocas = u.vs_allocas /\ lookup_var rv ss = SOME w /\
-           (!x. x <> rv ==> lookup_var x ss = lookup_var x u)` by
-            simp[Abbr `ss`, jump_to_def, update_var_def, lookup_var_def,
-                 FLOOKUP_UPDATE] >>
-          `!n b sz. local_region cenv ee.scopes ss n b sz <=>
-                    local_region cenv ee.scopes u n b sz` by
-            (rpt gen_tac >> simp[local_region_def] >> eq_tac >> rpt strip_tac >>
-             fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-          qpat_x_assum `vv_at _ _ _ _ _ _ _ _ u` mp_tac >>
-          simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def] >>
-          rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]
-          >~ [`FLOOKUP u.vs_allocas aid = SOME _`]
-          >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
-              `sa.cs_next_id <= aid /\ aid < sb.cs_next_id` by decide_tac >>
-              rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >>
-          rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      >- (strip_tac >> irule ifexp_place_ptr_root_var >> fs[] >> metis_tac[]) >>
+      conj_tac
+      >- (strip_tac >> irule ifexp_vv_at_root_frame >> simp[] >>
+          conj_tac >- metis_tac[] >>
+          qexistsl_tac [`op`, `sc`, `sd`] >> simp[] >> decide_tac) >>
       qexists_tac `v` >> simp[] >>
       irule expr_post_ifexp >>
       `~not_fresh_at sa rv` by metis_tac[] >> simp[] >>
@@ -309,6 +286,8 @@ Theorem ifexp_arm_finish_full_family:
   MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
   (~is_word_type t ==>
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~is_word_type t ==>
+   vv_place_ptr cenv cx ee u tv (LocatedValue t (mk_ptr op LocMemory))) /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   expr_store_bound cx t v op u /\
   u.vs_current_bb = sd.cs_current_bb /\

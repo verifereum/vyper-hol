@@ -1,6 +1,6 @@
 Theory bodyFullAbiDecodeTailAdd
 Ancestors
-  bodyFullAbiDecodeLeafCases typedCopyOriginPtrDynArray bodyPtrMakeArrayEmission fragGasSeqPtr fragGasOriginPtr
+  bodyFullAbiDecodeTailAddExact bodyFullAbiDecodeLeafCases typedCopyOriginPtrDynArray bodyPtrMakeArrayEmission fragGasSeqPtr fragGasOriginPtr
   bodyFullGhostFrame abiDecodePtrMemberFrame allocaHistory bodyPtrDefs
   loweringStateRelDefs codegenRel freshWrites stateFrame
   exprLoweringProps emitHelperProps emitHelper compileEnv venomState venomExecSemantics venomInst
@@ -68,107 +68,8 @@ Theorem abi_decode_tail_ptr_add_joint:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `allocas_from lo s` by (fs[] >> metis_tac[ghost_inv_at_def]) >>
-  drule emit_op_fetch_boundary >> disch_then drule >>
-  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `res = Var r` >>
-  qabbrev_tac `i = mk_inst sa.cs_next_id ADD [Var p;off] [r]` >>
-  qabbrev_tac `u = update_var r (n2w (a+k)) s` >>
-  qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  qabbrev_tac `gf = step_prov PG G i u` >>
-  qabbrev_tac `tf = step_taint i s u tn` >>
-  suspend "effects"
+  (Q.SUBGOAL_THEN `?H. V H` assume_tac >- (qexists_tac `H` >> simp[])) >>
+  drule_all abi_decode_tail_ptr_add_joint_exact >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`r`, `t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
-
-Resume abi_decode_tail_ptr_add_joint[effects]:
-  `!x. not_fresh_at sa x ==> x <> r` by metis_tac[] >>
-  `not_fresh_at sb r /\ sa.cs_next_var <= sb.cs_next_var /\
-   sa.cs_next_id <= sb.cs_next_id` by
-    (conj_tac >- metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
-     drule emitted_insts_emit_op >> simp[] >> strip_tac >>
-     qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
-     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-       fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
-  `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, exec_pure2_def,
-      mk_inst_def, eval_operand_def, word_add_n2w] >>
-  `inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
-    simp[Abbr `i`, mk_inst_def, inst_mem_below_frontier_def,
-      inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-  `!D. ptr_inst_ok D lo 0 ctx fn G tn i s` by
-    (gen_tac >> simp[ptr_inst_ok_def, Abbr `i`, mk_inst_def, access_ok_def,
-      taint_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
-       exec_pure2_def, eval_operand_def, update_var_def]) >>
-  suspend "package"
-QED
-
-Resume abi_decode_tail_ptr_add_joint[package]:
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-    (s,G,tn) [] (OK t,gf,tf)` by
-    (gen_tac >>
-     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-      get_instruction bb s.vs_inst_idx = SOME i /\
-      i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      ptr_inst_ok D lo 0 ctx fn G tn i s` by
-       (gvs[markerTheory.Abbrev_def, mk_inst_def, is_terminator_def]) >>
-     `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG)
-       (s,G,tn) [] (OK t,gf,tf)` by
-       (simp[Abbr `t`, Abbr `gf`, Abbr `tf`] >>
-        drule_all straight_line_origin_ptr_edge >>
-        simp[Abbr `i`, mk_inst_def, is_terminator_def]) >>
-     drule (cj 2 gas_origin_ptr_path_rules) >>
-     disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
-     irule (cj 1 gas_origin_ptr_path_rules) >>
-     simp[Abbr `t`, Abbr `u`, update_var_def]) >>
-  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)` by
-    suspend "old" >>
-  `tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
-   tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm` by suspend "taint" >>
-  `alloca_history fn t` by suspend "history" >>
-  `(^owned_decoder_state) sb t gf tf` by
-    (irule abi_decode_owned_scalar_frame_with_history >>
-     conj_tac >- simp[] >>
-     qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
-     simp[Abbr `t`, Abbr `u`, state_frame_def, update_var_def]) >>
-  qexistsl_tac [`r`, `t`, `gf`, `tf`] >> asm_rewrite_tac[] >>
-  simp[Abbr `t`, Abbr `u`, update_var_def] >>
-  suspend "result"
-QED
-
-Resume abi_decode_tail_ptr_add_joint[old]:
-  rpt strip_tac >> `x <> r` by metis_tac[] >>
-  simp[Abbr `t`, Abbr `u`, Abbr `gf`, Abbr `tf`, Abbr `i`,
-    step_prov_def, set_prov_def, out_prov_def, first_prov_def, op_prov_def,
-    step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
-    mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
-Resume abi_decode_tail_ptr_add_joint[taint]:
-  simp[Abbr `tf`, Abbr `i`, step_taint_def, set_var_taint_def,
-    out_taint_def, store_taint_def, adopt_reset_def, mem_taint_def, imm_taint_def,
-    step_writes_def, source_memory_write_ranges_def, written_taint_def,
-    range_bytes_def, mk_inst_def, Abbr `u`, update_var_def,
-    new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss]
-QED
-
-Resume abi_decode_tail_ptr_add_joint[history]:
-  irule abi_decode_no_alloca_endpoint_history >>
-  qexistsl_tac [`s`, `sa`, `sb`] >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  fs[] >> simp[Abbr `t`, Abbr `u`, update_var_def, Abbr `i`, mk_inst_def,
-    IS_PREFIX_APPEND]
-QED
-
-Resume abi_decode_tail_ptr_add_joint[result]:
-  gvs[update_var_def, ptr_covers_def, lookup_var_def] >>
-  gvs[Abbr `gf`, Abbr `tf`, Abbr `i`, step_prov_def, set_prov_def,
-    out_prov_def, first_prov_def, op_prov_def, step_taint_def,
-    set_var_taint_def, out_taint_def, op_taint_def, mk_inst_def,
-    eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
-
-Finalise abi_decode_tail_ptr_add_joint

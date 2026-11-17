@@ -314,7 +314,7 @@ Resume target_subscript_sim_full[index_run]:
   `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
     dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >>
+     fs[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >>
      metis_tac[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     (simp[gas_admissible_def] >> rpt strip_tac >>

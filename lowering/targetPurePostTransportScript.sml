@@ -309,6 +309,17 @@ Proof
       simp[] >> qexistsl_tac [`H`, `s`, `sa`, `sm`] >> simp[])
   >- (irule (cj 1 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
+  >- (`vv_place_ptr cenv cx es1 u r vv` by
+        (`!id q sz w.
+            FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+            lookup_var q s = SOME w ==> lookup_var q u = SOME w` by
+           (rpt strip_tac >> fs[local_ptrs_reserved_def, wb_frame_def] >>
+            metis_tac[]) >>
+         `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
+           metis_tac[target_saved_operand_exists] >>
+         irule vv_place_ptr_vars_frame >> qexists_tac `s` >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      Cases_on `vv` >> fs[vv_place_ptr_def])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule target_saved_storage_live_frame >>

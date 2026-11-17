@@ -698,7 +698,7 @@ Proof
 QED
 
 (* Needed for Holmake: mark incomplete theorems *)
-val _ = Feedback.set_trace "Theory.allow_rebinds" 1;
+val _ = HOLFlags.set_trace "Theory.allow_rebinds" 1;
 
 (* ===== Argument Decoding (helpers only) ===== *)
 
