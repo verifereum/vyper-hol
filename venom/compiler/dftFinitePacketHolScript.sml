@@ -5,8 +5,7 @@ Ancestors
   dftPacketBlockRootedAppend
   dftPacketBlockCutAggregate dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketBlockAppendShape dftGasPrefixProvider
-  dftPacketBlockAppendTraceBoundary
-  dftNativePlanPrefix
+  dftPacketBlockAppendTraceBoundary dftNativePlanPrefix
   dftPacketBlockNativePrefix
   dftPacketCallNative
   dftPacketCallUpdate
@@ -20,22 +19,22 @@ Ancestors
   dftPacketCutExtension
   dftPacketEntryReplay
   dftPacketFillingBoundary
-  dftPacketFreshCut dftPacketFreshRootSuccessSplit
-  dftPacketFreshChildStop
-  dftPacketFreshChildOccurrence dftPacketFreshRow
-  dftPacketFreshSingletonNormalize dftPacketBlockFreshEntry
+  dftPacketFreshCut
+  dftPacketFreshRootSuccessSplit dftPacketFreshChildStop
+  dftPacketFreshSingletonStop dftPacketFreshChildOccurrence dftPacketFreshRow
+  dftPacketFreshSingletonNormalize dftPacketFreshSingletonNative dftPacketBlockFreshEntry
   dftPacketKeyMap
   dftPacketKeySubstitution
   dftPacketLastRowValidity
   dftPacketNativeContinuation
-  dftPacketNativePrefixBoundary
+  dftPacketPseudoNativeNext dftPacketNativePrefixBoundary
   dftPacketNativeSupplierReplay
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
+  dftPacketInvokePrefixStop dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
   dftPacketPreterminalNativeAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry dftPacketPseudoAdvance
@@ -43,15 +42,14 @@ Ancestors
   dftPacketPseudoHistory dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketPseudoHistoryFrame dftPacketPseudoHistoryCuts dftPacketPseudoHistoryReplay dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows
-  dftPacketReturnActivation dftPacketReturnLocal
+  dftPacketReturnActivation dftPacketReturnOrder dftPacketReturnLocal
+  dftPacketReturnRowNormalize
   dftPacketReturnNative
-  dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts
-  dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
+  dftPacketTraceCallProvenance dftPacketReturnRecordFrame dftPacketReturnHistoricalCuts dftPacketReturnRowSupply dftPacketReturnParentReplay dftPacketReturnParentRetained dftPacketRootedAlignment
   dftPacketRootedCompose
   dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketBlockRootedOperational dftPacketRootedPlainStop
-  dftPacketBlockAppendStopBoundary
-  dftPacketRootedSegmentStop dftPacketRowAlignment
+  dftPacketBlockAppendStopBoundary dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
   dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
@@ -60,4 +58,4 @@ Ancestors
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess
+  dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry dftPacketChangedCallerSuccess dftPacketFreshRootGeometry
