@@ -58,6 +58,11 @@ current series contains:
   hunk only): an assignment whose target indices can modify memory or storage
   (`self.m[self.f()] = self.x`) freezes the right-hand side before lowering the
   target, so the store sees the value from before those effects.
+- `5322-signed-bytestring-convert.patch`, vyperlang/vyper#5322: a signed
+  (or decimal) conversion of a bytestring masks the data word with
+  `iszero(iszero(length))` before `sar`, so an empty bytestring whose data word
+  holds stale bytes (an emptied storage bytestring) converts to zero. The pin
+  masks only unbounded bytestrings.
 - `5332-immutable-runtime-length.patch`, vyperlang/vyper#5332: constructor
   immutable bytestring stores copy the length word and live data words, rather
   than the declared capacity.
