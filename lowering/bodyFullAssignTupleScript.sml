@@ -13,7 +13,8 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
   bodyFullMemoryCopy bodyFullMemoryFrames context loweringPosts loweringStateRelDefs
-  venomState
+  venomState typedCopyOriginPtrBase decoderSetupStepPtr exprPtrCtorImmStore
+  stateFrame ghostPcTransportPtr emitHelperProps arithmetic bodyPtrDefs ptrDiscipline
 
 val _ = Parse.hide "body";
 
@@ -221,6 +222,150 @@ Proof
   drule_at (Pos (el 5)) robust_val_in_memory_exterior_frame >>
   disch_then (qspecl_then [`tn1.t_mem`, `s.vs_memory`,
     `{i | b <= i /\ i < b+n}`] mp_tac) >> simp[]
+QED
+
+(* Tuple element addresses are joint origin/pointer steps at every horizon. *)
+Theorem body_assign_tuple_offset_add_path:
+  emit_op ADD [Var root; Lit (n2w off)] sa = (op,sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME w /\
+  ptr_covers G tn root s capacity /\ off+n <= capacity /\
+  w2n w + capacity < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out t Gf tf.
+    op = Var out /\ not_fresh_at sb out /\
+    t = (update_var out (w+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    Gf = step_prov PG G (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out])
+      (update_var out (w+n2w off) s) /\
+    tf = step_taint (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out]) s
+      (update_var out (w+n2w off) s) tn /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    lookup_var out t = SOME (w+n2w off) /\ ptr_covers Gf tf out t n /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    op_taint tf (Var out) = {} /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `op = Var out` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (gvs[not_fresh_at_def,Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
+  `op_taint tn (Var root) = {}` by gvs[ptr_covers_def] >>
+  `eval_operand (Var root) s = SOME w /\
+   eval_operand (Lit (n2w off)) s = SOME (n2w off) /\
+   op_taint tn (Lit (n2w off)) = {}` by simp[eval_operand_def,op_taint_def] >>
+  `!D. ?t Gf tf.
+     t = (update_var out (w+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+     Gf = step_prov PG G (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out])
+       (update_var out (w+n2w off) s) /\
+     tf = step_taint (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out]) s
+       (update_var out (w+n2w off) s) tn /\
+     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf) /\
+     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (gen_tac >>
+     drule_all (typed_copy_origin_ptr_binop_path |> Q.INST
+       [`opc` |-> `ADD`, `w` |-> `x+y`] |> SRULE []) >>
+     simp[eval_operand_def,op_taint_def] >>
+     disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`D`] mp_tac) >>
+     gvs[] >> metis_tac[]) >>
+  gnvs[] >>
+  conj_tac >- metis_tac[typed_copy_emit_op_fresh] >>
+  conj_tac >- simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
+  conj_tac >-
+    (simp[] >> irule typed_copy_origin_ptr_offset_covers >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame] >>
+  simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE,state_frame_def] >>
+  rpt strip_tac >>
+  `x <> out` by metis_tac[] >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame,GSYM update_var_def]
+QED
+
+(* Clean tuple words use the same deterministic MLOAD endpoint for all D. *)
+Theorem body_assign_tuple_mload_path:
+  emit_op MLOAD [Var root] sa = (op,sb) /\
+  lookup_var root s = SOME w /\ ptr_covers G tn root s 32 /\
+  w2n w+32 <= s.vs_alloca_next /\
+  (!i. w2n w <= i /\ i < w2n w+32 ==> i NOTIN tn.t_mem) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out t Gf tf.
+    op = Var out /\ not_fresh_at sb out /\
+    t = (update_var out (mload (w2n w) s) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    Gf = step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var root] [out])
+      (update_var out (mload (w2n w) s) s) /\
+    tf = step_taint (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s
+      (update_var out (mload (w2n w) s) s) tn /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)) /\
+    lookup_var out t = SOME (mload (w2n w) s) /\
+    op_taint tf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `op = Var out` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (gvs[not_fresh_at_def,Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s =
+     OK (update_var out (mload (w2n w) s) s)` by
+    simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomInstTheory.mk_inst_def,venomExecSemanticsTheory.exec_read1_def,eval_operand_def] >>
+  `!out. inst_mem_below_frontier (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s /\
+     inst_dload_in_section (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s` by
+    simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+      contextCodegenRelTheory.source_memory_read_ranges_def,
+      codegenRelTheory.source_memory_write_ranges_def,
+      memSafeRunTheory.inst_dload_in_section_def,venomInstTheory.mk_inst_def,eval_operand_def] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (update_var out (mload (w2n w) s) s with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var root] [out])
+       (update_var out (mload (w2n w) s) s),
+     step_taint (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s
+       (update_var out (mload (w2n w) s) s) tn) /\
+     sa.cs_current_bb = sb.cs_current_bb` by
+    (gen_tac >>
+     `!out. ptr_inst_ok D lo 0 ctx func G tn
+       (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s` by
+       (gen_tac >> irule ptr_inst_ok_mload_lo >> simp[]) >>
+     `MLOAD <> INVOKE /\ MLOAD <> GAS /\ ~is_terminator MLOAD` by
+       simp[venomInstTheory.is_terminator_def] >>
+     drule_all typed_copy_origin_ptr_emit_op_path >>
+     disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] mp_tac) >>
+     gvs[] >> metis_tac[update_var_def]) >>
+  gnvs[] >>
+  conj_tac >- metis_tac[typed_copy_emit_op_fresh] >>
+  simp[setup_mload_ghost |> SRULE []] >>
+  simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE,state_frame_def] >>
+  conj_tac >-
+    simp[op_prov_def,step_prov_def,out_prov_def,set_prov_def,
+      venomInstTheory.mk_inst_def,FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> `x <> out` by metis_tac[] >>
+  simp[decoderGhostFramePtrTheory.step_prov_other_output,
+    decoderGhostFramePtrTheory.step_taint_other_output,venomInstTheory.mk_inst_def]
 QED
 
 (* A source that is a widened aggregate call. *)
