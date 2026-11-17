@@ -193,6 +193,9 @@ Theorem computed_static_exec:
   rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
   inst.inst_outputs = [out] ==>
   exec_ext_call inst s gas addr 0w ai an ro rs T =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else
     OK (update_var out
       (if (FST (take_outcome rq s.vs_outcomes)).co_success then 1w else 0w)
       ((write_memory_with_expansion (w2n ro)
@@ -207,6 +210,7 @@ QED
 
 Theorem computed_static_exec_state_rel:
   rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
+  s.vs_outcomes <> [] /\
   inst.inst_outputs = [out] /\
   stmt_state_rel H ctx func cenv cx es s /\ not_local_ptr cenv es.scopes out /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -233,6 +237,7 @@ QED
 
 Theorem computed_static_exec_wb_frame:
   rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
+  s.vs_outcomes <> [] /\
   inst.inst_outputs = [out] /\ ~not_fresh_at sa out /\
   (!aid b sz.
      FLOOKUP s.vs_allocas aid = SOME (b, sz) /\ aid < sa.cs_next_id /\
@@ -261,18 +266,6 @@ Proof
   qmatch_goalsub_abbrev_tac `LENGTH bs` >>
   `LENGTH bs <= w2n rs` by simp[Abbr `bs`, listTheory.LENGTH_TAKE_EQ] >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
-QED
-
-Theorem computed_static_empty_probe[local]:
-  rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
-  inst.inst_outputs = [out] /\ s.vs_outcomes = [] ==>
-  exec_ext_call inst s gas addr 0w ai an ro rs T =
-    OK (update_var out 0w
-      ((write_memory_with_expansion (w2n ro) [] s)
-        with <|vs_returndata := []; vs_outcomes := []|>))
-Proof
-  strip_tac >> drule_all computed_static_exec >>
-  simp[take_outcome_def, write_memory_with_expansion_def]
 QED
 
 Theorem computed_static_false_probe[local]:
@@ -1793,6 +1786,9 @@ Theorem computed_static_exec_failure:
   precompile_result rq.cr_target rq.cr_data = SOME NONE /\
   inst.inst_outputs = [out] ==>
   exec_ext_call inst s gas addr 0w ai an ro rs T =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else
     OK (update_var out 0w
       ((write_memory_with_expansion (w2n ro) [] s)
        with <|vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes|>))
@@ -1969,6 +1965,37 @@ Proof
   simp[run_inst_seq_def, Abbr `sc`, Abbr `sg`, Abbr `s0`]
 QED
 
+Theorem computed_suffix_exhausted:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\ s.vs_outcomes = [] ==>
+  ?u. run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort u
+Proof
+  strip_tac >> drule computed_suffix_shape >> strip_tac >>
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
+  `step_inst_base (mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)]) s =
+   OK sg` by simp[Abbr `sg`, Abbr `g`, Abbr `s0`, step_GAS] >>
+  `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
+    (simp[Abbr `sg`] >>
+     metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
+  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
+    simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `sg.vs_outcomes = []` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
+  qexists_tac `halt_state (set_returndata [] sg)` >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[mk_inst_def, step_inst_base_def,
+       eval_operand_def, exec_ext_call_def]
+QED
+
 Theorem computed_suffix_failure:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
@@ -1978,14 +2005,18 @@ Theorem computed_suffix_failure:
   (!x. op = Var x ==> not_fresh_at sm x) /\
   precompile_result (venom_call_request s target 0w wi insz T).cr_target
     (venom_call_request s target 0w wi insz T).cr_data = SOME NONE ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
-  strip_tac >> drule computed_suffix_shape >> strip_tac >>
+  strip_tac >> Cases_on `s.vs_outcomes = []`
+  >- (simp[] >> irule computed_suffix_exhausted >> metis_tac[]) >>
+  simp[] >> drule computed_suffix_shape >> strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
   `!x. eval_operand x s0 = eval_operand x s` by
     (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
   qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var)) g s0` >>
+  `sg.vs_outcomes <> []` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
   `step_inst_base (mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)]) s =
    OK sg` by simp[Abbr `sg`, Abbr `g`, Abbr `s0`, step_GAS] >>
   `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
@@ -2010,7 +2041,8 @@ Proof
      ((write_memory_with_expansion (w2n wo) [] sg)
        with <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>))` by
     (qpat_x_assum `venom_call_request _ _ _ _ _ _ = _` kall_tac >>
-     irule computed_static_exec_failure >> simp[] >> metis_tac[]) >>
+     irule EQ_TRANS >> irule_at Any computed_static_exec_failure >>
+     simp[] >> metis_tac[]) >>
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -2038,9 +2070,12 @@ Theorem computed_suffix_oracle_failure:
   (!x. op = Var x ==> not_fresh_at sm x) /\
   computed_precompile (venom_call_request s target 0w wi insz T) /\
   (s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
-  strip_tac >> drule computed_suffix_shape >> strip_tac >>
+  strip_tac >> Cases_on `s.vs_outcomes = []`
+  >- (simp[] >> irule computed_suffix_exhausted >> metis_tac[]) >>
+  fs[] >> drule computed_suffix_shape >> strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
   `!x. eval_operand x s0 = eval_operand x s` by
@@ -2063,11 +2098,6 @@ Proof
   `exec_ext_call ci sg (g:bytes32) target 0w wi insz wo outsz T =
     OK sc` by
     (qunabbrev_tac `sc` >>
-     Cases_on `s.vs_outcomes = []`
-     >- (`sg.vs_outcomes = []` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
-         simp[] >> irule computed_static_empty_probe >>
-         simp[Abbr `ci`, mk_inst_def] >> metis_tac[]) >>
-     fs[] >>
      `sg.vs_outcomes = co::rest` by simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
      simp[] >> irule computed_static_false_probe >>
      simp[Abbr `ci`, mk_inst_def] >> metis_tac[]) >>
@@ -2284,6 +2314,9 @@ Proof
   `computed_precompile (venom_call_request s target 0w wi insz T)` by
     simp[computed_precompile_def, venom_call_request_def] >>
   drule_all computed_suffix_ok_outcomes >> disch_tac >>
+  `s.vs_outcomes <> []` by
+    (qpat_assum `?co rest. s.vs_outcomes = co::rest /\ co.co_success`
+       strip_assume_tac >> simp[]) >>
   drule_all computed_suffix_success >> strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
@@ -2572,13 +2605,15 @@ Theorem ecrecover_suffix_oracle_failure:
   (!x. ip = Var x ==> not_fresh_at sm x) /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
   ~( ?co rest. s.vs_outcomes = co::rest /\ co.co_success) ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
   strip_tac >> drule ecrecover_suffix_core >> strip_tac >>
   `computed_precompile (venom_call_request s 1w 0w wi 128w T)` by
     simp[computed_precompile_def, venom_call_request_def, precompile_result_def,
          wordsTheory.w2w_n2w, fcpLib.INDEX_CONV ``dimindex(:160)``] >>
-  `?u. run_inst_seq (emitted_insts sm sc) s = Abort Revert_abort u` by
+  `?u. run_inst_seq (emitted_insts sm sc) s =
+     Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u` by
     (irule computed_suffix_oracle_failure >> simp[] >>
      Cases_on `s.vs_outcomes` >> gvs[] >> metis_tac[]) >>
   qexists_tac `u` >> simp[] >>
@@ -2759,7 +2794,8 @@ Theorem compile_ecrecover_oracle_failure:
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
   eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
   (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sf x) ==>
-  ?u. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort u
+  ?u. run_inst_seq (emitted_insts sf sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) u
 Proof
   strip_tac >>
   qpat_x_assum `compile_ecrecover _ _ _ _ sf = _` mp_tac >>
@@ -2784,6 +2820,8 @@ Proof
     (pure_rewrite_tac [MEM] >> metis_tac[]) >>
   drule_all ecrecover_buffers_run >> strip_tac >>
   rename1 `eval_operand ip t = SOME wi` >>
+  `t.vs_outcomes = s.vs_outcomes` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   `~(?co rest. t.vs_outcomes = co::rest /\ co.co_success)` by
     (gvs[stmt_state_rel_def, state_rel_def]) >>
   `(!y. ip = Var y ==> not_fresh_at sm y) /\

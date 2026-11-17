@@ -194,6 +194,8 @@ Proof
   `accounts_rel H cx es s /\ es.outcomes = SOME s.vs_outcomes /\
    s.vs_call_ctx.cc_static = cx.txn.is_static` by
     fs[state_rel_def, call_ctx_rel_def] >>
+  Cases_on `s.vs_outcomes = []`
+  >- gvs[take_call_outcome_def, take_request_outcome_def] >>
   `?rest. rq = (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
                  value_opt es with cr_gas := gas_cap) /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
@@ -202,6 +204,7 @@ Proof
                            storage_trace := es.storage_trace ++
                              [StorageOutcome rq outcome] |>` by
     (qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
+     Cases_on `s.vs_outcomes` >> fs[] >>
      simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
   `request_agree H cx.txn.target rq
@@ -280,6 +283,8 @@ Theorem send_call_oracle_step:
     eval_send cx has_gas (to_v :: amount_v :: gas_vs) es = (res, es') ==>
     (res = INR (Error (RuntimeError "write in static context")) /\
      step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
+    (res = INR (Error (RuntimeError "take_call_outcome")) /\
+     step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
     res = INR (Error (RuntimeError "call outcome accounts")) \/
     ?s'. s' = s with <| vs_outcomes := s'.vs_outcomes;
                         vs_requests := s'.vs_requests;
@@ -317,6 +322,14 @@ Proof
      (INL (if cx.txn.is_static then NONE else SOME (w2n vw)), es)` by
     (Cases_on `cx.txn.is_static` >> fs[frame_call_value_def, w2n_eq_0,
       bind_def, ignore_bind_def, check_def, assert_def, vyperStateTheory.return_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (disj1_tac >>
+      qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
+      simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, check_def, lift_option_type_def, return_def,
+           take_call_outcome_def, take_request_outcome_def,
+           exec_ext_call_def] >> strip_tac >> gvs[]) >>
+  disj2_tac >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   simp[eval_send_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, check_def, lift_option_type_def,
@@ -366,5 +379,6 @@ Proof
           vyperStateTheory.return_def]) >>
   strip_tac >> disj1_tac >>
   qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
+  Cases_on `s.vs_outcomes` >> gvs[] >>
   simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
 QED
