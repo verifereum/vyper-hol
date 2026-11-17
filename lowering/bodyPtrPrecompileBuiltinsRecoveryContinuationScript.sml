@@ -51,21 +51,25 @@ Theorem computed_load_suffix_oracle_failure_path:
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   (s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) ==>
   ?t n j G' tn'.
-    run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t /\
+    run_inst_seq (emitted_insts sm sb) s =
+      Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-      (Abort Revert_abort (t with vs_inst_idx := j))
+      (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+        (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule computed_load_suffix_parts >> strip_tac >>
   `isPREFIX (emitted_insts sm sl) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
-  drule_all computed_emitted_suffix_paths >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  `?t. run_inst_seq (emitted_insts sm sl) s = Abort Revert_abort t` by
-    (qpat_assum `_ sm = (Var dst,sl)`
-       (mp_then Any mp_tac computed_suffix_oracle_failure) >>
-     disch_then (qspecl_then [`wo`,`wi`,`s`] mp_tac) >> simp[]) >>
-  `?n j. gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-    (Abort Revert_abort (t with vs_inst_idx := j))` by metis_tac[] >>
+  `?G' tn'. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sm sl) s G' tn'` by
+    (irule bodyPtrPrecompileBuiltinsEmittedSuffixTheory.computed_emitted_suffix_checked >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `?t n j. run_inst_seq (emitted_insts sm sl) s =
+       Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
+     gas_path_ptr D lo ctx fn PG G tn s n G' tn'
+       (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+         (t with vs_inst_idx := j))` by
+    (irule computed_suffix_oracle_failure_path >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qexistsl [`t`,`n`,`j`,`G'`,`tn'`] >> simp[] >>
   `!u. run_inst_seq (emitted_insts sm sl) s <> OK u` by simp[] >>
   drule run_inst_seq_append_err >> simp[]

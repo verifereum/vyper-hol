@@ -268,15 +268,6 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem computed_static_empty_probe[local]:
-  rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
-  inst.inst_outputs = [out] /\ s.vs_outcomes = [] ==>
-  exec_ext_call inst s gas addr 0w ai an ro rs T =
-    Abort ExHalt_abort (halt_state (set_returndata [] s))
-Proof
-  simp[exec_ext_call_def]
-QED
-
 Theorem computed_static_false_probe[local]:
   rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
   inst.inst_outputs = [out] /\ s.vs_outcomes = head::rest /\ ~head.co_success ==>
