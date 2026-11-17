@@ -482,31 +482,6 @@ Proof
        venom_state_component_equality]
 QED
 
-Theorem append_storage_header_agree[local]:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) ==>
-  (if tr then tload slot s else sload slot s) =
-    lookup_storage slot (get_storage cx es tr)
-Proof
-  strip_tac >>
-  `accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  drule accounts_rel_storage_transient >>
-  disch_then (drule_at Any) >> strip_tac >>
-  `storage_read_live H tr (get_storage cx es tr) slot
-     (ArrayTV tv (Dynamic cap))` by
-    metis_tac[observed_storage_region_read_live] >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
-      (get_storage cx es tr)
-      (if tr then contract_transient s else contract_storage s)` by
-    (Cases_on `tr` >>
-     gvs[storage_rel_def, transient_rel_def, get_storage_def, lookup_account_def]) >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic cap))` by
-    simp[type_slot_size_def] >>
-  drule_all storage_agree_read_head >>
-  Cases_on `tr` >> simp[tload_def, sload_def]
-QED
-
 Theorem append_storage_word_suffix_open[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then LocTransient else LocStorage) sb = ((),sf) ==>
@@ -994,7 +969,11 @@ Resume compile_append_storage_word_stmt_frag[operand]:
    value_has_type tv v` by metis_tac[] >>
   `(if tr then tload slot t else sload slot t) =
    lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr)` by
-    metis_tac[append_storage_header_agree] >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ t`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+     drule_at (Pat `MEM _ _`) accountsRelPropsTheory.observed_storage_head_agree >>
+     disch_then (drule_at (Pat `state_rel _ _ _ _ _ _`)) >>
+     impl_tac >- simp[type_slot_size_def] >> strip_tac >> gvs[]) >>
   Cases_on `cx.txn.is_static`
   >- (`t.vs_call_ctx.cc_static` by
         fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -1566,7 +1545,12 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
   `stmt_state_rel H0 ctx func cenv cx es_end staged` by metis_tac[] >>
   `(if tr then tload slot staged else sload slot staged) =
    lookup_storage slot (get_storage cx es_end tr)` by
-    (irule append_storage_header_agree >> metis_tac[]) >>
+    (`MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0)` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ _ _ staged`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+     drule_at (Pat `MEM _ _`) accountsRelPropsTheory.observed_storage_head_agree >>
+     disch_then (drule_at (Pat `state_rel _ _ _ _ _ _`)) >>
+     impl_tac >- simp[type_slot_size_def] >> strip_tac >> pop_assum ACCEPT_TAC) >>
   `w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256)` by
     (`MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0) /\
       regions_consistent (FST H0)` by metis_tac[] >>

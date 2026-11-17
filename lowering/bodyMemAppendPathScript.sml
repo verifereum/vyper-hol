@@ -246,7 +246,13 @@ Proof
   strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es s /\
    MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0)` by metis_tac[] >>
-  drule_all append_storage_header_agree_mem >> strip_tac >>
+  `(if tr then tload slot s else sload slot s) =
+   lookup_storage slot (get_storage cx es tr)` by
+    (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+     `0 < type_slot_size (ArrayTV tv (Dynamic cap))` by
+       simp[vyperValueTheory.type_slot_size_def] >>
+     drule_all accountsRelPropsTheory.observed_storage_head_agree >> strip_tac >> pop_assum ACCEPT_TAC) >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x)` by simp[eval_operand_def] >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`

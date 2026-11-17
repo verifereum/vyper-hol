@@ -590,27 +590,6 @@ Proof
   metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_def]
 QED
 
-Theorem pop_declared_header_load:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,w,ArrayTV tv (Dynamic n)) (FST H) ==>
-  (if tr then tload w s else sload w s) =
-    lookup_storage w (get_storage cx es tr)
-Proof
-  strip_tac >>
-  `storage_read_live H tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
-    (irule observed_storage_region_read_live >> first_assum ACCEPT_TAC) >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
-    (get_storage cx es tr)
-    (if tr then contract_transient s else contract_storage s)` by
-    (Cases_on `tr` >>
-     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
-         transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
-    simp[vyperValueTheory.type_slot_size_def] >>
-  drule_all storage_agree_read_head >>
-  Cases_on `tr` >> simp[sload_def, tload_def]
-QED
-
 Theorem pop_array_length_bound:
   slots_in_range st (w2n w) (ArrayTV tv (Dynamic n)) ==>
   w2n (lookup_storage w st) <= n
@@ -893,7 +872,12 @@ Proof
        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
      pop_assum (strip_assume_tac o MATCH_MP pop_storage_root_horizon) >>
      `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
-     conj_tac >- (irule pop_declared_header_load >> metis_tac[]) >>
+     conj_tac >-
+       (qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _`
+          (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+        `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
+          simp[vyperValueTheory.type_slot_size_def] >>
+        drule_all accountsRelPropsTheory.observed_storage_head_agree >> strip_tac >> pop_assum ACCEPT_TAC) >>
      qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,

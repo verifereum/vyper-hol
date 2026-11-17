@@ -116,7 +116,11 @@ Proof
   `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) =
      lookup_storage (n2w slot) (get_storage cx es tr)` by
-    (irule pop_declared_header_load >> metis_tac[]) >>
+    (qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ _`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [stmt_state_rel_def]) >>
+     `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
+       simp[vyperValueTheory.type_slot_size_def] >>
+     drule_all accountsRelPropsTheory.observed_storage_head_agree >> strip_tac >> pop_assum ACCEPT_TAC) >>
   Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w`
   >- (`!tail. eval_expr cx (Pop ann (TopLevelNameTarget (src,id)))
           (es with gas_obs := tail) =
