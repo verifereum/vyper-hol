@@ -15,7 +15,7 @@ Theorem concretize_external_abort_complete:
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
   local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
     (guarded_bytes (retpc_var fn) rv tn) R Obs s t /\
-  MEM inst.inst_opcode [CALL; CREATE; CREATE2] /\
+  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   step_inst_base inst s = Abort a post ==>
   ?tpost. step_inst_base inst t = Abort a tpost /\
     dead_result_rel D (Abort a post) (Abort a tpost)
@@ -32,6 +32,7 @@ Proof
   pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
   simp[AllCaseEqs(), exec_create_abort_iff, exec_ext_call_abort_iff,
+       exec_delegatecall_abort_iff,
        Excl "consume_create_outcome_eq"] >>
   rpt strip_tac >> gvs[]
   >- (`eval_operand val_op s = eval_operand val_op t` by
@@ -45,15 +46,16 @@ Proof
       qexists_tac `halt_state (set_returndata [] t)` >>
       simp[dead_result_rel_def] >>
       metis_tac[optionTheory.option_nchotomy, optionTheory.NOT_NONE_SOME])
-  >>~- ([`inst.inst_opcode = CALL`],
+  >> FIRST
+  [qpat_assum `t.vs_outcomes = []` kall_tac >>
       qexists_tac `halt_state (set_returndata [] t)` >>
       simp[dead_result_rel_def] >>
       fs[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_EXISTS] >>
-      metis_tac[]) >>
-  gvs[eval_operands_def] >>
-  TRY (qpat_assum `t.vs_call_ctx.cc_static` kall_tac >>
-       qexists_tac `halt_state (set_returndata [] t)` >>
-       simp[dead_result_rel_def] >> NO_TAC) >>
+      metis_tac[],
+   qpat_assum `t.vs_call_ctx.cc_static` kall_tac >>
+      qexists_tac `halt_state (set_returndata [] t)` >>
+      simp[dead_result_rel_def, eval_operands_def],
+   gvs[eval_operands_def] >>
   (`eval_operand sz_op s = eval_operand sz_op t` by
      (drule_at (Pat `local_rel _ _ _ _ _ _ _`) create_scalar_agreement >>
       disch_then assume_tac >> first_x_assum irule >> simp[] >>
@@ -62,7 +64,7 @@ Proof
       goal_assum (drule_at (Pat `_ .inst_operands = _`)) >> simp[]) >>
    qexists_tac `halt_state (set_returndata [] t)` >>
    simp[dead_result_rel_def] >>
-   metis_tac[optionTheory.option_nchotomy, optionTheory.NOT_NONE_SOME])
+   metis_tac[optionTheory.option_nchotomy, optionTheory.NOT_NONE_SOME])]
 QED
 
 Theorem layout_external_abort_step:
@@ -73,7 +75,7 @@ Theorem layout_external_abort_step:
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode [CALL; CREATE; CREATE2] /\
+  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   step_inst_base inst s = Abort a post ==>
   ?tpost. step_inst_base inst t = Abort a tpost /\
     dead_result_rel D (Abort a post) (Abort a tpost) /\
