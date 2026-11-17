@@ -309,6 +309,41 @@ Proof
   metis_tac[val_in_memory_word_type, mem_word_at_eq_mload]
 QED
 
+Theorem augassign_name_post_typed:
+  emit_op MLOAD [Var p] sa = (Var out,sb) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME entry.type ==>
+  expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+    (es with gas_obs := []) entry.value (Var out)
+    (update_var out (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `out = STRCAT "%" (toString sa.cs_next_var)` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def] >>
+  `not_local_ptr cenv (es with gas_obs := []).scopes out` by
+    (gvs[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+    (update_var out (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule stmt_state_rel_update_var >> simp[] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`,
+                            `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[]) >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE, locals_kept_mem] >>
+  rpt strip_tac >>
+  `STRING #"%" (toString sa.cs_next_var) <> x` by
+    (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
+QED
+
 Theorem augassign_local_load_typed:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   is_word_type ty /\ lookup_scopes id es.scopes = SOME entry /\
@@ -355,26 +390,16 @@ Proof
 QED
 
 Resume augassign_local_load_typed[post]:
-  `not_local_ptr cenv (es with gas_obs := []).scopes
-     (STRING #"%" (toString sa.cs_next_var))` by
-    (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
-    ((update_var (STRING #"%" (toString sa.cs_next_var))
-       (mload (w2n w) s0) s0) with vs_inst_idx := SUC s0.vs_inst_idx)` by
-    (irule stmt_state_rel_update_var >> simp[] >>
-     drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`,
-       `SUC s0.vs_inst_idx`, `[]`] mp_tac) >> simp[]) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (`(es with gas_obs := []).accounts = es.accounts /\
-      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def, eval_operand_def, update_var_def,
-       lookup_var_def, FLOOKUP_UPDATE, locals_kept_mem] >>
-  rpt strip_tac >>
-  `STRING #"%" (toString sa.cs_next_var) <> x` by
-    (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
+  `op = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_var_def, fresh_id_def, emit_def] >>
+  `expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+    (es with gas_obs := []) entry.value op
+    (update_var (STRING #"%" (toString sa.cs_next_var))
+      (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (gvs[] >> irule augassign_name_post_typed >> simp[] >> metis_tac[]) >>
+  fs[update_var_def]
 QED
 
 Finalise augassign_local_load_typed
