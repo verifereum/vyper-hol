@@ -271,7 +271,8 @@ Proof
   `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
   `vv_place_ptr ce cx ee u tv vv` by
-    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[]) >>
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+     first_assum ACCEPT_TAC) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
@@ -315,10 +316,8 @@ Proof
   `vv_post H ctx func ce cx e es sa sn s0 ee tv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >>
      qexistsl [`s`, `sm`] >> simp[] >>
-     conj_tac
-     >- (rpt strip_tac >> first_x_assum irule >>
-         irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
-     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     rpt conj_tac >> rpt strip_tac >> fs[local_ptrs_reserved_def] >>
+     metis_tac[not_fresh_at_mono]) >>
   irule frag_exec_seq >> qexistsl [`(\z. z = u)`, `sn`] >> simp[] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sm` >> simp[]) >>
