@@ -3124,12 +3124,16 @@ Theorem simple_do_swap_replay_wf:
   prefix_wf lo (LENGTH ps.ps_stack) ops /\
   apply_prefix_ops fmp lo ops ps = ps'
 Proof
-  strip_tac >>
-  `!off. ~MEM (SORestore off) ops` by
-    (fs[listTheory.EVERY_MEM] >>
-     metis_tac[strongPrefixSimTheory.is_simple_stack_op_def]) >>
-  `d <= 16` by metis_tac[do_swap_no_restore_shallow] >>
-  metis_tac[do_swap_shallow_symbolic_prefix_facts, planAlignTheory.do_swap_align]
+  match_mp_tac symControlForwardPrepareOwnTheory.simple_do_swap_replay_wf_conditional >>
+  rewrite_tac[GSYM control_reorder_place_def] >> rpt conj_tac
+  >- MATCH_ACCEPT_TAC emit_input_plan_spill_free_stack_replay
+  >- MATCH_ACCEPT_TAC list_rel_op_kind_transport
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC control_reorder_one_decompose)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC control_reorder_place_spill_free_kind_replay)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC reorder_restore_no_restore_identity)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity)
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC do_swap_no_restore_shallow) >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts
 QED
 
 Theorem optimistic_simple_replay_wf:
@@ -3450,6 +3454,7 @@ Theorem terminal_operand_word_kind:
   MEM op (compute_operands inst) /\ op <> dead_stack_marker /\
   op_kind_ok fn ret op sv ==> ?w. sv = Val w
 Proof
+  simp [listTheory.MEM] >>
   MATCH_ACCEPT_TAC (SRULE []
     (Q.INST [`allow_own` |-> `F`] (SPEC_ALL terminal_operand_word_kind_mode)))
 QED
@@ -3479,10 +3484,19 @@ Theorem arranged_word_prepared_symbolic_stack:
   mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack /\
   ?suffix. ss.sym_stack = MAP Val values ++ suffix
 Proof
-  MATCH_ACCEPT_TAC (SRULE [asm_sym_rel_core_canonical]
-    (Q.INST [`code_ok` |-> `asm_data_env_ok p env`,
-             `lo` |-> `SND (compute_label_offsets p)`]
-      (SPEC_ALL arranged_word_prepared_symbolic_stack_core)))
+  strip_tac >>
+  `mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack` by
+    (irule (emitSimTheory.arranged_eval_operands_stack |> Q.INST
+       [`operands` |-> `REVERSE operands`] |> SRULE []) >>
+     conj_tac >- gvs[listTheory.EVERY_MEM] >>
+     qexistsl [`lo`, `ps`, `tail`, `vs`] >> gvs[]) >>
+  simp[] >> irule word_prepared_symbolic_stack >>
+  conj_tac
+  >- (qexistsl [`mid with as_stack := mid.as_stack ++ rest`, `env`, `p`,
+        `DROP (LENGTH operands) mid.as_stack ++ rest`] >>
+      simp[listTheory.APPEND_ASSOC]) >>
+  metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
+            listTheory.LENGTH_REVERSE]
 QED
 
 Theorem sym_frame_entry_selected_prefix_sim_marked:
