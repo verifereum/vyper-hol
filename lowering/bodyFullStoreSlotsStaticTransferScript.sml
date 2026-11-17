@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsStaticTransfer
 Ancestors
-  fragGasOriginPtr fragGasOrigin fragGasPathPtr ptrSafeRun ptrDiscipline
+  fragGasOriginPtr fragGasOrigin fragGasPathPtr fragExec ptrSafeRun ptrDiscipline
   gasEvents gasCount memSafeRun venomExecSemantics venomState venomInst
   contextCodegenRel codegenRel unitTransformDefs
   list finite_map arithmetic
@@ -146,4 +146,93 @@ Theorem slots_static_entry[local,simp]:
     entry_taint_vars fn s tn
 Proof
   simp[entry_prov_def, entry_taint_vars_def]
+QED
+
+Theorem store_slots_readonly_edge_static:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  MEM i.inst_opcode [ASSIGN; ADD; MUL; EQ; LT; ISZERO; SHR; MLOAD; JMP; JNZ] /\
+  gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G',tn') ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+    (s with vs_call_ctx := (s.vs_call_ctx with cc_static := T),G,tn) []
+    (OK (u with vs_call_ctx := (u.vs_call_ctx with cc_static := T)),G',tn')
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule gas_origin_ptr_edge_common_fuel >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `fuel` (qx_choose_then `bb1` (qx_choose_then `inst`
+      (qx_choose_then `middle` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))) >>
+  `?mid. middle = OK mid` by (gvs[exit_result_def] >> metis_tac[]) >>
+  gnvs[Excl "MEM"] >>
+  drule_all (SRULE[MEM] slots_static_step_ok) >> strip_tac >>
+  `ghost_step fuel ctx PG G tn i
+     (s with vs_call_ctx := (s.vs_call_ctx with cc_static := T)) =
+   ghost_step fuel ctx PG G tn i s` by
+    (irule slots_static_ghost >> simp[MEM] >> metis_tac[]) >>
+  drule_all (SRULE[MEM] slots_static_ptr_safe) >> strip_tac >>
+  drule (SRULE[MEM] slots_static_checks) >> strip_tac >>
+  `gas_events_step fuel ctx func.fn_name i
+     (s with vs_call_ctx := (s.vs_call_ctx with cc_static := T)) = [] /\
+   gas_count_step fuel ctx i
+     (s with vs_call_ctx := (s.vs_call_ctx with cc_static := T)) = 0` by
+    (qpat_x_assum `_ = ASSIGN \/ _` mp_tac >> strip_tac >>
+     simp[gas_events_step_def, gas_count_step_def]) >>
+  qpat_x_assum `_ = ASSIGN \/ _` kall_tac >>
+  rewrite_tac[gas_origin_ptr_edge_def, gas_origin_edge_def, gas_path_ptr_edge_def] >>
+  conj_tac >> (conj_tac >- simp[]) >>
+  qexistsl_tac [`fuel`, `bb`, `i`,
+    `OK (mid with vs_call_ctx := (mid.vs_call_ctx with cc_static := T))`] >>
+  simp[] >>
+  qpat_x_assum `~is_terminator _ /\ _ \/ _` mp_tac >>
+  strip_tac >> gvs[exit_result_def] >>
+  TRY (rename1 `eval_phis mid target.bb_instructions = OK entered` >>
+       drule slots_static_phis >> strip_tac >> disj1_tac >>
+       qexists_tac `entered with vs_call_ctx := (entered.vs_call_ctx with cc_static := T)` >>
+       simp[venom_state_component_equality] >> NO_TAC) >>
+  metis_tac[]
+QED
+
+Theorem store_slots_readonly_prefix_static:
+  !L s G tn u G' tn' lo explicit ctx func PG.
+    L <> [] /\ HD L = (s,G,tn) /\ LAST L = (u,G',tn') /\
+    ~s.vs_halted /\
+    (!D n a Ga tna b Gb tnb.
+       SUC n < LENGTH L /\ EL n L = (a,Ga,tna) /\
+       EL (SUC n) L = (b,Gb,tnb) ==>
+       ?bb i.
+         lookup_block a.vs_current_bb func.fn_blocks = SOME bb /\
+         get_instruction bb a.vs_inst_idx = SOME i /\
+         MEM i.inst_opcode [ASSIGN; ADD; MUL; EQ; LT; ISZERO; SHR; MLOAD; JMP; JNZ] /\
+         gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+           (a,Ga,tna) [] (OK b,Gb,tnb)) ==>
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s with vs_call_ctx := (s.vs_call_ctx with cc_static := T),G,tn) []
+      (OK (u with vs_call_ctx := (u.vs_call_ctx with cc_static := T)),G',tn')
+Proof
+  Induct_on `L` >- simp[] >>
+  qx_gen_tac `head` >> Cases_on `L`
+  >- (simp[] >> rpt strip_tac >> gvs[] >>
+      irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[HD] >> PairCases_on `h` >>
+  rename1 `LAST ((b,Gb,tnb)::t) = (u,G',tn')` >> gen_tac >>
+  qpat_assum `!D n a Ga tna b Gb tnb. _`
+    (qspecl_then [`D`, `0`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `bb` (qx_choose_then `i`
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>
+  `~b.vs_halted` by
+    ((drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
+     gvs[exit_result_def, jump_to_def] >> (metis_tac[exit_result_def, jump_to_def, gas_origin_ptr_edge_common_fuel]))) >>
+  drule_all (SRULE[MEM] store_slots_readonly_edge_static) >> strip_tac >>
+  qpat_x_assum `gas_origin_ptr_edge _ (_ with vs_call_ctx := _,_,_) _ _`
+    (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
+  simp[] >> disch_then irule >>
+  qpat_x_assum `!s G tn lo explicit ctx func PG. _` irule >>
+  simp[] >>
+  map_every qx_gen_tac [`horizon`, `n`, `a`, `Ga`, `tna`, `b1`, `Gb1`, `tnb1`] >>
+  strip_tac >>
+  qpat_x_assum `!D n a Ga tna b Gb tnb. _`
+    (qspecl_then [`horizon`, `SUC n`] mp_tac) >>
+  simp[]
+
 QED
