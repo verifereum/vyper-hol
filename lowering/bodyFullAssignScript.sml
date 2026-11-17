@@ -30,7 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
-  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage placeStore valueEncodingProps venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
+  sum venomState stateRelProj stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness ptrDiscipline stateRelProjStorage placeStore valueEncodingProps venomMemProofs bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults immutableAssignEmpty ctorDeployDeadSectionFrame abiEncoderProps abiDecodeStaticProps immutableDeployAssignFacts bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout immSectionDead ctorDeployDeadSection stmtSimDeclMem valueCopyBytes vyperTyping
 
 val _ = Parse.hide "body";
 
@@ -1793,4 +1793,73 @@ Proof
        mem_bytes_at q 1 mix = mem_bytes_at q 1 mem` by
     (rpt gen_tac >> disch_tac >> first_x_assum irule >> decide_tac) >>
   drule_all place_store_replace_memory_entry >> simp[]
+QED
+
+Theorem body_assign_empty_dead_value[local]:
+  has_length_word ty /\ evaluate_type tenv ty = SOME tv /\
+  mem_word_at off sec' = 0w /\ mem_dead_bytes sec off tv i ==>
+  mem_dead_bytes sec' off tv i
+Proof
+  strip_tac >>
+  `is_bytestring_type ty \/ ?et n. ty = ArrayT et (Dynamic n)` by
+    (Cases_on `ty` >> gvs[has_length_word_def] >>
+     rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[has_length_word_def])
+  >- (drule_all bytestring_type_value >> strip_tac >>
+      gvs[mem_dead_bytes_def] >> decide_tac) >>
+  gvs[evaluate_type_def, AllCaseEqs(), mem_dead_bytes_def] >>
+  qexists_tac `k` >> simp[] >>
+  Cases_on `k < w2n (mem_word_at off sec)` >> gvs[] >>
+  drule (cj 1 mem_dead_bytes_range) >>
+  simp[LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem body_assign_empty_immutable_dead:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\ has_length_word ty /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec = imm_len tops /\ off + type_memory_size tv <= LENGTH sec /\
+  LENGTH sec' = LENGTH sec /\ mem_word_at off sec' = 0w /\
+  (!i. ~(off <= i /\ i < off+32) ==>
+     mem_bytes_at i 1 sec' = mem_bytes_at i 1 sec) ==>
+  !i. imm_section_dead tops sec i ==> imm_section_dead tops sec' i
+Proof
+  strip_tac >> gen_tac >> rewrite_tac[imm_section_dead_def] >> strip_tac >>
+  rename1 `evaluate_type (type_env tops) ty' = SOME tv'` >>
+  qexistsl_tac [`pre'`,`vis'`,`name'`,`ty'`,`slot'`,`post'`,`tv'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `pre = pre'`
+  >- (`ty = ty'` by
+        (qpat_x_assum `tops = pre ++ _` mp_tac >>
+         qpat_x_assum `tops = pre' ++ _` (fn th => rewrite_tac[th]) >>
+         simp[]) >>
+      `tv = tv'` by metis_tac[optionTheory.SOME_11] >>
+      irule body_assign_empty_dead_value >> metis_tac[]) >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+     type_memory_size tv` by metis_tac[imm_frame_size] >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' =
+     type_memory_size tv'` by metis_tac[imm_frame_size] >>
+  `32 <= type_memory_size tv` by metis_tac[memory_length_word_layout] >>
+  `pre ++ VariableDecl vis Immutable name ty slot :: post =
+   pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post'` by metis_tac[] >>
+  drule imm_frame_occurrence_separation >>
+  disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
+  strip_tac >>
+  `mem_dead_bytes sec'
+     (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv' =
+   mem_dead_bytes sec
+     (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre') tv'` by
+    (irule mem_dead_bytes_frame >> reverse conj_tac
+     >- first_assum ACCEPT_TAC >>
+     (rpt strip_tac >>
+         `mem_bytes_at j 1 sec' = mem_bytes_at j 1 sec` by
+           (qpat_x_assum `!i. ~(off <= i /\ i < off+32) ==> _` irule >>
+            qpat_x_assum `tops = pre ++ _` kall_tac >>
+            qpat_x_assum `tops = pre' ++ _` kall_tac >>
+            fs[] >> decide_tac) >>
+         `j < LENGTH sec'` by metis_tac[] >>
+         metis_tac[mem_bytes_at_from_EL, listTheory.CONS_11]) >>
+     simp[]) >>
+  metis_tac[]
 QED
