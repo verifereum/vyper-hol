@@ -13,6 +13,11 @@
  * TOP-LEVEL:
  *   source_unit_exit_safe_runs -- the entry's memory-safe run and its
  *     pointer-safe run at the dead set of the observed horizon
+ *   lower_vyper_runtime_unit_exit_mem_safe_blocks -- any memory path from
+ *     the entry to an exit (the exit arm's, or a revert's) gives the
+ *     memory-safe run
+ *   source_unit_exit_ptr_safe_horizons -- the pointer-safe run at the dead
+ *     set of every valid horizon of the certificate's source trace
  *)
 Theory sourceUnitExitSafe
 Ancestors
@@ -31,6 +36,32 @@ Proof
   drule gas_path_mem_exec >> strip_tac >> gvs[exit_result_def] >>
   irule mem_safe_run_all_fuel >> qexists_tac `fuel` >>
   metis_tac[exit_result_not_error]
+QED
+
+(* From an exit along a memory path from an __entry block start, the
+   entry's blocks run memory-safe at every fuel: the run reaches an exit,
+   so the start block exists, and it has no phis. *)
+Theorem lower_vyper_runtime_unit_exit_mem_safe_blocks:
+  !tops rpolicy unit func s n r.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    ~ctx_has_dalloca unit.cu_context /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    s.vs_inst_idx = 0 /\
+    gas_path_mem unit.cu_context func s n r /\ exit_result r ==>
+    !fuel. mem_safe_blocks fuel unit.cu_context func s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all gas_path_mem_exit_mem_safe_run >> strip_tac >>
+  drule gas_path_mem_exec >> strip_tac >> gvs[exit_result_def] >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by
+    (Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >>
+     gvs[run_from_def, exit_result_def]) >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[lower_vyper_runtime_unit_block_phi] >>
+  `s with vs_inst_idx := 0 = s` by
+    simp[venomStateTheory.venom_state_component_equality] >>
+  irule mem_safe_blocks_no_phi >> asm_rewrite_tac[] >>
+  qexists_tac `bb` >> simp[eval_phis_no_phi]
 QED
 
 Theorem source_unit_exit_safe_runs:
@@ -69,15 +100,44 @@ Proof
   reverse conj_tac
   >- (first_x_assum (qspec_then `storage_trace_horizon obs` mp_tac) >>
       fs[storage_trace_domain_def]) >>
-  qabbrev_tac `s0 = vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                               vs_inst_idx := 0 |>` >>
-  `!fuel. mem_safe_run fuel unit.cu_context func s0` by
-    (drule gas_origin_path_erase >> simp[gas_marked_path_def] >>
-     metis_tac[gas_path_mem_exit_mem_safe_run]) >>
-  drule_all gas_origin_path_events >> strip_tac >>
-  `phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[lower_vyper_runtime_unit_block_phi] >>
-  `s0 with vs_inst_idx := 0 = s0` by simp[Abbr`s0`] >>
-  irule mem_safe_blocks_no_phi >> asm_rewrite_tac[] >>
-  qexists_tac `bb` >> simp[eval_phis_no_phi]
+  drule gas_origin_path_erase >> simp[gas_marked_path_def] >> strip_tac >>
+  irule lower_vyper_runtime_unit_exit_mem_safe_blocks >> simp[] >>
+  metis_tac[]
+QED
+
+(* At every valid horizon of the certificate's own source trace, the run
+   from the entry is pointer-safe at that horizon's dead set. *)
+Theorem source_unit_exit_ptr_safe_horizons:
+  !marks tops ret am tx unit vs func.
+    source_unit_execution_correct_at marks tops ret am tx unit vs /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    source_storage_ok am tx vs.vs_outcomes
+      (gas_explicit marks vs.vs_gas_readings) /\
+    call_outcomes_storage_ok am tx vs.vs_outcomes
+      (gas_explicit marks vs.vs_gas_readings) /\
+    ~source_exempt tops
+      (call_external (SOME vs.vs_outcomes)
+         (gas_explicit marks vs.vs_gas_readings) am tx)
+    ==>
+    !H. valid_horizon
+          (initial_evaluation_context am.sources am.layouts tx NONE)
+          (initial_state am []) H
+          (source_storage_trace am tx vs.vs_outcomes
+             (gas_explicit marks vs.vs_gas_readings)) ==>
+        !fuel. ptr_safe_blocks
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+          0 fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                      vs_inst_idx := 0 |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
+  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+        (qspec_then `[]` assume_tac) >> fs[] >>
+      drule call_external_trace_result >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+    (qspec_then `[]` assume_tac) >>
+  gvs[source_storage_trace_def]
 QED
