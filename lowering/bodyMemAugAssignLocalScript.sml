@@ -380,12 +380,16 @@ Proof
   drule_all body_name_source_region >> strip_tac >> gvs[] >>
   drule_all augassign_local_typed_word >> strip_tac >> gvs[] >>
   drule emitted_insts_emit_op >> strip_tac >>
-  `same_blocks sa sb` by
-    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  drule emit_op_same_blocks >> strip_tac >>
   qabbrev_tac `loaded = update_var (STRING #"%" (toString sa.cs_next_var))
     (typed_val_to_w256 entry.type entry.value) s0` >>
+  `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var p]
+     [STRING #"%" (toString sa.cs_next_var)]) s0 = OK loaded` by
+    (qspecl_then [`Var p`, `w`, `sa.cs_next_id`,
+       `STRING #"%" (toString sa.cs_next_var)`, `s0`] mp_tac step_MLOAD >>
+     simp[eval_operand_def, Abbr `loaded`]) >>
   `run_inst_seq (emitted_insts sa sb) s0 = OK loaded` by
-    simp[run_inst_seq_def, Abbr `loaded`, step_MLOAD, eval_operand_def] >>
+    simp[run_inst_seq_def] >>
   `32 <= sz` by metis_tac[word_tv_memory_size] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
     (irule emit_mload_mem_ok >> goal_assum (drule_at Any) >>
@@ -407,9 +411,9 @@ Proof
       >- (gen_tac >>
           irule (cj 1 stmtSimAugAssignTheory.eval_target_place_local) >>
           simp[]) >>
-      simp[]) >>
+      qpat_x_assum `gas_path_mem ctx func s0 0 _` mp_tac >> simp[]) >>
   conj_tac
-  >- (rpt strip_tac >> drule_all augassign_name_post_typed >>
+  >- (rpt strip_tac >> gvs[] >> drule_all augassign_name_post_typed >>
       simp[Abbr `loaded`, update_var_def]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -595,9 +599,11 @@ Resume compile_augassign_local_mem_typed[binop]:
      [ty; expr_type e] entry.value v
      (typed_val_to_w256 entry.type entry.value) (typed_val_to_w256 etv v)
      (ee with gas_obs := [])` by
-    (irule augassign_binop_frag_typed_mem >> simp[] >>
-     strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
-     Cases_on `expr_int_literal e` >> gvs[]) >>
+    (irule (Q.INST [`t2` |-> `expr_type e`, `tys` |-> `[ty; expr_type e]`]
+       augassign_binop_frag_typed_mem) >> simp[] >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+        Cases_on `expr_int_literal e` >> gvs[])]) >>
   `expr_post H1 ctx func cenv cx (Name ty id) es sa s1 s0
      (es with gas_obs := []) entry.value (Var out) t /\
    expr_post H1 ctx func cenv cx e (es with gas_obs := []) s1 s2 t
@@ -632,7 +638,8 @@ QED
 Resume compile_augassign_local_mem_typed[operator_normal]:
   gvs[] >> rename1 `expr_val_rel cx ty result res_op s` >>
   `eval_operand res_op s = SOME (typed_val_to_w256 entry.type result)` by
-    (irule expr_val_rel_typed >> simp[] >> goal_assum (drule_at Any)) >>
+    (qspecl_then [`cx`, `ty`, `entry.type`, `result`, `res_op`, `s`]
+       mp_tac expr_val_rel_typed >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
        storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
