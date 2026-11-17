@@ -7,8 +7,9 @@ Ancestors
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile
   fragGasPathFrameMem
   gasShadowCompileHelpers exprSimMemorySource exprSimIfExp exprSimDefs
+  exprSimCalldataSlice exprSimIfExpWidenedAdapter
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
-  typedCopyDomain vyperTypeSystem compileEnv context vyperAST
+  typedCopyDomain vyperTypeSystem vyperTypeInvariants compileEnv context vyperAST
   vyperInterpreter vyperState venomState
 
 val _ = Parse.hide "body";
@@ -76,9 +77,10 @@ Theorem ifexp_nocopy_physical_owned_vv[local]:
   val_footprint sv v = val_footprint dv v /\
   expr_val_own ce cx src sa sb ee v op s /\
   read_result cx tv ee = (INL v,ee) ==>
-  vv_at ce cx dst sa sb ee tv (LocatedValue dst (mk_ptr op LocMemory)) s
+  vv_at ce cx dst sa sb ee tv (LocatedValue dst (mk_ptr op LocMemory)) s /\
+  vv_own ce cx dst sa sb ee tv (LocatedValue dst (mk_ptr op LocMemory)) s
 Proof
-  simp[vv_at_def, mk_ptr_def, expr_val_own_def] >> rpt strip_tac >>
+  simp[vv_at_def, vv_own_def, mk_ptr_def, expr_val_own_def] >> rpt strip_tac >>
   first_x_assum (qspec_then `sv` mp_tac) >> simp[] >> metis_tac[]
 QED
 
@@ -119,6 +121,8 @@ Theorem ifexp_nocopy_physical_endpoint_vv[local]:
   expr_post H ctx fn ce cx e es sa sb s0 ee v op s /\
   read_result cx raw ee = (INL v,ee) ==>
   vv_at ce cx (expr_type e) sa sb ee raw
+    (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s /\
+  vv_own ce cx (expr_type e) sa sb ee raw
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s
 Proof
   strip_tac >> irule ifexp_nocopy_physical_owned_vv >>
@@ -219,6 +223,7 @@ Theorem ifexp_nocopy_physical_family[local]:
     expr_post H ctx func ce cx (IfExp t c a b) es sa sb u ee v op z /\
     ghost_inv_at (DF H) lo d ce cx ee Gz tf z) /\
   vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z /\
+  vv_own ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z /\
   expr_store_bound cx t v op z /\
   ptr_val_ok cx t v op Gz tf z /\
   (!e'. lowered_value_type ce e' = t ==> ptr_buf_ok ce e' op Gz z) /\
@@ -243,18 +248,23 @@ Proof
   `expr_store_bound cx t v op z` by
     (qpat_x_assum `expr_store_bound cx (post_value_type ce e) v op z` mp_tac >>
      simp[expr_store_bound_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z /\
+   vv_own ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qpat_assum `expr_type e = t` (fn th => rewrite_tac[GSYM th]) >>
+     irule (INST_TYPE [``:'a`` |-> ``:256``] ifexp_nocopy_physical_endpoint_vv) >>
+     goal_assum (drule_at Any) >> gvs[] >>
+     qexistsl [`storage_trace_horizon ee.storage_trace`,`ctx`,`es`,`func`,`u`] >>
+     metis_tac[]) >>
   qpat_x_assum `expr_type e = t` (SUBST_ALL_TAC o SYM) >>
   rpt conj_tac
   >- (rpt strip_tac >> res_tac >> simp[] >>
       irule ifexp_nocopy_physical_post >> goal_assum (drule_at Any) >> simp[] >>
       metis_tac[])
-  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
-        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-      irule (INST_TYPE [``:'a`` |-> ``:256``] ifexp_nocopy_physical_endpoint_vv) >>
-      goal_assum (drule_at Any) >> simp[] >>
-      qexistsl_tac [`storage_trace_horizon ee.storage_trace`, `ctx`, `es`, `func`, `u`] >>
-      first_assum ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (irule ifexp_nocopy_physical_ptr >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[])
@@ -292,6 +302,78 @@ Proof
 QED
 
 (* Uniform selected-arm conversion; the endpoint is shared by all horizons. *)
+Theorem ifexp_conditional_value_eq[local]:
+  read_result cx raw ee = (INL v,ee) /\
+  conditional_result cx raw ee = (INL (Value v'),ee) ==> v' = v
+Proof
+  strip_tac >>
+  `(do r <- conditional_result cx raw; read_result cx r od) ee = (INL v',ee)` by
+    simp[vyperStateTheory.bind_def, read_result_def, vyperStateTheory.return_def] >>
+  drule exprSimIfExpTheory.conditional_read_cases >> strip_tac >> gvs[]
+QED
+
+Theorem ifexp_vv_own_conditional_value[local]:
+  vv_own ce cx t sa sb ee raw vv z /\
+  read_result cx raw ee = (INL v,ee) /\
+  conditional_result cx raw ee = (INL (Value v'),ee) ==>
+  vv_own ce cx t sa sb ee (Value v') vv z
+Proof
+  strip_tac >> `v' = v` by metis_tac[ifexp_conditional_value_eq] >>
+  Cases_on `vv` >> fs[vv_own_def, read_result_def, vyperStateTheory.return_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> metis_tac[]
+QED
+
+Theorem ifexp_unwrap_identity_owned[local]:
+  ~is_word_type t /\ ~is_bytestring_type t /\
+  vv_holds ce cx t (Value v) vv ee z /\
+  vv_own ce cx t sa sm ee (Value v) vv z /\
+  (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+  unwrap_value ce vv sm = (op,sb) /\
+  local_ptrs_reserved ce sm /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!x. not_fresh_at sm x ==> lookup_var x z' = lookup_var x z) /\
+  z'.vs_labels = z.vs_labels /\
+  wb_frame ce ee ee sm z z' ==>
+  vv_own ce cx t sa sb ee (Value v) (LocatedValue t (mk_ptr op LocMemory)) z'
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce ee.scopes z' n b sz <=>
+            local_region ce ee.scopes z n b sz` by
+    (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists `sm` >> simp[]) >>
+  `eval_operand (vv_operand vv) z' = eval_operand (vv_operand vv) z` by
+    (Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
+  `vv_own ce cx t sa sm ee (Value v) vv z'` by
+    (irule exprSimIfExpWidenedAdapterTheory.vv_own_alloc_mono_frame >>
+     qpat_assum `vv_own ce cx t sa sm ee (Value v) vv z` (irule_at Any) >>
+     simp[] >> fs[wb_frame_def]) >>
+  Cases_on `vv` >> gvs[vv_location_def]
+  >- (gvs[unwrap_value_def, comp_return_def] >>
+      fs[vv_own_def, expr_val_own_def, read_result_def, vyperStateTheory.return_def, mk_ptr_def] >>
+      metis_tac[]) >>
+  `t' = t` by (fs[vv_holds_def] >> metis_tac[]) >>
+  gvs[unwrap_value_def, comp_return_def] >> fs[vv_own_def, mk_ptr_def] >> metis_tac[]
+QED
+
+Theorem typed_aggregate_memory_conditional[local]:
+  evaluate_type tenv ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\ ty <> NoneT /\
+  runtime_place_typed cx st (MemoryPlace id path) tv ==>
+  conditional_result cx (PlaceR (MemoryPlace id path)) st =
+    (INL (PlaceR (MemoryPlace id path)),st)
+Proof
+  strip_tac >>
+  `place_type_value cx (MemoryPlace id path) st = (INL tv,st)` by
+    fs[runtime_place_typed_def] >>
+  simp[conditional_result_def, vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+  Cases_on `ty` >>
+  gvs[is_word_type_def, is_bytestring_type_def, vyperValueTheory.evaluate_type_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[is_word_type_def, is_bytestring_type_def, vyperValueTheory.evaluate_type_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[is_word_type_def, is_bytestring_type_def, vyperValueTheory.evaluate_type_def, vyperStateTheory.return_def, AllCaseEqs()]
+QED
+
 Theorem ifexp_selected_arm_step_full:
   compile_expr cenv ty e sa = (vv,sm) /\
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
@@ -339,6 +421,7 @@ Theorem ifexp_selected_arm_step_full:
   (!id path. tva = PlaceR (MemoryPlace id path) ==>
     same_memory_layout cenv (lowered_value_type cenv e) t) /\
   storage_trace_domain cx st0 ee.storage_trace /\
+  eval_result_typed (env,cx,ee) tva (Type (expr_type e)) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx e es1 sa sm u ee tva vv z /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn z) /\
@@ -346,6 +429,9 @@ Theorem ifexp_selected_arm_step_full:
   z.vs_current_bb = sm.cs_current_bb /\
   z.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~z.vs_halted /\
   alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\
+  (!v. tva = Value v /\ ~is_word_type (post_value_type cenv e) /\
+    ~is_bytestring_type (post_value_type cenv e) ==>
+    vv_own cenv cx (post_value_type cenv e) sa sm ee tva vv z) /\
   ptr_vv_ok cx (post_value_type cenv e) tva vv ee G tn z /\
   (!t' op0. vv = StackValue t' op0 /\ ~is_word_type (post_value_type cenv e) ==>
      ptr_buf_ok cenv e op0 G z) /\
@@ -370,6 +456,10 @@ Theorem ifexp_selected_arm_step_full:
      vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr op LocMemory)) z') /\
     (~is_word_type t ==> !id path. tva = PlaceR (MemoryPlace id path) ==>
       vv_place_ptr cenv cx ee z' tva (LocatedValue t (mk_ptr op LocMemory))) /\
+    (!ctv v. conditional_result cx tva ee = (INL ctv,ee) /\
+      ctv = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+      vv_own cenv cx t sa sb ee ctv
+        (LocatedValue t (mk_ptr op LocMemory)) z') /\
     expr_store_bound cx t v op z' /\
     z'.vs_current_bb = sb.cs_current_bb /\
     z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -387,40 +477,8 @@ Proof
   strip_tac
   >>~- ([`post_value_type cenv e <> t`, `same_memory_layout cenv _ t`],
     suspend "physical")
-  >>~- ([`type_widens_to _ _ _`], (
-      `!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
-      qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
-        (fn th => SIMP_TAC bool_ss [th]) >>
-      irule ifexp_widened_call_arm_step_full >>
-      rpt conj_tac >>
-      FIRST_PROVE [(rpt gen_tac >> strip_tac >>
-                    drule_all unwrap_value_origin_ptr >> simp[] >> NO_TAC),
-             MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_memory_typed_origin_ptr_path),
-             first_assum MATCH_ACCEPT_TAC,
-             (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
-              qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
-             (qexistsl_tac [`e`,`stv`,`sm`,`stv`,`ty`,`vv`] >>
-              simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])] >> gvs[]))
-  >>~- ([`is_bytestring_type _`, `~same_memory_layout _ _ _`], (
-      `!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
-      qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
-        (fn th => SIMP_TAC bool_ss [th]) >>
-      irule ifexp_widen_arm_step_full >> rpt conj_tac >>
-      FIRST [(rpt gen_tac >> strip_tac >>
-              drule_all unwrap_value_origin_ptr >> simp[] >> NO_TAC),
-             MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_bytestring_origin_ptr_path),
-             first_assum MATCH_ACCEPT_TAC,
-             (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
-              qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
-             (irule valueCopyBytesTheory.is_bytestring_word_type >> first_assum MATCH_ACCEPT_TAC),
-             (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> gvs[]),
-             FAIL_TAC "bytes concrete"] >> gvs[])) >>
+  >>~- ([`type_widens_to _ _ _`], suspend "widened")
+  >>~- ([`is_bytestring_type _`, `~same_memory_layout _ _ _`], suspend "bytes") >>
   suspend "nocopy"
 QED
 
@@ -467,11 +525,34 @@ Resume ifexp_selected_arm_step_full[nocopy]:
      simp[NoAsms, expr_post_def, post_value_type_def, expr_type_def] >>
      rpt strip_tac >> gvs[] >> metis_tac[]) >>
   qexistsl_tac [`v`,`z'`,`G'`,`tn'`] >> gns[] >> rpt strip_tac >>
-  `?rtp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rtp` by metis_tac[] >>
-  pop_assum strip_assume_tac >>
-  `type_memory_size rtp = type_memory_size rty` by
-    (fs[same_memory_layout_def] >> metis_tac[]) >>
-  gvs[ptr_buf_ok_def, same_memory_layout_def] >> metis_tac[]
+  (fn (g as (_,goal)) =>
+    case total dest_thy_const (fst (strip_comb goal)) of
+      SOME {Name = "vv_own", ...} =>
+        (Cases_on `?id path. tva = PlaceR (MemoryPlace id path)`
+         >- (`v' = v` by metis_tac[ifexp_conditional_value_eq] >>
+             Cases_on `t = NoneT`
+             >- (gvs[] >> qpat_assum `vv_at cenv cx NoneT sa sb ee _ _ z'` mp_tac >>
+                 qpat_assum `read_result cx _ ee = (INL NoneV,ee)` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >>
+                 simp[vv_own_def, vv_at_def, mk_ptr_def, read_result_def, vyperStateTheory.return_def,
+                      vyperValueTheory.evaluate_type_def,
+                      valueEncodingTheory.type_memory_size_def, val_footprint_def] >>
+                 rpt strip_tac >> metis_tac[]) >>
+             gvs[] >> drule_all typed_aggregate_memory_conditional >> simp[]) >>
+         suspend "nocopyown") g
+    | SOME {Name = "ptr_buf_ok", ...} =>
+        (irule ifexp_nocopy_physical_buffer >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) g
+    | _ =>
+        (qpat_assum `~is_word_type t ==> !w. eval_operand op z' = SOME w ==> _` mp_tac >>
+         qpat_assum `same_memory_layout cenv _ t` mp_tac >>
+         qpat_assum `!ty' tvt. evaluate_type _ ty' = SOME tvt ==> _` mp_tac >>
+         qpat_assum `evaluate_type _ (lowered_value_type cenv _) = SOME _` mp_tac >>
+         qpat_assum `evaluate_type _ t = SOME _` mp_tac >>
+         qpat_assum `~is_word_type t` mp_tac >>
+         qpat_assum `eval_operand op z' = SOME _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[same_memory_layout_def] >> rpt strip_tac >> metis_tac[]) g)
 QED
 
 Resume ifexp_selected_arm_step_full[physical]:
@@ -522,7 +603,120 @@ Resume ifexp_selected_arm_step_full[physical]:
     eval_operand op z' = SOME w ==>
     type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z'.vs_alloca_next` by metis_tac[] >>
   drule_all ifexp_nocopy_physical_family >> strip_tac >>
-  qexistsl_tac [`v`,`z'`,`G'`,`tn'`] >> simp[]
+  qexistsl_tac [`v`,`z'`,`G'`,`tn'`] >> simp[] >> rpt strip_tac >>
+  irule ifexp_vv_own_conditional_value >>
+  qpat_assum `vv_own cenv cx t sa sb ee tva _ z'` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ifexp_selected_arm_step_full[nocopyown]:
+  markerLib.RESUME_TAC >>
+  `v' = v` by metis_tac[ifexp_conditional_value_eq] >>
+  qpat_x_assum `v' = v` SUBST_ALL_TAC >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ z`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  (Cases_on `vv_location vv = NONE \/ vv_location vv = SOME LocMemory`
+  >- (`!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
+      `tva = Value v` by
+        (qpat_assum `vv_at _ _ _ _ _ _ tva vv z` mp_tac >>
+         qpat_assum `vv_place_ptr _ _ _ z tva vv` mp_tac >>
+         qpat_assum `vv_location vv = NONE \/ vv_location vv = SOME LocMemory` mp_tac >>
+         qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)` mp_tac >>
+         qpat_assum `read_result cx tva ee = (INL v,ee)` mp_tac >>
+         qpat_assum `post_value_type cenv _ = t` mp_tac >>
+         qpat_assum `~is_word_type t` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         Cases_on `tva` >> Cases_on `vv` >>
+         gvs[vv_location_def, read_result_def, vyperStateTheory.return_def,
+             vyperStateTheory.raise_def, vv_at_def, vv_place_ptr_def] >>
+         rename1 `read_place cx place ee` >> Cases_on `place` >>
+         gvs[slot_loc_def, COND_RATOR, COND_RAND] >> metis_tac[]) >>
+      gvs[] >>
+      irule ifexp_unwrap_identity_owned >>
+      qpat_assum `unwrap_value cenv vv sm = (op,sb)` (irule_at Any) >>
+      simp[] >> fs[] >> metis_tac[]) >>
+  `?ann p. vv = LocatedValue ann p /\ p.ptr_location <> LocMemory` by
+    (qpat_assum `~(vv_location vv = NONE \/ vv_location vv = SOME LocMemory)` mp_tac >>
+     Cases_on `vv` >> simp[vv_location_def]) >>
+  qpat_x_assum `vv = LocatedValue ann p` SUBST_ALL_TAC >>
+  `~is_word_type ann /\
+   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
+    p.ptr_location = LocCode)` by
+    (qpat_assum `vv_holds _ _ _ tva (LocatedValue ann p) ee z` mp_tac >>
+     qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
+     qpat_assum `~is_word_type t` mp_tac >>
+     qpat_assum `post_value_type cenv _ = t` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `p.ptr_location` >>
+     simp[vv_holds_def] >> metis_tac[]) >>
+  `vv_own cenv cx t sm sb ee (Value v)
+     (LocatedValue t (mk_ptr op LocMemory)) z'` by metis_tac[] >>
+  irule exprSimCalldataSliceTheory.vv_own_start_mono >>
+  qexists `sm` >> simp[])
+QED
+
+Resume ifexp_selected_arm_step_full[widened]:
+  markerLib.RESUME_TAC >>
+      (`!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
+      qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
+        (fn th => SIMP_TAC bool_ss [th]) >>
+      mp_tac (Q.INST [`ptv` |-> `stv`] ifexp_widened_call_arm_step_full) >>
+      impl_tac
+      >- (rpt conj_tac >>
+      FIRST_PROVE [(rpt gen_tac >> strip_tac >>
+                    drule_all unwrap_value_origin_ptr >>
+                    disch_then (qspecl_then [`explicit`,`PG`]
+                      (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+                    qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+             MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_store_memory_typed_origin_ptr_path),
+             (qpat_assum `post_value_type cenv e = lowered_value_type cenv e`
+                (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC),
+             (asm_simp_tac bool_ss [] >> NO_TAC),
+             first_assum MATCH_ACCEPT_TAC,
+             (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
+              qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
+             (qexistsl_tac [`e`,`stv`,`sm`,`stv`,`ty`,`vv`] >>
+              simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])] >> gvs[]) >>
+      disch_then (qx_choosel_then [`v`,`z'`,`Gz`,`tf`] strip_assume_tac) >>
+      qexistsl [`v`,`z'`,`Gz`,`tf`] >> simp[] >> rpt strip_tac >>
+      `~is_word_type (post_value_type cenv e)` by metis_tac[] >>
+      `~is_bytestring_type (post_value_type cenv e)` by
+        metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
+      `v' = v` by metis_tac[ifexp_conditional_value_eq] >>
+      gvs[] >> irule exprSimCalldataSliceTheory.vv_own_start_mono >>
+      qexists `sm` >> simp[])
+QED
+
+Resume ifexp_selected_arm_step_full[bytes]:
+  markerLib.RESUME_TAC >>
+      `!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
+      qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
+        (fn th => SIMP_TAC bool_ss [th]) >>
+      qpat_assum `is_bytestring_type t` (fn th => SIMP_TAC bool_ss [th]) >>
+      irule ifexp_widen_arm_step_full >> rpt conj_tac >>
+      FIRST [(rpt gen_tac >> strip_tac >>
+              drule_all unwrap_value_origin_ptr >>
+              disch_then (qspecl_then [`explicit`,`PG`]
+                (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+              qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+             MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_store_bytestring_origin_ptr_path),
+             (asm_simp_tac bool_ss [] >> NO_TAC),
+             first_assum MATCH_ACCEPT_TAC,
+             (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
+              qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
+             (irule valueCopyBytesTheory.is_bytestring_word_type >> first_assum MATCH_ACCEPT_TAC),
+             (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> gvs[]),
+             FAIL_TAC "bytes concrete"] >> gvs[]
 QED
 
 Finalise ifexp_selected_arm_step_full
@@ -537,6 +731,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
     (!id path. tv = PlaceR (MemoryPlace id path) ==>
       same_memory_layout cenv (lowered_value_type cenv e) t) /\
     storage_trace_domain cx st0 ee.storage_trace /\
+    eval_result_typed (env,cx,ee) tv (Type (expr_type e)) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       vv_post H ctx func cenv cx e es1 sa sm u ee tv vv z /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn z) /\
@@ -544,6 +739,9 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
     z.vs_current_bb = sm.cs_current_bb /\
     z.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~z.vs_halted /\
     alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\
+      (!v. tv = Value v /\ ~is_word_type (post_value_type cenv e) /\
+        ~is_bytestring_type (post_value_type cenv e) ==>
+        vv_own cenv cx (post_value_type cenv e) sa sm ee tv vv z) /\
     ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn z /\
     (!t' op0. vv = StackValue t' op0 /\ ~is_word_type (post_value_type cenv e) ==>
       ptr_buf_ok cenv e op0 G z) /\
@@ -572,6 +770,10 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
         vv_at cenv cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z') /\
       (~is_word_type t ==> !id path. tv = PlaceR (MemoryPlace id path) ==>
         vv_place_ptr cenv cx ee z' tv (LocatedValue t (mk_ptr op LocMemory))) /\
+      (!ctv v. conditional_result cx tv ee = (INL ctv,ee) /\
+        ctv = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+        vv_own cenv cx t sa sb ee ctv
+          (LocatedValue t (mk_ptr op LocMemory)) z') /\
       expr_store_bound cx t v op z' /\
       z'.vs_current_bb = sb.cs_current_bb /\
       z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -607,6 +809,8 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
     ghost_inv_at (DF H) lo d cenv cx es1 G1 tn1 u) /\
   ~u.vs_halted /\ u.vs_current_bb = sa.cs_current_bb /\
   u.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!gs raw ee. eval_expr cx e (es1 with gas_obs := gs) = (INL raw,ee) ==>
+    eval_result_typed (env,cx,ee) raw (Type (expr_type e))) /\
   (!gs v ee. bind (eval_expr cx e) (read_result cx) (es1 with gas_obs := gs) =
     (INL v,ee) ==>
     value_has_type rty v /\
@@ -623,6 +827,8 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
         vv_at cenv cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z) /\
       (~is_word_type t ==>
         vv_place_ptr cenv cx ee z tv (LocatedValue t (mk_ptr op LocMemory))) /\
+      (!v. tv = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+        vv_own cenv cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z) /\
       expr_store_bound cx t v op z /\
       z.vs_current_bb = sb.cs_current_bb /\
       z.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~z.vs_halted /\
@@ -646,9 +852,9 @@ Proof
     (rw[gasContextTheory.gas_admissible_def] >>
      qpat_x_assum `gas_admissible (bind _ _) _ _`
        (qspec_then `gs` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     Cases_on `res` >> simp[bind_def, expr_vv_res_ok_def] >>
+     Cases_on `res` >> simp[vyperStateTheory.bind_def, expr_vv_res_ok_def] >>
      rename1 `INL rv0` >> Cases_on `rv0` >>
-     simp[conditional_result_def, raise_def, expr_vv_res_ok_def]) >>
+     simp[conditional_result_def, vyperStateTheory.raise_def, expr_vv_res_ok_def]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`u`,`G1`,`tn1`] mp_tac) >>
@@ -695,6 +901,7 @@ Resume ifexp_arm_outcome_full_conditional[selected]:
      qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      pure_rewrite_tac [listTheory.APPEND_NIL] >>
      disch_then assume_tac >> fs[]) >>
+  `eval_result_typed (env,cx,ee) tv (Type (expr_type e))` by metis_tac[] >>
   `MAP FDOM es1.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!v. read_result cx tv ee = (INL v,ee) ==>
@@ -704,7 +911,7 @@ Resume ifexp_arm_outcome_full_conditional[selected]:
     (rpt strip_tac >>
      qpat_x_assum `!gs v ee. bind _ _ _ = _ ==> _`
        (qspecl_then [`gas_explicit marks u.vs_gas_readings`,`v`,`ee`] mp_tac) >>
-     simp[bind_def]) >>
+     simp[vyperStateTheory.bind_def]) >>
   fs[] >>
   `!id path. tv = PlaceR (MemoryPlace id path) ==>
     same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
@@ -723,7 +930,7 @@ Resume ifexp_arm_outcome_full_conditional[pure]:
     (qpat_x_assum `gas_admissible (bind _ _) _ _`
       (qspec_then `gas_explicit marks u.vs_gas_readings` mp_tac o
        REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     fs[bind_def]) >>
+     fs[vyperStateTheory.bind_def]) >>
   drule_all bodyPtrIfExpConditionalSourceTheory.ifexp_conditional_source_success >>
   disch_then (qx_choose_then `ctv` strip_assume_tac) >>
   rename1 `expr_store_bound cx t v op zf` >>
@@ -748,15 +955,38 @@ Resume ifexp_arm_outcome_full_conditional[post]:
   `~zf.vs_halted` by
     (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
      simp[fragExecTheory.exit_result_def] >> metis_tac[])
-  >~ [`vv_at cenv cx t sa sb ee ctv (LocatedValue t (mk_ptr op LocMemory)) zf`]
-  >- (irule ifexp_vv_at_conditional >>
-      qexistsl [`tv`,`v`] >> fs[] >>
-      qpat_assum `!tail. conditional_result _ _ _ = _`
-        (qspec_then `ee.gas_obs` mp_tac) >>
-      pure_rewrite_tac (TypeBase.updates_of ``:evaluation_state``) >>
-      disch_then (mp_tac o MATCH_MP ifexp_conditional_result_shape) >>
-      strip_tac >> fs[read_result_def, return_def]) >>
-  rpt strip_tac >>
+  >> rpt strip_tac >>
+  (fn g as (_, goal) =>
+    case total dest_thy_const (fst (strip_comb goal)) of
+      SOME {Name = "vv_at", ...} => suspend "post_at" g
+    | SOME {Name = "vv_own", ...} => suspend "post_own" g
+    | _ => suspend "post_place" g)
+QED
+
+Resume ifexp_arm_outcome_full_conditional[post_at]:
+  irule ifexp_vv_at_conditional >>
+  qexistsl [`tv`,`v`] >> fs[] >>
+  qpat_assum `!tail. conditional_result _ _ _ = _`
+    (qspec_then `ee.gas_obs` mp_tac) >>
+  pure_rewrite_tac (TypeBase.updates_of ``:evaluation_state``) >>
+  disch_then (mp_tac o MATCH_MP ifexp_conditional_result_shape) >>
+  strip_tac >> fs[read_result_def, vyperStateTheory.return_def]
+QED
+
+Resume ifexp_arm_outcome_full_conditional[post_own]:
+  `cr = INL (Value v') /\ ces = ee` by
+    (qpat_assum `!tail. conditional_result _ _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     qpat_assum `ee with gas_obs := [] = ee`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `ctv = Value v'` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `conditional_result cx tv ee = (cr,ces)`
+       (fn th => PURE_REWRITE_TAC [th]) >> simp[]) >>
+  qpat_assum `!v. _ ==> vv_own cenv cx t sa sb ee _ _ zf`
+    (qspec_then `v'` mp_tac) >> simp[]
+QED
+
+Resume ifexp_arm_outcome_full_conditional[post_place]:
   qpat_assum `!tail. conditional_result _ _ _ = _`
     (qspec_then `ee.gas_obs` mp_tac) >>
   pure_rewrite_tac (TypeBase.updates_of ``:evaluation_state``) >>
@@ -915,6 +1145,35 @@ Proof
   pop_assum SUBST1_TAC >> simp[]
 QED
 
+Theorem ifexp_vv_own_assigned_root_frame[local]:
+  vv_own ce cx ty sc sd es tv (LocatedValue ty (mk_ptr op LocMemory)) u /\
+  eval_operand op u = SOME w /\ local_ptrs_reserved ce sa /\
+  (!x. not_fresh_at sa x ==> x <> rv) /\
+  sa.cs_next_id <= sc.cs_next_id /\ sd.cs_next_id <= sb.cs_next_id ==>
+  vv_own ce cx ty sa sb es tv (LocatedValue ty (mk_ptr (Var rv) LocMemory))
+    (jump_to xl (update_var rv w u with vs_inst_idx := k))
+Proof
+  strip_tac >>
+  qabbrev_tac `ss = jump_to xl (update_var rv w u with vs_inst_idx := k)` >>
+  `ss.vs_allocas = u.vs_allocas /\ lookup_var rv ss = SOME w` by
+    simp[Abbr `ss`, jump_to_def, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `!x. not_fresh_at sa x ==> lookup_var x ss = lookup_var x u` by
+    (rpt strip_tac >> `x <> rv` by metis_tac[] >>
+     simp[Abbr `ss`, jump_to_def, update_var_def, lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `!n b sz. local_region ce es.scopes ss n b sz <=>
+            local_region ce es.scopes u n b sz` by
+    (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists `sa` >> simp[]) >>
+  qpat_x_assum `vv_own _ _ _ sc sd _ _ _ u` mp_tac >>
+  simp[vv_own_def, mk_ptr_def, eval_operand_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[] >>
+  disj1_tac >> qexistsl [`aid`,`b`,`sz`] >>
+  `sa.cs_next_id <= aid /\ aid < sb.cs_next_id` by decide_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem ifexp_arm_finish_vv_family[local]:
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   local_ptrs_reserved cenv sa /\
@@ -938,6 +1197,8 @@ Theorem ifexp_arm_finish_vv_family[local]:
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
   (~is_word_type t ==>
    vv_place_ptr cenv cx ee u tv (LocatedValue t (mk_ptr op LocMemory))) /\
+  (!v. tv = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+    vv_own cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   expr_store_bound cx t v op u /\
   u.vs_current_bb = sd.cs_current_bb /\
@@ -980,6 +1241,11 @@ Theorem ifexp_arm_finish_vv_family[local]:
       ptr_vv_ok cx (post_value_type cenv (IfExp t c a b)) tv'
         (if is_word_type t then StackValue t (Var rv)
          else LocatedValue t (mk_ptr (Var rv) LocMemory)) ee Gz tf z /\
+      (!v. tv' = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+        vv_own cenv cx t sa sb ee tv'
+          (LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
+        (!t' p. LocatedValue t (mk_ptr (Var rv) LocMemory) = LocatedValue t' p ==>
+          p.ptr_location = LocMemory)) /\
       (cenv.ce_is_ctor /\
        vv_location (if is_word_type t then StackValue t (Var rv)
          else LocatedValue t (mk_ptr (Var rv) LocMemory)) = SOME LocCode ==>
@@ -999,17 +1265,42 @@ Theorem ifexp_arm_finish_vv_family[local]:
       ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tf)
 Proof
   strip_tac >>
-  drule_all bodyFullIfExpFinishTheory.ifexp_arm_finish_full_family >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 tr`)
+  >- (fs[] >> qexistsl [`ARB`,`ARB`,`ARB`] >> simp[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `?w. eval_operand op u = SOME w` by
+    (qpat_assum `!H. valid_horizon _ _ H tr ==> _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  qexistsl
+    [`jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)`,
+     `step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u)`,
+     `step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn`] >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H tr ==> _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `dead_lo_ok H (DF H) lo cenv cx` by first_assum (qspec_then `H` ACCEPT_TAC) >>
+  drule_all (Q.INST [`D` |-> `DF H`] bodyFullIfExpFinishTheory.ifexp_arm_finish_full) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl [`z`,`Gz`,`tf`] >> gen_tac >> strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H tr ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    drule >> strip_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp z)` by
-    (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ z`
+  qpat_x_assum `expr_type e = t` kall_tac >>
+  qpat_x_assum `post_value_type cenv e = t` kall_tac >>
+  qpat_x_assum `sb.cs_current_bb = xl` kall_tac >> gvs[] >>
+  `(ctx_has_dalloca ctx ==>
+    allocas_below_fmp (jump_to xl
+      (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)))` by
+    (qpat_assum `vv_post H _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _`
        (assume_tac o CONJUNCT1 o REWRITE_RULE [vv_post_def]) >>
      drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
   Cases_on `is_word_type t` >>
-  gvs[contextTheory.vv_location_def, post_value_type_def, expr_type_def, mk_ptr_def]
+  gvs[contextTheory.vv_location_def, post_value_type_def, expr_type_def, mk_ptr_def] >>
+  rpt strip_tac >>
+  irule (REWRITE_RULE [mk_ptr_def]
+    (Q.INST [`sc` |-> `sc`,`sd` |-> `sd`,`op` |-> `op`,`u` |-> `u`]
+      ifexp_vv_own_assigned_root_frame)) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 (* Keep the condition's actual path available to its selected continuation. *)
@@ -1056,6 +1347,7 @@ Theorem ifexp_vv_full_root_uniform:
       (!id path. tv = PlaceR (MemoryPlace id path) ==>
         same_memory_layout cenv (lowered_value_type cenv e) t) /\
       storage_trace_domain cx st0 ee.storage_trace /\
+      eval_result_typed (env,cx,ee) tv (Type (expr_type e)) /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==>
         vv_post H ctx func cenv cx e es1 sa sm u ee tv av z /\
         ghost_inv_at (DF H) lo d cenv cx ee G tn z) /\
@@ -1063,6 +1355,9 @@ Theorem ifexp_vv_full_root_uniform:
       z.vs_current_bb = sm.cs_current_bb /\
       z.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~z.vs_halted /\
       alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\
+      (!v. tv = Value v /\ ~is_word_type (post_value_type cenv e) /\
+    ~is_bytestring_type (post_value_type cenv e) ==>
+    vv_own cenv cx (post_value_type cenv e) sa sm ee tv av z) /\
       ptr_vv_ok cx (post_value_type cenv e) tv av ee G tn z /\
       (!t' op0. av = StackValue t' op0 /\ ~is_word_type (post_value_type cenv e) ==>
         ptr_buf_ok cenv e op0 G z) /\
@@ -1091,6 +1386,10 @@ Theorem ifexp_vv_full_root_uniform:
           vv_at cenv cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z') /\
         (~is_word_type t ==> !id path. tv = PlaceR (MemoryPlace id path) ==>
           vv_place_ptr cenv cx ee z' tv (LocatedValue t (mk_ptr op LocMemory))) /\
+    (!ctv v. conditional_result cx tv ee = (INL ctv,ee) /\
+      ctv = Value v /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+      vv_own cenv cx t sa sb ee ctv
+        (LocatedValue t (mk_ptr op LocMemory)) z') /\
         expr_store_bound cx t v op z' /\
         z'.vs_current_bb = sb.cs_current_bb /\
         z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -1122,6 +1421,9 @@ Theorem ifexp_vv_full_root_uniform:
        (INL v,es1) ==>
      expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty a es1 /\
      expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty b es1 /\
+     (!e gs' raw ee. (e = a \/ e = b) /\
+       eval_expr cx e (es1 with gas_obs := gs') = (INL raw,ee) ==>
+       eval_result_typed (env,cx,ee) raw (Type (expr_type e))) /\
      !e gs' v' es2.
        (e = a \/ e = b) /\
        bind (eval_expr cx e) (read_result cx) (es1 with gas_obs := gs') =
@@ -1248,11 +1550,24 @@ Proof
     (Cases_on `sel` >> simp[] >> metis_tac[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
         cenv cx ty (if sel then a else b) mid` by metis_tac[] >>
+  `(!gs raw ee. eval_expr cx (if sel then a else b)
+       (mid with gas_obs := gs) = (INL raw,ee) ==>
+       eval_result_typed (env,cx,ee) raw
+         (Type (expr_type (if sel then a else b))))` by
+    (Cases_on `sel` >> simp[] >> metis_tac[]) >>
   `(!gs v ee. bind (eval_expr cx (if sel then a else b)) (read_result cx)
        (mid with gas_obs := gs) = (INL v,ee) ==>
        value_has_type rty v /\
        !ptv. evaluate_type (get_tenv cx) (post_value_type cenv (if sel then a else b)) = SOME ptv ==>
-         value_has_type ptv v)` by (Cases_on `sel` >> simp[] >> metis_tac[]) >>
+         value_has_type ptv v)` by
+    (qpat_assum `!gs v es1. bind (eval_expr cx c) (read_result cx)
+       (es with gas_obs := gs) = (INL v,es1) ==> _ /\ _`
+       (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,`BoolV sel`,`mid`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     qpat_x_assum `!e gs v ee. _ ==> value_has_type rty v /\ _`
+       (qspec_then `if sel then a else b` mp_tac) >>
+     Cases_on `sel` >> simp[]) >>
   `gas_admissible (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
       expr_vv_res_ok mid` by
     (drule_all exprSimIfExpTheory.ifexp_root_branch_admissible >>
@@ -1310,7 +1625,7 @@ Resume ifexp_vv_full_root_uniform[arm]:
   qpat_assum `compile_expr cenv ty (gas_shadow_expr (if sel then a else b)) shadow_se = _`
     (irule_at Any) >>
   qpat_assum `expr_vv_sim_full _ _ _ _ (if sel then a else b) mid` (irule_at Any) >>
-  qexistsl [`t`,`sx`,`rty`,`aop`,`c`,`b`,`a`] >>
+  qexistsl [`t`,`sx`,`rty`,`aop`,`env`,`c`,`b`,`a`] >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
@@ -1346,6 +1661,7 @@ Resume ifexp_vv_full_root_uniform[arm]:
       simp[]) >>
   simp[jump_to_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
@@ -1359,9 +1675,9 @@ Resume ifexp_vv_full_root_uniform[arm]:
   simp[NoAsms, Abbr `finalQ`] >>
   qpat_assum `res = INL tv` (fn th => rewrite_tac[th]) >>
   qpat_assum `vv = _` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms] >>
+  simp[NoAsms, expr_type_def] >>
   irule (CONV_RULE (RAND_CONV
-    (SIMP_CONV (srw_ss() ++ numSimps.ARITH_ss) [post_value_type_def]))
+    (SIMP_CONV (srw_ss() ++ numSimps.ARITH_ss) [post_value_type_def, expr_type_def]))
     ifexp_arm_finish_vv_family) >>
   simp[] >>
   conj_tac >- metis_tac[] >>

@@ -94,3 +94,5 @@ Ancestors
   bodyPtrPrecompileBuiltinsArithmeticValue bodyPtrSignedConvertSourceFixed
   forPtrAllocationFrame internalReturnImmutableTypes logBytesCodePtr
   logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
+  reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
+  reasonTypingProps revertReasonPrefixCodePtr revertReasonSuffixPathPtr

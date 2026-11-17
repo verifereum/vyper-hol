@@ -211,7 +211,7 @@ Resume splice_run_terminal_own_by_steps[window]:
   drule sym_result_rel_terminal >> strip_tac >> qexists_tac `j'` >>
   `sym_run_own (pfx ++ repl ++ sfx) env own j' ss = dstSteps j' ss`
     by (first_x_assum irule >> simp[] >>
-        Cases_on `dstSteps j' ss` >> gvs[sym_terminal_def]) >> simp[]
+        Cases_on `dstSteps j' ss` >> FIRST [gvs[sym_terminal_def]]) >> simp[]
 QED
 
 Resume splice_run_terminal_own_by_steps[window_ok]:

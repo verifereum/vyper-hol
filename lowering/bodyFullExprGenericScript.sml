@@ -73,7 +73,50 @@ Proof
       conj_tac
       >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
               read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
-      irule vv_store_bound_stack_value >> simp[]) >>
+      conj_tac
+      >- (irule vv_store_bound_stack_value >> simp[]) >>
+      strip_tac >>
+      simp[vv_own_def, read_result_def, return_def, expr_val_own_def] >>
+      rpt strip_tac >>
+      `post_value_type cenv e = lowered_value_type cenv e` by
+        (qpat_x_assum `compile_expr cenv ty e sa = _` mp_tac >>
+         qpat_x_assum `~is_word_type _` mp_tac >>
+         qpat_x_assum `~is_bytestring_type _` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         map_every qid_spec_tac [`sa`, `ty`, `e`, `cenv`] >>
+         ho_match_mp_tac lowered_value_type_ind >>
+         rw[post_value_type_def, lowered_value_type_def,
+            vyperASTTheory.expr_type_def, is_bytestring_type_def]
+         >~ [`compile_expr _ _ (Builtin _ (Concat _) _) _ = _`]
+         >- (qpat_x_assum `compile_expr _ _ (Builtin _ (Concat _) _) _ = _` mp_tac >>
+             rpt (pop_assum kall_tac) >>
+             `!n args. ~exprSimHypsDefs$names_builtin (Concat n) args` by
+               (`!bt args. exprSimHypsDefs$names_builtin bt args ==>
+                           !n. bt <> Concat n` suffices_by metis_tac[] >>
+                ho_match_mp_tac exprSimHypsDefsTheory.names_builtin_ind >>
+                simp[exprSimHypsDefsTheory.names_builtin_def]) >>
+             simp[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
+             ONCE_REWRITE_TAC [compile_builtin_dispatch_component_eq] >>
+             simp[] >> strip_tac >> rpt (pairarg_tac >> gvs[])) >>
+         qpat_x_assum `compile_expr _ _ (TypeBuiltin _ (AbiEncode _ _) _ _) _ = _`
+           mp_tac >> rpt (pop_assum kall_tac) >>
+         ONCE_REWRITE_TAC [compile_expr_component_eq] >>
+         simp[vyperASTTheory.expr_type_def, vyperASTTheory.expr_size_def] >>
+         ONCE_REWRITE_TAC [compile_type_builtin_dispatch_component_eq] >>
+         simp[AllCaseEqs(), as_ptr_val_def] >> rpt strip_tac >>
+         rpt (pairarg_tac >> gvs[as_ptr_val_def]) >>
+         qmatch_asmsub_abbrev_tac `as_ptr_val _ _ encoded` >>
+         Cases_on `encoded` >> gvs[as_ptr_val_def]) >>
+      `type_memory_size tv = 0` by metis_tac[] >>
+      `val_footprint tv v = 0` by
+        (Cases_on `v` >> simp[val_footprint_def] >>
+         Cases_on `tv` >>
+         gvs[valueEncodingTheory.type_memory_size_def] >>
+         rename1 `BaseTV bt` >> Cases_on `bt` >>
+         gvs[valueEncodingTheory.type_memory_size_def] >>
+         rename1 `BytesT bd` >> Cases_on `bd` >>
+         gvs[valueEncodingTheory.type_memory_size_def]) >>
+      gvs[expr_post_def, expr_val_rel_def]) >>
   rpt strip_tac >> gvs[AllCaseEqs(), expr_exit_success_map, halt_exit_def] >>
   rename1 `expr_exit (INR exc) result` >>
   Cases_on `result` >> Cases_on `exc` >> gvs[expr_exit_def] >>

@@ -524,7 +524,7 @@ Proof
     (fs[sue_state_rel_def] >>
      drule stateFrameTheory.execution_frame_projection >>
      simp[stateFrameTheory.execution_frame_def]) >>
-  simp[mem_corr_def, call_corr_def, unitMemInvTheory.dalloca_no_wrap_def,
+  simp[mem_corr_def, call_corr_def, unitTransformDefsTheory.dalloca_no_wrap_def,
        unitMemInvTheory.inst_mem_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def]
@@ -663,7 +663,7 @@ Proof
         venomStateTheory.venom_state_component_equality]) >>
   `dalloca_no_wrap inst s ==>
    dalloca_no_wrap (inst with inst_operands := ops) t` by
-    (simp[unitMemInvTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
+    (simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
      gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]) >>
   simp[mem_corr_def] >> disj2_tac >>
   Cases_on `inst.inst_opcode = DRET`
