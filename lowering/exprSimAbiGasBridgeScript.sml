@@ -1967,7 +1967,7 @@ Proof
        venomCallOracleDefsTheory.consume_create_outcome_eq,
        update_var_def, halt_state_def, set_returndata_def,
        instIdxIndepTheory.exec_result_map_def] >>
-  IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
+  rpt IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
 Theorem frag_delegatecall_control[local]:
