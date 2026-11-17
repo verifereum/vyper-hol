@@ -382,6 +382,12 @@ Theorem gas_exec_ext_call:
   gas_replay_at 0
     (\u. exec_ext_call inst u gas addr value ao az ro rz st) s
 Proof
+  Cases_on `s.vs_outcomes = []`
+  >- (Cases_on `inst.inst_outputs` >>
+      simp[gas_replay_at_def, exec_ext_call_def, lift_result_def] >>
+      Cases_on `t` >>
+      simp[gas_replay_at_def, exec_ext_call_def, lift_result_def,
+           halt_state_def, set_returndata_def]) >>
   simp[gas_replay_at_def, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
   gen_tac >> pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
@@ -441,6 +447,12 @@ QED
 Theorem gas_exec_delegatecall:
   gas_replay_at 0 (\u. exec_delegatecall inst u gas addr ao az ro rz) s
 Proof
+  Cases_on `s.vs_outcomes = []`
+  >- (Cases_on `inst.inst_outputs` >>
+      simp[gas_replay_at_def, exec_delegatecall_def, lift_result_def] >>
+      Cases_on `t` >>
+      simp[gas_replay_at_def, exec_delegatecall_def, lift_result_def,
+           halt_state_def, set_returndata_def]) >>
   simp[gas_replay_at_def, exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
   gen_tac >> pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
@@ -454,6 +466,7 @@ Proof
   Cases_on `inst.inst_outputs` >>
   simp[gas_replay_at_def, exec_create_def, lift_result_def] >>
   Cases_on `t` >> simp[gas_replay_at_def, exec_create_def, lift_result_def] >>
+  Cases_on `s.vs_outcomes = []` >>
   Cases_on `w2n sz > 2 * max_code_size` >>
   simp[gas_replay_at_def, exec_create_def, lift_result_def,
        venom_create_request_def, read_memory_def, update_var_def,
