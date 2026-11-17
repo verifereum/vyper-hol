@@ -124,31 +124,6 @@ Proof
   fs[supported_stmt_append_form]
 QED
 
-Theorem append_nested_robust_path_assign:
-  !path tv k ltv a b mem mem' v old result tm tm'.
-    mem_path_offset tv path = SOME (k,ltv) /\
-    value_has_type tv a /\ value_has_type ltv v /\
-    evaluate_subscripts tv a path = INL old /\
-    assign_subscripts tv a path (Replace v) = INL result /\
-    (!m. mem_agree_outside tm mem m ==> val_in_memory tv a b m) /\
-    (!m. mem_agree_outside tm' mem' m ==> val_in_memory ltv v (b+k) m) /\
-    (!q. q < b+k \/ b+k+type_memory_size ltv <= q ==>
-      mem_bytes_at q 1 mem = mem_bytes_at q 1 mem') /\
-    (!q. (q < b+k \/ b+k+type_memory_size ltv <= q) /\ q IN tm' ==>
-      q IN tm) ==>
-    (!m. mem_agree_outside tm' mem' m ==> val_in_memory tv result b m)
-Proof
-  rpt gen_tac >> strip_tac >>
-  match_mp_tac (SRULE [] (Q.INST
-    [`entry` |-> `<|assignable := T; type := tv; value := a; popped := []|>`,
-     `entry'` |-> `<|assignable := T; type := tv; value := result; popped := []|>`,
-     `ptv` |-> `ltv`, `off` |-> `b`]
-    memoryPlaceStorePostTheory.memory_place_replace_robust)) >>
-  simp[vyperStateTheory.replace_memory_entry_def] >>
-  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem append_nested_robust_array_project:
   mem_path_offset rt path = SOME (k,ArrayTV tv (Dynamic cap)) /\
   value_has_type rt a /\ well_formed_type_value rt /\
@@ -657,12 +632,17 @@ Resume append_nested_memory_cont_full[success]:
         vyperTypingTheory.all_have_type_EVERY, EVERY_APPEND]) >>
   `!mem. mem_agree_outside tnf.t_mem u.vs_memory mem ==>
       val_in_memory entry.type updated (w2n rootw) mem` by
-    (rpt strip_tac >> irule append_nested_robust_path_assign >>
-     goal_assum (drule_at (Pat `assign_subscripts _ _ _ _ = INL _`)) >>
-     goal_assum (drule_at (Pat `mem_path_offset _ _ = _`)) >>
-     qexistsl_tac [`t.vs_memory`, `u.vs_memory`,
-       `ArrayV (DynArrayV vs)`, `tn.t_mem`, `tnf.t_mem`] >>
-     simp[GSYM markerTheory.Abbrev_def] >>
+    (match_mp_tac (SRULE [] (Q.INST
+       [`entry` |-> `entry`,
+        `entry'` |-> `entry with <|value := updated; popped := []|>`,
+        `path` |-> `path`, `k` |-> `k`,
+        `ptv` |-> `ArrayTV tv (Dynamic cap)`,
+        `off` |-> `w2n rootw`, `v` |-> `ArrayV (DynArrayV (vs ++ [v]))`,
+        `tm` |-> `tn.t_mem`, `tm'` |-> `tnf.t_mem`,
+        `mem` |-> `t.vs_memory`, `mem'` |-> `u.vs_memory`]
+       memoryPlaceStorePostTheory.memory_place_replace_robust)) >>
+     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+     simp[replace_memory_entry_def, GSYM markerTheory.Abbrev_def] >>
      conj_tac
      >- (rpt strip_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
          qpat_assum `w2n bp = _` (fn th => rewrite_tac[GSYM th]) >>
