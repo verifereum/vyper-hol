@@ -2770,3 +2770,24 @@ Proof
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
 QED
+
+Theorem body_assign_memory_place_lower_bound:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  dead_lo_ok H D lo cenv cx /\
+  place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  0 < type_memory_size dtv /\
+  write_place cx p v ee = (INL (),ff) /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type) ==>
+  lo <= w2n dw
+Proof
+  strip_tac >>
+  drule_all memory_place_live_region >> strip_tac >>
+  `0 < len` by decide_tac >>
+  `lo <= b` by (irule body_full_local_region_lower_bound >> metis_tac[]) >>
+  decide_tac
+QED
