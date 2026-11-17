@@ -58,6 +58,11 @@ Proof
   `ir_supply_inst_ok (init_ir_supply unit)` by
     simp[irSupplyTheory.init_ir_supply_inst_ok] >>
   drule_all o1_pre_walk_rows >> strip_tac >>
+  `EVERY no_raw_fmp_ops pre.cu_context.ctx_functions` by
+    (first_assum irule >>
+     `is_raw_fmp_opcode DALLOCA` by simp[venomInstTheory.is_raw_fmp_opcode_def] >>
+     rewrite_tac[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+     metis_tac[source_no_raw_fmp_ops, venomInstTheory.no_raw_fmp_ops_def]) >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   mp_tac (Q.INST [`unit` |-> `pre`,
     `fcg` |-> `fcg_analyze pre.cu_context`] o1_ctx_shape_prune) >>

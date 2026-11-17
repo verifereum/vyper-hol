@@ -980,6 +980,20 @@ Proof
   simp[]
 QED
 
+Theorem uint2str_width_bound:
+  x < 2 ** k ==>
+  LENGTH (num_to_dec_string x) <=
+  LENGTH (num_to_dec_string (2 ** k - 1))
+Proof
+  strip_tac >> Cases_on `x = 0`
+  >- (simp[ASCIInumbersTheory.LENGTH_num_to_dec_string] >> rw[] >> decide_tac) >>
+  `0 < x /\ x <= 2 ** k - 1 /\ 0 < 2 ** k - 1` by decide_tac >>
+  `k <> 0` by (strip_tac >> gvs[]) >>
+  `LOG 10 x <= LOG 10 (2 ** k - 1)` by
+    (irule logrootTheory.LOG_LE_MONO >> simp[]) >>
+  simp[ASCIInumbersTheory.LENGTH_num_to_dec_string]
+QED
+
 Theorem uint2str_strlen_bound:
   !tyv i. value_has_type tyv (IntV i) ∧ well_formed_type_value tyv ==>
           STRLEN (toString (Num i)) ≤ 78
@@ -2717,10 +2731,11 @@ Proof
   (* Uint2Str success returns a string within the statically required bound. *)
   TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Uint2Str n) _ [IntV i] = INL v` >>
        gvs[evaluate_builtin_def, compatible_bound_def] >>
-       `STRLEN (toString (Num i)) <= 78` by
-         (irule uint2str_strlen_bound >>
-          qexists `BaseTV (UintT k)` >>
-          gvs[value_has_type_def, well_formed_type_value_def]) >>
+       `STRLEN (toString (Num i)) <= n` by
+         (irule LESS_EQ_TRANS >>
+          qexists_tac `LENGTH (num_to_dec_string (2 ** k - 1))` >>
+          simp[] >> irule uint2str_width_bound >>
+          gvs[value_has_type_def, within_int_bound_def]) >>
        gvs[] >> NO_TAC) >>
   (* Floor/Ceil success returns Int256 by the decimal division bounds. *)
   TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Ceil _ [DecimalV d] = INL v` >>
