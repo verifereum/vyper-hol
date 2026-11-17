@@ -4220,31 +4220,25 @@ Theorem sym_rf_copy_preparation_execution:
     ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
     ps' = release_dead_spills nl (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)
 Proof
-  gen_tac >> strip_tac >>
-  `compute_operands inst = [zop;sop;dop]` by
-    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
-  `ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
-   ps' = release_dead_spills nl (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)` by
-    (drule_all fnFrameStepsRevertForwardTheory.rf_copy_plan_result >>
-     disch_then (fn th => fs[th])) >>
-  `asm_block_at prog st.as_pc (execute_plan fmp (ins ++ ros)) /\
-   asm_block_at prog (st.as_pc + LENGTH (execute_plan fmp (ins ++ ros)))
-     [AsmOp "RETURNDATACOPY"]` by
-    gvs[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
-        stackOpSimTheory.asm_block_at_append] >>
-  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
-         ~MEM (SORestore off) (ins ++ ros)` by fs[listTheory.MEM_APPEND] >>
-  `RETURNDATACOPY <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
-   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
-  `EVERY is_simple_stack_op (ins ++ ros)` by
-    metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple] >>
-  `prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros)` by
-    (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
-     qexistsl [`dfg_build_function fn`, `compute_operands inst`, `nl`, `RETURNDATACOPY`,
-               `ps1`, `ps2`] >>
-     simp[] >> gvs[] >> metis_tac[is_label_operand_def]) >>
-  drule_all sym_rf_suffix_preparation_execution >> strip_tac >>
-  qexistsl [`mid`, `ss'`, `stk'`, `top'`] >> gvs[]
+  qx_gen_tac `cp0` >> strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  mp_tac (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES, asm_sym_rel_core_canonical]
+    (DISCH_ALL (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`]
+      (Q.SPECL [`F`, `asm_data_env_ok prog env`, `[]`]
+        (UNDISCH sym_rf_copy_preparation_execution_mode_conditional))))) >>
+  impl_tac
+  >- (pure_rewrite_tac[GSYM control_reorder_place_def] >> rpt conj_tac >>
+      FIRST [MATCH_ACCEPT_TAC emit_input_plan_spill_free_stack_replay,
+        MATCH_ACCEPT_TAC list_rel_op_kind_transport,
+        MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [GSYM control_reorder_place_def]
+          (GEN_ALL sym_reorder_one_decompose)),
+        MATCH_ACCEPT_TAC control_reorder_place_spill_free_kind_replay,
+        MATCH_ACCEPT_TAC reorder_restore_no_restore_identity,
+        MATCH_ACCEPT_TAC reorder_reduce_no_spill_identity,
+        MATCH_ACCEPT_TAC do_swap_no_restore_shallow,
+        MATCH_ACCEPT_TAC do_swap_shallow_symbolic_prefix_facts]) >>
+  disch_then (qspec_then `cp0` mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> drule_all asm_sym_steps_lockstep >> simp[]) >>
+  simp[]
 QED
 
 Theorem sym_rf_copy_operand_kind:
@@ -4253,11 +4247,8 @@ Theorem sym_rf_copy_operand_kind:
   MEM op inst.inst_operands /\ ~is_label_operand op /\
   op_kind_ok fn ret op sv ==> ?w. sv = Val w
 Proof
-  strip_tac >>
-  `op <> dead_stack_marker` by
-    (strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
-  drule ordinary_noncopy_operand_word_kind >>
-  disch_then drule >> simp[] >> metis_tac[]
+  metis_tac[sym_rf_copy_operand_kind_mode,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_rf_copy_prepared_stack:
@@ -4270,14 +4261,10 @@ Theorem sym_rf_copy_prepared_stack:
   LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top ==>
   ?suffix. ss.sym_stack = MAP Val [dst;src;sz] ++ suffix
 Proof
-  strip_tac >>
-  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
-  rename1 `op_kind_ok fn ret dop sd` >>
-  rename1 `op_kind_ok fn ret sop sr` >>
-  rename1 `op_kind_ok fn ret zop szv` >>
-  `(?w. sd = Val w) /\ (?w. sr = Val w) /\ (?w. szv = Val w)` by
-    (rpt conj_tac >> irule sym_rf_copy_operand_kind >> metis_tac[listTheory.MEM]) >>
-  gvs[asm_sym_rel_def, sval_conc_def]
+  strip_tac >> irule (PURE_REWRITE_RULE [asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`] sym_rf_copy_prepared_stack_core)) >>
+  metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_rf_copy_success_stack:
@@ -4302,13 +4289,12 @@ Theorem sym_rf_copy_success_stack:
     (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b) /\
     ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
 Proof
-  gen_tac >> strip_tac >>
-  drule_all sym_rf_copy_prepared_stack >> strip_tac >>
-  `ss.sym_stack = Val dst :: Val src :: Val sz :: suffix` by simp[] >>
-  drule_all sym_returndatacopy_success_transfer >> strip_tac >>
-  drule_all sym_returndatacopy_success_inventory >> strip_tac >>
-  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
-  metis_tac[listTheory.CONS_11, listTheory.APPEND]
+  qx_gen_tac `cp0` >> strip_tac >>
+  mp_tac (PURE_REWRITE_RULE [asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`] sym_rf_copy_success_stack_core)) >>
+  disch_then (qspec_then `cp0` mp_tac) >> impl_tac >-
+    (simp[] >> metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]) >> simp[]
 QED
 
 Theorem sym_rf_copy_prepared_success:
@@ -4337,22 +4323,13 @@ Theorem sym_rf_copy_prepared_success:
     (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b) /\
     ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
 Proof
-  gen_tac >> strip_tac >>
-  `dop <> dead_stack_marker /\ sop <> dead_stack_marker /\ zop <> dead_stack_marker` by
-    (rpt strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
-  `?d s z residual. stk = d :: s :: z :: residual /\
-    operand_val current (SND (compute_label_offsets prog)) dop = SOME d /\
-    operand_val current (SND (compute_label_offsets prog)) sop = SOME s /\
-    operand_val current (SND (compute_label_offsets prog)) zop = SOME z` by
-    (irule emitSimTheory.asm_stack_top3_from_plan >> simp[] >>
-     qexists `tail` >> simp[]) >>
-  gvs[] >>
-  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by simp[] >>
-  drule_all sym_rf_copy_success_stack >> strip_tac >>
-  qexistsl [`ss'`, `top'`] >> simp[] >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
-  fs[asm_block_at_def] >>
-  pure_rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >> simp[]
+  qx_gen_tac `cp0` >> strip_tac >>
+  mp_tac (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES, asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`, `allow_own` |-> `F`]
+      sym_rf_copy_prepared_success_mode_core)) >>
+  disch_then (qspec_then `cp0` mp_tac) >> impl_tac >-
+    (simp[] >> metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]) >> simp[]
 QED
 
 Theorem sym_rf_copy_success_execution:
@@ -4403,38 +4380,18 @@ Theorem sym_rf_copy_success_execution:
     (!b. b IN FDOM ss_out.sym_mem_labels ==> context_spill_byte cp b) /\
     ~mem_labels_hit ss_out.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
 Proof
-  qx_gen_tac `cplan` >> strip_tac >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_copy_execution >>
-  disch_then (qspec_then `build_offset_to_pc prog` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `asm_steps _ _ _ (LENGTH (execute_plan fmp ops)) st = AsmOK out` >>
-  rename1 `out.as_stack = stk_out ++ rest` >>
-  drule_all sym_rf_copy_preparation_execution >> strip_tac >>
-  rename1 `mid.as_stack = stk_mid ++ rest` >>
-  rename1 `ss'.sym_stack = top_mid ++ srest` >>
-  `LENGTH (execute_plan fmp ops) = LENGTH (execute_plan fmp (ins ++ ros)) + 1` by
-    simp[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
-         listTheory.APPEND_ASSOC] >>
-  `asm_steps lo (build_offset_to_pc prog) prog 1 mid = AsmOK out` by
-    (qpat_assum `asm_steps _ _ _ _ st = AsmOK mid`
-       (mp_then Any (qspec_then `1` mp_tac) stackOpSimTheory.asm_steps_add_ok) >>
-     gvs[]) >>
-  `asm_step lo (build_offset_to_pc prog) (AsmOp "RETURNDATACOPY") mid = AsmOK out` by
-    (qpat_x_assum `asm_steps _ _ _ 1 mid = _` mp_tac >>
-     pure_rewrite_tac[arithmeticTheory.ONE, asmSemTheory.asm_steps_def] >>
-     gvs[asm_block_at_def, AllCaseEqs()]) >>
-  `plan_stack_rel lo (frame_view fn ra vs)
-     (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk_mid /\
-   LIST_REL (op_kind_ok fn ret)
-     (REVERSE (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop])) top_mid` by metis_tac[] >>
-  `ss'.sym_mem_labels = ss.sym_mem_labels` by
-    metis_tac[finite_mapTheory.FLOOKUP_EXT] >>
-  `!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cplan b` by simp[] >>
-  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
-  drule_all sym_rf_copy_prepared_success >> strip_tac >>
-  rename1 `sym_steps prog env 1 ss' = SymOK ss_out` >>
-  rename1 `ss_out.sym_stack = top_out ++ srest` >>
-  qexistsl [`out`, `ss_out`, `stk_out`, `top_out`] >>
-  gvs[fnPlanPrefixTheory.release_dead_spills_stack, sym_steps_add]
+  qx_gen_tac `cp0` >> strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  mp_tac (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES, asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`, `allow_own` |-> `F`]
+      (INST_TYPE [``:'cfg`` |-> ``:'a``]
+        sym_rf_copy_success_execution_mode_conditional))) >>
+  impl_tac >-
+    (rpt gen_tac >> strip_tac >>
+     drule_all (SRULE [] (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`]
+       sym_rf_copy_preparation_execution)) >> simp[]) >>
+  disch_then (qspec_then `cp0` mp_tac) >> impl_tac >-
+    (simp[] >> metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]) >> simp[]
 QED
 
 Theorem sym_rf_copy_fault_stack:
@@ -4450,12 +4407,11 @@ Theorem sym_rf_copy_fault_stack:
     (AsmOp "RETURNDATACOPY") cs = AsmFault cs' ==>
   sym_terminal (sym_steps prog env 1 ss)
 Proof
-  strip_tac >> drule_all sym_rf_copy_prepared_stack >> strip_tac >>
-  irule sym_terminal_opcode_transfer >>
-  conj_tac >- simp[] >>
-  qexistsl [`[dst;src;sz]`, `AsmFault cs'`, `cs`, `"RETURNDATACOPY"`, `suffix`] >>
-  simp[asm_op_arity_def, asm_op_mem_reads_def, mem_labels_hit_def,
-       asm_op_arity_table_def, log_table_def]
+  strip_tac >> irule (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES, asm_sym_rel_core_canonical]
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`, `allow_own` |-> `F`]
+      sym_rf_copy_fault_stack_mode_core)) >>
+  metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_rf_copy_fault_execution:
@@ -4766,17 +4722,14 @@ Theorem sym_plan_stack_rel_inst_idx:
   plan_stack_rel lo (frame_view fn ra (s with vs_inst_idx := k)) ops stk <=>
   plan_stack_rel lo (frame_view fn ra s) ops stk
 Proof
-  simp[codegenRelTheory.plan_stack_rel_def] >>
-  AP_TERM_TAC >> AP_TERM_TAC >> ABS_TAC >>
-  Cases_on `EL i (REVERSE ops)` >>
-  simp[frame_view_def, codegenRelTheory.operand_val_def, venomStateTheory.lookup_var_def]
+  MATCH_ACCEPT_TAC symControlForwardRunOwnTheory.sym_plan_stack_rel_inst_idx
 QED
 
 Theorem sym_terminal_rel_inst_idx:
   venom_asm_terminal_rel (s with vs_inst_idx := k) st <=>
   venom_asm_terminal_rel s st
 Proof
-  simp[venom_asm_terminal_rel_def]
+  MATCH_ACCEPT_TAC symControlForwardRunOwnTheory.sym_terminal_rel_inst_idx
 QED
 
 Theorem sym_assign_success_state:
@@ -4784,14 +4737,7 @@ Theorem sym_assign_success_state:
   inst.inst_outputs = [out] /\ step_inst fuel ctx inst s = OK s' ==>
   ?w. s' = s with vs_vars := s.vs_vars |+ (out,w)
 Proof
-  strip_tac >>
-  `step_inst fuel ctx inst s = step_inst_base inst s` by
-    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  gvs[] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[] >> Cases_on `eval_operand rhs s` >>
-  simp[venomStateTheory.update_var_def] >> metis_tac[]
+  MATCH_ACCEPT_TAC symControlForwardRunOwnTheory.sym_assign_success_state
 QED
 
 Theorem sym_assign_block_abort_continuation:
@@ -4801,16 +4747,7 @@ Theorem sym_assign_block_abort_continuation:
   ?s'. step_inst fuel ctx inst s = OK s' /\
     exec_block fuel ctx bb (s' with vs_inst_idx := SUC k) = Abort a s_end
 Proof
-  strip_tac >>
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  simp[Once exec_block_def, is_terminator_def] >>
-  Cases_on `eval_operand rhs s` >>
-  `step_inst fuel ctx inst s = step_inst_base inst s` by
-    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
-  qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
-  qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
-  qpat_assum `inst.inst_outputs = [out]` SUBST1_TAC >> simp[]
+  MATCH_ACCEPT_TAC symControlForwardRunOwnTheory.sym_assign_block_abort_continuation
 QED
 
 Theorem sym_rf_future_non_phi:
@@ -4818,12 +4755,7 @@ Theorem sym_rf_future_non_phi:
   !r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
     ti.inst_opcode <> PHI
 Proof
-  rpt strip_tac >>
-  `ti.inst_opcode =
-    (if r = i then RETURNDATACOPY else if r = j then REVERT else ASSIGN)` by
-    (irule fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
-     conj_tac >- decide_tac >> simp[] >> qexists `bb` >> simp[]) >>
-  Cases_on `r = i` >> fs[] >> Cases_on `r = j` >> fs[]
+  MATCH_ACCEPT_TAC symControlForwardRunOwnTheory.sym_rf_future_non_phi
 QED
 
 Theorem sym_rf_assign_continuation_execution:
@@ -5011,8 +4943,7 @@ Theorem sym_rf_current_normalized_value:
   operand_val (frame_view fn ra s) lo op = value ==>
   operand_val entry lo (normalize_operand (dfg_build_function fn) [] op) = value
 Proof
-  simp[fnFrameStepsRevertForwardTheory.rf_value_inv_def] >>
-  metis_tac[fnFrameStepsRevertForwardTheory.rf_live_use_current]
+  MATCH_ACCEPT_TAC symControlForwardSourceFactsTheory.sym_rf_current_normalized_value
 QED
 
 Theorem sym_rf_copy_normalized_range:
@@ -5024,10 +4955,7 @@ Theorem sym_rf_copy_normalized_range:
   operand_val entry lo (normalize_operand (dfg_build_function fn) [] dop) = SOME dst /\
   operand_val entry lo (normalize_operand (dfg_build_function fn) [] zop) = SOME sz
 Proof
-  rpt strip_tac >>
-  `MEM dop (compute_operands inst) /\ MEM zop (compute_operands inst)` by
-    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
-  metis_tac[sym_rf_current_normalized_value]
+  MATCH_ACCEPT_TAC symControlForwardSourceFactsTheory.sym_rf_copy_normalized_range
 QED
 
 Theorem sym_rf_abort_source_fault:
@@ -5036,10 +4964,7 @@ Theorem sym_rf_abort_source_fault:
   step_inst fuel ctx inst vs = Abort ExHalt_abort fault ==>
   a = ExHalt_abort /\ vs_end = fault
 Proof
-  rpt strip_tac >>
-  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
-   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >> simp[]
+  MATCH_ACCEPT_TAC symControlForwardSourceFactsTheory.sym_rf_abort_source_fault
 QED
 
 Theorem sym_rf_abort_source_success:
@@ -5048,10 +4973,7 @@ Theorem sym_rf_abort_source_success:
   step_inst fuel ctx inst vs = OK copied ==>
   exec_block fuel ctx bb (copied with vs_inst_idx := SUC i) = Abort a vs_end
 Proof
-  rpt strip_tac >>
-  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
-   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >> simp[]
+  MATCH_ACCEPT_TAC symControlForwardSourceFactsTheory.sym_rf_abort_source_success
 QED
 
 Theorem sym_rf_revert_runs_compose:
@@ -5062,9 +4984,8 @@ Theorem sym_rf_revert_runs_compose:
   asm_steps lo o2pc prog (n1 + n2) ast = AsmRevert out /\
   sym_terminal (sym_steps prog env (n1 + n2) ss)
 Proof
-  rpt strip_tac >-
-    (irule blockSimHelpersTheory.asm_steps_compose_revert >> metis_tac[]) >>
-  simp[sym_steps_add]
+  MATCH_ACCEPT_TAC (SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`]
+    symControlForwardSourceFactsTheory.sym_rf_revert_runs_compose_mode))
 QED
 
 Theorem sym_rf_entry_fault_terminal:
@@ -5078,8 +4999,8 @@ Theorem sym_rf_entry_fault_terminal:
      (a = ExHalt_abort /\ asm_steps lo o2pc prog m ast = AsmFault ast_end)) /\
     venom_asm_terminal_rel vs_end ast_end /\ sym_terminal (sym_steps prog env m ss)
 Proof
-  rpt strip_tac >> drule_all sym_rf_abort_source_fault >> strip_tac >>
-  qexistsl [`n`,`out`] >> simp[]
+  MATCH_ACCEPT_TAC (SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`]
+    symControlForwardSourceFactsTheory.sym_rf_entry_fault_terminal_mode))
 QED
 
 Theorem sym_rf_entry_future_non_phi:
@@ -5087,10 +5008,7 @@ Theorem sym_rf_entry_future_non_phi:
   !r ti. SUC i <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
     ti.inst_opcode <> PHI
 Proof
-  rpt strip_tac >>
-  `i <= r /\ r <> i` by decide_tac >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
-  simp[] >> IF_CASES_TAC >> simp[]
+  MATCH_ACCEPT_TAC symControlForwardSourceFactsTheory.sym_rf_entry_future_non_phi
 QED
 
 Theorem sym_rf_entry_success_terminal:
