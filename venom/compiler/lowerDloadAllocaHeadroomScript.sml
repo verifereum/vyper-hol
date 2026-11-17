@@ -43,3 +43,25 @@ Proof
     (drule_all ld_next_headroom >> simp[is_terminator_def]) >>
   qexists_tac `s1` >> gvs[] >> strip_tac >> gvs[]
 QED
+
+(* Under DALLOCA, the source's frontier after an original ALLOCA still
+   leaves the DLOAD headroom below the initial free memory pointer. *)
+Theorem ld_alloca_source_dyn_headroom:
+  wf_function fn /\ mem_inv dload_headroom_ok C vs0 /\
+  raw_reachable vs0 C fn i s /\ active_inst fn i s /\
+  i.inst_opcode = ALLOCA /\ step_inst fuel C i s = OK s1 /\
+  EXISTS (\f. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f))
+    C.ctx_functions ==>
+  s1.vs_alloca_next + 32 * ctx_dload_count C <= w2n s1.vs_initial_fmp
+Proof
+  strip_tac >>
+  drule_all ld_alloca_successor_active >> strip_tac >>
+  `~is_terminator i.inst_opcode` by simp[is_terminator_def] >>
+  `raw_reachable vs0 C fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    metis_tac[raw_reachable_next] >>
+  qpat_x_assum `mem_inv _ _ _` mp_tac >>
+  simp[mem_inv_raw_reachable, dload_headroom_ok_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`fn`, `inst2`,
+    `s1 with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[]
+QED

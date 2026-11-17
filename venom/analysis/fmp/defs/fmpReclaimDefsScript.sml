@@ -157,12 +157,10 @@ Definition fmp_reclaim_analyze_fuel_def:
     let cfg = cfg_analyze fn in
     let transfer = fmp_transfer infos fn live env in
     let st0 = init_df_state NONE (MAP (\b. b.bb_label) fn.fn_blocks) in
-    let st1 = st0 with ds_boundary :=
-      st0.ds_boundary |+ (bb.bb_label,SOME fmp_empty_reclaim_state) in
     let result = SND (wl_iterate_fuel fuel
       (\lbl old new. df_boundary NONE new lbl <> df_boundary NONE old lbl)
       (fmp_process_block transfer entry cfg fn.fn_blocks)
-      (cfg_succs_of cfg) cfg.cfg_dfs_pre st1) in
+      (cfg_succs_of cfg) cfg.cfg_dfs_pre st0) in
     SOME (fmp_populate transfer entry cfg fn.fn_blocks result)
 End
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable

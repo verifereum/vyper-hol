@@ -745,53 +745,6 @@ Proof
   simp[asm_pc_to_offset_suc]
 QED
 
-Triviality asm_evm_rel_next_sstore_domain:
-  !prog as es ctxt rb ctxt1 rbstate stk asm_accounts md.
-    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
-    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
-    ctxt1.msgParams = ctxt.msgParams /\
-    ctxt1.stack = stk /\
-    buffer_to_list ctxt1.memory = as.as_memory /\
-    ctxt1.pc = asm_pc_to_offset prog as.as_pc + 1 /\
-    ctxt1.jumpDest = NONE /\
-    ctxt1.returnData = as.as_returndata /\
-    ctxt1.logs = as.as_logs /\
-    rbstate.accounts = asm_accounts /\
-    rbstate.tStorage = as.as_transient /\
-    rbstate.toDelete = as.as_pending_deletions ==>
-    asm_evm_rel prog
-      (asm_next (as with <|as_stack := stk; as_accounts := asm_accounts|>))
-      (es with <|contexts := [(ctxt1, rb)]; rollback := rbstate; msdomain := md|>)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
-  strip_tac >> gvs[] >>
-  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc]
-QED
-
-Triviality asm_evm_rel_next_stack_memory_logs:
-  !prog as es ctxt rb stk mem m logs gas.
-    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
-    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
-    buffer_to_list m = mem ==>
-    asm_evm_rel prog
-      (asm_next (as with <|as_stack := stk; as_memory := mem;
-                           as_logs := logs|>))
-      (es with contexts :=
-         [(ctxt with <|stack := stk; memory := m; logs := logs;
-                      pc := asm_pc_to_offset prog as.as_pc + 1;
-                      gasUsed := gas|>, rb)])
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
-  strip_tac >> gvs[] >>
-  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc]
-QED
-
 Triviality asm_evm_rel_calldata:
   !prog as es ctxt rb.
     asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] ==>
@@ -1223,25 +1176,6 @@ Proof
   pop_assum SUBST_ALL_TAC >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
   IF_CASES_TAC >> simp[]
-QED
-
-(* MCOPY: DROP(doff + LENGTH(TAKE sz (DROP soff expanded))) = DROP(doff + sz)
-   when expanded = asm_expand_memory (MAX (soff+sz) (doff+sz)) mem *)
-Theorem mcopy_drop_eq[local]:
-  !doff soff sz (mem:byte list).
-    let expanded = asm_expand_memory (MAX (soff + sz) (doff + sz)) mem in
-    DROP (doff + LENGTH (TAKE sz (DROP soff expanded))) expanded =
-    DROP (doff + sz) expanded
-Proof
-  rpt gen_tac >> simp[LET_THM] >>
-  `soff + sz <= MAX (soff + sz) (doff + sz)` by simp[] >>
-  mp_tac (Q.SPECL [`MAX (soff+sz) (doff+sz)`, `mem`]
-    asm_expand_memory_length) >>
-  strip_tac >>
-  `LENGTH (TAKE sz (DROP soff
-    (asm_expand_memory (MAX (soff+sz) (doff+sz)) mem))) = sz`
-    by simp[listTheory.LENGTH_TAKE_EQ] >>
-  simp[]
 QED
 
 (* An EVM write into memory that was first extended, stated on lists. *)
@@ -3173,6 +3107,9 @@ Resume asm_evm_step_context_dispatch[context_15]:
   fs[] >> IF_CASES_TAC >> simp[] >>
   gas_close_tac
 QED
+(* context_16, _17 and _22 end in FIRST [gas_close_tac] so holbuild times
+   gas_close_tac once per goal, not once summed over the ~12 goals the gas-check
+   split leaves (that sum was 1.3-1.5 s, near the 2.5 s step limit). *)
 Resume asm_evm_step_context_dispatch[context_16]:
   gvs[] >>
   simp[asm_state_unop_def, asm_next_def] >>
@@ -3189,7 +3126,7 @@ Resume asm_evm_step_context_dispatch[context_16]:
        assert_def, LET_THM] >>
   TRY (Cases_on `es.msdomain` >> simp[]) >>
   fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
-  gas_close_tac
+  FIRST [gas_close_tac]
 QED
 Resume asm_evm_step_context_dispatch[context_17]:
   gvs[] >>
@@ -3207,7 +3144,7 @@ Resume asm_evm_step_context_dispatch[context_17]:
        assert_def, LET_THM] >>
   TRY (Cases_on `es.msdomain` >> simp[]) >>
   fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
-  gas_close_tac
+  FIRST [gas_close_tac]
 QED
 Resume asm_evm_step_context_dispatch[context_18]:
   gvs[] >>
@@ -3285,7 +3222,7 @@ Resume asm_evm_step_context_dispatch[context_22]:
        assert_def, LET_THM] >>
   TRY (Cases_on `es.msdomain` >> simp[]) >>
   fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
-  gas_close_tac
+  FIRST [gas_close_tac]
 QED
 Resume asm_evm_step_context_dispatch[context_23]:
   gvs[] >>

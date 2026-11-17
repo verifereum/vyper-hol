@@ -38,17 +38,17 @@ Theorem dload_boundary_core_parameter_tracked:
   MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
   (i.inst_opcode = RETPC_PARAM ==> !out. MEM out i.inst_outputs ==> out NOTIN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
 Proof
   strip_tac >>
-  `dload_param_values fs PG PH s.vs_params t.vs_params` by
+  `dload_param_values fl fs PG PH s.vs_params t.vs_params` by
     metis_tac[dload_boundary_params] >>
   `LENGTH s.vs_params = LENGTH t.vs_params` by
     metis_tac[dload_param_values_length] >>
@@ -61,14 +61,14 @@ Proof
   qmatch_goalsub_abbrev_tac `set_prov H [out] q` >>
   qmatch_goalsub_abbrev_tac `s with vs_vars := sv` >>
   qmatch_goalsub_abbrev_tac `t with vs_vars := tv` >>
-  `dload_vars_match fs V
+  `dload_vars_match fl fs V
     (set_prov G [out] p) (set_prov H [out] q)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     (s with <|vs_vars := sv; vs_inst_idx := s.vs_inst_idx|>)
     (t with <|vs_vars := tv; vs_inst_idx := t.vs_inst_idx|>)` by
     (simp[Abbr `sv`, Abbr `tv`] >> pure_rewrite_tac[GSYM update_var_def] >>
-     `out IN V ==> dload_value_word fs {} p q
+     `out IN V ==> dload_value_word fl fs {} p q
        (if i.inst_opcode = PARAM then EL (w2n idx) s.vs_params else s.vs_return_pc_token)
        (if i.inst_opcode = PARAM then EL (w2n idx) t.vs_params else t.vs_return_pc_token)` by
        (strip_tac >> unabbrev_all_tac >> gvs[] >>
@@ -83,13 +83,13 @@ Theorem dload_boundary_core_parameter_tracked_index:
   MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
   (i.inst_opcode = RETPC_PARAM ==> !out. MEM out i.inst_outputs ==> out NOTIN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     (!v. v IN U ==>
       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t1 with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
@@ -118,11 +118,11 @@ QED
 Theorem dload_boundary_core_parameter:
   MEM i (fn_insts f) /\ (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
@@ -136,7 +136,7 @@ Theorem dload_actual_parameter_next:
   dload_control_match q f g s t i [i] 0 /\
   (i.inst_opcode = PARAM \/ i.inst_opcode = RETPC_PARAM) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
   active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
@@ -148,7 +148,7 @@ Theorem dload_actual_parameter_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

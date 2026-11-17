@@ -53,7 +53,8 @@ Proof
   rpt strip_tac >> drule_all scalar_conversion_from_address >> strip_tac >>
   gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def] >>
   simp[mk_convert_op_def, is_bytestring_type_def]
-  >- (irule scalar_address_uint_result_frag >> simp[]) >>
+  >- (irule scalar_address_uint_result_frag >> simp[])
+  >- (irule scalar_address_bool_result_frag >> simp[]) >>
   irule scalar_address_bytes_result_frag >> simp[]
 QED
 
@@ -129,23 +130,13 @@ Theorem scalar_int_typed_dispatch:
 Proof
   rpt strip_tac >> drule_all scalar_conversion_from_int >> strip_tac >>
   gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def] >> simp[]
-  >- suspend "bytes"
-  >- suspend "address" >>
+  >- suspend "bytes" >>
   suspend "decimal"
 QED
 Resume scalar_int_typed_dispatch[bytes]:
   simp[mk_convert_op_def, is_bytestring_type_def, typed_val_to_w256_def,
        val_to_w256_def] >>
   irule (SRULE[] (Q.SPEC `T` (Q.GEN `sg` (SPEC_ALL scalar_int_bytes_result_frag)))) >> simp[]
-QED
-Resume scalar_int_typed_dispatch[address]:
-  simp[mk_convert_op_def, is_bytestring_type_def, typed_val_to_w256_def,
-       val_to_w256_def] >>
-  irule scalar_int_address_result_frag >>
-  drule_all vyperArithTheory.within_int_bound_in_word_range >>
-  simp[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
-       wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def, dimword_def] >>
-  intLib.ARITH_TAC
 QED
 Resume scalar_int_typed_dispatch[decimal]:
   simp[typed_val_to_w256_def, val_to_w256_def] >>
@@ -258,12 +249,39 @@ Theorem scalar_decimal_typed_dispatch:
       (convert_result cx (BaseT DecimalT) t v) es1
 Proof
   rpt strip_tac >> drule scalar_conversion_from_decimal >> strip_tac >>
+  gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def]
+  >- (simp[typed_val_to_w256_def, val_to_w256_def] >>
+      irule scalar_decimal_signed_mk_frag >> simp[])
+  >- (simp[typed_val_to_w256_def, val_to_w256_def] >>
+      rename1 `mk_convert_op _ (BaseT (UintT bits))` >> Cases_on `bits = 256`
+      >- (gvs[] >> irule scalar_decimal_uint256_mk_frag >> simp[]) >>
+      irule scalar_decimal_unsigned_mk_frag >> simp[])
+  >- (simp[mk_convert_op_def, is_bytestring_type_def] >>
+      irule scalar_decimal_bool_result_frag >> simp[]) >>
+  simp[mk_convert_op_def, is_bytestring_type_def] >>
+  irule scalar_decimal_bytes_result_frag >> simp[]
+QED
+
+Theorem scalar_bool_typed_dispatch:
+  !ctx func cenv cx env es1 t tv v.
+    valid_conversion (BaseT BoolT) t /\
+    ~is_bytestring_type (BaseT BoolT) /\ ~is_bytestring_type t /\
+    ~int_convert_pair (BaseT BoolT) t /\
+    evaluate_type (get_tenv cx) (BaseT BoolT) = SOME tv /\
+    IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
+    expr_sim_inv cenv cx env es1 ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x
+        (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+                 | _ => mk_convert_op (BaseT BoolT) t))
+      (typed_val_to_w256 tv v) t
+      (convert_result cx (BaseT BoolT) t v) es1
+Proof
+  rpt strip_tac >> drule_all scalar_conversion_from_bool >> strip_tac >>
   gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def] >>
-  simp[typed_val_to_w256_def, val_to_w256_def]
-  >- (irule scalar_decimal_signed_mk_frag >> simp[]) >>
-  rename1 `mk_convert_op _ (BaseT (UintT bits))` >> Cases_on `bits = 256`
-  >- (gvs[] >> irule scalar_decimal_uint256_mk_frag >> simp[]) >>
-  irule scalar_decimal_unsigned_mk_frag >> simp[]
+  simp[mk_convert_op_def, is_bytestring_type_def]
+  >- (irule scalar_bool_decimal_result_frag) >>
+  irule scalar_bool_bytes_result_frag >> simp[]
 QED
 
 Theorem scalar_flag_typed_dispatch:
@@ -328,7 +346,8 @@ Proof
   >- (irule scalar_address_typed_dispatch >> simp[] >> metis_tac[])
   >- (irule scalar_int_typed_dispatch >> simp[] >> metis_tac[])
   >- (irule scalar_uint_typed_dispatch >> simp[] >> metis_tac[])
-  >- (irule scalar_decimal_typed_dispatch >> simp[] >> metis_tac[]) >>
+  >- (irule scalar_decimal_typed_dispatch >> simp[] >> metis_tac[])
+  >- (irule scalar_bool_typed_dispatch >> simp[] >> metis_tac[]) >>
   irule scalar_flag_typed_dispatch >> simp[] >> metis_tac[]
 QED
 
@@ -348,6 +367,8 @@ Proof
   >- (drule_all scalar_conversion_from_uint >> strip_tac >>
       gvs[evaluate_type_def, is_word_type_def])
   >- (drule scalar_conversion_from_decimal >> strip_tac >>
+      gvs[evaluate_type_def, is_word_type_def])
+  >- (drule_all scalar_conversion_from_bool >> strip_tac >>
       gvs[evaluate_type_def, is_word_type_def]) >>
   drule scalar_conversion_from_flag >> strip_tac >> gvs[evaluate_type_def, is_word_type_def]
 QED
@@ -386,7 +407,10 @@ Proof
       simp[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
            type_bits_def, is_signed_type_def,
            straight_fresh_convert_scalar, straight_fresh_convert] >>
-      IF_CASES_TAC >> simp[straight_fresh_convert_scalar]) >>
+      IF_CASES_TAC >> simp[straight_fresh_convert_scalar])
+  >- (drule_all scalar_conversion_from_bool >> strip_tac >> gvs[] >>
+      simp[mk_convert_op_def, is_bytestring_type_def,
+           straight_fresh_convert_scalar, straight_fresh_convert]) >>
   drule scalar_conversion_from_flag >> strip_tac >> gvs[] >>
   simp[mk_convert_op_def, is_bytestring_type_def,
        straight_fresh_convert_scalar, straight_fresh_convert]

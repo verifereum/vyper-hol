@@ -110,7 +110,8 @@ Proof
     (qpat_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
   `?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
     (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> metis_tac[]) >>
@@ -121,16 +122,18 @@ Proof
      gvs[taint_ok_def, about_to_revert_def] >>
      rpt disch_tac >> disj2_tac >> qexistsl_tac [`w2n x`,`len`,`w2n x+k`] >>
      simp[arithmeticTheory.ADD_COMM]) >>
+  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
   qexists_tac `y` >> simp[] >> irule ld_memory_agree_clean_slice >>
-  qexistsl_tac [`lo`,`tn.t_mem`,`sites`] >> simp[] >>
-  gvs[ld_joint_boundary_def] >> metis_tac[arithmeticTheory.ADD_COMM]
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ld_joint_concrete_shared_inputs:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   active_inst fn inst s /\
-  MEM inst.inst_opcode [DELEGATECALL;CREATE;CREATE2] ==>
+  MEM inst.inst_opcode [CREATE;CREATE2] ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
 Proof
@@ -160,7 +163,8 @@ Theorem ld_joint_delegatecall_operands[local]:
     eval_operand rsop t = SOME rs /\
     read_memory (w2n off) (w2n sz) s =
       read_memory (w2n off') (w2n sz) t /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof
@@ -190,7 +194,8 @@ Proof
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      simp[taint_ok_def] >> metis_tac[MEM]) >>
   `?ro'. eval_operand rop t = SOME ro' /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
     (drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
@@ -201,33 +206,37 @@ QED
 
 Theorem ld_joint_delegatecall_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DELEGATECALL /\ step_inst fuel C inst s = OK s1 ==>
-  ?out w r rq ro ro' rs.
-    inst.inst_outputs = [out] /\ s1 = update_var out w r /\
-    ~computed_precompile rq /\
-    r = s with <|
-      vs_returndata := r.vs_returndata;
-      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
-      vs_transient := r.vs_transient;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_outcomes := r.vs_outcomes;
-      vs_requests := record_request rq s.vs_requests;
+  ?out w r1 r2 rq1 rq2 ro ro' rs.
+    inst.inst_outputs = [out] /\ s1 = update_var out w r1 /\
+    ~computed_precompile rq1 /\
+    r1 = s with <|
+      vs_returndata := r1.vs_returndata;
+      vs_accounts := r1.vs_accounts; vs_logs := r1.vs_logs;
+      vs_transient := r1.vs_transient;
+      vs_pending_deletions := r1.vs_pending_deletions;
+      vs_outcomes := r1.vs_outcomes;
+      vs_requests := record_request rq1 s.vs_requests;
       vs_memory := (write_memory_with_expansion ro
-        (TAKE rs r.vs_returndata) s).vs_memory |> /\
-    step_inst fuel C' inst t = OK (update_var out w (t with <|
-      vs_returndata := r.vs_returndata;
-      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
-      vs_transient := r.vs_transient;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_outcomes := r.vs_outcomes;
-      vs_requests := record_request rq t.vs_requests;
+        (TAKE rs r1.vs_returndata) s).vs_memory |> /\
+    r2 = t with <|
+      vs_returndata := r1.vs_returndata;
+      vs_accounts := r2.vs_accounts; vs_logs := r1.vs_logs;
+      vs_transient := r2.vs_transient;
+      vs_pending_deletions := r1.vs_pending_deletions;
+      vs_outcomes := r1.vs_outcomes;
+      vs_requests := record_request rq2 t.vs_requests;
       vs_memory := (write_memory_with_expansion ro'
-        (TAKE rs r.vs_returndata) t).vs_memory |>)) /\
-    request_agree_except D rq rq /\
+        (TAKE rs r1.vs_returndata) t).vs_memory |> /\
+    step_inst fuel C' inst t = OK (update_var out w r2) /\
+    request_agree_except D rq1 rq2 /\
+    ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2 /\
     source_memory_write_ranges inst s = [(ro,rs)] /\
-    (rs=0 \/ (ro=ro' /\ ro+rs<=lo) \/
+    (rs=0 \/ (ro=ro' /\ (ro+rs<=lo \/
+       dyn_floor C vs<=ro /\ ro+rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+rs<=z /\
                     ro=b+j /\ ro'=c+j))
 Proof
@@ -245,38 +254,77 @@ Proof
   drule_all ld_joint_delegatecall_operands >>
   disch_then (qx_choose_then `di_target` (qx_choose_then `dr_target` assume_tac)) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
+    (qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[exec_delegatecall_def, AllCaseEqs(), consume_call_outcome_eq,
+          venom_call_request_def, computed_precompile_def,
+          update_var_def, record_request_def] >> rpt strip_tac >> gvs[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (fs[taint_within_upto_def] >> metis_tac[]) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    fs[ld_joint_boundary_def] >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts /\
+   transient_agree_except D s.vs_transient t.vs_transient` by
+    metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe] >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
-    fs[ld_joint_boundary_def, ld_shared_agree_def] >>
-  qabbrev_tac `rq = venom_call_request s daval 0w dival dzval F with
+    fs[ld_joint_boundary_def, ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  qabbrev_tac `rq1 = venom_call_request s daval 0w dival dzval F with
                       cr_kind := DelegateMessageCall` >>
-  `venom_call_request t daval 0w di_target dzval F with
-     cr_kind := DelegateMessageCall = rq` by
-    simp[Abbr `rq`, venom_call_request_def] >>
-  Cases_on `consume_call_outcome rq (w2n drval) (w2n dnval) s` >>
-  rename1 `consume_call_outcome rq _ _ s = (w1,r1)` >>
+  qabbrev_tac `rq2 = venom_call_request t daval 0w di_target dzval F with
+                      cr_kind := DelegateMessageCall` >>
+  `request_agree_except D rq1 rq2` by
+    simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
+         venom_call_request_def, call_request_component_equality] >>
+  `~computed_precompile rq1 /\ ~computed_precompile rq2 /\
+   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
+    simp[Abbr `rq1`, Abbr `rq2`, venom_call_request_def, computed_precompile_def] >>
+  Cases_on `consume_call_outcome rq1 (w2n drval) (w2n dnval) s` >>
+  rename1 `consume_call_outcome rq1 _ _ s = (w1,r1)` >>
   `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
-    (fs[Abbr `rq`, exec_delegatecall_def,
+    (fs[Abbr `rq1`, exec_delegatecall_def,
         Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  drule_at (Pat `consume_call_outcome _ _ _ _ = _`) consume_call_outcome_state_transport >>
-  disch_then (qspec_then `t` mp_tac) >> simp[Excl "consume_call_outcome_eq"] >>
-  disch_then (qspec_then `w2n dr_target` strip_assume_tac) >>
-  qexistsl_tac [`w1`,`r1`,`rq`,`w2n drval`,`w2n dr_target`,`w2n dnval`] >>
+  Cases_on `consume_call_outcome rq2 (w2n dr_target) (w2n dnval) t` >>
+  rename1 `consume_call_outcome rq2 _ _ t = (w2,r2)` >>
+  `LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
+    fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  drule_all ld_consume_call_outcome_masked_observation >> strip_tac >>
+  drule_all ld_consume_call_outcome_shared >> strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2` by
+    (qpat_x_assum `ld_shared_agree _ _ (tn with <|t_stor := _; t_trans := _|>) _ _`
+       mp_tac >>
+     Cases_on `r1.vs_accounts = s.vs_accounts` >>
+     Cases_on `r1.vs_transient = s.vs_transient` >>
+     simp[ld_shared_agree_def, word_agree_except_def,
+        Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  `r1.vs_logs = r2.vs_logs /\
+   r1.vs_pending_deletions = r2.vs_pending_deletions` by
+    fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  qexistsl_tac [`out`,`w1`,`r1`,`r2`,`rq1`,`rq2`,
+                `w2n drval`,`w2n dr_target`,`w2n dnval`] >>
   simp[Excl "consume_call_outcome_eq"] >>
-  conj_tac >- simp[Abbr `rq`, computed_precompile_def] >>
+  conj_tac
+  >- (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >>
+      gvs[venom_state_component_equality]) >>
+  conj_tac
+  >- (qpat_x_assum `consume_call_outcome rq2 _ _ t = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >>
+      gvs[venom_state_component_equality]) >>
   conj_tac
   >- (simp[step_inst_non_invoke, Excl "consume_call_outcome_eq"] >>
       asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs,
                                Excl "consume_call_outcome_eq"] >>
-      simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"]) >>
-  conj_tac
-  >- simp[request_agree_except_def, accounts_agree_except_def,
-          transient_agree_except_def, storage_agree_except_def,
-          word_agree_except_def] >>
+      simp[exec_delegatecall_def, Abbr `rq2`, Excl "consume_call_outcome_eq"]) >>
   simp[source_memory_write_ranges_def, fixed_source_write_range_def]
 QED
 
@@ -302,7 +350,7 @@ QED
 
 Theorem ld_joint_delegatecall_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ taint_within_upto D ncut C vs /\
   ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ inst.inst_opcode = DELEGATECALL /\
   step_inst fuel C inst s = OK s1 /\
@@ -318,13 +366,14 @@ Theorem ld_joint_delegatecall_next:
 Proof
   strip_tac >> drule_all ld_joint_delegatecall_execute >>
   disch_then (qx_choose_then `out` (qx_choose_then `w`
-    (qx_choose_then `r` (qx_choose_then `rq` (qx_choose_then `ro`
-      (qx_choose_then `ro'` (qx_choose_then `rs` assume_tac))))))) >>
+    (qx_choose_then `r1` (qx_choose_then `r2` (qx_choose_then `rq1`
+      (qx_choose_then `rq2` (qx_choose_then `ro`
+        (qx_choose_then `ro'` (qx_choose_then `rs` assume_tac))))))))) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     fs[ld_joint_boundary_def] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     simp[is_terminator_def] >>
@@ -333,7 +382,7 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
@@ -349,29 +398,37 @@ Proof
     suspend "environment" >>
   `new_site_bytes s s1 = {}` by
     (simp[new_site_bytes_def, update_var_def] >>
-     qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
      simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
   `ld_joint_geometry sites X lo (a::MAP (\x. x.of_owner) U)` by
     fs[ld_joint_boundary_def, ld_joint_frame_def] >>
   `ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
       s1.vs_memory target.vs_memory` by
     suspend "memory" >>
+  `ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+      s1.vs_memory target.vs_memory` by
+    suspend "dyn" >>
   `ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
      s1 target` by
     suspend "shared" >>
   qexists_tac `target` >> simp[] >>
   irule ld_joint_external_update_next >>
   qpat_assum `s1 = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
-  conj_tac >- simp[Abbr `target`, update_var_def] >>
   conj_tac
-  >- (qexistsl_tac [`r.vs_accounts`,`s.vs_vars |+ (out,w)`,`r.vs_logs`,
-         `r.vs_memory`,`r.vs_outcomes`,`r.vs_pending_deletions`,
-         `r.vs_returndata`,`record_request rq s.vs_requests`,`r.vs_transient`] >>
+  >- (simp[Abbr `target`, update_var_def] >>
+      qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac
+  >- (qexistsl_tac [`r1.vs_accounts`,`s.vs_vars |+ (out,w)`,`r1.vs_logs`,
+         `r1.vs_memory`,`r1.vs_outcomes`,`r1.vs_pending_deletions`,
+         `r1.vs_returndata`,`record_request rq1 s.vs_requests`,`r1.vs_transient`] >>
       simp[update_var_def] >>
-      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
       simp[venom_state_fupdcanon, venom_state_component_equality]) >>
   conj_tac
-  >- (simp[Abbr `target`, update_var_def, venom_state_component_equality]) >>
+  >- (simp[Abbr `target`, update_var_def] >>
+      qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >>
+      simp[venom_state_fupdcanon, venom_state_component_equality]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[]
 QED
 
@@ -380,34 +437,55 @@ Resume ld_joint_delegatecall_next[environment]:
   conj_tac >- simp[occurrence_out_def, out_prov_def] >>
   qexistsl_tac [`t`,`w`] >> simp[Abbr `target`, update_var_def] >>
   conj_tac
-  >- (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  >- (qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+      qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   metis_tac[ld_joint_environment]
 QED
 
 Resume ld_joint_delegatecall_next[memory]:
   simp[step_taint_def, mem_taint_def, step_writes_def,
        range_bytes_def, update_var_def, Abbr `target`] >>
-  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  `ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by fs[ld_joint_boundary_def] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
   disch_then irule >> simp[] >> conj_tac
-  >- (qpat_x_assum `rs = 0 \/ _` strip_assume_tac
+  >- (qexists_tac `dyn_floor C vs` >>
+      qpat_x_assum `rs = 0 \/ _` strip_assume_tac
       >- simp[]
       >- (disj2_tac >> disj1_tac >> simp[] >>
-          simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-      disj2_tac >> disj2_tac >>
+          simp[arithmeticTheory.MIN_DEF] >> decide_tac)
+      >- (disj2_tac >> disj2_tac >> disj2_tac >> gvs[] >> metis_tac[]) >>
+      disj2_tac >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >>
       simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
   fs[ld_joint_boundary_def, ld_joint_frame_def] >> metis_tac[]
 QED
 
+Resume ld_joint_delegatecall_next[dyn]:
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       range_bytes_def, update_var_def, Abbr `target`] >>
+  qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   lo <= dyn_floor C vs /\
+   !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    (fs[ld_joint_boundary_def, ld_dyn_floor_ok_def] >> metis_tac[]) >>
+  irule ld_dyn_agree_return_buffer >> simp[] >>
+  qpat_x_assum `rs = 0 \/ _` strip_assume_tac
+  >- fs[]
+  >- fs[]
+  >- fs[] >>
+  `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+  rpt disj2_tac >> simp[arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+QED
+
 Resume ld_joint_delegatecall_next[shared]:
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
-    fs[ld_joint_boundary_def] >>
-  simp[ld_shared_agree_def, step_taint_def, imm_taint_def,
-       update_var_def, Abbr `target`, word_agree_except_def] >>
-  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
-  fs[ld_shared_agree_def, word_agree_except_def] >>
-  simp[record_request_def, LIST_REL_APPEND]
+  fs[ld_shared_agree_def, step_taint_def, imm_taint_def,
+     store_taint_def, adopt_reset_def, update_var_def, Abbr `target`]
 QED
 
 Finalise ld_joint_delegatecall_next
@@ -569,7 +647,7 @@ Proof
   qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     fs[ld_joint_boundary_def] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     gvs[MEM, is_terminator_def] >>
@@ -579,7 +657,7 @@ Proof
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >>
      gvs[MEM, occurrence_sites_step_def]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
@@ -598,6 +676,14 @@ Proof
      simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
   `ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
       s1.vs_memory target.vs_memory` by suspend "memory" >>
+  `ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+      s1.vs_memory target.vs_memory` by
+    (`source_memory_write_ranges inst s = []` by
+       gvs[MEM, source_memory_write_ranges_def] >>
+     simp[step_taint_def, mem_taint_def, step_writes_def,
+          range_bytes_def, update_var_def, Abbr `target`] >>
+     qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+     fs[ld_joint_boundary_def]) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
      s1 target` by suspend "shared" >>
   qexists_tac `target` >> simp[] >>
@@ -660,7 +746,8 @@ Theorem ld_joint_call_operands[local]:
   (!op. MEM op (prefix ++ [szop;rsop]) ==> eval_operand op s = eval_operand op t) /\
   ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof
@@ -695,7 +782,8 @@ Proof
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      gvs[taint_ok_def] >> metis_tac[MEM]) >>
   `?ro'. eval_operand rop t = SOME ro' /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
     (drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
@@ -762,7 +850,8 @@ Theorem ld_joint_call_execute_effects[local]:
                  t_trans := if r1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
       r1 r2 /\
     source_memory_write_ranges inst s = [(w2n ro,w2n rs)] /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j)) /\
     ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
@@ -792,7 +881,8 @@ Proof
   `(!op. MEM op (prefix ++ [szop;rsop]) ==> eval_operand op s = eval_operand op t) /\
    ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
     (drule ld_joint_call_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
@@ -870,7 +960,8 @@ Theorem ld_joint_call_execute:
                  t_trans := if r1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
       r1 r2 /\
     source_memory_write_ranges inst s = [(w2n ro,w2n rs)] /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof
@@ -922,7 +1013,7 @@ Proof
   qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     fs[ld_joint_boundary_def] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     gvs[MEM, is_terminator_def, Excl "consume_call_outcome_eq"] >>
@@ -932,7 +1023,7 @@ Proof
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >>
      gvs[MEM, occurrence_sites_step_def, Excl "consume_call_outcome_eq"]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
@@ -949,6 +1040,8 @@ Proof
     fs[ld_joint_boundary_def, ld_joint_frame_def] >>
   `ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
       s1.vs_memory target.vs_memory` by suspend "memory" >>
+  `ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+      s1.vs_memory target.vs_memory` by suspend "dyn" >>
   `ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
      s1 target` by suspend "shared" >>
   qexists_tac `target` >> simp[Excl "consume_call_outcome_eq"] >>
@@ -997,18 +1090,52 @@ Resume ld_joint_call_next[memory]:
   qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
   qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >>
   simp[] >>
+  `ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
+    fs[ld_joint_boundary_def, Excl "consume_call_outcome_eq"] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
   disch_then irule >> simp[] >> conj_tac
-  >- (qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
+  >- (qexists_tac `dyn_floor C vs` >>
+      qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
       >- gvs[Excl "consume_call_outcome_eq"]
       >- (disj2_tac >> disj1_tac >>
           gvs[Excl "consume_call_outcome_eq"] >>
-          simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-      disj2_tac >> disj2_tac >>
+          simp[arithmeticTheory.MIN_DEF] >> decide_tac)
+      >- (disj2_tac >> disj2_tac >> disj2_tac >>
+          gvs[Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+      disj2_tac >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >>
       simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
   fs[ld_joint_boundary_def, ld_joint_frame_def, Excl "consume_call_outcome_eq"] >>
   metis_tac[]
+QED
+
+Resume ld_joint_call_next[dyn]:
+  SUBGOAL_THEN ``inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+   inst.inst_opcode = DELEGATECALL`` assume_tac
+  >- gvs[MEM, Excl "consume_call_outcome_eq"] >>
+  `new_site_bytes s s1 = {}` by
+    (simp[new_site_bytes_def, update_var_def, Excl "consume_call_outcome_eq"] >>
+     qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+     simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       range_bytes_def, update_var_def, Abbr `target`,
+       Excl "consume_call_outcome_eq"] >>
+  qpat_x_assum `r1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `r2 = _` (fn th => once_rewrite_tac[th]) >>
+  simp[] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   lo <= dyn_floor C vs /\
+   !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    (fs[ld_joint_boundary_def, ld_dyn_floor_ok_def, Excl "consume_call_outcome_eq"] >>
+     metis_tac[]) >>
+  irule ld_dyn_agree_return_buffer >> simp[] >>
+  qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
+  >- gvs[Excl "consume_call_outcome_eq"]
+  >- gvs[Excl "consume_call_outcome_eq"]
+  >- gvs[Excl "consume_call_outcome_eq"] >>
+  `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+  rpt disj2_tac >> simp[arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 Resume ld_joint_call_next[shared]:

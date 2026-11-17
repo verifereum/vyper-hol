@@ -1,7 +1,7 @@
 (* One selected block's DLOAD pairs, rewritten throughout the function. *)
 Theory mmDloadProofs
 Ancestors
-  venomFnInstsProofs
+  venomFnInstsProofs mmTraceProofs
   mmWfProofs
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner passSharedDefs irSupply codegenReadyCompute dominatorProofs
@@ -14,6 +14,8 @@ Ancestors
 (* The cached equality is used only where the producer is available.  In
    particular, mere presence of an old loop iteration's output is not a
    sufficient availability test. *)
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Definition mm_dload_cached_def:
   mm_dload_cached src out s <=>
     ?off. eval_operand src s = SOME off /\
@@ -1226,7 +1228,7 @@ Theorem mm_dload_static_mem_ok[local]:
     (transform_dload_inst pairs i) t
 Proof
   strip_tac >> qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[static_mem_ok_def] >> strip_tac
+  pure_rewrite_tac[mmTraceProofsTheory.mm_static_mem_ok_def] >> strip_tac
   >- metis_tac[mm_dload_revert_forward] >>
   `inst_mem_ranges (transform_dload_inst pairs i) s =
    inst_mem_ranges (transform_dload_inst pairs i) t` by

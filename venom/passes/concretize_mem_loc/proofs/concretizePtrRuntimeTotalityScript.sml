@@ -106,10 +106,10 @@ Definition pure_local_saved_def:
   pure_local_total P f.cf_fn f.cf_state f.cf_prov
 End
 
-Theorem frame_pure_local_total:
+Theorem frame_pure_local_total_static:
   !vs ctx stk PG G tn fn inst s.
   frame_reachable vs ctx stk PG G tn fn inst s ==>
-  o1_run_state_ok vs /\ EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ EVERY (fn_ptr_ok P) ctx.ctx_functions /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY fn_inst_wf ctx.ctx_functions ==>
   MEM fn ctx.ctx_functions /\ pure_local_total P fn s G /\
   EVERY (pure_local_saved P ctx) stk
@@ -122,7 +122,7 @@ Proof
   >> suspend "ret"
 QED
 
-Resume frame_pure_local_total[entry]:
+Resume frame_pure_local_total_static[entry]:
   rpt gen_tac >> strip_tac >> strip_tac >> simp[] >> conj_tac
   >- metis_tac[lookup_function_MEM] >>
   `vs.vs_vars = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
@@ -131,7 +131,7 @@ Resume frame_pure_local_total[entry]:
   simp[pure_local_total_def, lookup_var_def]
 QED
 
-Resume frame_pure_local_total[next]:
+Resume frame_pure_local_total_static[next]:
   rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
   `fn_ptr_ok P fn /\ ssa_form fn /\ fn_inst_wf fn` by metis_tac[EVERY_MEM] >>
   `MEM inst (fn_insts fn)` by metis_tac[active_inst_def, MEM_EL, mem_fn_insts_intro] >>
@@ -139,12 +139,12 @@ Resume frame_pure_local_total[next]:
     (irule pure_local_next >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[pure_local_total_def, lookup_var_def]
 QED
-Resume frame_pure_local_total[block]:
+Resume frame_pure_local_total_static[block]:
   rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
   `fn_ptr_ok P fn /\ ssa_form fn /\ fn_inst_wf fn` by metis_tac[EVERY_MEM] >>
   simp[] >> irule pure_local_block >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
-Resume frame_pure_local_total[call]:
+Resume frame_pure_local_total_static[call]:
   rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
   `MEM fn' ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
   `MEM inst (fn_insts fn)` by metis_tac[active_inst_def, MEM_EL, mem_fn_insts_intro] >>
@@ -153,7 +153,7 @@ Resume frame_pure_local_total[call]:
   `s''.vs_vars = FEMPTY` by metis_tac[initial_entry_empty] >>
   gvs[pure_local_saved_def, pure_local_total_def, lookup_var_def]
 QED
-Resume frame_pure_local_total[ret]:
+Resume frame_pure_local_total_static[ret]:
   rpt gen_tac >> strip_tac >> strip_tac >> fs[pure_local_saved_def] >>
   `ssa_form f.cf_fn` by metis_tac[EVERY_MEM] >>
   `pure_local_total P f.cf_fn s'
@@ -161,7 +161,31 @@ Resume frame_pure_local_total[ret]:
     (irule pure_local_return >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[pure_local_total_def, lookup_var_def]
 QED
-Finalise frame_pure_local_total
+Finalise frame_pure_local_total_static
+
+Theorem frame_pure_local_total:
+  !vs ctx stk PG G tn fn inst s.
+  frame_reachable vs ctx stk PG G tn fn inst s ==>
+  o1_run_state_ok vs /\ EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  EVERY ssa_form ctx.ctx_functions /\ EVERY fn_inst_wf ctx.ctx_functions ==>
+  MEM fn ctx.ctx_functions /\ pure_local_total P fn s G /\
+  EVERY (pure_local_saved P ctx) stk
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL frame_pure_local_total_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_reachable_pure_local_totality_static:
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  EVERY ssa_form ctx.ctx_functions /\ EVERY fn_inst_wf ctx.ctx_functions /\
+  frame_reachable vs ctx stk PG G tn fn inst s ==>
+  !v w. v IN (pointer_derived_vars fn (alloca_roots fn) DIFF
+               pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)) /\
+        lookup_var v s = SOME w ==> ?site. FLOOKUP G v = SOME site
+Proof
+  strip_tac >> drule_all frame_pure_local_total_static >> simp[pure_local_total_def]
+QED
 
 Theorem ptr_reachable_pure_local_totality:
   o1_run_state_ok vs /\ EVERY (fn_ptr_ok P) ctx.ctx_functions /\
@@ -171,5 +195,7 @@ Theorem ptr_reachable_pure_local_totality:
                pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)) /\
         lookup_var v s = SOME w ==> ?site. FLOOKUP G v = SOME site
 Proof
-  strip_tac >> drule_all frame_pure_local_total >> simp[pure_local_total_def]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_pure_local_totality_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

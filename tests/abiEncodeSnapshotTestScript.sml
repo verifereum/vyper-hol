@@ -15,7 +15,8 @@ Definition abi_snapshot_test_args_def:
   abi_snapshot_test_args ce = compile_abi_encode_args compile_expr
     (ce with <| ce_vars := FEMPTY |+ ("x", MemLoc 0 96);
                 ce_var_type := K (SOME (ArrayT (BaseT (UintT 256)) (Dynamic 2)));
-                ce_struct_fields := FEMPTY |>)
+                ce_struct_fields := FEMPTY;
+                ce_func_defaults := [] |>)
     [Name (ArrayT (BaseT (UintT 256)) (Dynamic 2)) "x";
      Pop (BaseT (UintT 256)) (NameTarget "x")]
     abi_snapshot_test_state
@@ -25,7 +26,8 @@ Definition abi_snapshot_test_builtin_def:
   abi_snapshot_test_builtin ce = compile_expr
     (ce with <| ce_vars := FEMPTY |+ ("x", MemLoc 0 96);
                 ce_var_type := K (SOME (ArrayT (BaseT (UintT 256)) (Dynamic 2)));
-                ce_struct_fields := FEMPTY |>)
+                ce_struct_fields := FEMPTY;
+                ce_func_defaults := [] |>)
     (BaseT (BytesT (Dynamic 160)))
     (TypeBuiltin (BaseT (BytesT (Dynamic 160))) (AbiEncode F NONE)
       (BaseT (BytesT (Dynamic 160)))

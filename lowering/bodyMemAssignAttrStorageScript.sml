@@ -4,7 +4,7 @@ Theory bodyMemAssignAttrStorage
 Ancestors
   fragGasSeqAbort venomInst
   supportedExprTraverse allocLimits allocLimitsProps
-  bodySimStmtCases
+  bodySimStmtFacts
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
   vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
