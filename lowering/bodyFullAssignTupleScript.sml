@@ -17,6 +17,7 @@ Ancestors
   stateFrame ghostPcTransportPtr emitHelperProps arithmetic bodyPtrDefs ptrDiscipline
   tupleLoadProps fragExec fragGasOriginPtrLoop
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
+  augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
 
 val _ = Parse.hide "body";
 
@@ -692,6 +693,93 @@ Proof
   Cases_on `w` >>
   asm_simp_tac std_ss [wordsTheory.word_add_n2w,wordsTheory.w2n_n2w,
     LESS_MOD,eval_operand_def,AC ADD_ASSOC ADD_COMM]
+QED
+
+(* A normal storage head changes neither the staged tuple nor loaded operands. *)
+Theorem body_assign_tuple_storage_head_path:
+  compile_store_at_loc cenv.ce_imm_alloca dst value
+    (SOME (if tr then LocTransient else LocStorage)) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME slot /\ eval_operand value s = SOME w /\
+  op_taint tn dst = {} /\ op_taint tn value = {} /\
+  write_storage_slot cx tr slot tv v es = (INL (),es') /\
+  encode_value tv v = SOME [(0,w)] /\ es'.scopes = es.scopes ==>
+  ?t tf.
+    t = ((if tr then tstore slot w s else sstore slot w s)
+      with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    tf = step_taint (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE)
+      [dst;value] []) s (if tr then tstore slot w s else sstore slot w s) tn /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G,tf)) /\
+    (!H. stmt_state_rel H ctx func cenv cx es s /\
+      (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
+      stmt_state_rel H ctx func cenv cx es' t) /\
+    (!H D d. dead_lo_ok H D lo cenv cx /\
+      ghost_inv_at D lo d cenv cx es G tn s /\
+      (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
+      ghost_inv_at D lo d cenv cx es' G tf t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_call_ctx = s.vs_call_ctx /\
+    tf.t_mem = tn.t_mem /\ tf.t_var = tn.t_var /\ tf.t_imm = tn.t_imm /\
+    (!x. lookup_var x t = lookup_var x s /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!x cap. ptr_covers G tn x s cap ==> ptr_covers G tf x t cap)
+Proof
+  strip_tac >>
+  `emit_void (if tr then TSTORE else SSTORE) [dst;value] sa = ((),sb)` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_void_same_blocks >> simp[same_blocks_def]) >>
+  qabbrev_tac `u = if tr then tstore slot w s else sstore slot w s` >>
+  qabbrev_tac `un = step_taint
+    (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;value] []) s u tn` >>
+  `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp` by
+    (Cases_on `tr` >> simp[Abbr `u`,tstore_def,sstore_def]) >>
+  `un.t_mem = tn.t_mem /\ un.t_var = tn.t_var /\ un.t_imm = tn.t_imm /\
+   un.t_stor = (if tr then tn.t_stor else {(k,b) | (k,b) IN tn.t_stor /\ k <> slot}) /\
+   un.t_trans = (if tr then {(k,b) | (k,b) IN tn.t_trans /\ k <> slot} else tn.t_trans)` by
+    (simp[Abbr `un`] >> irule clean_storage_step_taint_ptr >> simp[]) >>
+  `un = (if tr then tn with t_trans := key_update tn.t_trans slot {}
+         else tn with t_stor := key_update tn.t_stor slot {})` by
+    (Cases_on `tr` >> simp[taint_component_equality,key_update_def]) >>
+  qexistsl [`u with vs_inst_idx := LENGTH sb.cs_current_insts`,`un`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> simp[Abbr `u`] >>
+      drule_all storage_word_store_origin_ptr >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[stmt_state_rel_inst_idx,Abbr `u`] >>
+      drule_all stmt_state_rel_write_storage_word >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> pure_rewrite_tac[ghost_inv_at_inst_idx] >>
+      qpat_x_assum `un = _` kall_tac >>
+      `stor_taint_ok_at D un u` by
+        (fs[ghost_inv_at_def,dead_lo_ok_def,stor_taint_ok_at_def] >>
+         Cases_on `tr` >>
+         gvs[Abbr `u`,sourceUnitExecutionTheory.cx_dead_def,sstore_def,tstore_def,lookup_account_def,
+             combinTheory.APPLY_UPDATE_THM] >>
+         simp[pred_setTheory.SUBSET_DEF] >> metis_tac[pred_setTheory.SUBSET_DEF]) >>
+      qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[ghost_inv_at_def] >> strip_tac >>
+      Cases_on `tr` >>
+      gvs[Abbr `u`,tstore_def,sstore_def,allocas_from_def,op_taint_def,
+          lookup_var_def,ptr_covers_def,key_update_def,stor_taint_ok_at_def] >>
+      (Cases_on `d` >-
+        (gvs[return_buf_ptr_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       rename1 `return_buf_ptr (SOME rb) cenv G tn s` >>
+       PairCases_on `rb` >>
+       gvs[return_buf_ptr_def,ptr_covers_def,op_taint_def,lookup_var_def] >>
+       rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  Cases_on `tr` >>
+  simp[Abbr `u`,tstore_def,sstore_def,lookup_var_def,op_taint_def,ptr_covers_def]
 QED
 
 (* A source that is a widened aggregate call. *)
