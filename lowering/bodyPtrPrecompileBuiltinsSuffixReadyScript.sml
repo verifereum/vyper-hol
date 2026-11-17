@@ -21,9 +21,7 @@ Proof
   `exec_ext_call ci u gas addr 0w wi an wo rn T = OK v` by
     (gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `ci.inst_outputs = [cv]` by simp[mk_inst_def] >>
-  (* Specialize the provider before discharging it. Type-instantiating an
-     assumption theorem afterwards would retain a new, undischargeable hyp. *)
-  drule_all (INST_TYPE [alpha |-> ``:256 word``, beta |-> ``:256``,
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``,
     gamma |-> ``:256``] computed_static_exec_eq) >>
   disch_then (qspecl_then [`rn`,`wo`,`gas`] mp_tac) >> simp[] >> strip_tac >>
   Cases_on `u.vs_outcomes = []` >>

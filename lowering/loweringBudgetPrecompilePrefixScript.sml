@@ -10,7 +10,7 @@ Theorem three_instruction_abort_prefix[local]:
       p.bp_fn = fn /\ p.bp_state = s /\
       gi.inst_opcode = GAS /\ ci.inst_opcode = STATICCALL /\
       ai.inst_opcode = ASSERT /\ ai.inst_operands = [op] /\
-      (?a u. run_inst_seq [gi;ci;ai] s = Abort a u) /\
+      (?u. run_inst_seq [gi;ci;ai] s = Abort Revert_abort u) /\
       (!st i. st.vs_current_bb = s.vs_current_bb /\
         st.vs_inst_idx < s.vs_inst_idx + 3 /\
         s.vs_inst_idx <= st.vs_inst_idx /\ active_inst fn i st ==>
@@ -19,7 +19,7 @@ Theorem three_instruction_abort_prefix[local]:
       q.bp_state.vs_current_bb = s.vs_current_bb /\
       ?n. n < 3 /\ q.bp_state.vs_inst_idx = s.vs_inst_idx + n /\
         lower_history_count h <= (if n = 2 then 1 else 0) /\
-        (?a u. run_inst_seq (DROP n [gi;ci;ai]) q.bp_state = Abort a u) /\
+        (?u. run_inst_seq (DROP n [gi;ci;ai]) q.bp_state = Abort Revert_abort u) /\
         (n = 2 ==> eval_operand op q.bp_state = SOME 0w)
 Proof
   ho_match_mp_tac lower_budget_path_ind >> rpt conj_tac >>

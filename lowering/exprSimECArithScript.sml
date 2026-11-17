@@ -1868,7 +1868,7 @@ Resume ec_points_run[suffix]:
              ec_precompile_words, markerTheory.Abbrev_def]) >>
       pop_assum strip_assume_tac >>
       drule run_inst_seq_append >>
-      disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
+      disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> gvs[]) >>
   qmatch_goalsub_rename_tac `option_CASE (SOME r)` >>
   PairCases_on `r` >> simp[] >>
   reverse (Cases_on `?co rest. s.vs_outcomes = co::rest /\ co.co_success`)
@@ -1884,7 +1884,7 @@ Resume ec_points_run[suffix]:
          simp[] >> metis_tac[]) >>
       pop_assum strip_assume_tac >>
       drule run_inst_seq_append >>
-      disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
+      disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> gvs[]) >>
   simp[] >> pop_assum strip_assume_tac >>
   `?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)` by
     metis_tac[markerTheory.Abbrev_def] >>
