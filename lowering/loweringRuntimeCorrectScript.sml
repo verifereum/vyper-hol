@@ -39,7 +39,8 @@ Ancestors
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
   fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
-  acceptedContextPhi vyperLoweringCorrect
+  acceptedContextPhi vyperLoweringCorrect sourceCallCount lowerDloadDefs
+  runtimeDallocaBound
 
 val _ = Parse.hide "body";
 
@@ -367,6 +368,12 @@ Theorem lower_vyper_runtime_unit_body_joint:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254 /\
+    LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -639,6 +646,12 @@ Theorem lower_vyper_runtime_unit_correct:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254 /\
+    LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
@@ -684,6 +697,12 @@ Theorem lower_vyper_runtime_unit_run_bounded:
     ?fuel. !vs.
       valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
       initial_venom_state_rel tops am tx vs /\
+      (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+      vs.vs_fmp = vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254 /\
+      LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
+      unit_alloca_budget unit.cu_context +
+        32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
       (!marks.
          source_storage_ok am tx vs.vs_outcomes

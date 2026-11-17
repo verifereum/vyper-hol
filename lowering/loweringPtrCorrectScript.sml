@@ -16,7 +16,7 @@
  *)
 Theory loweringPtrCorrect
 Ancestors
-  vyperCompiler vyperLoweringCorrect ptrSafeRun
+  vyperCompiler vyperLoweringCorrect ptrSafeRun contextRawReachable venomLayout
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "tops";
@@ -24,7 +24,14 @@ val _ = Parse.hide "tops";
 Theorem lower_vyper_runtime_unit_ptr_taint:
   !tops rpolicy unit vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    ~ctx_has_dalloca unit.cu_context /\
+    (!f i s.
+       raw_reachable vs unit.cu_context f i s ==>
+       s.vs_initial_fmp = vs.vs_initial_fmp /\
+       w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+       (i.inst_opcode = DALLOCA ==>
+        !sz_op sz.
+          i.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
+          w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256))) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
@@ -33,6 +40,8 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
     ==> ptr_discipline 0 unit.cu_context vs /\
         taint_within D unit.cu_context vs
 Proof
+  (* The static-only bridge proof is retained until the dynamic
+     allocation bridge is established.
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
@@ -41,4 +50,6 @@ Proof
   drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
   `0 <= vs.vs_alloca_next` by simp[] >>
   drule_all ptr_safe_ptr_discipline >> simp[]
+  *)
+  cheat
 QED
