@@ -949,8 +949,6 @@ QED
 Finalise body_assign_tuple_nonlocal_write_ready
 
 (* A successful nonlocal head observes its root before the joint slot store. *)
-val _ = HOLFlags.set_trace "types" 1;
-
 Theorem body_assign_tuple_nonlocal_head_full_path:
   compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
   assign_tuple_targets cx g v es = (INL (),es') /\
@@ -1015,26 +1013,96 @@ Resume body_assign_tuple_nonlocal_head_full_path[scalar]:
   `eval_operand (Lit (n2w k)) s = SOME (n2w k) /\
    op_taint tn (Lit (n2w k)) = {}` by simp[eval_operand_def,op_taint_def] >>
   `es'.scopes = (es with storage_trace := obs).scopes` by simp[] >>
-  drule_all body_assign_tuple_storage_head_path >>
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    body_assign_tuple_storage_head_path) >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`]
     (qx_choosel_then [`t`,`tf`] (map_every assume_tac o CONJUNCTS))) >>
+  qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ /\ _ ==> _`
+    (mk_asm "store_rel") >>
+  qpat_x_assum `!H D d. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
+    (mk_asm "store_ghost") >>
   qexistsl [`t`,`G`,`tf`] >>
   qpat_x_assum `t = _` kall_tac >> qpat_x_assum `tf = _` kall_tac >>
   simp[] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
         (drule_then assume_tac) >>
-      first_x_assum (qspec_then `H` drule) >> simp[]) >>
+      asm "store_rel" (qspec_then `H` mp_tac) >>
+      simp[exprLoweringPropsTheory.stmt_state_rel_storage_trace]) >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
   qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
     (drule_then assume_tac) >>
-  qpat_x_assum `!H D d. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`H`,`D`,`d`] mp_tac) >> simp[]
+  asm "store_ghost" (qspecl_then [`H`,`D`,`d`] mp_tac) >>
+  simp[bodyPtrDefsTheory.ghost_inv_at_storage_trace]
 QED
 
 Resume body_assign_tuple_nonlocal_head_full_path[field]:
-  FAIL_TAC "field store"
+  drule_all tuple_target_field_place >>
+  disch_then (qspec_then `es` assume_tac) >> gvs[] >>
+  Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] sa` >>
+  rename1 `emit_op ADD _ sa = (dst,sm)` >>
+  drule_all tuple_target_field_pointer >> strip_tac >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def,comp_return_def] >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
+  `cs_extends sm sb` by
+    metis_tac[externalEntryShapeTheory.compile_store_at_loc_labels,pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``] body_assign_tuple_field_add_path) >>
+  disch_then (qspecl_then [`tn`,`explicit`,`es`,`cx`,`PG`,`G`]
+    (qx_choosel_then [`out`,`mid`,`GM`,`tm`] (map_every assume_tac o CONJUNCTS))) >>
+  map_every (fn q => qpat_x_assum q kall_tac) [`mid = _`,`GM = _`,`tm = _`] >>
+  qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ ==> _` (mk_asm "add_rel") >>
+  qpat_x_assum `!D d. ghost_inv_at _ _ _ _ _ _ _ _ _ ==> _` (mk_asm "add_ghost") >>
+  `mid.vs_fmp = s.vs_fmp /\ mid.vs_immutables = s.vs_immutables /\
+   mid.vs_call_ctx = s.vs_call_ctx` by fs[state_frame_def] >>
+  `allocas_from lo mid /\ lo <= mid.vs_alloca_next /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp mid)` by
+    (fs[allocas_from_def,allocas_below_fmp_def] >> metis_tac[]) >>
+  `eval_operand dst mid = SOME (n2w k + n2w (struct_field_offset_slots
+     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) /\
+   op_taint tm dst = {}` by simp[eval_operand_def] >>
+  `eval_operand op mid = SOME (typed_val_to_w256 tv v) /\ op_taint tm op = {}` by
+    (Cases_on `op` >> fs[eval_operand_def,op_taint_def] >> metis_tac[]) >>
+  `es'.scopes = (es with storage_trace := obs).scopes` by simp[] >>
+  `~mid.vs_call_ctx.cc_static` by simp[] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    body_assign_tuple_storage_head_path) >>
+  disch_then (qspecl_then [`explicit`,`PG`,`GM`]
+    (qx_choosel_then [`t`,`tf`] (map_every assume_tac o CONJUNCTS))) >>
+  qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ /\ _ ==> _`
+    (mk_asm "store_rel") >>
+  qpat_x_assum `!H D d. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
+    (mk_asm "store_ghost") >>
+  qpat_x_assum `t = _` kall_tac >> qpat_x_assum `tf = _` kall_tac >>
+  qexistsl [`t`,`GM`,`tf`] >> simp[] >>
+  conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!D. gas_origin_ptr_path _ (s,_,_) _ _`
+        (qspec_then `D` mp_tac) >>
+      qpat_x_assum `!D. gas_origin_ptr_path _ (mid,_,_) _ _`
+        (qspec_then `D` mp_tac) >>
+      POP_ASSUM_LIST (K all_tac) >>
+      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append,APPEND]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
+        (drule_then assume_tac) >>
+      asm "add_rel" (drule_then assume_tac) >>
+      asm "store_rel" (qspec_then `H` mp_tac) >>
+      simp[exprLoweringPropsTheory.stmt_state_rel_storage_trace]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!st0 H. valid_horizon _ _ _ _ ==> _`
+    (drule_then assume_tac) >>
+  asm "add_ghost" (drule_then assume_tac) >>
+  asm "store_ghost" (qspecl_then [`H`,`D`,`d`] mp_tac) >>
+  simp[bodyPtrDefsTheory.ghost_inv_at_storage_trace]
 QED
 
 Finalise body_assign_tuple_nonlocal_head_full_path
