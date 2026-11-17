@@ -1,6 +1,6 @@
 Theory bodyFullConvertBytesJoint
 Ancestors
-  stateRelProj
+  stateRelProj bodyInvNoDalloca
   bodyFullPreds bodySimFull bodyFullConvertChildRead bodyFullPathHistory
   bodyFullConvertCopyRun bodyFullConvertCopyPosts bodyFullConvertEndpointPosts
   bodyFullConvertCastOrigin bodyPtrTypeBuiltinsMemoryInterface
@@ -243,7 +243,9 @@ Theorem convert_bytes_vv_sim_full:
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
-  strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `is_bytestring_type (expr_type e)` by metis_tac[valid_conversion_to_bytestring] >>
   `~is_word_type ann /\ (!n. ann <> FlagT n)` by
     (Cases_on `ann` >> gvs[is_bytestring_type_def, is_word_type_def] >>

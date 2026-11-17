@@ -1,6 +1,6 @@
 Theory bodyFullConvertDynamicJoint
 Ancestors
-  typeBuiltinPrereqs
+  typeBuiltinPrereqs bodyInvNoDalloca
   bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
@@ -79,7 +79,9 @@ Theorem convert_dynamic_vv_sim_full:
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
-  strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `well_formed_type env.type_defs ann` by
     metis_tac[dynamic_convert_typing_boundary] >>
   `is_word_type ann /\ (!n. ann <> FlagT n)` by
