@@ -1025,8 +1025,6 @@ Proof
                   `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
      imp_res_tac values_have_types_length >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live H _ _ _ _` mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
      impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>

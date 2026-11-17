@@ -56,9 +56,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   irule vv_post_fields_transport >>
   conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `~expr_has_effect e ==> vv_storage_live H _ _ _ t` drule >>
-      strip_tac >> Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
+  >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
   metis_tac[]
 QED
 

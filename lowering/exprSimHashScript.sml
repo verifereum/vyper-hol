@@ -2289,7 +2289,7 @@ Theorem vv_post_frame_intro:
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
   vv_place_ptr cenv cx es' t tv vv /\
-  (~expr_has_effect e ==> vv_storage_live H cx vv es' t) /\
+  vv_storage_live H cx vv es' t /\
   wb_frame cenv es es' sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
   vv_post H ctx func cenv cx e es sa sb s0 es' tv vv t

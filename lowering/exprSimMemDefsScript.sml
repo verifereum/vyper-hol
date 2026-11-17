@@ -214,7 +214,7 @@ Theorem vv_post_fields_transport:
   storage_well_formed_on cx es' (FST H) /\
   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx /\
-  (~expr_has_effect e ==> vv_storage_live H cx vv es' u) ==>
+  vv_storage_live H cx vv es' u ==>
   vv_post H ctx func cenv cx e es sa sb s0 es' tv vv u
 Proof
   rpt gen_tac >> strip_tac >>

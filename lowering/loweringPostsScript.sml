@@ -780,7 +780,7 @@ Definition vv_post_def:
     vv_place_ptr cenv cx es' s tv vv /\
     (post_value_type cenv e <> expr_type e ==>
      vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
-    (~expr_has_effect e ==> vv_storage_live H cx vv es' s) /\
+    vv_storage_live H cx vv es' s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

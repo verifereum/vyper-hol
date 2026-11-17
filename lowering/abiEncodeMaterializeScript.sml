@@ -138,7 +138,7 @@ Proof
      rpt strip_tac >> gvs[vv_operand_def] >>
      disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
      metis_tac[]) >>
-  `~expr_has_effect e ==> vv_storage_live H cx vv es' t` by
+  `vv_storage_live H cx vv es' t` by
     (Cases_on `vv` >>
      gvs[vv_storage_live_def, vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by

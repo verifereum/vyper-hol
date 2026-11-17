@@ -169,7 +169,6 @@ Proof
   rpt strip_tac
   >~ [`vv_storage_live H _ _ _ t`]
   >- (qpat_x_assum `vv_storage_live H _ _ _ s ==> _` irule >>
-      qpat_x_assum `~expr_has_effect e ==> vv_storage_live H _ _ _ _` irule >>
       first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _` irule >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`

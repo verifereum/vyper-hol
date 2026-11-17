@@ -546,10 +546,7 @@ Proof
       qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
-  >- (strip_tac >>
-      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live H _ _ _ _` mp_tac >>
-      asm_rewrite_tac[] >> strip_tac >>
-      drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
+  >- (drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
       drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
       strip_tac >>
       Cases_on `bvv` >>
