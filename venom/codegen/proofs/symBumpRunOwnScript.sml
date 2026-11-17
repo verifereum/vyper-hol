@@ -258,7 +258,7 @@ Proof
   disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
   disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`sb`, `r`, `labs0`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
   (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
   rename1 `sym_steps_mode allow_own prog env own _ ss = SymOK ready` >>
   rename1 `sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop)` >>
@@ -288,7 +288,7 @@ Proof
   disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
   disch_then (drule_at (Pat `arranged.ps_stack = _`)) >>
   disch_then (drule_at (Pat `ready.sym_stack = _`)) >>
-  disch_then (qspecl_then [`sz`, `emitted`, `env`, `own`, `ctx`, `code_ok`, `base_val`, `allow_own`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`sz`, `emitted`, `prog`, `own`, `env`, `ctx`, `code_ok`, `base_val`, `allow_own`] mp_tac) >> simp[] >>
   (impl_tac >- (gvs[Abbr `emitted`, codegen_ready_fn_def] >> metis_tac[])) >> strip_tac >>
   `asm_block_at prog full.sym_base.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
     gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
