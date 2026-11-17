@@ -152,16 +152,19 @@ Proof
            (qpat_x_assum `can_invoke_cut` irule >> simp[] >> metis_tac[]) >>
          first_x_assum drule >> strip_tac >> metis_tac[]) >>
      Cases_on `inst.inst_opcode = GAS`
-     >- (mp_tac (SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`] sym_body_gas_ok_own_kernel)) >> FAIL_TAC "gas theorem") >>
+     >- (drule_all (SRULE [sym_steps_mode_def]
+           (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`] sym_body_gas_ok_own_kernel)) >>
+         strip_tac >> gvs[sym_frame_inv_canonical_own] >> metis_tac[]) >>
      `sym_data_label prog env "code_end"` by
-       (irule codegen_sym_code_end_label_kernel >> gvs[body_inv_def]) >>
+       ((irule codegen_sym_code_end_label_kernel >> gvs[body_inv_def] >> (metis_tac[]))) >>
      `(MEM (Label "runtime_begin") inst.inst_operands ==>
        sym_data_label prog env "runtime_begin")` by
        (strip_tac >> irule codegen_sym_runtime_begin_label_kernel >>
         drule body_inv_facts >> strip_tac >> drule_all body_inv_inst >> strip_tac >>
         gvs[body_inv_def] >> metis_tac[]) >>
-     drule_all (SRULE [sym_steps_mode_def] (Q.SPEC `F` sym_body_ordinary_ok_own_kernel)) >>
-     strip_tac >> fs[sym_frame_inv_canonical_own] >> metis_tac[]) >>
+     drule_all (SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+       (SPEC_ALL sym_body_ordinary_ok_own_kernel))) >>
+     strip_tac >> gvs[sym_frame_inv_canonical_own] >> metis_tac[]) >>
   drule_all body_inv_advance >> strip_tac >>
   `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
   drule_all body_inv_inst >> strip_tac >>
@@ -182,5 +185,26 @@ Theorem sym_body_canonical_branches_given_invoke:
         (can_R as1 ss1 (block_rest fuel ctx fn bb vs') ==>
          can_R as ss (block_rest fuel ctx fn bb vs)))
 Proof
-  FAIL_TAC "inspect abbreviation"
+  strip_tac >> rpt gen_tac >> strip_tac >> drule_all can_facts >> strip_tac >>
+  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
+  reverse (Cases_on `k < LENGTH bb.bb_instructions`)
+  >- (disj1_tac >>
+      `LENGTH bb.bb_instructions <= vs.vs_inst_idx` by simp[] >>
+      drule fnBlockBodyHelpersTheory.exec_block_out_of_range >>
+      disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
+      drule block_rest_error >> simp[] >> metis_tac[]) >>
+  `EL k bb.bb_instructions = EL k bb.bb_instructions` by simp[] >>
+  drule_all sym_body_inst_bounds_reloc_kernel >> strip_tac >>
+  Cases_on `?j. revert_forward_pair bb k j`
+  >- suspend "revert" >>
+  `!j. ~revert_forward_pair bb k j` by metis_tac[] >>
+  Cases_on `?vs1. step_inst fuel ctx (EL k bb.bb_instructions) vs = OK vs1`
+  >- (pop_assum strip_assume_tac >>
+      Cases_on `is_terminator (EL k bb.bb_instructions).inst_opcode`
+      >- suspend "jump" >>
+      drule_all can_nonterm_prefix >> strip_tac >> disj2_tac >> simp[] >>
+      qexistsl [`prefix'`, `rest'`, `ps'`, `vs'`, `as1`, `ss1`] >>
+      simp[] >> conj_tac >- metis_tac[] >>
+      strip_tac >> irule can_runs_prefix >> metis_tac[]) >>
+  disj1_tac >> suspend "nonok"
 QED
