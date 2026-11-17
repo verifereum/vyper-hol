@@ -2,7 +2,7 @@
 Theory bodyFullAnnAssignWidened
 Ancestors
   assignRelayoutCaller annassignRelayoutSource annassignRelayoutFrag annassignRelayoutPost
-  bodySimFull bodyPtrDefs exprSimSource exprSimHypsDefs
+  bodySimFull bodyPtrDefs exprSimSource exprSimHypsDefs gasOutcomeFullCompose
   loweringPosts exprLoweringProps exprOperandVar assignBasePtrBoundary
   externalReturnBounds exprSimAggregateChildren representationCleanPtr
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState
@@ -92,4 +92,54 @@ Proof
   qexistsl_tac [`xs`, `sw`] >> gvs[venomStateTheory.eval_operand_def] >>
   fs[ptr_val_ok_def, ptr_mem_ok_def, venomStateTheory.eval_operand_def] >>
   metis_tac[]
+QED
+
+(* Enrich only the successful RHS post.  The supplied post, including its
+   allocation/taint frame, and the complete exceptional post are retained. *)
+Theorem annassign_widened_full_rhs_source:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (bind (eval_expr cx e) (read_result cx)) (es,t0,G0,tn0) Q R /\
+  post_value_type ce e = sty /\ sty <> expr_type e /\
+  type_widens_to (get_tenv cx) sty (expr_type e) /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
+  0 < type_memory_size stv /\
+  (!gs v mid. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gs) = (INL v,mid) ==>
+    value_has_type dtv v /\ val_wf dtv v /\
+    val_footprint stv v = type_memory_size stv) /\
+  FLOOKUP t0.vs_allocas aid = SOME (w2n dw,sz) /\ aid < a.cs_next_id /\
+  type_memory_size dtv <= sz /\ not_fresh_at a p /\ lookup_var p t0 = SOME dw /\
+  (!H v mid G tn t. Q H (INL v) mid G tn t ==>
+    expr_post H ctx func ce cx e es a b t0 mid v op t /\
+    ptr_val_ok cx sty v op G tn t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (bind (eval_expr cx e) (read_result cx)) (es,t0,G0,tn0)
+    (\H res mid G tn t. Q H res mid G tn t /\
+      !v. res = INL v ==> value_has_type dtv v /\ val_wf dtv v /\
+        ?xs sw.
+          op = Var xs /\ lookup_var xs t = SOME sw /\ lookup_var p t = SOME dw /\
+          FLOOKUP t.vs_allocas aid = SOME (w2n dw,sz) /\
+          ptr_covers G tn xs t (type_memory_size stv) /\
+          (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+            val_in_memory stv v (w2n sw) mem) /\
+          w2n sw + type_memory_size stv < dimword (:256) /\
+          w2n dw + type_memory_size dtv < dimword (:256) /\
+          w2n sw + type_memory_size stv <= t.vs_alloca_next /\
+          (w2n sw + type_memory_size stv <= w2n dw \/
+           w2n dw + type_memory_size dtv <= w2n sw) /\
+          expr_val_at ce cx sty a b mid v (Var xs) t) R
+Proof
+  strip_tac >> irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `value_has_type dtv v /\ val_wf dtv v /\
+   val_footprint stv v = type_memory_size stv` by
+    (qpat_x_assum `!gs v mid. _` irule >>
+     qexists_tac `xs` >>
+     qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `!H v mid G tn t. _` drule_all >> strip_tac >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (SRULE [ADD_COMM] annassign_widened_full_source) >>
+  simp[] >> disch_then drule_all >> simp[]
 QED
