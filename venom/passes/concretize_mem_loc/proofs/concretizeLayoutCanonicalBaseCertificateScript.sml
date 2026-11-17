@@ -131,6 +131,14 @@ Proof
   Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
   >- (drule_all layout_canonical_external_pending >> simp[]) >>
   drule_all layout_base_opcode_cases >> disch_tac >>
+  `MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE;
+      TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE;
+      MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE;
+      SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])` by
+    (qpat_x_assum `MEM i.inst_opcode _ \/ _` mp_tac >>
+     asm_simp_tac bool_ss [MEM]) >>
   irule layout_canonical_ordinary_nonterm_pending >>
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
