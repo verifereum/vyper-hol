@@ -62,7 +62,7 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasMaskRequests dftGasPrefixProvider
-  dftFinitePacket
+  dftFinitePacketHol
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
