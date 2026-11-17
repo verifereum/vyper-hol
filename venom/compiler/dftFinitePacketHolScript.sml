@@ -32,7 +32,7 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketLiteralRowExtend
+  dftPacketLiteralRowExtend dftPacketLiteralFullRowExtend
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
@@ -59,3 +59,4 @@ Ancestors
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
   dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation
+  dftPacketFreshCutGeometry
