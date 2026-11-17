@@ -1,29 +1,16 @@
 Theory bodyPtrPrecompileBuiltinsArithmeticValue
-Ancestors bodyPtrPrecompileBuiltinsArithmeticSource exprSimECArith exprSimPrecompiles
+Ancestors bodyPtrPrecompileBuiltinsArithmeticSource exprSimECArith exprPtrCleanBufferPost exprSimPrecompiles
           extCallOracle vfmExecution bn254 vfmBuffer vfmTypes byte list rich_list
           valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs loweringPosts
           exprLowering exprSimDefs compileEnv loweringStateRelDefs vyperValue vyperValueOperation vyperTypeBuiltins vyperContext
           bodyPtrDefs ptrCoverage representationCleanPtr exprSimProps venomState entryDecodeStaticProps vyperAST
-
-Theorem clean_window_mem_agree:
-  mem_agree_outside m mem mem' /\
-  (!i. a <= i /\ i < a+n ==> i NOTIN m) ==>
-  mem_bytes_at a n mem = mem_bytes_at a n mem'
-Proof
-  strip_tac >> irule LIST_EQ >> simp[EL_mem_bytes_at] >> rpt strip_tac >>
-  `a+x NOTIN m` by (first_x_assum irule >> decide_tac) >>
-  `mem_bytes_at (a+x) 1 mem = mem_bytes_at (a+x) 1 mem'` by
-    metis_tac[mem_agree_outside_def] >>
-  `EL 0 (mem_bytes_at (a+x) 1 mem) = EL 0 (mem_bytes_at (a+x) 1 mem')` by simp[] >>
-  gvs[EL_mem_bytes_at]
-QED
 
 Theorem clean_word_mem_agree:
   mem_agree_outside m mem mem' /\
   (!i. a <= i /\ i < a+32 ==> i NOTIN m) ==>
   mem_word_at a mem = mem_word_at a mem'
 Proof
-  strip_tac >> drule_all clean_window_mem_agree >>
+  strip_tac >> drule_all clean_window_memory_agree >>
   simp[mem_word_at_def, mem_bytes_at_def]
 QED
 
