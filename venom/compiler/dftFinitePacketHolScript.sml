@@ -3,7 +3,7 @@ Ancestors
   dftFinitePacket
   dftFinitePacketReachability
   dftPacketBlockRootedAppend
-  dftPacketBlockAppendNative
+  dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketBlockAppendShape dftGasPrefixProvider
   dftNativePlanPrefix
   dftPacketBlockNativePrefix
@@ -33,27 +33,27 @@ Ancestors
   dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
-  dftPacketOrdinaryTrace
+  dftPacketLiteralRowExtend dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
-  dftPacketPseudoAdvance
+  dftPacketPreterminalGeometry dftPacketPseudoAdvance
   dftPacketPseudoCursor
-  dftPacketRefinementBoundary
+  dftPacketPseudoHistory dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows
-  dftPacketReturnLocal
+  dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
-  dftPacketRootedPlainStop
-  dftPacketRowAlignment
+  dftPacketRootedEntryContext dftPacketRootedOperational
+  dftPacketCompletePlanOperational dftPacketRootedPlainStop
+  dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
-  dftPacketCallPathInsertion
+  dftPacketCallPathInsertion dftPacketCallRootConservation
