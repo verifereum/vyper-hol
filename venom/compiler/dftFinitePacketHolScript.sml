@@ -25,6 +25,7 @@ Ancestors
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
+  dftPacketPreterminalOracle
   dftPacketPseudoAdvance
   dftPacketRefinementBoundary
   dftPacketReturnLocal
