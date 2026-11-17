@@ -540,7 +540,7 @@ Proof
      fs[vv_post_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qexistsl_tac [`t`, `w`] >> simp[vv_post_def] >>
   fs[vv_post_def] >> rpt conj_tac
-  >- (strip_tac >> fs[] >> Cases_on `vv` >> gvs[vv_operand_def])
+  >- (Cases_on `vv` >> gvs[vv_operand_def])
   >- (rpt strip_tac >>
       `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
   >- metis_tac[]

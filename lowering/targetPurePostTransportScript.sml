@@ -322,7 +322,7 @@ Proof
       Cases_on `vv` >> fs[vv_place_ptr_def])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
-  >- (strip_tac >> irule target_saved_storage_live_frame >>
+  >- (irule target_saved_storage_live_frame >>
       qexists_tac `s` >>
       conj_tac >- simp[] >>
       conj_tac >- (drule target_saved_operand_exists >> simp[]) >>
