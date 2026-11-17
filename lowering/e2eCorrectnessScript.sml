@@ -21,7 +21,8 @@ Ancestors
   loweringCalldataCorrect callPremiseDispatch sourceCallCount
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
-  codegenCorrectness immutableCodeLayout asmOptimizer
+  codegenCorrectness immutableCodeLayout asmOptimizer codegenEncodingWf
+  spillWordBounds
   sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
   stateEquiv stateEquivProps
   venomExecSemantics
@@ -781,6 +782,58 @@ Proof
   rw[gas_variant_def] >>
   qpat_x_assum `so = _` SUBST_ALL_TAC >>
   gvs[initial_venom_state_rel_def, venom_env_rel_def]
+QED
+
+(* entry_venom_state_initial_venom_state_rel for opt_entry_state.  Stated
+   here rather than in e2eEntry because the proof uses e2eProducers. *)
+Theorem opt_entry_initial_venom_state_rel:
+  !tops prog prog' am tx es cplan.
+  call_state_rel tops (assemble prog') am tx es ==>
+  initial_venom_state_rel tops am
+    (tx with code := (opt_entry_state prog prog' cplan es).vs_code)
+    (opt_entry_state prog prog' cplan es)
+Proof
+  rpt strip_tac >>
+  drule_then (qspec_then `cplan` mp_tac) entry_venom_state_initial_venom_state_rel >>
+  simp[initial_venom_state_rel_def, venom_env_rel_def, opt_entry_state_def,
+       entry_venom_state_frame_fields] >>
+  simp[entry_venom_state_def] >> strip_tac >>
+  gvs[value_transfer_ok_def, accounts_after_transfer_def,
+      loweringStateRelDefsTheory.tx_env_ok_def,
+      loweringStateRelDefsTheory.call_ctx_rel_def]
+QED
+
+(* generated_entry_code_layout_shape for opt_entry_state.  Stated here
+   rather than in e2eEntry because the proof uses e2eProducers and
+   immutableCodeLayout. *)
+Theorem opt_entry_code_layout_valid:
+  !tops prog prog' am tx es cplan policy unit.
+  call_state_rel tops (assemble prog') am tx es /\
+  codegen_assembly policy unit = SOME prog /\ unit_shape_ok unit ==>
+  code_layout_valid (opt_entry_state prog prog' cplan es)
+Proof
+  rpt strip_tac >>
+  drule_all codegenEncodingWfTheory.codegen_assembly_asm_encoding_wf >> strip_tac >>
+  drule codegen_assembly_success_shape >> strip_tac >>
+  `FLOOKUP (SND (compute_label_offsets prog)) "code_end" =
+     SOME (LENGTH (assemble prog))` by
+    (irule immutable_code_end_length >> fs[] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  `LENGTH (assemble prog) < 65536` by
+    (qpat_x_assum `asm_encoding_wf prog` mp_tac >>
+     qpat_x_assum `FLOOKUP _ "code_end" = _` mp_tac >>
+     Cases_on `compute_label_offsets prog` >>
+     simp[asmWfTheory.asm_encoding_wf_def] >> rpt strip_tac >>
+     qpat_x_assum `!lbl off. _` drule >> strip_tac >>
+     drule spillWordBoundsTheory.encode_num_bytes_length_bound >>
+     simp[symbolResolveTheory.symbol_size_def]) >>
+  `LENGTH (FST (HD es.contexts)).msgParams.code <= 24576` by
+    gvs[call_state_rel_def] >>
+  simp[code_layout_valid_def, opt_entry_state_def,
+       entry_venom_state_frame_fields] >>
+  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  qpat_x_assum `prog = _` (SUBST_ALL_TAC o SYM) >>
+  conj_tac >- (qexists_tac `LENGTH (assemble prog)` >> asm_rewrite_tac[]) >>
+  decide_tac
 QED
 
 (* ADMISSION: raw-variant bridge for the generic call link.  Waits for its

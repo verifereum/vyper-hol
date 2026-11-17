@@ -193,29 +193,3 @@ Theorem opt_entry_txp_identity:
 Proof
   cheat
 QED
-
-(* ADMISSION: entry_venom_state_initial_venom_state_rel for opt_entry_state.
-   Its proof exists in the assembly-optimizer work, but uses lemmas from
-   e2eProducers, which sits above this theory; waits for that proof to move. *)
-Theorem opt_entry_initial_venom_state_rel:
-  !tops prog prog' am tx es cplan.
-  call_state_rel tops (assemble prog') am tx es ==>
-  initial_venom_state_rel tops am
-    (tx with code := (opt_entry_state prog prog' cplan es).vs_code)
-    (opt_entry_state prog prog' cplan es)
-Proof
-  cheat
-QED
-
-(* ADMISSION: opt_entry_state's code fits the address space.  Its proof
-   exists in the assembly-optimizer work, but uses lemmas from e2eProducers
-   and immutableCodeLayout, which sit above this theory; waits for that proof
-   to move. *)
-Theorem opt_entry_code_layout_valid:
-  !tops prog prog' am tx es cplan policy unit.
-  call_state_rel tops (assemble prog') am tx es /\
-  codegen_assembly policy unit = SOME prog /\ unit_shape_ok unit ==>
-  code_layout_valid (opt_entry_state prog prog' cplan es)
-Proof
-  cheat
-QED
