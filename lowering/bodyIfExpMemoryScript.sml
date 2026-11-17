@@ -251,7 +251,7 @@ Proof
           disj1_tac >> qexists_tac `v` >> simp[]) >>
       qexistsl_tac [`res`, `es_end`, `r`] >> conj_tac
       >- first_assum ACCEPT_TAC >>
-      disj2_tac >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   first_assum ACCEPT_TAC
 QED
@@ -498,7 +498,8 @@ Proof
     gas_explicit left s0.vs_gas_readings ++
     gas_explicit right u.vs_gas_readings` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_explicit_append_path] >>
-  fs[gas_bad_storage_at_def, APPEND_ASSOC]
+  fs[gas_bad_storage_at_def] >>
+  pure_once_rewrite_tac[GSYM APPEND_ASSOC] >> pure_asm_rewrite_tac[] >> simp[]
 QED
 
 Theorem ifexp_forced_selected_outcome_prefix_mem[local]:
@@ -545,7 +546,7 @@ QED
 
 Theorem ifexp_raw_conditional_outcome_mem[local]:
   gas_outcome T tops (ctx,func) cx st0 (eval_expr cx e) (es,s0) P
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee s. P H res ee s ==> ?raw. res = INL raw) /\
   (!marks raw ee s.
     gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
@@ -559,7 +560,7 @@ Theorem ifexp_raw_conditional_outcome_mem[local]:
          Q H (INL tv) (ee with gas_obs := []) q)) ==>
   gas_outcome T tops (ctx,func) cx st0
     (bind (eval_expr cx e) (conditional_result cx)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -681,10 +682,12 @@ QED
 Theorem ifexp_forced_condition_exit_mem[local]:
   gas_marked_exec T (ctx,func)
     (bind (eval_expr cx c) (read_result cx)) (es,s0) marks res mid r /\
-  expr_exit res r ==>
+  expr_exit res r /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     halt_exit H cx (mid with gas_obs := []) res r) ==>
   gas_outcome T tops (ctx,func) cx st0
     (bind (eval_expr cx (IfExp t c a b)) (read_result cx)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_def, gas_summary_at_def] >>
@@ -695,8 +698,8 @@ Proof
       irule gas_marked_exec_bind_exception >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
   disj2_tac >> simp[] >>
-  Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
-  Cases_on `y` >> fs[expr_exit_def] >>
+  Cases_on `r` >> fs[expr_exit_def, exit_result_def, halt_exit_def] >>
+  Cases_on `y` >> fs[expr_exit_def, halt_exit_def] >>
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
 
@@ -705,7 +708,7 @@ Theorem ifexp_forced_condition_dispatch_mem[local]:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   gas_outcome T tops (ctx,func) cx st0
     (bind (eval_expr cx c) (read_result cx)) (es,s0) P
-    (\H res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee u. P H res ee u ==> ?v. res = INL v) /\
   (!marks sel mid u.
     gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
@@ -715,10 +718,10 @@ Theorem ifexp_forced_condition_dispatch_mem[local]:
          P H (INL (BoolV sel)) (mid with gas_obs := []) u) ==>
     gas_outcome T tops (ctx,func) cx st0
       (bind (eval_expr cx (IfExp t c a b)) (read_result cx)) (es,s0) Q
-      (\H res ee r. expr_exit res r)) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   gas_outcome T tops (ctx,func) cx st0
     (bind (eval_expr cx (IfExp t c a b)) (read_result cx)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -729,6 +732,7 @@ Proof
       simp[storage_trace_frame_read_result] >>
       irule gas_bad_storage_at_bind_left >> simp[ifexp_root_cont_frame])
   >- (qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+      rename1 `gas_marked_exec _ _ _ _ _ _ _ (OK cond_state)` >>
       qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
@@ -746,8 +750,8 @@ Proof
         (INL v,es_end with gas_obs := tail)` by fs[gas_marked_exec_def] >>
       `?sel. v = BoolV sel` by (irule ifexp_root_condition_bool >> metis_tac[]) >>
       qpat_x_assum `v = BoolV sel` SUBST_ALL_TAC >>
-      qpat_x_assum `!marks sel mid u. _` (qspecl_then
-        [`marks`,`sel`,`es_end`,`t`] mp_tac) >>
+      qpat_x_assum `!marks sel mid u. gas_marked_exec _ _ _ _ _ _ _ _ /\ _ ==> _`
+        (qspecl_then [`marks`,`sel`,`es_end`,`cond_state`] mp_tac) >>
       impl_tac
       >- (rpt conj_tac
           >- first_assum ACCEPT_TAC
@@ -813,7 +817,6 @@ Proof
 QED
 
 Resume compile_ifexp_word_vv_sim_mem[selected]:
-  qpat_x_assum `?H. valid_horizon _ _ H mid.storage_trace` strip_assume_tac >>
   rename1 `valid_horizon cx st0 H0 mid.storage_trace` >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -849,8 +852,8 @@ Resume compile_ifexp_word_vv_sim_mem[selected]:
      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next` by
     metis_tac[] >>
   `gas_path_mem ctx func u 0 (OK (jump_to se.cs_current_bb u))` by
-    (HZX_TAC `H0` >> asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >>
-     simp[] >> metis_tac[]) >>
+    (HZX_TAC `H0` >> gvs[] >>
+     drule_all ifexp_jnz_path_mem >> simp[]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by (HZX_TAC `H0` >> metis_tac[]) >>
   suspend "selected_entry"
 QED
@@ -913,13 +916,12 @@ Resume compile_ifexp_word_vv_sim_mem[selected_raw_arm]:
         stmt_state_rel _ _ _ _ _ (mid with gas_obs := []) _ /\ _` mp_tac >>
       simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
   strip_tac >>
-  drule ifexp_raw_conditional_outcome_mem >> disch_then irule >>
+  gvs[] >> drule ifexp_raw_conditional_outcome_mem >> disch_then irule >>
   reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> suspend "arm_cont"
 QED
 
 Resume compile_ifexp_word_vv_sim_mem[arm_cont]:
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace` strip_assume_tac >>
   rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -957,15 +959,14 @@ Resume compile_ifexp_word_vv_sim_mem[arm_cont]:
      (jump_to se.cs_current_bb u).vs_alloca_next <= u1.vs_alloca_next /\
      u1.vs_accounts = s.vs_accounts /\ u1.vs_transient = s.vs_transient /\
      u1.vs_requests = s.vs_requests /\ u1.vs_call_ctx = s.vs_call_ctx` by
-    (HZ_TAC `H1` >> HZX_TAC `H1` >>
-     drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
-     disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    (HZ_TAC `H1` >> HZX_TAC `H1` >> gvs[] >>
+     drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) unwrap_value_marked_read_mem >>
+     disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
      impl_tac >- simp[] >>
      disch_then (qx_choosel_then [`v1`,`u1`] strip_assume_tac) >>
      `?w. eval_operand aop u1 = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
      `alloca_inv u1` by fs[expr_post_def, stmt_state_rel_def] >>
      qexistsl_tac [`v1`,`u1`,`w`] >> metis_tac[]) >>
-  pop_assum (qx_choosel_then [`v1`,`u1`,`w`] strip_assume_tac) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
      storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
@@ -989,20 +990,27 @@ Resume compile_ifexp_word_vv_sim_mem[arm_cont]:
        (update_var rv w u1 with vs_inst_idx := LENGTH sy.cs_current_insts)))` by
     (irule ifexp_marked_zero_suffix_mem >> goal_assum (drule_at Any) >>
      irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
-  `~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect (if sel then a else b)` by
+  `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
     (Cases_on `sel` >>
      rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
-  `expr_type (if sel then a else b) = t` by (Cases_on `sel` >> simp[]) >>
+  `expr_type (if sel then a else b) = (expr_type a)` by (Cases_on `sel` >> simp[]) >>
   `post_value_type cenv (if sel then a else b) = expr_type (if sel then a else b)` by
     metis_tac[post_value_type_word] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 (ee with gas_obs := []) tv
-       (if is_word_type t then StackValue t (Var rv)
-        else LocatedValue t (mk_ptr (Var rv) LocMemory))
+     vv_post H ctx func cenv cx (IfExp (expr_type a) c a b) es sa sb s0 (ee with gas_obs := []) tv
+       (if is_word_type (expr_type a) then StackValue (expr_type a) (Var rv)
+        else LocatedValue (expr_type a) (mk_ptr (Var rv) LocMemory))
        (jump_to sb.cs_current_bb
          (update_var rv w u1 with vs_inst_idx := LENGTH sy.cs_current_insts))` by
-    (irule ifexp_root_guarded_post_mem >> metis_tac[]) >>
+    (rpt strip_tac >> irule ifexp_root_guarded_post_mem >>
+     conj_tac >- (rpt strip_tac >> gvs[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cop`, `if sel then a else b`, `mid with gas_obs := []`,
+       `se.cs_current_bb`, `aop`, `sc`, `se`, `sx`, `st0`, `u`, `v1`, `BoolV sel`] >>
+     conj_tac
+     >- (qx_gen_tac `H3` >> strip_tac >> HZ_TAC `H3` >> HZ_TAC `H3` >>
+         HZX_TAC `H3` >> gvs[]) >> gvs[]) >>
   `alloca_history func (update_var rv w u1 with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
     (irule assign_history >> metis_tac[]) >>
@@ -1021,7 +1029,7 @@ Resume compile_ifexp_word_vv_sim_mem[arm_cont]:
   >- simp[jump_to_def, update_var_def]
   >- simp[jump_to_def, update_var_def]
   >- first_assum ACCEPT_TAC
-  >- (simp[jump_to_def, update_var_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- (fs[jump_to_def, update_var_def] >> decide_tac)
 QED
 
 Finalise compile_ifexp_word_vv_sim_mem
@@ -1092,7 +1100,6 @@ Proof
 QED
 
 Resume compile_ifexp_nonword_vv_sim_mem[selected]:
-  qpat_x_assum `?H. valid_horizon _ _ H mid.storage_trace` strip_assume_tac >>
   rename1 `valid_horizon cx st0 H0 mid.storage_trace` >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -1128,8 +1135,8 @@ Resume compile_ifexp_nonword_vv_sim_mem[selected]:
      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next` by
     metis_tac[] >>
   `gas_path_mem ctx func u 0 (OK (jump_to se.cs_current_bb u))` by
-    (HZX_TAC `H0` >> asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >>
-     simp[] >> metis_tac[]) >>
+    (HZX_TAC `H0` >> gvs[] >>
+     drule_all ifexp_jnz_path_mem >> simp[]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by (HZX_TAC `H0` >> metis_tac[]) >>
   suspend "selected_entry"
 QED
@@ -1193,13 +1200,15 @@ Resume compile_ifexp_nonword_vv_sim_mem[selected_raw_arm]:
         stmt_state_rel _ _ _ _ _ (mid with gas_obs := []) _ /\ _` mp_tac >>
       simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
   strip_tac >>
-  drule ifexp_raw_conditional_outcome_mem >> disch_then irule >>
+  gvs[] >> drule ifexp_raw_conditional_outcome_mem >> disch_then irule >>
   reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> suspend "arm_cont"
 QED
 
 Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace` strip_assume_tac >>
+  qpat_x_assum `mk_ptr _ _ = mk_ptr _ _` (assume_tac o SRULE [contextTheory.mk_ptr_def]) >> gvs[] >>
+  rename1 `compile_expr _ _ _ _ = (LocatedValue _ (mk_ptr (Var rv) LocMemory),_)` >>
+  rename1 `gas_marked_exec _ _ (eval_expr _ _) _ arm_marks _ _ _` >>
   rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -1241,40 +1250,41 @@ Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
      gas_marked_exec T (ctx,func) (conditional_result cx raw)
        (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK u1) /\
      expr_post H1 ctx func cenv cx (if sel then a else b) (mid with gas_obs := [])
-       se sb (jump_to se.cs_current_bb u) (ee with gas_obs := []) v1 aop u1 /\
+       se sx (jump_to se.cs_current_bb u) (ee with gas_obs := []) v1 aop u1 /\
      read_result cx tv (ee with gas_obs := []) = (INL v1,ee with gas_obs := []) /\
-     vv_store_bound cx t t (ee with gas_obs := []) tv
-       (LocatedValue t (mk_ptr aop LocMemory)) u1 /\
+     vv_store_bound cx (expr_type a) (expr_type a) (ee with gas_obs := []) tv
+       (LocatedValue (expr_type a) (mk_ptr aop LocMemory)) u1 /\
      eval_operand aop u1 = SOME w /\ alloca_inv u1 /\
-     u1.vs_current_bb = sb.cs_current_bb /\
-     u1.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     u1.vs_current_bb = sx.cs_current_bb /\
+     u1.vs_inst_idx = LENGTH sx.cs_current_insts /\
      alloca_history func u1 /\
      (jump_to se.cs_current_bb u).vs_alloca_next <= u1.vs_alloca_next /\
-     vv_at cenv cx t sa sb (ee with gas_obs := []) tv
-       (LocatedValue t (mk_ptr aop LocMemory)) u1 /\
+     vv_at cenv cx (expr_type a) se sx (ee with gas_obs := []) tv
+       (LocatedValue (expr_type a) (mk_ptr aop LocMemory)) u1 /\
      u1.vs_accounts = s.vs_accounts /\ u1.vs_transient = s.vs_transient /\
      u1.vs_requests = s.vs_requests /\ u1.vs_call_ctx = s.vs_call_ctx` by
-    (HZ_TAC `H1` >> HZX_TAC `H1` >>
-     drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`) ifexp_selected_marked_endpoint_mem >>
-     disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     impl_tac >- (simp[] >> conj_tac
+    (HZ_TAC `H1` >> HZX_TAC `H1` >> gvs[] >>
+     drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_selected_marked_endpoint_mem >>
+     disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
+     disch_then (qspecl_then [`arm_marks`, `H1`] mp_tac) >>
+     impl_tac >- (simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> conj_tac
        >- (Cases_on `sel` >> gvs[] >> strip_tac >>
            rename1 `~same_memory_layout cenv (lowered_value_type cenv arm) _` >>
            qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `arm` mp_tac) >>
            metis_tac[ifexp_copy_types]) >>
-       conj_tac >- metis_tac[] >> Cases_on `sel` >> gvs[] >> metis_tac[]) >>
+       conj_tac >- (Cases_on `sel` >> gvs[] >> metis_tac[ifexp_copy_types]) >>
+       Cases_on `sel` >> gvs[] >> metis_tac[]) >>
      strip_tac >>
      `?w. eval_operand aop u' = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
      `alloca_inv u'` by fs[expr_post_def, stmt_state_rel_def] >>
      metis_tac[]) >>
-  pop_assum (qx_choosel_then [`tv`,`v1`,`u1`,`w`] strip_assume_tac) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
      storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
     (rpt strip_tac >> HZX_TAC `H` >> fs[vv_post_def]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      expr_post H ctx func cenv cx (if sel then a else b) (mid with gas_obs := [])
-       se sb (jump_to se.cs_current_bb u) (ee with gas_obs := []) v1 aop u1` by
+       se sx (jump_to se.cs_current_bb u) (ee with gas_obs := []) v1 aop u1` by
     metis_tac[ifexp_arm_post_horizons_mem] >>
   `~u1.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
@@ -1286,19 +1296,27 @@ Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
        (update_var rv w u1 with vs_inst_idx := LENGTH sy.cs_current_insts)))` by
     (irule ifexp_marked_zero_suffix_mem >> goal_assum (drule_at Any) >>
      irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
-  `~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect (if sel then a else b)` by
+  `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
     (Cases_on `sel` >>
      rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
-  `expr_type (if sel then a else b) = t` by (Cases_on `sel` >> simp[]) >>
+  `expr_type (if sel then a else b) = (expr_type a)` by (Cases_on `sel` >> simp[]) >>
   `post_value_type cenv (if sel then a else b) = expr_type (if sel then a else b)` by
     (Cases_on `sel` >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 (ee with gas_obs := []) tv
-       (LocatedValue t (mk_ptr (Var rv) LocMemory))
+     vv_post H ctx func cenv cx (IfExp (expr_type a) c a b) es sa sb s0 (ee with gas_obs := []) tv
+       (if is_word_type (expr_type a) then StackValue (expr_type a) (Var rv)
+        else LocatedValue (expr_type a) (mk_ptr (Var rv) LocMemory))
        (jump_to sb.cs_current_bb
          (update_var rv w u1 with vs_inst_idx := LENGTH sy.cs_current_insts))` by
-    (mp_tac ifexp_root_guarded_post_mem >> simp[] >> disch_then irule >> metis_tac[]) >>
+    (rpt strip_tac >> irule ifexp_root_guarded_post_mem >>
+     conj_tac >- (rpt strip_tac >> gvs[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cop`, `if sel then a else b`, `mid with gas_obs := []`,
+       `se.cs_current_bb`, `aop`, `sc`, `se`, `sx`, `st0`, `u`, `v1`, `BoolV sel`] >>
+     conj_tac
+     >- (qx_gen_tac `H3` >> strip_tac >> HZ_TAC `H3` >> HZ_TAC `H3` >>
+         HZX_TAC `H3` >> gvs[]) >> gvs[]) >>
   `alloca_history func (update_var rv w u1 with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
     (irule assign_history >> metis_tac[]) >>
@@ -1306,18 +1324,18 @@ Resume compile_ifexp_nonword_vv_sim_mem[arm_cont]:
   qexistsl_tac [`tv`, `jump_to sb.cs_current_bb
     (update_var rv w u1 with vs_inst_idx := LENGTH sy.cs_current_insts)`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  BETA_TAC >> qx_gen_tac `H2` >> strip_tac >> qexists_tac `tv` >>
+  BETA_TAC >> qx_gen_tac `H2` >> strip_tac >>
   rpt conj_tac
-  >- REFL_TAC
   >- (qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
         vv_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _` (qspec_then `H2` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >>
       simp[vyperASTTheory.expr_type_def, lowered_value_type_def])
-  >- (irule ifexp_pointer_bound_assign >> metis_tac[])
+  >- (irule ifexp_pointer_bound_assign >> qexists_tac `aop` >>
+      gvs[vyperASTTheory.expr_type_def, lowered_value_type_def])
   >- simp[jump_to_def, update_var_def]
   >- simp[jump_to_def, update_var_def]
   >- first_assum ACCEPT_TAC
-  >- (simp[jump_to_def, update_var_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- (fs[jump_to_def, update_var_def] >> decide_tac)
 QED
 
 Finalise compile_ifexp_nonword_vv_sim_mem
@@ -1429,7 +1447,6 @@ Proof
 QED
 
 Resume compile_ifexp_word_sim_mem[selected]:
-  qpat_x_assum `?H. valid_horizon _ _ H mid.storage_trace` strip_assume_tac >>
   rename1 `valid_horizon cx st0 H0 mid.storage_trace` >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -1465,13 +1482,13 @@ Resume compile_ifexp_word_sim_mem[selected]:
      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next` by
     metis_tac[] >>
   `gas_path_mem ctx func u 0 (OK (jump_to se.cs_current_bb u))` by
-    (HZX_TAC `H0` >> asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >>
-     simp[] >> metis_tac[]) >>
+    (HZX_TAC `H0` >> gvs[] >>
+     drule_all ifexp_jnz_path_mem >> simp[]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by (HZX_TAC `H0` >> metis_tac[]) >>
   irule ifexp_forced_selected_outcome_prefix_mem >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >>
-  qexistsl_tac [`marks`,`u`,`sel`] >> simp[] >>
+  qexistsl_tac [`marks`,`mid`,`sel`] >> simp[] >>
   suspend "forced_entry"
 QED
 
@@ -1524,12 +1541,13 @@ Resume compile_ifexp_word_sim_mem[forced_entry]:
     (Cases_on `sel` >>
      rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
-  qpat_assum `sb.cs_current_insts = []`
-    (fn th => irule (SRULE [th] ifexp_forced_arm_finish_mem)) >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >>
-  simp[] >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  asm_simp_tac (srw_ss()) [expr_store_bound_word, vyperASTTheory.expr_type_def] >>
+  qpat_assum `!H. valid_horizon _ _ H (mid with gas_obs := []).storage_trace ==> _ /\ _`
+    (fn cth => qpat_assum `sb.cs_current_insts = []`
+      (fn sth => irule (SRULE [sth] (MATCH_MP
+        (REWRITE_RULE [GSYM AND_IMP_INTRO] ifexp_forced_arm_finish_mem) cth)))) >>
+  rpt conj_tac >> gvs[jump_to_def] >>
+  qexistsl_tac [`if sel then a else b`, `aop`, `se`, `sx`, `sy`, `sz`] >> gvs[]
 QED
 
 Finalise compile_ifexp_word_sim_mem

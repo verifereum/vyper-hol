@@ -23,7 +23,7 @@ Theorem convert_call_vv_layout[local]:
       type_memory_size ltv
 Proof
   strip_tac >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `vv_post H0 ctx func cenv cx (Call ann (IntCall fid) args drv) es sa sm s0 ee tv vv s` by
     metis_tac[] >>
   Cases_on `read_result cx tv ee` >> rename1 `read_result cx tv ee = (rr,ef)` >>
@@ -81,7 +81,8 @@ Proof
       MATCH_ACCEPT_TAC bodyMemTbConvertComposeTheory.convert_read_continuation_frame)
   >~ [`expr_exit (INR _) _`]
   >- (rpt strip_tac >> TRY BETA_TAC >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      gvs[halt_exit_def]) >>
   qexists_tac `\H tv ee u.
     vv_post H ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type (Call a (IntCall fid) args drv))
@@ -97,20 +98,27 @@ Proof
       (lowered_value_type cenv (Call a (IntCall fid) args drv)) ee tv vv t /\
    t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
-     metis_tac[]) >>
+    metis_tac[] >>
   suspend "continuation"
 QED
 
 Resume call_dynamic_convert_sim_mem[continuation]:
-  drule_all convert_call_vv_layout >> strip_tac >>
-  drule_at (Pat `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    call_dynamic_vv_convert_summary >>
-  disch_then (drule_at (Pat `well_formed_type _ _`)) >>
-  disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
-  disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
-  simp[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]
+  mp_tac (Q.INST [`ann` |-> `a`, `s` |-> `t`] convert_call_vv_layout) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  mp_tac (Q.INST [`e` |-> `Call a (IntCall fid) args drv`]
+            call_dynamic_vv_convert_summary) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  disch_then (qx_choose_then `res` (qx_choose_then `es_end`
+    (qx_choose_then `out` strip_assume_tac))) >>
+  `res <> INR HaltException` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     gvs[convert_result_def, AllCaseEqs()] >>
+     metis_tac[evalNoHaltTheory.read_result_no_halt]) >>
+  qexistsl_tac [`res`, `es_end`, `out`] >>
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 Finalise call_dynamic_convert_sim_mem
@@ -204,13 +212,13 @@ Proof
       (lowered_value_type cenv (Call a (IntCall fid) args drv)) ee tv vv t /\
    t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
-     metis_tac[]) >>
+    metis_tac[] >>
   suspend "continuation"
 QED
 
 Resume call_bytestring_convert_outcome[continuation]:
-  drule_all convert_call_vv_layout >> strip_tac >>
+  mp_tac (Q.INST [`ann` |-> `a`, `s` |-> `t`] convert_call_vv_layout) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `type_memory_bytes cenv ann < dimword (:256)` by
     (`~is_word_type ann` by gvs[bytestring_type_cases, is_word_type_def] >>
      `alloc_limits_expr cenv (TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv])` by
@@ -229,17 +237,18 @@ Resume call_bytestring_convert_outcome[continuation]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es s0` by
     (rpt strip_tac >>
+     rename1 `stmt_state_rel H1 ctx func cenv cx es s0` >>
      `storage_trace_frame (eval_expr cx (Call a (IntCall fid) args drv))` by
        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-     `valid_horizon cx st0 H es.storage_trace` by
-       (drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+     `valid_horizon cx st0 H1 es.storage_trace` by
+       (qpat_assum `eval_expr cx (Call a (IntCall fid) args drv)
+          (es with gas_obs := gs) = (INL tv,ee)`
+          (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[] >> disch_then irule >> first_assum ACCEPT_TAC) >>
      metis_tac[]) >>
-  drule_at (Pat `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    call_bytestring_vv_convert_summary >>
-  disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
-  disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
-  disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
+  mp_tac (Q.INST [`e` |-> `Call a (IntCall fid) args drv`]
+            call_bytestring_vv_convert_summary) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]
 QED
 
@@ -253,13 +262,30 @@ Theorem call_bytestring_convert_sim_mem[local]:
 Proof
   strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   rw[expr_sim_mem_def] >>
-  drule_at (Pat `lower_value _ _ _ _ _ = _`) call_bytestring_convert_outcome >>
-  disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
-  disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> _`)) >>
-  simp[] >> strip_tac >>
-  irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> simp[vyperASTTheory.expr_type_def] >>
-  metis_tac[bytestring_convert_capacity_posts]
+  mp_tac (Q.INST [`e` |-> `Call a (IntCall fid) args drv`]
+            call_bytestring_convert_outcome) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  `!st st'. eval_expr cx (TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]) st <>
+       (INR HaltException,st')` by
+    (rpt gen_tac >> irule eval_expr_calls_no_halt >> fs[expr_body_pre_def]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rw[gas_outcome_def] >> qexists_tac `marks`
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_summary_at_def, gas_marked_exec_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `es_end`
+        (qx_choose_then `out` strip_assume_tac))) >>
+      `res <> INR HaltException` by
+        (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+         qpat_assum `!st st'. eval_expr _ _ st <> _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+         metis_tac[evalNoHaltTheory.read_result_no_halt]) >>
+      qexistsl_tac [`res`, `es_end`, `out`] >>
+      gvs[halt_exit_def, vyperASTTheory.expr_type_def] >>
+      metis_tac[bytestring_convert_capacity_posts]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem call_bytestring_convert_vv_sim_mem[local]:
@@ -278,9 +304,27 @@ Proof
     (irule exprSimStackTheory.eval_expr_force_admissible >>
      simp[] >> metis_tac[eval_expr_type_builtin_value]) >>
   simp[vyperASTTheory.expr_type_def, lowered_value_type_def] >>
-  irule bytestring_convert_stack_outcome >>
-  conj_tac >- metis_tac[] >>
-  irule call_bytestring_convert_outcome >> simp[] >> metis_tac[]
+  mp_tac (Q.INST [`e` |-> `Call a (IntCall fid) args drv`]
+            bytestring_convert_stack_outcome) >>
+  (impl_tac >- (conj_tac >- metis_tac[] >>
+               irule call_bytestring_convert_outcome >> simp[] >> metis_tac[])) >>
+  strip_tac >>
+  `!st st'. eval_expr cx (TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]) st <>
+       (INR HaltException,st')` by
+    (rpt gen_tac >> irule eval_expr_calls_no_halt >> fs[expr_body_pre_def]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rw[gas_outcome_def] >> qexists_tac `marks`
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_summary_at_def, gas_marked_exec_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `es_end`
+        (qx_choose_then `out` strip_assume_tac))) >>
+      `res <> INR HaltException` by
+        (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+         metis_tac[]) >>
+      qexistsl_tac [`res`, `es_end`, `out`] >> gvs[halt_exit_def] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem call_bytestring_convert_mem:

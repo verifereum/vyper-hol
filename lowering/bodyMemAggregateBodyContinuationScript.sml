@@ -8,7 +8,7 @@ Ancestors
   vyperInterpreter vyperState fragGasPathMem
 
 (* A layout-equal tuple is stored by a bulk copy of its whole window. *)
-Theorem aggregate_layout_copy_path_mem[local]:
+Theorem aggregate_layout_copy_path_mem:
   compile_copy_memory dst src (type_memory_size tv) sa = ((),sb) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
   type_memory_size tv < dimword (:256) /\
