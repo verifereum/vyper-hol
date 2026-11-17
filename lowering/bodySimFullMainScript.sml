@@ -12,92 +12,149 @@
 Theory bodySimFullMain
 Ancestors
   bodyFullCases bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
-  vyperAST vyperInterpreter vyperState vyperTypeCallGraph list
+  vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
 
 val _ = Parse.hide "body";
 
 val body_ind = evaluate_ind
-  |> Q.SPECL [`body_stmt_full_ok`, `body_stmts_full_ok`, `body_iterator_full_ok`,
-              `body_for_full_ok`, `body_expr_full_ok`, `body_exprs_full_ok`,
-              `body_base_target_full_ok`, `body_base_target_full_ok`,
-              `body_tuple_target_full_ok`, `body_tuple_targets_full_ok`,
-              `body_results_full_ok`];
+  |> Q.SPECL [
+       `\cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_stmt_full_ok cx s`,
+       `\cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_stmts_full_ok cx ss`,
+       `\cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_iterator_full_ok cx it`,
+       `\cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_for_full_ok cx tyv nm body vs`,
+       `\cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_expr_full_ok cx e`,
+       `\cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_exprs_full_ok cx es`,
+       `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_base_target_full_ok cx t`,
+       `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_base_target_full_ok cx t`,
+       `\cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_tuple_target_full_ok cx g v`,
+       `\cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_tuple_targets_full_ok cx gs vs`,
+       `\cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+          body_results_full_ok cx es`]
+  |> CONV_RULE (DEPTH_CONV BETA_CONV);
+
+fun full_case th =
+  rpt strip_tac >> fs[push_function_def, return_def] >>
+  irule (SIMP_RULE (srw_ss()) [push_function_def, return_def] th) >>
+  asm_rewrite_tac[];
 
 Theorem body_sim_full_mutual:
-  (!cx s. body_stmt_full_ok cx s) /\ (!cx ss. body_stmts_full_ok cx ss) /\
-  (!cx it. body_iterator_full_ok cx it) /\
-  (!cx tyv nm body vs. body_for_full_ok cx tyv nm body vs) /\
-  (!cx e. body_expr_full_ok cx e) /\ (!cx es. body_exprs_full_ok cx es) /\
-  (!cx t. body_base_target_full_ok cx t) /\
-  (!cx g v. body_tuple_target_full_ok cx g v) /\
-  (!cx gs vs. body_tuple_targets_full_ok cx gs vs) /\
-  (!cx es. body_results_full_ok cx es)
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_tuple_targets_full_ok cx gs vs) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_results_full_ok cx es)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
-    (* 0 *) MATCH_ACCEPT_TAC body_pass_case_full,
-    (* 1 *) MATCH_ACCEPT_TAC body_continue_case_full,
-    (* 2 *) MATCH_ACCEPT_TAC body_break_case_full,
-    (* 3 *) MATCH_ACCEPT_TAC body_return_none_case_full,
-    (* 4 *) MATCH_ACCEPT_TAC body_return_case_full,
-    (* 5 *) MATCH_ACCEPT_TAC body_raise_bare_case_full,
-    (* 6 *) MATCH_ACCEPT_TAC body_raise_unreachable_case_full,
-    (* 7 *) MATCH_ACCEPT_TAC body_raise_reason_case_full,
-    (* 8 *) rw[body_stmt_full_ok_def, supported_stmt_def, supported_raise_reason_def],
-    (* 9 *) MATCH_ACCEPT_TAC body_assert_case_full,
-    (* 10 *) MATCH_ACCEPT_TAC body_assert_unreachable_case_full,
-    (* 11 *) MATCH_ACCEPT_TAC body_assert_reason_case_full,
-    (* 12 *) rw[body_stmt_full_ok_def, supported_stmt_def, supported_assert_reason_def],
-    (* 13 *) MATCH_ACCEPT_TAC body_log_case_full,
-    (* 14 *) MATCH_ACCEPT_TAC body_annassign_case_full,
-    (* 15 *) MATCH_ACCEPT_TAC body_append_case_full,
-    (* 16 *) MATCH_ACCEPT_TAC body_assign_case_full,
-    (* 17 *) MATCH_ACCEPT_TAC body_assign_tuple_case_full,
-    (* 18 *) MATCH_ACCEPT_TAC body_augassign_case_full,
-    (* 19 *) MATCH_ACCEPT_TAC body_if_case_full,
-    (* 20 *) MATCH_ACCEPT_TAC body_for_case_full,
-    (* 21 *) MATCH_ACCEPT_TAC body_expr_stmt_case_full,
-    (* 22 *) MATCH_ACCEPT_TAC body_stmts_nil_case_full,
-    (* 23 *) MATCH_ACCEPT_TAC body_stmts_cons_case_full,
+    (* 0 *) full_case body_pass_case_full,
+    (* 1 *) full_case body_continue_case_full,
+    (* 2 *) full_case body_break_case_full,
+    (* 3 *) full_case body_return_none_case_full,
+    (* 4 *) full_case body_return_case_full,
+    (* 5 *) full_case body_raise_bare_case_full,
+    (* 6 *) full_case body_raise_unreachable_case_full,
+    (* 7 *) full_case body_raise_reason_case_full,
+    (* 8 *) rpt strip_tac >> rw[body_stmt_full_ok_def, supported_stmt_def, supported_raise_reason_def],
+    (* 9 *) full_case body_assert_case_full,
+    (* 10 *) full_case body_assert_unreachable_case_full,
+    (* 11 *) full_case body_assert_reason_case_full,
+    (* 12 *) rpt strip_tac >> rw[body_stmt_full_ok_def, supported_stmt_def, supported_assert_reason_def],
+    (* 13 *) full_case body_log_case_full,
+    (* 14 *) full_case body_annassign_case_full,
+    (* 15 *) full_case body_append_case_full,
+    (* 16 *) full_case body_assign_case_full,
+    (* 17 *) full_case body_assign_tuple_case_full,
+    (* 18 *) full_case body_augassign_case_full,
+    (* 19 *) full_case body_if_case_full,
+    (* 20 *) full_case body_for_case_full,
+    (* 21 *) full_case body_expr_stmt_case_full,
+    (* 22 *) full_case body_stmts_nil_case_full,
+    (* 23 *) full_case body_stmts_cons_case_full,
     (* 24 *) simp[body_iterator_full_ok_def],
-    (* 25 *) rw[body_iterator_full_ok_def] >> metis_tac[],
+    (* 25 *) rpt strip_tac >> fs[] >> rw[body_iterator_full_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_full_ok_def],
-    (* 27 *) rw[body_for_full_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
+    (* 27 *) rpt strip_tac >> fs[] >> rw[body_for_full_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
     (* 29 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
     (* 30 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 31 *) MATCH_ACCEPT_TAC body_ifexp_case_full,
+    (* 31 *) full_case body_ifexp_case_full,
     (* 32 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_full,
-    (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_full,
-    (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_full,
-    (* 36 *) MATCH_ACCEPT_TAC body_builtin_case_full,
-    (* 37 *) MATCH_ACCEPT_TAC body_pop_case_full,
-    (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_full,
-    (* 39 *) MATCH_ACCEPT_TAC body_send_case_full,
-    (* 40 *) MATCH_ACCEPT_TAC body_extcall_case_full,
-    (* 41 *) MATCH_ACCEPT_TAC body_intcall_case_full,
-    (* 42 *) MATCH_ACCEPT_TAC body_raw_call_case_full,
-    (* 43 *) MATCH_ACCEPT_TAC body_raw_call_calldata_case_full,
-    (* 44 *) MATCH_ACCEPT_TAC body_raw_log_case_full,
-    (* 45 *) MATCH_ACCEPT_TAC body_raw_revert_case_full,
-    (* 46 *) MATCH_ACCEPT_TAC body_selfdestruct_case_full,
-    (* 47 *) MATCH_ACCEPT_TAC body_create_case_full,
+    (* 33 *) full_case body_structlit_case_full,
+    (* 34 *) full_case body_subscript_case_full,
+    (* 35 *) full_case body_attribute_case_full,
+    (* 36 *) full_case body_builtin_case_full,
+    (* 37 *) full_case body_pop_case_full,
+    (* 38 *) full_case body_type_builtin_case_full,
+    (* 39 *) full_case body_send_case_full,
+    (* 40 *) full_case body_extcall_case_full,
+    (* 41 *) full_case body_intcall_case_full,
+    (* 42 *) full_case body_raw_call_case_full,
+    (* 43 *) full_case body_raw_call_calldata_case_full,
+    (* 44 *) full_case body_raw_log_case_full,
+    (* 45 *) full_case body_raw_revert_case_full,
+    (* 46 *) full_case body_selfdestruct_case_full,
+    (* 47 *) full_case body_create_case_full,
     (* 48 *) simp[body_exprs_full_ok_def],
-    (* 49 *) rw[body_exprs_full_ok_def] >> metis_tac[],
+    (* 49 *) rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_full_ok_def],
     (* 51 *) simp[body_base_target_full_ok_def],
     (* 52 *) simp[body_base_target_full_ok_def],
-    (* 53 *) rw[body_base_target_full_ok_def] >> metis_tac[],
+    (* 53 *) rpt strip_tac >> fs[] >> rw[body_base_target_full_ok_def] >> metis_tac[],
     (* 54 *) simp[],
     (* 55 *) simp[body_tuple_target_full_ok_def],
     (* 56 *) simp[body_tuple_target_full_ok_def],
     (* 57 *) simp[body_tuple_target_full_ok_def],
-    (* 58 *) rw[body_tuple_target_full_ok_def] >> metis_tac[],
+    (* 58 *) rpt strip_tac >> fs[] >> rw[body_tuple_target_full_ok_def] >> metis_tac[],
     (* 59 *) simp[body_tuple_target_full_ok_def],
     (* 60 *) simp[body_tuple_target_full_ok_def],
     (* 61 *) simp[body_results_full_ok_def],
-    (* 62 *) rw[body_results_full_ok_def] >> metis_tac[]
+    (* 62 *) rpt strip_tac >> fs[] >> rw[body_results_full_ok_def] >> metis_tac[]
   ]) >>
   simp[]
 QED
@@ -105,7 +162,8 @@ QED
 Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+    body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>
        occurs_abi_decode_target target tops) /\
@@ -122,5 +180,8 @@ Theorem body_stmts_sim_full:
       (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
       (eval_stmts cx ss) es
 Proof
+  rpt strip_tac >>
+  `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+        struct_args_unique ts` by (fs[body_inv_def] >> metis_tac[]) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED

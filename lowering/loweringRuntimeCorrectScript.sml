@@ -39,7 +39,7 @@ Ancestors
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
   fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
-  acceptedContextPhi vyperLoweringCorrect
+  acceptedContextPhi vyperLoweringCorrect typedCopyProducer
 
 val _ = Parse.hide "body";
 
@@ -467,6 +467,9 @@ Proof
     metis_tac[entry_runtime_no_dalloca] >>
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]) >>
+  `struct_args_unique tops` by
+    (fs[source_typing_ok_def] >>
+     metis_tac[checked_contract_struct_args_unique]) >>
   (* the body *)
   drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
   disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
