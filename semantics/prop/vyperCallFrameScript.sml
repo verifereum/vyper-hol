@@ -9,6 +9,64 @@ Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
 
+Theorem eval_ext_call_success_value:
+  eval_ext_call cx static skip sigt opts vs st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  PairCases_on `sigt` >> Cases_on `vs` >>
+  simp[eval_ext_call_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply,
+       lift_option_type_def, type_check_def, check_def, assert_def,
+       return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  Cases_on `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  gvs[bind_apply, ignore_bind_apply, lift_sum_runtime_def,
+      return_def, raise_def, get_accounts_def, check_def, assert_def,
+      AllCaseEqs()] >>
+  Cases_on `if returnData = [] then
+    ext_call_kwarg EKDefault opts (DROP (LENGTH sigt1) t) else NONE` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def,
+      get_accounts_def, assert_def, AllCaseEqs()] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv ca) sigt2 returnData` >>
+  gvs[bind_apply, return_def, raise_def]
+QED
+
+Theorem eval_send_success_value:
+  eval_send cx has_gas vs st = (INL pv,st') ==> ?v. pv = Value v
+Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
+  simp[eval_send_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply, type_check_def,
+       check_def, assert_def, return_def, raise_def, lift_option_type_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `st.outcomes` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def, AllCaseEqs(),
+      get_accounts_def, get_transient_storage_def, lift_option_def,
+      bind_def, ignore_bind_def, check_def, assert_def] >>
+  rpt strip_tac >> gvs[] >>
+  (* static frame: the outcomes case is on the post-check state *)
+  TRY (qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
+       simp[bind_apply, ignore_bind_apply, return_def, raise_def,
+            AllCaseEqs(), get_accounts_def, get_transient_storage_def,
+            lift_option_def, bind_def, ignore_bind_def, check_def,
+            assert_def] >>
+       rpt strip_tac >> gvs[]) >>
+  pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
+                       return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem eval_raw_call_success_value:
+  eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  (* Only the final return builds pv: keep the call steps folded. *)
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def, raise_def,
+       COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+  rw[] >> gvs[]
+QED
+
 Theorem concrete_extcall_tail:
   (do
     check success msg;

@@ -690,7 +690,17 @@ Resume assign_place_pure_continuation[static_normalize]:
       (irule assignPlaceLayoutTheory.widening_source_memory_size_pos >> metis_tac[]) >>
     `val_footprint stv v = type_memory_size stv` by
       (irule annassignRelayoutSourceTheory.nonbytes_evaluated_val_footprint >> metis_tac[]) >>
-    gvs[arithmeticTheory.ADD_COMM, exprSimHypsDefsTheory.expr_sim_inv_def] >>
+    qpat_assum `expr_sim_inv cenv cx env mid'`
+      (fn th => map_every mp_tac (map (fn n => cj n
+        (PURE_REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def] th)) [12,13])) >>
+    qpat_assum `evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` mp_tac >>
+    qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv` mp_tac >>
+    qpat_assum `lowered_value_type cenv e = expr_type e` mp_tac >>
+    qpat_assum `~is_word_type (lowered_value_type cenv e)` mp_tac >>
+    qpat_assum `val_footprint stv v = type_memory_size stv` mp_tac >>
+    qpat_assum `0 < type_memory_size stv` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+    gvs[arithmeticTheory.ADD_COMM] >>
     metis_tac[])) >>
   disch_then (qx_choosel_then [`norm`, `nw`] strip_assume_tac) >>
   `stmt_state_rel H1 ctx func cenv cx (mid' with gas_obs := []) norm` by

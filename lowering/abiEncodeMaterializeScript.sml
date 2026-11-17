@@ -124,6 +124,9 @@ Proof
     (irule exprSimVVFrameTheory.vv_holds_vars_frame >> qexists_tac `s` >> simp[]) >>
   `vv_at cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
     (irule materialize_vv_at_alloc_frame >> qexistsl [`s`, `sm`] >> simp[]) >>
+  `vv_place_ptr cenv cx es' t tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `locals_kept cenv es es' s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
   `post_value_type cenv e <> expr_type e ==>
@@ -305,16 +308,6 @@ Proof
        comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem materialize_expr_post_inst_idx[local]:
-  expr_post H ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
-  expr_post H ctx func ce cx e es sa sb s0 es' v op s
-Proof
-  simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
-       expr_val_rel_def, expr_val_at_def, expr_val_own_def,
-       venomStateTheory.lookup_var_def,
-       local_region_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem materialize_rebase_post:

@@ -51,12 +51,17 @@ Theorem ld_mcopy_effect:
   eval_operand n f.lf_tgt = SOME len /\
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
   EVERY (ld_maps A) frames /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
   ((w2n dst+w2n len <= lo /\ dst'=dst) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+w2n len <= sz)) /\
+     w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+w2n len <= sz) \/
+   (dst'=dst /\ fl <= w2n dst)) /\
   ((w2n src+w2n len <= lo /\ src'=src) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n src=b+delta /\ w2n src'=c+delta /\ delta+w2n len <= sz)) /\
+     w2n src=b+delta /\ w2n src'=c+delta /\ delta+w2n len <= sz) \/
+   (src'=src /\ fl <= w2n src /\ w2n src + w2n len < dimword (:256))) /\
   step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -64,6 +69,8 @@ Theorem ld_mcopy_effect:
       lf_tv := (step_taint inst f.lf_src ss tn).t_var |> ) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q)
       (ld_erase A o_f f.lf_H) inst ss = ld_erase A o_f f.lf_H /\
     ss.vs_allocas = f.lf_src.vs_allocas /\
@@ -98,29 +105,70 @@ Proof
     EL j (read_memory (w2n src) (w2n len) f.lf_src) =
     EL j (read_memory (w2n src') (w2n len) f.lf_tgt)` by
     (rpt strip_tac >> asm_rewrite_tac[] >> FIRST [
+       (qpat_assum `fl <= w2n src` kall_tac >>
+        irule ld_dyn_read_masked >> metis_tac[]),
        (qpat_assum `w2n src + w2n len <= lo` kall_tac >>
         irule ld_memory_read_low_masked >>
         metis_tac[]),
        (irule ld_memory_read_slot_masked >> conj_tac >- simp[] >>
         goal_assum (drule_at Any) >>
         metis_tac[])]) >>
-  qexists_tac `mcopy (w2n dst) (w2n src) (w2n len) f.lf_src` >> gvs[] >>
-  (conj_tac >- gvs[ld_vars_def, mcopy_def, write_memory_with_expansion_def] >>
-   conj_tac >- (
-     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >>
+  qabbrev_tac `M = {j | j < w2n len /\ w2n src+j IN tn.t_mem}` >>
+  `{w2n dst+j | j < w2n len /\ w2n src+j IN tn.t_mem} =
+   {w2n dst+j | j < w2n len /\ j IN M}` by simp[Abbr `M`, SF CONJ_ss] >>
+  `!j. j < w2n len /\ j NOTIN M ==>
+    EL j (read_memory (w2n src) (w2n len) f.lf_src) =
+    EL j (read_memory (w2n src') (w2n len) f.lf_tgt)` by
+    (rpt strip_tac >>
+     qpat_assum `!j. j < w2n len /\ w2n src+j NOTIN tn.t_mem ==> _` irule >>
+     qpat_x_assum `j NOTIN M` mp_tac >> fs[Abbr `M`]) >>
+  `ld_dyn_agree fl
+     ((tn.t_mem DIFF {w2n dst+j | j < w2n len}) UNION
+       {w2n dst+j | j < w2n len /\ j IN M})
+     (mcopy (w2n dst) (w2n src) (w2n len) f.lf_src).vs_memory
+     (mcopy (w2n dst') (w2n src') (w2n len) f.lf_tgt).vs_memory` by
+    (pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >>
+     BETA_TAC >> irule ld_dyn_agree_write >>
+     qexistsl_tac [`M`, `w2n len`, `tn`] >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC,
+       (qpat_assum `fl <= w2n dst` kall_tac >> disj2_tac >> disj1_tac >>
+        conj_tac >- (qpat_x_assum `dst' = dst` (fn th => rewrite_tac[th])) >>
+        first_assum ACCEPT_TAC),
+       (disj2_tac >> disj2_tac >> res_tac >> decide_tac)]) >>
+  `ld_memory lo A
+     (tn with t_mem := (tn.t_mem DIFF {w2n dst+j | j < w2n len}) UNION
+       {w2n dst+j | j < w2n len /\ j IN M})
+     (mcopy (w2n dst) (w2n src) (w2n len) f.lf_src)
+     (mcopy (w2n dst') (w2n src') (w2n len) f.lf_tgt)` by
+    (pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >>
      BETA_TAC >>
      FIRST [
+       (qpat_assum `fl <= w2n dst` kall_tac >>
+        qpat_x_assum `dst' = dst` SUBST_ALL_TAC >>
+        irule ld_memory_write_high >> rpt conj_tac >>
+        FIRST [qexistsl_tac [`M`, `w2n len`, `tn`] >> simp[] >> NO_TAC,
+               decide_tac,
+               rpt strip_tac >> res_tac >> decide_tac]),
        (qpat_assum `w2n dst + w2n len <= lo` kall_tac >>
-        irule ld_memory_write_low),
-       irule ld_memory_write_slot] >>
-     conj_tac >- metis_tac[ld_alloc_bounds] >>
-     FIRST [
-       (qpat_assum `w2n dst + w2n len <= lo` kall_tac >>
-        qexistsl_tac [`{j | j < w2n len /\ w2n src+j IN tn.t_mem}`, `w2n len`, `tn`]),
-       qexistsl_tac [`{j | j < w2n len /\ w2n src+j IN tn.t_mem}`, `k`, `w2n len`, `sz`, `tn`]] >>
-     pure_rewrite_tac[ADD_ASSOC] >> simp[SF CONJ_ss] >> asm_rewrite_tac[] >>
-     rpt strip_tac >> metis_tac[ld_alloc_separate]) >>
-   conj_tac >- gvs[ld_nonghost_def, mcopy_def, write_memory_with_expansion_def] >>
-   simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mcopy_def,
-        write_memory_with_expansion_def])
+        qpat_x_assum `dst' = dst` SUBST_ALL_TAC >>
+        irule ld_memory_write_low >>
+        conj_tac >- metis_tac[ld_alloc_bounds] >>
+        qexistsl_tac [`M`, `w2n len`, `tn`] >>
+        rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC]),
+       (qpat_x_assum `w2n dst = _` (fn th => rewrite_tac[th]) >>
+        qpat_x_assum `w2n dst' = _` (fn th => rewrite_tac[th]) >>
+        irule ld_memory_write_slot >>
+        conj_tac >- metis_tac[ld_alloc_bounds] >>
+        qexistsl_tac [`M`, `k`, `w2n len`, `sz`, `tn`] >>
+        rpt conj_tac >>
+        FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC,
+               rpt strip_tac >> metis_tac[ld_alloc_separate]])]) >>
+  qexists_tac `mcopy (w2n dst) (w2n src) (w2n len) f.lf_src` >> gvs[] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+         gvs[ld_vars_def, mcopy_def, write_memory_with_expansion_def] >> NO_TAC,
+         gvs[ld_nonghost_def, mcopy_def, write_memory_with_expansion_def] >> NO_TAC,
+         simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mcopy_def,
+              write_memory_with_expansion_def]]
 QED

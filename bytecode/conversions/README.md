@@ -10,10 +10,10 @@ the HOL compiler's output (`../native/README.md`).
 literal controls, which the HOL checker accepts. `typecheck-rejected/` holds 12
 controls that the pinned Vyper's type checker rejects (`_convert_rules.py`), so
 their annotated AST/layout JSON comes from Vyper `9362e36b`, the last pin that
-accepted them: the ten conversions outside Vyper's input sets or inconsistent in
-width must fail the HOL checker, while the two conversions where HOL lowering
-and source semantics agree are still accepted by it. `compilerLoweringTestTheory`
-(`tests/`) checks these verdicts on the exported ASTs in both modes.
+accepted them: the HOL checker must reject all of them (the ten conversions
+outside Vyper's input sets or inconsistent in width, and the two signed
+int-to-address conversions). `compilerLoweringTestTheory` (`tests/`) checks
+these verdicts on the exported ASTs in both modes.
 
 CI reproduces both sets of independent inputs
 with pinned Vyper, experimental codegen, Prague, `-O none`, and no metadata.

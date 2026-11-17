@@ -86,7 +86,8 @@ QED
 
 Theorem middle_fmp_step[local]:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\ EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
+  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
+  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   label_flow_ok (ctx with ctx_functions := [f]) /\ middle_code_end_lifetime f ==>
   label_flow_ok (ctx with ctx_functions := [out.fpo_function]) /\
   middle_code_end_lifetime out.fpo_function
@@ -167,6 +168,7 @@ QED
 Theorem middle_fmp_stage:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering) view C C' /\
   EVERY (o1_fn_row 3) C.ctx_functions /\
+  EVERY no_raw_fmp_ops C.ctx_functions /\
   (!f observed. MEM f C.ctx_functions /\ view C' f observed ==>
     EVERY fmp_sig_no_param observed.cu_context.ctx_functions) /\
   label_flow_ok C /\ EVERY middle_code_end_lifetime C.ctx_functions ==>
@@ -183,6 +185,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> fs[] >>
       `o1_fn_row 3 f` by fs[EVERY_MEM] >>
+      `no_raw_fmp_ops f` by fs[EVERY_MEM] >>
       `EVERY fmp_sig_no_param observed.cu_context.ctx_functions` by metis_tac[] >>
       drule_all middle_fmp_step >> simp[]) >>
   fs[EVERY_CONJ, GSYM middle_flow_functions]
@@ -218,6 +221,7 @@ Theorem middle_interval_label_flow_ok:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering) vf C2 C3 /\
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) vs C3 C4 /\
   EVERY (o1_fn_row 3) C2.ctx_functions /\
+  EVERY no_raw_fmp_ops C2.ctx_functions /\
   (!f observed. MEM f C2.ctx_functions /\ vf C3 f observed ==>
     EVERY fmp_sig_no_param observed.cu_context.ctx_functions) /\
   o1_ctx_shape C3 /\ EVERY (o1_fn_row 4) C3.ctx_functions /\

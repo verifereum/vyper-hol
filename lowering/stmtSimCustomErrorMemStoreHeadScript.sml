@@ -1,6 +1,7 @@
 (* Memory-checked boundaries for the custom-error argument head. *)
 Theory stmtSimCustomErrorMemStoreHead
 Ancestors
+  bodySimStmtFacts
   stmtSimCustomErrorMemUnwrap stmtSimCustomErrorMemTypedCopy
   exprSimAggregateBodyCounted exprSimAggregateChildren exprSimMemUnwrap
   exprSimMemDefs exprSimHyps exprSimHypsDefs exprSimProps exprLoweringProps

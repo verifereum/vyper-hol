@@ -72,6 +72,16 @@ Proof
   MATCH_ACCEPT_TAC run_defs_ind
 QED
 
+val ldRequestStaticSubst = [``o1_run_state_ok vs`` |->
+  ``(o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs)``];
+val ldRequestIndStatic = Term.subst ldRequestStaticSubst ldRequestInd;
+
+Theorem ld_request_runner_induction_static:
+  ^ldRequestIndStatic
+Proof
+  MATCH_ACCEPT_TAC run_defs_ind
+QED
+
 Theorem ld_request_runner_packet_terminates:
   ^ldRequestPacket stk PG fn a U HP ts A0 r r' ==> terminates r'
 Proof

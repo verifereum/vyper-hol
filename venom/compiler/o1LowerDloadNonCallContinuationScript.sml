@@ -10,11 +10,11 @@ Ancestors
   contextCodegenRel venomInst venomExecProps irSupply list finite_map gasEvents
   ctxLookupAgreeHelpers
 
-Theorem ld_joint_singleton_continue[local]:
+Theorem ld_joint_singleton_continue_static[local]:
   !bb.
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo ncut C vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ o1_safe_upto D lo ncut C vs /\
   callee_first names C.ctx_functions /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -82,7 +82,7 @@ Proof
          qexistsl_tac [`next`,`t1`,`B`,`sites`] >> simp[])
      >> `~MEM inst.inst_opcode [INVOKE; DLOAD; DLOADBYTES; ALLOCA]` by simp[] >>
      drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-       ld_joint_ordinary_next >>
+       ld_joint_ordinary_next_static >>
      simp[] >> disch_then drule_all >> strip_tac >> metis_tac[]) >>
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
   drule_all ld_joint_unchanged_fetch >> strip_tac >>
@@ -103,10 +103,10 @@ Proof
   simp[gas_events_step_def]
 QED
 
-Theorem ld_joint_noncall_continue:
+Theorem ld_joint_noncall_continue_static:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo ncut C vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ o1_safe_upto D lo ncut C vs /\
   callee_first names C.ctx_functions /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -138,7 +138,7 @@ Proof
   `wf_function fn /\ fn_inst_wf fn` by
     (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DLOAD`
-  >- (drule_all ld_joint_dload_next >> strip_tac >>
+  >- (drule_all ld_joint_dload_next_static >> strip_tac >>
       `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
         (irule ld_joint_generated_slice >> simp[] >> metis_tac[]) >>
       `!m. exec_block m C' bb' t =
@@ -167,7 +167,7 @@ Proof
       qexistsl_tac [`inst2`,`t4 with vs_inst_idx := t.vs_inst_idx+4`,
                     `fn'`,`bb'`,`B`,`sites`,`X1`] >> simp[gas_events_step_def]) >>
   Cases_on `inst.inst_opcode = DLOADBYTES`
-  >- (drule_all ld_joint_dloadbytes_next >> strip_tac >>
+  >- (drule_all ld_joint_dloadbytes_next_static >> strip_tac >>
       `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
         (irule ld_joint_generated_slice >> simp[] >> metis_tac[]) >>
       `!m. exec_block m C' bb' t =
@@ -192,6 +192,33 @@ Proof
          fs[Once frame_reachable_cases] >> metis_tac[]) >>
       qexistsl_tac [`inst2`,`t3 with vs_inst_idx := t.vs_inst_idx+2`,
                     `fn'`,`bb'`,`B`,`sites`,`X`] >> simp[gas_events_step_def]) >>
-  drule_all ld_joint_singleton_continue >> metis_tac[]
+  drule_all ld_joint_singleton_continue_static >> metis_tac[]
 QED
 
+
+Theorem ld_joint_noncall_continue:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo ncut C vs /\
+  callee_first names C.ctx_functions /\ gas_cut ncut vs s /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME inst) /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  ~in_revert_forward fn s /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 tnext fn' bb' B1 sites1 X1.
+    active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    (!m. exec_block m C' bb' t = exec_block m C' bb' tnext) /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) tnext
+      n a U B1 HP (occurrence_step a HP H inst s1) sites1 X1 ts /\
+    (!m. gas_events_block m C' fn'.fn_name bb' t =
+         gas_events_step fuel C fn.fn_name inst s ++
+         gas_events_block m C' fn'.fn_name bb' tnext)
+Proof
+  rpt gen_tac >> strip_tac >> irule ld_joint_noncall_continue_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
