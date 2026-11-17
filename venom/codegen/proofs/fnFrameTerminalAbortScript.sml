@@ -873,8 +873,8 @@ Resume gen_inst_ext_fault_frame_sim[exhausted_call]:
     gvs[MEM, venom_to_evm_name_def, inst_wf_def] >>
   `mid.as_outcomes = []` by fs[venom_asm_rel_def, frame_view_def] >>
   irule terminal_exhausted_call_fault_step >> simp[] >>
-  qexistsl_tac [`vals`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`] >>
-  gvs[APPEND_ASSOC]
+  qexistsl_tac [`name`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`, `vals`] >>
+  gvs[MEM, APPEND_ASSOC]
 QED
 
 Resume gen_inst_ext_fault_frame_sim[create]:
