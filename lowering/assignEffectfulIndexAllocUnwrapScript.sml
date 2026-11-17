@@ -7,19 +7,6 @@ Ancestors
   exprSimVVFrame freshWrites loweringStateRelDefs
   exprSafeOperand valueEncoding
 
-Theorem assign_effectful_alloc_world[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
-Proof
-  simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >>
-  gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-      step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
-QED
 
 (* Allocation transports the original post; the physical retag is used only
    by the subsequent unwrap, not to change that post's semantic type. *)
@@ -56,7 +43,7 @@ Proof
   `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
-  drule_all assign_effectful_alloc_world >> strip_tac >>
+  drule_all compile_alloc_buffer_world >> strip_tac >>
   `contract_storage t = contract_storage s /\
    contract_transient t = contract_transient s` by
     metis_tac[alloc_buffer_storage] >>

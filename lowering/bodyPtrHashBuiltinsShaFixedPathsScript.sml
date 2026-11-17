@@ -37,7 +37,11 @@ Theorem hash_sha256_bytesm_abort_path:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -80,8 +84,12 @@ Resume hash_sha256_bytesm_abort_path[call]:
        b <= w2n w /\ w2n w+w2n (n2w m:bytes32) <= b+k))` assume_tac >-
     (disj2_tac >> disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n w`, `32`] >> simp[]) >>
   `!i. w2n w <= i /\ i < w2n w+w2n (n2w m:bytes32) ==> i NOTIN tn2.t_mem` by simp[] >>
+  `tn2.t_stor SUBSET D.d_stor a.vs_call_ctx.cc_address
+      (a.vs_accounts a.vs_call_ctx.cc_address).storage /\
+   tn2.t_trans SUBSET D.d_trans a.vs_call_ctx.cc_address
+      (a.vs_transient a.vs_call_ctx.cc_address)` by gvs[] >>
   drule_all hash_alloc_sha256_abort_path >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   suspend "compose"
 QED
 
@@ -124,7 +132,11 @@ Theorem hash_sha256_bytesm_success_path:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   LENGTH bs = m /\ TAKE m (word_to_bytes_be v) = bs /\
@@ -176,8 +188,12 @@ Resume hash_sha256_bytesm_success_path[call]:
     (simp[IgnAsm `a = _`] >>
      qpat_x_assum `!bs. LENGTH bs = m /\ _ ==> _` (qspec_then `bs` mp_tac) >>
      simp[IgnAsm `a = _`]) >>
+  `tn2.t_stor SUBSET D.d_stor a.vs_call_ctx.cc_address
+      (a.vs_accounts a.vs_call_ctx.cc_address).storage /\
+   tn2.t_trans SUBSET D.d_trans a.vs_call_ctx.cc_address
+      (a.vs_transient a.vs_call_ctx.cc_address)` by gvs[] >>
   drule_all hash_alloc_sha256_success_path >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   suspend "compose"
 QED
 
@@ -224,7 +240,11 @@ Theorem hash_sha256_word_abort_path:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -237,7 +257,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `32 <= 32` by decide_tac >>
   drule_all hash_sha256_bytesm_abort_path >>
-  disch_then (qspecl_then [`D`, `PG`] mp_tac) >> simp[]
+  disch_then (qspec_then `PG` mp_tac) >> simp[]
 QED
 
 Theorem hash_sha256_word_success_path:
@@ -253,7 +273,11 @@ Theorem hash_sha256_word_success_path:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var+1))]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be v) = bs /\
@@ -272,5 +296,5 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `32 <= 32` by decide_tac >>
   drule_all hash_sha256_bytesm_success_path >>
-  disch_then (qspecl_then [`D`, `PG`] mp_tac) >> simp[]
+  disch_then (qspec_then `PG` mp_tac) >> simp[]
 QED

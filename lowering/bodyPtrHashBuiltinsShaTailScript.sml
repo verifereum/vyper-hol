@@ -13,6 +13,10 @@ Theorem hash_sha256_tail_success_check:
     op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
     p <> gv /\ q <> gv /\ (!x. len = Var x ==> x <> gv) /\ q <> sv /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
     s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
@@ -49,7 +53,10 @@ Resume hash_sha256_tail_success_check[call]:
   qabbrev_tac `t = update_var sv 1w
     ((write_memory_with_expansion (w2n r)
       (word_to_bytes (SHA_256_bytes bs) T) sg) with
-      <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T; vs_outcomes := rest|>)` >>
+      <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T; vs_outcomes := rest;
+        vs_requests := sg.vs_requests ++
+          [venom_call_request sg 2w 0w w n T with
+            cr_gas := SOME (w2n (HD (s.vs_gas_readings ++ [0w])))]|>)` >>
   `step_inst_base (mk_inst i1 STATICCALL
      [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg = OK t` by
     (simp[Abbr `t`] >> irule step_STATICCALL_sha256 >>
@@ -59,7 +66,7 @@ Resume hash_sha256_tail_success_check[call]:
 QED
 
 Resume hash_sha256_tail_success_check[finish]:
-  `t.vs_requests = sg.vs_requests /\ t.vs_allocas = sg.vs_allocas /\
+  `t.vs_allocas = sg.vs_allocas /\
    t.vs_fmp = sg.vs_fmp /\ LENGTH t.vs_returndata = 32 /\
    lookup_var sv t = SOME 1w /\ eval_operand (Var q) t = SOME r` by
     gvs[Abbr `t`, update_var_def, write_memory_with_expansion_def,
@@ -72,7 +79,8 @@ Resume hash_sha256_tail_success_check[finish]:
       [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg t tg)
       with t_var := tg.t_var |+ (sv,{}) |+ (out,{}))` by
     (irule hash_sha256_call_load_check >>
-     gvs[ptr_covers_def, eval_operand_def, Abbr `tg`, op_taint_def] >>
+     gvs[ptr_covers_def, eval_operand_def, Abbr `Gg`, Abbr `tg`, Abbr `sg`,
+       update_var_def, lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
      rpt strip_tac >> gvs[]) >>
   suspend "ghost"
 QED
@@ -101,6 +109,10 @@ Theorem hash_sha256_tail_success_path:
     op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
     p <> gv /\ q <> gv /\ (!x. len = Var x ==> x <> gv) /\ q <> sv /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -151,6 +163,10 @@ Theorem hash_sha256_tail_abort_check:
     op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
     p <> gv /\ q <> gv /\ (!x. len = Var x ==> x <> gv) /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -188,7 +204,10 @@ Resume hash_sha256_tail_abort_check[call]:
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >> metis_tac[]) >>
   qabbrev_tac `t = update_var sv 0w
     ((write_memory_with_expansion (w2n r) [] sg) with
-      <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes|>)` >>
+      <|vs_returndata := []; vs_outcomes := DROP 1 sg.vs_outcomes;
+        vs_requests := sg.vs_requests ++
+          [venom_call_request sg 2w 0w w n T with
+            cr_gas := SOME (w2n (HD (s.vs_gas_readings ++ [0w])))]|>)` >>
   `step_inst_base (mk_inst i1 STATICCALL
      [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg = OK t` by
     (mp_tac (Q.INST [`s` |-> `sg`, `iid` |-> `i1`, `out` |-> `sv`,
@@ -203,7 +222,7 @@ Resume hash_sha256_tail_abort_check[call]:
 QED
 
 Resume hash_sha256_tail_abort_check[finish]:
-  `t.vs_requests = sg.vs_requests /\ t.vs_allocas = sg.vs_allocas /\
+  `t.vs_allocas = sg.vs_allocas /\
    t.vs_fmp = sg.vs_fmp /\ LENGTH t.vs_returndata = 0 /\
    lookup_var sv t = SOME 0w` by
     gvs[Abbr `t`, update_var_def, write_memory_with_expansion_def,
@@ -215,7 +234,8 @@ Resume hash_sha256_tail_abort_check[finish]:
     (step_taint (mk_inst i1 STATICCALL
       [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg t tg)` by
     (irule hash_sha256_call_abort_check >>
-     gvs[ptr_covers_def, eval_operand_def, Abbr `tg`, op_taint_def] >>
+     gvs[ptr_covers_def, eval_operand_def, Abbr `Gg`, Abbr `tg`, Abbr `sg`,
+       update_var_def, lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
      rpt strip_tac >> gvs[]) >>
   `step_taint (mk_inst i1 STATICCALL
      [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg t tg =
@@ -360,6 +380,10 @@ Theorem hash_sha256_tail_abort_path:
     op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
     p <> gv /\ q <> gv /\ (!x. len = Var x ==> x <> gv) /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\

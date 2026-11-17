@@ -4,7 +4,7 @@ Ancestors bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaBytes
   builtinHashing emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   list rich_list arithmetic context fragGasSeqPtr ptrDiscipline venomState
   venomExecSemantics venomInst fragExec instIdxIndep words fragExecPtr ghostPcTransportPtr
-  bodyPtrDefs finite_map pred_set freshWrites bodyPtrHashBuiltinsGhostFrame exprSimHash
+  bodyPtrDefs finite_map pred_set freshWrites bodyPtrHashBuiltinsGhostFrame exprSimHash exprSimAlloc
 
 Theorem hash_sha256_fixed_parts:
   compile_sha256_bytesm value m sa = (op,sb) ==>
@@ -147,7 +147,9 @@ Theorem hash_fixed_prepare_endpoint:
   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
   sm.cs_next_var = sa.cs_next_var+1 /\ sm.cs_next_id = sa.cs_next_id+2 /\
   (!bs. LENGTH bs = m /\ TAKE m (word_to_bytes_be v) = bs ==>
-    mem_bytes_at (w2n w) m a.vs_memory = bs)
+    mem_bytes_at (w2n w) m a.vs_memory = bs) /\
+  a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+  a.vs_call_ctx = s.vs_call_ctx /\ tn2.t_stor = tn.t_stor /\ tn2.t_trans = tn.t_trans
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all hash_fixed_prepare_emission >> strip_tac >>
@@ -171,6 +173,13 @@ Proof
 QED
 
 Resume hash_fixed_prepare_endpoint[post]:
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_call_ctx = s.vs_call_ctx` by metis_tac[compile_alloc_buffer_world] >>
+  `tn2.t_stor = tn.t_stor /\ tn2.t_trans = tn.t_trans` by
+    gvs[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
+  `(mstore (w2n a) v t).vs_accounts = s.vs_accounts /\
+   (mstore (w2n a) v t).vs_transient = s.vs_transient /\
+   (mstore (w2n a) v t).vs_call_ctx = s.vs_call_ctx` by simp[mstore_def] >>
   qpat_x_assum `p = STRING _ _` SUBST_ALL_TAC >>
   qpat_x_assum `G2 = _` kall_tac >> qpat_x_assum `tn2 = _` kall_tac >>
   qpat_x_assum `G1 = _` kall_tac >> qpat_x_assum `tn1 = _` kall_tac >>

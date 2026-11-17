@@ -67,6 +67,20 @@ Proof
   goal_assum drule >> simp[] >> metis_tac[]
 QED
 
+Theorem compile_alloc_buffer_world:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  run_inst_seq (emitted_insts sa sm) s = OK t ==>
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
+       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >>
+  gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
+      step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  gvs[update_var_def]
+QED
+
 Theorem literal_alloc_buffer_run:
   !H.
   !func cenv cx es sa sm buf sz s ctx.
