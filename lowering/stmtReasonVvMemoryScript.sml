@@ -16,7 +16,7 @@ Ancestors
   compileEnv valueEncoding vyperInterpreter vyperState vyperValue
   vyperEvalPreservesScopes vyperExprNoControl vyperValueOperation
   vyperStatePreservation venomExecSemantics venomExecProofs venomInst
-  venomState integer_word vyperAST context allocaHistory
+  venomState integer_word vyperAST context allocaHistory reasonSourceProps
 Libs
   monadsyntax intLib
 
@@ -174,35 +174,6 @@ Proof
   simp[Once evaluate_def]
 QED
 
-Theorem raise_reason_expr_admissible:
-  gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_expr cx se) expr_vv_res_ok es
-Proof
-  strip_tac >> irule forced_expr_admissible_raw >>
-  pure_rewrite_tac[gas_admissible_def] >> rpt gen_tac >> disch_tac >>
-  Cases_on `eval_stmt cx (Raise (RaiseReason se)) (es with gas_obs := gs)` >>
-  drule_all gas_admissible_result >> strip_tac >>
-  drule_all eval_raise_reason_cases >> strip_tac >>
-  qpat_x_assum `_ = (r1, _)`
-    (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
-  gvs[]
-QED
-
-Theorem raise_reason_exempt:
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_expr cx se) (return ()))
-    (es,s0) marks (err,ee) (leaf,fin) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_stmt cx (Raise (RaiseReason se))) (return ()))
-    (es,s0) marks (err,ee) (leaf,fin)
-Proof
-  strip_tac >> rewrite_tac[eval_raise_reason_eq] >>
-  pure_rewrite_tac[ignore_bind_def] >>
-  once_rewrite_tac[vyperStateTheory.bind_assoc] >>
-  irule gas_exempt_cert_error_result >>
-  fs[ignore_bind_def]
-QED
-
 Theorem raise_reason_source:
   (!tail. eval_expr cx se (es with gas_obs := G ++ tail) =
           (INL tv, ee with gas_obs := tail)) /\
@@ -292,7 +263,7 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
   `gas_admissible (eval_expr cx se) expr_vv_res_ok es` by
-    metis_tac[raise_reason_expr_admissible] >>
+    metis_tac[raise_reason_raw_admissible] >>
   qpat_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `vv`, `s`] mp_tac) >>
@@ -311,7 +282,7 @@ Proof
       disj2_tac >> disj1_tac >> suspend "exception") >>
   disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule raise_reason_exempt >> first_assum ACCEPT_TAC
+  irule raise_reason_raw_exempt >> first_assum ACCEPT_TAC
 QED
 
 Resume raise_reason_vv_outcome[normal]:
@@ -410,62 +381,6 @@ Proof
 QED
 
 (* ===== Assert ===== *)
-
-(* A false condition runs the reason as raise does. *)
-Theorem eval_assert_reason_bind:
-  !cx e se.
-    eval_stmt cx (Assert e (AssertReason se)) =
-    bind (bind (eval_expr cx e) (read_result cx))
-      (\v. if v = BoolV T then return ()
-           else if v = BoolV F then eval_stmt cx (Raise (RaiseReason se))
-           else raise (Error (TypeError "not BoolV")))
-Proof
-  rpt gen_tac >> rewrite_tac[eval_raise_reason_eq] >>
-  simp_tac (srw_ss()) [FUN_EQ_THM] >> gen_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def] >>
-  simp[eval_expr_switch_forced] >>
-  simp[bind_def] >>
-  Cases_on `eval_expr cx e x` >> rename1 `_ = (raw,st)` >>
-  Cases_on `raw` >> simp[] >>
-  rename1 `read_result cx v st` >>
-  Cases_on `read_result cx v st` >> rename1 `_ = (forced,sf)` >>
-  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >> simp[bind_def]
-QED
-
-Theorem assert_reason_expr_admissible:
-  gas_admissible (eval_stmt cx (Assert e (AssertReason se))) (stmt_res_ok lctx)
-    es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
-Proof
-  rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  `no_control_exc ex` by
-    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
-     simp[bind_def] >>
-     Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
-     rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
-  simp[eval_assert_reason_bind, bind_def] >>
-  fs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def] >>
-  metis_tac[]
-QED
-
-Theorem assert_reason_raise_admissible:
-  gas_admissible (eval_stmt cx (Assert e (AssertReason se))) (stmt_res_ok lctx)
-    es /\
-  (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := G ++ tail) =
-          (INL (BoolV F), mid with gas_obs := tail)) ==>
-  gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
-    (mid with gas_obs := [])
-Proof
-  rw[gas_admissible_def] >>
-  first_x_assum (qspecl_then [`G ++ gs`, `res`, `ee`] irule) >>
-  qexistsl_tac [`G`, `ee`, `gs`] >>
-  rewrite_tac[eval_assert_reason_bind] >> pure_once_rewrite_tac[bind_def] >>
-  asm_simp_tac (srw_ss()) []
-QED
 
 Theorem assert_ok_return_outcome[local]:
   gas_marked_path memory ctx func s 0 (OK t) /\
@@ -655,7 +570,7 @@ Resume compile_assert_reason_vv_frag_mem[false]:
      disch_then ACCEPT_TAC) >>
   `gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
      (mid with gas_obs := [])` by
-    (irule assert_reason_raise_admissible >> metis_tac[]) >>
+    (drule_then irule assert_reason_raise_admissible >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
        stmt_state_rel H ctx func cenv cx (mid with gas_obs := [])
          (jump_to s5.cs_current_bb t) /\

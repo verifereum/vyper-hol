@@ -160,6 +160,8 @@ Proof
     (`(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
      metis_tac[storage_well_formed_on_backends]) >>
+  `alloca_frame cenv es sa s0 cenv (es with gas_obs := []) (jump_to lbl s0)`
+    by (irule alloca_frame_same >> simp[jump_to_def]) >>
   qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl, ghost_inv_at_jump_to,
        return_buf_frame_jump_to] >>
@@ -380,10 +382,34 @@ Resume compile_assert_frag_full[true]:
      imp_res_tac fresh_label_props >> imp_res_tac new_block_props >>
      imp_res_tac emit_inst_extends >> gvs[] >> decide_tac) >>
   `v = BoolV T` by fs[] >> pop_assum SUBST_ALL_TAC >>
+  `?xs. mid.storage_trace = es.storage_trace ++ xs` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       (irule storage_trace_frame_bind_all >>
+        simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all storage_trace_frame_prefix >> simp[]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    metis_tac[valid_horizon_append] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def, locals_kept_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac expr_post_alloca_frame) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac assert_success_post_mem) >> simp[] >>
   disch_then (qspecl_then [`sb`, `lctx`, `d`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[ghost_inv_at_jump, ghost_kept_at_def]
+  strip_tac >> gvs[ghost_inv_at_jump, ghost_kept_at_def] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+         irule alloca_frame_same_state >> qexists_tac `t` >>
+         simp[jump_to_def] >> first_assum ACCEPT_TAC]
 QED
 
 Resume compile_assert_frag_full[false]:

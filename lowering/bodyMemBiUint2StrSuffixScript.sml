@@ -69,7 +69,7 @@ Theorem u2s_allocated_mem_exit:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz+n < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\ X < dimword (:256) /\
-  78 <= n /\ 32 <= sz /\
+  LENGTH (num_to_dec_string X) <= n /\ 32 <= sz /\
   wb_frame cenv es es sp spre s /\ local_ptrs_reserved cenv sp /\
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b ready inst t. gas_path_mem ctx fn s 0 (OK t) /\
@@ -85,6 +85,7 @@ Theorem u2s_allocated_mem_exit:
     b+sz+n < dimword (:256)
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   drule_all u2s_alloc_layout_code >> strip_tac >>
   drule_all u2s_alloc_mem_ready >> strip_tac >>
   rename1 `gas_path_mem ctx fn s 0 (OK ready)` >>

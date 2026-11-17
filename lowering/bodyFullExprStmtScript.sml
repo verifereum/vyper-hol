@@ -34,6 +34,9 @@ Theorem compile_expr_stmt_frag_ok_full:
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >>
   rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  conj_tac >- simp[] >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ (Expr e) _ = _` mp_tac >>
   qpat_x_assum `stmt_env _ _ _ (Expr (gas_shadow_expr e)) _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
@@ -71,7 +74,24 @@ Proof
         (qpat_x_assum `return_buf_frame _ _ sa s0` mp_tac >>
          rpt (pop_assum mp_tac) >> rpt strip_tac >>
          drule_then irule return_buf_frame_frame >> fs[vv_post_def]) >>
-      fs[vv_post_def, ghost_kept_at_def, stmt_lands_def, cenv_top_ext_refl]) >>
+      fs[vv_post_def, ghost_kept_at_def, stmt_lands_def, cenv_top_ext_refl] >>
+      `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+           (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+      `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+        (qpat_assum `locals_kept _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [locals_kept_def]) >>
+         first_assum ACCEPT_TAC) >>
+      rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+             rpt conj_tac >>
+             FIRST [first_assum ACCEPT_TAC,
+                    qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`,
+                                  `cx`, `func`] >> first_assum ACCEPT_TAC]]) >>
   rpt gen_tac >> strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
   rename1 `expr_exit (INR exc) r` >> simp[stmt_exit_ptr_def] >>
   Cases_on `r` >> Cases_on `exc` >> gvs[expr_exit_def, halt_exit_def] >>

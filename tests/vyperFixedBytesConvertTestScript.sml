@@ -52,6 +52,51 @@ Proof
   Cases_on `bd` >> simp[valid_conversion_def]
 QED
 
+(* _convert_rules.py admits BytesT, but no StringT, source for BytesM_T. *)
+Theorem string_fixed_bytes_rejected:
+  ~valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m)))
+Proof
+  simp[valid_conversion_def]
+QED
+
+Theorem string_fixed_bytes_expr_rejected:
+  ~well_typed_expr env
+    (TypeBuiltin (BaseT (BytesT (Fixed m))) Convert
+      (BaseT (BytesT (Fixed m))) [Name (BaseT (StringT n)) "x"])
+Proof
+  simp[well_typed_expr_def, well_typed_type_builtin_args_def,
+       expr_type_def, valid_conversion_def]
+QED
+
+Definition bytestring_convert_program_def:
+  bytestring_convert_program src dst =
+    [FunctionDecl External Pure F F "convert_arg" [("x",src)] [] dst
+       [Return (SOME (TypeBuiltin dst Convert dst [Name src "x"]))]]
+End
+
+Theorem string_fixed_bytes_contract_rejected:
+  EVERY (λdeploy. EVERY (λ(n,m).
+    check_contract deploy [] (0w : address)
+      [(NONE, bytestring_convert_program
+        (BaseT (StringT n)) (BaseT (BytesT (Fixed m))))] = NONE)
+    [(0,1); (1,1); (1,32); (4,4); (32,32); (33,32)]) [F;T]
+Proof
+  simp[bytestring_convert_program_def, EVERY_DEF] >>
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem bytestring_convert_contract_controls:
+  EVERY (λdeploy. EVERY (λ(src,dst).
+    IS_SOME (check_contract deploy [] (0w : address)
+      [(NONE, bytestring_convert_program src dst)]))
+    [(BaseT (BytesT (Dynamic 4)), BaseT (BytesT (Fixed 4)));
+     (BaseT (StringT 4), BaseT (BytesT (Dynamic 4)));
+     (BaseT (StringT 4), BaseT BoolT)]) [F;T]
+Proof
+  simp[bytestring_convert_program_def, EVERY_DEF] >>
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 Definition fixed_bytes_cases_def:
   fixed_bytes_cases =
   [((([] : word8 list), 0), INL (BytesV []));
@@ -156,13 +201,13 @@ Proof
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
-(* Integer encodings select the low bytes; strings pad on the right. *)
+(* Integer encodings select the low bytes; byte strings pad on the right. *)
 Theorem convert_alignment_regressions:
   evaluate_convert FEMPTY (IntV 5) (BaseT (BytesT (Fixed 1))) =
     INL (BytesV [5w]) /\
   evaluate_convert FEMPTY (IntV 0x1234) (BaseT (BytesT (Fixed 20))) =
     INL (BytesV (REPLICATE 18 0w ++ [0x12w; 0x34w])) /\
-  evaluate_convert FEMPTY (StringV "ab") (BaseT (BytesT (Fixed 4))) =
+  evaluate_convert FEMPTY (BytesV [97w; 98w]) (BaseT (BytesT (Fixed 4))) =
     INL (BytesV [97w; 98w; 0w; 0w])
 Proof
   EVAL_TAC

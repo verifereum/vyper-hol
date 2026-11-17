@@ -134,6 +134,8 @@ Proof
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
   `ir_supply_inst_ok (init_ir_supply unit)` by simp[init_ir_supply_inst_ok] >>
   drule_all o1_pre_walk_rows >> strip_tac >>
+  `EVERY no_raw_fmp_ops pre.cu_context.ctx_functions` by
+    metis_tac[o1_source_unit_ok_no_dalloca] >>
   qpat_x_assum `!rpolicy unit s unit' s'. _` drule_all >> strip_tac >>
   drule_all o1_pre_walk_sim >> strip_tac >>
   `unit.cu_context.ctx_entry = SOME entry` by metis_tac[] >>

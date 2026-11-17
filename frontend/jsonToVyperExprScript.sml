@@ -90,8 +90,10 @@ Definition pad_right_zeros_def:
 End
 
 
-Definition decimal_string_to_int_def:
-  decimal_string_to_int s : int =
+(* Parses an unsigned decimal literal ("1.5", "15e-10"); a leading sign is
+   honoured too. *)
+Definition decimal_literal_to_int_def:
+  decimal_literal_to_int s : int =
     let (obj, exp) = split_at_e s in
     let (neg_exp, exp_rest) = strip_sign exp in
     let exp_digits = FILTER isDigit exp_rest in
@@ -108,6 +110,38 @@ Definition decimal_string_to_int_def:
     let digits = FILTER isDigit ds_rest in
     let n = num_from_dec_string digits in
       if neg then &0 - &n else &n
+End
+
+
+(* Python comments run from "#" to the end of the line. *)
+Definition strip_comments_def:
+  (strip_comments in_comment [] = []) /\
+  (strip_comments in_comment (c::cs) =
+     if c = #"\n" then c :: strip_comments F cs
+     else if in_comment \/ c = #"#" then strip_comments T cs
+     else c :: strip_comments F cs)
+End
+
+
+(* Splits off what precedes the first digit or ".", and says whether it holds
+   an odd number of minus signs. *)
+Definition split_sign_prefix_def:
+  (split_sign_prefix [] = (F, [])) /\
+  (split_sign_prefix (c::cs) =
+     if isDigit c \/ c = #"." then (F, c::cs)
+     else let (neg, r) = split_sign_prefix cs in
+       ((if c = #"-" then ~neg else neg), r))
+End
+
+
+(* A Decimal node's value is its source span, which covers any unary minus
+   signs Vyper folded into the literal and any comments between them:
+   "--1.5", "-(-2.25)", "-( # note\n 3.0)". *)
+Definition decimal_string_to_int_def:
+  decimal_string_to_int s : int =
+    let (neg, lit) = split_sign_prefix (strip_comments F s) in
+    let n = decimal_literal_to_int lit in
+      if neg then &0 - n else n
 End
 
 
@@ -328,8 +362,19 @@ Definition fold_pin_constant_def:
     | _ => e
 End
 
+(* An exponent or a shift amount is a compile-time value where Vyper folds
+   it; the checker needs a literal (or unsigned) one. *)
 Definition exponent_operand_def:
-  exponent_operand op e = if op = JBop_Pow then fold_pin_constant e else e
+  exponent_operand op e =
+    if op = JBop_Pow \/ op = JBop_LShift \/ op = JBop_RShift
+    then fold_pin_constant e else e
+End
+
+Definition word_literal_def:
+  word_literal (Literal (BaseT (IntT n)) (IntL i)) =
+    (if 0 <= i then Literal (BaseT (UintT 256)) (IntL i)
+     else Literal (BaseT (IntT n)) (IntL i)) /\
+  word_literal e = e
 End
 
 Definition make_builtin_call_def:
@@ -363,7 +408,12 @@ Definition make_builtin_call_def:
     else if name = "ceil" then Builtin ty Ceil args
     else if name = "blockhash" then Builtin ty BlockHash args
     else if name = "blobhash" then Builtin ty BlobHash args
-    else if name = "ecrecover" then Builtin ty ECRecover args
+    else if name = "ecrecover" then
+      (* Vyper annotates a small literal v, r or s as int8; its value is the
+         word the precompile reads, so it is typed uint256. *)
+      Builtin ty ECRecover (case args of
+                            | h :: vrs => h :: MAP word_literal vrs
+                            | [] => [])
     else if name = "ecadd" then Builtin ty ECAdd args
     else if name = "ecmul" then Builtin ty ECMul args
     else if name = "empty" then TypeBuiltin ty Empty ty []
@@ -436,29 +486,31 @@ Definition make_builtin_call_def:
         (create_keyword_order RawCreate (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE)
     else if name = "shift" then
-      (let original = Call ty (IntCall (NONE,"shift")) args NONE in
-       case MAP origin_fold_value args of
+      (* Only a shift Vyper folds is supported: a runtime shift() is rejected,
+         never read as a call to a function of that name. *)
+      (case MAP origin_fold_value args of
        | [Literal _ (IntL i); Literal _ (IntL bits)] =>
            if -256 <= bits /\ bits <= 256 then
              if bits < 0 then
                Literal ty (IntL (int_shift_right (Num (-bits)) i))
              else
-               (case pin_fold_result ty original
+               (case pin_fold_result ty rejected_expr
                   (wrapped_int_op (if i < 0 then Signed 256 else Unsigned 256)
                     (int_shift_left (Num bits) i) : value + error) of
                 | Literal lty l => Literal lty l
-                | _ => original)
-           else original
-       | _ => original)
+                | _ => rejected_expr)
+           else rejected_expr
+       | _ => rejected_expr)
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
-      fold_pin_constant (case args of
-         (v::d::_) =>
+      (* Vyper takes exactly two arguments, the second a string; one that
+         doesn't reduce to a literal here is rejected, not read as wei. *)
+      (case args of
+         [v; d] =>
            (case denomination_of_expr d of
-              SOME dn => Builtin ty (AsWeiValue dn) [v]
-            | NONE => Builtin ty (AsWeiValue Wei) [v])
-       | (v::_) => Builtin ty (AsWeiValue Wei) [v]
-       | _ => Builtin ty (AsWeiValue Wei) [])
+              SOME dn => fold_pin_constant (Builtin ty (AsWeiValue dn) [v])
+            | NONE => rejected_expr)
+       | _ => rejected_expr)
     else if name = "uint2str" then
       fold_pin_constant
         (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
@@ -500,12 +552,12 @@ Definition make_builtin_call_def:
                        | _ =>
                            (case args of
                               (arg::_) => arg
-                            | _ => Call ty (IntCall (NONE, name)) args NONE))
+                            | _ => rejected_expr))
                     else
                       (case args of
                          (arg::_) => arg
-                       | _ => Call ty (IntCall (NONE, name)) args NONE)
-                else Call ty (IntCall (NONE, name)) args NONE
+                       | _ => rejected_expr)
+                else rejected_expr
           | _ =>
               if is_cast_name name then
                   if is_builtin_cast_name name then
@@ -517,12 +569,12 @@ Definition make_builtin_call_def:
                      | _ =>
                          (case args of
                             (arg::_) => arg
-                          | _ => Call ty (IntCall (NONE, name)) args NONE))
+                          | _ => rejected_expr))
                   else
                     (case args of
                        (arg::_) => arg
-                     | _ => Call ty (IntCall (NONE, name)) args NONE)
-              else Call ty (IntCall (NONE, name)) args NONE)
+                     | _ => rejected_expr)
+              else rejected_expr)
 End
 
 
@@ -691,6 +743,18 @@ Definition lookup_toplevel_type_def:
     case ALOOKUP (expr_toplevel_types ctx) nsid of
     | SOME ty => ty
     | NONE => fallback
+End
+
+Definition struct_field_key_def:
+  struct_field_key sname fname = sname ++ "." ++ fname
+End
+
+(* A field read is typed at the field's declared type, not the wider type
+   Vyper annotates in an argument, return or assignment position. *)
+Definition member_type_def:
+  member_type ctx (StructT (m, sname)) fname ann_ty =
+    lookup_toplevel_type ctx (m, struct_field_key sname fname) ann_ty /\
+  member_type ctx _ fname ann_ty = ann_ty
 End
 
 Definition expr_type_ctx_def:
@@ -867,7 +931,8 @@ Definition translate_attribute_def:
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx base_ty obj]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx base_ty obj]
     else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx base_ty obj]
-    else Attribute ty (make_name ctx base_ty obj) attr
+    else let base = make_name ctx base_ty obj in
+      Attribute (member_type ctx (expr_type base) attr ty) base attr
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
@@ -896,7 +961,8 @@ Definition translate_attribute_def:
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translated_base]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translated_base]
     else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [translated_base]
-    else Attribute ty translated_base attr
+    else Attribute (member_type ctx (expr_type translated_base) attr ty)
+           translated_base attr
 End
 
 
@@ -995,8 +1061,13 @@ Definition translate_call_def:
         if fname = "__at__" \/ fname = "__interface__" then
           interface_constructor_result rty args'
         else if fname = "pop" then
+          (* pop() yields an element, whatever wider type the context
+             expects. *)
           (case translated_pop_target of
-           | SOME tgt => Pop rty tgt
+           | SOME (receiver, tgt) =>
+               Pop (case expr_type receiver of
+                    | ArrayT elem_ty _ => elem_ty
+                    | _ => rty) tgt
            | NONE => Call rty (IntCall (NONE, "pop")) args' NONE)
         else
           (case obj of
@@ -1068,6 +1139,25 @@ Proof
   Cases_on `args` >> simp[] >> Cases_on `func` >>
   simp[is_raw_call_calldata_call_def]
 QED
+
+(* convert(x, T) and abi_decode(x, T) produce a T: Vyper annotates the call
+   with the type its context expects, which may be wider, and annotates the
+   type argument with T itself. *)
+Definition json_expr_annotation_def:
+  json_expr_annotation (JE_Name _ _ _ jt) = jt /\
+  json_expr_annotation (JE_Attribute _ _ _ _ _ _ jt) = jt /\
+  json_expr_annotation (JE_Subscript _ _ jt) = jt /\
+  json_expr_annotation (JE_Tuple _ jt) = jt /\
+  json_expr_annotation _ = JT_None
+End
+
+Definition type_argument_def:
+  type_argument (JE_Name name tc _ _) [_; type_arg] =
+    (if tc <> SOME "interface" /\
+        MEM name ["convert"; "abi_decode"; "_abi_decode"]
+     then SOME (json_expr_annotation type_arg) else NONE) /\
+  type_argument _ _ = NONE
+End
 
 (* A JSON ABI import's declared Bytes/String bound is "..." rather than an
    ABI bound. The callsite operand is already translated using its canonical
@@ -1226,6 +1316,17 @@ Definition lookup_origin_pair_def:
     OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
 End
 
+(* A subscript or attribute is typed at the element's or field's own type:
+   Vyper annotates it with the type its context expects, which may be wider.
+   A HashMap value (no array base) keeps the annotation. *)
+Definition element_type_def:
+  element_type (ArrayT elem_ty _) idx ann_ty = elem_ty /\
+  element_type (TupleT tys) (Literal _ (IntL n)) ann_ty =
+    (if 0 <= n then (case oEL (Num n) tys of SOME ty => ty | NONE => ann_ty)
+     else ann_ty) /\
+  element_type _ _ ann_ty = ann_ty
+End
+
 Definition translate_expr_with_policy_def:
   (translate_expr_with_policy resolve ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -1285,9 +1386,10 @@ Definition translate_expr_with_policy_def:
   (translate_expr_with_policy resolve ctx (JE_Subscript arr idx jt) =
     let arr' = translate_expr_with_policy resolve ctx arr in
     let idx' = translate_expr_with_policy resolve ctx idx in
-    let ty = translate_type (expr_type_ctx ctx) jt in
-    let original = Subscript ty arr'
-      (case expr_type arr' of TupleT _ => fold_pin_constant idx' | _ => idx') in
+    let idx'' = (case expr_type arr' of TupleT _ => fold_pin_constant idx' | _ => idx') in
+    let ann_ty = translate_type (expr_type_ctx ctx) jt in
+    let ty = element_type (expr_type arr') idx'' ann_ty in
+    let original = Subscript ty arr' idx'' in
     let arr_value = origin_fold_value
       (translate_expr_with_policy T ctx arr) in
     let index_value = origin_fold_value
@@ -1299,8 +1401,10 @@ Definition translate_expr_with_policy_def:
       case pin_fold_subscript elem_ty arr_checked index_value of
       | Subscript _ _ _ => original
       | selected =>
-          let retyped = origin_retype ty selected in
-          if pin_literal_tree retyped /\ expr_type retyped = ty
+          (* A folded element is a literal: it takes the type Vyper reads
+             it at, as the compiler does. *)
+          let retyped = origin_retype ann_ty selected in
+          if pin_literal_tree retyped /\ expr_type retyped = ann_ty
           then retyped else original
     else original) /\
 
@@ -1409,11 +1513,19 @@ Definition translate_expr_with_policy_def:
     let translated_pop_target =
       case func of
       | JE_Attribute obj fname _ _ _ _ _ =>
-          if fname = "pop" then expr_base_target (translate_expr_with_policy resolve ctx obj)
+          if fname = "pop" then
+            let receiver = translate_expr_with_policy resolve ctx obj in
+            OPTION_MAP (\tgt. (receiver, tgt)) (expr_base_target receiver)
           else NONE
       | _ => NONE in
-    translate_call ctx func args' kwargs' ret_ty src_id_opt
-      translated_pop_target) /\
+    case type_argument func args of
+    | SOME JT_None => rejected_expr
+    | SOME result_ty =>
+        translate_call ctx func args' kwargs' result_ty src_id_opt
+          translated_pop_target
+    | NONE =>
+        translate_call ctx func args' kwargs' ret_ty src_id_opt
+          translated_pop_target) /\
 
   (* ExtCall - mutating external call (is_static = F).
      Operands: target :: positional args ++ keyword args in source order. *)

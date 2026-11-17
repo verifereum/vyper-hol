@@ -1641,8 +1641,6 @@ Proof
   >>~- ([`EVERY (\p. FST p = out) _`],
     qmatch_goalsub_abbrev_tac `update_var out value s` >>
     qexists_tac `[(out,value)]` >> simp[])
-  >>~- ([`x.inst_opcode = BUMP`],
-    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
   >> qexists_tac `[]` >> simp[]
 QED
 
@@ -1666,8 +1664,6 @@ Proof
   >>~- ([`EVERY (\p. FST p = out) _`],
     qmatch_goalsub_abbrev_tac `update_var out value s` >>
     qexists_tac `[(out,value)]` >> simp[])
-  >>~- ([`inst.inst_opcode = BUMP`],
-    qexists_tac `[(ptr_out,base_val); (next_out,base_val + sz)]` >> simp[])
   >> qexists_tac `[]` >> simp[]
 QED
 

@@ -9,8 +9,8 @@
   },
   "fixtures": {
     "abi_dynamic": {
-      "deploy_sha256": "15ad7037d66e4b258ae8f164d2157d233fdfbedc6eade08f7cb02fa450587435",
-      "runtime_sha256": "33de5d86018eb243a2e214f08f1b79746527cb42da339fb2d409e5dd80983b22",
+      "deploy_sha256": "5fc367d9c1e2779ca85ce20279e45c16112c127fa498a6930949aa9d35b73b4b",
+      "runtime_sha256": "a99a5213aecc0c57a6f353ac53aad0c12771b1a3f4a179bdd68effbf60a6c51e",
       "source": "python-o1-no-asm-opt-sources/abi_dynamic.vy",
       "source_sha256": "89725c5a088cd659ef40135815703d8125c3023efd4a94c46b980cd7812e8bca"
     },

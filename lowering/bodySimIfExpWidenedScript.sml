@@ -20,7 +20,7 @@ Ancestors
   entryDecodeStaticProps abiBuiltinEncodeWord
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* A ternary with an arm whose value the lowering lays out differently from
