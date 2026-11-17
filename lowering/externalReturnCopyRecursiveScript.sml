@@ -1,6 +1,7 @@
 (* Rank assembly for task-owned, footprint-sensitive typed copying. *)
 Theory externalReturnCopyRecursive
 Ancestors
+  typedMemoryCopy
   externalReturnCopyAdapter externalReturnCopyFields externalReturnCopyLayout
   externalReturnCopyArrays externalReturnCopyBulk externalReturnCopyFrame
   context compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec exprLoweringProps
@@ -55,46 +56,6 @@ Proof
   irule frag_exec_run_inst_seq >> gvs[same_blocks_def] >> simp[]
 QED
 
-Theorem return_copy_word_frame[local]:
-  return_copy_frame sa dst 32 s
-    ((mstore dst w (update_var (STRING #"%" (toString sa.cs_next_var)) w s))
-      with vs_inst_idx := idx)
-Proof
-  simp[return_copy_frame_def] >> conj_tac
-  >- simp[mstore_def, write_memory_with_expansion_def, update_var_def,
-          venom_state_component_equality] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `x <> STRING #"%" (toString sa.cs_next_var)` by
-        (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
-      simp[mstore_def, write_memory_with_expansion_def, update_var_def,
-           lookup_var_def, FLOOKUP_UPDATE]) >>
-  `(mstore dst w (update_var (STRING #"%" (toString sa.cs_next_var)) w s)).vs_memory =
-   (mstore dst w s).vs_memory` by simp[mstore_def, update_var_def] >>
-  simp[return_copy_memory_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
-  simp[immutable_mstore_capacity, update_var_def, MAX_DEF]
-QED
-
-Theorem return_copy_word_frag:
-  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
-  is_word_type dty /\ evaluate_type tenv dty = SOME tv /\
-  value_has_type tv v /\ type_memory_size tv = 32 /\
-  mem_word_at (w2n a) s0.vs_memory = typed_val_to_w256 tv v /\
-  (!x. dst = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s0 = SOME a /\ eval_operand dst s0 = SOME d ==>
-  frag_exec ctx sa sb (\s. s = s0)
-    (\t. val_in_memory tv v (w2n d) t.vs_memory /\
-         return_copy_frame sa (w2n d) (type_memory_size tv) s0 t) (\r. F)
-Proof
-  strip_tac >> drule_all return_copy_word_raw_frag >>
-  disch_then (qspec_then `ctx` (mp_then Any irule frag_exec_conseq)) >> simp[] >>
-  conj_tac
-  >- (drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
-      simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]) >>
-  simp[return_copy_word_frame]
-QED
-
 Theorem return_copy_word_layout[local]:
   is_word_type ty /\ evaluate_type tenv ty = SOME tv ==>
   type_memory_size tv = 32
@@ -118,7 +79,7 @@ Proof
   `type_memory_size dtv = 32` by metis_tac[return_copy_word_layout] >>
   `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
     metis_tac[exprSimPropsTheory.val_in_memory_word] >>
-  drule_all return_copy_word_frag >> simp[]
+  drule_all typed_copy_word_frag >> simp[]
 QED
 
 Theorem return_recursive_bytes_widen_shape[local]:
