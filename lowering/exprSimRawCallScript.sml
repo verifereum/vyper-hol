@@ -767,7 +767,7 @@ Theorem raw_call_eval_action:
         data <- lift_option_type (dest_BytesV dv) "raw_call data";
         amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
         eval_raw_call cx flags target data amount
-          (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+          (ext_call_kwarg EKGas flags.rcf_kws kvs)
       od)))
 Proof
   simp[Once evaluate_def, raw_call_eval_args_action, bind_assoc, bind_return]
@@ -2637,7 +2637,8 @@ Theorem raw_call_memory_oracle_exec[local]:
   w2w aw = target /\
   w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n ro \/ w2n ro + w2n rz <= b) /\
@@ -2761,7 +2762,7 @@ Proof
 QED
 
 Theorem raw_call_oracle_stmt_frame[local]:
-  take_call_outcome target calldata value_opt es = (INL (rq,outcome),es1) /\
+  take_call_outcome gas_cap target calldata value_opt es = (INL (rq,outcome),es1) /\
   es' = SND (adopt_call_outcome rq outcome es1) /\
   stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' t /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
@@ -3212,7 +3213,8 @@ Theorem raw_call_oracle_emit_run_aged:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     b + sz <= w2n ro \/ w2n ro + w2n (n2w cap : bytes32) <= b) /\
@@ -3281,7 +3283,7 @@ Resume raw_call_oracle_emit_run_aged[result]:
      Cases_on `outcome.co_success` >> simp[bool_to_word_def]) >>
   `stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) oracle_state` by
     (irule raw_call_oracle_stmt_frame >> simp[] >>
-     goal_assum (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
      simp[] >> qexists_tac `s` >>
      simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing]) >>
   qexistsl_tac [`oracle_state`,`result_state`] >> simp[] >>
@@ -3482,7 +3484,8 @@ Theorem raw_call_oracle_path[local]:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     b + sz <= w2n ro \/ w2n ro + cap <= b) /\
@@ -3512,7 +3515,7 @@ Proof
   strip_tac >>
   drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`val_word`, `ro`, `gas`, `aw`] mp_tac) >>
   impl_tac
   >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -3551,7 +3554,7 @@ Resume raw_call_oracle_path[post]:
        (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
           raw_call_oracle_emit_run_aged) >>
      disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
      disch_then (qspecl_then [`val_word`, `ro`, `gas`, `aw`] mp_tac) >>
      impl_tac
      >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -3576,7 +3579,7 @@ Finalise raw_call_oracle_path
 (* A raw call's outcome leaves the source scopes alone, so a frame at the
    pre-call state holds at the post-call one. *)
 Theorem raw_call_adopt_wb_frame[local]:
-  take_call_outcome addr data value_opt es = (INL (rq,outcome),es1) /\
+  take_call_outcome gas_cap addr data value_opt es = (INL (rq,outcome),es1) /\
   wb_frame cenv es0 es sa s0 s ==>
   wb_frame cenv es0 (SND (adopt_call_outcome rq outcome es1)) sa s0 s
 Proof
@@ -3767,7 +3770,8 @@ Theorem raw_call_outbuf_zero_tail_vv_path[local]:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
@@ -3816,7 +3820,7 @@ Proof
   `eval_operand gas_op t = SOME gas /\ eval_operand to_op t = SOME aw /\
    eval_operand dp t = SOME ao /\ eval_operand dl t = SOME az /\
    eval_operand val_op t = SOME val_word` by metis_tac[] >>
-  `take_call_outcome target (read_memory (w2n ao) (w2n az) t) value_opt es =
+  `take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) t) value_opt es =
     (INL (rq,outcome),es1)` by fs[read_memory_def] >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
@@ -3852,12 +3856,12 @@ QED
 
 Resume raw_call_outbuf_zero_tail_vv_path[call]:
   gvs[] >>
-  drule_at (Pat `take_call_outcome _ _ _ _ = _`) raw_call_adopt_wb_frame >>
+  drule_at (Pat `take_call_outcome _ _ _ _ _ = _`) raw_call_adopt_wb_frame >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >> strip_tac >>
   qpat_assum `stmt_state_rel H _ _ _ _ es t`
     (mp_then Any mp_tac raw_call_oracle_path) >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
@@ -4017,7 +4021,8 @@ Theorem raw_call_outbuf_positive_tail_vv_path[local]:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
@@ -4066,7 +4071,7 @@ Proof
   `eval_operand gas_op t = SOME gas /\ eval_operand to_op t = SOME aw /\
    eval_operand dp t = SOME ao /\ eval_operand dl t = SOME az /\
    eval_operand val_op t = SOME val_word` by metis_tac[] >>
-  `take_call_outcome target (read_memory (w2n ao) (w2n az) t) value_opt es =
+  `take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) t) value_opt es =
     (INL (rq,outcome),es1)` by fs[read_memory_def] >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
@@ -4107,12 +4112,12 @@ QED
 Resume raw_call_outbuf_positive_tail_vv_path[call]:
   `initial.cs_next_var <= sm.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
   gvs[] >>
-  drule_at (Pat `take_call_outcome _ _ _ _ = _`) raw_call_adopt_wb_frame >>
+  drule_at (Pat `take_call_outcome _ _ _ _ _ = _`) raw_call_adopt_wb_frame >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >> strip_tac >>
   qpat_assum `stmt_state_rel H _ _ _ _ es t`
     (mp_then Any mp_tac raw_call_oracle_path) >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
@@ -4336,7 +4341,8 @@ Theorem raw_call_outbuf_tail_vv_path[local]:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
@@ -4523,9 +4529,9 @@ Theorem raw_call_source_continuation:
     data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
     amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
     eval_raw_call cx flags target data amount
-      (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+      (ext_call_kwarg EKGas flags.rcf_kws kvs)
   od) = eval_raw_call cx flags target bs amount
-    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+    (ext_call_kwarg EKGas flags.rcf_kws kvs)
 Proof
   strip_tac >> simp[FUN_EQ_THM, bind_def, ignore_bind_def, type_check_def,
     assert_def, lift_option_type_def, dest_BytesV_def, return_def]
@@ -4537,7 +4543,7 @@ Theorem raw_call_source_tail:
   outcomes_accounts_typed es.outcomes /\
   accounts_runtime_well_typed es.accounts ==>
   ?rq outcome es1 es2.
-    take_call_outcome target bytes
+    take_call_outcome (OPTION_BIND gas dest_NumV) target bytes
       (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) es =
         (INL (rq,outcome),es1) /\
     adopt_call_outcome rq outcome es1 = (INL (),es2) /\
@@ -4558,7 +4564,8 @@ Proof
   strip_tac >>
   drule_all raw_call_typed_outcome >>
   disch_then (qspecl_then [`target`, `bytes`,
-    `if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`] strip_assume_tac) >>
+    `if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`,
+    `OPTION_BIND gas dest_NumV`] strip_assume_tac) >>
   Cases_on `adopt_call_outcome rq outcome es1` >>
   drule adopt_call_outcome_frame >> strip_tac >> gvs[] >>
   drule_all raw_call_oracle_result >> strip_tac >>
@@ -4610,6 +4617,8 @@ Theorem raw_call_tail_outcome[local]:
   (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
   eval_operand len t = SOME (n2w (LENGTH bs)) /\
   eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+       g = w2n gw) /\
   mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
   b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   wb_frame cenv es esK sa s0 t /\ local_ptrs_reserved cenv sa /\
@@ -4631,7 +4640,7 @@ Theorem raw_call_tail_outcome[local]:
       data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
       amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
       eval_raw_call cx flags target data amount
-        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+        (ext_call_kwarg EKGas flags.rcf_kws kvs)
     od) (esK,t)
     (\H res ee u. (\H res ee u. ?tv. res = INL tv /\
       vv_post H ctx func cenv cx
@@ -4668,7 +4677,7 @@ Proof
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
   drule_all raw_call_source_tail >>
   disch_then (qspecl_then [`target`,
-    `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
+    `ext_call_kwarg EKGas flags.rcf_kws kvs`,`bs`]
     strip_assume_tac) >>
   suspend "ready"
 QED
@@ -4678,7 +4687,7 @@ Resume raw_call_tail_outcome[static_value_abort]:
   drule_all raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
   `!st. eval_raw_call cx flags target bs amount
-    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) st =
+    (ext_call_kwarg EKGas flags.rcf_kws kvs) st =
     (INR (Error (RuntimeError "write in static context")), st)` by
     (gen_tac >> irule raw_call_static_value_abort >> simp[]) >>
   `local_ptrs_reserved cenv s6` by
@@ -4778,7 +4787,7 @@ Resume raw_call_tail_outcome[path]:
   `(flags.rcf_is_static \/ cx.txn.is_static) =
     IS_NONE (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)` by
     simp[] >>
-  `take_call_outcome target
+  `take_call_outcome (OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV) target
     (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
     (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) esK =
       (INL (rq,outcome),es1)` by simp[] >>
@@ -4819,7 +4828,7 @@ Resume raw_call_tail_outcome[lift]:
   conj_tac >- simp[] >>
   qexistsl_tac [`es2`,
     `FST (eval_raw_call cx flags target bs amount
-      (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) esK)`, `s6`] >>
+      (ext_call_kwarg EKGas flags.rcf_kws kvs) esK)`, `s6`] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
@@ -4838,7 +4847,7 @@ Resume raw_call_tail_outcome[lift]:
   disch_then (drule_at (Pat `eval_operand dp _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand len _ = _`)) >>
   simp[] >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
   disch_then (qspec_then `ann` mp_tac) >>
   simp[] >>
   impl_tac >- (Cases_on `flags.rcf_is_static` >> gvs[]) >>
@@ -4899,7 +4908,7 @@ Theorem raw_call_action_frame[local]:
       data <- lift_option_type (dest_BytesV dv) "raw_call data";
       amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
       eval_raw_call cx flags target data amount
-        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+        (ext_call_kwarg EKGas flags.rcf_kws kvs)
     od)
 Proof
   rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
@@ -4977,7 +4986,7 @@ Resume compile_raw_call_case[placement]:
       data <- lift_option_type (dest_BytesV dv) "raw_call data";
       amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
       eval_raw_call cx flags target data amount
-        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+        (ext_call_kwarg EKGas flags.rcf_kws kvs)
     od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_sim)))) >>
   first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `exprs_case _ _ _ _ _ _`)) >>

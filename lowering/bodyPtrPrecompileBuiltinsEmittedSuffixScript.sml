@@ -23,6 +23,24 @@ Proof
   `src <> STRING #"%" (toString sm.cs_next_var) /\
    dst <> STRING #"%" (toString sm.cs_next_var)` by
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (qabbrev_tac `gi = mk_inst sm.cs_next_id GAS []
+        [STRING #"%" (toString sm.cs_next_var)]` >>
+      qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
+        [Var (STRING #"%" (toString sm.cs_next_var)); Lit target;
+         Var src; Lit insz; Var dst; Lit outsz]
+        [STRING #"%" (toString (sm.cs_next_var+1))]` >>
+      qabbrev_tac `u = update_var (STRING #"%" (toString sm.cs_next_var))
+        (HD (s.vs_gas_readings ++ [0w]))
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings)` >>
+      `step_inst_base gi s = OK u` by simp[Abbr `gi`, Abbr `u`, step_GAS] >>
+      `step_inst_base ci u = Abort ExHalt_abort (halt_state (set_returndata [] u))` by
+        (simp[Abbr `ci`, mk_inst_def, step_inst_base_def,
+           eval_operand_def, lookup_var_def, Abbr `u`, update_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE, exec_ext_call_def] >>
+         gvs[eval_operand_def, lookup_var_def]) >>
+      qexistsl_tac [`step_prov PG G gi u`, `step_taint gi s u tn`] >>
+      irule suffix_abort_checked >> simp[Abbr `gi`, Abbr `ci`] >> metis_tac[]) >>
   drule_all computed_call_prefix >> strip_tac >>
   simp[] >> irule suffix_checked >> simp[] >>
   simp[venomInstTheory.mk_inst_def] >> metis_tac[]

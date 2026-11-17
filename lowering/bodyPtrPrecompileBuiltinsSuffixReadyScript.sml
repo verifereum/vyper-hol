@@ -26,6 +26,7 @@ Proof
   drule_all (INST_TYPE [alpha |-> ``:256 word``, beta |-> ``:256``,
     gamma |-> ``:256``] computed_static_exec_eq) >>
   disch_then (qspecl_then [`rn`,`wo`,`gas`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `u.vs_outcomes = []` >>
   gvs[update_var_def, write_memory_with_expansion_def,
       lookup_var_def, FLOOKUP_UPDATE]
 QED
