@@ -5062,15 +5062,13 @@ Theorem sym_jmp_suffix_frame_sim:
     cs'.as_pc = pc
 Proof
   rpt gen_tac >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by
-    metis_tac[sym_frame_inv_def, asm_sym_rel_pc] >>
-  `sym_steps p env 2 ss = SymOK (ss with sym_base := ss.sym_base with as_pc := pc)` by
-    (irule sym_jmp_suffix >> metis_tac[]) >>
-  drule_all_then strip_assume_tac (cj 1 (iffLR sym_frame_inv_def)) >>
-  drule_all_then strip_assume_tac asm_sym_steps_lockstep >>
-  qexistsl [`cs'`, `ss with sym_base := ss.sym_base with as_pc := pc`] >>
-  gvs[sym_frame_inv_def, sym_kinds_ok_def] >>
-  drule_then mp_tac asm_sym_rel_pc >> simp[]
+  irule (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES,
+      asm_sym_rel_core_canonical, GSYM sym_frame_inv_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+      `code_ok` |-> `asm_data_env_ok p env`]
+      sym_jmp_suffix_frame_sim_mode_conditional)) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  (metis_tac[asm_sym_steps_lockstep])
 QED
 
 Theorem sym_jmp_plan_decompose:
@@ -5086,13 +5084,7 @@ Theorem sym_jmp_plan_decompose:
     ops = rops ++ sops ++ [SOPushLabel target; SOEmit "JUMP"] /\
     qs = release_dead_spills nl arranged
 Proof
-  strip_tac >>
-  gvs[genFrameSimTheory.generate_inst_plan_jmp,
-      generate_regular_inst_plan_def, compute_operands_def,
-      asmIRTheory.get_non_label_operands_def, venomEffectsTheory.is_commutative_def,
-      asmIRTheory.venom_to_evm_name_def, generate_emit_ops_def, stackModelTheory.stack_pop_def,
-      join_target_ops_def] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+  MATCH_ACCEPT_TAC symControlJumpOwnTheory.sym_jmp_plan_decompose
 QED
 
 Theorem sym_jmp_plan_frame_sim:
@@ -5124,29 +5116,20 @@ Theorem sym_jmp_plan_frame_sim:
     sym_frame_inv p env ctx cplan fn ret srest labs0 qs ac sy /\
     ac.as_pc = pc
 Proof
-  gen_tac >> strip_tac >>
-  `sym_jump_dest p (Lab target 0) = SOME pc` by
-    (irule sym_code_label_dest >> metis_tac[]) >>
-  `execute_plan initial_fmp [SOPushLabel target; SOEmit "JUMP"] =
-   [AsmPushLabel target; AsmOp "JUMP"]` by
-    simp[execute_plan_def, exec_stack_op_def] >>
-  gvs[allocMonoTheory.release_dead_spills_spill_base,
-      allocMonoTheory.release_dead_spills_next_offset,
-      stackOpSimTheory.execute_plan_append,
-      stackOpSimTheory.asm_block_at_append, listTheory.EVERY_APPEND] >>
-  `asm_block_at p cs.as_pc (execute_plan initial_fmp (rops ++ sops))` by
-    simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
-  drule_all_then strip_assume_tac (SRULE []
-    (Q.INST [`dfg` |-> `dfg_build_function fn`] sym_jmp_prepare_frame_sim)) >>
-  `asm_block_at p cs'.as_pc [AsmPushLabel target; AsmOp "JUMP"]` by
-    (simp[stackOpSimTheory.execute_plan_append] >>
-     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  drule_all_then strip_assume_tac sym_jmp_suffix_frame_sim >>
-  drule_then assume_tac sym_frame_inv_release_dead_spills >>
-  qexistsl [`cs''`, `ss''`] >>
-  gvs[stackOpSimTheory.execute_plan_append] >>
-  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
-  pure_once_rewrite_tac[stackOpSimTheory.asm_steps_add, sym_steps_add] >> simp[]
+  qx_gen_tac `spillbase` >> strip_tac >>
+  irule (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES,
+      asm_sym_rel_core_canonical, GSYM sym_frame_inv_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+      `code_ok` |-> `asm_data_env_ok p env`]
+      sym_jmp_plan_frame_sim_mode_conditional)) >>
+  simp[] >> conj_tac >- metis_tac[sym_code_label_dest] >>
+  conj_tac >- metis_tac[asm_sym_steps_lockstep] >>
+  qexistsl [`arranged`, `spillbase`, `nl`, `pending`, `prepared`, `ps`, `r`, `rops`, `sops`] >>
+  simp[] >> conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
+       sym_jmp_prepare_frame_sim)) >> simp[]) >>
+  gvs[]
 QED
 
 Theorem sym_jmp_frame_sim_deep:
