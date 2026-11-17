@@ -40,18 +40,18 @@ Ancestors
   dftPacketPseudoCursor
   dftPacketPseudoHistory
   dftPacketPseudoCutFrame
-  dftPacketRefinementBoundary
+  dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
-  dftPacketReturnLocal
+  dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational dftPacketCompletePlanOperational
+  dftPacketRootedEntryContext dftPacketRootedOperational dftPacketCompletePlanOperational
   dftPacketRootedPlainStop
   dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
-  dftPacketSuccessfulRowBoundary
+  dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
   dftPacketSuccessfulSchedule
   dftPacketSuccessfulTerminalRow
   dftPacketTableSplice
