@@ -39,6 +39,7 @@ Ancestors
   dftPacketPseudoCursor
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
+  dftPacketReturnActivation
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
