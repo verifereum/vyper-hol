@@ -303,7 +303,9 @@ Proof
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
       Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
       pure_once_rewrite_tac[step_inst_base_def] >>
-      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >> simp[]) >>
+      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
+      asm_simp_tac bool_ss
+        [list_case_def, pair_case_def, optionTheory.option_case_def]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
