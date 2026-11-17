@@ -113,7 +113,7 @@ Theorem ld_joint_static_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
-  MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL] /\
+  MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL] /\
   step_inst fuel C inst s = Abort reason s1 ==>
   ?t1. step_inst fuel C' inst t = Abort reason t1
 Proof
@@ -129,6 +129,8 @@ Proof
     (simp[ld_eval_operands_defined, EVERY_MEM] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = CALL`
   >- suspend "call" >>
+  Cases_on `MEM inst.inst_opcode [STATICCALL; DELEGATECALL]`
+  >- suspend "exhausted_call" >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
   gvs[MEM] >> simp[step_inst_non_invoke] >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
@@ -153,6 +155,16 @@ Resume ld_joint_static_abort[call]:
      `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM]) >>
   gvs[] >>
+  fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+Resume ld_joint_static_abort[exhausted_call]:
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+  gvs[MEM] >> simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[exec_ext_call_abort_iff, exec_delegatecall_abort_iff, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
   fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 Finalise ld_joint_static_abort
