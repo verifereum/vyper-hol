@@ -19,9 +19,6 @@ The changes, as they appear in the pinned Python compiler:
 - P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
   with the argument's own type rather than `Bytes[49152]`, which sizes its
   initcode buffer (the HOL lowering still snapshots 49152 bytes).
-- P9 constructor argument snapshot: a composite constructor argument is
-  copied before a later argument that can modify memory or storage is
-  evaluated (also a source-semantics change).
 
 P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
 assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
@@ -29,9 +26,12 @@ slice's output buffer allocated after its bounds check), P3 (escaping
 allocations: comparisons don't make an allocation escape, escaping static
 allocations stay live everywhere and are allocated first) and P6 (eager call
 arguments: internal- and external-call arguments are read as they are
-evaluated, also a source-semantics change) and P7 (subscript overlap: an
+evaluated, also a source-semantics change), P7 (subscript overlap: an
 array base derived through a dynamic-array element is copied before an index
 that writes a variable the base reads or makes a risky call, also a
+source-semantics change) and P9 (constructor argument snapshot: each
+constructor argument is read as it is evaluated, a composite one copied
+before a later argument that can modify memory or storage, also a
 source-semantics change) are ported. P2 still heads sections below: two
 fixtures that differ for other reasons, and those that also need P4 or P8.
 A fixture listed under several changes needs all of them. The attribution
@@ -131,9 +131,6 @@ They remain out of parity until regenerated with that fix.
 
 - `create-builtins/rcr02_rawcreate_args_salt`
 - `create-builtins/rcr05_rawcreate_args`
-
-## P2 (calldata argument guard) + P4 (direct ABI encoder) + P8 (`raw_create` bytecode type) + P9 (constructor argument snapshot)
-
 - `constructor-alias/ctor_alias`
 
 ## Not yet attributed

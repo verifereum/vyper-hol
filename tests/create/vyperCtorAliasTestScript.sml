@@ -1,9 +1,8 @@
-(* Constructor argument aliasing: an earlier local array is mutated by a later
-   argument before the generated code copies the earlier value to its tuple.
-   Pinned Vyper now snapshots the earlier argument first, and its bytecode is
-   out of parity until that change is ported (../../bytecode/
-   pending-5127-port.md); this checks the HOL compiler against the source
-   semantics. *)
+(* Constructor argument aliasing: a later argument pops the local array passed
+   as an earlier one. Each argument is read when it is evaluated, so the
+   constructor gets the array before the pop. The bytecode stays out of parity
+   for the other items listed in ../../bytecode/pending-5127-port.md; this
+   checks the HOL compiler against the source semantics. *)
 Theory vyperCtorAliasTest
 Ancestors
   vyperCreateMemoryTest createCtorAliasCompileTest vyperCreateSelfdestruct
@@ -104,7 +103,7 @@ Definition ctor_alias_request_agrees_def:
       (SOME src_code,SOME (kind,amount,vm_code),SOME outcomes,SOME xs) =>
         kind = CreateCall /\ amount = 0 /\ outcomes = [] /\
         xs = ArrayV (DynArrayV [IntV 1]) /\
-        LENGTH src_code = 129 /\ LENGTH vm_code = 129 /\
+        LENGTH src_code = 161 /\ LENGTH vm_code = 161 /\
         src_code = vm_code
     | _ => F
 End

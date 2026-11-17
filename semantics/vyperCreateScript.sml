@@ -174,6 +174,114 @@ Proof
   rw[create_arg_ctor_types_pre_def]
 QED
 
+(* ===== Operand evaluation order ===== *)
+
+(* The order in which the operands of the layout above are evaluated. Python
+   evaluates the constructor arguments of create_from_blueprint and raw_create
+   right after the code source, before value=, salt= and code_offset=
+   (create.py lower_create_from_blueprint, lower_raw_create); the other kinds
+   evaluate in layout order. *)
+Definition create_operand_order_def:
+  create_operand_order (CreateFromBlueprint _) has_salt (target::rest) =
+    (let n = if has_salt then 3 else 2 in
+     target :: (DROP n rest ++ TAKE n rest)) ∧
+  create_operand_order RawCreate has_salt (code::value::rest) =
+    (let n = LENGTH rest - if has_salt then 1 else 0 in
+     code :: (TAKE n rest ++ value :: DROP n rest)) ∧
+  create_operand_order kind has_salt xs = xs
+End
+
+(* Puts operands listed in create_operand_order back into the layout. *)
+Definition create_operand_layout_def:
+  create_operand_layout (CreateFromBlueprint _) has_salt (target::rest) =
+    (let n = LENGTH rest - if has_salt then 3 else 2 in
+     target :: (DROP n rest ++ TAKE n rest)) ∧
+  create_operand_layout RawCreate has_salt (code::rest) =
+    (let n = LENGTH rest - if has_salt then 2 else 1 in
+     case DROP n rest of
+       value::salt => code :: value :: (TAKE n rest ++ salt)
+     | [] => code :: rest) ∧
+  create_operand_layout kind has_salt xs = xs
+End
+
+val () = cv_auto_trans create_operand_order_def;
+val () = cv_auto_trans create_operand_layout_def;
+
+Theorem LENGTH_create_operand_order[simp]:
+  LENGTH (create_operand_order kind has_salt xs) = LENGTH xs
+Proof
+  Cases_on `kind` >> Cases_on `xs` >>
+  rw[create_operand_order_def, LENGTH_TAKE_EQ] >>
+  rename1 `_ :: t` >> Cases_on `t` >>
+  rw[create_operand_order_def, LENGTH_TAKE_EQ]
+QED
+
+Theorem SUM_MAP_create_operand_order[simp]:
+  SUM (MAP f (create_operand_order kind has_salt xs)) = SUM (MAP f xs)
+Proof
+  `∀n t. SUM (MAP f (DROP n t)) + SUM (MAP f (TAKE n t)) = SUM (MAP f t)`
+    by metis_tac[SUM_APPEND, MAP_APPEND, TAKE_DROP, ADD_COMM] >>
+  Cases_on `kind` >> Cases_on `xs` >>
+  simp[create_operand_order_def, SUM_APPEND, MAP_APPEND] >>
+  rename1 `_ :: t` >> Cases_on `t` >>
+  simp[create_operand_order_def, SUM_APPEND, MAP_APPEND] >>
+  metis_tac[ADD_COMM, ADD_ASSOC]
+QED
+
+Theorem create_operand_layout_swap[local]:
+  ∀n t.
+    DROP (LENGTH (DROP n t ++ TAKE n t) - n) (DROP n t ++ TAKE n t) ++
+    TAKE (LENGTH (DROP n t ++ TAKE n t) - n) (DROP n t ++ TAKE n t) = t
+Proof
+  rpt gen_tac >>
+  `LENGTH (DROP n t ++ TAKE n t) = LENGTH t` by rw[LENGTH_TAKE_EQ] >>
+  pop_assum SUBST1_TAC >> Cases_on `n ≤ LENGTH t`
+  >- (`LENGTH t - n = LENGTH (DROP n t)` by simp[] >>
+      pop_assum SUBST1_TAC >>
+      rewrite_tac[DROP_LENGTH_APPEND, TAKE_LENGTH_APPEND, TAKE_DROP]) >>
+  `LENGTH t - n = 0` by simp[] >> pop_assum SUBST1_TAC >>
+  gvs[NOT_LESS_EQUAL, DROP_LENGTH_TOO_LONG, TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem create_operand_layout_insert[local]:
+  ∀n t v. n ≤ LENGTH t ⇒
+    DROP n (TAKE n t ++ v :: DROP n t) = v :: DROP n t ∧
+    TAKE n (TAKE n t ++ v :: DROP n t) = TAKE n t
+Proof
+  rpt strip_tac >> `LENGTH (TAKE n t) = n` by fs[] >>
+  metis_tac[DROP_LENGTH_APPEND, TAKE_LENGTH_APPEND]
+QED
+
+Theorem create_operand_layout_raw[local]:
+  ∀s code v t.
+    create_operand_layout RawCreate s
+      (code :: (TAKE (LENGTH t - if s then 1 else 0) t ++
+                v :: DROP (LENGTH t - if s then 1 else 0) t)) =
+    code :: v :: t
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `n = LENGTH t - if s then 1 else 0` >>
+  `n ≤ LENGTH t` by simp[Abbr `n`] >>
+  `LENGTH (TAKE n t ++ v :: DROP n t) - (if s then 2 else 1) = n`
+    by (simp[Abbr `n`, LENGTH_TAKE_EQ] >> rw[]) >>
+  drule_then (qspec_then `v` strip_assume_tac) create_operand_layout_insert >>
+  simp_tac bool_ss [create_operand_layout_def, LET_THM] >>
+  asm_rewrite_tac[] >>
+  simp_tac bool_ss [list_case_def, TAKE_DROP]
+QED
+
+Theorem create_operand_layout_order[simp]:
+  create_operand_layout kind has_salt (create_operand_order kind has_salt xs) =
+  xs
+Proof
+  Cases_on `kind` >> Cases_on `xs` >>
+  rewrite_tac[create_operand_order_def, create_operand_layout_def]
+  >- simp_tac bool_ss [LET_THM, create_operand_order_def,
+                       create_operand_layout_def, create_operand_layout_swap] >>
+  Cases_on `t` >- simp[create_operand_order_def, create_operand_layout_def] >>
+  simp_tac bool_ss [LET_THM, create_operand_order_def, create_operand_layout_raw]
+QED
+
 (* ===== Initcode construction ===== *)
 
 Definition minimal_proxy_loader_def:
@@ -667,4 +775,26 @@ val eval_create_cv_def = eval_create_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def,
             lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR,
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
+  |> cv_auto_trans;
+
+(* Puts operands evaluated in create_operand_order back into the layout, then
+   checks a blueprint's code, after every operand as Python's EXTCODESIZE
+   assert is, and creates. *)
+Definition eval_create_operands_def:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs =
+    let vs = create_operand_layout kind has_salt vs in
+    case kind of
+    | CreateFromBlueprint _ => do
+        code_size <- check_create_blueprint has_salt literal_offset vs;
+        eval_create cx kind has_salt rof arg_tys vs (SOME code_size)
+      od
+    | _ => eval_create cx kind has_salt rof arg_tys vs NONE
+End
+
+Theorem create_kind_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="create_kind"}));
+
+val () = eval_create_operands_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, create_kind_CASE_rator]
   |> cv_auto_trans;

@@ -100,9 +100,8 @@ the general recursive ABI or creation-pipeline correctness theorem.
 
 `vyperCtorAliasTestTheory` checks the CREATE memory request for
 `tests/create/constructor-alias/sources/ctor_alias.vy` against the source
-semantics. An earlier local array argument is read after a later `xs.pop()`
-shortens it; source and HOL-compiled execution both request 129 initcode
-bytes. Pinned Vyper snapshots the earlier argument before the pop, so its
-bytecode for this witness is out of parity and listed in
-`../pending-5127-port.md`.
+semantics. An earlier local array argument is read before a later `xs.pop()`
+shortens it, as pinned Vyper does; source and HOL-compiled execution both
+request 161 initcode bytes. Its bytecode stays out of parity for the other
+items listed in `../pending-5127-port.md`.
 `vyperCtorStorageAliasTestTheory` checks the corresponding storage-array case.
