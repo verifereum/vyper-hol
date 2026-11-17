@@ -5,7 +5,7 @@
    supported_assert_reason, supported_raise_reason, supported_log. *)
 Theory supportedStmts
 Ancestors
-  vyperTypeContract vyperEventArgCompat
+  vyperTypeContract vyperEventArgCompat vyperExprEffects
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
   supportedTypes supportedDecls supportedTargets vyperTypeSystem exprLowering vyperAST list alist integer
 
@@ -81,9 +81,11 @@ Definition supported_append_target_def:
          SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
        (mut = Storage \/ mut = Transient) /\
        ~supported_full_word_type elem) /\
-  supported_append_target tops (NameTarget name) = F /\
-  supported_append_target tops (SubscriptTarget target key) = F /\
-  supported_append_target tops (AttributeTarget target fname) = F
+  supported_append_target tops (NameTarget name) = T /\
+  supported_append_target tops (SubscriptTarget target key) =
+    supported_target_pure tops (SubscriptTarget target key) /\
+  supported_append_target tops (AttributeTarget target fname) =
+    supported_target_pure tops target
 End
 
 Definition supported_string_reason_def:
@@ -127,12 +129,13 @@ End
 (* Literal ranges have exactly Num(b-a), including zero. The other range
    branch requires a positive checked bound. An array iterable has the loop
    type as its element type and its bound at most the AST bound (exactly it
-   for a local fixed array): a local array, an immutable array, or another
-   supported array expression that is not a place rooted at a top-level name
-   and has no ternary in it.
-   - Storage and transient arrays stay out: the source iterates a snapshot
-     while the compiled loop reads the slots each iteration, which a
-     re-entrant call in the body can change (#1268).
+   for a local fixed array): a local array, an immutable array, a storage or
+   transient array declared at the iterated type, or another supported array
+   expression that is not a place rooted at a top-level name and has no
+   ternary in it.
+   - A storage or transient array is read like the compiled loop reads it:
+     the length once at entry and element i from its slot in iteration i
+     (#1268).
    - A ternary of same-layout arms lowers to a pointer into one arm, so a
      ternary over locals would alias a local the body may write (#1254).
    - An internal call's declared return type is the annotated type: a
@@ -151,7 +154,8 @@ Definition supported_iterator_def:
      | Name _ _ => F
      | TopLevelName (ArrayT elem bd) nid =>
          elem = ty /\ bound_length bd <= n /\
-         IS_SOME (supported_immutable_type tops nid)
+         (IS_SOME (supported_immutable_type tops nid) \/
+          supported_storage_value tops nid (ArrayT elem bd))
      | TopLevelName _ _ => F
      | _ => supported_expr tops e /\
             ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
@@ -189,7 +193,11 @@ Definition supported_stmt_def:
          (?vis mut dn slot.
            supported_variable_decl tops id =
              SOME (vis, mut, ArrayT (expr_type e) (Dynamic dn), SOME slot))
-     | _ => F) /\
+     | _ =>
+         supported_full_word_type (expr_type e) /\
+         ~supported_target_exists (\key. ~pure_expr key) target /\
+         ?dn. supported_target_info tops bindings target =
+           SOME (ValPT (ArrayT (expr_type e) (Dynamic dn)))) /\
   supported_stmt tops bindings (If c yes no) =
     (supported_pure_expr tops c /\ supported_stmts tops bindings yes /\
      supported_stmts tops bindings no) /\
