@@ -11,7 +11,7 @@ Ancestors
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
   dftPacketCallLocalPreservation
-  dftPacketCalleeAlignment
+  dftPacketCallPathGeometry dftPacketCalleeAlignment
   dftPacketCallFreshEntry
   dftPacketClosedRowNative
   dftPacketClosedRows
@@ -43,13 +43,13 @@ Ancestors
   dftPacketPseudoReplayFrame
   dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
-  dftPacketReturnLocal
+  dftPacketPreterminalRows dftPacketReturnActivation dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
   dftPacketRootedCompose
-  dftPacketRootedOperational
+  dftPacketRootedEntryContext dftPacketRootedOperational
   dftPacketCompletePlanOperational dftPacketRootedPlainStop
-  dftPacketRowAlignment
+  dftPacketRootedSegmentStop dftPacketRowAlignment
   dftPacketSameLevelCompose
   dftPacketSlotRefine
   dftPacketSuccessfulPrefixTrace dftPacketSuccessfulRowBoundary
@@ -59,4 +59,4 @@ Ancestors
   dftPacketBlockTableSplice dftPacketTerminalPhi
   dftPacketSuccessorObservation dftPacketExistingPathRows dftPacketCallInsertionConservation
   dftPacketCallPathInsertion
-  dftPacketCallKeyFreshness
+  dftPacketCallKeyFreshness dftPacketCallRootConservation
