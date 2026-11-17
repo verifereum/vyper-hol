@@ -3,8 +3,9 @@
    the memory twin of S1's body_assign_tuple_targets (bodySimStmtCases). *)
 Theory bodyMemAssignTupleTargets
 Ancestors
+  bodySimStmtFacts
   bodyMemoryPreds bodyMemAssignTupleTargetsFacts bodyMemAssignTupleTargetsWrapper
-  bodySimStmtCases bodyMemAssignTupleLocalsPrep
+  bodyMemAssignTupleLocalsPrep
   tupleTargetStoreProps bodyExprPreFacts bodySim bodyMemoryDefs exprSimDefs
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants exprSimHypsDefs
   supportedStmts supportedExprs stmtSimDefs loweringPosts

@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  bodySimStmtFacts
   supportedExprTraverse allocLimitsProps
   annassignRelayoutFrag annassignRelayoutSource assignRelayoutCaller
   valueEncodingDefs exprSimSource
@@ -34,7 +35,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimExprCases bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
+  list finite_map bodySim bodySimExprCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
