@@ -7,6 +7,8 @@ Ancestors
   codegenFrameChecks codegenOracleRegression contextReachabilityChecks
   asmEncodingRegression fnBoundaryRegression sourceMemoryRangeChecks
   fnBlockPlanStaticNopWitness fnBlockPlanStaticRetWitness
+  (* final assembly optimizer rule branches against Python's results *)
+  asmOptimizerChecks
   (* generated deep-DUP assembly at the spill/restore boundaries *)
   deepDupChecks
   (* internal-frame allocation, cleanup and join-spill regressions *)
