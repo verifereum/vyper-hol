@@ -97,13 +97,15 @@ Proof
   simp[listTheory.EVERY_DEF] >> CONV_TAC cv_eval
 QED
 
-(* A blueprint rejection precedes CREATE and must leave the stream untouched. *)
+(* The blueprint source check, run on the evaluated operands, rejects before
+   CREATE and must leave the stream untouched. *)
 Theorem create_oracle_source_failure_does_not_consume:
   EVERY (λrof.
     let st = create_oracle_test_state (CreateFromBlueprint F) F F [] in
-    let (result,final) = eval_create blueprint_test_context (CreateFromBlueprint F)
-      F rof (create_oracle_test_types (CreateFromBlueprint F) F)
-      [AddressV 42w; IntV 0; IntV 1] (SOME 0) st in
+    let (result,final) = eval_create_operands blueprint_test_context
+      (CreateFromBlueprint F) F rof
+      (create_oracle_test_types (CreateFromBlueprint F) F) F
+      [AddressV 42w; IntV 0; IntV 1] st in
     result = INR (Error (RuntimeError "create source has no deployable code")) ∧
     final.outcomes = st.outcomes ∧ final.requests = []) [F;T]
 Proof

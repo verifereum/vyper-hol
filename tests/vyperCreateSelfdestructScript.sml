@@ -195,11 +195,15 @@ Theorem blueprint_prefix_rejected[local]:
   eval_expr cx (blueprint_test_offset_expr off) st =
     (INR (Error (RuntimeError "create source has no deployable code")), st)
 Proof
-  strip_tac >>
-  simp[blueprint_test_offset_expr_def, Once evaluate_def] >>
+  strip_tac >> imp_res_tac eval_exprs_length >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+  simp[blueprint_test_offset_expr_def, Once evaluate_def,
+       create_operand_order_def, eval_create_operands_def,
+       create_operand_layout_def] >>
   simp[vyperStateTheory.bind_def, check_create_blueprint_def,
        vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_def,
-       vyperStateTheory.return_def, vyperStateTheory.raise_def]
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       create_operand_layout_def]
 QED
 
 Definition blueprint_runtime_state_def:
@@ -566,6 +570,20 @@ Definition blueprint_test_nested_post_def:
 End
 val () = cv_auto_trans blueprint_test_nested_post_def;
 
+(* Two nested deployments: the target, then the constructor argument. *)
+Definition blueprint_test_double_post_def:
+  blueprint_test_double_post =
+    let accounts = create_prelude_accounts 41w
+      (vfmContext$address_for_create 41w 3) 0 blueprint_test_nested_post.accounts in
+    blueprint_test_nested_post with
+      <|accounts := accounts;
+        storage_trace :=
+          [StorageBackend blueprint_test_nested_post.accounts
+             blueprint_test_nested_post.tStorage;
+           StorageBackend accounts blueprint_test_nested_post.tStorage]|>
+End
+val () = cv_auto_trans blueprint_test_double_post_def;
+
 Theorem blueprint_test_nested_run:
   blueprint_test_run blueprint_test_nested_create (blueprint_test_state []) =
     (INL (Value (AddressV (vfmContext$address_for_create 41w 2))),
@@ -599,33 +617,24 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* The pinned compiler's order: target, constructor arguments, value, salt and
+   code offset are all evaluated before the source check, so both nested
+   deployments run before the check rejects the empty-runtime target. *)
 Theorem blueprint_test_outer_failure:
-  blueprint_test_run
-    (blueprint_test_expr blueprint_test_nested_create F salted rof 0
-      [blueprint_test_nested_create]) (blueprint_test_state []) =
-  (INR (Error (RuntimeError "create source has no deployable code")),
-   blueprint_test_nested_post)
+  EVERY (\salted. EVERY (\rof.
+    blueprint_test_run
+      (blueprint_test_expr blueprint_test_nested_create F salted rof 0
+        [blueprint_test_nested_create]) (blueprint_test_state []) =
+    (INR (Error (RuntimeError "create source has no deployable code")),
+     blueprint_test_double_post)) [F;T]) [F;T]
 Proof
-  rewrite_tac[blueprint_test_run_def,
-    GSYM vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
-  Cases_on `salted` >>
-  simp[blueprint_test_expr_def, Once evaluate_def] >>
-  simp[Once evaluate_def, vyperStateTheory.bind_def,
-       blueprint_test_nested_eval] >>
-  simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-  ntac 8 (simp[Once evaluate_def, vyperStateTheory.bind_def,
-    vyperStateTheory.read_result_def, vyperStateTheory.return_def,
-    vyperValueOperationTheory.evaluate_literal_def]) >>
-  simp[blueprint_test_nested_source_check, blueprint_literal_offset_def,
-       subst_consts_expr_def, origin_fold_value_def, is_int_literal_def]
+  simp[listTheory.EVERY_DEF] >> CONV_TAC cv_eval
 QED
 
-(* The prefix deploys an empty-runtime target, then fails its source check.
-   The identical nested deployment in the constructor suffix must not run.
-   Nonce three and the first deployed account survive the expression error;
-   the second prospective deployment is still absent. *)
-
-Theorem blueprint_invalid_source_precedes_constructor_effects:
+(* The target deploys an empty-runtime account, the constructor argument
+   deploys a second one, and only then does the source check fail.  Nonce four
+   and both deployed accounts survive the expression error. *)
+Theorem blueprint_invalid_source_fails_after_constructor_effects:
   EVERY (\salted.
     EVERY (\rof.
         let e = blueprint_test_expr blueprint_test_nested_create F salted rof 0
@@ -634,11 +643,11 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
         eval_expr blueprint_test_context e (blueprint_test_state []) = r /\
         FST r = INR (Error (RuntimeError "create source has no deployable code")) /\
         let final = SND r in
-        (lookup_account 41w final.accounts).nonce = 3 /\
+        (lookup_account 41w final.accounts).nonce = 4 /\
         (lookup_account 41w final.accounts).balance = 100 /\
         (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).nonce = 1 /\
         (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).code = [] /\
-        (lookup_account (vfmContext$address_for_create 41w 3) final.accounts).nonce = 0 /\
+        (lookup_account (vfmContext$address_for_create 41w 3) final.accounts).nonce = 1 /\
         (lookup_account (vfmContext$address_for_create 41w 3) final.accounts).code = [] /\
         final.logs = [<|logger := 43w; topics := []; data := [99w]|>] /\
         final.requests = [] /\ IS_NONE final.outcomes)
@@ -647,14 +656,14 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def, listTheory.EVERY_DEF,
-       blueprint_test_outer_failure] >>
+       SRULE [listTheory.EVERY_DEF] blueprint_test_outer_failure] >>
   CONV_TAC cv_eval
 QED
 
-(* An empty source is legal at U-1: the signed wrapped size is one.  During
-   constructor-argument evaluation, CREATE deposits one byte at that previously
-   empty source address.  CREATE2's observable address distinguishes the saved
-   one-byte size from an incorrect recomputation producing two zero bytes. *)
+(* An empty source is legal at U-1: the signed wrapped size is one.  CREATE
+   evaluates its constructor argument before the source check, so that
+   argument deposits one byte at the previously empty source address first.
+   The check then sees the populated source: the wrapped size is two. *)
 Definition blueprint_test_populate_source_def:
   blueprint_test_populate_source =
     Call (BaseT AddressT) (CreateTarget RawCreate F T [])
@@ -663,10 +672,19 @@ Definition blueprint_test_populate_source_def:
 End
 val () = cv_auto_trans blueprint_test_populate_source_def;
 
-(* The constructor argument would install nonempty code at the blueprint
-   address itself.  At offset zero that source is invalid before evaluation,
-   so it cannot be repaired by running the constructor expression early. *)
-Theorem blueprint_constructor_cannot_make_invalid_source_valid:
+Definition blueprint_test_valid_source_address_def:
+  blueprint_test_valid_source_address =
+    vfmExecution$address_for_create2 41w 0w
+      ([0w] ++ REPLICATE 12 0w ++
+       word_to_bytes (vfmContext$address_for_create 41w 2) T)
+End
+val () = cv_auto_trans blueprint_test_valid_source_address_def;
+
+(* The constructor argument installs one byte of code at the blueprint address
+   itself.  At offset zero that source is empty when the expression starts, but
+   the pinned compiler's order evaluates the constructor argument before the
+   source check, so the check sees the populated source and accepts it. *)
+Theorem blueprint_constructor_can_make_empty_source_valid:
   EVERY (\salted.
     EVERY (\rof.
       blueprint_test_observe []
@@ -674,8 +692,11 @@ Theorem blueprint_constructor_cannot_make_invalid_source_valid:
           (Literal (BaseT AddressT)
             (BytesL (word_to_bytes (vfmContext$address_for_create 41w 2) T)))
           F salted rof 0 [blueprint_test_populate_source])
-        (INR (Error (RuntimeError "create source has no deployable code")))
-        2 (vfmContext$address_for_create 41w 2) 0 [])
+        (INL (Value (AddressV
+          (if salted then blueprint_test_valid_source_address
+           else vfmContext$address_for_create 41w 3))))
+        4 (if salted then blueprint_test_valid_source_address
+           else vfmContext$address_for_create 41w 3) 1 [])
       [F;T])
     [F;T]
 Proof
@@ -685,7 +706,7 @@ QED
 Definition blueprint_test_captured_address_def:
   blueprint_test_captured_address =
     vfmExecution$address_for_create2 41w 0w
-      ([0w] ++ REPLICATE 12 0w ++
+      ([0w;0w] ++ REPLICATE 12 0w ++
        word_to_bytes (vfmContext$address_for_create 41w 2) T)
 End
 val () = cv_auto_trans blueprint_test_captured_address_def;
@@ -718,8 +739,10 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem blueprint_size_is_captured_before_constructor_changes_source:
-  blueprint_copy_size (2 ** 256 - 1) [] = 1 /\
+(* The wrapped size is computed from the source as the constructor argument
+   left it (one byte), so the CREATE2 initcode starts with two zero bytes. *)
+Theorem blueprint_size_uses_source_after_constructor_changes_it:
+  blueprint_copy_size (2 ** 256 - 1) [0w] = 2 /\
   let e = blueprint_test_expr
     (Literal (BaseT AddressT)
       (BytesL (word_to_bytes (vfmContext$address_for_create 41w 2) T)))
@@ -847,10 +870,12 @@ Definition create_argument_result_def:
 End
 val () = cv_auto_trans create_argument_result_def;
 
-(* Raw creation reads constructor arguments before evaluating salt; blueprint
-   creation evaluates salt in its prefix. Both read the array after the later
-   constructor pop. The differing deployed lengths distinguish all three stages. *)
-Theorem create_constructor_reads_and_salt_order:
+(* Both kinds follow the pinned compiler's order: constructor arguments are
+   evaluated, and each is read when evaluated, before the salt.  The array
+   argument is read before the constructor's own later pop and before the salt
+   pop, so both deployed lengths are three; the array ends with one element
+   after both pops. *)
+Theorem create_constructor_reads_before_salt:
   EVERY (\raw.
     eval_expr blueprint_test_context (create_argument_expr raw)
       create_argument_state = create_argument_result raw /\
@@ -861,7 +886,7 @@ Theorem create_constructor_reads_and_salt_order:
           | SOME address =>
               (lookup_account address (SND (create_argument_result raw)).accounts).nonce = 1 /\
               (lookup_account address (SND (create_argument_result raw)).accounts).code =
-                REPLICATE 31 0w ++ [if raw then 2w else 1w]
+                REPLICATE 31 0w ++ [3w]
           | NONE => F)
      | _ => F) /\
     OPTION_MAP (\entry. entry.value)
