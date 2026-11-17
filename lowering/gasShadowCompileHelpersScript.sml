@@ -260,6 +260,26 @@ Proof
    simp[gas_shadow_compiles_return])
 QED
 
+Theorem gas_shadow_compiles_create_ctor_args:
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+  !es. gas_shadow_compiles (compile_create_ctor_args f cenv es)
+    (compile_create_ctor_args g cenv
+      (if sh then MAP gas_shadow_expr es else es))
+Proof
+  strip_tac >> Cases_on `sh` >> simp[] >> Induct >>
+  simp[compile_create_ctor_args_def, gas_shadow_compiles_return,
+       gas_shadow_expr_can_mutate] >> gen_tac >>
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- metis_tac[COND_CLAUSES] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- simp[gas_shadow_compiles_snapshot_vv] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   simp[gas_shadow_compiles_return])
+QED
+
 Theorem gas_shadow_compiles_create_ctor_tuple:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -270,7 +290,7 @@ Proof
   simp[compile_create_ctor_tuple_def, MAP_MAP_o, combinTheory.o_DEF,
        SF ETA_ss, comp_ignore_bind_def, gas_shadow_lowered_value_type] >>
   (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- (drule gas_shadow_compiles_multi_vvs >> metis_tac[COND_CLAUSES]) >>
+   >- (drule gas_shadow_compiles_create_ctor_args >> metis_tac[COND_CLAUSES]) >>
    gen_tac >> BETA_TAC >>
    rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
         >- simp[gas_shadow_compiles_alloc_buffer,
@@ -319,8 +339,9 @@ QED
 Theorem gas_shadow_compiles_create_blueprint_args:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
-  gas_shadow_compiles (compile_create_blueprint_args f cenv raw_args args)
+  gas_shadow_compiles (compile_create_blueprint_args f cenv raw_args later_es args)
     (compile_create_blueprint_args g cenv raw_args
+      (if sh then MAP gas_shadow_expr later_es else later_es)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -336,12 +357,12 @@ Proof
   namedCases_on `rest` ["", "next more"] >>
   simp[compile_create_blueprint_args_def, comp_ignore_bind_def,
        MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss,
-       gas_shadow_lowered_value_type,
+       gas_shadow_lowered_value_type, gas_shadow_expr_can_mutate,
        gas_shadow_compiles_bind, gas_shadow_compiles_emit_inst,
        gas_shadow_compiles_return] >>
-  drule gas_shadow_compiles_lower_value >> strip_tac >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- (simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_emit_op,
+       >- (simp[gas_shadow_compiles_snapshot_vv, gas_shadow_compiles_unwrap_value,
+                gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_emit_op,
                 gas_shadow_compiles_abi_encode_to_buf] >>
            fs[FORALL_BOOL, MAP]) >> gen_tac >> BETA_TAC) >>
   simp[gas_shadow_compiles_return]
@@ -376,6 +397,9 @@ Proof
                fs[FORALL_BOOL]) >> gen_tac >> BETA_TAC) >>
       simp[gas_shadow_compiles_return]) >>
   gen_tac >> pairarg_tac >> gvs[] >>
+  match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- metis_tac[COND_CLAUSES] >>
+  gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- metis_tac[COND_CLAUSES] >>
   simp[gas_shadow_compiles_create_dispatch])
@@ -643,9 +667,12 @@ Proof
   `!cenv ty e. gas_shadow_compiles (lower_value f cenv ty e)
      (lower_value g cenv ty (if sh then gas_shadow_expr e else e))`
     by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
-  `!es. gas_shadow_compiles (compile_create_blueprint_args f cenv raw_args es)
-     (compile_create_blueprint_args g cenv raw_args (if sh then MAP gas_shadow_expr es else es))`
-    by (gen_tac >> irule gas_shadow_compiles_create_blueprint_args >> simp[]) >>
+  `!later_es es. gas_shadow_compiles
+     (compile_create_blueprint_args f cenv raw_args later_es es)
+     (compile_create_blueprint_args g cenv raw_args
+       (if sh then MAP gas_shadow_expr later_es else later_es)
+       (if sh then MAP gas_shadow_expr es else es))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_create_blueprint_args >> simp[]) >>
   `!salt. gas_shadow_compiles (compile_create_salt f cenv salt)
      (compile_create_salt g cenv (if sh then OPTION_MAP gas_shadow_expr salt else salt))`
     by (gen_tac >> irule gas_shadow_compiles_create_salt >> simp[]) >>
@@ -674,17 +701,20 @@ Proof
   gvs[compile_create_call_def, comp_ignore_bind_def,
       gas_shadow_compiles_bind, gas_shadow_compiles_emit_inst,
       gas_shadow_compiles_return, gas_shadow_origin_int_literal] >>
-  (ntac 5 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (qpat_x_assum `!later_es es. gas_shadow_compiles
+         (compile_create_blueprint_args f cenv raw_args later_es es) _`
+         mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[MAP]) >>
+   gen_tac >> pairarg_tac >> gvs[] >>
+   ntac 4 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
         >- simp[gas_shadow_compiles_create_blueprint_check,
                 SIMP_RULE (srw_ss()) []
                   (Q.INST [`sh` |-> `T`] gas_shadow_compiles_blueprint_offset),
                 SIMP_RULE (srw_ss()) []
                   (Q.INST [`sh` |-> `F`] gas_shadow_compiles_blueprint_offset)] >>
         gen_tac >> BETA_TAC) >>
-   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- (qpat_x_assum `!es. gas_shadow_compiles (compile_create_blueprint_args f cenv raw_args es) _`
-         mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[MAP]) >>
-   gen_tac >> pairarg_tac >> gvs[] >>
    simp[gas_shadow_compiles_create_blueprint_append])
 QED
 
