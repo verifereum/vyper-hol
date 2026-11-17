@@ -31,6 +31,8 @@
  *   observed_storage_region_read_live, storage_read_live_head,
  *   storage_read_live_field — reads of a declared region see live bytes
  *   storage_agree_read_head — agreeing storages read a live value alike
+ *   observed_storage_head_agree — the first slot of an observed region reads
+ *                             alike in the Venom and source states
  *   storage_range_agree_of_live, storage_range_agree_head,
  *   storage_range_agree_field — agreement on the slots of one read: from a
  *                             live read, on its first slot, on a field
@@ -498,6 +500,29 @@ Theorem storage_agree_read_head:
 Proof
   rw[storage_agree_def] >> irule word_to_bytes_EL_eq >> rpt strip_tac >>
   drule_all storage_read_live_head >> metis_tac[]
+QED
+
+(* The first slot of an observed region reads, in the Venom state, what the
+   source state holds there. *)
+Theorem observed_storage_head_agree:
+  state_rel H func cenv cx es s /\
+  MEM (tr,slot,tv) (FST H) /\ 0 < type_slot_size tv ==>
+  (if tr then tload slot s else sload slot s) =
+    lookup_storage slot (get_storage cx es tr)
+Proof
+  strip_tac >>
+  `storage_rel H cx.txn.target es s /\ transient_rel H cx.txn.target es s` by
+    fs[state_rel_def] >>
+  `storage_read_live H tr (get_storage cx es tr) slot tv` by
+    metis_tac[observed_storage_region_read_live] >>
+  `storage_agree (storage_dead H tr (get_storage cx es tr))
+      (get_storage cx es tr)
+      (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[storage_rel_def, transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+         lookup_account_def]) >>
+  drule_all storage_agree_read_head >>
+  Cases_on `tr` >> simp[tload_def, sload_def]
 QED
 
 (* Two element slot ranges of an array that share a slot x are the same

@@ -384,7 +384,7 @@ QED
    zero) exit, and on a value of the operator its word is stored at f's
    slot.  e may call internal functions unless nocalls: its
    expr_sim_case is a premise, as e runs after x's root is recorded. *)
-Theorem compile_augassign_attr_storage_case:
+Theorem compile_augassign_attr_storage_case_typed:
   !nocalls ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot.
     expr_sim_case nocalls ctx func cenv cx e /\
@@ -398,7 +398,8 @@ Theorem compile_augassign_attr_storage_case:
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    (bop = ShL \/ bop = ShR ==>
+      shift_amount_ok e \/ augassign_shift_amount_ok ty e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
@@ -411,9 +412,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
-  `is_word_type ty` by metis_tac[word_value_type_word] >>
   `?fs off ftv.
      evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
      struct_field_slot fs fld = SOME (off, ftv)` by
@@ -464,6 +462,8 @@ Proof
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_offset_slots_eq >> strip_tac >>
   drule_all struct_field_type >> strip_tac >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_is_word] >>
   `ALOOKUP fs fld = SOME ftv` by
     metis_tac[vyperPlaceTypingTheory.struct_field_slot_type] >>
   gvs[] >>
@@ -472,7 +472,7 @@ Proof
   suspend "load_prefix"
 QED
 
-Resume compile_augassign_attr_storage_case[load_prefix]:
+Resume compile_augassign_attr_storage_case_typed[load_prefix]:
   `valid_horizon cx st0 H1 es.storage_trace /\
    MEM (tr,n2w slot,StructTV fs) (FST H1) /\ regions_consistent (FST H1)` by
     (qpat_assum `!H. valid_horizon _ _ H (_ ++ _) ==> _`
@@ -490,14 +490,13 @@ Resume compile_augassign_attr_storage_case[load_prefix]:
   `value_has_type ftv fv` by
     metis_tac[
       vyperTypeStatePreservationTheory.read_storage_slot_well_typed_value] >>
-  `word_value fv` by metis_tac[word_value_type_typed] >>
   `!s'. stmt_state_rel H1 ctx func cenv cx es s' ==>
      (if tr then tload (n2w slot + n2w off) s'
-      else sload (n2w slot + n2w off) s') = val_to_w256 fv` by
+      else sload (n2w slot + n2w off) s') = typed_val_to_w256 ftv fv` by
     (rpt strip_tac >>
      `storage_holds cx tr ty (Value fv) (n2w slot + n2w off) es s'` by
        metis_tac[] >>
-     drule_all storage_holds_load >> simp[typed_val_to_w256_word_value]) >>
+     drule_all storage_holds_load >> simp[]) >>
   `cs_extends sa sn /\ cs_extends sn s1 /\ cs_extends s1 s2 /\
    cs_extends s2 s3 /\ cs_extends s3 sb` by
     metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def,
@@ -565,7 +564,7 @@ Resume compile_augassign_attr_storage_case[load_prefix]:
   metis_tac[]
 QED
 
-Resume compile_augassign_attr_storage_case[rhs_summary]:
+Resume compile_augassign_attr_storage_case_typed[rhs_summary]:
   rewrite_tac[gas_outcome_def] >> BETA_TAC >> qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
               (es with storage_trace :=
@@ -603,7 +602,7 @@ Resume compile_augassign_attr_storage_case[rhs_summary]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume compile_augassign_attr_storage_case[rhs_normal]:
+Resume compile_augassign_attr_storage_case_typed[rhs_normal]:
   qpat_assum `!H. valid_horizon _ _ H _ ==>
                 ?v. res = INL v /\ expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H2` mp_tac) >>
@@ -653,7 +652,7 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
     (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   strip_tac
   >- suspend "store" >>
   gvs[] >>
@@ -681,7 +680,7 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
-Resume compile_augassign_attr_storage_case[store]:
+Resume compile_augassign_attr_storage_case_typed[store]:
   gvs[] >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -690,26 +689,10 @@ Resume compile_augassign_attr_storage_case[store]:
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        ftv bop fv v` >> gvs[]) >>
   qpat_x_assum `INL result = _` kall_tac >>
-  `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
-  `expr_body_pre cenv cx env e
-     (es with storage_trace :=
-        es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])` by
-    simp[] >>
-  drule_all augassign_attr_binop_ready >>
-  disch_then (qspecl_then [`func`, `es_end with gas_obs := []`, `ctx`]
-    strip_assume_tac) >>
-  `value_has_type ftv result` by
-    (first_x_assum irule >> irule EQ_TRANS >>
-     qexists_tac `case evaluate_binop
-       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` >>
-     conj_tac >- (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
-     simp[]) >>
   `encode_value ftv result = SOME [(0, typed_val_to_w256 ftv result)]` by
     metis_tac[encode_value_word_typed] >>
   `type_slot_size ftv = 1` by
-    metis_tac[word_value_type_word, word_type_slot_size] >>
+    metis_tac[word_type_slot_size] >>
   `s1.cs_next_var <= s2.cs_next_var` by
     metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, ci_mono_def,
               pairTheory.SND] >>
@@ -749,8 +732,6 @@ Resume compile_augassign_attr_storage_case[store]:
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP u.vs_allocas aid = SOME b` by
     (fs[expr_post_def] >> metis_tac[]) >>
-  `eval_operand res_op u = SOME (typed_val_to_w256 ftv result)` by
-    simp[typed_val_to_w256_word_value] >>
   Cases_on `cx.txn.is_static`
   >- (`u.vs_call_ctx.cc_static` by
         fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -848,4 +829,32 @@ Resume compile_augassign_attr_storage_case[store]:
   metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]
 QED
 
-Finalise compile_augassign_attr_storage_case
+Finalise compile_augassign_attr_storage_case_typed
+
+Theorem compile_augassign_attr_storage_case:
+  !nocalls ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
+   ts tr id_str slot.
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts =
+      SOME (StorageVarDecl tr (StructT sid), id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e))
+      (eval_stmt cx
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es
+Proof
+  rpt strip_tac >> irule compile_augassign_attr_storage_case_typed >>
+  simp[] >> metis_tac[]
+QED
