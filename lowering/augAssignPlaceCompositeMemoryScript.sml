@@ -83,7 +83,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all aug_place_compilation_mem >> strip_tac >> gnvs[] >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
     (irule aug_place_target_admissible_mem >> goal_assum (drule_at Any)) >>
   `!p. storage_trace_frame (bind (read_place cx p) (\cur.
@@ -177,7 +179,9 @@ Proof
     metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info] >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all aug_place_compilation_mem >> strip_tac >> gnvs[] >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
     (irule aug_place_target_admissible_mem >> goal_assum (drule_at Any)) >>
   `!p. storage_trace_frame (bind (read_place cx p) (\cur.
