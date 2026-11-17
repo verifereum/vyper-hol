@@ -328,7 +328,8 @@ Proof
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_corresponds_def] >>
   simp[external_call_result_rel_def, venom_frame_rel_def,
-       call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
+       call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def,
+       tx_return_bytes_def, LET_THM] >>
   rpt strip_tac >> qexists_tac `ss.vs_returndata` >>
   gvs[logs_correspond_def, LIST_REL_eq]
 QED
