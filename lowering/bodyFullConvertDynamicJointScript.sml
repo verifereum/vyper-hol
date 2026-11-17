@@ -370,7 +370,8 @@ Resume convert_dynamic_vv_sim_full[unsigned]:
   simp[] >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
   conj_tac >- (qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR y`,`tnf`] >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]) >> simp[])
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+       halt_exit_not_halt]) >> simp[])
 QED
 
 Resume convert_dynamic_vv_sim_full[zero]:

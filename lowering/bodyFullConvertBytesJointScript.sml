@@ -483,7 +483,8 @@ Resume convert_bytes_vv_sim_full[cast_dispatch]:
   qpat_x_assum `n < L ==> _` drule >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
   conj_tac >- (qexistsl_tac [`H`,`mid`,`Abort Revert_abort t'`,`INR (Error (RuntimeError msg))`,`th`] >>
-    simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]) >> simp[])
+    simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+         halt_exit_not_halt]) >> simp[])
 QED
 
 Resume convert_bytes_vv_sim_full[cast_success]:
