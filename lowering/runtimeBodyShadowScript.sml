@@ -152,6 +152,8 @@ Proof
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
   rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  qpat_assum `classify_functions tops = _`
+    (fn th => rule_assum_tac (REWRITE_RULE [th]) >> assume_tac th) >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
     (build_selectors (type_env tops) exts)` by
     rewrite_tac[build_selectors_fn_labels] >>
@@ -197,8 +199,10 @@ Proof
        (MAP (set_internal_package_target rpolicy.rpol_target o
          package_internal_fn tops T (K global_nonreentrant_slot) F 0)
          (order_internals (runtime_internal_order tops ints) ints))))` by
-    gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-         internal_fn_descriptors_MAP_package_internal_fn] >>
+    (gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+         internal_fn_descriptors_MAP_package_internal_fn,
+         EVERY_MAP, EVERY_MEM] >>
+     fs[MEM_MAP, PULL_EXISTS]) >>
   rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
   qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
   drule_all run_lowering_pinned_body_interval >> strip_tac >>
