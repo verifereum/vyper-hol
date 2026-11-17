@@ -42,6 +42,7 @@ Ancestors
   dftPacketPseudoReplayFrame
   dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
+  dftPacketReturnActivation
   dftPacketReturnLocal
   dftPacketReturnNative
   dftPacketRootedAlignment
