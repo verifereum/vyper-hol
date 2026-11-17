@@ -148,7 +148,41 @@ Theorem call_external_selected_body_trace:
     ?r am' rqs.
       call_external_trace orc gobs am tx = (r, am', rqs, ee.storage_trace)
 Proof
-  cheat
+  rw[source_deployment_rel_def] >>
+  `type_env_all_modules [(NONE, tops)] = type_env tops` by
+    simp[type_env_all_modules_def, type_env_def] >>
+  `es0.scopes = [env]` by
+    (drule (cj 1 send_call_value_with_scopes) >> simp[initial_state_def]) >>
+  simp[call_external_trace_def, find_function_module_def,
+       lookup_exported_function_def, get_self_code_def, get_module_code_def,
+       initial_evaluation_context_def] >>
+  qmatch_goalsub_abbrev_tac `call_external_function_trace orc gobs am cx` >>
+  qabbrev_tac `es1 = (es0 with gas_obs := gobs) with scopes := [FEMPTY]` >>
+  `send_call_value mut cx
+     (initial_state am [FEMPTY] with
+        <| outcomes := orc; requests := []; gas_obs := gobs |>) =
+   (INL (), es1)` by
+    (qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
+     simp[Abbr `cx`, initial_evaluation_context_def] >> strip_tac >>
+     drule send_call_value_with_gas_obs >> strip_tac >>
+     pop_assum (qspec_then `gobs` assume_tac) >>
+     drule send_call_value_with_scopes >> strip_tac >>
+     pop_assum (qspec_then `[FEMPTY]` mp_tac) >>
+     simp[Abbr `es1`, initial_state_def]) >>
+  `es1 with scopes := [env] = es0 with gas_obs := gobs` by
+    simp[Abbr `es1`, evaluation_state_component_equality] >>
+  `eval_stmts cx fbody (es0 with gas_obs := gobs) = (res, ee)` by
+    gvs[Abbr `cx`, initial_evaluation_context_def] >>
+  `~cx.in_deploy` by simp[Abbr `cx`] >>
+  `initial_state am [FEMPTY] with
+     <| outcomes := orc; requests := []; gas_obs := gobs; storage_trace := [] |> =
+   initial_state am [FEMPTY] with
+     <| outcomes := orc; requests := []; gas_obs := gobs |>` by
+    simp[initial_state_def] >>
+  simp[call_external_function_trace_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.set_scopes_def, vyperStateTheory.return_def] >>
+  BasicProvers.every_case_tac >> gvs[pairTheory.UNCURRY]
 QED
 
 (* call_external_selected_body_gas without gas observations. *)
