@@ -3,7 +3,7 @@ Ancestors lowerDloadPtrDelegateInterfaces lowerDloadPtrCallBuffers
   lowerDloadPtrPhi lowerDloadPtrAggregate lowerDloadPtrRel lowerDloadPtrScalar
   lowerDloadPtrResidualInterfaces lowerDloadPtrCall lowerDloadPtrExternalCall
   pointerConfinedDefs memLocDefs ptrDiscipline contextCodegenRel codegenRel
-  venomExecSemantics venomState finite_map pred_set list
+  venomExecSemantics venomCallOracleDefs extCallOracle venomState finite_map pred_set list
 
 Theorem dload_delegate_success_inputs:
   i.inst_opcode = DELEGATECALL /\ step_inst fuel C i t = OK t1 ==>
@@ -54,7 +54,6 @@ Proof
   `!op. MEM op i.inst_operands ==> op_taint tn op = {}` by
     (fs[taint_ok_def] >> rpt strip_tac >>
      qpat_x_assum `!op. MEM op _ /\ _ ==> _` (qspec_then `op` mp_tac) >> simp[]) >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by gvs[taint_ok_def] >>
   `!op x y. MEM op [a;r] /\ eval_operand op s = SOME x /\
     eval_operand op t = SOME y ==>
     dload_value_word fs {} (op_prov G op) (op_prov H op) x y` by
@@ -183,27 +182,15 @@ Theorem dload_delegate_reverse_inputs[local]:
   dload_equal_environment t s /\ dload_shared_store un tn t s
 Proof
   strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    metis_tac[dload_delegate_full_stores] >>
   conj_tac
   >- gvs[dload_equal_environment_def, venom_state_component_equality] >>
-  gvs[dload_shared_store_def, storage_agree_except_def, word_agree_except_def] >>
+  gvs[dload_equal_environment_def, venom_state_component_equality,
+      dload_shared_store_def, storage_agree_except_def, word_agree_except_def] >>
+  conj_tac
+  >- (gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
+      qpat_x_assum `s.vs_accounts a with storage := _ = _`
+        (SUBST1_TAC o SYM) >> simp[]) >>
   metis_tac[]
-QED
-
-Theorem dload_delegate_exec_shape[local]:
-  exec_delegatecall i s gas addr ao az ro rz = OK s1 ==>
-  s1 = s with <|vs_vars := s1.vs_vars;
-    vs_returndata := s1.vs_returndata; vs_accounts := s1.vs_accounts;
-    vs_logs := s1.vs_logs;
-    vs_memory := (write_memory_with_expansion (w2n ro)
-       (TAKE (w2n rz) s1.vs_returndata) s).vs_memory;
-    vs_transient := s1.vs_transient;
-    vs_pending_deletions := s1.vs_pending_deletions;
-    vs_outcomes := s1.vs_outcomes; vs_requests := s1.vs_requests|>
-Proof
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def, venom_state_component_equality]
 QED
 
 Theorem dload_delegate_exec_backward[local]:
@@ -219,14 +206,7 @@ Proof
   drule_all (Q.ISPEC `ro:bytes32` (Q.GEN `tr` (SPEC_ALL dload_delegate_exec_success))) >>
   strip_tac >> first_x_assum (qspec_then `ro:bytes32` strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `t1 = _` SUBST_ALL_TAC >>
-  drule dload_delegate_exec_shape >>
-  disch_then (fn th => once_rewrite_tac[th]) >>
-  qpat_x_assum `dload_equal_environment s t` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-       dload_equal_environment_def, venom_state_component_equality]
+  gvs[dload_equal_environment_def, venom_state_component_equality]
 QED
 
 Theorem dload_delegate_step[local]:
@@ -266,18 +246,16 @@ Theorem dload_delegate_shared_store[local]:
   dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   strip_tac >>
-  `s1.vs_immutables = s.vs_immutables` by
-    (qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` mp_tac >>
-     disch_then (fn th => assume_tac th) >>
-     drule dload_delegate_exec_shape >>
-     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `t1.vs_immutables = t.vs_immutables` by
-    (qpat_x_assum `exec_delegatecall i s _ _ _ _ _ _ = _` kall_tac >>
-     drule dload_delegate_exec_shape >>
-     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes` by
+    gvs[dload_equal_environment_def, venom_state_component_equality] >>
+  fs[exec_delegatecall_def, AllCaseEqs()] >>
+  Cases_on `t.vs_outcomes` >>
   gvs[dload_shared_store_def, step_taint_def, store_taint_def,
-      adopt_reset_def, imm_taint_def, storage_agree_except_def,
-      word_agree_except_def] >> metis_tac[]
+      adopt_reset_def, imm_taint_def, update_var_def,
+      venom_call_request_def, take_outcome_def,
+      computed_precompile_def, adopt_outcome_def,
+      storage_agree_except_def, word_agree_except_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> metis_tac[]
 QED
 
 Theorem dload_delegate_outputs[local]:
