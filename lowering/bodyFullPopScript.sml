@@ -790,7 +790,16 @@ Proof
     (load ++ (chunk ++ (store ++ tail))) (s with vs_inst_idx := k) H tm` by
     metis_tac[inst_seq_ptr_uniform_append] >>
   qexistsl_tac [`u'`, `H`, `tm`] >>
-  conj_tac >- metis_tac[run_inst_seq_append] >>
+  conj_tac >- (qpat_assum `memory_pop_insts (Var p) id esz x0 x1 x2 x3 x4 x5 x6 = _`
+      SUBST1_TAC >>
+    qpat_assum `run_inst_seq load s = OK s1`
+      (mp_then Any (qspec_then `chunk ++ (store ++ tail)` SUBST1_TAC)
+        run_inst_seq_append) >>
+    qpat_assum `run_inst_seq chunk s1 = OK u`
+      (mp_then Any (qspec_then `store ++ tail` SUBST1_TAC) run_inst_seq_append) >>
+    qpat_assum `run_inst_seq store u = OK s2`
+      (mp_then Any (qspec_then `tail` SUBST1_TAC) run_inst_seq_append) >>
+    first_assum ACCEPT_TAC) >>
   conj_tac >- (gen_tac >> first_x_assum (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
   fs[op_prov_def] >> metis_tac[]
 QED

@@ -719,7 +719,7 @@ Resume append_nested_memory_cont_full[success]:
              `tv0 = entry.type` by
                metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees,
                          optionTheory.SOME_11] >>
-             gvs[]) >>
+             FIRST [gvs[]]) >>
          conj_tac
          >- metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees] >>
          irule (cj 1 stmtSimDeclStoreTheory.typed_word_store) >>

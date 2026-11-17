@@ -209,7 +209,8 @@ Proof
   qpat_assum `compile_tuple_store_all _ tys1 gs ops1 sm = _`
     (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
   `fn_has_code st sm func /\ fn_has_code sm st' func` by
-    metis_tac[fn_has_code_split] >>
+    (mp_tac (Q.SPECL [`st`, `sm`, `st'`, `func`] fn_has_code_split) >>
+      (impl_tac >- asm_rewrite_tac[]) >> strip_tac >> asm_rewrite_tac[]) >>
   `!x. op = Var x ==> not_fresh_at st x` by fs[] >>
   Cases_on `head_res = INL ()`
   >- suspend "prefix" >>

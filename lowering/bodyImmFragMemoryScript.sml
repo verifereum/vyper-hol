@@ -133,7 +133,7 @@ Proof
        comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `valid_horizon cx st0 H (es with gas_obs := []).storage_trace` by simp[] >>
-  `?H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace` by metis_tac[] >>
+  `?H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace` by (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace ==>
      stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
      storage_well_formed_on cx (es with gas_obs := []) (FST H)` by

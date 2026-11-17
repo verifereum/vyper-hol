@@ -361,7 +361,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
   >- (simp[] >> qpat_assum `LIST_REL _ ops vs` mp_tac >>
       qid_spec_tac `vs` >> qid_spec_tac `ops` >>
       Induct >> simp[venomStateTheory.eval_operands_def] >>
-      rpt strip_tac >> gvs[] >> first_x_assum drule >>
+      rpt strip_tac >> FIRST [gvs[]] >> first_x_assum drule >>
       disch_then (qspec_then `H` mp_tac) >> simp[]) >>
   simp[wordsTheory.dimword_def] >> decide_tac
 QED

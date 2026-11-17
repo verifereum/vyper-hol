@@ -51,7 +51,7 @@ Proof
     `ctx`, `func`, `bb`] mp_tac) >>
   simp[is_terminator_def, run_inst_seq_mem_ok_def,
        run_inst_seq_def, below_frontier_MLOAD, step_MLOAD,
-       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_def,
+       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_read1_def, eval_operand_def,
        venomStateTheory.eval_operands_def, arithmeticTheory.ADD1]
 QED

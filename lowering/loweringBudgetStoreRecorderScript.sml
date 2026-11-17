@@ -13,7 +13,7 @@ Proof
   ho_match_mp_tac lower_budget_path_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   once_rewrite_tac[lower_budget_path_cases] >>
-  strip_tac >> gvs[GSYM SNOC_APPEND] >>
+  strip_tac >> FIRST [gvs[GSYM SNOC_APPEND]] >>
   metis_tac[]
 QED
 
