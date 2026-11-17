@@ -6,6 +6,7 @@ Ancestors
   o1LowerDloadEnvironment o1LowerDloadShared o1LowerDloadRelocationKernel ptrDiscipline
   venomExecSemantics venomState codegenRel finite_map words list pred_set arithmetic
   o1PassContract venomWf venomInst contextCodegenRel
+  o1LowerDloadScratchCount o1LowerDloadOccurrenceHeadroom
 
 Theorem ld_alloca_fresh_annotations[local]:
   inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit amount] /\
@@ -40,6 +41,11 @@ Proof
   simp[] >> decide_tac
 QED
 
+fun ld_on_head name tac (g as (_, w)) =
+  let val hd = if is_exists w then "?"
+               else (#1 (dest_const (#1 (strip_comb w))) handle HOL_ERR _ => "")
+  in if hd = name then tac g else NO_TAC g end
+
 Theorem ld_joint_alloca_fresh_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
@@ -64,12 +70,12 @@ Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     simp[is_terminator_def] >>
   drule_all occ_frame_reachable_next >> strip_tac >>
-  `occurrence_annotation_ok n a U (occurrence_sites_step a B inst s1) HP
+  `occurrence_annotation_ok (dyn_floor C vs) n a U (occurrence_sites_step a B inst s1) HP
       (occurrence_step a HP H inst s1) stk PG (step_prov PG G inst s1)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
@@ -89,6 +95,17 @@ Proof
     (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
   qhdtm_assum `ld_joint_frame`
     (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
+  (* the fresh site lies below the dynamic floor on both sides *)
+  `s.vs_alloca_next + w2n amount <= dyn_floor C vs /\
+   t.vs_alloca_next + w2n amount <= dyn_floor C vs` by
+    (`s1.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
+       (irule ld_occurrence_shape_alloca_dyn_headroom >> metis_tac[]) >>
+     `s1.vs_alloca_next = s.vs_alloca_next + w2n amount` by
+       (qpat_x_assum `exec_alloca inst s amount = OK s1` mp_tac >>
+        simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+        rpt strip_tac >> gvs[]) >>
+     drule_all ld_joint_scratch_count >> strip_tac >>
+     FIRST [decide_tac, fs[] >> decide_tac]) >>
   `(a,inst.inst_id) NOTIN FDOM sites` by
     (`FLOOKUP B (a,inst.inst_id) = NONE` by
        fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
@@ -114,27 +131,54 @@ Proof
     (qpat_x_assum `ld_joint_control u fn fn' (_ with vs_inst_idx := _) _` mp_tac >>
      gvs[exec_alloca_def, update_var_def, ld_joint_control_def]) >>
   qexists_tac `u` >> simp[] >>
-  simp[ld_joint_boundary_def] >>
-  reverse conj_tac
-  >- (gvs[exec_alloca_def, update_var_def, ld_shared_agree_def]) >>
-  qexists_tac `u` >> simp[ld_joint_frame_def] >>
-  conj_tac
-  >- (qpat_x_assum `ld_env_agree (_ |+ _) fn _ tn s1 t1` mp_tac >>
-      simp[ld_env_agree_def, op_taint_def, FLOOKUP_UPDATE] >>
-      strip_tac >>
-      rpt strip_tac >> Cases_on `v = out`
-      >- (gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE] >>
-          pure_rewrite_tac[ld_value_agree_pointer] >>
-          simp[FLOOKUP_UPDATE] >>
-          metis_tac[WORD_ADD_SUB2]) >>
-      fs[] >> metis_tac[]) >>
-  conj_tac >- gvs[ld_params_agree_def] >>
-  conj_tac >- gvs[exec_alloca_def, update_var_def, ld_joint_local_fields_def] >>
-  conj_tac
-  >- (qpat_x_assum `ld_joint_allocas (_ |+ _) X a fn t1` mp_tac >>
-      simp[NoAsms, ld_joint_allocas_def] >> strip_tac >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >> Cases_on `aid = inst.inst_id` >>
-      gvs[FLOOKUP_UPDATE] >> first_x_assum drule >> strip_tac >> decide_tac) >>
-  rpt strip_tac >> first_x_assum drule >> decide_tac
+  simp[ld_joint_boundary_def] >> rpt conj_tac >>
+  FIRST [
+    ld_on_head "ld_shared_agree"
+      (gvs[exec_alloca_def, update_var_def, ld_shared_agree_def]),
+    ld_on_head "ld_dyn_floor_ok"
+      (qpat_x_assum `ld_dyn_floor_ok _ _ _ _`
+         (strip_assume_tac o REWRITE_RULE [ld_dyn_floor_ok_def]) >>
+       rewrite_tac[ld_dyn_floor_ok_def, FLOOKUP_UPDATE] >> rpt conj_tac >>
+       FIRST [
+         first_assum ACCEPT_TAC,
+         rpt gen_tac >> IF_CASES_TAC
+         >- (strip_tac >> gvs[] >> decide_tac) >>
+         metis_tac[]]),
+    ld_on_head "ld_dyn_agree"
+      (FIRST [
+         qpat_x_assum `ld_dyn_agree _ _ _ _` mp_tac >>
+         gvs[exec_alloca_def, update_var_def, ld_dyn_agree_def] >>
+         rpt strip_tac >> metis_tac[] >> NO_TAC,
+         qpat_x_assum `ld_dyn_agree _ _ _ _` mp_tac >>
+         rpt (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac) >>
+         simp[exec_alloca_def, AllCaseEqs(), update_var_def, ld_dyn_agree_def] >>
+         rpt strip_tac >> gvs[] >> metis_tac[]]),
+    (fn (g as (_, w)) => if is_exists w then ALL_TAC g else NO_TAC g) >>
+     qexists_tac `u` >> simp[ld_joint_frame_def] >>
+      conj_tac
+      >- (qpat_x_assum `ld_env_agree (_ |+ _) fn _ tn s1 t1` mp_tac >>
+          simp[ld_env_agree_def, op_taint_def, FLOOKUP_UPDATE] >>
+          strip_tac >>
+          rpt strip_tac >> Cases_on `v = out`
+          >- (gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE] >>
+              pure_rewrite_tac[ld_value_agree_pointer] >>
+              simp[FLOOKUP_UPDATE] >>
+              metis_tac[WORD_ADD_SUB2]) >>
+          fs[] >> metis_tac[]) >>
+      conj_tac >- gvs[ld_params_agree_def] >>
+      conj_tac >- gvs[exec_alloca_def, update_var_def, ld_joint_local_fields_def] >>
+      conj_tac
+      >- (qpat_x_assum `ld_joint_allocas (_ |+ _) X a fn t1` mp_tac >>
+          simp[NoAsms, ld_joint_allocas_def] >> strip_tac >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >> Cases_on `aid = inst.inst_id` >>
+          gvs[FLOOKUP_UPDATE] >> first_x_assum drule >> strip_tac >> decide_tac) >>
+      rpt strip_tac >> first_x_assum drule >> decide_tac,
+    ld_on_head "="
+      (rpt (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac) >>
+       simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+       rpt strip_tac >> gvs[]),
+    fn (g as (_, w)) =>
+      (print ("ld_joint_alloca_fresh_next: no case closes " ^
+              term_to_string w ^ "\n"); NO_TAC g)]
 QED

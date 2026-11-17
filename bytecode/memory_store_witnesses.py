@@ -40,8 +40,19 @@ def prepare(repo: Path, corpus: Path, output: Path, *, check: bool) -> None:
     if not compiler.endswith("commit." + pin[:8]):
         raise ValueError(f"Vyper {compiler} does not match VYPER_PIN {pin}")
     output.mkdir(parents=True, exist_ok=True)
+    # Sources the pinned compiler rejects keep oracles from another version.
+    rejects_file = corpus / "compiler-rejects.txt"
+    rejects = set(names(rejects_file)) if rejects_file.exists() else set()
     for source in sorted((corpus / "sources").glob("*.vy")):
         stem = source.stem
+        if stem in rejects:
+            if subprocess.run([
+                    "vyper", "--experimental-codegen", "--evm-version",
+                    "prague", "-O", "none", str(source)],
+                    capture_output=True).returncode == 0:
+                raise ValueError(f"{source.name} now compiles: regenerate it "
+                                 f"and remove it from {rejects_file.name}")
+            continue
         raw = output / (stem + ".raw.json")
         raw.write_text(run(["vyper", "-f", "annotated_ast,layout", str(source)]))
         run(["python3", str(repo / "tests/sanitize_check_contract_json.py"),
@@ -90,6 +101,10 @@ def prepare(repo: Path, corpus: Path, output: Path, *, check: bool) -> None:
         expected = json.loads((corpus / "oracle/provenance.json").read_text())
         # A corpus can retain diagnostic oracles for known residuals as well as
         # exact-parity fixtures. Reproduce every output named by its receipt.
+        expected["outputs"] = {
+            name: digest for name, digest in expected["outputs"].items()
+            if Path(name).stem not in rejects
+        }
         retained = set(expected["outputs"])
         provenance["outputs"] = {
             name: digest for name, digest in provenance["outputs"].items()

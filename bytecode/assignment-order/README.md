@@ -19,7 +19,10 @@ holbuild build evalAssignmentOrderTheory
 
 - Runtime and deployment frontend acceptance for all 13 source-derived inputs.
 - Supported-program acceptance and exact deployment/runtime bytecode equality
-  for c08, c09, g6, x04, s11 and g19.
+  for c08, c09, g6, x04 and g19.
+- s11 is supported and compiles, but differs from its oracle by the bounded
+  return-data decode guards (`../pending-bounded-decode-guards.md`); the
+  theory proves it differs, so a change that makes it match fails the build.
 - Flat tuple assignment support, nested tuple rejection, and exclusion of the
   nested-pop compiler form.
 - Nine interpreter regressions: assignment side effects, delayed storage and

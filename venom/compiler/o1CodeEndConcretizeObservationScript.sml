@@ -21,6 +21,7 @@ Theorem concretize_codecopy_reflect:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C Ct /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_inv D 2 C vs /\
+  ~ctx_has_dalloca C /\
   max_live_eom Ct = SOME eom /\ raw_reachable vs Ct ft j t /\
   j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
   code_end_var ft x /\ eval_operand (Var x) t = SOME w ==>
@@ -30,6 +31,7 @@ Theorem concretize_codecopy_reflect:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[o1_inv_def, o1_src_inv_def] >>
+  `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by simp[] >>
   `EVERY all_reachable C.ctx_functions /\
    EVERY fn_defs_reach_uses C.ctx_functions` by
     (fs[EVERY_MEM, make_ssa_input_ok_def] >> metis_tac[]) >>
@@ -95,8 +97,9 @@ Resume concretize_codecopy_reflect[paired]:
      a.po_state t /\ a.po_state.vs_labels = t.vs_labels` by
     (fs[ptr_paired_sample_def, ptr_observe_def] >>
      metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   suspend "scalar"
 QED
@@ -110,9 +113,6 @@ Resume concretize_codecopy_reflect[scalar]:
   disch_then (qx_choose_then `P` strip_assume_tac o CONJUNCT2) >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
-  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
-     metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
     (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >>

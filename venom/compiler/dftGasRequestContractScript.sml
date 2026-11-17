@@ -72,11 +72,11 @@ Resume dft_ctx_replay_rq_gas[lowered]:
   conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
   gvs[mem_inv_raw_reachable] >>
   `!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
-     static_mem_ok eom C fn inst t` by
+     lowered_mem_fact eom C fn inst t` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >>
      first_x_assum drule >> simp[]) >>
   `!p d fn inst t. ev_reachable orc vs' C' p d fn inst t ==>
-     static_mem_ok eom C' fn inst t` by
+     lowered_mem_fact eom C' fn inst t` by
     (mp_tac (Q.INST [`s:venom_state` |-> `vs'`] dft_ev_lowered_inv) >>
      simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   conj_tac
@@ -97,7 +97,7 @@ Theorem dft_ctx_sim_rq_gas_conditional:
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
   o1_ctx_shape C /\ dead_wf D /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
        ctx_abort_rq D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof

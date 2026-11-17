@@ -403,6 +403,12 @@ Proof
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `vv_place_ptr ce cx ee u tv vv` by
+    (irule vv_place_ptr_region_frame >> conj_tac
+     >- (Cases_on `vv` >> fs[vv_holds_def] >>
+         BasicProvers.every_case_tac >>
+         fs[storage_holds_def, immutable_holds_def] >> metis_tac[]) >>
+     qexists_tac `s` >> simp[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 

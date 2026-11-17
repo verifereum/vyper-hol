@@ -24,7 +24,7 @@ QED
 Theorem ptr_tag_roots_step:
   ptr_site_supported
     (pointer_derived_vars fn (ptr_tag_roots fn tok PT tag)) TG tag /\
-  MEM inst (fn_insts fn) /\ inst.inst_opcode <> DALLOCA ==>
+  MEM inst (fn_insts fn) ==>
   ptr_site_supported
     (pointer_derived_vars fn (ptr_tag_roots fn tok PT tag))
     (ptr_tagged_step tok PT TG inst s') tag
@@ -40,6 +40,11 @@ Proof
       irule (pointer_derived_vars_roots |> REWRITE_RULE [SUBSET_DEF]) >>
       simp[ptr_tag_roots_finite, ptr_tag_roots_def] >>
       qexists `inst` >> simp[]) >>
+  Cases_on `inst.inst_opcode = DALLOCA`
+  >- (simp[ptr_tagged_step_def] >>
+      Cases_on `inst.inst_outputs` >> TRY (Cases_on `t`) >>
+      gvs[set_prov_def, ptr_site_supported_def, FLOOKUP_DRESTRICT] >>
+      rw[] >> metis_tac[]) >>
   simp[ptr_tagged_step_def] >> irule ptr_site_step >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -67,21 +72,20 @@ Theorem ptr_source_tag_roots_support[local]:
   !vs C h a tokens registry births PT TG saved.
   ptr_source_ownership vs C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
   (!tag. ptr_site_supported
     (pointer_derived_vars a.po_fn (ptr_tag_roots a.po_fn (HD tokens) PT tag)) TG tag) /\
   (!n tag. n < LENGTH a.po_stack ==>
     ptr_site_supported
       (pointer_derived_vars (EL n a.po_stack).cf_fn
         (ptr_tag_roots (EL n a.po_stack).cf_fn (EL (SUC n) tokens)
-          (FST (EL n saved)) tag)) (SND (EL n saved)) tag))
+          (FST (EL n saved)) tag)) (SND (EL n saved)) tag)
 Proof
   ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[ptr_source_ownership_rules] >>
       simp[ptr_site_supported_def]) >>
   rpt gen_tac >> strip_tac >>
-  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >>
   `ptr_source_birth_caches vs C h a tokens registry births` by
     metis_tac[ptr_source_ownership_caches] >>
   `ptr_ledger_source_activations vs C h a tokens registry` by
@@ -90,9 +94,6 @@ Proof
     metis_tac[ptr_source_activations_length] >>
   `LENGTH saved = LENGTH a.po_stack` by
     metis_tac[ptr_source_ownership_stack_length] >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_source_activations_sound, ptr_birth_reachable_no_dalloca] >>
-  qpat_x_assum `EVERY _ _ ==> _` (fn th => mp_tac th) >> simp[] >> strip_tac >>
   rpt (qhdtm_x_assum `ptr_source_ownership` kall_tac) >>
   qhdtm_x_assum `ptr_source_birth_caches` kall_tac >>
   qhdtm_x_assum `ptr_ledger_source_activations` kall_tac >>
@@ -114,8 +115,7 @@ Proof
 QED
 
 Theorem ptr_source_tag_roots_current:
-  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_ownership vs C h a tokens registry births PT TG saved ==>
   ptr_site_supported
     (pointer_derived_vars a.po_fn
       (ptr_tag_roots a.po_fn (HD tokens) PT tag)) TG tag
@@ -125,7 +125,6 @@ QED
 
 Theorem ptr_source_tag_roots_saved:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack ==>
   ptr_site_supported
     (pointer_derived_vars (EL n a.po_stack).cf_fn
@@ -219,7 +218,6 @@ QED
 
 Theorem ptr_source_tag_roots_current_foreign_param:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME (owner,aid) /\ owner <> HD tokens ==>
   ?i idx out. MEM i (fn_insts a.po_fn) /\ i.inst_opcode = PARAM /\
     MEM out i.inst_outputs /\ i.inst_operands = [Lit idx] /\
@@ -232,7 +230,6 @@ QED
 
 Theorem ptr_source_tag_roots_saved_foreign_param:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack /\
   FLOOKUP (SND (EL n saved)) v = SOME (owner,aid) /\
   owner <> EL (SUC n) tokens ==>
@@ -248,7 +245,6 @@ QED
 
 Theorem ptr_source_tag_history_bound[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME (owner,aid) ==> owner < LENGTH h
 Proof
   strip_tac >>
@@ -270,23 +266,21 @@ Theorem ptr_source_params_fresh_invariant[local]:
   !vs C h a tokens registry births PT TG saved.
   ptr_source_ownership vs C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-    (!owner aid. MEM (SOME (owner,aid)) PT ==> owner < HD tokens) /\
-    (!n owner aid. n < LENGTH saved /\
-      MEM (SOME (owner,aid)) (FST (EL n saved)) ==>
-      owner < EL (SUC n) tokens))
+  (!owner aid. MEM (SOME (owner,aid)) PT ==> owner < HD tokens) /\
+  (!n owner aid. n < LENGTH saved /\
+    MEM (SOME (owner,aid)) (FST (EL n saved)) ==>
+    owner < EL (SUC n) tokens)
 Proof
   ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[ptr_source_ownership_rules] >> simp[]) >>
   rpt gen_tac >> strip_tac >>
-  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >>
   `!v owner aid. FLOOKUP TG v = SOME (owner,aid) ==> owner < LENGTH h` by
     metis_tac[ptr_source_tag_history_bound] >>
   `LENGTH tokens = SUC (LENGTH a.po_stack)` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations,
       ptr_source_activations_length] >>
-  qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
   rpt (qhdtm_x_assum `ptr_source_ownership` kall_tac) >>
   qpat_x_assum `ptr_tagged_chrono_step _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[Once ptr_tagged_chrono_step_cases] >> strip_tac >>
@@ -304,7 +298,6 @@ QED
 
 Theorem ptr_source_params_fresh_current:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   MEM (SOME (owner,aid)) PT ==> owner < HD tokens
 Proof
   metis_tac[ptr_source_params_fresh_invariant]
@@ -312,7 +305,6 @@ QED
 
 Theorem ptr_source_params_fresh_saved:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved /\ MEM (SOME (owner,aid)) (FST (EL n saved)) ==>
   owner < EL (SUC n) tokens
 Proof

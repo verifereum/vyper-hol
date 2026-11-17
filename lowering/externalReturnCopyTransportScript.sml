@@ -1,40 +1,10 @@
 (* Task-owned transport interfaces; no recursive copy execution here. *)
 Theory externalReturnCopyTransport
 Ancestors
+  typedMemoryCopy
   externalReturnCopyFrame exprLoweringProps venomState compileEnv loweringStateRelDefs
   loweringPosts valueEncoding valueEncodingDefs valueEncodingProps arithmetic
   fragExec emitHelper emitHelperProps context venomExecSemantics venomInst words finite_map
-
-Theorem return_copy_frame_mono:
-  ci_mono sa sb /\ return_copy_frame sb off len s t ==>
-  return_copy_frame sa off len s t
-Proof
-  rw[ci_mono_def, return_copy_frame_def] >>
-  first_x_assum irule >>
-  gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]
-QED
-
-Theorem return_copy_frame_operand:
-  return_copy_frame sa dst len s t /\
-  (!x. op = Var x ==> not_fresh_at sa x) ==>
-  eval_operand op t = eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, return_copy_frame_def] >>
-  rpt strip_tac >> gvs[venom_state_component_equality]
-QED
-
-Theorem return_copy_frame_jump:
-  return_copy_frame sa off len s t ==>
-  return_copy_frame sa off len s (jump_to l t)
-Proof
-  simp[return_copy_frame_def, jump_to_def, lookup_var_def]
-QED
-
-Theorem return_copy_operand_jump[simp]:
-  eval_operand op (jump_to l t) = eval_operand op t
-Proof
-  Cases_on `op` >> simp[eval_operand_def, jump_to_def, lookup_var_def]
-QED
 
 Theorem return_footprint_le_layout:
   val_wf tv v ==> val_footprint tv v <= type_memory_size tv
@@ -90,14 +60,14 @@ Theorem return_copy_offset_frag:
   frag_exec ctx sa sb (\s. s = s0)
     (\t. eval_operand op t = SOME (w + n2w off) /\
          t.vs_memory = s0.vs_memory /\
-         return_copy_frame sa dst len s0 t) (\r. F)
+         typed_copy_state_frame sa dst len s0 t) (\r. F)
 Proof
   strip_tac >> Cases_on `off = 0`
   >- (gvs[compile_with_byte_offset_def, comp_return_def] >>
       irule frag_exec_refl >> simp[WORD_ADD_0]) >>
   drule_all return_copy_offset_run_seq >> strip_tac >>
   irule frag_exec_run_inst_seq >> gvs[same_blocks_def] >> simp[] >>
-  simp[eval_operand_def, lookup_var_update_var, return_copy_frame_def,
+  simp[eval_operand_def, lookup_var_update_var, typed_copy_state_frame_def,
        update_var_def, lookup_var_def, venom_state_component_equality] >>
   simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
   `x <> STRING #"%" (toString sa.cs_next_var)` by
@@ -111,18 +81,18 @@ Theorem return_copy_offset_child_frag:
   eval_operand baseop s0 = SOME w /\
   cs_extends sa sm /\ cs_extends sm sb /\
   (!t. eval_operand op t = SOME (w + n2w off) /\
-       t.vs_memory = s0.vs_memory /\ return_copy_frame sa dst len s0 t ==>
+       t.vs_memory = s0.vs_memory /\ typed_copy_state_frame sa dst len s0 t ==>
        frag_exec ctx sm sb (\s. s = t)
-         (\u. Q u /\ return_copy_frame sa dst len t u) (\r. F)) ==>
+         (\u. Q u /\ typed_copy_state_frame sa dst len t u) (\r. F)) ==>
   frag_exec ctx sa sb (\s. s = s0)
-    (\u. Q u /\ return_copy_frame sa dst len s0 u) (\r. F)
+    (\u. Q u /\ typed_copy_state_frame sa dst len s0 u) (\r. F)
 Proof
   rpt gen_tac >> strip_tac >> drule_all return_copy_offset_frag >>
   disch_then (qspecl_then [`len`, `dst`, `ctx`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_then) >> simp[] >>
   rpt strip_tac >> first_x_assum drule_all >>
   disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
-  rpt strip_tac >> irule return_copy_frame_trans >>
+  rpt strip_tac >> irule typed_copy_state_frame_trans >>
   qexists_tac `t` >> simp[]
 QED
 
@@ -182,9 +152,9 @@ Theorem return_copy_two_offsets_frag:
        eval_operand sp u = SOME (sw + n2w soff) /\
        u.vs_memory = s0.vs_memory ==>
        frag_exec ctx s2 sb (\s. s = u)
-         (\t. Q t /\ return_copy_frame s2 off len u t) (\r. F)) ==>
+         (\t. Q t /\ typed_copy_state_frame s2 off len u t) (\r. F)) ==>
   frag_exec ctx sa sb (\s. s = s0)
-    (\t. Q t /\ return_copy_frame sa off len s0 t) (\r. F)
+    (\t. Q t /\ typed_copy_state_frame sa off len s0 t) (\r. F)
 Proof
   rpt gen_tac >> strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2` by metis_tac[return_copy_offset_mono] >>
@@ -196,19 +166,19 @@ Proof
   irule return_copy_offset_child_frag >>
   qexistsl_tac [`dst`, `doff`, `dp`, `s1`, `dw`] >> simp[] >>
   rpt strip_tac >>
-  `eval_operand src t = SOME sw` by metis_tac[return_copy_frame_operand] >>
+  `eval_operand src t = SOME sw` by metis_tac[typed_copy_state_frame_operand] >>
   irule frag_exec_conseq >>
-  qexistsl_tac [`(\u. u = t)`, `(\u. Q u /\ return_copy_frame s1 off len t u)`, `(\r. F)`] >>
+  qexistsl_tac [`(\u. u = t)`, `(\u. Q u /\ typed_copy_state_frame s1 off len t u)`, `(\r. F)`] >>
   simp[] >> conj_tac
-  >- metis_tac[return_copy_frame_mono] >>
+  >- metis_tac[typed_copy_state_frame_mono] >>
   irule return_copy_offset_child_frag >>
   qexistsl_tac [`src`, `soff`, `sp`, `s2`, `sw`] >> simp[] >>
   rpt strip_tac >>
   `eval_operand dp t' = SOME (dw + n2w doff)` by
-    metis_tac[return_copy_frame_operand] >>
+    metis_tac[typed_copy_state_frame_operand] >>
   first_x_assum drule_all >>
   disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
-  metis_tac[return_copy_frame_mono]
+  metis_tac[typed_copy_state_frame_mono]
 QED
 
 Theorem return_copy_remaining_source_separation:
@@ -238,11 +208,11 @@ Theorem return_copy_offsets_value_frag:
        val_in_memory stv v (w2n (sw + n2w soff)) u.vs_memory ==>
        frag_exec ctx s2 sb (\s. s = u)
          (\t. val_in_memory dtv v (w2n (dw + n2w doff)) t.vs_memory /\
-              return_copy_frame s2 (w2n dw + doff) (type_memory_size dtv) u t)
+              typed_copy_state_frame s2 (w2n dw + doff) (type_memory_size dtv) u t)
          (\r. F)) ==>
   frag_exec ctx sa sb (\s. s = s0)
     (\t. val_in_memory dtv v (w2n dw + doff) t.vs_memory /\
-         return_copy_frame sa (w2n dw + doff) (type_memory_size dtv) s0 t)
+         typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) s0 t)
     (\r. F)
 Proof
   rpt gen_tac >> strip_tac >>

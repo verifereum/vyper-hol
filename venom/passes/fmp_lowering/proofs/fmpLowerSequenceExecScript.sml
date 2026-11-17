@@ -1,7 +1,7 @@
-(* Straight-line operational composition of the production indexed walker.
- * The point invariant includes the concrete ledger/coverage and fresh-name
- * conditions required by local simulations. The rule does not establish them
- * from static plan acceptance, and does not model block control flow. *)
+(* Operational composition of the production indexed walker. The straight-line
+ * rule takes ledger, coverage and fresh-name conditions from its caller; the
+ * block ledger rule below obtains restore-selection and ledger facts from
+ * accepted reclaim analysis. These rules do not compose block control flow. *)
 Theory fmpLowerSequenceExec
 Ancestors
   fmpLowerIndexedProps fmpLowerRestoreExec fmpLowerReclaimPlan analysisSimDefs
@@ -131,7 +131,7 @@ Theorem dalloca_relocate_exec:
     OK (update_var out s_raw.vs_fmp
       (s_raw with vs_fmp := n2w (w2n s_raw.vs_fmp + ceil32 (w2n sz)))) /\
   run_insts fuel ctx
-    [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+    [mk_inst ai ADD [size_op;Lit 31w] [plus31];
      mk_inst ni NOT [Lit 31w] [mask];
      mk_inst mi AND [Var plus31;Var mask] [aligned];
      mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s_low =
@@ -352,7 +352,7 @@ Theorem fmp_lower_inst_dalloca_shape:
   fmp_lower_inst infos c runner sp inst = SOME (head,sp1) ==>
   ?size_op out plus31 mask aligned ai ni mi bi.
     inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
-    head = [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+    head = [mk_inst ai ADD [size_op;Lit 31w] [plus31];
             mk_inst ni NOT [Lit 31w] [mask];
             mk_inst mi AND [Var plus31;Var mask] [aligned];
             mk_inst bi BUMP [Var runner;Var aligned] [out;runner]]
@@ -399,6 +399,15 @@ Proof
   gvs[] >> metis_tac[APPEND_ASSOC]
 QED
 
+(* One reachable block of the lowered function, against a raw run R relates
+ * to it.  The block invariant carries the restore selection, the analysis
+ * state, the runner, the frontier relation between the raw FMP and the runner
+ * (fmp0 is the lowered base, raw0 the raw one) and the ledger.  The caller
+ * owes, per original instruction: for DALLOCA, the expansion's operand,
+ * no-wrap and freshness facts and R across the computed raw and lowered
+ * steps; for any other instruction, the lowered head's run, R, the frontier
+ * relation afterwards, and (unless it clears the marks) an unchanged runner
+ * and marks. *)
 Theorem fmp_lower_block_ledger:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
@@ -446,7 +455,7 @@ Theorem fmp_lower_block_ledger:
      (EL j bb.bb_instructions).inst_operands = [size_op] /\
      (EL j bb.bb_instructions).inst_outputs = [out] /\
      fmp_lower_inst infos ctx runner sp0 (EL j bb.bb_instructions) =
-       SOME ([mk_inst ai ADD [Lit 31w;size_op] [plus31];
+       SOME ([mk_inst ai ADD [size_op;Lit 31w] [plus31];
               mk_inst ni NOT [Lit 31w] [mask];
               mk_inst mi AND [Var plus31;Var mask] [aligned];
               mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],sp1) ==>

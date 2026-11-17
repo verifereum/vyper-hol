@@ -4,7 +4,7 @@
    tuple writes remain outside this interface. *)
 Theory supportedTargets
 Ancestors
-  supportedExprs supportedExprForms supportedTypes supportedDecls
+  supportedExprs supportedExprForms supportedExprTraverse supportedTypes supportedDecls
   exprLowering vyperAST list alist
 
 Definition supported_target_info_def:
@@ -45,6 +45,18 @@ Definition supported_target_pure_def:
   supported_target_pure tops (AttributeTarget base field) =
     supported_target_pure tops base
 End
+
+Theorem supported_target_pure_expr_exclusion:
+  (!e. supported_pure_expr tops e ==> ~supported_expr_exists p e) /\
+  supported_target_pure tops target ==> ~supported_target_exists p target
+Proof
+  `(!e:expr. T) /\
+   !target. (!e. supported_pure_expr tops e ==> ~supported_expr_exists p e) /\
+     supported_target_pure tops target ==> ~supported_target_exists p target`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  rw[supported_target_pure_def, supported_expr_exists_def] >> metis_tac[]
+QED
 
 (* Until #550 changes Assign evaluation order, an effectful target may only
    precede an RHS whose lowering has no child computations. Name values keep
