@@ -155,13 +155,15 @@
  *   - The outcomes clause (outcomes_accounts_typed): every call outcome
  *     still to consume has fewer than 2**256 bytes of return data, which
  *     RETURNDATASIZE reads as a word (raw_call stores the length it reads),
- *     and every successful one adopts runtime well-typed accounts.
+ *     and every one carries runtime well-typed accounts.
  *     take_call_outcome raises "call outcome accounts" on a successful
  *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
  *     it and goes on, so without the clause send and extcall do not
- *     simulate.  The outcomes are the environment's answers, not the
- *     contract's: e2eDefs's call_outcomes_ok asks this of the initial ones,
- *     and the evaluator only drops outcomes from the front
+ *     simulate.  take_create_outcome raises "create outcome accounts" on
+ *     any create outcome whose accounts are not, failed ones included.
+ *     The outcomes are the environment's answers, not the contract's:
+ *     e2eDefs's call_outcomes_ok asks this of the initial ones, and the
+ *     evaluator only drops outcomes from the front
  *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
@@ -1165,6 +1167,25 @@ Proof
   gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
   Cases_on `expr_int_literal e` >> gvs[] >>
   drule_all eval_expr_int_literal_agrees >> strip_tac >> metis_tac[]
+QED
+
+Theorem expr_body_pre_bop:
+  !cenv cx env ann bop e1 e2 es.
+    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
+    expr_body_pre cenv cx env e1 es /\
+    !es'. expr_sim_inv cenv cx env es' ==> expr_body_pre cenv cx env e2 es'
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       listTheory.EVERY_APPEND] >>
+  strip_tac >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
 QED
 
 Theorem expr_body_pre_bop_operands:

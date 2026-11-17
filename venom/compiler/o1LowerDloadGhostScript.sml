@@ -188,3 +188,163 @@ Proof
   gvs[EVERY_MEM, fn_ptr_ok_def] >>
   metis_tac[frame_reachable_active_inst, active_inst_member]
 QED
+
+(* ===== Dynamic ghosts =====
+
+   A provenance map G against a reference map KA: G has every site of KA,
+   and where KA has none, G has none or a dynamic site at or above the
+   floor fl.  DALLOCA pointers are untagged: they carry a site in the
+   frame provenance and none in the reference. *)
+
+Theorem ld_ghost_first_prov:
+  !ops.
+    (!v x. FLOOKUP (Ke:(string, num # num) fmap) v = SOME x ==>
+           FLOOKUP G v = SOME x) /\
+    (!v. FLOOKUP Ke v = NONE ==>
+       FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
+    (!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
+           w IN FDOM G ==> v = w) ==>
+    (!x. first_prov Ke ops = SOME x ==> first_prov G ops = SOME x) /\
+    (first_prov Ke ops = NONE ==>
+       first_prov G ops = NONE \/
+       ?b z. first_prov G ops = SOME (b,z) /\ fl <= b /\
+             b + z < dimword (:256))
+Proof
+  Induct >> simp[first_prov_def] >> rpt gen_tac >> strip_tac >>
+  `!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
+         w IN FDOM G ==> v = w` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `h` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP Ke v` >>
+  Cases_on `FLOOKUP Ke v` >> simp[]
+  >- (`FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)`
+        by metis_tac[] >>
+      pop_assum strip_assume_tac >> simp[] >> rpt strip_tac >>
+      drule first_prov_origin >> strip_tac >>
+      `FLOOKUP G v' = SOME x` by metis_tac[] >>
+      `v' = v` by metis_tac[flookup_thm] >> gvs[]) >>
+  rename1 `FLOOKUP Ke v = SOME y` >>
+  `FLOOKUP G v = SOME y` by metis_tac[] >> simp[]
+QED
+
+Theorem ld_ghost_op_prov:
+  (!v x. FLOOKUP (KA:(string, num # num) fmap) v = SOME x ==>
+         FLOOKUP G v = SOME x) /\
+  (!v. FLOOKUP KA v = NONE ==>
+     FLOOKUP G v = NONE \/
+     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
+  (!x. op_prov KA op = SOME x ==> op_prov G op = SOME x) /\
+  (op_prov KA op = NONE ==>
+     op_prov G op = NONE \/
+     ?b z. op_prov G op = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256))
+Proof
+  strip_tac >> Cases_on `op` >> simp[op_prov_def]
+QED
+
+Theorem ld_ghost_set_prov:
+  (!v x. FLOOKUP (KA:(string, num # num) fmap) v = SOME x ==>
+         FLOOKUP G v = SOME x) /\
+  (!v. FLOOKUP KA v = NONE ==>
+     FLOOKUP G v = NONE \/
+     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
+  (!x. p = SOME x ==> q = SOME x) /\
+  (p = NONE ==>
+     q = NONE \/ ?b z. q = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
+  (!v x. FLOOKUP (set_prov KA outs p) v = SOME x ==>
+         FLOOKUP (set_prov G outs q) v = SOME x) /\
+  (!v. FLOOKUP (set_prov KA outs p) v = NONE ==>
+     FLOOKUP (set_prov G outs q) v = NONE \/
+     ?b z. FLOOKUP (set_prov G outs q) v = SOME (b,z) /\ fl <= b /\
+           b + z < dimword (:256))
+Proof
+  strip_tac >> Cases_on `outs`
+  >- (simp[set_prov_def, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  Cases_on `t`
+  >- (Cases_on `p` >> Cases_on `q` >>
+      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+      rw[] >> gvs[] >> metis_tac[]) >>
+  Cases_on `p` >> Cases_on `q` >>
+  gvs[set_prov_def, FLOOKUP_DRESTRICT] >> rw[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_ghost_phis_prov:
+  !is.
+  (!v x. FLOOKUP (KA:(string, num # num) fmap) v = SOME x ==>
+         FLOOKUP G v = SOME x) /\
+  (!v. FLOOKUP KA v = NONE ==>
+     FLOOKUP G v = NONE \/
+     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
+  (!v x. FLOOKUP (phis_prov prev KA is) v = SOME x ==>
+         FLOOKUP (phis_prov prev G is) v = SOME x) /\
+  (!v. FLOOKUP (phis_prov prev KA is) v = NONE ==>
+     FLOOKUP (phis_prov prev G is) v = NONE \/
+     ?b z. FLOOKUP (phis_prov prev G is) v = SOME (b,z) /\ fl <= b /\
+           b + z < dimword (:256))
+Proof
+  Induct >- simp[phis_prov_def] >>
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[phis_prov_def] >>
+  Cases_on `h.inst_opcode = PHI` >> asm_rewrite_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  irule ld_ghost_set_prov >> simp[] >>
+  Cases_on `prev` >> simp[phi_prov_def] >>
+  Cases_on `resolve_phi x h.inst_operands` >> simp[] >>
+  irule ld_ghost_op_prov >> metis_tac[]
+QED
+
+Theorem ld_ghost_entry_prov:
+  (!v x. FLOOKUP (KA:(string, num # num) fmap) v = SOME x ==>
+         FLOOKUP G v = SOME x) /\
+  (!v. FLOOKUP KA v = NONE ==>
+     FLOOKUP G v = NONE \/
+     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
+  (!v x. FLOOKUP (entry_prov fn s KA) v = SOME x ==>
+         FLOOKUP (entry_prov fn s G) v = SOME x) /\
+  (!v. FLOOKUP (entry_prov fn s KA) v = NONE ==>
+     FLOOKUP (entry_prov fn s G) v = NONE \/
+     ?b z. FLOOKUP (entry_prov fn s G) v = SOME (b,z) /\ fl <= b /\
+           b + z < dimword (:256))
+Proof
+  strip_tac >> simp[entry_prov_def] >>
+  CASE_TAC >> simp[] >>
+  irule ld_ghost_phis_prov >> metis_tac[]
+QED
+
+(* Output provenance away from DALLOCA: the frame provenance keeps every
+   reference site, given that pointer arithmetic sees one pointer. *)
+Theorem ld_ghost_out_prov:
+  (!v x. FLOOKUP (KA:(string, num # num) fmap) v = SOME x ==>
+         FLOOKUP G v = SOME x) /\
+  (!v. FLOOKUP KA v = NONE ==>
+     FLOOKUP G v = NONE \/
+     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
+  LIST_REL (\p q. (!x. p = SOME x ==> q = SOME x) /\
+    (p = NONE ==>
+       q = NONE \/ ?b z. q = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)))
+    PK PG /\
+  inst.inst_opcode <> DALLOCA /\
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+    inst.inst_opcode = ASSIGN) ==>
+   !v w. MEM (Var v) inst.inst_operands /\ MEM (Var w) inst.inst_operands /\
+         v IN FDOM G /\ w IN FDOM G ==> v = w) ==>
+  (!x. out_prov PK KA inst s = SOME x ==> out_prov PG G inst s = SOME x) /\
+  (out_prov PK KA inst s = NONE ==>
+     out_prov PG G inst s = NONE \/
+     ?b z. out_prov PG G inst s = SOME (b,z) /\ fl <= b /\
+           b + z < dimword (:256))
+Proof
+  strip_tac >> simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >- simp[] >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (fs[LIST_REL_EL_EQN] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `h` >> simp[] >>
+      rename1 `w2n idx < _` >>
+      IF_CASES_TAC >> simp[]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN` >> simp[] >>
+  irule ld_ghost_first_prov >> metis_tac[]
+QED

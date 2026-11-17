@@ -32,7 +32,7 @@ Proof
     dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        dalloca_no_wrap_def] >> metis_tac[]) >>
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   drule_all rest_word_full_compile_layout >> strip_tac >>
   `gas_admissible (bind (eval_expr cx e1) (read_result cx)) expr_res_ok es` by
     metis_tac[bop_first_admissible] >>

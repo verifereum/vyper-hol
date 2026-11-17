@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem scalar_matched_data:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. b = Var v ==> v IN V) /\ op_prov G b = NONE /\
   eval_operand b t = SOME y ==>
   ?x. eval_operand b s = SOME x /\
@@ -45,7 +45,7 @@ Proof
   `eval_operand b s = NONE <=> eval_operand b t = NONE` by
     metis_tac[dload_matched_operand_defined] >>
   Cases_on `eval_operand b s` >- gvs[] >>
-  `dload_value_word fs (op_taint tn b) (op_prov G b) (op_prov H b) x y` by
+  `dload_value_word fl fs (op_taint tn b) (op_prov G b) (op_prov H b) x y` by
     (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
   Cases_on `op_prov H b` >> gvs[dload_value_word_def] >>
   Cases_on `b` >> gvs[op_taint_def, dload_vars_match_def]
@@ -119,18 +119,18 @@ Theorem dload_boundary_core_scalar:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
     t' = t with vs_vars := t'.vs_vars
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `?out z w. i.inst_outputs = [out] /\ t' = update_var out w t /\
      step_inst fuel Cs i s = OK (update_var out z s) /\
@@ -151,21 +151,21 @@ Proof
          `?x. eval_operand a s = SOME x /\ op_taint tn a = op_taint un a /\
               word_agree_except (op_taint tn a) x y` by
            (irule scalar_matched_data >>
-            qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+            qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
          `?z. eval_operand b s = SOME z /\ op_taint tn b = op_taint un b /\
               word_agree_except (op_taint tn b) z w` by
            (irule scalar_matched_data >>
-            qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+            qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
          `op_taint tn a = {} ==> x = y` by
            (strip_tac >> `eval_operand a s = eval_operand a t` by
               (irule scalar_operand_equal >> simp[] >>
-               qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[] >>
+               qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[] >>
                metis_tac[MEM]) >>
             gvs[]) >>
          `op_taint tn b = {} ==> z = w` by
            (strip_tac >> `eval_operand b s = eval_operand b t` by
               (irule scalar_operand_equal >> simp[] >>
-               qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[] >>
+               qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[] >>
                metis_tac[MEM]) >>
             gvs[]) >>
          qexistsl [`x * z`,`y * w`] >>
@@ -220,7 +220,7 @@ Proof
      un with t_var := set_var_taint un.t_var [out] (out_taint un i t)` by
     (irule scalar_ghost_updates >> simp[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] (out_taint tn i s))
     (un with t_var := set_var_taint un.t_var [out] (out_taint un i t))
     (s with <|vs_vars := (update_var out z s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
@@ -239,13 +239,13 @@ Theorem dload_boundary_core_scalar_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)

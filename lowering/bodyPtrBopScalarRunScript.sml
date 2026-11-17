@@ -4,7 +4,7 @@ Ancestors exprSimArith exprSimBinopFrag exprBopSimDefs exprLowering
   freshWrites compileEnv valueEncoding vyperInterpreter loweringSlice
   vyperContext vyperValueOperation varsExt appendStorageStageTransportPtr
   fragGasFresh list arithmeticProps builtinProps exprBopBitwise exprSimCompare exprBopShift vyperAST
-  vyperTypeSystem
+  vyperTypeSystem exprSimHypsDefs
 
 Theorem bop_checked_fresh_run:
   MEM bop [Add; Sub; Mul] /\
@@ -276,6 +276,7 @@ QED
 
 Theorem bop_bitwise_fresh_run:
   (bop = And \/ bop = Or \/ bop = XOr) /\
+  word_value v1 /\
   expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
   (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
     within_int_bound
@@ -296,6 +297,7 @@ QED
 
 Theorem bop_bitwise_run:
   (bop = And \/ bop = Or \/ bop = XOr) /\
+  word_value v1 /\
   expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
   (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
     within_int_bound
@@ -826,7 +828,11 @@ Theorem bop_bitwise_typed_run:
     run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule bop_bitwise_run >> simp[] >> reverse conj_tac
+  irule bop_bitwise_run >> simp[] >>
+  `word_value v1` by
+    (qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
+     asm_rewrite_tac[] >> rpt strip_tac >> gvs[word_value_def]) >>
+  simp[] >> reverse conj_tac
   >- (goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> simp[]) >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
   qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac word_value_type_value_cases >>
@@ -835,6 +841,7 @@ QED
 
 Theorem bop_shift_typed_run:
   (bop = ShL \/ bop = ShR) /\ well_typed_binop ann bop t1 t2 /\
+  word_value_type t1 /\
   (?i. v2 = IntV i /\ 0 <= i) /\
   evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
   evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 /\
@@ -852,7 +859,7 @@ Proof
   strip_tac >>
   `t1 = ann /\ is_int_type ann /\ is_int_type t2 /\
    (bop = ShL ==> type_bits ann = 256)` by
-    (Cases_on `bop` >> gvs[well_typed_binop_def, type_bits_def]) >>
+    (Cases_on `bop` >> gvs[well_typed_binop_def, type_bits_def, word_value_type_def]) >>
   qpat_x_assum `t1 = ann` SUBST_ALL_TAC >>
   qspecl_then [`tenv`, `ann`, `tv1`, `v1`] mp_tac int_type_value >>
   qspecl_then [`tenv`, `t2`, `tv2`, `v2`] mp_tac int_type_value >>

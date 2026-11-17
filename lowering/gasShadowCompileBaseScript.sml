@@ -52,7 +52,7 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_expr_child:
-  (!cenv ty e shadow. expr_size e < bound ==>
+  (!cenv ty e shadow. expr_size e + cenv_defaults_size cenv < bound ==>
      gas_shadow_compiles (f cenv ty e)
        (g cenv ty (if shadow then gas_shadow_expr e else e))) ==>
   !cenv ty e shadow.
@@ -61,7 +61,7 @@ Theorem gas_shadow_compiles_expr_child:
         (if shadow then gas_shadow_expr e else e))
 Proof
   strip_tac >> rpt gen_tac >> Cases_on `shadow` >>
-  Cases_on `expr_size e < bound` >>
+  Cases_on `expr_size e + cenv_defaults_size cenv < bound` >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[expr_child_callback_def, gas_shadow_expr_size] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -73,7 +73,7 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_builtin_child:
-  (!cenv ret_ty ty bi args shadow. list_size expr_size args < bound ==>
+  (!cenv ret_ty ty bi args shadow. list_size expr_size args + cenv_defaults_size cenv < bound ==>
      gas_shadow_compiles (f cenv ret_ty ty bi args)
        (g cenv ret_ty ty (if shadow then gas_shadow_builtin bi else bi)
          (if shadow then MAP gas_shadow_expr args else args))) ==>
@@ -84,7 +84,7 @@ Theorem gas_shadow_compiles_builtin_child:
         (if shadow then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >> rpt gen_tac >> Cases_on `shadow` >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size cenv < bound` >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[builtin_child_callback_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_type_child:
-  (!cenv vv_ty ty tb ret_ty args shadow. list_size expr_size args < bound ==>
+  (!cenv vv_ty ty tb ret_ty args shadow. list_size expr_size args + cenv_defaults_size cenv < bound ==>
      gas_shadow_compiles (f cenv vv_ty ty tb ret_ty args)
        (g cenv vv_ty ty tb ret_ty
          (if shadow then MAP gas_shadow_expr args else args))) ==>
@@ -105,7 +105,7 @@ Theorem gas_shadow_compiles_type_child:
         (if shadow then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >> rpt gen_tac >> Cases_on `shadow` >>
-  Cases_on `list_size expr_size args < bound` >>
+  Cases_on `list_size expr_size args + cenv_defaults_size cenv < bound` >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[type_child_callback_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>

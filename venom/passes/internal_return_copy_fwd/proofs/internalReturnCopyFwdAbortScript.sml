@@ -124,7 +124,7 @@ Proof
   strip_tac >>
   `MEM fn C.ctx_functions` by
     (drule o1LowerDloadOccurrenceTheory.frame_reachable_occurrence_lift >>
-     strip_tac >> drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >>
+     strip_tac >> drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation_static >>
      simp[]) >>
   `fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn` by
     (gvs[EVERY_MEM] >> metis_tac[venomWfTheory.wf_function_def]) >>
