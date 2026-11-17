@@ -26,7 +26,7 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
-  symEmitSim symInstPieces
+  symEmitSim symInstPieces symControlPrefixOwn
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
 Theorem list_rel_op_kind_transport:

@@ -1,8 +1,8 @@
 Theory symBumpInstSim
 Ancestors
-  symInstPieces symPostfixSim symEmitSim deepInstSim deepResidualSim
+  symInstPieces symPostfixSim symEmitSim deepInstSim deepResidualSim symBumpRunOwn
   genBlockSim stackPlanGen planExec codegenSymRel asmSymBridge asmSymSem
-  fnPlanPrefix genFrameSim allocMono venomWf fnBlockPlanStaticRegion
+  fnPlanPrefix genFrameSim allocMono venomWf fnBlockPlanStaticRegion symBumpOwn
 
 Theorem bump_plan_decompose:
   inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\
@@ -19,14 +19,7 @@ Theorem bump_plan_decompose:
     ops = iops ++ rops ++ bump_emit_ops ++ pops ++ opts /\
     qs = release_dead_spills nl ps9
 Proof
-  strip_tac >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_inst_plan_def, venomInstTheory.is_param_opcode_def,
-    generate_regular_inst_plan_def, compute_operands_def,
-    venomInstTheory.python_stack_operands_def, venomInstTheory.ir_specific_operand_order_def,
-    venomEffectsTheory.is_commutative_def, generate_emit_ops_def] >>
-  simp[is_pre_codegen_opcode_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >> metis_tac[]
+  ACCEPT_TAC symBumpRunOwnTheory.bump_plan_decompose
 QED
 
 Theorem sym_bump_prepared_full_emit:
@@ -55,29 +48,10 @@ Theorem sym_bump_prepared_full_emit:
     qs.ps_stack = residual ++ [Var ptr;Var next]
 Proof
   strip_tac >>
-  `asm_block_at p (ss with sym_stack := top).sym_base.as_pc
-    [AsmOp "DUP2"; AsmOp "ADD"]` by simp[] >>
-  drule_all sym_bump_prepared_local_emit >> strip_tac >>
-  rename1 `sym_steps p env 2 (ss with sym_stack := top) = SymOK localend` >>
-  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
-    (irule fnBlockBodyHelpersTheory.label_positions_ok_other >> simp[] >>
-     metis_tac[unitShapeDefsTheory.fn_shape_ok_def, listTheory.EVERY_MEM,
-       unitShapeDefsTheory.inst_shape_ok_def]) >>
-  `?delta fmp tail. top = Val delta :: Val fmp :: tail` by
-    (qpat_assum `sym_kinds_ok _ _ _ [] ps _`
-       (mp_then (Pat `sym_kinds_ok _ _ _ _ _ _`) mp_tac ordinary_prepared_selected_numeric) >>
-     disch_then (drule_at (Pat `ps.ps_stack = _`)) >>
-     disch_then (qspecl_then [`inst`, `ctx`] mp_tac) >>
-     (impl_tac >- (gvs[listTheory.EVERY_MEM] >> metis_tac[])) >> simp[] >>
-     metis_tac[numeric_prefix_two]) >>
-  qpat_assum `sym_steps p env 2 (ss with sym_stack := top) = _`
-    (mp_then (Pat `sym_steps _ _ _ _ = _`) mp_tac sym_bump_steps_ok_stack_suffix) >>
-  simp[] >> disch_then (qspec_then `srest` mp_tac) >> simp[] >> strip_tac >>
-  qexists `localend with sym_stack := localend.sym_stack ++ srest` >>
-  `ss with sym_stack := top ++ srest = ss` by
-    (simp[asmSymSemTheory.sym_state_component_equality]) >>
-  gvs[] >> conj_tac >- gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  irule sym_kinds_ok_restore_stack >> simp[]
+  drule_all (REWRITE_RULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
+      `code_ok` |-> `asm_data_env_ok p env`]
+      sym_bump_prepared_full_emit_core_mode)) >> simp[]
 QED
 
 Theorem selected_prefix_outputs_absent:
@@ -87,20 +61,14 @@ Theorem selected_prefix_outputs_absent:
   EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) outputs ==>
   EVERY (\v. ~MEM (Var v) arranged.ps_stack /\ Var v NOTIN FDOM arranged.ps_spilled) outputs
 Proof
-  strip_tac >> fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  drule_all generatedPrefixSimTheory.emit_input_plan_preserves_not_mem >> strip_tac >>
-  drule_all generatedPrefixSimTheory.reorder_plan_preserves_not_mem_reachable >> simp[]
+  ACCEPT_TAC symBumpRunOwnTheory.selected_prefix_outputs_absent
 QED
 
 Theorem bump_plan_length[local]:
   LENGTH (execute_plan fmp (xs ++ ys ++ bump_emit_ops ++ zs ++ ws)) =
   LENGTH (execute_plan fmp (xs ++ ys)) + (2 + LENGTH (execute_plan fmp (zs ++ ws)))
 Proof
-  `LENGTH (execute_plan fmp bump_emit_ops) = 2` by
-    simp[bump_emit_ops_def, execute_plan_def, exec_stack_op_def] >>
-  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
-  asm_rewrite_tac[] >> decide_tac
+  ACCEPT_TAC symBumpRunOwnTheory.bump_plan_length
 QED
 
 Theorem bump_success_operand_values[local]:
@@ -109,10 +77,7 @@ Theorem bump_success_operand_values[local]:
   (!op. MEM op [bop;sop] ==> eval_operand op s = operand_val s lo op) ==>
   ?bv sz. operand_val s lo bop = SOME bv /\ operand_val s lo sop = SOME sz
 Proof
-  strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def, venomStateTheory.eval_operands_def] >>
-  gvs[AllCaseEqs()] >> metis_tac[listTheory.MEM]
+  ACCEPT_TAC symBumpRunOwnTheory.bump_success_operand_values
 QED
 
 Theorem sym_bump_endpoint_compose[local]:
@@ -133,12 +98,10 @@ Theorem sym_bump_endpoint_compose[local]:
       FLOOKUP last.sym_mem_labels b = FLOOKUP labs0 b)
 Proof
   strip_tac >>
-  `sym_steps p env (2 + LENGTH (execute_plan fmp (zs ++ ws))) ready = SymOK final` by
-    simp[sym_steps_add] >>
-  `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
-    FLOOKUP final.sym_mem_labels b = FLOOKUP ready.sym_mem_labels b` by metis_tac[] >>
-  drule_all sym_frame_suffix_compose >> strip_tac >>
-  qexists `final` >> simp[bump_plan_length] >> gvs[]
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [sym_frame_inv_def]) >>
+  drule_all (REWRITE_RULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`] sym_bump_endpoint_compose_mode)) >> simp[]
 QED
 
 Theorem sym_bump_inst_symbolic_run:
@@ -184,92 +147,16 @@ Theorem sym_bump_inst_symbolic_run:
     (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
       FLOOKUP final.sym_mem_labels b = FLOOKUP labs0 b)
 Proof
-  strip_tac >> drule_all bump_plan_decompose >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `popmany_plan _ emitted` >>
-  `ptr <> next` by metis_tac[genBlockSimTheory.codegen_ready_bump_outputs_distinct] >>
-  `EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) [ptr;next]` by
-    (gvs[listTheory.EVERY_MEM] >> rpt conj_tac >> strip_tac >>
-     FIRST [qpat_assum `!op. MEM op ps.ps_stack ==> _` drule,
-       qpat_assum `!op. op IN FDOM ps.ps_spilled ==> _` drule] >> simp[]) >>
-  `generated_plan_state_wf_marked sb emitted` by
-    (drule_at (Pat `emit_input_plan _ _ _ _ = _`) regional_regular_outputs_marked_wf >>
-     disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
-     disch_then (qspecl_then [`sb`, `[ptr;next]`] mp_tac) >> simp[Abbr `emitted`]) >>
-  `(if inst.inst_outputs = [] \/ F then ([],emitted)
-    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted) = (pops,ps8)` by gvs[] >>
-  `emitted.ps_stack = stack_pop 2 arranged.ps_stack ++ [Var ptr;Var next]` by
-    simp[Abbr `emitted`, stackModelTheory.stack_push_def, listTheory.SNOC_APPEND] >>
-  `(if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
-    else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9)` by gvs[] >>
-  drule_at (Pat `(if _ then _ else _) = (opts,ps9)`) sym_bump_postfix_applicability >>
-  disch_then (drule_at (Pat `generated_plan_state_wf_marked sb emitted`)) >>
-  disch_then (drule_at (Pat `(if _ then _ else _) = (pops,ps8)`)) >>
-  disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>
-  disch_then (drule_at (Pat `MEM r cplan.cp_regions`)) >>
-  disch_then (drule_at (Pat `emitted.ps_stack = _`)) >>
-  disch_then (qspecl_then [`fn.fn_name`, `ctx`] mp_tac) >> simp[] >> strip_tac >>
-  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
-   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
-    (gvs[Abbr `emitted`] >> metis_tac[allocMonoTheory.emit_input_plan_spill_base,
-       allocMonoTheory.reorder_plan_spill_base]) >>
-  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
-   asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
-    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
-      stackOpSimTheory.asm_block_at_append] >>
-  `emit_input_plan inst.inst_opcode [base_op; size_op] nl ps = (iops,prepared)` by simp[] >>
-  drule_at (Pat `step_inst _ _ _ _ = _`) sym_frame_selected_prefix_paired >>
-  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
-  rename1 `sym_steps prog env _ ss = SymOK ready` >>
-  rename1 `asm_sym_rel prog env mid (ready with sym_stack := localtop)` >>
-  `asm_block_at prog ready.sym_base.as_pc [AsmOp "DUP2"; AsmOp "ADD"]` by
-    gvs[stackOpSimTheory.execute_plan_append, stackPlanGenTheory.bump_emit_ops_def,
-      planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
-      planExecTheory.dup_name_def, stackOpSimTheory.asm_block_at_append] >>
-  `?base_val sz.
-    operand_val (frame_view fn ra vs with vs_memory := cs.as_memory) lo base_op = SOME base_val /\
-    operand_val (frame_view fn ra vs with vs_memory := cs.as_memory) lo size_op = SOME sz` by
-    (irule bump_success_operand_values >>
-     conj_tac >- simp[venomMemPropsTheory.eval_operand_with_memory,
-       genFrameSimTheory.operand_val_memory_update] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `EVERY (\v. ~MEM (Var v) arranged.ps_stack /\ Var v NOTIN FDOM arranged.ps_spilled) [ptr;next]` by
-    (drule_at (Pat `reorder_plan _ _ _ = _`) selected_prefix_outputs_absent >>
-     disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
-     disch_then (qspec_then `[ptr;next]` mp_tac) >> gvs[]) >>
-  `EVERY (\op. case op of Var x => x <> ptr /\ x <> next | _ => T) arranged.ps_stack /\
-    (!op. op IN FDOM arranged.ps_spilled ==>
-      case op of Var x => x <> ptr /\ x <> next | _ => T)` by
-    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >> Cases_on `op` >> gvs[] >> metis_tac[]) >>
-  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
-  drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_bump_prepared_full_emit >>
-  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
-  disch_then (drule_at (Pat `inst.inst_opcode = BUMP`)) >>
-  disch_then (drule_at (Pat `inst.inst_operands = _`)) >>
-  disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
-  disch_then (drule_at (Pat `arranged.ps_stack = _`)) >>
-  disch_then (drule_at (Pat `ready.sym_stack = _`)) >>
-  disch_then (qspecl_then [`sz`, `emitted`, `ctx`, `base_val`] mp_tac) >> simp[] >>
-  (impl_tac >- (gvs[Abbr `emitted`, codegen_ready_fn_def] >> metis_tac[])) >> strip_tac >>
-  `asm_block_at prog full.sym_base.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
-    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
-      bump_emit_ops_def, execute_plan_def, exec_stack_op_def, dup_name_def] >>
-  drule_at (Pat `(if _ then _ else _) = (opts,ps9)`) sym_bump_generated_postfix_sim_marked >>
-  disch_then (drule_at (Pat `(if _ then _ else _) = (pops,ps8)`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ emitted full`)) >>
-  disch_then (drule_at (Pat `emitted.ps_stack = _`)) >>
-  disch_then (drule_at (Pat `asm_block_at _ full.sym_base.as_pc _`)) >>
-  disch_then (qspecl_then [`qs`, `env`, `closure_spill_byte ctx cplan fn.fn_name`] mp_tac) >>
-  (impl_tac >- (simp[] >> conj_tac
-    >- (rpt strip_tac >> qpat_assum `EVERY _ ops`
-        (fn th => mp_tac (REWRITE_RULE [listTheory.EVERY_MEM] th)) >>
-        disch_then (qspec_then `SOSpill off` mp_tac) >> simp[])
-    >> metis_tac[listTheory.MEM_APPEND])) >> strip_tac >>
-  drule_all sym_bump_endpoint_compose >> gvs[]
+  strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  `!n cs ss ss'. asm_sym_rel prog env cs ss /\
+    sym_steps prog env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
+      asm_sym_rel prog env cs' ss'` by
+    (rpt strip_tac >> drule_all asm_sym_steps_lockstep >> simp[]) >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [sym_frame_inv_def]) >>
+  drule_all (REWRITE_RULE [asm_sym_rel_core_canonical, sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
+      `code_ok` |-> `asm_data_env_ok prog env`]
+      sym_bump_inst_symbolic_run_mode_conditional)) >> simp[]
 QED
