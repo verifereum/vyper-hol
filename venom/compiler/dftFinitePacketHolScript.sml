@@ -22,11 +22,13 @@ Ancestors
   dftPacketNativePrefixBoundary
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
+  dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
   dftPacketPreterminalOracle
   dftPacketPseudoAdvance
+  dftPacketPseudoCursor
   dftPacketRefinementBoundary
   dftPacketReturnLocal
   dftPacketReturnNative

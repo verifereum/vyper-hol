@@ -14,9 +14,38 @@ Ancestors
   lowerDloadRequestObservation ptrDiscipline ptrStaticDiscipline
   o1PassContract unitShapeDefs unitLabelMapIdentity contextCodegenRel
   memLocDefs concretizeMemLocDefs pointerConfinedDefs opcodeClass
-  venomExecProofs
+  concretizePtrDallocaObservationTransport concretizePtrTaintContent
+  venomCallOracleDefs extCallOracle venomExecProofs
   venomExecSemantics venomInstProofs venomInstProofs1 venomWf venomInst venomState
   list rich_list arithmetic finite_map pred_set words
+
+Theorem ptr_dalloca_delegate_request_growth[local]:
+  inst_wf inst /\ inst.inst_opcode = DELEGATECALL /\
+  ptr_mixed_vars (births : (num # num) |-> (num # num)) positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\
+  step_inst fuel CT inst t = OK post ==>
+  ?srcpost. step_inst 0 CS inst s = OK srcpost /\
+    LENGTH s.vs_requests < LENGTH srcpost.vs_requests
+Proof
+  strip_tac >>
+  `?out. inst.inst_outputs = [out]` by
+    (qpat_x_assum `inst_wf inst` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  drule_all ptr_mixed_vars_eval_presence >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  `?gas addr ao az ro rz.
+    eval_operands inst.inst_operands s = SOME [gas;addr;ao;az;ro;rz]` by
+    (simp[eval_operands_def, AllCaseEqs()] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `eval_operands _ s = SOME _` mp_tac >>
+  simp[eval_operands_def, AllCaseEqs()] >> strip_tac >>
+  simp[Once step_inst_non_invoke, step_inst_base_def, exec_delegatecall_def,
+       Excl "consume_call_outcome_eq"] >>
+  simp[consume_call_outcome_eq, update_var_def, record_request_def,
+      computed_precompile_def]
+QED
 
 (* Both observations use the same actual stage bridge and endpoint ledger.
    In particular, a request bound is obtained from an actual source step. *)
@@ -209,6 +238,35 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
             `nextt` |-> `zt.po_state`] ptr_dalloca_actual_request_observation) >>
           (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[] >>
             simp[Abbr`zt`, ptr_observe_def])) >> simp[]) >>
+      Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
+      >- (mp_tac (Q.INST [`inst` |-> `a.po_inst`, `s` |-> `a.po_state`,
+            `t` |-> `at.po_state`, `CS` |-> `C`, `CT` |-> `C'`,
+            `fuel` |-> `fuelt`, `post` |-> `post`, `f` |-> `a.po_fn`,
+            `g` |-> `at.po_fn`, `births` |-> `births`, `positions` |-> `positions`,
+            `TG` |-> `TG`, `tn` |-> `a.po_taint`]
+            ptr_dalloca_delegate_request_growth) >>
+          (impl_tac >- (rpt conj_tac >> fs[])) >>
+          disch_then (qx_choose_then `srcpost` strip_assume_tac) >>
+          `a.po_taint.t_stor SUBSET D.d_stor a.po_state.vs_call_ctx.cc_address
+             (a.po_state.vs_accounts a.po_state.vs_call_ctx.cc_address).storage /\
+           a.po_taint.t_trans SUBSET D.d_trans a.po_state.vs_call_ctx.cc_address
+             (a.po_state.vs_transient a.po_state.vs_call_ctx.cc_address)` by
+            (qpat_assum `taint_within D C vs`
+               (mp_tac o CONJUNCT1 o REWRITE_RULE [taint_within_def]) >>
+             disch_then (qspecl_then [`a.po_stack`,`a.po_params`,`a.po_prov`,
+               `a.po_taint`,`a.po_fn`,`a.po_inst`,`a.po_state`,`0`,`srcpost`]
+               mp_tac) >> simp[]) >>
+          `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+            (drule ptr_history_content_call_ctx >> simp[]) >>
+          qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state`
+            (strip_assume_tac o SIMP_RULE (srw_ss())
+              [ptr_history_content_def, ptr_taint_content_def,
+               contract_storage_def, contract_transient_def,
+               vfmStateTheory.lookup_account_def]) >>
+          mp_tac (Q.INST [`D` |-> `D`, `tn` |-> `a.po_taint`,
+            `s` |-> `a.po_state`, `t` |-> `at.po_state`, `tt` |-> `at.po_taint`]
+            ptr_dalloca_request_taint_transport) >>
+          (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[])) >> simp[]) >>
       `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
         (fs[MEM, taint_ok_def] >> metis_tac[]) >>
       fs[SUBSET_EMPTY]) >>

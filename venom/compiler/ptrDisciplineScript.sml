@@ -449,9 +449,10 @@ End
    clearing their taint.  Whether it adopts depends only on the shared
    outcome, not on either run's own storage.  Any other call keeps them: a
    static call and a failed one change nothing, and a computed precompile,
-   which records no request, keeps the accounts it had.  DELEGATECALL and
-   CREATE run real code on each run's own storage, so taint_ok requires
-   none to be tainted there. *)
+   which records no request, keeps the accounts it had.  A DELEGATECALL
+   consumes the shared oracle like a CALL but keeps its taint: its request
+   snapshot is bounded by taint_within, like any call's.  taint_ok requires
+   no storage taint at CREATE. *)
 Definition adopt_reset_def:
   adopt_reset inst adopted (X:'a set) =
     if inst.inst_opcode = CALL /\ adopted
@@ -615,9 +616,8 @@ End
    only ASSIGNed, shifted by an untainted amount (shift_taint tracks where
    its bytes go), multiplied by an untainted zero/one selector, or stored
    as the value of a store with an untainted
-   address, and tainted memory is only loaded, copied or returned.  Code
-   that runs on this contract's storage (DELEGATECALL, CREATE) sees none
-   tainted. *)
+   address, and tainted memory is only loaded, copied or returned.  A
+   CREATE sees no storage tainted. *)
 Definition taint_ok_def:
   taint_ok fn tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
@@ -638,8 +638,7 @@ Definition taint_ok_def:
        off <= i /\ i < off + len /\ i IN tn.t_mem ==>
        inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
        inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN) /\
-    ((inst.inst_opcode = DELEGATECALL \/ inst.inst_opcode = CREATE \/
-      inst.inst_opcode = CREATE2) ==>
+    ((inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) ==>
      tn.t_stor = {} /\ tn.t_trans = {})
 End
 
