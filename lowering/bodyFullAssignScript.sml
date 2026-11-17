@@ -30,6 +30,7 @@ Ancestors
   assignRelayoutSource bodyFullHashKeccakFixed exprOpenTerminals
   exprOperandVar exprSimAggregateChildren exprSimProps freshWrites
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
+  targetPlaceSim
   sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
   stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
   vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
@@ -55,7 +56,7 @@ Ancestors
   bodyFullPathHistory typedCopyOriginPtrBase exprSimStorageCopy codegenRel context
   bodyFullUnwrapWord exprSimCopy exprSafeOperand exprReasonOperand bytestringCopyExecution decoderSetupStepPtr ptrSafeRun memLocDefs
   contextCodegenRel unitTransformDefs fragExecMem venomExecSemantics
-  typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps
+  representationCleanPtr typedCopyOriginPtr robustCopyTransportPtr exprSimAlloc abiDecodeStaticProps
   assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping alist
   bodyFullTargetDefs targetPlaceSimCasesBase
 Libs
@@ -1856,6 +1857,50 @@ Proof
   cheat
 QED
 
+Theorem body_assign_widened_layout_ready:
+  !cx id ty e tops bindings ctx cenv env env' ret_ty es.
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    ~is_word_type ty /\
+    0 < type_memory_bytes cenv ty /\
+    ~(lowered_value_type cenv e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type cenv e) /\
+      arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    post_value_type cenv e = lowered_value_type cenv e /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty /\
+    ?stv dtv.
+      evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+      evaluate_type (get_tenv cx) ty = SOME dtv /\
+      type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+      type_memory_bytes cenv ty = type_memory_size dtv /\
+      0 < type_memory_size stv /\
+      type_memory_size stv <= type_memory_size dtv /\
+      type_memory_size dtv < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `0 < type_memory_size stv` by
+    (drule_all widening_zero_memory_size >> simp[] >> decide_tac) >>
+  simp[] >> gvs[dimword_def] >> decide_tac
+QED
+
 Theorem body_assign_field_prefix_joint:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   is_word_type (expr_type e) /\
@@ -3013,6 +3058,32 @@ Proof
   rewrite_tac[imm_section_dead_def] >>
   qexistsl_tac [`pre'`, `vis'`, `name'`, `ty'`, `slot'`, `post'`, `tv'`] >>
   gvs[]
+QED
+
+Theorem body_assign_immutable_bytes_source_live_clean:
+  evaluate_type tenv sty = SOME stv /\ is_bytestring_type sty /\
+  value_has_type stv v /\
+  (!mem. mem_agree_outside M s.vs_memory mem ==>
+         val_in_memory stv v a mem) ==>
+  ?len.
+    ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+     (?str. v = StringV str /\ len = LENGTH str)) /\
+    mload a s = n2w len /\
+    (!i. a <= i /\ i < a + 32 + len ==> i NOTIN M)
+Proof
+  strip_tac >>
+  `val_in_memory stv v a s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_all bytestring_type_value >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def]
+  >- (drule robust_val_in_memory_bytes_clean >> simp[] >> strip_tac >>
+      conj_tac
+      >- gvs[val_in_memory_def, mload_def, mem_word_at_def] >>
+      rpt strip_tac >> Cases_on `i < a + 32` >> gvs[])
+  >> drule robust_val_in_memory_string_clean >> strip_tac >>
+  conj_tac
+  >- gvs[val_in_memory_def, mload_def, mem_word_at_def] >>
+  rpt strip_tac >> Cases_on `i < a + 32` >> gvs[]
 QED
 
 Theorem body_assign_immutable_sensitivity_fixed:
