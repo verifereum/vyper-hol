@@ -179,8 +179,29 @@ Resume focus_retained_row_replay[observations_step]:
     LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE a ms) front /\
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL a ms) g` by
     (qpat_x_assum `LIST_REL _ (TAKE (SUC a) ms) kgss` mp_tac >>
-     asm_rewrite_tac[] >> simp[LIST_REL_SNOC]) >>
-  gvs[] >> FAIL_TAC "prefix"
+     asm_rewrite_tac[] >> simp[LIST_REL_SPLIT1] >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!kgss' tail. _`
+    (qspecl_then [`front`, `g ++ tail`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE a xs) /\
+   ~is_terminator (EL a xs).inst_opcode /\ ~is_pseudo (EL a xs).inst_opcode` by
+    (fs[EVERY_EL, LENGTH_TAKE] >> (gvs[EL_TAKE, LESS_EQ_LESS_TRANS])) >>
+  `!s. FOLDR (dft_exec_cons (fuel-d) C7) OK (TAKE a xs ++ [EL a xs]) s =
+    case FOLDR (dft_exec_cons (fuel-d) C7) OK (TAKE a xs) s of
+      OK t => dft_exec_cons (fuel-d) C7 (EL a xs) OK t | other => other` by
+    (gen_tac >> pure_rewrite_tac[FOLDR_APPEND, FOLDR] >>
+     simp[Once dft_exec_prefix_continue]) >>
+  qspecl_then [`TAKE a xs`, `be with vs_gas_readings := FLAT front ++ g ++ tail`,
+    `be.vs_inst_idx`] mp_tac native_prefix_cut >> simp[NoAsms] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`fuel-d`, `C7`, `sf`, `p`, `d`, `[EL a xs]`,
+    `<|bb_label := be.vs_current_bb; bb_instructions := []|>`, `mk_inst 0 STOP [] []`]
+    strip_assume_tac) >>
+  Cases_on `FOLDR (dft_exec_cons (fuel-d) C7) OK (TAKE a xs)
+    (be with vs_gas_readings := FLAT front ++ g ++ tail)`
+  >- (suspend "observations_ok") >>
+  gvs[] >> qexists_tac `extra ++ EL a ess` >> simp[APPEND_ASSOC]
 QED
 
 Resume focus_retained_row_replay[replay]:
@@ -211,6 +232,22 @@ Resume focus_retained_row_replay[replay]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (mp_tac o CONJUNCT2) >>
   disch_then drule >> simp[NoAsms]
+QED
+
+Resume focus_retained_row_replay[observations_ok]:
+  qpat_x_assum `!u. FOLDR _ _ _ _ = OK u ==> _`
+    (qspec_then `v` mp_tac) >> simp[APPEND_ASSOC] >> strip_tac >>
+  qpat_x_assum `FLAT (TAKE a ess) = _` kall_tac >>
+  gvs[] >>
+  `gas_events_block (fuel-d) C7 sf.fn_name
+    <|bb_label := be.vs_current_bb; bb_instructions :=
+      REPLICATE (a + be.vs_inst_idx) (mk_inst 0 STOP [] []) ++ [EL a xs]|> v =
+    gas_events_step (fuel-d) C7 sf.fn_name (EL a xs) v` by
+    (once_rewrite_tac[gas_events_block_def] >>
+     simp[get_instruction_def, EL_APPEND_EQN] >>
+     Cases_on `step_inst (fuel-d) C7 (EL a xs) v` >>
+     simp[Once gas_events_block_def, get_instruction_def]) >>
+  FAIL_TAC "single"
 QED
 
 Finalise focus_retained_row_replay
