@@ -1003,14 +1003,14 @@ Theorem augassign_binop_frag_typed_mem:
     ctx func cenv cx bop ty ty bl el tys v1 v2
     (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `(bop = ShL \/ bop = ShR ==>
       (?i. v2 = IntV i /\ 0 <= i) \/
       t2 = BaseT (BytesT (Fixed 32)))` by
-    (rpt strip_tac >> Cases_on `t2 = BaseT (BytesT (Fixed 32))`
+    (rpt strip_tac >> (Cases_on `t2 = BaseT (BytesT (Fixed 32))`
      >- simp[] >>
      `is_int_type t2` by gvs[well_typed_binop_def] >>
-     drule_all int_type_value >> strip_tac >> gvs[]) >>
+     drule_all int_type_value >> strip_tac >> gvs[])) >>
   drule_all well_typed_binop_augassign_word >> strip_tac
   >- (`word_value v1 /\ word_value v2` by metis_tac[word_value_type_typed] >>
       `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
@@ -1020,7 +1020,9 @@ Proof
       >- metis_tac[word_value_type_word] >>
       rewrite_tac[GSYM binop_frag_val_mem_def] >>
       irule binop_frag_word_typed_mem >> simp[] >> metis_tac[]) >>
-  gvs[] >>
-  irule binop_frag_bytes_typed_mem >> simp[] >>
-  qexistsl_tac [`t2`, `get_tenv cx`, `tv1`, `tv2`] >> simp[]
+  qpat_x_assum `ty = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+  irule (Q.INST [`t2` |-> `t2`, `tenv` |-> `get_tenv cx`,
+                 `tv1` |-> `tv1`, `tv2` |-> `tv2`]
+    binop_frag_bytes_typed_mem) >> simp[] >>
+  qexists_tac `t2` >> simp[] >> first_assum ACCEPT_TAC
 QED
