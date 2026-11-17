@@ -23,9 +23,11 @@ Ancestors
   dftPacketNativePrefixBoundary
   dftPacketNativeSlice
   dftPacketNestedCutPrefix
+  dftPacketSelectedCutTransport
   dftPacketObservationSuccess
   dftPacketOperationalPrefix
   dftPacketOrdinaryTrace
+  dftPacketPreterminalOracle
   dftPacketPseudoAdvance
   dftPacketRefinementBoundary
   dftPacketReturnLocal
@@ -41,3 +43,4 @@ Ancestors
   dftPacketSuccessfulSchedule
   dftPacketTableSplice
   dftPacketTerminalPhi
+  dftPacketSuccessorObservation
