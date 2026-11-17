@@ -1306,7 +1306,7 @@ Proof
 QED
 
 (* Check the proof certificates of the frozen public obligations. *)
-val _ = (Globals.show_tags := true);
+val _ = HOLFlags.set_bflag (HOLFlags.show_tags, true);
 val _ = List.app print_thm
   [lower_dload_function_supply_wf_function,
    lower_dload_function_supply_ssa_form, lower_dload_step_contract];
