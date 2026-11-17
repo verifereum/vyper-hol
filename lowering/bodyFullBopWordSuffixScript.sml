@@ -5,7 +5,7 @@ Ancestors
   bodyPtrBopScalarSeq fragExec exprSimDefs freshWrites vyperStorageFootprint
   instMemFrontier valueEncoding exprLoweringProps vyperTypeSystem augAssignPtrCompiler
   bodyPtrBopTypedSource bodyPtrBopScalarRun bodyPtrBopScalarDispatch
-  bodySimFull gasOutcomeFullCompose exprBopSimProps exprSimSource
+  bodySimFull gasOutcomeFullCompose exprBopSimProps exprSimSource exprSimProps
   wordArgsPtr ptrDiscipline bodyPtrDefs loweringPosts exprSimWordArgs
 
 Theorem bop_word_suffix_inputs[local]:
@@ -123,8 +123,8 @@ Theorem bop_suffix_full:
       ptr_buf_ok cenv (Builtin ann (Bop bop) [e1;e2]) op G t) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) (\H res ee gt r. expr_exit res r)
 Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  fs[] >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace /\
    valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
     fs[storage_trace_domain_def] >>
@@ -308,6 +308,7 @@ Proof
          simp[expr_val_rel_def, typed_val_to_w256_word_value]) >>
      disj2_tac >> metis_tac[]) >>
   mp_tac (SRULE [LET_THM] bop_suffix_full) >>
-  (impl_tac >- (rpt conj_tac >> simp[] >> metis_tac[word_value_type_word])) >>
+  (impl_tac >- (rpt conj_tac >> simp[] >>
+     metis_tac[word_value_type_word, post_value_type_word])) >>
   simp[]
 QED

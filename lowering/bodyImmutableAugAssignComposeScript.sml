@@ -68,7 +68,8 @@ Proof
   drule_all immutable_augassign_source_prefix >> strip_tac >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[] >>
   drule_all immutable_augassign_prefix_obs >> strip_tac >>
-  drule aug_place_typing >> strip_tac >>
+  drule aug_place_typing >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   simp[stmt_frag_def,stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   drule_all immutable_augassign_code_parts >> strip_tac >> gvs[] >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -195,6 +196,8 @@ Resume immutable_deploy_augassign_frag[rhs_normal]:
      metis_tac[assignable_type_well_formed]) >>
   `((bop = Eq \/ bop = NotEq) ==> !bs. v0 <> BytesV bs)` by
     metis_tac[augassign_compare_not_bytes] >>
+  `(bop = ShL \/ bop = ShR ==>
+    shift_amount_ok e \/ augassign_shift_amount_ok ity e)` by metis_tac[] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`,`ee with gas_obs := []`,`ctx`] strip_assume_tac) >>
   `expr_res_ok (bop_result cx ity bop [ity;expr_type e] v0 v ee)` by
@@ -213,12 +216,17 @@ Resume immutable_deploy_augassign_frag[binop_ready]:
   strip_tac >> gvs[] >>
   `expr_post H2 ctx func cenv cx e (es with gas_obs := [])
      s1 s2 t (ee with gas_obs := []) v rhs_op u` by metis_tac[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
   qpat_assum `expr_post H2 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn eq => qpat_assum `expr_val_rel _ (post_value_type _ _) _ rhs_op u`
+      (assume_tac o REWRITE_RULE [eq])) >>
   `eval_operand (Var out) t = SOME (typed_val_to_w256 tv v0)` by simp[] >>
   `eval_operand rhs_op u = SOME (typed_val_to_w256 tv2 v)` by
-    (irule expr_val_rel_typed >> simp[] >>
-     fs[expr_post_def] >> metis_tac[]) >>
+    (irule expr_val_rel_typed >> qexistsl_tac [`cx`,`expr_type e`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `eval_operand (Var out) u = SOME (typed_val_to_w256 tv v0)` by
     (irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`s1`,`t`] >> gvs[expr_post_def]) >>
@@ -243,13 +251,13 @@ Resume immutable_deploy_augassign_frag[operator_normal]:
      case evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `evaluate_binop
      (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
      tv bop v0 v = INL result` by gvs[AllCaseEqs()] >>
   `value_has_type tv result` by simp[] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 tv result)` by
-    (irule expr_val_rel_typed >> simp[]) >>
+    (irule expr_val_rel_typed >> qexistsl_tac [`cx`,`ity`] >> simp[]) >>
   `stmt_state_rel H2 ctx func cenv cx (ee with gas_obs := []) s /\
    storage_well_formed_on cx (ee with gas_obs := []) (FST H2)` by
     (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
@@ -337,7 +345,7 @@ Resume immutable_deploy_augassign_frag[operator_exit]:
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v`

@@ -5,7 +5,7 @@ Ancestors
   bodySimFull bodyFullBopWordLayout wordArgsPtr exprSimWordArgs exprSimSource exprSimOperators
   loweringPosts exprLoweringProps freshWrites compileEnv ptrDiscipline
   venomState vyperState finite_map pred_set allocaHistory valueEncoding loweringStateRelDefs ghostPcTransportPtr
-  augAssignPtrCompiler vyperTypeSystem bodyFullUnwrapRun exprSimHyps
+  augAssignPtrCompiler vyperTypeSystem bodyFullUnwrapRun exprSimHyps instIdxIndep
 
 Theorem bop_suffix_success_post:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
@@ -87,18 +87,18 @@ Proof
   `expr_val_rel cx ann v op
      (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb))` by
     (qpat_x_assum `expr_val_rel cx ann v op r` mp_tac >>
-     simp[expr_val_rel_def, eval_operand_def]) >>
+     simp[expr_val_rel_def, eval_op_inst_idx]) >>
   simp[] >> conj_tac
-  >- (irule expr_post_bop_rel >>
-      simp[] >>
-      reverse conj_tac
-      >- (goal_assum (drule_at Any) >>
-          goal_assum (drule_at Any) >>
-          gvs[lookup_var_def] >>
-          goal_assum (drule_at Any) >>
-          qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
-      simp[stmt_state_rel_inst_idx]) >>
+  >- (irule expr_post_bop_rel >> simp[] >>
+      conj_tac
+      >- (qpat_assum `expr_val_rel cx ann v op r` mp_tac >>
+          simp[NoAsms, expr_val_rel_def, eval_op_inst_idx]) >>
+      conj_tac
+      >- (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+          simp[stmt_state_rel_inst_idx]) >>
+      qexistsl_tac [`mid`, `s1`, `s2`, `t`, `u`, `v1`, `v2`, `x`, `y`] >>
+      simp[] >> gvs[lookup_var_def] >>
+      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `MEM bop [Add; Sub; Mul; Div; Mod; UnsafeAdd; UnsafeSub; UnsafeMul;
     UnsafeDiv; And; Or; XOr; ShL; ShR; Eq; NotEq; Lt; LtE; Gt; GtE;
     Exp; Min; Max; In; NotIn]` by
