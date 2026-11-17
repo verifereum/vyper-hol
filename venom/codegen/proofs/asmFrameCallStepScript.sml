@@ -253,7 +253,7 @@ Theorem asm_frame_call_request:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "CALL" /\
   a.as_stack = gas :: addr :: value :: ao :: sz :: ro :: rs :: stk ==>
-  asm_call_request a addr value (w2n ao) (w2n sz) F = request_of es
+  asm_call_request a addr value (w2n ao) (w2n sz) F with cr_gas := SOME (w2n gas) = request_of es
 Proof
   strip_tac >>
   `next_opcode (FST (HD es.contexts)) = SOME Call` by
@@ -269,7 +269,7 @@ Theorem asm_frame_staticcall_request:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "STATICCALL" /\
   a.as_stack = gas :: addr :: ao :: sz :: ro :: rs :: stk ==>
-  asm_call_request a addr 0w (w2n ao) (w2n sz) T = request_of es
+  asm_call_request a addr 0w (w2n ao) (w2n sz) T with cr_gas := SOME (w2n gas) = request_of es
 Proof
   strip_tac >>
   `next_opcode (FST (HD es.contexts)) = SOME StaticCall` by

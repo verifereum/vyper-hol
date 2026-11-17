@@ -40,7 +40,8 @@ Definition observable_call_def:
 End
 
 (* Called only under observable_call by observe. The total extractor uses
- * top-first stack order; the gas and output-buffer operands are omitted.
+ * top-first stack order; a call records its gas operand (the top of the
+ * stack), and the output-buffer operands are omitted.
  * Accounts are live rollback accounts, NOT the saved frame snapshot. *)
 Definition request_of_def:
   request_of s =
@@ -60,7 +61,7 @@ Definition request_of_def:
             cr_tStorage := s.rollback.tStorage |>
        else <| cr_kind := if next_opcode c = SOME DelegateCall
                           then DelegateMessageCall else MessageCall;
-          cr_gas := NONE;
+          cr_gas := SOME (w2n (HD c.stack));
           cr_data_len := w2n (EL (3 + valueOffset) c.stack);
           cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;

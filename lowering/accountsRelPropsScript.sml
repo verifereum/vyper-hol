@@ -316,9 +316,9 @@ QED
 (* ===== The call oracle ===== *)
 
 Theorem accounts_rel_take_call_outcome:
-  !cx target calldata value_opt es es' res s.
+  !cx gas_cap target calldata value_opt es es' res s.
     accounts_rel H cx es s /\
-    take_call_outcome target calldata value_opt es = (res, es') ==>
+    take_call_outcome gas_cap target calldata value_opt es = (res, es') ==>
     accounts_rel H cx es' s
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>

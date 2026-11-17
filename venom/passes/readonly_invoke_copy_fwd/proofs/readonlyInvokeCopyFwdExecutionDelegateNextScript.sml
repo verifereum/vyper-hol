@@ -119,9 +119,9 @@ Proof
   `step_inst fuel Ct inst t = exec_delegatecall inst t gas addr ao' az ro' rs` by
     simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   qabbrev_tac `rq1 = venom_call_request s addr 0w ao az F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   qabbrev_tac `rq2 = venom_call_request t addr 0w ao' az F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w,r)` >>
   `?out. inst.inst_outputs = [out] /\ u = update_var out w r` by
