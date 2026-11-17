@@ -39,6 +39,7 @@ Ancestors
   dftPacketPseudoAdvance
   dftPacketPseudoCursor
   dftPacketPseudoHistory
+  dftPacketPseudoReplayFrame
   dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketReturnLocal
