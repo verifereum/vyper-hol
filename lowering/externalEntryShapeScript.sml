@@ -2837,8 +2837,6 @@ Proof
   map_every qx_gen_tac [`z`, `v`] >> PairCases_on `z` >> simp[] >>
   ho_match_mp_tac pair_case_labels >> conj_tac
   >- simp[compile_raw_call_finish_labels] >>
-  rpt gen_tac >> ho_match_mp_tac application_labels >> conj_tac
-  >- simp[emit_void_labels] >>
   rpt gen_tac >> simp[] >> IF_CASES_TAC >>
   simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED

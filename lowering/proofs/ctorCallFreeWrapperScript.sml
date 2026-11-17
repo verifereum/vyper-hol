@@ -264,16 +264,19 @@ Theorem deploy_ctor_call_free_prefix:
   ?se sf ctx data.
     compile_internal_fn_bodies
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       se = ((),sf) /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts se) /\
-    (ints <> [] ==> ~MEM
+    ((order_internals (deploy_internal_order (SOME cf) ints) ints) <> [] ==> ~MEM
       (FST (HD (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)))
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))))
       (MAP (\bb. bb.bb_label) (all_blocks se))) /\
     extract_context_with_internals "__deploy"
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       sf = SOME (ctx,data) /\
     dunit.cu_context = install_immutable_reservation (imm_len tops) ctx
 Proof
@@ -295,7 +298,7 @@ Proof
      metis_tac[constructor_prefix_labels, pairTheory.SND]) >>
   qexistsl_tac [`st_final`, `post`, `ctx`, `data`] >> simp[] >>
   strip_tac >> irule constructor_prefix_label_absent >> simp[] >>
-  Cases_on `ints` >> gvs[] >> PairCases_on `h` >>
+  Cases_on `order_internals (deploy_internal_order (SOME cf) ints) ints` >> gvs[] >> PairCases_on `h` >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        internal_label_ok_def, internal_fn_label_prefix, internal_fn_label_def]
 QED

@@ -5,6 +5,7 @@ Ancestors
   supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreateFrame
+  vyperLocalAccessFrame
 
 (* select_result, extend_place and lookup_global record a storage
    observation, so their end state is the start state with a longer
@@ -218,17 +219,6 @@ Proof
   imp_res_tac supported_pure_scopes_mutual >> metis_tac[]
 QED
 
-Theorem lookup_global_not_memory:
-  !cx src id es es' root path.
-    lookup_global cx src id es <> (INL (PlaceR (MemoryPlace root path)),es')
-Proof
-  rpt strip_tac >>
-  gvs[lookup_global_def, vyperMiscTheory.option_CASE_rator,
-      vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def,
-      return_def, raise_def, AllCaseEqs()]
-QED
-
 Theorem supported_effect_scopes_mutual:
   (!tops e. supported_effect_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
@@ -413,25 +403,6 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem extend_place_memory_root[local]:
-  !cx pv sb es root path es'.
-    extend_place cx pv sb es = (INL (PlaceR (MemoryPlace root path)),es') ==>
-    ?oldpath. pv = PlaceR (MemoryPlace root oldpath)
-Proof
-  Cases_on `pv` >> Cases_on `sb` >>
-  simp[oneline extend_place_def, bind_def, ignore_bind_def,
-       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[bind_def, return_def, raise_def, lift_sum_def,
-      value_type_CASE_rator, place_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-      vyperMiscTheory.option_CASE_rator, AllCaseEqs(), extend_memory_place_def] >>
-  Cases_on `tv` >>
-  gvs[oneline extend_storage_place_def, vyperValueTheory.value_CASE_rator,
-      bind_def, ignore_bind_def, check_def, assert_def,
-      lift_option_type_def, lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
-  pairarg_tac >> gvs[return_def]
-QED
-
 Theorem eval_base_place_memory_root:
   !target cx es root path es'.
     eval_base_place cx target es = (INL (PlaceR (MemoryPlace root path)),es') ==>
@@ -448,7 +419,7 @@ Proof
       PairCases_on `nsid` >> gvs[Once evaluate_def] >>
       metis_tac[lookup_global_not_memory]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  drule extend_place_memory_root >> strip_tac >> gvs[] >>
+  drule extend_place_memory_origin >> strip_tac >> gvs[] >>
   rename1 `eval_base_place cx inner _ = _` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
   disch_then drule >> simp[place_access_def, place_access_root_attrs]

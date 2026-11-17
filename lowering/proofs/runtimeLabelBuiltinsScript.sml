@@ -480,12 +480,7 @@ Resume rb_compile_call_raw_calldata[finish]:
     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_raw_call_finish >> Cases_on `x0` >> gvs[]) >>
-  gen_tac >> strip_tac >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.INST [`P` |-> `K T`] (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    irule rb_emit_void >> simp[]) >>
-  gen_tac >> Cases_on `rcf.rcf_max_outsize = 0` >> simp[] >>
+  gen_tac >> strip_tac >> Cases_on `rcf.rcf_max_outsize = 0` >> simp[] >>
   (pure_rewrite_tac[GSYM comp_return_def] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    irule rb_step_return >> simp[rb_value_ok_def, rb_mk_ptr])
