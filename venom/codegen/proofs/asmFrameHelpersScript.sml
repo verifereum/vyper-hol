@@ -305,6 +305,7 @@ Theorem asm_consume_call_outcome_frame:
   asm_consume_call_outcome rq ro rs (stk ++ rest) (s with as_stack := xs) =
     AsmOK (t with as_stack := t.as_stack ++ rest)
 Proof
+  Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_call_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >>
   simp[asm_next_def] >> strip_tac >> gvs[]
@@ -322,6 +323,7 @@ Theorem asm_consume_create_outcome_frame[local]:
   asm_consume_create_outcome rq (stk ++ rest) (s with as_stack := xs) =
     AsmOK (t with as_stack := t.as_stack ++ rest)
 Proof
+  Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_create_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >>
   simp[asm_next_def] >> strip_tac >> gvs[]
