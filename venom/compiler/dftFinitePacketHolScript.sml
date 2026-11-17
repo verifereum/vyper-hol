@@ -21,6 +21,7 @@ Ancestors
   dftPacketFreshRow
   dftPacketKeyMap
   dftPacketKeySubstitution
+  dftPacketLastRowValidity
   dftPacketNativeContinuation
   dftPacketNativePrefixBoundary
   dftPacketNativeSupplierReplay
