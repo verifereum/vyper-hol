@@ -167,7 +167,7 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
-      tx.function_name = "__init__" /\ ~tx.is_static /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\ tx.created_in_tx /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
@@ -238,9 +238,7 @@ Definition deploy_result_rel_def:
     | INR (Error e) =>
         unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-    | INR BreakException => F
-    | INR ContinueException => F
-    | INR (ReturnException _) => F
+    | INR _ => F
 End
 
 (* The deployment relation at every gas filling, with the source run on the
