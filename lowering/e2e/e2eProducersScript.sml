@@ -19,7 +19,7 @@ Ancestors
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
-  contextStaticAbortRel o1PipelineMemoryLoweredAbort
+  contextStaticAbortRel o1PipelineMemoryLoweredAbort asmOptimizer
 
 Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
@@ -101,6 +101,35 @@ Proof
   simp[compile_vyper_def] >> strip_tac >>
   drule compile_vyper_with_success_phases >> strip_tac >>
   gvs[finalize_codegen_identity, o1PipelineCorrectTheory.o1_pipeline_def,
+      AllCaseEqs()] >>
+  rename1 `lower_vyper_runtime_unit tops rpolicy = SOME unit` >>
+  rename1 `run_venom_pipeline (K T) (K T) (K T)
+             rpolicy o1_pipeline_spec unit = SOME out` >>
+  qpat_x_assum `codegen_assembly rpolicy out.po_unit = SOME _`
+    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
+  goal_assum $ drule_at Any >> gvs[]
+QED
+
+Theorem compile_vyper_runtime_phases_asm_opt:
+  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
+  ?rpolicy unit out prog prog' cplan.
+    resolve_o1_policy policy = SOME rpolicy /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    out.po_final_assembly = rpolicy.rpol_final_assembly /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    generate_context_plan out.po_unit.cu_context = SOME cplan /\
+    assembly_target_safe rpolicy.rpol_target prog /\
+    prog = execute_plan cplan.cp_initial_fmp (context_plan_ops cplan) ++
+           data_segment_asm out.po_unit.cu_data_segment ++
+           [AsmDataHeader "code_end"] /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    assembly_target_safe rpolicy.rpol_target prog' /\
+    runtime_bc = assemble prog'
+Proof
+  simp[compile_vyper_def] >> strip_tac >>
+  drule compile_vyper_with_success_phases >> strip_tac >>
+  gvs[finalize_codegen_def, o1PipelineCorrectTheory.o1_pipeline_def,
       AllCaseEqs()] >>
   rename1 `lower_vyper_runtime_unit tops rpolicy = SOME unit` >>
   rename1 `run_venom_pipeline (K T) (K T) (K T)
