@@ -191,9 +191,16 @@ Theorem sym_rf_strict_suffix_abort_mode_conditional:
     venom_asm_terminal_rel s_end out /\
     sym_terminal (sym_steps_mode allow_own prog env own n ss)
 Proof
-  disch_then (fn bundle =>
-    markerLib.hide_tac "suffix" (GEN_ALL (MP sym_rf_suffix_revert_abort_mode_conditional bundle)) >>
-    markerLib.hide_tac "assign" (GEN_ALL (MP sym_rf_assign_continuation_execution_mode_conditional bundle))) >>
+  disch_then (fn bundle => let
+    fun typed_cfg th = let
+      val cfg = List.find (fn v => fst (dest_var v) = "cfg") (free_vars (concl th))
+        |> valOf
+      val target = type_of ``cfg_analyze fn``
+    in INST_TYPE (match_type (type_of cfg) target) th end
+  in
+    markerLib.hide_tac "suffix" (GEN_ALL (MP (typed_cfg sym_rf_suffix_revert_abort_mode_conditional) bundle)) >>
+    markerLib.hide_tac "assign" (GEN_ALL (MP (typed_cfg sym_rf_assign_continuation_execution_mode_conditional) bundle))
+  end) >>
   measureInduct_on `j - k` >> rpt gen_tac >> strip_tac >> disch_tac >>
   `i <= k` by decide_tac >>
   `?inst. get_instruction bb k = SOME inst` by
@@ -261,17 +268,22 @@ Resume sym_rf_strict_suffix_abort_mode_conditional[revert]:
       rpt strip_tac >>
       qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _` drule >> simp[]) >>
   markerLib.use_hidden_assum "suffix" drule >>
-  FAIL_TAC "first suffix premise consumed" >> strip_tac >>
+  rpt (disch_then drule) >>
+  disch_then (qspecl_then [`top`,`srest`,`ret`,`cplan`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _` drule >> simp[])) >> strip_tac >>
   simp[] >> qexistsl [`LENGTH (execute_plan initial_fmp step_ops)`,`out`] >> gvs[]
 QED
 
 Resume sym_rf_strict_suffix_abort_mode_conditional[assign]:
   `k < j /\ inst.inst_opcode = ASSIGN` by gvs[] >>
-  `?rhs out. inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]` by metis_tac[] >>
+  `?rhs out. inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]` by (simp[]) >>
   `~is_label_operand rhs` by fs[] >>
   drule_all sym_assign_block_abort_continuation >> strip_tac >>
   `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
-    ti.inst_opcode <> PHI` by metis_tac[sym_rf_future_non_phi] >>
+    ti.inst_opcode <> PHI` by
+    (match_mp_tac (GEN_ALL symControlForwardRunOwnTheory.sym_rf_future_non_phi) >>
+     qexists `i` >> simp[]) >>
   drule_all fnFrameStepsRevertForwardTheory.rf_assign_success_invariants >> strip_tac >>
   `is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled` by
     (strip_tac >> first_x_assum irule >>
@@ -279,21 +291,43 @@ Resume sym_rf_strict_suffix_abort_mode_conditional[assign]:
   `operand_val (frame_view fn ra s) lo rhs =
    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
     (first_x_assum irule >> simp[compute_operands_def, python_stack_operands_def]) >>
-  markerLib.use_hidden_assum "assign" drule_all >>
-  disch_then (qspec_then `SUC k` strip_assume_tac) >>
+  Q.SUBGOAL_THEN `bridge_core lo code_ok st ss` assume_tac
+  >- (simp[] >> conj_tac >- (qexists `m` >> simp[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _` drule >> simp[]) >>
+  markerLib.use_hidden_assum "assign"
+    (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  rpt (disch_then drule) >>
+  disch_then (qspecl_then [`top`,`srest`,`ret`,`SUC k`,`cplan`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _` drule >> simp[])) >>
+  strip_tac >>
   `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by
     fs[listTheory.MEM_APPEND] >>
-  `asm_block_at prog st'.as_pc (execute_plan initial_fmp rest_ops)` by metis_tac[] >>
+  `asm_block_at prog st'.as_pc (execute_plan initial_fmp rest_ops)` by
+    (qpat_x_assum `st'.as_pc = _` (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
   `~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))` by
     (`ss'.sym_mem_labels = ss.sym_mem_labels` by
-      metis_tac[finite_mapTheory.FLOOKUP_EXT] >> simp[]) >>
+      (rewrite_tac[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >> first_assum ACCEPT_TAC) >> simp[]) >>
+  Q.SUBGOAL_THEN `bridge_core lo code_ok st' ss'` assume_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (qexists `m'` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
   `j - SUC k < j - k` by decide_tac >>
   qpat_x_assum `!y. j - y < j - k ==> _`
     (qspec_then `SUC k` mp_tac) >>
-  simp[] >>
+  (impl_tac >- decide_tac) >>
   disch_then (qspec_then `s' with vs_inst_idx := SUC k` mp_tac) >>
-  gvs[] >> disch_then (qspec_then `st'` mp_tac) >>
-  simp[] >> disch_then drule_all >> strip_tac >> simp[] >>
+  disch_then (qspec_then `st'` mp_tac) >>
+  disch_then (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`stk'`,`ss'`,`top'`] mp_tac) >>
+  (impl_tac >- (pure_rewrite_tac[GSYM CONJ_ASSOC] >>
+    conj_tac >- first_assum (ACCEPT_TAC o PURE_REWRITE_RULE[GSYM CONJ_ASSOC]) >>
+    conj_tac >- first_assum (ACCEPT_TAC o PURE_REWRITE_RULE[GSYM CONJ_ASSOC]) >> simp[] >>
+    rpt strip_tac >>
+    qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _` drule >> simp[])) >>
+  strip_tac >> simp[] >>
   qexistsl [`LENGTH (execute_plan initial_fmp step_ops) + n`, `out'`] >>
   conj_tac
   >- (qpat_assum `asm_steps _ _ _ _ st = AsmOK _`
