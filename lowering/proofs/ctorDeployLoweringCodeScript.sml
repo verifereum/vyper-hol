@@ -263,11 +263,13 @@ Theorem deploy_ctor_lowering_trace:
       st_epilogue = ((),st_final) /\
     compile_internal_fn_bodies
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       st_final = ((),post) /\
     extract_context_with_internals "__deploy"
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
+        (order_internals (deploy_internal_order (SOME cf) ints) ints))
       post = SOME (ctx,data) /\
     lowering_context_ok (install_immutable_reservation (imm_len tops) ctx) /\
     dunit = <|cu_context := install_immutable_reservation (imm_len tops) ctx;

@@ -168,6 +168,10 @@ Proof
                  supported_program_internal_names] >>
   qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
+     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
+    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
+                 PERM_order_deploy_internals] >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
   simp[EVERY_MEM] >> rpt strip_tac >>

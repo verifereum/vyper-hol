@@ -59,9 +59,14 @@ Proof
      irule package_external_fn_shape_ok >> gs[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops ints) ints))` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
+     (order_internals (runtime_internal_order tops ints) ints)))`
+    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
+                 PERM_order_runtime_internals] >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
     (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
