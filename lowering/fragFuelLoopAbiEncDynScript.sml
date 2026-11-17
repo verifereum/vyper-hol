@@ -705,11 +705,26 @@ Proof
   rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
   qpat_x_assum `!i. i < 9 ==> _` kall_tac >>
   qpat_x_assum `get_instruction _ _ = _` kall_tac >>
-  simp[Abbr `post`, Abbr `u9`, Abbr `u8`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
-       Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, update_var_def,
-       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, mload_def,
-       vars_kept_def] >>
-  conj_tac
+  simp[Abbr `post`, vars_kept_def] >> rpt conj_tac >>
+  simp[Abbr `u9`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u8`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u7`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u6`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u5`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u4`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u3`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u2`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `u1`, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[mload_def]
   >- (rpt strip_tac >>
       `x <> x0 /\ x <> x1 /\ x <> x2 /\ x <> x3 /\ x <> x4 /\
        x <> x5 /\ x <> x6 /\ x <> x7 /\ x <> x8` by metis_tac[] >> simp[]) >>
