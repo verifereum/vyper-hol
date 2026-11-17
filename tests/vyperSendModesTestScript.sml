@@ -99,15 +99,13 @@ Proof
 QED
 
 (* Closed actual counterexample to the old inert-mode Send conjunct, saved
-   before amending it: ordinary zero-value Send still records/exhausts. *)
+   before amending it: ordinary zero-value Send still takes an outcome, so
+   on an empty outcome list it stops with the exhaustion error. *)
 Theorem send_zero_initial_state_not_inert:
-  let st = initial_state initial_machine_state [FEMPTY] with outcomes := SOME [] in
-    eval_expr empty_evaluation_context (send_call 0w 0) st =
-      (INR (Error (RuntimeError "send failed")),
-       st with <|requests := [(call_outcome_request 0w [] (SOME 0) st with cr_gas := SOME 0)];
-         storage_trace := [StorageOutcome (call_outcome_request 0w [] (SOME 0) st with cr_gas := SOME 0)
-           (failed_outcome (call_outcome_request 0w [] (SOME 0) st with cr_gas := SOME 0))]|>) /\
-    eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
+  eval_expr empty_evaluation_context (send_call 0w 0)
+    (initial_state initial_machine_state [FEMPTY] with outcomes := SOME []) =
+  (INR (Error (RuntimeError "take_call_outcome")),
+   initial_state initial_machine_state [FEMPTY] with outcomes := SOME [])
 Proof
   simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, initial_state_def,
        take_call_outcome_def, take_request_outcome_def, call_outcome_request_def, take_outcome_def,
