@@ -28,7 +28,8 @@ Proof
   strip_tac >> gvs[]
   >- (Cases_on `dst` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `b` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def]
-      >- suspend "address_uint" >> suspend "address_bytes") >>
+      >- suspend "address_uint"
+      >- suspend "address_bool" >> suspend "address_bytes") >>
   Cases_on `dst` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def] >>
   Cases_on `b` >> gvs[valid_conversion_def, vyperValueTheory.evaluate_type_def]
   >- suspend "flag_uint" >> suspend "flag_bytes"
@@ -48,6 +49,13 @@ Resume scalar_address_flag_source_run[address_uint]:
   Cases_on `within_int_bound (Unsigned n) i` >> simp[] >> strip_tac >>
   simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
        typed_val_to_w256_def, val_to_w256_def, Abbr `i`] >> metis_tac[]
+QED
+Resume scalar_address_flag_source_run[address_bool]:
+  Cases_on `v` >> gvs[value_has_type_def, mk_convert_op_def] >>
+  drule_all scalar_address_bool_run >> strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+       typed_val_to_w256_def, val_to_w256_def] >>
+  Cases_on `EXISTS (\b. b <> 0w) l` >> simp[bool_to_word_def]
 QED
 Resume scalar_address_flag_source_run[address_bytes]:
   Cases_on `v` >> gvs[value_has_type_def] >>
