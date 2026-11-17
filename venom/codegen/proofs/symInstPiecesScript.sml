@@ -3,7 +3,7 @@ Theory symInstPieces
 Ancestors
   symPostfixSim symPlannerSim stackPlanGen stackPlanOps stackModel asmSplice
   planExec codegenSymRel asmSymSem doSwapSim genBlockSim symEmitSim fnFrameDeepInst
-  symEmitStoreOwn symInstPiecesFacts
+  symEmitStoreOwn symInstPiecesFacts symInstAssertOwn
 
 Theorem sym_phi_dup_rename:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
