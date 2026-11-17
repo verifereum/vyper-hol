@@ -1451,7 +1451,7 @@ Definition ec_source_tail_def:
   ec_source_tail cx ann bt tys vs es =
     case exprSimWordArgs$builtin_result cx es.accounts ann bt tys vs of
       INR ex => (INR ex,es)
-    | INL v => (do precompile_call_success bt;
+    | INL v => (do precompile_call_success bt vs;
                    vyperState$return (Value v) od) es
 End
 
