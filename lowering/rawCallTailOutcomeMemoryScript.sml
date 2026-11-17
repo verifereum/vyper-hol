@@ -28,6 +28,8 @@ Theorem raw_call_tail_outcome_mem:
     (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
     eval_operand len t = SOME (n2w (LENGTH bs)) /\
     eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+    (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+         g = w2n gw) /\
     mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
     b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
     stmt_state_rel H ctx func cenv cx esK t /\
@@ -58,7 +60,7 @@ Theorem raw_call_tail_outcome_mem:
       data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
       amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
       eval_raw_call cx flags target data amount
-        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
+        (ext_call_kwarg EKGas flags.rcf_kws kvs)
     od) (esK,t)
     (\H res ee u. (?tv. res = INL tv /\
       vv_post H ctx func cenv cx
@@ -97,7 +99,7 @@ Proof
   `cx.txn.is_static ==> amount = 0` by fs[] >>
   drule_all raw_call_source_tail >>
   disch_then (qspecl_then [`target`,
-    `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
+    `ext_call_kwarg EKGas flags.rcf_kws kvs`,`bs`]
     strip_assume_tac) >>
   suspend "ready"
 QED
@@ -151,10 +153,10 @@ Resume raw_call_tail_outcome_mem[path]:
     (Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
   `(flags.rcf_is_static \/ cx.txn.is_static) =
     IS_NONE (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)` by simp[] >>
-  `take_call_outcome target
+  `take_call_outcome (OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV) target
     (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
     (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) esK = (INL (rq,outcome),es1)` by
-    (qpat_x_assum `take_call_outcome _ _ _ esK = _` mp_tac >> simp[]) >>
+    (qpat_x_assum `take_call_outcome _ _ _ _ esK = _` mp_tac >> simp[]) >>
   `MAP FDOM esK.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by simp[] >>
   `0 < flags.rcf_max_outsize ==> evaluate_type (get_tenv cx)
     (expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) =
@@ -200,7 +202,7 @@ Resume raw_call_tail_outcome_mem[execute]:
   disch_then (drule_at (Pat `eval_operand gas t = _`)) >>
   disch_then (drule_at (Pat `eval_operand (case ext_call_kwarg _ _ _ of _ => _ | _ => _) t = _`)) >>
   simp[] >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ esK = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ esK = _`)) >>
   disch_then (qspec_then `ann` mp_tac) >>
   impl_tac >- fs[expr_type_def, wordsTheory.dimword_def] >>
   disch_then (qx_choose_then `r` assume_tac) >> suspend "outcome"
@@ -211,7 +213,7 @@ Resume raw_call_tail_outcome_mem[outcome]:
   disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexists_tac `FST (eval_raw_call cx flags target bs amount
-    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) esK)` >>
+    (ext_call_kwarg EKGas flags.rcf_kws kvs) esK)` >>
   qexists_tac `es2` >> qexists_tac `r` >>
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
   qpat_x_assum `gas_path_mem _ _ _ _ _ /\ _` strip_assume_tac >>
@@ -233,7 +235,7 @@ Resume raw_call_tail_outcome_mem[static_value_abort]:
   drule_all raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
   `!st. eval_raw_call cx flags target bs amount
-    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) st =
+    (ext_call_kwarg EKGas flags.rcf_kws kvs) st =
     (INR (Error (RuntimeError "write in static context")), st)` by
     (gen_tac >> irule raw_call_static_value_abort >> simp[]) >>
   `local_ptrs_reserved cenv s6` by

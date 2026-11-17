@@ -26,7 +26,8 @@ Theorem raw_call_outbuf_tail_mem:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\

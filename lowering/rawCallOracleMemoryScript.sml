@@ -140,7 +140,8 @@ Theorem raw_call_oracle_run_mem:
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
   (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
-  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     b + sz <= w2n ro \/ w2n ro + cap <= b) /\
@@ -191,7 +192,7 @@ Proof
   `w2n (n2w cap : bytes32) = cap` by simp[wordsTheory.w2n_n2w] >>
   drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`val_word`,`ro`,`gas`,`aw`] mp_tac) >>
   (impl_tac >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `t` (qx_choose_then `u` strip_assume_tac)) >>
@@ -202,7 +203,7 @@ Proof
      qpat_x_assum `stmt_state_rel H _ _ _ _ _ s` kall_tac >>
      drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
      disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
      disch_then (qspecl_then [`val_word`,`ro`,`gas`,`aw`] mp_tac) >>
      (impl_tac >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then (qx_choose_then `t2` (qx_choose_then `u2` strip_assume_tac)) >>
