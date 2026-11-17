@@ -10,6 +10,7 @@ Ancestors
   dftPacketCallNative
   dftPacketCallUpdate
   dftPacketCallEdgeClauses
+  dftPacketCallPathGeometry
   dftPacketCalleeAlignment
   dftPacketClosedRowNative
   dftPacketClosedRows
