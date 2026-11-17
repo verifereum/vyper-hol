@@ -535,6 +535,9 @@ Theorem sha256_exec_ext_call_fail:
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   exec_ext_call (mk_inst iid STATICCALL ops [out]) s gas 2w 0w
     args_off args_size ret_off (32w:bytes32) T =
+  if s.vs_outcomes = [] then
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
+  else
   OK (update_var out 0w
     ((write_memory_with_expansion (w2n ret_off) [] s) with
       <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>))
@@ -649,6 +652,9 @@ Theorem step_STATICCALL_sha256_fail:
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   step_inst_base
     (mk_inst iid STATICCALL [gas_op; Lit 2w; args_op; size_op; ret_op; Lit 32w] [out]) s =
+  if s.vs_outcomes = [] then
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
+  else
   OK (update_var out 0w
     ((write_memory_with_expansion (w2n ret_off) [] s) with
       <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>))
@@ -773,7 +779,8 @@ Theorem sha256_tail_fail:
      mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
        [success_var];
      mk_inst i2 ASSERT [Var success_var] [];
-     mk_inst i3 MLOAD [ret_op] [out]] s = Abort Revert_abort t
+     mk_inst i3 MLOAD [ret_op] [out]] s =
+       Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
@@ -789,6 +796,25 @@ Proof
    eval_operand ret_op (update_var gas_name g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
+  `step_inst_base
+    (mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+      [success_var]) (update_var gas_name g s0) =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] (update_var gas_name g s0)))
+    else OK (update_var success_var 0w
+      ((write_memory_with_expansion (w2n r) [] (update_var gas_name g s0)) with
+        <|vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes|>))` by
+    (mp_tac (Q.INST [`s` |-> `update_var gas_name g s0`, `iid` |-> `i1`,
+       `gas_op` |-> `Var gas_name`, `args_op` |-> `ptr_op`, `size_op` |-> `len_op`,
+       `ret_op` |-> `ret_op`, `gas` |-> `g`, `args_off` |-> `p`, `args_size` |-> `n`,
+       `ret_off` |-> `r`, `out` |-> `success_var`] step_STATICCALL_sha256_fail) >>
+     simp[eval_operand_def, lookup_var_update_var, Abbr `s0`, update_var_def] >>
+     metis_tac[]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (fs[] >>
+      simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >>
+      qexists_tac `halt_state (set_returndata [] (update_var gas_name g s0))` >> simp[]) >>
+  simp[] >>
   `?t. step_inst_base
     (mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
       [success_var]) (update_var gas_name g s0) =
@@ -797,9 +823,7 @@ Proof
        (update_var gas_name g s0)) with
        <| vs_returndata := [];
           vs_outcomes := DROP 1 (update_var gas_name g s0).vs_outcomes |>` >>
-     irule step_STATICCALL_sha256_fail >>
-     simp[eval_operand_def, lookup_var_update_var, Abbr `s0`, update_var_def] >>
-     metis_tac[]) >>
+     simp[Abbr `s0`, update_var_def]) >>
   simp[Once run_inst_seq_def] >>
   fs[mk_inst_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
@@ -926,7 +950,8 @@ Theorem emit_sha256_tail_fail:
   eval_operand ret_op s = SOME r /\
   (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> not_fresh_at sa x) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts sa sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >> drule_all emitted_insts_sha256_tail >> strip_tac >> gvs[] >>
   irule sha256_tail_fail >> simp[] >>
@@ -994,12 +1019,15 @@ Theorem hash_alloc_sha256_tail_fail:
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts sa sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >>
   `32 < dimword (:256)` by simp[dimword_def] >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sn) s = OK allocated` >>
+  `allocated.vs_outcomes = s.vs_outcomes` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   `allocated.vs_labels = s.vs_labels` by
     (drule_all hash_alloc_buffer_labels >> simp[]) >>
   `eval_operand ptr_op allocated = SOME p /\
@@ -1198,7 +1226,8 @@ Theorem compile_sha256_bytes_fail:
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts sa sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >>
   qpat_x_assum `compile_sha256_bytes _ _ = _` mp_tac >>
@@ -1215,6 +1244,9 @@ Proof
   rename1 `emit_void ASSERT [success_op] sc = (u, sh)` >> Cases_on `u` >>
   drule_all hash_data_prefix_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK prefix` >>
+  `prefix.vs_outcomes = s.vs_outcomes` by
+    (qpat_x_assum `prefix with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_outcomes`) >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es prefix` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
@@ -1337,7 +1369,8 @@ Theorem compile_sha256_bytesm_fail:
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts sa sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >>
   qpat_x_assum `compile_sha256_bytesm _ _ _ = _` mp_tac >>
@@ -1354,6 +1387,8 @@ Proof
   rename1 `emit_void ASSERT [success_op] sc = (v,sh)` >> Cases_on `v` >>
   drule_all hash_alloc_mstore_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sd) s = OK staged` >>
+  `staged.vs_outcomes = s.vs_outcomes` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   `eval_operand (Lit (n2w len)) staged = SOME (n2w len)` by
     simp[eval_operand_def] >>
   `!x. in_buf.buf_operand = Var x \/ Lit (n2w len) = Var x ==>
@@ -2413,14 +2448,14 @@ Theorem hash_abort_frag:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
-  (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t) ==>
+  (!s. P s ==> ?a t. run_inst_seq (emitted_insts sa sb) s = Abort a t) ==>
   frag_exec ctx sa sb P Q
     (expr_exit (INR (Error (RuntimeError "precompile failed"))))
 Proof
   strip_tac >> irule frag_exec_run_inst_seq >>
   gvs[same_blocks_def, IS_PREFIX_APPEND] >> rpt strip_tac >>
   disj2_tac >> first_x_assum drule >> strip_tac >>
-  qexistsl [`Revert_abort`, `t`] >> simp[expr_exit_def]
+  qexistsl [`a`, `t`] >> simp[expr_exit_def]
 QED
 
 Theorem vv_post_allocated_memory_intro:
@@ -3127,7 +3162,7 @@ Theorem sha256_fixed_fail_frag:
     (expr_exit (INR (Error (RuntimeError "precompile failed"))))
 Proof
   strip_tac >> irule hash_abort_frag >> simp[] >>
-  drule_all compile_sha256_bytesm_fail >> simp[]
+  drule_all compile_sha256_bytesm_fail >> metis_tac[]
 QED
 
 Theorem sha256_memory_fail_frag:
@@ -3148,7 +3183,7 @@ Theorem sha256_memory_fail_frag:
     (expr_exit (INR (Error (RuntimeError "precompile failed"))))
 Proof
   strip_tac >> irule hash_abort_frag >> simp[] >>
-  drule_all compile_sha256_bytes_fail >> simp[]
+  drule_all compile_sha256_bytes_fail >> metis_tac[]
 QED
 
 Theorem sha256_fixed_post_run:
@@ -3405,7 +3440,8 @@ Theorem sha256_typed_fail_run:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
-  ?t. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t
+  ?t. run_inst_seq (emitted_insts sm sb) s =
+    Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t
 Proof
   strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by

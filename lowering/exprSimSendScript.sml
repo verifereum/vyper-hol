@@ -195,9 +195,9 @@ Theorem take_call_outcome_typed:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[take_call_outcome_def, take_request_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
-  Cases_on `x` >> gvs[failed_outcome_def] >>
   Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
   gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
@@ -369,7 +369,8 @@ Theorem send_call_read_step:
                        vs_logs := t'.vs_logs;
                        vs_pending_deletions := t'.vs_pending_deletions;
                        vs_returndata := t'.vs_returndata |> /\
-    ((res = INR (Error (RuntimeError "write in static context")) /\
+    (((res = INR (Error (RuntimeError "write in static context")) \/
+       res = INR (Error (RuntimeError "take_call_outcome"))) /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         Abort ExHalt_abort (halt_state (set_returndata [] t))) \/
@@ -393,6 +394,7 @@ Proof
     SRULE [mk_inst_def]) >>
   disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
   gvs[mk_inst_def]
+  >- (qexists_tac `t` >> simp[])
   >- (qexists_tac `t` >> simp[]) >>
   metis_tac[]
 QED
@@ -491,9 +493,8 @@ Proof
     simp[call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[take_call_outcome_def, take_request_outcome_def] >>
   rename1 `st.outcomes = SOME os` >>
-  Cases_on `take_outcome
-    (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) os` >>
-  rw[]
+  Cases_on `os` >> simp[] >>
+  pairarg_tac >> simp[] >> rw[]
 QED
 
 Theorem adopt_call_outcome_gas_obs[local]:
