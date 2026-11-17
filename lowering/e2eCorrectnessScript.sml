@@ -1206,7 +1206,7 @@ Proof
   conj_tac
   >- (fs[codegen_context_obligations_abort_def,
          codegen_memory_obligations_abort_def] >> metis_tac[]) >>
-  metis_tac[raw_reachable_package]
+  fs[raw_reachable_package_iff, codegen_reachability_package_def] >> metis_tac[]
 QED
 
 Theorem vyper_call_correct_at_marks:
@@ -1282,6 +1282,8 @@ Proof
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec unit = SOME out`
+    by fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
   `code_layout_valid vs0` by metis_tac[opt_entry_code_layout_valid] >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    code_layout_valid vs /\ vs.vs_initial_fmp = fmp /\ vs.vs_fmp = fmp` by
@@ -1305,7 +1307,7 @@ Proof
   drule call_external_trace_result >> strip_tac >>
   Cases_on `source_exempt tops (res,am',rqs)`
   >- (irule source_exempt_call_result_rel >> simp[]) >>
-  gvs[] >>
+  fs[] >>
   drule_all selected_run >> strip_tac >>
   drule_all (REWRITE_RULE [storage_trace_domain_def] source_storage_guards_domain) >>
   strip_tac >>
@@ -1357,8 +1359,7 @@ Proof
       fs[Abbr `D`, cx_dead_def, external_call_dead_def,
          initial_evaluation_context_def] >>
       rpt strip_tac >>
-      drule_all (REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]
-        runtime_codegen_compute_labels_bound) >> strip_tac >>
+      drule_all runtime_codegen_compute_labels_bound >> strip_tac >>
       drule_all codegen_correct_static_abort >> metis_tac[]) >>
   `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
   `~program_reads_self_code tops` by fs[] >>
@@ -1390,8 +1391,7 @@ Proof
   fs[Abbr `D`, cx_dead_def, external_call_dead_def,
      initial_evaluation_context_def] >>
   rpt strip_tac >>
-  drule_all (REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]
-    runtime_codegen_compute_labels_bound) >> strip_tac >>
+  drule_all runtime_codegen_compute_labels_bound >> strip_tac >>
   drule_all codegen_correct_static_abort_asm_opt >> metis_tac[]
 QED
 
@@ -1530,7 +1530,7 @@ Proof
   drule gas_readings_rel_mono >> disch_then irule >>
   rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
   qpat_x_assum `call_storage_ok _ _ _ gs ==> _` drule >> strip_tac >>
-  gvs[] >>
+  qpat_x_assum `gs = gas_explicit _ _ ++ _` SUBST_ALL_TAC >>
   drule_all vyper_call_correct_at_marks >> strip_tac >> gvs[]
 QED
 
@@ -1603,7 +1603,11 @@ Proof
                `es`, `opt_entry_state prog prog cplan es`, `fmp`, `r`, `es'`]
     mp_tac call_pipeline_gas_link >>
   impl_tac >- fs[] >> strip_tac >>
-  drule_all vyper_call_correct_from_gas_link >> simp[]
+  qspecl_then [`K SOME`, `policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`,
+               `unit`, `out`, `prog`, `prog`, `cplan`, `am`, `tx`, `tx`, `ret`,
+               `es`, `opt_entry_state prog prog cplan es`, `fmp`, `r`, `es'`]
+    mp_tac vyper_call_correct_from_gas_link >>
+  impl_tac >- fs[] >> simp[]
 QED
 
 (* The final assembly optimizer's case: the program, compiled with Python's

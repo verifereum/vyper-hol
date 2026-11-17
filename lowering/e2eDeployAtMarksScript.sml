@@ -513,7 +513,7 @@ Proof
   drule gas_readings_rel_mono >> disch_then irule >>
   rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
   qpat_x_assum `deploy_storage_ok _ _ _ _ gs ==> _` drule >> strip_tac >>
-  gvs[] >>
+  qpat_x_assum `gs = gas_explicit _ _ ++ _` SUBST_ALL_TAC >>
   drule_all deploy_entry_facts >> strip_tac >>
   qpat_x_assum `vs.vs_outcomes = _` (SUBST_ALL_TAC o SYM) >>
   `~(?t. runtime_bc = 0xEFw :: t)` by fs[] >>

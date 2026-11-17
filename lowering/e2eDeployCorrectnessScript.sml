@@ -278,8 +278,16 @@ Proof
   disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
   drule_all deploy_unit_execution_correct_raw_fmp >>
   disch_then (qspec_then `fmp` strip_assume_tac) >>
-  drule_all deploy_pipeline_gas_link >> strip_tac >>
-  drule_all e2e_deploy_correct_from_gas_link >> simp[]
+  qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+               `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`,
+               `opt_deploy_entry_state prog prog cplan tops es`, `fmp`, `r`, `es'`]
+    mp_tac deploy_pipeline_gas_link >>
+  impl_tac >- fs[] >> strip_tac >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `assemble prog`, `runtime_bc`,
+               `rpolicy`, `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
+               `tx`, `es`, `opt_deploy_entry_state prog prog cplan tops es`,
+               `fmp`, `r`, `es'`] mp_tac e2e_deploy_correct_from_gas_link >>
+  impl_tac >- fs[] >> simp[]
 QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
