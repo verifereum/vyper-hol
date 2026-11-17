@@ -46,18 +46,12 @@ Proof
 QED
 
 Theorem bytes_bitwise_checker_pairs:
-  (!bop m n. MEM bop [And;Or;XOr] ==>
-    (well_typed_binop (BaseT (BytesT (Fixed m))) bop
-      (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed n))) <=> m = n)) /\
-  (!bop m n. MEM bop [And;Or;XOr] ==>
-    ~well_typed_binop (BaseT (BytesT (Fixed m))) bop
-      (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n)))) /\
-  (!bop m k. MEM bop [ShL;ShR] ==>
-    (well_typed_binop (BaseT (BytesT (Fixed m))) bop
-      (BaseT (BytesT (Fixed m))) (BaseT (UintT k)) <=> m = 32)) /\
-  (!bop m k. MEM bop [ShL;ShR] ==>
-    (well_typed_binop (BaseT (BytesT (Fixed m))) bop
-      (BaseT (BytesT (Fixed m))) (BaseT (IntT k)) <=> m = 32))
+  (!bop m ann rhs. MEM bop [And;Or;XOr] ==>
+    (well_typed_binop ann bop (BaseT (BytesT (Fixed m))) rhs <=>
+       ann = BaseT (BytesT (Fixed m)) /\ rhs = ann)) /\
+  (!bop m ann rhs. MEM bop [ShL;ShR] ==>
+    (well_typed_binop ann bop (BaseT (BytesT (Fixed m))) rhs <=>
+       m = 32 /\ ann = BaseT (BytesT (Fixed 32)) /\ is_int_type rhs))
 Proof
   simp[] >> rpt strip_tac >> gvs[well_typed_binop_def]
 QED
