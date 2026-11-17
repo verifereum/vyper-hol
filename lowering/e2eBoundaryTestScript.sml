@@ -73,7 +73,7 @@ Theorem block_environment_bounds:
   tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
   MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
   LENGTH tx.block_hashes <= 256 /\
-  tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
+  tp.prevRandao = n2w tx.prev_randao /\ tx.block_hashes = TAKE 256 tp.prevHashes
 Proof
   simp[tx_block_fields_rel_def, loweringStateRelDefsTheory.tx_env_ok_def]
 QED
