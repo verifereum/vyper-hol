@@ -1271,6 +1271,26 @@ Proof
   MATCH_ACCEPT_TAC (step_inst_base_for ``MLOAD``)
 QED
 
+Theorem step_inst_base_SSTORE:
+  !inst s. inst.inst_opcode = SSTORE ==>
+  step_inst_base inst s =
+    (if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. sstore key val s) inst s)
+Proof
+  MATCH_ACCEPT_TAC (step_inst_base_for ``SSTORE``)
+QED
+
+Theorem step_inst_base_TSTORE:
+  !inst s. inst.inst_opcode = TSTORE ==>
+  step_inst_base inst s =
+    (if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. tstore key val s) inst s)
+Proof
+  MATCH_ACCEPT_TAC (step_inst_base_for ``TSTORE``)
+QED
+
 Theorem step_inst_base_JMP:
   !inst s. inst.inst_opcode = JMP ==>
   step_inst_base inst s =
