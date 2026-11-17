@@ -75,6 +75,76 @@ QED
 (* Pointwise final-table transport.  The unchanged alternative covers every
    offpath row (and every completed row of a live activation).  The other
    alternative uses the literal final child aggregate in each changed cell. *)
+
+Theorem dft_packet_call_old_Q_transport:
+  !N C7 sf p a e bb ps xs be cnt sched ms ms'
+    (calls:(gas_event,num # num # venom_state # num list # venom_state #
+      (internal_return # venom_state # venom_state) option) fmap)
+    ms_out cid q h b done child ret.
+    FLOOKUP ms_out (a,e) = SOME ms' /\
+    FLOOKUP calls (a,e,cid) = SOME (q,h,b,done,child,ret) /\
+    ((FLOOKUP ms_out (a,e) = SOME ms) \/
+     ?livecid liveq b0 tf bt ys child_order.
+      dft_fn_rel sf tf /\
+      lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+      lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+      bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+      EVERY (\x. is_pseudo x.inst_opcode) ps /\
+      EVERY (\x. ~is_pseudo x.inst_opcode) xs /\ LENGTH xs = LENGTH ys /\
+      PERM sched (COUNT_LIST (LENGTH xs)) /\
+      LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+        from_block [EL q xs] y) sched ys /\
+      liveq < LENGTH xs /\ (EL liveq xs).inst_opcode = INVOKE /\
+      b0.vs_inst_idx = LENGTH ps + cnt /\
+      get_instruction bt b0.vs_inst_idx = SOME (EL liveq xs) /\
+      (a = p \/ ?i h done child.
+        i < LENGTH p /\ a = DROP (SUC i) p /\ (e,livecid) = EL i p /\
+        FLOOKUP calls (a,e,livecid) = SOME (liveq,h,b0,done,child,NONE)) /\
+      (!cid q h b done child ret.
+        FLOOKUP calls (a,e,cid) = SOME (q,h,b,done,child,ret) ==>
+        q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\
+        (case ret of
+          NONE => MEM ((e,cid)::a) (GENLIST (\k. DROP k p) (SUC (LENGTH p)))
+        | SOME triple => MEM q (TAKE cnt sched))) /\
+      FLOOKUP ms_out (a,e) = SOME (LUPDATE
+        (FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_out ((e,livecid)::a,f)))) child_order)) liveq ms)) /\
+    (!F kgss tail u.
+      N <= F /\
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+        (TAKE q ms) kgss /\
+      FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
+        (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+      (!op. MEM op (EL q xs).inst_operands ==>
+        eval_operand op u = eval_operand op b) /\
+      (!callee args.
+        setup_callee callee args (u with vs_gas_readings := b.vs_gas_readings) =
+        setup_callee callee args b)) ==>
+    (!F kgss tail u.
+      N <= F /\
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+        (TAKE q ms') kgss /\
+      FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
+        (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+      (!op. MEM op (EL q xs).inst_operands ==>
+        eval_operand op u = eval_operand op b) /\
+      (!callee args.
+        setup_callee callee args (u with vs_gas_readings := b.vs_gas_readings) =
+        setup_callee callee args b))
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `TAKE q ms' = TAKE q ms` by
+    (qpat_x_assum `(FLOOKUP _ _ = SOME ms) \/ _`
+       (DISJ_CASES_THEN2 assume_tac
+         (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)))
+     >- gvs[] >>
+     drule_all dft_packet_call_old_row_bounds >> strip_tac >>
+     `q <= liveq` by metis_tac[] >>
+     gvs[dft_packet_row_prefix_splice]) >>
+  match_mp_tac dft_packet_pseudo_Q_transport >>
+  qexists_tac `ms` >>
+  conj_tac >- (first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
+QED
+
 Theorem dft_packet_call_old_U_transport:
   !N C7 sf p a e bb ps xs be cnt sched ms ess ks ms' ess' ks'
     (calls:(gas_event,num # num # venom_state # num list # venom_state #
@@ -193,6 +263,7 @@ Proof
      rpt gen_tac >> strip_tac >>
      `k <= liveq` by metis_tac[] >>
      gvs[dft_packet_row_prefix_splice]) >>
-  irule (INST_TYPE [alpha |-> ``:instruction``] dft_packet_pseudo_U_transport) >>
-  rpt (first_assum (irule_at Any))
+  match_mp_tac dft_packet_pseudo_U_transport >>
+  qexistsl [`ms`,`ess`,`ks`] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
 QED
