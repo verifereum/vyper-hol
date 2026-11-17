@@ -102,9 +102,11 @@ Proof
 QED
 
 Theorem ptr_create_family_delegate_request[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t ==>
-  venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F
+  venom_call_request s addr 0w ao az F with
+    <|cr_accounts := t.vs_accounts; cr_tStorage := t.vs_transient|> =
+  venom_call_request t addr 0w at az F
 Proof
   strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
@@ -176,7 +178,7 @@ QED
 
 Theorem ptr_create_family_delegate_mixed_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
   inst.inst_opcode = DELEGATECALL /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) (at:bytes32) (az:bytes32)
@@ -217,7 +219,7 @@ QED
 
 Theorem ptr_create_family_taint[local]:
   taint_ok fn tn inst s /\ MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  (MEM inst.inst_opcode [CREATE; CREATE2] ==> tn.t_stor = {} /\ tn.t_trans = {}) /\
   (!off len j. MEM (off,len) (source_memory_read_ranges inst s) /\ j < len ==>
      off + j NOTIN tn.t_mem) /\
   (!op. MEM op inst.inst_operands ==> op_taint tn op = {})

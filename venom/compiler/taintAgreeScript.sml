@@ -242,7 +242,7 @@ QED
 Theorem taint_agree_external_clean_shared:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   ptr_discipline lo C vs /\
-  MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] /\
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
   taint_agree D X tn s t ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
@@ -883,8 +883,9 @@ Proof
 QED
 
 Theorem taint_agree_exec_delegatecall:
-  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  taint_agree D X tn s t /\
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off) (w2n sz) t /\
   exec_delegatecall inst s (gas:256 word) (addr:256 word) (off:256 word)
     (sz:256 word) (ro:256 word) (rs:256 word) = OK s' ==>
@@ -955,7 +956,7 @@ QED
 Theorem taint_agree_delegatecall_ok:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   o1_ctx_shape C /\ MEM fn C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\ taint_within D C vs /\
   taint_agree D X tn s t /\
   (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
                off <= i /\ i < off + len ==> i NOTIN X) /\

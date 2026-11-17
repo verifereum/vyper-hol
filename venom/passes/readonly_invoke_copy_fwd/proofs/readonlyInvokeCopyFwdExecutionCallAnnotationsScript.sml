@@ -9,8 +9,7 @@ Theorem ricf_execution_call_annotations:
   3 < LENGTH inst.inst_operands /\ inst.inst_outputs = [out] /\
   source_memory_write_ranges inst s = [(w2n (ro:256 word),w2n (rs:256 word))] /\
   r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp /\
-  rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
-  (inst.inst_opcode = DELEGATECALL ==> tn.t_stor = {} /\ tn.t_trans = {}) ==>
+  rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) ==>
   step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
   step_taint inst s (update_var out w r) tn =
     (ricf_call_taint tn rq s r (w2n ro) (w2n rs)

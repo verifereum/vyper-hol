@@ -75,20 +75,24 @@ Proof
   simp[DISJ_IMP_THM, FORALL_AND_THM, EL]
 QED
 
-(* With equal accounts and transient storage, both runs adopt the same
-   outcome; only the relocated return-buffer write differs. *)
+(* Each run's request carries its own accounts; both take the same outcome
+   and adopt it alike, so storage still agrees outside the taint. *)
 Theorem ld_consume_delegate_effect[local]:
   ld_memory lo A tn s t /\ ld_nonghost tn s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
   (!a k u v z b c sz.
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
-  consume_call_outcome rq rt n t = (w,ts) /\
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
+  rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  rq.cr_kind = rq'.cr_kind /\
+  consume_call_outcome rq' rt n t = (w,ts) /\
   xs = TAKE n ts.vs_returndata /\
   tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
-  tn'.t_imm = tn.t_imm /\ tn'.t_stor = {} /\ tn'.t_trans = {} /\
+  tn'.t_imm = tn.t_imm /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
      ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
@@ -120,14 +124,14 @@ Proof
       word_agree_except_def] >> metis_tac[]
 QED
 
-(* Both runs consume the shared oracle with the source's delegate request. *)
+(* The target run consumes the shared oracle with its own delegate request. *)
 Theorem ld_delegate_execution:
-  ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_nonghost tn s t /\
   read_memory (w2n (ao:bytes32)) (w2n (az:bytes32)) s =
     read_memory (w2n (at:bytes32)) (w2n az) t /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) at az (rt:bytes32) (rz:bytes32) = OK ts ==>
   ?rq out w u.
-    rq = venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall /\
+    rq = venom_call_request t addr 0w at az F with cr_kind := DelegateMessageCall /\
     consume_call_outcome rq (w2n rt) (w2n rz) t = (w,u) /\
     inst.inst_outputs = [out] /\ ts = update_var out w u
 Proof
@@ -150,7 +154,7 @@ QED
 Theorem ld_delegate_observed_effect:
   ld_vars P A f /\ tn.t_var = f.lf_tv /\ MEM inst (fn_insts f.lf_fn) /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\ inst.inst_opcode = DELEGATECALL /\
+  inst.inst_opcode = DELEGATECALL /\
   3 < LENGTH inst.inst_operands /\
   source_memory_write_ranges inst f.lf_src = [(w2n (ro:bytes32),w2n (rz:bytes32))] /\
   (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\

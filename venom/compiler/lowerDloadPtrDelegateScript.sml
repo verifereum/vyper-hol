@@ -36,8 +36,7 @@ Theorem dload_delegate_evaluated_inputs:
     MEM (w2n x,w2n z) (source_memory_read_ranges i s) /\
     read_memory (w2n x) (w2n z) s = read_memory (w2n y) (w2n z) t) /\
   (!x z. eval_operand r s = SOME x /\ eval_operand rs s = SOME z ==>
-    MEM (w2n x,w2n z) (source_memory_write_ranges i s)) /\
-  tn.t_stor = {} /\ tn.t_trans = {}
+    MEM (w2n x,w2n z) (source_memory_write_ranges i s))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!op. MEM op i.inst_operands ==> eval_operand op t <> NONE` by
@@ -180,10 +179,8 @@ Proof
 QED
 
 Theorem dload_delegate_reverse_inputs[local]:
-  dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} ==>
-  dload_equal_environment t s /\ dload_shared_store un tn t s /\
-  un.t_stor = {} /\ un.t_trans = {}
+  dload_equal_environment s t /\ dload_shared_store tn un s t ==>
+  dload_equal_environment t s /\ dload_shared_store un tn t s
 Proof
   strip_tac >>
   `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
@@ -211,12 +208,10 @@ QED
 
 Theorem dload_delegate_exec_backward[local]:
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i t gas addr bo az rt rz = OK t1 ==>
   ?s1. exec_delegatecall i s gas addr ao az (ro:bytes32) rz = OK s1 /\
     dload_equal_environment s1 t1 /\
-    s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1)
 Proof
   strip_tac >> drule_all dload_delegate_reverse_inputs >> strip_tac >>
@@ -244,14 +239,12 @@ Theorem dload_delegate_step[local]:
   eval_operand r s = SOME ro /\ eval_operand r t = SOME rt /\
   eval_operand rs s = SOME rz /\ eval_operand rs t = SOME rz /\
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
     exec_delegatecall i s gv addr ao az ro rz = OK s1 /\
     exec_delegatecall i t gv addr bo az rt rz = OK t1 /\
     dload_equal_environment s1 t1 /\
-    s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -265,11 +258,11 @@ Proof
 QED
 
 Theorem dload_delegate_shared_store[local]:
-  i.inst_opcode = DELEGATECALL /\ dload_shared_store tn un s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  i.inst_opcode = DELEGATECALL /\
+  dload_equal_environment s t /\ dload_shared_store tn un s t /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i s gas addr ao az ro rz = OK s1 /\
-  exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
-  s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient ==>
+  exec_delegatecall i t gas addr bo az rt rz = OK t1 ==>
   dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   strip_tac >>
@@ -301,14 +294,13 @@ Theorem dload_delegate_boundary[local]:
   source_memory_write_ranges i t = [(w2n rt,w2n rz)] /\
   dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   dload_value_word fs {} p q ro rt /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_delegatecall i s gas addr ao az ro rz = OK s1 /\
   exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
   dload_equal_environment s1 t1 /\
-  s1.vs_accounts = t1.vs_accounts /\ s1.vs_transient = t1.vs_transient /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) ==>
   dload_boundary_core lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)

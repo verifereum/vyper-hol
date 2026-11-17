@@ -130,7 +130,7 @@ Theorem ld_joint_concrete_shared_inputs:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   active_inst fn inst s /\
-  MEM inst.inst_opcode [DELEGATECALL;CREATE;CREATE2] ==>
+  MEM inst.inst_opcode [CREATE;CREATE2] ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
 Proof
@@ -201,31 +201,34 @@ QED
 
 Theorem ld_joint_delegatecall_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DELEGATECALL /\ step_inst fuel C inst s = OK s1 ==>
-  ?out w r rq ro ro' rs.
-    inst.inst_outputs = [out] /\ s1 = update_var out w r /\
-    ~computed_precompile rq /\
-    r = s with <|
-      vs_returndata := r.vs_returndata;
-      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
-      vs_transient := r.vs_transient;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_outcomes := r.vs_outcomes;
-      vs_requests := record_request rq s.vs_requests;
+  ?out w r1 r2 rq1 rq2 ro ro' rs.
+    inst.inst_outputs = [out] /\ s1 = update_var out w r1 /\
+    ~computed_precompile rq1 /\
+    r1 = s with <|
+      vs_returndata := r1.vs_returndata;
+      vs_accounts := r1.vs_accounts; vs_logs := r1.vs_logs;
+      vs_transient := r1.vs_transient;
+      vs_pending_deletions := r1.vs_pending_deletions;
+      vs_outcomes := r1.vs_outcomes;
+      vs_requests := record_request rq1 s.vs_requests;
       vs_memory := (write_memory_with_expansion ro
-        (TAKE rs r.vs_returndata) s).vs_memory |> /\
-    step_inst fuel C' inst t = OK (update_var out w (t with <|
-      vs_returndata := r.vs_returndata;
-      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
-      vs_transient := r.vs_transient;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_outcomes := r.vs_outcomes;
-      vs_requests := record_request rq t.vs_requests;
+        (TAKE rs r1.vs_returndata) s).vs_memory |> /\
+    r2 = t with <|
+      vs_returndata := r1.vs_returndata;
+      vs_accounts := r2.vs_accounts; vs_logs := r1.vs_logs;
+      vs_transient := r2.vs_transient;
+      vs_pending_deletions := r1.vs_pending_deletions;
+      vs_outcomes := r1.vs_outcomes;
+      vs_requests := record_request rq2 t.vs_requests;
       vs_memory := (write_memory_with_expansion ro'
-        (TAKE rs r.vs_returndata) t).vs_memory |>)) /\
-    request_agree_except D rq rq /\
+        (TAKE rs r1.vs_returndata) t).vs_memory |> /\
+    step_inst fuel C' inst t = OK (update_var out w r2) /\
+    request_agree_except D rq1 rq2 /\
+    ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2 /\
     source_memory_write_ranges inst s = [(ro,rs)] /\
     (rs=0 \/ (ro=ro' /\ ro+rs<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+rs<=z /\
@@ -302,7 +305,7 @@ QED
 
 Theorem ld_joint_delegatecall_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ taint_within_upto D ncut C vs /\
   ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ inst.inst_opcode = DELEGATECALL /\
   step_inst fuel C inst s = OK s1 /\

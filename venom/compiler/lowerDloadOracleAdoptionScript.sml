@@ -102,17 +102,6 @@ Proof
   gvs[take_outcome_def, adopt_outcome_def] >> IF_CASES_TAC >> gvs[]
 QED
 
-Theorem ld_storage_sensitive_exact:
-  ld_shared_state tn un s t /\ taint_ok fn tn inst s /\
-  (inst.inst_opcode = DELEGATECALL \/ inst.inst_opcode = CREATE \/
-   inst.inst_opcode = CREATE2) ==>
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
-  un.t_stor = {} /\ un.t_trans = {}
-Proof
-  strip_tac >> irule ld_shared_state_empty_exact >>
-  gvs[taint_ok_def] >> metis_tac[]
-QED
-
 (* External storage producer checkpoint (source locations refer to the
    immutable producer files, not claims of a full instruction simulation).
 
@@ -141,8 +130,8 @@ QED
      venomCallOracleDefs:76-119: CreateCall/Create2Call request, cr_static=F.
      adopt_outcome adopts supplied maps even on unsuccessful outcomes for
      these non-MessageCall kinds; empty list returns failed_outcome with input
-     maps. No mask reset (not CALL). taint_ok:582-584 provides empty source
-     masks, hence exact inputs by ld_storage_sensitive_exact. Even retained-map
+     maps. No mask reset (not CALL). taint_ok provides empty source
+     masks, hence exact inputs. Even retained-map
      branches therefore have exact storage. Oversized initcode abort keeps
      input maps and is not an OK successor.
 
