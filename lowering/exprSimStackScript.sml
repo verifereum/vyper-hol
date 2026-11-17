@@ -105,6 +105,6 @@ Proof
   >- (first_assum ACCEPT_TAC) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[eval_expr_force_admissible] >>
-  gvs[expr_sim_def] >> first_x_assum irule >> simp[]
+  gvs[expr_sim_def] >> first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
 QED
 

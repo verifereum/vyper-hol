@@ -3,7 +3,7 @@ Theory exprSimDefs
 Ancestors
   loweringStateRelDefs
   loweringPosts gasOutcome gasContext exprLowering compileEnv loweringSlice
-  vyperInterpreter vyperState venomState venomExecSemantics
+  vyperInterpreter vyperState venomState venomExecSemantics unitMemInv
 
 Definition halt_exit_def:
   halt_exit H cx (ee:evaluation_state) (res : 'a + exception) r <=>
@@ -34,6 +34,7 @@ Definition expr_sim_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 ∧
         storage_well_formed_on cx es (FST H)) ∧ ~s0.vs_halted ∧
@@ -71,6 +72,7 @@ Definition expr_vv_sim_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 ∧
         storage_well_formed_on cx es (FST H)) ∧ ~s0.vs_halted ∧
