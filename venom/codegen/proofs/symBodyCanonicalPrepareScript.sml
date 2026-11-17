@@ -205,6 +205,133 @@ Proof
       drule_all can_nonterm_prefix >> strip_tac >> disj2_tac >> simp[] >>
       qexistsl [`prefix'`, `rest'`, `ps'`, `vs'`, `as1`, `ss1`] >>
       simp[] >> conj_tac >- metis_tac[] >>
-      strip_tac >> irule can_runs_prefix >> metis_tac[]) >>
+      strip_tac >> irule can_runs_prefix >>
+      qexistsl [`as1`, `n`, `ss1`] >> gvs[]) >>
   disj1_tac >> suspend "nonok"
+QED
+
+Resume sym_body_canonical_branches_given_invoke[revert]:
+  pop_assum strip_assume_tac >> disj1_tac >>
+  `MEM (AsmLabel "revert") prog` by
+    (irule placed_revert_sym_code_label_kernel >>
+     drule body_inv_facts >> strip_tac >> gvs[body_inv_def] >> metis_tac[]) >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+      (SPEC_ALL sym_body_revert_step_own_kernel))) >> strip_tac >>
+  first_x_assum (qspec_then `fuel` strip_assume_tac) >>
+  qpat_x_assum `can_invoke_cut` kall_tac >>
+  Cases_on `exec_block fuel ctx bb vs` >>
+  gvs[block_rest_def, asm_sym_rel_own_canonical] >> metis_tac[]
+QED
+
+Resume sym_body_canonical_branches_given_invoke[nonok]:
+  drule_all body_inv_inst >> strip_tac >>
+  `get_instruction bb vs.vs_inst_idx = SOME (EL k bb.bb_instructions)` by metis_tac[] >>
+  `!s. step_inst fuel ctx (EL k bb.bb_instructions) vs <> OK s` by metis_tac[] >>
+  `block_rest fuel ctx fn bb vs = step_inst fuel ctx (EL k bb.bb_instructions) vs` by
+    (irule block_rest_other >> simp[] >> metis_tac[]) >>
+  once_asm_rewrite_tac [] >>
+  Cases_on `(EL k bb.bb_instructions).inst_opcode = INVOKE`
+  >- (`?nm args. (EL k bb.bb_instructions).inst_operands = Label nm :: args` by
+        (irule invoke_operands_wf_shape_kernel >>
+         gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
+      `can_invoke_outcome k rest_ops ps vs as ss (EL k bb.bb_instructions)` by
+        (qpat_x_assum `can_invoke_cut` irule >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `can_invoke_cut` kall_tac >>
+      Cases_on `step_inst fuel ctx (EL k bb.bb_instructions) vs` >> gvs[]
+      >- (qexistsl [`n`, `as'`] >> simp[])
+      >- (qexistsl [`n`, `as'`] >> simp[])
+      >- (qexistsl [`n`, `as'`] >> simp[]) >>
+      drule_all codegen_ready_intret_opcode >> simp[]) >>
+  qpat_x_assum `can_invoke_cut` kall_tac >>
+  Cases_on `step_inst fuel ctx (EL k bb.bb_instructions) vs` >> gvs[] >>
+  `EL vs.vs_inst_idx bb.bb_instructions = EL vs.vs_inst_idx bb.bb_instructions` by simp[]
+  >- (drule_all (SRULE [sym_steps_mode_def]
+        (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+          (SPEC_ALL sym_body_halt_step_own_kernel))) >> simp[])
+  >- (`MEM (AsmLabel "revert") prog` by
+        (irule placed_revert_sym_code_label_kernel >>
+         drule body_inv_facts >> strip_tac >> gvs[body_inv_def] >> metis_tac[]) >>
+      metis_tac[SRULE [sym_steps_mode_def]
+        (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+          (SPEC_ALL sym_body_abort_step_own_kernel))]) >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+      (SPEC_ALL sym_body_ret_step_own_kernel))) >>
+  gvs[asm_sym_rel_own_canonical] >> metis_tac[]
+QED
+
+Resume sym_body_canonical_branches_given_invoke[jump]:
+  disj1_tac >> qpat_x_assum `can_invoke_cut` kall_tac >>
+  drule_all body_inv_inst >> strip_tac >>
+  `get_instruction bb vs.vs_inst_idx = SOME (EL k bb.bb_instructions)` by metis_tac[] >>
+  `!t. MEM t (get_successors (EL k bb.bb_instructions)) ==> MEM (AsmLabel t) prog` by
+    ((rpt strip_tac >>
+     `!bb fn liveness dfg cfg ps ops ps' prog pc initial_fmp.
+       bb <> HD fn.fn_blocks /\
+       generate_block_plan liveness dfg (cfg:cfg_analysis) fn bb ps = SOME (ops, ps') /\
+       asm_block_at prog pc (execute_plan initial_fmp ops) ==>
+       MEM (AsmLabel bb.bb_label) prog` by metis_tac[placed_nonentry_sym_code_label_kernel] >>
+     drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[])) >>
+  `?n as1 ss1 t off.
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 /\
+    sym_frame_inv_own lo prog env vs.vs_code ctx cpl fn ret srest labs0 ps_after as1 ss1 /\
+    (!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+      operand_val (frame_view fn ra vs1) lo at =
+      operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+    MEM t (get_successors (EL k bb.bb_instructions)) /\ vs1 = jump_to t vs /\
+    FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc` by
+    (drule_all fnBlockBodyHelpersTheory.step_ok_terminator_jump >> strip_tac
+     >- suspend "jmp_prefix"
+     >- suspend "jnz_prefix" >> gvs[unitShapeDefsTheory.inst_shape_ok_def]) >>
+  drule_all body_jump_entry_reloc_kernel >> strip_tac >>
+  `sym_frame_inv prog env ctx cpl fn ret srest labs0 pe as1 ss1` by
+    (`sym_frame_inv_own lo prog env vs.vs_code ctx cpl fn ret srest labs0 pe as1 ss1` by
+       (irule sym_frame_inv_plan_transport_own >> goal_assum (drule_at Any) >> simp[]) >>
+     gvs[sym_frame_inv_canonical_own]) >>
+  drule_all block_rest_jump >> disch_then (qspec_then `fn` SUBST1_TAC) >>
+  irule can_runs_prefix >> qexistsl [`as1`, `n`, `ss1`] >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `!l. FLOOKUP vs1.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)` by metis_tac[] >>
+  qhdtm_x_assum `sym_fn_frame_sim_at` (mp_tac o REWRITE_RULE [sym_fn_frame_sim_at_def]) >>
+  disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+Resume sym_body_canonical_branches_given_invoke[jmp_prefix]:
+  drule_all jmp_wf_operands_kernel >> disch_then assume_tac >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+      (SPEC_ALL sym_body_jmp_prefix_pointwise))) >>
+  strip_tac >> qexistsl [`n`, `as1`, `ss1`, `t`, `off`] >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Resume sym_body_canonical_branches_given_invoke[jnz_prefix]:
+  drule body_inv_facts >> strip_tac >>
+  drule_all jnz_wf_operands_kernel >> disch_then assume_tac >>
+  `!c l1 l2. (EL k bb.bb_instructions).inst_operands = [c;Label l1;Label l2] ==>
+    eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
+    metis_tac[jnz_condition_frame_view_kernel] >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
+      (SPEC_ALL sym_body_jnz_prefix_pointwise))) >>
+  strip_tac >> qexistsl [`n`, `as1`, `ss1`, `t`, `off`] >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Finalise sym_body_canonical_branches_given_invoke
+
+Theorem sym_body_canonical_nonterm_application_given_invoke:
+  can_invoke_cut /\
+  (!m. m < d ==> !k prefix_ops rest_ops ps vs as ss.
+    m = LENGTH bb.bb_instructions - k /\ can_A k prefix_ops rest_ops ps vs as ss ==>
+    can_R as ss (block_rest fuel ctx fn bb vs)) /\
+  d = LENGTH bb.bb_instructions - k /\ can_A k prefix_ops rest_ops ps vs as ss ==>
+  can_R as ss (block_rest fuel ctx fn bb vs)
+Proof
+  strip_tac >> drule_all sym_body_canonical_branches_given_invoke >> strip_tac >- simp[] >>
+  `LENGTH bb.bb_instructions - SUC k < d` by decide_tac >>
+  first_x_assum drule >> disch_then (qspec_then `SUC k` mp_tac) >>
+  simp_tac (srw_ss()) [] >> disch_then (drule_at (Pat `body_inv`)) >>
+  simp[] >> metis_tac[]
 QED
