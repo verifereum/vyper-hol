@@ -101,6 +101,67 @@ Proof
        gvs[bind_def, lift_option_type_def, return_def, raise_def])
 QED
 
+Theorem intcall_args_conditional_result_scope_action:
+  (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+  !cx s sc. conditional_result cx r (s with scopes := sc) =
+    (FST (conditional_result cx r s),
+     SND (conditional_result cx r s) with scopes := sc)
+Proof
+  Cases_on `r` >> simp[conditional_result_def, return_def, raise_def] >>
+  rename1 `PlaceR p` >> Cases_on `p` >>
+  simp[conditional_result_def] >>
+  (gen_tac >> irule intcall_args_scope_bind >> reverse conj_tac
+   >- (irule intcall_args_place_type_scope_action >> simp[]) >>
+   rpt gen_tac >> disch_tac >> BETA_TAC >>
+   irule intcall_args_scope_bind >> reverse conj_tac
+   >- simp[intcall_args_read_place_scope_action, pairTheory.UNCURRY] >>
+   simp[return_def])
+QED
+
+Theorem intcall_args_conditional_result_nonlocal:
+  (!id path. r <> PlaceR (MemoryPlace id path)) /\
+  conditional_result cx r s = (INL r',t) ==>
+  (!id path. r' <> PlaceR (MemoryPlace id path))
+Proof
+  rpt strip_tac >> Cases_on `r` >>
+  gvs[conditional_result_def, return_def, raise_def] >>
+  rename1 `PlaceR p` >> Cases_on `p` >>
+  gvs[conditional_result_def, bind_def, return_def, AllCaseEqs()]
+QED
+
+Theorem intcall_args_result_array_length_scope_action:
+  (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+  !cx s sc. result_array_length cx r (s with scopes := sc) =
+    (FST (result_array_length cx r s),
+     SND (result_array_length cx r s) with scopes := sc)
+Proof
+  strip_tac >> gen_tac >>
+  qabbrev_tac `k = \v. case v of
+      ArrayV (DynArrayV vs) => return (LENGTH vs)
+    | ArrayV (SArrayV vs) => return (LENGTH vs)
+    | ArrayV (TupleV vs) => return (LENGTH vs)
+    | BytesV bs => return (LENGTH bs)
+    | StringV bs => return (LENGTH bs)
+    | _ => raise (Error (TypeError "result_array_length"))` >>
+  `!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !s sc. bind (read_result cx r) k (s with scopes := sc) =
+      (FST (bind (read_result cx r) k s),
+       SND (bind (read_result cx r) k s) with scopes := sc)` by
+    (gen_tac >> strip_tac >> irule intcall_args_scope_bind >> reverse conj_tac
+     >- (irule intcall_args_read_result_scope_action >> simp[]) >>
+     rpt gen_tac >> disch_tac >> simp[Abbr `k`] >>
+     Cases_on `v` >> simp[return_def, raise_def] >>
+     rename1 `ArrayV av` >> Cases_on `av` >> simp[return_def]) >>
+  fs[Abbr `k`] >>
+  Cases_on `r` >> simp[result_array_length_def] >>
+  rename1 `PlaceR p` >> Cases_on `p` >> gvs[result_array_length_def] >>
+  rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+  simp[result_array_length_def] >> rename1 `ArrayTV etv bd` >> Cases_on `bd` >>
+  simp[result_array_length_def, return_def] >> Cases_on `tr` >>
+  simp[get_storage_backend_def, get_accounts_def, get_transient_storage_def,
+       bind_def, return_def]
+QED
+
 (* Lock acquisition precedes push_function.  Only its successful endpoint
    commutes with the scope update; failures retain the original scopes. *)
 Theorem intcall_args_lock_push_success:
