@@ -164,8 +164,10 @@ Proof
      >- (gvs[] >>
          `EL i p::DROP (SUC i) p = DROP i p` by simp[DROP_CONS_EL] >>
          metis_tac[LUPDATE_SAME]) >>
-     qpat_assum `!i. i <= LENGTH p ==> _` (qspec_then `i` strip_assume_tac) >>
-     gvs[] >> metis_tac[]) >>
+     qpat_assum `!i. i <= LENGTH p ==> _` (qspec_then `i` mp_tac) >>
+     (impl_tac >- decide_tac) >> disch_then strip_assume_tac >>
+     gvs[] >>
+     qpat_assum `!i row. i < LENGTH p /\ _ ==> _` irule >> simp[]) >>
   drule_all dft_packet_pseudo_prefix_frame >> strip_tac >>
   `(!a e bb bt ps xs ys rho hin h body pos front brest.
       FLOOKUP blocks (a,e) =
@@ -181,7 +183,14 @@ Proof
     FLOOKUP calls (a,e,cid) = SOME (q,h,b,done,ent,ret) ==>
     ?row. FLOOKUP out (a,e) = SOME row /\ q < LENGTH row /\
       EL q row = A' ((e,cid)::a)` by
-    (irule dft_packet_pseudo_call_cell_frame >>
-     rpt (first_assum (irule_at Any)) >> simp[] >> metis_tac[]) >>
-  simp[]
+    (rpt gen_tac >> disch_tac >>
+     irule dft_packet_pseudo_call_cell_frame >>
+     rpt (first_assum (irule_at Any)) >>
+     qexistsl [`tab`,`p`,`inds`,`d`,`blocks`,`A`] >>
+     asm_rewrite_tac[] >> rpt strip_tac >>
+     qpat_assum `!i. i < LENGTH p ==> ?sf tf bb bt ps xs ys rho hin h be hbe pos b0 done_at_call child_entry call_h. _`
+       (drule_then strip_assume_tac) >>
+     qexistsl [`call_h`,`b0`,`done_at_call`,`child_entry`] >>
+     gvs[]) >>
+  asm_rewrite_tac[]
 QED
