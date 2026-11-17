@@ -1,7 +1,7 @@
 (* Checked allocation-budget regressions; no execution-memory claims. *)
 Theory evalCompilerAllocationBudget
 Ancestors vyperCompiler venomInst venomWf words venomExecSemantics
-  venomState stackPlanGen fmpLowerDefs
+  venomState stackPlanGen fmpLowerDefs allocLimits
 Libs computeLib wordsLib
 
 (* Every block ends in a terminator, so the test units are well-formed
@@ -110,6 +110,10 @@ QED
 
 Theorem allocation_budget_strict_boundary_eval:
   lowering_context_ok
+    (allocation_budget_test_context [(0, n2w (2 ** 254 - 1))]) /\
+  ~lowering_context_ok
+    (allocation_budget_test_context [(0, n2w (2 ** 254))]) /\
+  ~lowering_context_ok
     (allocation_budget_test_context [(0, n2w (2 ** 256 - 1))]) /\
   unit_alloca_budget
     (allocation_budget_test_context [(0, n2w (2 ** 255));
@@ -140,7 +144,7 @@ Definition allocation_budget_invoke_context_def:
        mk_raw_function "callee"
          [<| bb_label := "callee";
              bb_instructions :=
-               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"];
+               [instruction 1 ALLOCA [Lit (n2w (2 ** 253))] ["p"];
                 instruction 3 RET [] []] |>]]
       (SOME "__entry")
 End
@@ -150,8 +154,153 @@ Theorem allocation_budget_invoke_multiplier_rejects_eval:
   wf_invoke_targets_check allocation_budget_invoke_context /\
   ctx_inst_ids_distinct allocation_budget_invoke_context /\
   forced_alloc_inputs_check allocation_budget_invoke_context /\
-  unit_alloca_budget allocation_budget_invoke_context = 2 ** 256 /\
+  unit_alloca_budget allocation_budget_invoke_context = 2 ** 254 /\
   ~lowering_context_ok allocation_budget_invoke_context
+Proof
+  EVAL_TAC
+QED
+
+Definition allocation_budget_dload_context_def:
+  allocation_budget_dload_context size =
+    mk_venom_context
+      [mk_raw_function "__entry"
+        [<| bb_label := "__entry";
+            bb_instructions :=
+              [instruction 0 ALLOCA [Lit (n2w size)] ["p"];
+               instruction 1 DLOAD [Lit 0w] ["word"];
+               instruction 2 STOP [] []] |>]]
+      (SOME "__entry")
+End
+
+Theorem allocation_budget_dload_boundary_eval:
+  lowering_context_ok (allocation_budget_dload_context (2 ** 254 - 33)) /\
+  unit_alloca_budget (allocation_budget_dload_context (2 ** 254 - 32)) =
+    2 ** 254 - 32 /\
+  ~lowering_context_ok (allocation_budget_dload_context (2 ** 254 - 32))
+Proof
+  EVAL_TAC
+QED
+
+Definition allocation_plan_test_context_def:
+  allocation_plan_test_context eom =
+    mk_venom_context
+      [(mk_raw_function "__entry"
+        [<| bb_label := "__entry";
+            bb_instructions := [instruction 0 STOP [] []] |>])
+        with fn_eom := SOME eom]
+      (SOME "__entry")
+End
+
+(* The static end and spill end both pass through ceil32 before the gate. *)
+Theorem allocation_plan_static_boundary_eval:
+  IS_SOME (generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254 - 32))) /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254 - 31)) = NONE /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254)) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem allocation_plan_spill_boundary_eval:
+  IS_SOME (generate_context_plan_with
+    (\fn base labels. SOME ([], (init_plan_state base) with
+      ps_alloc updated_by (\al. al with sa_next_offset := 2 ** 254 - 32)))
+    (allocation_plan_test_context 0)) /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], (init_plan_state base) with
+      ps_alloc updated_by (\al. al with sa_next_offset := 2 ** 254 - 31)))
+    (allocation_plan_test_context 0) = NONE
+Proof
+  EVAL_TAC
+QED
+
+(* CREATE checker fixtures; no producer change. *)
+Definition allocation_test_word_def:
+  allocation_test_word = Name (BaseT (UintT 256)) "word"
+End
+
+Definition allocation_test_array_def:
+  allocation_test_array n =
+    Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args"
+End
+Theorem create_raw_alloc_boundary_eval:
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536)] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537);allocation_test_word] /\
+  ~ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536);allocation_test_word]
+Proof
+  EVAL_TAC
+QED
+
+Theorem create_blueprint_alloc_boundary_eval:
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59)] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 58);allocation_test_array (2 ** 58)]
+Proof
+  EVAL_TAC
+QED
+
+(* Empty, raw, fixed-buffer, and malformed cases allocate no new variable
+   static constructor buffer. Their operands remain checked recursively. *)
+Theorem create_alloc_nonallocating_paths_eval:
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint T) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))] /\
+  ext_call_alloc_ok cenv (CreateTarget CreateCopyOf F T []) [allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))] /\
+  ext_call_alloc_ok cenv (CreateTarget CreateMinimalProxy F T []) [allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))]
+Proof
+  EVAL_TAC
+QED
+
+(* Struct metadata can describe a larger staging footprint than its ABI
+   fields. The checker must use the environment's actual physical size. *)
+Theorem create_alloc_struct_environment_eval:
+  abi_size_bound (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])).ce_struct_fields (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 32 /\
+  type_memory_bytes (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 2 ** 64 /\
+  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget RawCreate F T []) [allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")] /\
+  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")]
+Proof
+  EVAL_TAC
+QED
+
+(* Isolate the existing combined deploy guard: the raw context is accepted
+   by lowering_context_ok even at the newly rejected combined endpoint.
+   This exercises the generic lowering API, not a valid-source claim. *)
+Theorem allocation_deploy_combined_boundary_eval:
+  lowering_context_ok (install_immutable_reservation (2 ** 253)
+  (FST (run_deploy_lowering_pair_compat F 0 (2 ** 253) [] 0 []
+    cenv [] F F 0 F "__deploy"))) /\
+  unit_alloca_budget (install_immutable_reservation (2 ** 253)
+  (FST (run_deploy_lowering_pair_compat F 0 (2 ** 253) [] 0 []
+    cenv [] F F 0 F "__deploy"))) = 2 ** 253 /\
+  IS_SOME (run_deploy_lowering F
+  ((ARB : resolved_compiler_policy) with <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear; rpol_final_assembly := FAP_Optimize |>)
+  [] (2 ** 253 - 1) [] 0 [] cenv [] F F 0 F "__deploy") /\
+  run_deploy_lowering F
+  ((ARB : resolved_compiler_policy) with <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear; rpol_final_assembly := FAP_Optimize |>)
+  [] (2 ** 253) [] 0 [] cenv [] F F 0 F "__deploy" = NONE
 Proof
   EVAL_TAC
 QED
