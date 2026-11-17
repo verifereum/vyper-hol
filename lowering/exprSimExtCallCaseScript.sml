@@ -19,7 +19,11 @@
  * declared ABI types; the calldata is the selector followed by the arguments
  * encoded at their own lowered types, at the encoded length (vyper#5127),
  * as build_ext_calldata sends; a storage, transient or immutable argument is
- * read at its own declared type (vyper#5239).  The extcodesize check and the
+ * read at its own declared type (vyper#5239).  Whether an earlier composite
+ * operand is copied before a later operand's call reads
+ * cenv.ce_func_mutability (call_can_mutate), so both lemmas take it to be
+ * the program's build_func_mutability unless the operands make no internal
+ * calls (nocalls).  The extcodesize check and the
  * void result are keyed on return_type = NoneT on both sides, and typing
  * rules out default_return_value on a void call.  The call itself is an
  * oracle step (extCallOracleStep: venom_call_request_source,
@@ -229,6 +233,8 @@ Theorem extcall_request_setup:
      int_calls_expr
        (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
           args dflt) = []) /\
+    (nocalls \/
+     cenv.ce_func_mutability = build_func_mutability (cx_tops cx)) /\
     compile_expr cenv ty
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) sa = (vv, sb) /\
@@ -522,14 +528,17 @@ Theorem compile_extcall_case:
        eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 args)) s' =
          (INL vs, t') ==>
        exprs_case nocalls ctx func cenv cx
-         (DROP (1 + LENGTH (FST (SND sig))) args)) ==>
+         (DROP (1 + LENGTH (FST (SND sig))) args)) /\
+    (nocalls \/
+     cenv.ce_func_mutability = build_func_mutability (cx_tops cx)) ==>
     expr_sim_case nocalls ctx func cenv cx
       (Call ann (ExtCall is_static skip sig opts) args dflt) /\
     expr_vv_case nocalls ctx func cenv cx
       (Call ann (ExtCall is_static skip sig opts) args dflt)
 Proof
   rpt gen_tac >> PairCases_on `sig` >>
-  PURE_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  PURE_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rename1 `ExtCall stat skip (fname,arg_types,ret_type) opts` >>
   `expr_vv_case nocalls ctx func cenv cx
      (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts)

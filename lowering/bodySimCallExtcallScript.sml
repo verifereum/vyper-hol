@@ -23,6 +23,9 @@ Theorem extcall_body_expr_ok:
     body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
   rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
+  `cenv.ce_func_mutability = build_func_mutability (cx_tops cx)` by
+    (fs[body_inv_def, cenv_module_pins_def] >>
+     metis_tac[gasContextTheory.cx_tops_module]) >>
   irule compile_extcall_case >> rpt conj_tac >> rpt strip_tac
   >> metis_tac[body_exprs_ok_case]
 QED
