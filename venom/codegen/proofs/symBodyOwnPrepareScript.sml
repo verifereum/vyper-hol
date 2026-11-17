@@ -345,3 +345,78 @@ Proof
       drule_all sym_body_abort_step_own_kernel >> simp[]) >>
   drule_all sym_body_ret_step_own_kernel >> simp[]
 QED
+
+Theorem sym_body_own_branches_given_invoke:
+  own_invoke_cut allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+    ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 /\
+  own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+    ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0
+      (k,prefix_ops,rest_ops,ps,vs,as,ss) ==>
+  own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb
+    (k,prefix_ops,rest_ops,ps,vs,as,ss) \/
+  (k < LENGTH bb.bb_instructions /\
+   ?y. FST y = SUC k /\
+    own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+      ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 y /\
+    (own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb y ==>
+     own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb
+       (k,prefix_ops,rest_ops,ps,vs,as,ss)))
+Proof
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  reverse (Cases_on `k < LENGTH bb.bb_instructions`)
+  >- (disj1_tac >>
+      `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
+      `?e. exec_block fuel ctx bb vs = Error e` by
+        metis_tac[fnBlockBodyHelpersTheory.exec_block_out_of_range, arithmeticTheory.NOT_LESS] >>
+      drule block_rest_error >> simp_tac (srw_ss()) []) >>
+  `EL k bb.bb_instructions = EL k bb.bb_instructions` by simp[] >>
+  drule_all sym_body_inst_bounds_reloc_kernel >> strip_tac >>
+  Cases_on `?j. revert_forward_pair bb k j`
+  >- (disj1_tac >> pop_assum strip_assume_tac >>
+      drule_all (SRULE [] own_revert_result) >> simp[]) >>
+  pop_assum (assume_tac o REWRITE_RULE [NOT_EXISTS_THM]) >>
+  Cases_on `?vs1. step_inst fuel ctx (EL k bb.bb_instructions) vs = OK vs1`
+  >- (pop_assum strip_assume_tac >>
+      Cases_on `is_terminator (EL k bb.bb_instructions).inst_opcode`
+      >- (disj1_tac >> drule_all (SRULE [] own_terminator_result) >> simp[]) >>
+      disj2_tac >> simp[] >> drule_all (SRULE [] own_nonterm_successor) >> simp[]) >>
+  disj1_tac >>
+  `!s. step_inst fuel ctx (EL k bb.bb_instructions) vs <> OK s` by metis_tac[] >>
+  `step_inst fuel ctx (EL k bb.bb_instructions) vs =
+   step_inst fuel ctx (EL k bb.bb_instructions) vs` by simp[] >>
+  drule_all (SRULE [] own_nonok_result) >> simp[]
+QED
+
+Theorem sym_body_own_nonterm_application_given_invoke:
+  own_invoke_cut allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+    ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 /\
+  (!m. m < d ==>
+    !y. m = LENGTH bb.bb_instructions - FST y /\
+      own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+        growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+        ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0 y ==>
+      own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb y) /\
+  d = LENGTH bb.bb_instructions - k /\
+  own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+    ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0
+      (k,prefix_ops,rest_ops,ps,vs,as,ss) ==>
+  own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb
+    (k,prefix_ops,rest_ops,ps,vs,as,ss)
+Proof
+  strip_tac >>
+  drule_all sym_body_own_branches_given_invoke >> strip_tac >- simp[] >>
+  qspecl_then [`LENGTH bb.bb_instructions`,
+    `own_admissible allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+      ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0`,
+    `own_result allow_own fuel lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0 bb`]
+    mp_tac sym_body_nonterm_result_client >>
+  disch_then (qspec_then `d` mp_tac) >>
+  disch_then (qspec_then `(k,prefix_ops,rest_ops,ps,vs,as,ss)` mp_tac) >>
+  simp_tac (srw_ss()) [] >> disch_then irule >> simp[]
+QED
