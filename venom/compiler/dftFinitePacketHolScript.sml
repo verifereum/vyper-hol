@@ -38,7 +38,7 @@ Ancestors
   dftPacketPreterminalOracle
   dftPacketPreterminalAgreement
   dftPacketPreterminalGeometry dftPacketPseudoAdvance
-  dftPacketPseudoCursor dftPacketPseudoSegment
+  dftPacketPseudoCursor dftPacketPseudoSegment dftPacketPseudoFreshCut
   dftPacketPseudoHistory dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame dftPacketRefinementBoundary
   dftPacketRetainedOracle
   dftPacketPreterminalRows
