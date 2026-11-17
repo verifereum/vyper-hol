@@ -14,7 +14,7 @@ Ancestors
   symFrameBoundary symFrameControl symFrameInvoke symFrameInst symFnSimSpec
   codegenSymRel fnBlockBody fnBlockBodySteps fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
-  venomExecSemantics venomState venomInst fnPlanLineageEntryProduction
+  venomExecSemantics venomState venomInst fnPlanLineageEntryProduction symBodyAlgebra
 
 (* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result_simple) with
    the symbolic run from ss over the same n steps: it ends where the
@@ -153,11 +153,9 @@ Theorem sym_body_result_prefix:
     as ss res
 Proof
   rpt gen_tac >> strip_tac >>
-  `!m. asm_steps lo o2pc prog (n + m) as =
-       asm_steps lo o2pc prog m as1` by
-    metis_tac[stackOpSimTheory.asm_steps_add_ok] >>
-  `!m. sym_steps prog env (n + m) ss = sym_steps prog env m ss1` by
-    simp[sym_steps_add] >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.SPEC `F` sym_body_runs_prefix_mode)) >>
+  disch_then assume_tac >>
   gvs[sym_body_result_def] >> rpt conj_tac >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`n' + n`, `as'`] >> simp[] >> metis_tac[]
@@ -181,7 +179,7 @@ Theorem sym_frame_inv_plan_transport:
   sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss ==>
   sym_frame_inv prog env ctx cp fn ret srest labs0 ps' cs ss
 Proof
-  simp[sym_frame_inv_def, sym_kinds_ok_def]
+  simp[sym_frame_inv_def] >> metis_tac[sym_kinds_ok_plan_transport]
 QED
 
 Theorem codegen_sym_code_end_label:
