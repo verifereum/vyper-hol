@@ -169,10 +169,19 @@ Proof
                  supported_program_internal_names] >>
   qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
+     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
+    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops T)
+                (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))
+              (MAP FST (MAP (source_internal_fn_descriptor tops T) int_fns))`
+          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+              simp[PERM_order_deploy_internals]) >>
+        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  irule package_internal_fn_ctor_shape_ok >> simp[]
+  simp[EVERY_MEM] >> rpt strip_tac
+  >- (irule package_internal_fn_ctor_shape_ok >> gs[]) >>
+  fs[EVERY_MEM]
 QED
 
 Theorem lower_vyper_deploy_unit_source_unit_ok:
