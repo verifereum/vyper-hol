@@ -307,11 +307,49 @@ Resume focus_initial_singleton_packet[body_cuts]:
   qspecl_then [`fuel`,`C7`,`root_sf`,`root_entry`] mp_tac focus_initial_singleton_cut >>
   disch_then (qspecl_then [`bb`,`[]`,`bb.bb_instructions`,`root_entry`,`q`] mp_tac) >>
   impl_tac >- simp[] >>
-  simp_tac bool_ss [LET_THM] >>
+  ntac 5 (CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV))) >>
+  qpat_assum `Abbrev (row_eval = _)`
+    (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  map_every (fn v =>
+    CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+    qpat_assum v
+      (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
+    [`Abbrev (plan_eval = _)`,`Abbrev (call_setup = _)`,`Abbrev (rooted_eval = _)`] >>
+  ntac 2 (CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV))) >>
   disch_then (qspecl_then [`gs`,`tail`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >>
-  simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`, Abbr `call_setup`] >>
-  FAIL_TAC "cut composed"
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qpat_x_assum `!i sf plan call. _` kall_tac >>
+  `!zs. FLAT (MAP (\i. if i.inst_opcode = GAS then
+       [(root_sf.fn_name,i.inst_id)] else []) zs) =
+       MAP (\i. (root_sf.fn_name,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) zs) /\
+     FLAT (MAP (\i. if i.inst_opcode = GAS then [(([],1,i.inst_id):gas_event)] else []) zs) =
+       MAP (\i. (([],1,i.inst_id):gas_event)) (FILTER (\i. i.inst_opcode = GAS) zs)` by
+    (Induct >> simp[] >> Cases_on `h.inst_opcode = GAS` >> simp[]) >>
+  pure_asm_rewrite_tac[] >>
+  conj_tac >- metis_tac[] >>
+  Cases_on `rooted_eval fuel C7 [(root_sf,[(bb,1,TAKE q bb.bb_instructions)],NONE)]
+    (root_entry with vs_gas_readings := gs ++ tail)` >>
+  rename1 `(ev,r)` >> Cases_on `r`
+  >- (qpat_x_assum `!ev u. _ = (ev,OK u) ==> _` mp_tac >>
+      simp_tac (srw_ss()) [] >> strip_tac >>
+      fs[dftGasFromListTraceDefsTheory.trace_gas_def] >>
+      suspend "cut_observation") >>
+  qpat_x_assum `!ev r. _` mp_tac >>
+  simp_tac (srw_ss()) []
+QED
+
+Resume focus_initial_singleton_packet[cut_observation]:
+  conj_tac >- (qexistsl_tac [`before`,`after`] >> simp[]) >>
+  strip_tac >>
+  `FOLDR (dft_exec_cons (fuel-1) C7) OK (TAKE q bb.bb_instructions)
+      (root_entry with vs_gas_readings := gs ++ tail) = OK v` by
+    (qpat_x_assum `!tail'. rooted_eval _ _ _ _ = _` (qspec_then `tail` mp_tac) >>
+     simp[Abbr `rooted_eval`, Abbr `plan_eval`, Abbr `row_eval`] >>
+     Cases_on `FOLDR (dft_exec_cons (fuel-1) C7) OK (TAKE q bb.bb_instructions)
+       ((root_entry with vs_gas_readings := gs ++ tail) with vs_inst_idx := 0)` >>
+     simp[]) >>
+  FAIL_TAC "native fold"
 QED
 
 Finalise focus_initial_singleton_packet
