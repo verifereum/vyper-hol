@@ -36,6 +36,7 @@ val _ = Parse.hide "body";
 
 (* The successful Assign RHS determines both the source local layout and
    the scalar operand used by the joint tail. *)
+
 Theorem body_assign_local_word_full_rhs[local]:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\ expr_body_pre cenv cx env e es /\
@@ -85,6 +86,7 @@ Proof
 QED
 
 (* A single RHS endpoint is extended by the same scalar store at every horizon. *)
+
 Theorem body_assign_local_word_full_continue[local]:
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -94,6 +96,8 @@ Theorem body_assign_local_word_full_continue[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   expr_body_pre cenv cx env e es /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H0 : (bool # 256 word # type_value) list # num list)
+    ctx func cenv cx es s0 /\
   return_buf_frame d cenv sa s0 /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -130,7 +134,13 @@ Theorem body_assign_local_word_full_continue[local]:
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-        op_taint tn (Var x) = op_taint tn0 (Var x))) R
+        op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 ce ee t /\
+      (!aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem)) R
 Proof
   strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -159,7 +169,39 @@ Proof
   `find_containing_scope id (mid with gas_obs := []).scopes = SOME (pre,sc,entry,rest)` by simp[] >>
   drule_all body_assign_local_word_full_tail >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
-  strip_tac >> gvs[vyperStateTheory.evaluation_state_fupdcanon]
+  strip_tac >> gvs[vyperStateTheory.evaluation_state_fupdcanon] >>
+  reverse conj_tac
+  >- (drule_all wordLoadStorePtrTheory.mstore_ghost_frame >> strip_tac >>
+      fs[bodyPtrDefsTheory.ghost_kept_at_def, pred_setTheory.IN_DIFF] >> metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    fs[expr_post_def, locals_kept_def] >>
+  `alloca_frame ce es sa s0 ce (mid with gas_obs := []) t` by
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ _`
+       (mp_then Any irule stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
+     fs[expr_post_def] >> first_assum ACCEPT_TAC) >>
+  `lookup_scopes id mid.scopes = SOME entry` by
+    metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
+  `local_ptrs_rel func ce mid.scopes t` by
+    (fs[expr_post_def] >> metis_tac[stmt_state_rel_local_ptrs_alloca]) >>
+  `32 <= sz` by
+    (fs[local_ptrs_rel_def, stmtSimDeclStoreTheory.store_lays_out_def] >>
+     first_x_assum (qspecl_then [`id`,`entry`,`p`,`sz`] mp_tac) >> simp[]) >>
+  `local_region ce (mid with gas_obs := []).scopes t id (w2n dst) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  irule stmtSimDefsTheory.alloca_frame_region_write >>
+  goal_assum (drule_at Any) >>
+  simp[] >>
+  conj_tac >- simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  drule vyperLookupTheory.find_containing_scope_structure >>
+  strip_tac >> gvs[] >>
+  `id IN FDOM sc` by fs[FLOOKUP_DEF] >>
+  simp[pred_setTheory.ABSORPTION_RWT]
 QED
 
 (* A word local. *)
@@ -202,6 +244,7 @@ Proof
   goal_assum (drule_at Any) >> simp[Abbr `Q1`] >> metis_tac[]
 QED
 *)
+
 Theorem body_assign_local_word_full:
   !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -229,7 +272,56 @@ Theorem body_assign_local_word_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  `expr_type e = ty` by metis_tac[type_widens_to_word] >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty e es` by metis_tac[body_expr_full_ok_def] >>
+  `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    metis_tac[expr_sim_inv_def] >>
+  `cenv.ce_var_type id = SOME ty` by metis_tac[expr_sim_inv_def] >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  conj_tac >- simp[] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    metis_tac[] >>
+  `is_word_type (expr_type e)` by simp[] >>
+  gvs[] >> drule_all body_assign_local_word_full_setup >> strip_tac >> gvs[] >>
+  rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
+  drule assign_local_admissible_rhs >> strip_tac >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
+    `op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
+  irule body_assign_local_word_full_source >>
+  conj_tac >- metis_tac[] >> qexists_tac `Q1` >>
+  reverse conj_tac >- (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+    goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >>
+    POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+    Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
+    Cases_on `y` >> Cases_on `r` >>
+    gvs[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,
+        exprSimDefsTheory.halt_exit_def] >>
+    rename1 `Error err` >> Cases_on `err` >>
+    gvs[exprSimDefsTheory.expr_exit_def]) >>
+  rpt gen_tac >> strip_tac >>
+  irule body_assign_local_word_full_continue >>
+  goal_assum (drule_at Any) >> simp[Abbr `Q1`] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (qexistsl_tac [`G1`,`marks`,`mid`,`res`,`t`,`tn1`] >>
+      qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _` mp_tac >>
+      simp[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexists_tac `storage_trace_horizon es.storage_trace` >> metis_tac[]
 QED
 
 (* A memory local whose source is stored at its own layout. *)
