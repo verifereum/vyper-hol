@@ -3,7 +3,8 @@ Theory augAssignFullOperatorExec
 Ancestors
   bodyPtrBopScalarRun augAssignFullOperatorIntegerExec
   augAssignFullOperatorPowerExec augAssignFullOperatorWordExec
-  exprBopBytes exprSimSource loweringPosts valueEncoding
+  exprBopBytes exprSimSource exprSimProps loweringPosts valueEncoding
+  exprSimHypsDefs vyperTypeSystem exprSimBinopFrag
 
 Theorem augassign_numeric_execution:
   !cx ty bop t2 bl el tys v1 v2 es tv1 tv2 x y sa sb op s.
@@ -31,7 +32,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all bop_word_typed_run >> strip_tac
   >- (disj1_tac >> goal_assum (drule_at Any) >>
-      qexists_tac `t` >> simp[expr_val_rel_def, typed_val_to_w256_word_value,
+      qexists_tac `v` >> simp[expr_val_rel_def, typed_val_to_w256_word_value,
                              word_value_type_word]) >>
   disj2_tac >> metis_tac[]
 QED
@@ -68,14 +69,12 @@ Proof
         gvs[typed_val_to_w256_word_value] >>
       `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
         (rpt strip_tac >> gvs[word_value_type_def]) >>
-      irule augassign_numeric_execution >> goal_assum (drule_at Any) >> simp[] >>
-      metis_tac[]) >>
+      drule_all augassign_numeric_execution >> simp[]) >>
   qpat_x_assum `ty = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
   `(bop = ShL \/ bop = ShR ==> (?i. v2 = IntV i /\ 0 <= i) \/
      t2 = BaseT (BytesT (Fixed 32)))` by
     (rpt strip_tac >> (Cases_on `t2 = BaseT (BytesT (Fixed 32))` >- simp[] >>
      `is_int_type t2` by gvs[well_typed_binop_def] >>
      drule_all int_type_value >> strip_tac >> gvs[])) >>
-  disj1_tac >> irule compile_bytes_binop_run >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  disj1_tac >> drule_all compile_bytes_binop_run >> simp[]
 QED
