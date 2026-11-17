@@ -409,6 +409,32 @@ Proof
   conj_tac >- gvs[] >> gvs[]
 QED
 
+Theorem intcall_args_defaults_typed:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx tenv ee /\
+  well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
+  well_typed_exprs (tenv with current_src := NONE) dflts
+Proof
+  rpt strip_tac >>
+  `functions_well_typed cx /\ env_consistent tenv cx ee` by
+    gvs[expr_sim_inv_def] >>
+  `get_module_code cx NONE = SOME tops` by gvs[bodySimTheory.body_inv_def] >>
+  `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
+    (qpat_x_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
+     simp[Once well_typed_expr_def] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
+  drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+  strip_tac >>
+  `tenv.type_defs = get_tenv cx` by
+    gvs[vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts` by
+    (drule (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer) >>
+     disch_then (qspec_then `defaults_env (tenv with current_src := NONE)` mp_tac) >>
+     simp[defaults_env_def]) >>
+  metis_tac[intcall_args_defaults_typing_mutual]
+QED
+
 (* Pure allocation checks depend on layouts and overlap modules, not locals. *)
 Theorem intcall_args_pure_alloc_mutual[local]:
   (!tops e. supported_pure_expr tops e ==>
