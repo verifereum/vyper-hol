@@ -27,7 +27,9 @@ Theorem immutable_augassign_root_metadata:
     (bop = ShL \/ bop = ShR ==> augassign_shift_amount_ok ty e)
 Proof
   strip_tac >>
-  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
   `?ts. get_module_code cx src = SOME ts /\
         find_var_decl_by_name id ts = NONE` by
@@ -110,7 +112,9 @@ Proof
   strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   drule_all immutable_augassign_root_metadata >> strip_tac >>
-  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `(word_value_type _ /\ _) \/ _` kall_tac >>
   `is_word_type ty` by
     metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_is_word] >>
   `FLOOKUP env.bare_globals (src,id) = SOME ty` by
