@@ -1,6 +1,7 @@
 (* Robust reconstruction of a memory array after appending one word. *)
 Theory bodyFullAppendResolved
 Ancestors
+  stateRelProj stmtSimDefs vyperScopePreservation
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyInvNoDalloca
   bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath
@@ -13,6 +14,18 @@ Ancestors
   abiDecodeStaticProps appendStorageStageTransportPtr bodyMemoryDefs
   dynCopyExec loweringShapeDefs ptrDiscipline stateFrame valueEncodingProofs
   valueEncodingTyping vyperLookup
+
+Theorem type_stmt_append_name[local]:
+  type_stmt env ret_ty (Append (NameTarget id) e) =
+    (case type_place_target env (NameTarget id) of
+     | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
+         if target_mutable env (NameTarget id) /\ well_typed_expr env e /\
+            type_widens_to env.type_defs (expr_type e) elem_ty /\
+            assignable_type env.type_defs elem_ty then SOME env else NONE
+     | _ => NONE)
+Proof
+  simp[Once vyperTypeSystemTheory.type_stmt_def]
+QED
 
 Theorem append_local_word_ghost_inputs[local]:
   expr_sim_pre ce cx env (Name (ArrayT elem (Dynamic cap)) id) es /\
@@ -585,7 +598,6 @@ Resume body_append_local_word_full[append_full]:
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
-(* TEMPORARILY CHEATED - the statement's normal post now carries alloca_frame and the older allocations' taint clause; this step and the steps it suspends (robust_array, scope_old_vars, scope_memory_frame, scope_low_frame) close the post by position from facts that don't include them. Original proof:
 Resume body_append_local_word_full[append_success]:
   qpat_assum `!len. _ /\ _ ==> ?u. _` (qspec_then `LENGTH vs` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -621,7 +633,7 @@ Resume body_append_local_word_full[append_success]:
         vyperTypeInvariantsTheory.env_context_consistent_def] >> gvs[]) >>
   `entry'.assignable` by
     (`FLOOKUP env.var_assignable id = SOME T` by
-        fs[vyperTypeSystemTheory.type_stmt_def, vyperTypeSystemTheory.target_mutable_def] >>
+        fs[type_stmt_append_name, vyperTypeSystemTheory.target_mutable_def] >>
       fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
       qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> ?en. lookup_scopes id mid.scopes = SOME en /\ en.assignable`
@@ -660,6 +672,15 @@ Resume body_append_local_word_full[append_success]:
   `u.vs_alloca_next = t.vs_alloca_next /\ u.vs_allocas = t.vs_allocas` by
     (qpat_assum `state_frame u = _` mp_tac >> rpt (pop_assum kall_tac) >>
      simp[stateFrameTheory.state_frame_def, dynCopyExecTheory.mstore_control_fields]) >>
+  `!x. not_fresh_at sa x ==>
+       FLOOKUP Gf x = FLOOKUP G0 x /\
+       op_taint tnf (Var x) = op_taint tn0 (Var x)` by
+    (qpat_assum `ghost_kept_at lo cenv _ sa G0 tn0 s0 G1 tn1`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [ghost_kept_at_def]) >>
+     qpat_assum `!x. not_fresh_at sm x ==> _` mp_tac >>
+     qpat_assum `sa.cs_next_var <= sm.cs_next_var` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`, `ff`, `INL ()`,
     `u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sb)`, `tnf`] >>
@@ -733,7 +754,7 @@ Resume body_append_local_word_full[append_success]:
       `local_region cenv mid.scopes t id (w2n bp) sz` by
         (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
       `local_ptrs_rel func cenv mid.scopes t` by
-        fs[expr_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+        metis_tac[expr_post_def, stmt_state_rel_local_ptrs_alloca] >>
       `lo <= u.vs_alloca_next /\ allocas_from lo u` by
         (qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _` mp_tac >>
          qpat_assum `u.vs_alloca_next = _` mp_tac >> qpat_assum `u.vs_allocas = _` mp_tac >>
@@ -759,15 +780,26 @@ Resume body_append_local_word_full[append_success]:
       conj_tac >- suspend "scope_low_frame" >>
       qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _` mp_tac >>
       rpt (pop_assum kall_tac) >> simp[ghost_inv_at_def] >> metis_tac[]) >>
-  all_tac >-
+  all_tac >~ [`alloca_frame _ _ _ _ _ _ _`]
+  >- suspend "success_alloca_frame" >>
+  all_tac >~ [`lookup_var _ _ = SOME _`]
+  >-
     (`not_fresh_at sm x` by
        (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
      `lookup_var x t = SOME w'` by (fs[expr_post_def] >> metis_tac[]) >>
      simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
-  all_tac >- (fs[expr_post_def] >> metis_tac[]) >>
-  `not_fresh_at sm x` by
-    (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  fs[ghost_kept_at_def] >> metis_tac[]
+  all_tac >~ [`FLOOKUP _.vs_allocas _ = SOME _`]
+  >- (fs[expr_post_def] >> metis_tac[]) >>
+  simp[] >>
+  qpat_assum `ghost_kept_at lo cenv _ sa G0 tn0 s0 G1 tn1`
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ghost_kept_at_def]) >>
+  qpat_assum `tnf.t_mem SUBSET tn1.t_mem` mp_tac >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`FLOOKUP s0.vs_allocas _ = SOME (_,_)`, `_ < sa.cs_next_id`,
+     `!n b sz'. local_region cenv es.scopes s0 n b sz' ==> _`,
+     `_ <= i`, `i < _`, `i IN tn1.t_mem`] >>
+  rpt (pop_assum kall_tac) >>
+  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
 Resume body_append_local_word_full[scope_old_vars]:
@@ -871,9 +903,105 @@ Resume body_append_local_word_full[robust_array]:
   strip_tac >> rpt strip_tac >> simp[] >>
   dep_rewrite.DEP_REWRITE_TAC [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >> decide_tac
 QED
-*)
-Resume body_append_local_word_full[append_success]:
-  cheat
+
+Resume body_append_local_word_full[success_alloca_frame]:
+  `?xs. mid.storage_trace = es.storage_trace ++ xs` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+             vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >> simp[]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    metis_tac[gasOutcomeFullTheory.valid_horizon_append] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+      (qspec_then `H` mp_tac) >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    fs[expr_post_def, locals_kept_def] >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (irule (INST_TYPE [alpha |-> ``:256``]
+       stmtSimDefsTheory.expr_post_alloca_frame) >>
+     simp[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `e`, `func`, `shadow_op`, `sm`, `v`] >>
+     simp[] >> fs[expr_post_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >> fs[locals_kept_def, popped_kept_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `local_region cenv mid.scopes t id (w2n bp) sz` by
+    (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
+  `local_ptrs_rel func cenv mid.scopes t` by
+    metis_tac[expr_post_def, stmt_state_rel_local_ptrs_alloca] >>
+  `32*(cap+1) <= sz` by
+    (qpat_assum `local_ptrs_rel func cenv mid.scopes t` mp_tac >>
+     qpat_assum `lookup_scopes id mid.scopes = _` mp_tac >>
+     qpat_assum `FLOOKUP cenv.ce_vars id = _` mp_tac >>
+     qpat_assum `lookup_var p t = _` mp_tac >>
+     qpat_assum `entry'.type = _` mp_tac >>
+     qpat_assum `type_memory_size tv = 32` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[loweringStateRelDefsTheory.local_ptrs_rel_def] >> rpt strip_tac >>
+     `type_memory_size entry'.type <= sz` by metis_tac[] >>
+     gvs[type_memory_size_def] >> decide_tac) >>
+  match_mp_tac (Q.INST [`H` |-> `H`, `ctx` |-> `ctx`, `func` |-> `func`,
+    `cx` |-> `cx`, `es1` |-> `mid`, `s` |-> `t`, `id` |-> `id`,
+    `t` |-> `u with vs_inst_idx := LENGTH sm.cs_current_insts + LENGTH (emitted_insts sm sb)`,
+    `b` |-> `w2n (bp:256 word)`, `z` |-> `sz`, `n0` |-> `sz`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
+      stmtSimDefsTheory.alloca_frame_local_store))) >>
+  simp[] >> rpt conj_tac
+  >- (qx_genl_tac [`x`, `wx`] >> strip_tac >>
+      `not_fresh_at sm x` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> simp[]) >>
+      `lookup_var x t = SOME wx` by
+        (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
+           (qspecl_then [`x`, `wx`] mp_tac) >> simp[]) >>
+      qpat_assum `!x a. not_fresh_at sm x /\ lookup_var x t = SOME a ==> _`
+        (qspecl_then [`x`, `wx`] mp_tac) >> fs[lookup_var_def])
+  >- (drule vyperLookupTheory.find_containing_scope_structure >>
+      drule vyperLookupTheory.find_containing_scope_lookup >>
+      simp[Abbr `ff`] >> rpt strip_tac >> gvs[] >>
+      `id IN FDOM env''` by
+        (qpat_assum `FLOOKUP env'' id = SOME entry'` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         Cases_on `id IN FDOM env''` >> simp[FLOOKUP_DEF]) >>
+      fs[pred_setTheory.ABSORPTION])
+  >- (rpt strip_tac >>
+      `not_fresh_at sa q` by
+        (qpat_assum `local_ptrs_reserved cenv sa` mp_tac >>
+         qpat_assum `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z')` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+      `not_fresh_at sm q` by
+        (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> simp[]) >>
+      simp[lookup_var_def] >>
+      irule (REWRITE_RULE [lookup_var_def]
+        appendStorageStageTransportPtrTheory.run_inst_seq_non_output_vars) >>
+      qexists_tac `emitted_insts sm sb` >> simp[] >>
+      qpat_assum `compile_dynarray_append _ _ _ 32 32 _ _ _ _ _ sm = _` mp_tac >>
+      qpat_assum `not_fresh_at sm q` mp_tac >> rpt (pop_assum kall_tac) >>
+      simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+        contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+        fresh_id_def, fresh_var_def, emit_def] >>
+      strip_tac >> disch_then (SUBST1_TAC o SYM) >>
+      simp_tac (srw_ss()) [emitted_insts_def] >>
+      pure_rewrite_tac [GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+      simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+      fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+      metis_tac[DECIDE ``n <= n+k``])
+  >- (rpt strip_tac >>
+      qpat_assum `state_frame u = _`
+        (mp_tac o AP_TERM ``\s:venom_state. s.vs_memory``) >>
+      simp_tac (srw_ss()) [stateFrameTheory.state_frame_def] >>
+      disch_then SUBST1_TAC >>
+      dep_rewrite.DEP_REWRITE_TAC
+        [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >> decide_tac)
 QED
 
 Finalise body_append_local_word_full
