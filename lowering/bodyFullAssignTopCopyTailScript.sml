@@ -63,17 +63,22 @@ Theorem body_assign_slots_full_static_exit:
      (!D. ghost_inv_at D lo d cenv cx ee G tn s ==>
           ghost_inv_at D lo d cenv cx ee Gf tnf t)) /\
     (type_slot_size tv <> 0 ==>
-     let r = Abort ExHalt_abort (halt_state (set_returndata [] t));
-         res = INR (Error (RuntimeError "write in static context")) in
-       (?bb inst. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-         get_instruction bb t.vs_inst_idx = SOME inst /\
-         inst.inst_opcode = (if tr then TSTORE else SSTORE) /\
-         step_inst_base inst t = r) /\
-       write_storage_slot cx tr dw tv v ee = (res,ee) /\ exit_result r /\
-       (!H tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res tnf r) /\
-       (!H. halt_exit H cx ee res r) /\
-       (ctx_has_dalloca ctx ==>
-        !u. (r = Halt u \/ ?ir. r = IntRet ir u) ==> allocas_below_fmp u))
+     (?bb inst. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+       get_instruction bb t.vs_inst_idx = SOME inst /\
+       inst.inst_opcode = (if tr then TSTORE else SSTORE) /\
+       step_inst_base inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
+     write_storage_slot cx tr dw tv v ee =
+       (INR (Error (RuntimeError "write in static context")),ee) /\
+     exit_result (Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
+     (!H tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail)
+       (INR (Error (RuntimeError "write in static context"))) tnf
+       (Abort ExHalt_abort (halt_state (set_returndata [] t)))) /\
+     (!H. halt_exit H cx ee (INR (Error (RuntimeError "write in static context")))
+       (Abort ExHalt_abort (halt_state (set_returndata [] t)))) /\
+     (ctx_has_dalloca ctx ==>
+      !u. (Abort ExHalt_abort (halt_state (set_returndata [] t)) = Halt u \/
+           ?ir. Abort ExHalt_abort (halt_state (set_returndata [] t)) = IntRet ir u) ==>
+          allocas_below_fmp u))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL compile_store_slots_static_origin_ptr_path)) >>
