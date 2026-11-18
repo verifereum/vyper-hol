@@ -360,7 +360,7 @@ Resume prefix_entry_register_suffix_origins_coverage_mode[head_support]:
   `ptr_covers H qt p actual (type_memory_bytes ce0 h1)` by
     (`initial.vs_alloca_next < dimword (:256)` by
        (qpat_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
-        simp_tac bool_ss [ctorDeployMemoryFrontierTheory.alloca_frontier_inv_from_def] >>
+        simp_tac bool_ss [allocaFrontierRoomTheory.alloca_frontier_inv_from_def] >>
         strip_tac >> decide_tac) >>
      simp[ptr_covers_def, wordsTheory.w2n_n2w]) >>
   qexistsl [`entry`,`initial.vs_alloca_next`,`B`] >> asm_rewrite_tac[] >>
@@ -388,7 +388,7 @@ Resume prefix_entry_register_suffix_origins_coverage_mode[fresh_coverage]:
     (qpat_x_assum `buf.buf_operand = Var q` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
   `initial.vs_alloca_next < dimword (:256)` by
     (qpat_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
-     simp_tac bool_ss [ctorDeployMemoryFrontierTheory.alloca_frontier_inv_from_def] >>
+     simp_tac bool_ss [allocaFrontierRoomTheory.alloca_frontier_inv_from_def] >>
      strip_tac >> decide_tac) >>
   qpat_assum `q = p` (fn th => rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[ptr_covers_def] >>

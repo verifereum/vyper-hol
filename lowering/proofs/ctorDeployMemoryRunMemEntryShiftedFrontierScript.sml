@@ -1,6 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedFrontier
 Ancestors
-  ctorDeployMemoryFrontier actualAllocCredit allocaFrontierBound
+  ctorDeployMemoryFrontier allocaFrontierRoom actualAllocCredit allocaFrontierBound
   allocaBudgetProps venomInst venomState finite_map pred_set list arithmetic words
 
 (* The deployment's immutables region is reserved before the first ALLOCA;
