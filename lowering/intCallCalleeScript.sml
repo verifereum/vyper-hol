@@ -1322,7 +1322,7 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem internal_args_materialization_pre[local]:
+Theorem internal_args_materialization_pre:
   !cenv params env idx args frontier mem caps st s func.
     internal_args_rel cenv params env idx args frontier mem /\
     LENGTH caps = LENGTH params /\
