@@ -4,19 +4,18 @@ Ancestors
 
 Theorem merge_iszero_outside_fetch_ok:
   !pre pat repl tail env u v.
-    let p = pre ++ pat ++ tail;
-        q = pre ++ repl ++ tail;
-        r = splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) in
+    !r. r = splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) ==>
     pat <> [] /\ LENGTH repl <= LENGTH pat /\
     (!l. ~MEM (AsmLabel l) pat /\ ~MEM (AsmLabel l) repl /\
          ~MEM (AsmDataHeader l) pat /\ ~MEM (AsmDataHeader l) repl) /\
     (u.sym_base.as_pc < LENGTH pre \/
      LENGTH pre + LENGTH pat <= u.sym_base.as_pc) /\
-    sym_steps p env 1 u = SymOK v ==>
-    sym_steps q env 1 (sym_with_pc (r u.sym_base.as_pc) u) =
+    sym_steps (pre ++ pat ++ tail) env 1 u = SymOK v ==>
+    sym_steps (pre ++ repl ++ tail) env 1 (sym_with_pc (r u.sym_base.as_pc) u) =
       SymOK (sym_with_pc (r v.sym_base.as_pc) v)
 Proof
-  rpt gen_tac >> simp[] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ntac 7 gen_tac >> CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2) >>
+  simp[] >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `u.sym_base.as_pc < LENGTH (pre ++ pat ++ tail)` by
     (Cases_on `u.sym_base.as_pc < LENGTH (pre ++ pat ++ tail)` >>
      gvs[sym_steps_compute]) >>
