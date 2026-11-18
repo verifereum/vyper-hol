@@ -21,7 +21,7 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs(), jump_to_def]
 QED
 
-Theorem ptr_paired_block_prefix_normalize[local]:
+Theorem ptr_paired_block_prefix_normalize:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   MEM a.po_inst.inst_opcode [JMP; JNZ; DJMP] /\
