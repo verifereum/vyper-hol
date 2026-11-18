@@ -4,14 +4,15 @@ Ancestors
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeABIDecode list pair
 
 Theorem outcomes_free_nonreentrant:
-  (!opc. MEM opc [TLOAD; SLOAD; TSTORE; SSTORE; EQ; ISZERO; ASSERT] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_nonreentrant_lock key trans view s))) /\
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_nonreentrant_unlock key trans view s)))
+  ((!opc. MEM opc [TLOAD; SLOAD; TSTORE; SSTORE; EQ; ISZERO; ASSERT] ==> P opc) /\
+   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+   EVERY (\i. P i.inst_opcode)
+     (state_insts (SND (compile_nonreentrant_lock key trans view s)))) /\
+  (P TSTORE /\ P SSTORE /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+   EVERY (\i. P i.inst_opcode)
+     (state_insts (SND (compile_nonreentrant_unlock key trans view s))))
 Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_nonreentrant_lock_def, compile_nonreentrant_unlock_def] >>
   rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
       opcode_every_emit_void, opcode_every_emit_inst]),
@@ -92,9 +93,10 @@ QED
 
 Theorem outcomes_free_decode_args:
   (!opc. MEM opc [ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) ==>
-  !args ce off opc hi base. P opc ==> !st.
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; ALLOCA; JMP; JNZ] ==> P opc) ==>
+  !args ce off opc hi base.
+  P opc /\ (opc = CALLDATALOAD ==> P CALLDATACOPY) /\
+  (opc = DLOAD ==> P DLOADBYTES) ==> !st.
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_decode_args ce args off opc hi base st)))
@@ -129,14 +131,14 @@ Theorem opcode_every_decode_args:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_decode_args ce args off opc hi base st)))
 Proof
-  strip_tac >> match_mp_tac outcomes_free_decode_args >>
-  simp[DISJ_IMP_THM, FORALL_AND_THM]
+  strip_tac >> mp_tac outcomes_free_decode_args >>
+  impl_tac >- simp[DISJ_IMP_THM] >> simp[]
 QED
 
 Theorem outcomes_free_register_constructor_args:
   (!opc. MEM opc [ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) /\ P DLOAD ==>
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; ALLOCA; JMP; JNZ] ==> P opc) /\
+  P DLOAD /\ P DLOADBYTES ==>
   !args ce off sz st.
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
@@ -161,8 +163,8 @@ QED
 Theorem outcomes_free_constructor_prefix:
   (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
      RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) /\
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; DLOADBYTES; ALLOCA; JMP; JNZ]
+     ==> P opc) /\
   (!ce st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
      EVERY (\i. P i.inst_opcode)
        (state_insts (SND (compile_stmts ce NoLoop NoneT fbody st)))) ==>
@@ -199,7 +201,9 @@ Proof
        (state_insts (SND (compile_nonreentrant_lock key trans view st))) /\
      EVERY (\i. P i.inst_opcode)
        (state_insts (SND (compile_nonreentrant_unlock key trans view st)))` by
-    (gen_tac >> strip_tac >> irule outcomes_free_nonreentrant >>
+    (gen_tac >> strip_tac >> conj_tac >|
+       [irule (cj 1 outcomes_free_nonreentrant),
+        irule (cj 2 outcomes_free_nonreentrant)] >>
      fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt (FIRST [IF_CASES_TAC,

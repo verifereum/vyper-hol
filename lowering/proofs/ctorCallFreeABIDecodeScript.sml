@@ -39,14 +39,14 @@ Proof
 QED
 
 Theorem outcomes_free_abi_element_ptr:
-  P ADD /\ P LT /\ P GT /\ P AND /\ P ISZERO /\ P ASSERT ==>
+  P ADD /\ P LT /\ P ISZERO /\ P ASSERT ==>
   (!src dyn off opc base_op hi_op st.
     P opc /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_getelemptr_abi src dyn off opc base_op hi_op st)))) /\
   (!opc base_op elem_src src_data hi_op asz st.
-    P opc /\
+    P GT /\ P AND /\ P opc /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi_op asz st))))
@@ -142,7 +142,7 @@ Theorem opcode_every_abi_element_ptr_opcode:
       (state_insts (SND (compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi_op asz st))))
   )
 Proof
-  strip_tac >> match_mp_tac outcomes_free_abi_element_ptr >> simp[]
+  strip_tac >> mp_tac outcomes_free_abi_element_ptr >> simp[]
 QED
 
 Theorem opcode_every_abi_decode_opcode:

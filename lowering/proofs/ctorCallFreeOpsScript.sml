@@ -122,6 +122,25 @@ Proof
       opcode_every_emit_inst, every_state_insts_return]
 QED
 
+(* Steps through emit/return/fresh/bind boundaries of a generator body,
+   closing the generator calls the given lemmas cover. *)
+fun opcode_preserve_with ths =
+  rpt (FIRST [CHANGED_TAC (simp([opcode_every_emit_op, opcode_every_emit_void,
+    opcode_every_emit_inst, every_state_insts_return, every_state_insts_fresh_id,
+    every_state_insts_fresh_var, every_state_insts_fresh_label,
+    every_state_insts_new_block] @ ths)),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
+
+val opcode_preserve_tac = opcode_preserve_with [];
+
+Theorem outcomes_free_compile_select:
+  P XOR /\ P MUL /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_select c a b s)))
+Proof
+  strip_tac >> simp[compile_select_def] >> opcode_preserve_tac
+QED
+
 Theorem outcomes_free_binop:
   (!opc. MEM opc [ADD; SUB; MUL; SDIV; Div; SMOD; Mod; EQ; ISZERO; OR; NOT;
     AND; ASSERT; SLT; SGT; GT; LT; Exp; SIGNEXTEND; XOR; SHL; SAR; SHR; INVALID]
@@ -130,10 +149,10 @@ Theorem outcomes_free_binop:
     (state_insts (SND (compile_binop bop x y ty base_literal exp_literal s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `bop` >> simp[compile_binop_def, compile_select_def] >>
+  Cases_on `bop` >> simp[compile_binop_def] >>
   rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
       opcode_every_emit_void, opcode_every_emit_inst,
-    outcomes_free_wrap_truncate,
+    outcomes_free_wrap_truncate, outcomes_free_compile_select,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_safe_add_sub,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_safe_mul,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_safe_div_mod,
@@ -143,15 +162,6 @@ Proof
         irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
     conj_tac, IF_CASES_TAC])
 QED
-
-(* Steps through emit/return/fresh/bind boundaries of a generator body. *)
-val opcode_preserve_tac =
-  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-    opcode_every_emit_inst, every_state_insts_return, every_state_insts_fresh_id,
-    every_state_insts_fresh_var, every_state_insts_fresh_label,
-    every_state_insts_new_block]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    irule every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
 
 Theorem outcomes_free_int_clamp:
   (!opc. MEM opc [SLT; SGT; GT; ISZERO; AND; ASSERT] ==> P opc) /\
@@ -199,13 +209,6 @@ Proof
     CHANGED_TAC opcode_preserve_tac, rename1 `BytesT bd` >> Cases_on `bd`])
 QED
 
-Theorem outcomes_free_compile_select:
-  P XOR /\ P MUL /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_select c a b s)))
-Proof
-  strip_tac >> simp[compile_select_def] >> opcode_preserve_tac
-QED
-
 Theorem outcomes_free_compile_neg:
   P SGT /\ P ASSERT /\ P SUB /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_neg v ty s)))
@@ -219,7 +222,8 @@ Theorem outcomes_free_compile_builtin_abs:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_builtin_abs v s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_builtin_abs_def, compile_select_def] >> opcode_preserve_tac
+  simp[compile_builtin_abs_def] >>
+  opcode_preserve_with [outcomes_free_compile_select]
 QED
 
 Theorem outcomes_free_compile_blockhash:
@@ -244,7 +248,8 @@ Theorem outcomes_free_compile_floor:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_floor v d s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_floor_def, compile_select_def] >> opcode_preserve_tac
+  simp[compile_floor_def] >>
+  opcode_preserve_with [outcomes_free_compile_select]
 QED
 
 Theorem outcomes_free_compile_ceil:
@@ -253,7 +258,8 @@ Theorem outcomes_free_compile_ceil:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_ceil v d s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_ceil_def, compile_select_def] >> opcode_preserve_tac
+  simp[compile_ceil_def] >>
+  opcode_preserve_with [outcomes_free_compile_select]
 QED
 
 Theorem outcomes_free_compile_env_var:

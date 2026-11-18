@@ -27,31 +27,36 @@ Proof
   drule_all load_contract_trace_call_free >> strip_tac >>
   drule_all deploy_storage_ok_outcomes >> strip_tac >>
   gvs[deploy_unit_execution_correct_with_def] >>
-  qexists_tac `shadow_func` >>
+  rename1 `gas_shadow_function _ sf` >> qexists_tac `sf` >>
   simp[venom_state_fupdcanon]
   >- (disj1_tac >> simp[] >>
-      qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`] >>
+      rename1 `gas_origin_ptr_focus (deploy_dead hz _ _ _ _, _) _ _
+        (lf, lpg, lg, ltn, _)` >>
+      qexistsl_tac [`hz`, `lf`, `lpg`, `lg`, `ltn`] >>
       drule_all (SRULE [] gas_origin_ptr_focus_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[])
   >- (disj2_tac >> disj1_tac >> simp[] >>
-      qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`] >>
+      rename1 `gas_origin_ptr_focus (deploy_dead hz _ _ _ _, _) _ _
+        (lf, lpg, lg, ltn, _)` >>
+      qexistsl_tac [`hz`, `lf`, `lpg`, `lg`, `ltn`] >>
       drule_all (SRULE [] gas_origin_ptr_focus_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[]) >>
   disj2_tac >> disj2_tac >>
-  qexists_tac `map_result_state (\t. t with vs_outcomes := os) r` >>
+  rename1 `exit_result r0` >>
+  qexists_tac `map_result_state (\t. t with vs_outcomes := os) r0` >>
   simp[exit_result_outcomes_update] >> conj_tac
   >- (drule_all (SRULE [] gas_origin_path_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[]) >>
-  gen_tac >> strip_tac >>
+  qx_gen_tac `hz` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> strip_tac >>
-  simp[] >> gen_tac >>
+  simp[] >> qx_gen_tac `fuel` >>
   qpat_x_assum `!fuel. ptr_safe_blocks _ _ _ _ _ _ _ _ _`
     (qspec_then `fuel` assume_tac) >>
   drule_all (SRULE [] (cj 3 ptr_safe_outcomes_update)) >>
-  disch_then (qspecl_then [`deploy_dead H tops runtime_bc am tx`,
+  disch_then (qspecl_then [`deploy_dead hz tops runtime_bc am tx`,
     `imm_len tops`, `fuel`, `dunit.cu_context`, `[]`, `FEMPTY`, `entry_taint`,
     `vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>`,
     `os`] mp_tac) >>

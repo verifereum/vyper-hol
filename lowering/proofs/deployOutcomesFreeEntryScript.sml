@@ -23,7 +23,8 @@ Theorem extract_context_entry_every:
 Proof
   simp[extract_context_with_internals_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  qexists_tac `mk_raw_function label entry_blocks` >>
+  rename1 `package_internal_blocks _ _ = SOME (eb,_)` >>
+  qexists_tac `mk_raw_function label eb` >>
   simp[mk_venom_context_def, lookup_function_def, mk_raw_function_def,
        fn_insts_def, EVERY_fn_insts_blocks, FIND_thm]
 QED
@@ -38,8 +39,8 @@ QED
 Theorem compile_generate_deploy_prefix_opcodes:
   (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
      RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) /\
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; DLOADBYTES; ALLOCA; JMP; JNZ]
+     ==> P opc) /\
   (!env s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
      EVERY (\i. P i.inst_opcode)
        (state_insts (SND (compile_stmts env NoLoop NoneT ss s)))) ==>

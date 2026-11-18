@@ -273,27 +273,29 @@ Theorem gas_origin_edge_outcomes_update:
     (map_result_state (\t. t with vs_outcomes := os) r)
 Proof
   rewrite_tac[gas_origin_edge_def] >> strip_tac >>
-  `~MEM inst.inst_opcode
+  rename1 `lookup_block s.vs_current_bb _ = SOME blk` >>
+  rename1 `step_inst fl _ ins s = mid` >>
+  `~MEM ins.inst_opcode
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]` by
     (imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >>
      fs[]) >>
-  `step_inst fuel ctx inst (s with vs_outcomes := os) =
-    map_result_state (\t. t with vs_outcomes := os) middle` by
+  `step_inst fl ctx ins (s with vs_outcomes := os) =
+    map_result_state (\t. t with vs_outcomes := os) mid` by
     simp[step_inst_outcomes_update] >>
-  `inst.inst_opcode <> INVOKE` by fs[MEM] >>
-  `memory ==> revert_forward_at bb s.vs_inst_idx \/
-    mem_safe_step fuel ctx inst (s with vs_outcomes := os)` by
+  `ins.inst_opcode <> INVOKE` by fs[MEM] >>
+  `memory ==> revert_forward_at blk s.vs_inst_idx \/
+    mem_safe_step fl ctx ins (s with vs_outcomes := os)` by
     simp[mem_safe_step_outcomes_update] >>
   gvs[]
-  >- (qexists_tac `fuel` >> simp[gas_events_step_outcomes_update, map_result_state_def])
-  >- (qexists_tac `fuel` >> simp[gas_events_step_outcomes_update, map_result_state_def])
-  >- (qexists_tac `fuel` >>
+  >- (qexists_tac `fl` >> simp[gas_events_step_outcomes_update, map_result_state_def])
+  >- (qexists_tac `fl` >> simp[gas_events_step_outcomes_update, map_result_state_def])
+  >- (qexists_tac `fl` >>
       simp[gas_events_step_outcomes_update, eval_phis_outcomes_update,
            map_result_state_def])
-  >- (qexists_tac `fuel` >>
+  >- (qexists_tac `fl` >>
       simp[gas_events_step_outcomes_update, jump_to_def, map_result_state_def] >>
       metis_tac[]) >>
-  qexists_tac `fuel` >> simp[gas_events_step_outcomes_update]
+  qexists_tac `fl` >> simp[gas_events_step_outcomes_update]
 QED
 
 Theorem gas_origin_path_outcomes_update:
@@ -327,27 +329,29 @@ Theorem gas_path_ptr_edge_outcomes_update:
     (map_result_state (\t. t with vs_outcomes := os) r)
 Proof
   rewrite_tac[gas_path_ptr_edge_def] >> strip_tac >>
-  `~MEM inst.inst_opcode
+  rename1 `lookup_block s.vs_current_bb _ = SOME blk` >>
+  rename1 `step_inst fl _ ins s = mid` >>
+  `~MEM ins.inst_opcode
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]` by
     (imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >>
      fs[]) >>
-  `step_inst fuel ctx inst (s with vs_outcomes := os) =
-    map_result_state (\t. t with vs_outcomes := os) middle` by
+  `step_inst fl ctx ins (s with vs_outcomes := os) =
+    map_result_state (\t. t with vs_outcomes := os) mid` by
     simp[step_inst_outcomes_update] >>
-  `inst.inst_opcode <> INVOKE` by fs[MEM] >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn inst (s with vs_outcomes := os)` by
+  `ins.inst_opcode <> INVOKE` by fs[MEM] >>
+  `ptr_safe_step D lo fl ctx fn PG G tn ins (s with vs_outcomes := os)` by
     simp[cj 1 ptr_safe_outcomes_update] >>
-  `gas_count_step fuel ctx inst (s with vs_outcomes := os) =
-    gas_count_step fuel ctx inst s` by
+  `gas_count_step fl ctx ins (s with vs_outcomes := os) =
+    gas_count_step fl ctx ins s` by
     metis_tac[cj 1 gas_events_length, gas_events_step_outcomes_update] >>
   gvs[]
-  >- (qexists_tac `fuel` >> simp[ghost_step_outcomes_update, map_result_state_def])
-  >- (qexists_tac `fuel` >> simp[map_result_state_def])
-  >- (qexists_tac `fuel` >>
+  >- (qexists_tac `fl` >> simp[ghost_step_outcomes_update, map_result_state_def])
+  >- (qexists_tac `fl` >> simp[map_result_state_def])
+  >- (qexists_tac `fl` >>
       simp[eval_phis_outcomes_update, map_result_state_def,
            entry_prov_outcomes_update, entry_taint_outcomes_update])
-  >- (qexists_tac `fuel` >> simp[jump_to_def, map_result_state_def] >> metis_tac[]) >>
-  qexists_tac `fuel` >> simp[]
+  >- (qexists_tac `fl` >> simp[jump_to_def, map_result_state_def] >> metis_tac[]) >>
+  qexists_tac `fl` >> simp[]
 QED
 
 Theorem gas_origin_ptr_edge_outcomes_update:
