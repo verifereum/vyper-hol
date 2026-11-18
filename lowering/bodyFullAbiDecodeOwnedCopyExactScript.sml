@@ -2,7 +2,7 @@ Theory bodyFullAbiDecodeOwnedCopyExact
 Ancestors
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeCopyFrame
   typedCopyOriginPtrDynArray bodyFullGhostFrame abiDecodePtrMemberFrame
-  allocaHistory bodyPtrDefs loweringStateRelDefs codegenRel freshWrites stateFrame
+  allocaHistory bodyPtrDefs loweringStateRelDefs stateRelProj codegenRel freshWrites stateFrame
   exprLoweringProps emitHelperProps emitHelper compileEnv venomState venomExecSemantics venomInst
   ptrDiscipline ptrSafeRun memSafeRun unitTransformDefs contextCodegenRel memLocDefs
   words arithmetic list rich_list finite_map pred_set pair
@@ -73,7 +73,7 @@ Theorem abi_decode_owned_mcopy_joint_exact:
 Proof
   BETA_TAC >> strip_tac >>
   `local_ptrs_rel fn ce es.scopes s` by
-    metis_tac[stmt_state_rel_def, state_rel_def] >>
+    metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `eval_operand (Var dst) s = SOME (n2w b) /\
    eval_operand (Var src) s = SOME (n2w a)` by simp[eval_operand_def] >>
   `EVERY (\(aid,p,base,k,bytes).
