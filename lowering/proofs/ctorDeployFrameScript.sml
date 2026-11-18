@@ -8,11 +8,11 @@
 Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
-  frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
+  frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs accountsRelProps
   frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
   codegenAsmProgOk frameRunRaises frameStep ctorDeployEntry immutableSectionRel
   unitMemInv ctxLookupAgree stepWriteFootprintBase contextCodegenRel
-  o1PassContract venomPipelineDriverProps venomWf venomInst
+  o1PassContract venomPipelineDriverProps venomWf venomInst vyperInterpreter
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -127,22 +127,6 @@ Proof
   gvs[frame_outcome_def, shadow_root_def, shadow_root_contexts_def]
 QED
 
-(* A pending deletion erases any earlier update of the deleted account. *)
-Theorem process_deletions_update_mem[local]:
-  !dels accs a x.
-    MEM a dels ==>
-    process_deletions dels (update_account a x accs) =
-    process_deletions dels accs
-Proof
-  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
-  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
-  strip_tac >>
-  `(h =+ empty_account_state) ((a =+ x) accs) =
-   (a =+ x) ((h =+ empty_account_state) accs)` by
-    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
-  simp[]
-QED
-
 Theorem deploy_venom_frame:
   !H tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
@@ -176,7 +160,7 @@ Proof
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def,
+          >- (gvs[deploy_venom_result_rel_def, initial_evaluation_context_def,
                   e2eDefsTheory.logs_correspond_def,
                   e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
@@ -197,7 +181,7 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def,
+          gvs[deploy_venom_result_rel_def, initial_evaluation_context_def,
               e2eDefsTheory.logs_correspond_def,
               e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac

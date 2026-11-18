@@ -31,14 +31,13 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs.
-        source_storage_ok am tx
-          (MAP SND (call_trace (add_frame_gas g' es))) gs /\
-        call_outcomes_storage_ok am tx
-          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops
+      (!gs. call_storage_ok am tx
+         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+      (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx))
+            obs am tx) /\
+       source_calls_within (2 ** 64) am tx
+         (MAP SND (call_trace (add_frame_gas g' es))) obs)
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -97,28 +96,26 @@ Theorem vyper_call_gas_sufficient:
       g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((!gs.
-           source_storage_ok am tx
-             (MAP SND (call_trace (add_frame_gas g' es))) gs /\
-           call_outcomes_storage_ok am tx
-             (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-         (!obs. ~gas_source_exempt tops
+        ((!gs. call_storage_ok am tx
+            (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+         (!obs. ~gas_source_exempt tops tx
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-               obs am tx)) /\
+               obs am tx) /\
+          source_calls_within (2 ** 64) am tx
+            (MAP SND (call_trace (add_frame_gas g' es))) obs) /\
          frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
-     (!gs.
-       source_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs /\
-       call_outcomes_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-     (!obs. ~gas_source_exempt tops
+     (!gs. call_storage_ok am tx
+        (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+     (!obs. ~gas_source_exempt tops tx
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-           obs am tx))
+           obs am tx) /\
+      source_calls_within (2 ** 64) am tx
+        (MAP SND (call_trace (add_frame_gas g' es))) obs)
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -134,7 +131,7 @@ Proof
   qspec_then `add_frame_gas g' es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
-  impl_tac >- simp[] >>
+  impl_tac >- fs[] >>
   strip_tac >> metis_tac[]
 QED
 

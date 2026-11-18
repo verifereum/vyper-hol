@@ -25,19 +25,21 @@ Proof
      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
       else s.vs_transient)` by
     (Cases_on `nr /\ ~iv` >> fs[]) >>
-  `accounts_agree H (initial_evaluation_context srcs layouts tx NONE)
+  `accounts_agree H tx.target
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).accounts
      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-   transient_agree H (initial_evaluation_context srcs layouts tx NONE)
+   transient_agree H tx.target
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).tStorage ss.vs_transient /\
    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).logs ss.vs_logs /\
-   LIST_REL (request_agree H (initial_evaluation_context srcs layouts tx NONE))
+   LIST_REL (request_agree H tx.target)
      es'.requests ss.vs_requests` by
-    metis_tac[external_halt_success_unlock] >>
+    (qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`,
+                  `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+       external_halt_success_unlock >> simp[]) >>
   gvs[external_call_result_rel_def, tx_return_bytes_def,
       vyperInterpreterTheory.abstract_machine_from_state_def]
 QED
