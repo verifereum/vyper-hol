@@ -29,13 +29,6 @@ Proof
   Cases_on `args` >> simp[]
 QED
 
-Theorem outcomes_free_second:
-  EVERY Q args /\ 2 <= LENGTH args ==>
-  Q (HD (TL args)) /\ MEM (HD (TL args)) args
-Proof
-  Cases_on `args` >> simp[] >> Cases_on `t` >> simp[]
-QED
-
 Theorem outcomes_free_builtin_arities:
   well_typed_builtin_app ty bi (MAP expr_type args) ==>
   ((?op. bi = Bop op) ==> LENGTH args = 2) /\

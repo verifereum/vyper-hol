@@ -226,16 +226,3 @@ Proof
       Cases_on `var_location_memory_size loc`)]) >>
   qpat_x_assum `!env off sz s. _` irule >> simp[]
 QED
-
-Theorem outcomes_free_register_constructor_args:
-  compile_register_constructor_args env args off sz s = (env', s') /\
-  EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) bb.bb_instructions) (all_blocks s) ==>
-  EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) bb.bb_instructions) (all_blocks s')
-Proof
-  strip_tac >>
-  mp_tac outcomes_free_register_constructor_args_state >>
-  disch_then (qspecl_then [`args`, `env`, `off`, `sz`, `s`] mp_tac) >>
-  gvs[ctorCallFreeRulesTheory.every_state_insts_blocks]
-QED

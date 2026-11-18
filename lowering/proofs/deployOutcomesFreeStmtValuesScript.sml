@@ -51,9 +51,9 @@ Theorem outcomes_free_compile_store_at_loc:
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_store_at_loc imm dst value loc s)))
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `loc`
+  strip_tac >> rpt gen_tac >> strip_tac >> namedCases_on `loc` ["", "loc_kind"]
   >- simp[compile_store_at_loc_def, outcomes_free_emit_ops] >>
-  Cases_on `x` >> simp[compile_store_at_loc_def, outcomes_free_emit_ops]
+  Cases_on `loc_kind` >> simp[compile_store_at_loc_def, outcomes_free_emit_ops]
 QED
 
 Theorem outcomes_free_compile_internal_return:

@@ -1,6 +1,7 @@
 Theory deployOutcomesFreeStep
 Ancestors
-  loweringBudgetFrameOracleTransport codegenSymRel
+  loweringBudgetFrameOracleTransport loweringBudgetNonconsumingOracleTransport
+  codegenSymRel
   contextCodegenRel dftCommutation venomState venomExecSemantics
 
 
@@ -37,14 +38,6 @@ Proof
   Cases_on `r` >> simp[map_result_state_def, EQ_SYM_EQ]
 QED
 
-Theorem outcomes_enters_block:
-  enters_block fn (s with vs_outcomes := os) t <=>
-  ?u. enters_block fn s u /\ t = (u with vs_outcomes := os)
-Proof
-  simp[enters_block_def, outcomes_eval_phis] >>
-  eq_tac >> rpt strip_tac >> gvs[]
-QED
-
 Theorem outcomes_state_operations[simp]:
   (mload n (s with vs_outcomes := os) = mload n s) /\
   (sload k (s with vs_outcomes := os) = sload k s) /\
@@ -66,18 +59,6 @@ Proof
        contract_transient_def, mstore_def, mstore8_def, sstore_def,
        tstore_def, write_memory_with_expansion_def, mcopy_def, istore_def,
        halt_state_def, revert_state_def, set_returndata_def, jump_to_def]
-QED
-
-Theorem outcomes_pack_dret_dynamic:
-  !pairs cursor s os.
-  pack_dret_dynamic cursor pairs (s with vs_outcomes := os) =
-    (FST (pack_dret_dynamic cursor pairs s),
-     FST (SND (pack_dret_dynamic cursor pairs s)),
-     SND (SND (pack_dret_dynamic cursor pairs s)) with vs_outcomes := os)
-Proof
-  Induct >> simp[pack_dret_dynamic_def] >> rpt gen_tac >>
-  PairCases_on `h` >> simp[pack_dret_dynamic_def] >>
-  pairarg_tac >> simp[]
 QED
 
 Theorem outcomes_exec_pure1:
@@ -189,7 +170,12 @@ Proof
   simp[halt_state_def, revert_state_def, set_returndata_def]
 QED
 Resume outcomes_step_inst_base[dret]:
-  simp[outcomes_pack_dret_dynamic] >>
+  `!pairs cursor st. pack_dret_dynamic cursor pairs (st with vs_outcomes := os) =
+     (FST (pack_dret_dynamic cursor pairs st),
+      FST (SND (pack_dret_dynamic cursor pairs st)),
+      SND (SND (pack_dret_dynamic cursor pairs st)) with vs_outcomes := os)` by
+    (rpt gen_tac >> irule pack_dret_dynamic_outcomes_update >> simp[]) >>
+  pop_assum (simp o single) >>
   CONV_TAC (REDEPTH_CONV patternMatchesLib.PMATCH_ELIM_CONV) >>
   simp_tac bool_ss (map_result_state_def :: pairTheory.ELIM_UNCURRY ::
                    map_result_rands) >>

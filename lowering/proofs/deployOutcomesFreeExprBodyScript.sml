@@ -90,11 +90,13 @@ Proof
   measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
   rpt gen_tac >> strip_tac
   >- (simp[compile_get_target_ptr_def] >>
-      Cases_on `FLOOKUP ce.ce_vars s` >> simp[comp_return_def] >>
-      Cases_on `x` >> simp[comp_return_def])
+      namedCases_on `FLOOKUP ce.ce_vars s` ["", "var_info"] >>
+      simp[comp_return_def] >>
+      Cases_on `var_info` >> simp[comp_return_def])
   >- (simp[compile_get_target_ptr_def] >>
-      Cases_on `FLOOKUP ce.ce_module_vars p` >> simp[comp_return_def] >>
-      Cases_on `x` >> simp[comp_return_def])
+      namedCases_on `FLOOKUP ce.ce_module_vars p` ["", "var_info"] >>
+      simp[comp_return_def] >>
+      Cases_on `var_info` >> simp[comp_return_def])
   >- (drule_all outcomes_free_typed_subscript_target >> strip_tac >>
       `!ty st. Q st ==> Q (SND (lower_value f ce ty e st))`
         by (rpt strip_tac >> irule outcomes_free_lower_value >>
@@ -103,10 +105,10 @@ Proof
       rpt (pairarg_tac >> simp[]) >>
       `Q cs'` by (first_x_assum (qspec_then `b` mp_tac) >>
         simp[vyperASTTheory.expr_size_def] >> metis_tac[pairTheory.SND]) >>
-      Cases_on `SND (SND result)`
+      namedCases_on `SND (SND result)` ["", "elem"]
       >- (simp[comp_bind_def] >> rpt (pairarg_tac >> simp[]) >>
           simp[comp_return_def] >> metis_tac[pairTheory.SND]) >>
-      Cases_on `x` >> simp[comp_bind_def] >>
+      Cases_on `elem` >> simp[comp_bind_def] >>
       rpt (pairarg_tac >> simp[]) >> simp[comp_return_def]
       >- (Cases_on `is_bytestring_type t` >> gvs[comp_return_def] >>
           metis_tac[pairTheory.SND]) >>
@@ -226,9 +228,9 @@ Resume outcomes_free_typed_expr_body[struct]:
 QED
 Resume outcomes_free_typed_expr_body[topname]:
   simp[compile_expr_body_def] >>
-  Cases_on `FLOOKUP ce.ce_module_vars n` >> simp[]
+  namedCases_on `FLOOKUP ce.ce_module_vars n` ["", "var_info"] >> simp[]
   >- (pairarg_tac >> simp[] >> metis_tac[pairTheory.SND, MEM]) >>
-  Cases_on `x` >> simp[] >> pairarg_tac >> simp[] >>
+  Cases_on `var_info` >> simp[] >> pairarg_tac >> simp[] >>
   metis_tac[pairTheory.SND, MEM]
 QED
 Resume outcomes_free_typed_expr_body[pop]:

@@ -2,7 +2,7 @@ Theory loweringBudgetNonconsumingOracleTransport
 Ancestors
   venomExecSemantics venomState oracleStateProps opcodeClass ptrSafeRun list
 
-Theorem pack_dret_dynamic_outcomes_update[local]:
+Theorem pack_dret_dynamic_outcomes_update:
   !pairs cursor s ptrs fc t os.
     pack_dret_dynamic cursor pairs s = (ptrs,fc,t) ==>
     pack_dret_dynamic cursor pairs (s with vs_outcomes := os) =
