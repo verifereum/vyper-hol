@@ -10,7 +10,7 @@ python3 tools/emit_run_test.py --smoke
 runner="$root/tests/.emit/run-test"
 fixture="$root/tests/fixtures/run_test_json/basic.json"
 
-printf '\nRun the exported JSON fixture (three passes, two intentional failures):\n'
+printf '\nRun the exported JSON fixture (five passes, four intentional failures):\n'
 status=0
 "$runner" "$fixture" || status=$?
 if [ "$status" -ne 1 ]; then
