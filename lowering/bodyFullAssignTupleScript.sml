@@ -4836,3 +4836,41 @@ Proof
   gvs[jump_to_def, update_var_def, eval_operand_def, lookup_var_def,
       stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]
 QED
+
+(* ISTORE has no register outputs and transfers the live word's taint. *)
+Theorem tuple_runtime_istore_cursor[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ISTORE [arg;v] []) /\
+  eval_operand arg s = SOME a /\ eval_operand v s = SOME w /\
+  op_prov G arg = NONE /\ op_taint tn arg = {} /\
+  w2n a + 32 <= lo /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf. t = (istore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    (!p. lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = (tn.t_mem DIFF {j | w2n a <= j /\ j < w2n a + 32}) UNION
+      {w2n a + k | k IN op_taint tn v} /\
+    tf.t_imm = key_update tn.t_imm (w2n a) (op_taint tn v) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id ISTORE [arg;v] []` >>
+  qabbrev_tac `r = istore (w2n a) w s` >>
+  qexistsl_tac [`r with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G i r`,`step_taint i s r tn`] >>
+  simp[Abbr `r`] >>
+  conj_tac >-
+    (gen_tac >>
+     `ptr_inst_ok D lo 0 ctx fn G tn i s` by
+       (simp[Abbr `i`] >> irule ptr_inst_ok_istore >> simp[] >> metis_tac[]) >>
+     irule decoderNavigationPtrTheory.straight_line_step_origin >>
+     goal_assum (drule_at Any) >>
+     `w2n a + 32 <= s.vs_alloca_next` by decide_tac >>
+     simp[Abbr `i`, step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
+          inst_dload_in_section_def, below_frontier_ISTORE] >> metis_tac[]) >>
+  simp[Abbr `i`, istore_transferred_taint, lookup_var_def,
+    decoderGhostFramePtrTheory.step_prov_other_output,
+    decoderGhostFramePtrTheory.step_taint_other_output, mk_inst_def, istore_def, mstore_def]
+QED
