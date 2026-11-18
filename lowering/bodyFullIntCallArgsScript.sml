@@ -5162,6 +5162,8 @@ Proof
     (qpat_x_assum `cap_end.cs_current_insts = _` (fn th => simp[Once th])) >>
   `lookup_block entered.vs_current_bb callee.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts entry cap_end) (DROP entered.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp entered` by
+    (qpat_assum `~ctx_has_dalloca ctx` (fn th => simp[NoAsms,th])) >>
   drule_all intCallEntryFullTheory.compile_internal_entry_prefix_joint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -5238,6 +5240,8 @@ Proof
      qpat_assum `s.vs_inst_idx = _` SUBST1_TAC >> simp[NoAsms]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `~ctx_has_dalloca ctx` (fn th => simp[NoAsms,th])) >>
   drule_all intCallEntryFullTheory.compile_internal_fixed_region_joint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   drule_all contextPropsTheory.compile_fixed_region_zero_correct >> strip_tac >>
