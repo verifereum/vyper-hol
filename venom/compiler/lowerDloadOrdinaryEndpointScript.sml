@@ -96,9 +96,10 @@ QED
 
 (* A DALLOCA moves both free memory pointers past a fresh dynamic region:
    its output's provenance is that region in G and nothing in H. *)
-Theorem ld_sync_dalloca_effect:
+Theorem ld_sync_dalloca_effect_at:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  taint_ok fn tn inst s /\ w2n vs0.vs_initial_fmp <= w2n s.vs_fmp /\
   inst.inst_opcode = DALLOCA /\ step_inst fuel C' inst t = OK ts ==>
   ?ss H'. step_inst fuel C inst s = OK ss /\
     ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
@@ -115,26 +116,15 @@ Theorem ld_sync_dalloca_effect:
     ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `MEM fn C.ctx_functions` by
-    (qhdtm_x_assum `ld_sync` mp_tac >>
-     simp[lowerDloadSafetyRelationTheory.ld_sync_def, EVERY_MEM] >>
-     strip_tac >> metis_tac[MEM]) >>
   `fn_shape_ok fn` by
     (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
-  `MEM inst (fn_insts fn)` by
-    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  drule ld_sync_source >> strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
   `ctx_has_dalloca C` by
-    (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
-  `w2n vs0.vs_initial_fmp <= w2n s.vs_fmp` by
-    (drule ld_sync_source >> strip_tac >>
-     drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
-     strip_tac >>
-     qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> rpt strip_tac >>
-     first_x_assum drule >> gvs[allocas_below_fmp_def]) >>
+    (drule ld_frame_reachable_certificate >> simp[] >> strip_tac >>
+     simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
   `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
-  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
   `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
     metis_tac[ld_global_selected, MEM] >>
   `ld_dyn_agree (dyn_floor C vs0) tn.t_mem s.vs_memory t.vs_memory` by
@@ -196,8 +186,40 @@ Proof
     (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
      qexistsl_tac [`f.lf_H`,`[out]`,`NONE`] >> simp[]) >>
   qexistsl_tac [`ss`, `set_prov f.lf_H [out] NONE`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
   simp[Abbr`ss`, update_var_def]
+QED
+
+Theorem ld_sync_dalloca_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  inst.inst_opcode = DALLOCA /\ step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
+Proof
+  strip_tac >> drule ld_sync_source >> strip_tac >>
+  `ctx_has_dalloca C` by
+    (drule ld_frame_reachable_certificate >> simp[] >> strip_tac >>
+     simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[ld_active_inst_member]) >>
+  `w2n vs0.vs_initial_fmp <= w2n s.vs_fmp` by
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >>
+     strip_tac >>
+     qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
+     simp[ptr_discipline_def] >> rpt strip_tac >>
+     first_x_assum drule >> gvs[allocas_below_fmp_def]) >>
+  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
+  drule_all ld_sync_dalloca_effect_at >> simp[]
 QED
 
 val ld_effect_tac =
