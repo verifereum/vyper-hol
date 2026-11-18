@@ -6,6 +6,10 @@ Ancestors
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
   list rich_list pred_set words arithmetic
 
+(* verifereum's calldata-bound frame_rel is in scope; the statements below
+   use frame_rel as a variable. *)
+val _ = hide "frame_rel";
+
 (* Proof goals only. These ML values register no HOL definitions or theorems.
    The packet, CFG cursor and frame-plan conjuncts will be joined here once
    their main-based owner theories are available. *)

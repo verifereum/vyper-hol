@@ -237,6 +237,28 @@ Proof
   simp[dalloca_no_wrap_def]
 QED
 
+(* A memory-safe run keeps every reachable DLOAD inside its data section. *)
+Theorem lowered_unit_dload_in_section:
+  !ctx name fn lbl vs.
+    lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel ctx fn
+              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                          vs_inst_idx := 0 |>)) ==>
+    !f inst s. raw_reachable vs ctx f inst s ==>
+      inst_dload_in_section inst s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lowered_unit_entry_facts >> strip_tac >> gvs[] >>
+  `mem_inv mem_safe_point ctx vs` by
+    (rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `mem_safe_point` >>
+     simp[mem_safe_point_closed] >>
+     irule mem_safe_point_entry >> simp[]) >>
+  fs[mem_inv_raw_reachable] >> metis_tac[mem_safe_point_dload]
+QED
+
 (* Every reachable DLOAD/DLOADBYTES offset, added to the length of the code
    before the data section, stays below 2^256: the memory-safe run checks
    that each offset is at most the data section's length
@@ -252,34 +274,25 @@ Theorem lowered_unit_dload_offset_ok:
                           vs_inst_idx := 0 |>))
     ==> mem_inv dload_offset_ok ctx vs
 Proof
-  rpt strip_tac >>
-  drule_all lowered_unit_entry_facts >> strip_tac >> gvs[] >>
-  rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
-  qexists_tac `\c f i s. mem_safe_point c f i s /\
-                         s.vs_code = vs.vs_code /\
-                         s.vs_data_section = vs.vs_data_section` >>
-  rpt conj_tac
-  >- (qspecl_then [`mem_safe_point`,
-        `\c f i s. s.vs_code = vs.vs_code /\
-                   s.vs_data_section = vs.vs_data_section`,
-        `ctx`] mp_tac reachability_closed_conj >>
-      simp[mem_safe_point_closed, code_data_closed])
-  >- (qexistsl [`name`, `fn`, `lbl`] >> simp[] >>
-      qspecl_then [`mem_safe_point`,
-        `\c f i s. s.vs_code = vs.vs_code /\
-                   s.vs_data_section = vs.vs_data_section`,
-        `ctx`, `fn`,
-        `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                    vs_inst_idx := 0 |>`] mp_tac fn_entry_inv_conj >>
-      impl_tac >- (
-        conj_tac >- (irule mem_safe_point_entry >> simp[]) >>
-        qspecl_then [`ctx`, `fn`,
-          `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                      vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
-        simp[]) >>
-      simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `!f inst s. raw_reachable vs ctx f inst s ==>
+     inst_dload_in_section inst s` by
+    (rpt strip_tac >> irule lowered_unit_dload_in_section >> metis_tac[]) >>
+  `mem_inv (\c f i s. s.vs_code = vs.vs_code /\
+                       s.vs_data_section = vs.vs_data_section) ctx vs` by
+    (rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `\c f i s. s.vs_code = vs.vs_code /\
+                            s.vs_data_section = vs.vs_data_section` >>
+     simp[code_data_closed] >>
+     qspecl_then [`ctx`, `fn`,
+       `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
+     simp[]) >>
+  fs[mem_inv_raw_reachable] >>
+  simp[] >> rpt strip_tac >>
+  `inst_dload_in_section inst s /\ s.vs_code = vs.vs_code /\
+   s.vs_data_section = vs.vs_data_section` by metis_tac[] >>
   rw[dload_offset_ok_def] >>
-  `inst_dload_in_section inst s` by metis_tac[mem_safe_point_dload] >>
   `w2n off <= LENGTH s.vs_data_section` by
     (fs[inst_dload_in_section_def] >> metis_tac[]) >>
   gvs[code_layout_valid_def, wordsTheory.dimword_def]

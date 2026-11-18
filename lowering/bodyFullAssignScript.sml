@@ -13,8 +13,7 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
   bodyFullAssignToplevelSetup bodyFullAssignToplevelTail
-  bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
-  bodyFullAssignToplevelCode bodyFullAssignToplevelSource exprSimSliceCompose
+  bodyFullStoreSlotsPath bodyFullStoreSlotsStatic bodyFullAssignToplevelCode bodyFullAssignToplevelSource exprSimSliceCompose
   gasOutcomeFullCompose exprSimTopLevelProps vyperStorageFootprint
   vyperStorageTrace exprLoweringProps loweringStateRelDefs
   bodyFullAssignLocalSetup bodyFullAssignLocalSource bodyFullAssignLocalTail
@@ -65,7 +64,9 @@ Ancestors
   assignPlaceLayout bodyPtrMakeArrayCopyStateFrame exprSimPtrLiteralBuffer
   representationCleanPtr bodyFullTargetDefs targetPlaceSimCasesBase
   exprSimAggregateEncoding bodyDynArraySource vyperTypeArgFits
-  bodyFullUnwrapWord immutableBytestringRuntime fragGasCopyLoop fragGasSeqAbort immutableAssignEmpty abiEncoderProps immutableDeployAssignFacts bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte
+  immutableBytestringRuntime fragGasCopyLoop fragGasSeqAbort immutableAssignEmpty abiEncoderProps immutableDeployAssignFacts
+  bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout
+  stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte bodyFullAllocGeneric bodyCopyMemoryBase exprSimBufferStore bodyPtrIfExpCopyHeader bodyPtrIfExpBytesPost bytesCopyCode eventTopicValueProps reasonCopySourcePtr vfmConstants valueTypingMemoryProps
 Libs
   monadsyntax
 
@@ -4953,6 +4954,115 @@ Resume body_assign_snapshot_copy_endpoint_frame[frame]:
 QED
 
 Finalise body_assign_snapshot_copy_endpoint_frame
+
+Theorem body_assign_snapshot_bytes_copy_endpoint:
+  !ce xs xd pty sk sb cx tv v s sw dw tn G lo ctx func explicit PG.
+  compile_store_memory ce (Var xs) (Var xd) pty pty sk = ((),sb) /\
+  is_bytestring_type pty /\ evaluate_type (get_tenv cx) pty = SOME tv /\
+  type_memory_bytes ce pty = type_memory_size tv /\ value_has_type tv v /\ val_wf tv v /\
+  not_fresh_at sk xs /\ not_fresh_at sk xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v (w2n sw) mem) /\
+  ptr_covers G tn xs s (type_memory_size tv) /\ ptr_covers G tn xd s (type_memory_size tv) /\
+  w2n sw + type_memory_size tv < dimword(:256) /\ w2n dw + type_memory_size tv < dimword(:256) /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size tv <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sk sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sk.cs_current_bb /\ s.vs_inst_idx = LENGTH sk.cs_current_insts ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==> val_in_memory tv v (w2n dw) mem) /\
+    typed_copy_state_frame sk (w2n dw) (type_memory_size tv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size tv) ==> (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at sk x ==> lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `compile_store_bytestring (Var xs) (Var xd) sk = ((),sb)` by
+    gvs[compile_store_memory_def,bytestring_type_not_word] >>
+  Q.SUBGOAL_THEN
+    `?len. 32 + 32 * word_size len <= type_memory_size tv /\
+           ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+            (?str. v = StringV str /\ len = LENGTH str))`
+    (qx_choose_then `len` (CONJUNCTS_THEN assume_tac))
+  >- suspend "extent" >>
+  drule_all robust_bytestring_header >> strip_tac >>
+  qabbrev_tac `n = 32 + 32 * word_size len` >>
+  `len <= 32 * word_size len` by simp[word_size_capacity] >>
+  `n <= type_memory_size tv /\ len+31 < dimword(:256) /\ n < dimword(:256)` by
+    (simp[Abbr `n`] >> decide_tac) >>
+  `ptr_covers G tn xs s n /\ ptr_covers G tn xd s n` by
+    (conj_tac >> irule ptr_covers_mono >> metis_tac[]) >>
+  `eval_operand (Var xs) s = SOME sw /\ eval_operand (Var xd) s = SOME dw` by
+    simp[eval_operand_def] >>
+  `!x. Var xs = Var x \/ Var xd = Var x ==> not_fresh_at sk x` by
+    (rpt strip_tac >> gvs[]) >>
+  `w2n sw + n <= s.vs_alloca_next /\ w2n dw + n <= s.vs_alloca_next` by decide_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sk sb) s` by
+    (irule compile_store_bytestring_body_mem_ok >>
+     qexistsl_tac [`dw`,`Var xd`,`len`,`Var xs`,`sw`] >>
+     gnvs[Abbr `n`] >> metis_tac[]) >>
+  `n = 32 + 32 * ((len+31) DIV 32)` by simp[Abbr `n`,word_size_def] >>
+  drule bytesCopyCodeTheory.compile_store_bytestring_code >> strip_tac >>
+  `sb.cs_current_bb = sk.cs_current_bb` by gvs[same_blocks_def] >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sk sb) (DROP s.vs_inst_idx bb.bb_instructions)` by suspend "prefix" >>
+  drule_all compile_store_bytestring_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `(sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by suspend "raw" >>
+  drule_all bytestring_copy_effects >> strip_tac >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==>
+         val_in_memory tv v (w2n dw) mem` by suspend "robust" >>
+  `sf.vs_current_bb = s.vs_current_bb /\ sf.vs_halted = s.vs_halted` by suspend "fields" >>
+  qexistsl_tac [`sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sk sb)`,`Gf`,`tnf`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
+  suspend "frame"
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[extent]:
+  drule_all valueCopyBytesTheory.bytestring_type_value >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def,type_memory_size_def] >>
+  irule exprSimPropsTheory.word_size_monotone >> simp[]
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[prefix]:
+  qpat_x_assum `fn_has_code sk sb func` mp_tac >> simp[fn_has_code_def] >>
+  strip_tac >> goal_assum drule >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,DROP_LENGTH_APPEND] >> simp[]
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[raw]:
+  `32 + 32 * word_size len < dimword(:256)` by gvs[Abbr `n`] >>
+  drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[robust]:
+  rpt strip_tac >> irule bytestring_copy_robust_destination >> metis_tac[]
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[fields]:
+  qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+  simp[venom_state_component_equality]
+QED
+
+Resume body_assign_snapshot_bytes_copy_endpoint[frame]:
+  irule typed_copy_state_frame_subinterval >>
+  qexistsl_tac [`w2n dw`,`n`] >> simp[] >>
+  simp[typed_copy_state_frame_def,blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
+  conj_tac >-
+    (qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  simp[] >>
+  irule (SRULE [] (cj 3 (REWRITE_RULE [typed_copy_state_frame_def]
+    typed_copy_mcopy_state_frame)))
+QED
+
+Finalise body_assign_snapshot_bytes_copy_endpoint
 
 Theorem body_assign_snapshot_positive_source_ready:
   0 < type_memory_size tv /\
