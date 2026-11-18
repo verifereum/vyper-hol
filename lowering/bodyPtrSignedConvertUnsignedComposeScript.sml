@@ -7,23 +7,6 @@ Ancestors
   emitHelperProps venomState venomInst venomExecSemantics ptrDiscipline
   bodyPtrDefs finite_map words arithmetic list compileEnv loweringStateRelDefs
 
-Theorem bytestring_source_run:
-  src <> len /\ lookup_var src s = SOME a ==>
-  run_inst_seq [mk_inst i MLOAD [Var src] [len];
-                mk_inst j ADD [Var src;Lit 32w] [dp]] s =
-    OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))
-Proof
-  strip_tac >>
-  `step_inst_base (mk_inst i MLOAD [Var src] [len]) s =
-     OK (update_var len (mload (w2n a) s) s)` by
-    (irule step_MLOAD >> simp[eval_operand_def]) >>
-  `step_inst_base (mk_inst j ADD [Var src;Lit 32w] [dp])
-     (update_var len (mload (w2n a) s) s) =
-     OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))` by
-    (irule step_ADD >> fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
-  simp[run_inst_seq_def]
-QED
-
 Theorem unsigned_loader_fixed_frame_raw:
   ALL_DISTINCT [src;len;dp;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 64 <= capacity /\

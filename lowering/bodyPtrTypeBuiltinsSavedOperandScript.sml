@@ -1,7 +1,7 @@
 (* Saved non-word values retain their robust footprint through later operands. *)
 Theory bodyPtrTypeBuiltinsSavedOperand
 Ancestors
-  bodyPtrTypeBuiltinsRepresentation exprSimAttributeFields exprSimOperands
+  robustCopyTransportPtr exprSimAttributeFields exprSimOperands
   loweringPosts bodyPtrDefs valueEncodingProofs valueEncoding valueEncodingDefs arithmetic
   exprBopSimProps
 

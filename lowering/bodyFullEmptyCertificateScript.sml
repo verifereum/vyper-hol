@@ -322,7 +322,10 @@ Resume empty_buffer_origin_full[history]:
   irule emitted_alloca_history >>
   conj_tac >- simp[] >>
   qexistsl_tac [`emitted_insts sa sb`, `s`, `sa`] >> simp[] >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >> simp[] >>
+  `alloca_inv s` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s`
+       (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+     simp[]) >> simp[] >>
   reverse conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
   qpat_x_assum `isPREFIX sa.cs_current_insts sb.cs_current_insts` mp_tac >>
   rewrite_tac[IS_PREFIX_APPEND] >> strip_tac >>

@@ -253,7 +253,7 @@ Proof
      Cases_on `eval_operand e s` >> gvs[] >>
      Cases_on `eval_operand f s` >> gvs[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_delegatecall_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_delegatecall_def])
   >~ [`inst.inst_opcode = CREATE`] >-
     (`LENGTH inst.inst_operands = 3` by gvs[inst_wf_def] >>
      gvs[LENGTH_EQ_NUM_compute] >>
@@ -500,7 +500,7 @@ Proof
      Cases_on `eval_operand g s` >> gvs[] >>
      IF_CASES_TAC >> simp[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_ext_call_def])
   >~ [`inst.inst_opcode = STATICCALL`] >-
     (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
      gvs[terminates_def, step_inst_base_opcode_eqs, exec_ext_call_def, AllCaseEqs()] >>
@@ -518,7 +518,7 @@ Proof
      Cases_on `eval_operand e s` >> gvs[] >>
      Cases_on `eval_operand f s` >> gvs[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_ext_call_def])
   >~ [`inst.inst_opcode = LOG`] >-
     (fs[step_inst_non_invoke, inst_wf_def] >>
      rename1 `inst.inst_operands = Lit tc :: rest` >>

@@ -72,24 +72,25 @@ Proof
 QED
 
 Definition boundary_source_some_failure_def:
-  boundary_source_some_failure name data err os =
+  boundary_source_some_failure name err os requests =
     let (res,am,rqs) = call_external (SOME os) []
       boundary_source_machine (boundary_source_tx name) in
       res = INR (Error err) /\
       (lookup_account 0w am.accounts).balance = 2 /\
       (lookup_account 8w am.accounts).balance = 5 /\
       (lookup_account 11w am.accounts).balance = 0 /\ am.logs = [] /\
-      boundary_source_requests rqs = [(0x99w,1,data,F,3,4,0w)]
+      boundary_source_requests rqs = requests
 End
 val () = cv_auto_trans boundary_source_some_failure_def;
 
 Theorem root_SOME_failure_and_exhaustion_keep_requests_roll_back_machine:
-  boundary_source_some_failure "send" [] (RuntimeError "send failed")
-    [send_outcome F [] 17;cpscv_tail] /\
-  boundary_source_some_failure "send" [] (RuntimeError "send failed") [] /\
-  boundary_source_some_failure "ext" (function_selector "ping" []) (RevertData [13w;37w])
-    [send_outcome F [13w;37w] 17;cpscv_tail] /\
-  boundary_source_some_failure "ext" (function_selector "ping" []) (RevertData []) []
+  boundary_source_some_failure "send" (RuntimeError "send failed")
+    [send_outcome F [] 17;cpscv_tail] [(0x99w,1,[],F,3,4,0w)] /\
+  boundary_source_some_failure "send" (RuntimeError "take_call_outcome") [] [] /\
+  boundary_source_some_failure "ext" (RevertData [13w;37w])
+    [send_outcome F [13w;37w] 17;cpscv_tail]
+    [(0x99w,1,function_selector "ping" [],F,3,4,0w)] /\
+  boundary_source_some_failure "ext" (RuntimeError "take_call_outcome") [] []
 Proof
   CONV_TAC cv_eval
 QED

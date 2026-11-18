@@ -9,20 +9,22 @@ Ancestors
    offsets are source-local; request shell agreement is the relative-content
    boundary.  In particular neither equal pointers nor equal accounts is used. *)
 Theorem ptr_dalloca_request_execution:
-  inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\ inst.inst_outputs = [out] /\
   ((inst.inst_opcode = CALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;value;ao;az;ro;rz] /\
     (s.vs_call_ctx.cc_static ==> value = 0w) /\
-    rq = venom_call_request s addr value ao az s.vs_call_ctx.cc_static) \/
+    rq = (venom_call_request s addr value ao az s.vs_call_ctx.cc_static with
+      cr_gas := SOME (w2n gas))) \/
    (inst.inst_opcode = STATICCALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;ao;az;ro;rz] /\
-    rq = venom_call_request s addr 0w ao az T) \/
+    rq = (venom_call_request s addr 0w ao az T with cr_gas := SOME (w2n gas))) \/
    (inst.inst_opcode = DELEGATECALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;ao;az;ro;rz] /\
-    rq = (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)) \/
+    rq = (venom_call_request s addr 0w ao az F with
+      <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>)) \/
    (inst.inst_opcode = CREATE /\ ~s.vs_call_ctx.cc_static /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [value;ao;az] /\ w2n az <= 2 * max_code_size /\
@@ -56,20 +58,22 @@ Theorem ptr_dalloca_request_step:
   inst.inst_outputs = [out] /\ inst.inst_opcode = it.inst_opcode /\
   step_inst fuelt CT it t = OK th /\ th.vs_requests <> t.vs_requests /\
   th.vs_requests = record_request rqt t.vs_requests /\
-  ptr_request_shell rq rqt /\
+  ptr_request_shell rq rqt /\ s.vs_outcomes <> [] /\
   ((inst.inst_opcode = CALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;value;ao;az;ro;rz] /\
     (s.vs_call_ctx.cc_static ==> value = 0w) /\
-    rq = venom_call_request s addr value ao az s.vs_call_ctx.cc_static) \/
+    rq = (venom_call_request s addr value ao az s.vs_call_ctx.cc_static with
+      cr_gas := SOME (w2n gas))) \/
    (inst.inst_opcode = STATICCALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;ao;az;ro;rz] /\
-    rq = venom_call_request s addr 0w ao az T) \/
+    rq = (venom_call_request s addr 0w ao az T with cr_gas := SOME (w2n gas))) \/
    (inst.inst_opcode = DELEGATECALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;ao;az;ro;rz] /\
-    rq = (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)) \/
+    rq = (venom_call_request s addr 0w ao az F with
+      <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>)) \/
    (inst.inst_opcode = CREATE /\ ~s.vs_call_ctx.cc_static /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [value;ao;az] /\ w2n az <= 2 * max_code_size /\
