@@ -894,7 +894,8 @@ Theorem entry_frame_symbolic_plan_next:
       ra pc_ret rest mem0 ret srest labs0 ss
 Proof
   rw[entry_frame_symbolic_plan_def] >>
-  drule_all entry_frame_plan_next >>
+  drule_all (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`]
+    entry_frame_plan_next_reloc |> REWRITE_RULE [entry_frame_plan_reloc_specialize]) >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   qexists `post` >> simp[]
 QED
@@ -2452,95 +2453,43 @@ Theorem normal_frame_symbolic_joint_progress:
           LENGTH bb.bb_instructions - s.vs_inst_idx))
 Proof
   strip_tac >>
-  qpat_x_assum `normal_frame_symbolic_plan _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [normal_frame_symbolic_plan_def])
-  >- suspend "active" >>
-  Cases_on `s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`
-  >- suspend "parameter" >>
-  `s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
-    (fs[entry_frame_symbolic_plan_def, entry_frame_plan_def] >> gvs[] >> decide_tac) >>
-  drule_all entry_frame_symbolic_plan_ready >>
-  disch_then (qx_choosel_then [`m`, `ready`, `rss`] strip_assume_tac) >>
-  suspend "ready"
+  `asm_static_wf prog /\ focus_s7_symbolic_context_own F unit prog /\
+   focus_s7_symbolic_guard_own (SND (compute_label_offsets prog)) cpl fn inst s` by
+    fs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def,
+       focus_s7_symbolic_guard_def, focus_s7_symbolic_guard_own_def] >>
+  `!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env` by
+    metis_tac[canonical_data_headers] >>
+  `s.vs_code = vs0.vs_code` by
+    (fs[joint_config_reachable_def] >>
+     drule joint_origin_history_projection >> strip_tac >>
+     drule frame_history_readonly >> simp[]) >>
+  `normal_frame_symbolic_plan_own F (SND (compute_label_offsets prog))
+      env vs0.vs_code rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG G tn fn inst s oms om hs h) ast ss` by
+    (qhdtm_x_assum `normal_frame_symbolic_plan`
+       (qx_choosel_then [`saved`, `ra`, `rest`, `mem0`, `sentry`, `ret`, `srest`, `labs0`]
+          (CONJUNCTS_THEN2 assume_tac assume_tac) o
+        REWRITE_RULE [normal_frame_symbolic_plan_def]) >>
+     rewrite_tac[normal_frame_symbolic_plan_own_def] >>
+     qexistsl [`saved`, `ra`, `rest`, `mem0`, `sentry`, `ret`, `srest`, `labs0`] >>
+     conj_tac >- metis_tac[frame_stack_symbolic_plan_to_own] >>
+     qpat_x_assum
+       `active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0
+          ret srest labs0 ss \/ _` strip_assume_tac
+     >- (disj1_tac >> metis_tac[active_frame_symbolic_plan_to_own]) >>
+     disj2_tac >> qexistsl [`entry`, `pc_ret`] >>
+     `ast.as_code = vs0.vs_code` by
+       gvs[entry_frame_symbolic_plan_def, entry_frame_plan_def,
+           fn_entry_state_rel_def, shared_state_rel_def, entry_bind_pairs_normal] >>
+     fs[entry_frame_symbolic_plan_def, entry_frame_symbolic_plan_own_def,
+        entry_frame_plan_reloc_specialize, asm_sym_rel_own_canonical]) >>
+  `code_labels_agree prog (SND (compute_label_offsets prog))` by
+    simp[code_labels_agree_refl] >>
+  drule_all normal_frame_symbolic_joint_progress_own >>
+  disch_then (qx_choosel_then [`n`, `ast1`, `ss1`] assume_tac) >>
+  qexistsl [`n`, `ast1`, `ss1`] >>
+  fs[sym_steps_mode_def] >> metis_tac[normal_frame_symbolic_plan_from_own]
 QED
-
-Resume normal_frame_symbolic_joint_progress[active]:
-  rpt strip_tac >>
-  qpat_assum `joint_transition _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[]
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_next_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[])
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_block_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[])
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_call_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[]) >>
-  drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_return_progress >>
-  simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[]
-QED
-
-Resume normal_frame_symbolic_joint_progress[parameter]:
-  rpt strip_tac >>
-  `entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0` by
-    fs[entry_frame_symbolic_plan_def] >>
-  qpat_assum `joint_transition _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[] >>
-  drule_all entry_frame_active_param >> strip_tac >> gvs[]
-  >- (drule_all entry_frame_symbolic_plan_next >>
-      disch_then (qspec_then `fuel` strip_assume_tac) >>
-      gvs[] >> suspend "parameter_finish")
-  >- (qmatch_asmsub_abbrev_tac `is_param_opcode opc` >>
-      Cases_on `opc` >> fs[is_param_opcode_def, is_terminator_def])
-  >- gvs[is_param_opcode_def] >>
-  drule_all entry_frame_symbolic_plan_next >>
-  disch_then (qspec_then `fuel` strip_assume_tac) >> gvs[]
-QED
-
-Resume normal_frame_symbolic_joint_progress[parameter_finish]:
-  rpt strip_tac >>
-  `post.vs_current_bb = s.vs_current_bb` by
-    metis_tac[step_preserves_control_flow] >>
-  qexistsl_tac [`0`, `ast`, `ss`] >> simp[asm_steps_def, asmSpliceTheory.sym_steps_def] >>
-  conj_tac
-  >- (simp[normal_frame_symbolic_plan_def] >>
-      qexistsl_tac [`saved`, `ra`, `rest`, `mem0`, `sentry`, `ret`, `srest`, `labs0`] >>
-      simp[] >> metis_tac[]) >>
-  fs[active_inst_def] >> qexists_tac `bb` >> simp[] >>
-  irule venomExecProofsTheory.MEM_lookup_block >> simp[] >>
-  fs[entry_frame_plan_def] >>
-  `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
-  fs[codegen_ready_fn_def, venomWfTheory.wf_function_def, fn_labels_def]
-QED
-
-Resume normal_frame_symbolic_joint_progress[ready]:
-  rpt strip_tac >>
-  qpat_assum `joint_transition _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[]
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_next_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
-      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose")
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_block_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
-      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose")
-  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_call_progress >>
-      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
-      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose") >>
-  drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_return_progress >>
-  simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
-  disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose"
-QED
-
-Resume normal_frame_symbolic_joint_progress[ready_compose]:
-  markerLib.RESUME_TAC >>
-  (rpt strip_tac >>
-   qexistsl_tac [`m + n`, `ast1`, `ss1`] >>
-   conj_tac
-   >- (irule blockSimHelpersTheory.asm_steps_compose_ok >> qexists_tac `ready` >> simp[]) >>
-   conj_tac
-   >- (irule sym_steps_compose >> qexists_tac `rss` >> simp[]) >>
-   simp[])
-QED
-
-Finalise normal_frame_symbolic_joint_progress
 
 (* General symbolic simulation over agreeing code labels and fixed code bytes. *)
 Theorem normal_frame_symbolic_trace_prefix_own:
@@ -2597,18 +2546,21 @@ Theorem normal_frame_symbolic_trace_prefix:
       (EL j (q0::qs)) ast ss
 Proof
   gen_tac >> strip_tac >>
-  ho_match_mp_tac (Q.INST [`ctx` |-> `unit.cu_context`]
-    joint_trace_paired_prefix) >> simp[] >>
-  conj_tac
-  >- (irule normal_frame_symbolic_initial >>
-      fs[joint_trace_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `i < LENGTH evs` by decide_tac >>
-  drule_all joint_trace_edge_at >> strip_tac >>
-  Cases_on `EL i (q0::qs)` >>
-  Cases_on `EL (SUC i) (q0::qs)` >>
-  gvs[] >>
-  (metis_tac[normal_frame_symbolic_joint_progress])
+  `asm_static_wf prog /\ focus_s7_symbolic_context_own F unit prog` by
+    fs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def] >>
+  `codegen_asm_entry_rel_reloc (SND (compute_label_offsets prog))
+      cpl prog vs0 (entry_asm_state vs0 es0)` by
+    fs[codegen_asm_entry_rel_def, codegen_asm_entry_rel_reloc_def] >>
+  qspecl_then [`F`, `SND (compute_label_offsets prog)`, `vs0.vs_code`, `j`]
+    mp_tac normal_frame_symbolic_trace_prefix_own >>
+  impl_tac
+  >- (simp[code_labels_agree_refl, canonical_data_headers,
+           asm_data_env_lo_ok_canonical, asm_data_env_ok_asm_data_env] >>
+      rewrite_tac[focus_s7_symbolic_guard_own_def, GSYM focus_s7_symbolic_guard_def] >>
+      rpt gen_tac >> strip_tac >> metis_tac[]) >>
+  disch_then (qx_choosel_then [`n`, `ast`, `ss`] strip_assume_tac) >>
+  qexistsl [`n`, `ast`, `ss`] >>
+  fs[sym_steps_mode_def] >> metis_tac[normal_frame_symbolic_plan_from_own]
 QED
 
 Theorem frame_stack_symbolic_plan_projection:
