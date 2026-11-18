@@ -1594,6 +1594,69 @@ Proof
   gvs[sym_steps_mode_def] >> metis_tac[normal_frame_symbolic_plan_from_own]
 QED
 
+Theorem active_frame_symbolic_ret_boundary_own[local]:
+  frame_stack_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 sentry ret srest labs0 /\
+  frame_history vs0 unit.cu_context stk PG G tn fn inst s hs history /\
+  active_frame_symbolic_plan_own lo env own rpolicy unit cpl prog fn s ast ra rest mem0 ret srest labs0 ss /\
+  active_inst fn inst s /\ inst.inst_opcode = RET /\
+  focus_s7_symbolic_context_own allow_own unit prog /\
+  step_inst fuel unit.cu_context inst s = IntRet rv send ==>
+  ?n asr ssr.
+    asm_steps lo (build_offset_to_pc prog) prog n ast = AsmOK asr /\
+    sym_steps_mode allow_own prog env own n ss = SymOK ssr /\
+    FLOOKUP (build_offset_to_pc prog) (w2n ra) = SOME asr.as_pc /\
+    asr.as_stack = REVERSE rv.iret_values ++ rest /\
+    fn_return_state_rel unit.cu_context cpl fn send entry asr /\
+    asm_sym_rel_own lo prog env own asr ssr /\
+    ssr.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+    (!b. context_spill_byte cpl b /\ ~closure_spill_byte unit.cu_context cpl fn.fn_name b ==> FLOOKUP ssr.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cpl b)
+Proof
+  rpt strip_tac >>
+  `mem0 = entry.as_memory /\
+   (entry.as_call_ctx, entry.as_tx_ctx, entry.as_block_ctx,
+    entry.as_code, entry.as_prev_hashes) =
+   (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+    vs0.vs_code, vs0.vs_prev_hashes)` by
+    (qhdtm_assum `frame_stack_symbolic_plan_own` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[Once frame_stack_symbolic_plan_own_cases] >> rpt strip_tac >>
+     fs[fn_entry_state_rel_def, shared_state_rel_def, fn_frame_inv_def,
+        contextCodegenRelTheory.context_venom_asm_rel_def, frame_view_def] >>
+     qpat_x_assum `setup_callee _ _ _ = SOME _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [setup_callee_def, AllCaseEqs()]) >>
+     qpat_x_assum `_ = cvs` (assume_tac o SYM) >> simp[]) >>
+  fs[active_frame_symbolic_plan_own_def, focus_s7_symbolic_context_own_def] >>
+  drule_all body_plan_active_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule body_plan_inv_facts_reloc >> strip_tac >>
+  drule_all body_plan_inv_static_reloc >> strip_tac >>
+  drule_all body_plan_inv_step_reloc >> strip_tac >>
+  drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
+  `MEM inst (fn_insts (reachable_fn fn))` by
+    (irule reachable_fn_mem_inst >> metis_tac[body_plan_inv_reloc_def]) >>
+  `ps'.ps_stack = []` by metis_tac[] >>
+  drule body_plan_inv_equiv_reloc >> disch_then drule >> disch_then drule >> strip_tac >>
+  qhdtm_assum `body_plan_inv_reloc` (strip_assume_tac o REWRITE_RULE [body_plan_inv_reloc_def]) >>
+  `fn_shape_ok fn` by fs[unit_shape_ok_def, EVERY_MEM] >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    symControlRetDischargeOwnTheory.sym_ret_frame_sim_deep_own >>
+  disch_then (drule_at (Pat `sym_frame_inv_own`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked`)) >>
+  simp[] >>
+  disch_then (qspecl_then [`allow_own`, `fuel`, `pc_ret`]
+    (drule_at (Pat `step_inst _ _ _ _ = _`))) >>
+  disch_then (qspec_then `allow_own` mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> (gvs[]))) >> strip_tac >>
+  drule_all ret_source_frame_boundary >>
+  disch_then (qspec_then `ra` strip_assume_tac) >>
+  drule frame_history_readonly >> strip_tac >>
+  qexistsl [`n`, `out`, `sout`] >>
+  simp[] >>
+  fs[fn_return_state_rel_def, shared_state_rel_def] >> metis_tac[]
+QED
+
 Theorem active_frame_symbolic_ret_boundary:
   frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 sentry ret srest labs0 /\
   frame_history vs0 unit.cu_context stk PG G tn fn inst s hs history /\
@@ -1612,47 +1675,17 @@ Theorem active_frame_symbolic_ret_boundary:
     (!b. context_spill_byte cpl b /\ ~closure_spill_byte unit.cu_context cpl fn.fn_name b ==> FLOOKUP ssr.sym_mem_labels b = FLOOKUP labs0 b) /\
     (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cpl b)
 Proof
-  rpt strip_tac >>
-  `mem0 = entry.as_memory /\
-   (entry.as_call_ctx, entry.as_tx_ctx, entry.as_block_ctx,
-    entry.as_code, entry.as_prev_hashes) =
-   (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
-    vs0.vs_code, vs0.vs_prev_hashes)` by
-    (qpat_x_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       mp_tac >> rpt (pop_assum kall_tac) >>
-     simp[Once frame_stack_symbolic_plan_cases] >> rpt strip_tac >>
-     fs[fn_entry_state_rel_def, shared_state_rel_def, fn_frame_inv_def,
-        contextCodegenRelTheory.context_venom_asm_rel_def, frame_view_def] >>
-     qpat_x_assum `setup_callee _ _ _ = SOME _`
-       (strip_assume_tac o SIMP_RULE (srw_ss()) [setup_callee_def, AllCaseEqs()]) >>
-     qpat_x_assum `_ = cvs` (assume_tac o SYM) >> simp[]) >>
-  fs[active_frame_symbolic_plan_def, focus_s7_symbolic_context_def] >>
-  drule_all body_plan_active_inst >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule body_plan_inv_facts >> strip_tac >>
-  drule_all body_plan_inv_static >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
-  drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
-  `MEM inst (fn_insts (reachable_fn fn))` by
-    (irule reachable_fn_mem_inst >> metis_tac[body_plan_inv_def]) >>
-  `ps'.ps_stack = []` by metis_tac[] >>
-  drule body_plan_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
-  qpat_assum `body_plan_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
-  `fn_shape_ok fn` by fs[unit_shape_ok_def, EVERY_MEM] >>
-  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) sym_ret_frame_sim_deep >>
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
-  simp[] >>
-  disch_then (qspecl_then [`fuel`, `pc_ret`, `rv`, `send`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  drule_all ret_source_frame_boundary >>
-  disch_then (qspec_then `ra` strip_assume_tac) >>
+  strip_tac >>
+  `asm_static_wf prog /\ focus_s7_symbolic_context_own F unit prog` by
+    gvs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def] >>
+  drule frame_stack_symbolic_plan_to_own >> simp[] >> strip_tac >>
+  drule_all active_frame_symbolic_plan_to_own >> strip_tac >>
   drule frame_history_readonly >> strip_tac >>
-  qexistsl [`n`, `as'`, `ss'`] >>
-  simp[] >>
-  fs[fn_return_state_rel_def, shared_state_rel_def] >> metis_tac[]
+  gvs[] >>
+  drule_all active_frame_symbolic_ret_boundary_own >>
+  disch_then (qx_choosel_then [`n`, `asr`, `ssr`] strip_assume_tac) >>
+  qexistsl [`n`, `asr`, `ssr`] >>
+  gvs[sym_steps_mode_def, asm_sym_rel_own_canonical]
 QED
 
 Theorem active_frame_symbolic_return_progress:
