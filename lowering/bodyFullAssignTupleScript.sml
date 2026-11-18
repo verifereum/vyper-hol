@@ -4129,6 +4129,8 @@ Theorem tuple_immutable_normalized_prefix[local]:
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory /\
     (!i. p <= i /\ i < p+k ==> (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+      a <= i /\ i < a+sz /\ i IN tf.t_mem ==> i IN tn.t_mem) /\
     alloca_frame ce st sa s ce st t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4303,6 +4305,13 @@ Resume tuple_immutable_normalized_prefix[post]:
   markerLib.RESUME_TAC >>
   (conj_tac >- (qpat_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _`
                   (qspecl_then [`p`,`k`] mp_tac) >> simp[])) >>
+  (conj_tac >-
+    (rpt strip_tac >>
+     `~(b <= i /\ i < b+n)` by
+       (qpat_assum `!aid a len. aid < sa.cs_next_id /\ _ ==> regions_disjoint b n a len`
+          (qspecl_then [`aid`,`a`,`sz`] mp_tac) >>
+        simp[regions_disjoint_def] >> decide_tac) >>
+     metis_tac[])) >>
   `!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
      aid < sa.cs_next_id ==> mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory` by
     (map_every qx_gen_tac [`aid`,`off`,`sz`] >> strip_tac >>
@@ -4380,6 +4389,8 @@ Theorem tuple_immutable_normalized_fixed_joint[local]:
     tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
     mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory /\
     (!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn.t_mem)) /\
+    (!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+      a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
     alloca_frame ce st sa s ce fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4493,6 +4504,17 @@ Resume tuple_immutable_normalized_fixed_joint[frames]:
   `!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn1.t_mem)` by
     (qx_gen_tac `i` >> strip_tac >>
      `~(i < off + type_memory_size dtv)` by decide_tac >> simp[]) >>
+  `!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+     a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     `lo <= a` by
+       (qpat_assum `allocas_from lo s` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
+        disch_then (qspecl_then [`aid`,`a`,`sz`] mp_tac) >> simp[]) >>
+     `~(i < off + type_memory_size dtv)` by decide_tac >>
+     `i IN tn1.t_mem` by
+       (qpat_assum `!x. x IN tq.t_mem <=> _` (qspec_then `i` mp_tac) >> simp[]) >>
+     qpat_assum `!aid a sz i. _ ==> i IN tn.t_mem`
+       (qspecl_then [`aid`,`a`,`sz`,`i`] mp_tac) >> simp[]) >>
   `fin.scopes = st.scopes` by
     (drule_then ACCEPT_TAC vyperPlaceFramesTheory.write_immutable_place_scopes) >>
   `!x. not_fresh_at su x ==> lookup_var x q = lookup_var x t` by simp[] >>
@@ -4501,7 +4523,9 @@ Resume tuple_immutable_normalized_fixed_joint[frames]:
        (mp_then Any mp_tac immutableAssignComposeTheory.immutable_assign_suffix_alloca_frame) >>
      disch_then (drule_at (Pat `FLOOKUP ce.ce_module_vars _ = SOME (ImmutableLoc off)`)) >>
      disch_then (drule_all_then ACCEPT_TAC)) >>
-  simp[] >> irule stmtSimDefsTheory.alloca_frame_trans >>
+  qpat_x_assum `!x. x IN tq.t_mem <=> _` kall_tac >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  irule stmtSimDefsTheory.alloca_frame_trans >>
   qexistsl_tac [`ce`,`st`,`t`,`su`] >> simp[]
 QED
 
@@ -6180,6 +6204,14 @@ QED
 
 Finalise tuple_immutable_runtime_bytes_joint[local]
 
+Theorem tuple_immutable_head_outside_old_alloca[local]:
+  allocas_from lo s /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+  off+n <= lo /\ a <= i ==> ~(i < off+n)
+Proof
+  rw[allocas_from_def] >>
+  res_tac >> decide_tac
+QED
+
 (* One immutable head, at the cursor where the whole tuple is already loaded.
    The window [p,p+k) is the original tuple snapshot, not the normalization
    buffer; it remains available at the returned cursor. *)
@@ -6241,6 +6273,8 @@ Theorem body_assign_tuple_immutable_head_joint:
     tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
     mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory /\
     (!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn.t_mem)) /\
+    (!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+      a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
     alloca_frame ce st sa s ce fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -6298,6 +6332,8 @@ Resume body_assign_tuple_immutable_head_joint[word]:
   `off + 32 <= lo` by fs[] >>
   `regions_disjoint p k off 32` by
     (simp[regions_disjoint_def] >> decide_tac) >>
+  `!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+     a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem` by simp[] >>
   qexistsl_tac [`q`,`Gq`,`tq`] >>
   asm_rewrite_tac[] >> simp[] >>
   irule immutableAssignComposeTheory.immutable_assign_suffix_alloca_frame >>
@@ -6339,6 +6375,19 @@ Resume body_assign_tuple_immutable_head_joint[runtime]:
   disch_then (qspecl_then [`lctx`,`explicit`,`d`,`PG`]
     (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tq`
       (map_every assume_tac o CONJUNCTS))))) >>
+  `!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+     a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     `~(i < off + type_memory_size dtv)` by
+       metis_tac[tuple_immutable_head_outside_old_alloca] >>
+     qpat_assum `!x. ~(off <= x /\ x < off + type_memory_size dtv) ==> (x IN tq.t_mem <=> x IN tn.t_mem)`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  `!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn.t_mem)` by
+    (rpt strip_tac >>
+     `~(i < off + type_memory_size dtv)` by decide_tac >>
+     qpat_assum `!x. ~(off <= x /\ x < off + type_memory_size dtv) ==> (x IN tq.t_mem <=> x IN tn.t_mem)`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  qpat_x_assum `!x. ~(off <= x /\ x < off + type_memory_size dtv) ==> (x IN tq.t_mem <=> x IN tn.t_mem)` kall_tac >>
   qexistsl_tac [`q`,`Gq`,`tq`] >>
   asm_rewrite_tac[] >> simp[] >>
   irule immutableAssignComposeTheory.immutable_assign_suffix_alloca_frame >>
@@ -6377,6 +6426,17 @@ Resume body_assign_tuple_immutable_head_joint[fixed_post]:
   disch_then (qspecl_then [`lctx`,`explicit`,`d`,`PG`]
     (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tq`
       (map_every assume_tac o CONJUNCTS))))) >>
+  `!aid a sz i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,sz) /\
+     a <= i /\ i < a+sz /\ i IN tq.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     `~(i < off + type_memory_size dtv)` by
+       metis_tac[tuple_immutable_head_outside_old_alloca] >>
+     qpat_assum `!x. x IN tq.t_mem <=> _` (qspec_then `i` mp_tac) >> simp[]) >>
+  `!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn.t_mem)` by
+    (rpt strip_tac >>
+     `~(i < off + type_memory_size dtv)` by decide_tac >>
+     qpat_assum `!x. x IN tq.t_mem <=> _` (qspec_then `i` mp_tac) >> simp[]) >>
+  qpat_x_assum `!x. x IN tq.t_mem <=> _` kall_tac >>
   qexistsl_tac [`q`,`Gq`,`tq`] >>
   asm_rewrite_tac[] >> simp[] >>
   irule immutableAssignComposeTheory.immutable_assign_suffix_alloca_frame >>
