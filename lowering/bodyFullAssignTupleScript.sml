@@ -4790,3 +4790,49 @@ Proof
   gvs[jump_to_def, update_var_def, lookup_var_def,
       stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]
 QED
+
+(* Entry and the back edge assign a clean counter before jumping to the header. *)
+Theorem tuple_runtime_loop_assign_jump[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id ASSIGN [op] [cv]; mk_inst (id+1) JMP [Label hdr] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  eval_operand op s = SOME c /\ op_prov G op = NONE /\ op_taint tn op = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\ store_copy_normalize s t = s /\
+    eval_operand (Var cv) t = SOME c /\ op_prov Gf (Var cv) = NONE /\
+    op_taint tf (Var cv) = {} /\
+    (!p. p <> cv ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  qabbrev_tac `i = mk_inst id ASSIGN [op] [cv]` >>
+  `step_inst_base i s = OK (update_var cv c s)` by
+    simp[Abbr `i`, mk_inst_def, step_inst_base_opcode_eqs] >>
+  `i.inst_outputs = [cv] /\ augAssignPtrScalarCertificate$scalar_shape i /\
+    EVERY (\p. op_prov G p = NONE /\ op_taint tn p = {}) i.inst_operands /\
+    inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
+    simp[Abbr `i`, mk_inst_def, augAssignPtrScalarCertificateTheory.scalar_shape_def,
+      augAssignPtrScalarCertificateTheory.scalar_binary_def,
+      augAssignPtrScalarCertificateTheory.scalar_unary_def, inst_mem_below_frontier_def,
+      inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  drule_all tuple_runtime_scalar_cursor >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (r,Gr,tr) []
+       (OK (jump_to hdr r),Gr,tr)` by
+    (gen_tac >> irule decoderNavigationPtrTheory.jump_origin_ptr_path >>
+     fs[update_var_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  qexistsl_tac [`jump_to hdr r`,`Gr`,`tr`] >>
+  conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[]) >>
+  gvs[jump_to_def, update_var_def, eval_operand_def, lookup_var_def,
+      stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]
+QED
