@@ -119,15 +119,13 @@ Theorem selected_nonbulk_parent_to_header:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   cd_decode F s.vs_call_ctx.cc_calldata (ArrayTV tv (Dynamic maxn)) (w2n p) = SOME x ==>
   ?ip cnt guard_st header_st loop_st labels st0 ops middle st1 body_bb exit_bb n vs t h H u q b.
-    let span = type_memory_size (ArrayTV tv (Dynamic maxn)) in
-    let live = loop_st.cs_next_var in
-    let names = [STRING #"%" (toString live); STRING #"%" (toString (live+1));
-      STRING #"%" (toString (live+2)); STRING #"%" (toString (live+3))] in
     ei = type_to_abi_dec_info sf ce ty /\ asz = tv_abi_size tv /\
     msz = type_memory_size tv /\ dyn = tv_abi_dynamic tv /\
     dec_info_needs_offset ei = tv_abi_dynamic tv /\
     n = w2n (cd_word s.vs_call_ctx.cc_calldata (w2n p)) /\ n <= maxn /\
-    maxn < dimword (:256) /\ span = 32+maxn*msz /\ 32+n*msz <= span /\
+    maxn < dimword (:256) /\
+    type_memory_size (ArrayTV tv (Dynamic maxn)) = 32+maxn*msz /\
+    32+n*msz <= type_memory_size (ArrayTV tv (Dynamic maxn)) /\
     x = ArrayV (DynArrayV vs) /\
     cd_decode_elems F h.vs_call_ctx.cc_calldata tv (cd_at F (w2n p) 32) 0 n = SOME vs /\
     abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
@@ -149,8 +147,10 @@ Theorem selected_nonbulk_parent_to_header:
     lookup_block (FST labels) fn.fn_blocks = SOME
       <|bb_label := FST labels; bb_instructions :=
         abi_decode_header_insts (loop_st.cs_next_id+1) ip src CALLDATALOAD
-          (STRING #"%" (toString live)) (STRING #"%" (toString (live+1)))
-          (STRING #"%" (toString (live+2))) (STRING #"%" (toString (live+3)))
+          (STRING #"%" (toString loop_st.cs_next_var))
+          (STRING #"%" (toString (loop_st.cs_next_var+1)))
+          (STRING #"%" (toString (loop_st.cs_next_var+2)))
+          (STRING #"%" (toString (loop_st.cs_next_var+3)))
           (FST (SND labels)) (SND (SND labels))|> /\
     (!bb. lookup_block (FST labels) fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
@@ -167,15 +167,25 @@ Theorem selected_nonbulk_parent_to_header:
     lookup_block (SND (SND labels)) fn.fn_blocks = SOME exit_bb /\
     phi_prefix_length exit_bb.bb_instructions = 0 /\
     last.cs_current_bb = SND (SND labels) /\ last.cs_current_insts = [] /\
-    st.cs_next_var <= live /\ st0.cs_next_var = live+4 /\
+    st.cs_next_var <= loop_st.cs_next_var /\ st0.cs_next_var = loop_st.cs_next_var+4 /\
     st0.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= st1.cs_next_var /\
     st1.cs_next_var < last.cs_next_var /\
-    abi_decoder_operand_live live src /\ abi_decoder_operand_live live (Var root) /\
-    abi_decoder_operand_live live ip /\ ALL_DISTINCT (q::names) /\
-    (!y. MEM y (STRING #"%" (toString st1.cs_next_var)::names) ==>
-      ~abi_decoder_operand_live live (Var y) /\
+    abi_decoder_operand_live loop_st.cs_next_var src /\
+    abi_decoder_operand_live loop_st.cs_next_var (Var root) /\
+    abi_decoder_operand_live loop_st.cs_next_var ip /\
+    ALL_DISTINCT [q; STRING #"%" (toString loop_st.cs_next_var);
+      STRING #"%" (toString (loop_st.cs_next_var+1));
+      STRING #"%" (toString (loop_st.cs_next_var+2));
+      STRING #"%" (toString (loop_st.cs_next_var+3))] /\
+    (!y. MEM y [STRING #"%" (toString st1.cs_next_var);
+      STRING #"%" (toString loop_st.cs_next_var);
+      STRING #"%" (toString (loop_st.cs_next_var+1));
+      STRING #"%" (toString (loop_st.cs_next_var+2));
+      STRING #"%" (toString (loop_st.cs_next_var+3))] ==>
+      ~abi_decoder_operand_live loop_st.cs_next_var (Var y) /\
       ?k. y = STRING #"%" (toString k) /\ k < limit.cs_next_var) /\
-    (!op. abi_decoder_operand_live live op ==> abi_decoder_operand_live st0.cs_next_var op) /\
+    (!op. abi_decoder_operand_live loop_st.cs_next_var op ==>
+      abi_decoder_operand_live st0.cs_next_var op) /\
     abi_decoder_operand_live middle.cs_next_var (FST ops) /\
     abi_decoder_operand_live middle.cs_next_var (FST (SND ops)) /\
     abi_decoder_operand_live middle.cs_next_var (SND (SND ops)) /\
@@ -189,7 +199,8 @@ Theorem selected_nonbulk_parent_to_header:
     FLOOKUP h.vs_allocas header_st.cs_next_id = SOME (b,32) /\
     b+32 < dimword (:256) /\ b+32 <= h.vs_alloca_next /\
     (b+32 <= base_addr \/ base_addr+cap <= b) /\
-    mload b h = 0w /\ ptr_covers H u q h 32 /\ ptr_covers H u root h span /\
+    mload b h = 0w /\ ptr_covers H u q h 32 /\
+    ptr_covers H u root h (type_memory_size (ArrayTV tv (Dynamic maxn))) /\
     mem_word_at d h.vs_memory = n2w n /\
     (!mem. mem_agree_outside u.t_mem h.vs_memory mem ==> mem_word_at d mem = n2w n) /\
     eval_operand src h = SOME p /\ abi_decode_load CALLDATALOAD p h = n2w n /\
@@ -252,7 +263,7 @@ Proof
       (map_every assume_tac o CONJUNCTS)))))))) >>
   qexistsl_tac [`ip`,`cnt`,`guard_st`,`header_st`,`loop_st`,`(labels0,labels1,labels2)`,
     `st0`,`ops`,`middle`,`st1`,`body_bb`,`exit_bb`,`n`,`vs`,`t`,`h`,`H`,`u`,`q`,`b`] >>
-  simp_tac bool_ss [LET_THM,pairTheory.FST,pairTheory.SND] >>
+  simp_tac bool_ss [pairTheory.FST,pairTheory.SND] >>
   qpat_assum `Abbrev (span = _)`
     (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)

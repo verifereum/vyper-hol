@@ -24,7 +24,7 @@ Proof
       (assume_tac o REWRITE_RULE [th])) >>
   drule_all selected_nonbulk_parent_to_header >>
   disch_then (qspec_then `PG` (List.foldr (uncurry qx_choose_then)
-    (map_every assume_tac o CONJUNCTS o SIMP_RULE bool_ss [LET_THM])
+    (map_every assume_tac o CONJUNCTS)
     [`ip`,`cnt`,`guard_st`,`header_st`,`loop_st`,`labels`,`st0`,`ops`,`middle`,
      `st1`,`body_bb`,`exit_bb`,`n`,`vs`,`init_st`,`h`,`Gh`,`th`,`q`,`slot`])) >>
   qpat_x_assum `ip = Var q` SUBST_ALL_TAC >>
