@@ -22,6 +22,7 @@ Proof
 QED
 
 Theorem deploy_sym_deploy_insts:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ supported_program_deploy tops /\
   ~program_reads_self_code tops /\
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit ==>

@@ -5,7 +5,7 @@
 Theory supportedProgram
 Ancestors
   supportedStmts supportedStmtTraverse supportedExprTraverse supportedNames
-  supportedDecls supportedTypes vyperAST list
+  supportedDecls supportedTypes supportedExprs constSubst vyperAST list alist
 
 (* Return lowering copies using the declared return layout. Equal nested
    aggregate layouts are admitted; differing aggregate subtype layouts still
@@ -85,8 +85,17 @@ Definition supported_program_def:
   supported_program tops <=>
     supported_declaration_headers tops /\ supported_declaration_names tops /\
     ALL_DISTINCT (supported_internal_function_names tops) /\
-    EVERY (supported_declaration_body tops) tops
+    EVERY (supported_declaration_body tops) tops /\
+    EVERY (supported_pure_expr tops o SND) (module_consts_env tops [])
 End
+
+Theorem supported_program_const_replacement:
+  supported_program tops /\ ALOOKUP (module_consts_env tops []) id = SOME e ==>
+  supported_pure_expr tops e
+Proof
+  rw[supported_program_def, EVERY_MEM] >>
+  drule ALOOKUP_MEM >> metis_tac[pairTheory.SND]
+QED
 
 (* The constructor runs only at deployment; the runtime gate above says
    nothing of its body.  Deployment theorems take this as well. *)
@@ -108,7 +117,7 @@ End
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
    existential in unspecified_behaviour_exempt. Traverse unsupported expressions,
    targets, iterators and reasons too. Function bodies and the defaults
-   compiled into callers; constants are excluded by supported_program. *)
+   compiled into callers. *)
 Definition expr_abi_decode_target_root_def:
   expr_abi_decode_target_root target
     (TypeBuiltin ty (AbiDecode unwrap) decoded es) = (decoded = target) /\

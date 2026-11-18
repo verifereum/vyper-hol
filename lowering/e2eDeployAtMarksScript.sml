@@ -379,6 +379,8 @@ Proof
      `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      `supported_program tops /\ supported_program_deploy tops /\
       ~program_reads_self_code tops` by fs[deploy_source_ok_def] >>
+     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+       (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
      drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
      drule_all deploy_unit_defs_reach_uses >> strip_tac >>
      drule_all o1_pipeline_label_flow_preserved >> strip_tac >>

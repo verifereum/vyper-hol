@@ -6,8 +6,8 @@ Ancestors
   vyperLoweringCorrect vyperCompiler venomInstIdsProps fragExec
   fragGasOriginPtr ptrDiscipline moduleLoweringProps emitHelperProps
   vyperCalldata vyperInterpreter vyperTypeContract vyperTypeContractContext
-  e2eDefs supportedProgram supportedDecls checkedSelectorTableProps list
-  venomInst venomWf compileEnv compileVyper constSubst publicGetterProps
+  e2eDefs supportedProgram checkedSelectorTableProps list
+  venomInst venomWf compileEnv compileVyper constSubst dispatchedValueSelection
   entryDispatchProps entryCheckIntervals actualRegistrationCode loweringShapeProps
   loweringShapeDefs loweringShapeRules venomState venomExecSemantics venomExecProofs
   actualEntryAllocationFrame entryDispatchPtr finite_map moduleLowering words
@@ -24,8 +24,9 @@ Theorem none_selected_check_prefix:
   ?mut nr rr args ret fbody tvs ce pos mincd pay key ut iv rt
     opened checked ce' last func t G tn.
     MEM (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody) (FST (classify_functions tops)) /\
-    vyperInterpreter$lookup_function NONE name External tops =
-      SOME (mut,nr,args,[],ret,fbody) /\
+    (?rawbody. vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,[],ret,rawbody) /\
+      fbody = subst_consts_stmts (module_consts_env tops []) rawbody) /\
     tys = MAP SND args /\
     OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs /\
     set_external_package_target rpolicy.rpol_target
@@ -72,8 +73,11 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
     (fs[source_typing_ok_def] >>
      drule check_contract_external_names_distinct >> simp[contract_keys_def]) >>
-  `vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,[],ret,fbody)` by suspend "lookup" >>
+  `?rawbody. vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,[],ret,rawbody) /\
+    fbody = subst_consts_stmts (module_consts_env tops []) rawbody` by
+    suspend "lookup" >>
+  qpat_x_assum `fbody = subst_consts_stmts _ rawbody` (mk_asm "compiled_body") >>
   `ALL_DISTINCT (MAP FST
     (build_selectors (type_env tops) (FST (classify_functions tops))))` by
     (fs[source_typing_ok_def] >>
@@ -122,17 +126,8 @@ Proof
 QED
 
 Resume none_selected_check_prefix[lookup]:
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_headers_module_consts_env,
-      supported_program_def, supported_declaration_headers_def] >>
-  drule classify_functions_external_source >> strip_tac >>
-  gvs[subst_consts_fn_empty]
-  >- (irule lookup_function_external_unique_decl >> simp[] >>
-      qexists_tac `FunctionDecl External mut nr rr name args [] ret fbody` >>
-      simp[vyperInterpreterTheory.lookup_function_def,
-           external_name_keys_toplevel_def]) >>
-  drule public_getter_lookup_singleton >> strip_tac >>
-  metis_tac[lookup_function_external_unique_decl]
+  drule_all classified_external_source_lookup >> strip_tac >>
+  Cases_on `rawdefaults` >> gvs[subst_consts_expr_def] >> metis_tac[]
 QED
 
 Resume none_selected_check_prefix[placement]:
@@ -204,9 +199,11 @@ Resume none_selected_check_prefix[execution]:
   qexistsl_tac [`rr`,`ce`,`pay`,`key`,`ut`,`iv`,`rt`,`opened`,`checked`,
     `registered_env`,`registered`,`t`,`dispatch_prov`,`dispatch_taint`] >>
   gvs[block_is_terminated_def, Abbr `ss`, entry_taint_def] >>
-  qpat_assum `MEM (mut,nr,rr,name,args,[],ret,fbody) _`
-    (mp_tac o ONCE_REWRITE_RULE [MEM_SPLIT]) >>
-  disch_then (qx_choosel_then [`left`,`right`] assume_tac) >>
-  qexistsl_tac [`left`,`right`] >> fs[]
+  asm "compiled_body" (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+  conj_tac
+  >- (qpat_assum `MEM (mut,nr,rr,name,args,[],ret,fbody) _`
+        (mp_tac o ONCE_REWRITE_RULE [MEM_SPLIT]) >>
+      simp[NoAsms]) >>
+  first_assum ACCEPT_TAC
 QED
 Finalise none_selected_check_prefix

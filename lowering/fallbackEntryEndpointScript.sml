@@ -11,7 +11,7 @@
  *)
 Theory fallbackEntryEndpoint
 Ancestors
-  runtimeEntryEndpoint vyperCalldata defaultDispatchFacts defaultEntryResourceInit
+  runtimeEntryEndpoint constSubst vyperCalldata defaultDispatchFacts defaultEntryResourceInit
   defaultConcreteRegistrationInit defaultConcreteRegistrationEnd
   defaultConcreteWordHead defaultConcreteBytesRegistration
   defaultConcreteRegistrationCapacity defaultGetterArguments
@@ -43,7 +43,8 @@ Theorem dispatched_entry_endpoint_default:
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) ==>
-    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   rpt gen_tac >> strip_tac >>
   drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -390,8 +391,7 @@ Proof
   `vyperInterpreter$lookup_function NONE "__default__" External tops =
     SOME (mut,T,args,[],ret,fbody)` by fs[] >>
   `args = []` by metis_tac[default_fallback_no_args] >> fs[] >>
-  drule_all default_fallback_classified >>
-  disch_then (qx_choose_then `rraw` assume_tac) >>
+  drule_all default_fallback_classified >> strip_tac >>
   qabbrev_tac `rt = if ret = NoneT then NONE else SOME ret` >>
   `?ce. set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops T (K global_nonreentrant_slot)
@@ -436,10 +436,6 @@ Proof
        (Cases_on `fn.fn_blocks` >>
         gvs[fn_entry_label_def, entry_block_def, lookup_block_def, listTheory.FIND_thm]) >>
      metis_tac[lower_vyper_runtime_unit_block_phi]) >>
-  `set_fallback_package_target rpolicy.rpol_target
-      (package_fallback_fn tops T (K global_nonreentrant_slot)
-        (SOME (mut,T,rraw,"__default__",[],([] : expr list),ret,fbody))) =
-    SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by fs[] >>
   drule_all fallback_empty_environment >> strip_tac >>
   drule_at (Pat `default_registration_resources _ _ _ _ _ _ _`)
     fallback_empty_registration_state >>

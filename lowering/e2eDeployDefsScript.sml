@@ -89,6 +89,17 @@ Definition deploy_typing_ok_def:
       machine_well_typed am /\ call_tx_well_typed tx
 End
 
+Theorem deploy_typing_ok_vtype_keys_distinct:
+  deploy_typing_ok tops am tx ==>
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))
+Proof
+  rw[deploy_typing_ok_def] >>
+  `contract_namespaces_ok F [(NONE,tops)]` by
+    metis_tac[vyperTypeContractStaticMapsTheory.check_contract_runtime_namespaces] >>
+  drule vyperTypeContractStaticMapsTheory.contract_namespaces_ok_module_toplevel_vtype_keys >>
+  disch_then (qspecl_then [`tops`, `NONE:num option`] mp_tac) >> simp[]
+QED
+
 Theorem deploy_typing_ok_constants_ready:
   deploy_typing_ok tops am tx <=>
     ?deploy_art runtime_art imms.

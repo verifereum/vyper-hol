@@ -3,17 +3,6 @@ Ancestors
   entryValueRejectFacts loweringShapeProps loweringShapeDefs compileVyper compileEnv entryDispatchProps
   supportedProgram supportedNames supportedDecls e2eDefs list
 
-Theorem selected_external_source_member[local]:
-  supported_program tops /\ tx.function_name <> "__default__" /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  ?rr. MEM (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)
-    (FST (classify_functions tops))
-Proof
-  strip_tac >> irule supported_headers_external_member >>
-  gvs[supported_program_def]
-QED
-
 Theorem external_source_package_labels[local]:
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl)
     (MAP (set_external_package_target target o
@@ -41,19 +30,24 @@ Theorem selected_external_package_member[local]:
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   ?ce pa mc key view rt.
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt)
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,
+      subst_consts_stmts (module_consts_env tops []) fbody,rt)
       (MAP (set_external_package_target target o
         package_external_fn tops T (K global_nonreentrant_slot))
         (FST (classify_functions tops)))
 Proof
-  strip_tac >> drule_all selected_external_source_member >> strip_tac >>
+  strip_tac >> drule_all lookup_function_external_member >> strip_tac >>
   `?ce pa mc key view rt.
      set_external_package_target target
        (package_external_fn tops T (K global_nonreentrant_slot)
-         (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
-       ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt)` by
-    simp[package_external_fn_def, set_external_package_target_def] >>
-  metis_tac[MEM_MAP, combinTheory.o_THM]
+         (subst_consts_fn (module_consts_env tops [])
+           (mut,nr,rr,tx.function_name,args,dflts,ret,fbody))) =
+       ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,
+        subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
+    simp[package_external_fn_def, set_external_package_target_def,
+         constSubstTheory.subst_consts_fn_def] >>
+  qexistsl_tac [`ce`, `pa`, `mc`, `key`, `view`, `rt`] >> simp[MEM_MAP] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem lower_runtime_named_source_packages:
@@ -66,7 +60,8 @@ Theorem lower_runtime_named_source_packages:
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts /\
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,
+      subst_consts_stmts (module_consts_env tops []) fbody,rt) exts /\
     exts = MAP (set_external_package_target rp.rpol_target o
       package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops))
@@ -97,7 +92,8 @@ Theorem lower_runtime_selected_source_packages:
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts /\
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,
+      subst_consts_stmts (module_consts_env tops []) fbody,rt) exts /\
     exts = MAP (set_external_package_target rp.rpol_target o
       package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops))

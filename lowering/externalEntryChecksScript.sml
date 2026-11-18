@@ -23,7 +23,8 @@ Theorem selected_external_dispatch:
   supported_program tops /\ valid_vyper_call tops tx cd ret /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut, F, args, [], ret, fbody) ==>
-  (?rr. MEM (mut, F, rr, tx.function_name, args, [], ret, fbody)
+  (?rr. MEM (mut,F,rr,tx.function_name,args,[],ret,
+      subst_consts_stmts (module_consts_env tops []) fbody)
           (FST (classify_functions tops))) /\
   (!fb. linear_dispatch_target cd
     (MAP (\(sel, lbl, _). (sel, lbl))
@@ -32,8 +33,9 @@ Theorem selected_external_dispatch:
 Proof
   strip_tac >>
   gvs[valid_vyper_call_def] >> conj_tac
-  >- (irule supported_headers_external_member >>
-      gvs[supported_program_def]) >>
+  >- (drule_all lookup_function_external_member >>
+      simp[constSubstTheory.subst_consts_fn_def,
+           constSubstTheory.subst_consts_expr_def]) >>
   gen_tac >>
   `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
      (FST (classify_functions tops))))` by
@@ -1092,9 +1094,10 @@ Theorem external_entry_reaches_checks:
      s0.
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
-           (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
-         rt) /\
+           (mut, F, rr, tx.function_name, args, ([] : expr list), ret,
+            subst_consts_stmts (module_consts_env tops []) fbody)) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv,
+         subst_consts_stmts (module_consts_env tops []) fbody, rt) /\
       compile_entry_checks min_cds is_payable st = ((), st') /\
       fn_has_code st st' func /\
       vars_pc_only vs s0 /\ fresh_vars_wrt st s0 /\ ~s0.vs_halted /\
@@ -1107,7 +1110,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all selected_external_dispatch >> strip_tac >>
   qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
-               `tx.function_name`, `args`, `ret`, `fbody`]
+               `tx.function_name`, `args`, `ret`,
+               `subst_consts_stmts (module_consts_env tops []) fbody`]
     strip_assume_tac selected_external_package >>
   drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all source_runtime_entry_checks_code >> strip_tac >>

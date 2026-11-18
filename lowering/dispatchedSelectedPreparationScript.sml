@@ -47,12 +47,13 @@ Theorem dispatched_selected_registration_preparation_nr:
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
           (mut,nr,lookup_raw_return_or_F (NONE:num option)
-            tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
-        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
+            tx.function_name External tops,tx.function_name,args,([] : expr list),ret,
+             subst_consts_stmts (module_consts_env tops []) fbody)) =
+        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
       runtime_selected_body_start tops rpolicy
-        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) st /\
+        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
-      compile_guarded_body cenv nr nkey ut' iv fbody rt sa = ((),st') /\
+      compile_guarded_body cenv nr nkey ut' iv (subst_consts_stmts (module_consts_env tops []) fbody) rt sa = ((),st') /\
       fn_has_code st sa efn /\ fn_has_code sa st' efn /\
       fn_inst_ids_distinct efn /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
@@ -123,18 +124,14 @@ Proof
   `MEM (tx.function_name,tys) (abi_external_signatures tops)` by
     metis_tac[venomInstTheory.FIND_MEM] >>
   `tys = MAP SND args` by metis_tac[dispatched_signature_args] >> gvs[] >>
-  `module_consts_env tops [] = []` by
-    (irule supported_headers_module_consts_env >> qexists_tac `tops` >>
-     fs[supported_program_def, supported_declaration_headers_def]) >>
-  `MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-      tx.function_name,args,([]:expr list),ret,fbody) (FST (classify_functions tops))` by
-    (Cases_on `tx.function_name = "__default__"` >>
-     gvs[] >-
-       (drule_all default_selected_source_args >> strip_tac >>
+  `MEM (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+     tx.function_name,args,([]:expr list),ret,fbody)) (FST (classify_functions tops))` by
+    (Cases_on `tx.function_name = "__default__"` >-
+       (gvs[] >> drule_all default_selected_source_args >> strip_tac >>
         drule_all default_selected_raw_return >> strip_tac >>
-        drule_all default_selected_classified_member >> simp[]) >>
-     drule_all lookup_function_external_raw_member >>
-     simp[constSubstTheory.subst_consts_fn_empty]) >>
+        simp[] >> drule_then ACCEPT_TAC public_getter_classified_mem) >>
+     drule_all_then ACCEPT_TAC lookup_function_external_raw_member) >>
   `4 <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
   `4 + SUM (MAP tv_abi_size tvs) <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
   drule_all dispatched_selected_registration_prefix_nr >> strip_tac >>
@@ -145,13 +142,25 @@ Proof
   rename1 `runtime_selected_body_start _ _
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) st` >>
   rename1 `compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa)` >>
-  qpat_x_assum `module_consts_env tops [] = []` (fn th =>
-    RULE_ASSUM_TAC (SRULE [th, subst_consts_stmt_empty, subst_consts_fn_empty])) >>
-  qpat_x_assum `pbody = fbody` SUBST_ALL_TAC >>
+  qpat_x_assum `pbody = _` SUBST_ALL_TAC >>
+  `set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,([]:expr list),ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt)` by
+    (rewrite_tac[Q.INST [`E` |-> `module_consts_env tops []`]
+       external_package_subst_consts] >> first_assum ACCEPT_TAC) >>
   drule_all registration_source_parameter_inputs_nr >> strip_tac >>
   rename1 `LIST_REL value_has_type us tx.args` >>
   `us = tvs` by (drule_all selection_type_list_unique >> simp[]) >>
   qpat_x_assum `us = tvs` SUBST_ALL_TAC >>
+  qpat_assum `set_external_package_target _
+    (package_external_fn _ _ _ (subst_consts_fn _ _)) = _`
+    (assume_tac o SIMP_RULE std_ss
+      [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]) >>
+  qpat_assum `MEM (subst_consts_fn _ _) _`
+    (assume_tac o SIMP_RULE std_ss
+      [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]) >>
   drule_all registration_reject_classified_package_inputs >> strip_tac >>
   rename1 `LIST_REL _ args (ZIP (MAP SND args,ts))` >>
   `ts = tvs` by fs[] >>
@@ -177,5 +186,6 @@ Proof
   qpat_x_assum `pos_args = build_positional_args cenv0 args` SUBST_ALL_TAC >>
   qpat_x_assum `min_cds = 4 + SUM (MAP tv_abi_size tvs)` SUBST_ALL_TAC >>
   `SUM (MAP tv_abi_size tvs) + 4 = 4 + SUM (MAP tv_abi_size tvs)` by decide_tac >>
-  asm_rewrite_tac []
+  asm_rewrite_tac [constSubstTheory.subst_consts_fn_def,
+    constSubstTheory.subst_consts_expr_def]
 QED
