@@ -10,7 +10,7 @@ Ancestors
   compileEnv venomState venomExecSemantics abiDecoderFrame fragGasOriginPtr
   exprLoweringProps loweringStateRelDefs ptrDiscipline abiDecoderReentry
   codegenRel instIdxIndep emitHelperProps abiEncoder finite_map pred_set list
-  bodyPtrDefs venomInst abiDecoderContract
+  bodyPtrDefs venomInst abiDecoderContract calldataDynOwned valueEncodingProps exprSimProps
 
 (* The index computation is word arithmetic even when the ABI head wraps. *)
 Theorem selected_array_source_word:
@@ -230,4 +230,213 @@ Proof
   asm_rewrite_tac[calldata_member_resource_frame_def, calldata_member_own_def,
     calldata_member_wit_def, op_taint_def] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+(* Separate the owned counter write from the child footprint. *)
+Theorem selected_array_backedge[local]:
+  lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv (Var q) hdr /\
+  v.vs_inst_idx = LENGTH prefix /\ ~v.vs_halted /\ q <> nv /\
+  ptr_covers G tn q v 32 /\ lookup_var q v = SOME (n2w slot) /\
+  slot+32 < dimword (:256) /\ slot+32 <= v.vs_alloca_next /\
+  eval_operand (Var iv) v = SOME (n2w j) /\
+  op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
+  j < cnt /\ cnt < dimword (:256) /\
+  allocas_from lower v /\ ~ctx_has_dalloca ctx /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  fresh_vars_wrt limit v /\ nv = STRING #"%" (toString k) /\ k < limit.cs_next_var /\
+  alloca_inv v /\ alloca_frontier_inv ctx fn site v /\ calldata_member_own fn L H v /\
+  L <= counter_id /\ counter_id < H /\ FLOOKUP v.vs_allocas counter_id = SOME (slot,32) /\
+  ~abi_decoder_operand_live live (Var nv) ==>
+  ?t Gt tt.
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    entry_decoder_obs v t /\ allocas_from lower t /\
+    calldata_member_resource_frame ctx fn site limit L H live d span v t [(slot,32)] /\
+    t.vs_allocas = v.vs_allocas /\ t.vs_alloca_next = v.vs_alloca_next /\
+    ptr_covers Gt tt q t 32 /\ mload slot t = n2w (SUC j) /\
+    DISJOINT {a | slot <= a /\ a < slot+32} tt.t_mem /\
+    tt.t_mem SUBSET tn.t_mem /\ tt.t_stor = tn.t_stor /\
+    tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+    (!x. x <> nv ==> lookup_var x t = lookup_var x v /\
+      FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
+    (!a n. a+n <= slot \/ slot+32 <= a ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n v.vs_memory) /\
+    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (v,G,tn) [] (OK t,Gt,tt))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`s` |-> `v`, `lo` |-> `lower`, `P` |-> `{}`, `ncount` |-> `cnt`]
+    (SPEC_ALL decoder_index_backedge_ptr_core_uniform_origin)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `t = jump_to hdr _` >>
+  drule_all decoder_index_backedge_replay_frame >> strip_tac >>
+  drule calldata_backedge_owned_state >>
+  disch_then (qspecl_then [`site`,`fn`,`ctx`] strip_assume_tac) >>
+  `~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\ entry_decoder_obs v t` by
+    (conj_tac >- simp[jump_to_def, mstore_def, update_var_def] >>
+     simp[entry_decoder_obs_def, jump_to_def, mstore_def, update_var_def]) >>
+  `allocas_from lower t` by
+    (rewrite_tac[allocas_from_def] >> asm_rewrite_tac[] >>
+     asm_rewrite_tac[GSYM allocas_from_def]) >>
+  `calldata_member_own fn L H t` by
+    (rewrite_tac[calldata_member_own_def] >> asm_rewrite_tac[] >>
+     asm_rewrite_tac[GSYM calldata_member_own_def]) >>
+  `calldata_member_wit L H t [(slot,32)]` by
+    (simp[calldata_member_wit_def] >> qexists_tac `counter_id` >> simp[]) >>
+  `!op. abi_decoder_operand_live live op ==> eval_operand op t = eval_operand op v` by
+    (rpt strip_tac >> `op <> Var nv` by (strip_tac >> fs[]) >> simp[]) >>
+  `abi_decode_footprint_frame [(d,span);(slot,32)] v t` by
+    (rewrite_tac[abi_decode_footprint_frame_def, abi_footprint_disjoint_def] >>
+     reverse conj_tac >- asm_rewrite_tac[] >>
+     rpt strip_tac >> qpat_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+     qpat_x_assum `!d' sz. MEM _ _ ==> _` (qspecl_then [`slot`,`32`] mp_tac) >> simp[]) >>
+  `calldata_member_resource_frame ctx fn site limit L H live d span v t [(slot,32)]` by
+    (rewrite_tac[calldata_member_resource_frame_def] >>
+     asm_rewrite_tac[LESS_EQ_REFL]) >>
+  qexistsl_tac [`t`,`H'`,`u`] >>
+  simp_tac bool_ss [] >> asm_rewrite_tac[]
+  >> (gvs[])
+QED
+
+Theorem selected_array_robust_prefix[local]:
+  EVERY (val_wf tv) xs /\ LENGTH xs = j /\ stride = type_memory_size tv /\
+  mem_bytes_at d (32+j*stride) new = mem_bytes_at d (32+j*stride) old /\
+  dirty' SUBSET dirty /\
+  (!k. k < j ==> !mem. mem_agree_outside dirty old mem ==>
+    val_in_memory tv (EL k xs) (d+32+k*stride) mem) ==>
+  !k. k < j ==> !mem. mem_agree_outside dirty' new mem ==>
+    val_in_memory tv (EL k xs) (d+32+k*stride) mem
+Proof
+  strip_tac >> qx_gen_tac `k` >> strip_tac >>
+  `val_wf tv (EL k xs)` by metis_tac[EVERY_EL] >>
+  `val_footprint tv (EL k xs) <= stride` by metis_tac[val_footprint_le] >>
+  rpt strip_tac >> irule calldata_member_robust_window_frame >>
+  simp[] >> qexistsl_tac [`new`, `dirty'`, `old`, `dirty`] >> simp[] >>
+  `SUC k * stride <= j * stride` by simp[] >>
+  `32+k*stride+val_footprint tv (EL k xs) <= 32+j*stride` by
+    (qpat_x_assum `SUC k * stride <= j * stride` mp_tac >>
+     pure_rewrite_tac [MULT_CLAUSES] >> decide_tac) >>
+  drule mem_bytes_at_translated_window >>
+  disch_then (qspecl_then [`32+k*stride`, `val_footprint tv (EL k xs)`] mp_tac) >>
+  gvs[]
+QED
+
+(* Join the header branch to the cursor just before the child decoder. *)
+Theorem selected_array_enter_child[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    abi_decode_header_insts hid (Var q) src CALLDATALOAD hv cv cmp dn
+      st.cs_current_bb exit_lbl /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\ ALL_DISTINCT [q;hv;cv;cmp;dn] /\
+  lookup_var q s = SOME (n2w slot) /\ ptr_covers G tn q s 32 /\
+  slot+32 < dimword (:256) /\ slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
+  eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+  abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
+  cnt < dimword (:256) /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\ fresh_vars_wrt limit s /\
+  (!x. MEM x [hv;cv;cmp;dn] ==> ?k. x = STRING #"%" (toString k) /\
+    k < limit.cs_next_var) /\
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD
+    (Lit 0w) (Lit 0w) di (tv_abi_size tv) (type_memory_size tv) st = (ops,ready) /\
+  dec_info_needs_offset di = tv_abi_dynamic tv /\
+  lookup_var root s = SOME (n2w d) /\ ptr_covers G tn root s span /\
+  abi_decoder_operand_live live (Var q) /\ abi_decoder_operand_live live (Var root) /\
+  abi_decoder_operand_live live src /\ live <= st.cs_next_var /\
+  (!x. MEM x [hv;cv;cmp;dn] ==> ~abi_decoder_operand_live live (Var x)) /\
+  32+j*type_memory_size tv+type_memory_size tv <= span /\
+  d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256) /\
+  ready.cs_next_var <= limit.cs_next_var /\ fn_has_code st ready fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ calldata_member_own fn L H s ==>
+  ?a Ga ta child.
+    ~a.vs_halted /\ a.vs_current_bb = ready.cs_current_bb /\
+    a.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    eval_operand (FST ops) a = SOME (n2w j) /\
+    eval_operand (FST (SND ops)) a = SOME
+      (n2w (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
+        (cd_at F (w2n (n2w sb:bytes32)) 32) (j*tv_abi_size tv))) /\
+    eval_operand (Var child) a = SOME (n2w (d+32+j*type_memory_size tv)) /\
+    SND (SND ops) = Var child /\
+    abi_decoder_operand_live ready.cs_next_var (FST ops) /\
+    abi_decoder_operand_live ready.cs_next_var (FST (SND ops)) /\
+    abi_decoder_operand_live ready.cs_next_var (Var child) /\
+    ptr_covers Ga ta child a (type_memory_size tv) /\
+    op_taint ta (FST ops) = {} /\ op_prov Ga (FST ops) = NONE /\
+    op_taint ta (FST (SND ops)) = {} /\ op_prov Ga (FST (SND ops)) = NONE /\
+    entry_decoder_obs s a /\ allocas_from lower a /\
+    a.vs_memory = s.vs_memory /\ a.vs_allocas = s.vs_allocas /\
+    a.vs_alloca_next = s.vs_alloca_next /\
+    calldata_member_resource_frame ctx fn site limit L H live d span s a [] /\
+    (!x. abi_decoder_operand_live live (Var x) ==>
+      FLOOKUP Ga x = FLOOKUP G x /\ op_taint ta (Var x) = op_taint tn (Var x)) /\
+    ta.t_mem = tn.t_mem /\ ta.t_stor = tn.t_stor /\
+    ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
+    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK a,Ga,ta))
+Proof
+  strip_tac >>
+  `src <> Var hv` by (strip_tac >> fs[]) >>
+  `!x. abi_decoder_operand_live live (Var x) ==> ~MEM x [hv;cv;cmp;dn]` by metis_tac[] >>
+  drule_all selected_array_header >> disch_then (qspec_then `PG` strip_assume_tac) >>
+  rename1 `b.vs_current_bb = st.cs_current_bb` >>
+  rename1 `ptr_covers Gb tb q b 32` >>
+  `!op. abi_decoder_operand_live live op ==>
+    eval_operand op b = eval_operand op s /\ op_taint tb op = op_taint tn op /\
+    op_prov Gb op = op_prov G op` by
+    (`b.vs_labels = s.vs_labels` by
+       (qpat_assum `entry_decoder_obs s b` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+        first_assum ACCEPT_TAC) >>
+     Cases >> simp[op_taint_def, op_prov_def, eval_operand_def] >>
+     strip_tac >> rename1 `abi_decoder_operand_live live (Var x)` >>
+     `~MEM x [hv;cv;cmp;dn]` by metis_tac[] >>
+     qpat_assum `!x. ~MEM x _ ==> _` (qspec_then `x` mp_tac) >>
+     asm_rewrite_tac[op_taint_def]) >>
+  `allocas_from lower b` by
+    (rewrite_tac[allocas_from_def] >> asm_rewrite_tac[] >>
+     asm_rewrite_tac[GSYM allocas_from_def]) >>
+  `lookup_var q b = SOME (n2w slot) /\ lookup_var root b = SOME (n2w d)` by metis_tac[] >>
+  `ptr_covers Gb tb root b span` by
+    (irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
+  `!op. abi_decoder_operand_live live op ==> abi_decoder_operand_live st.cs_next_var op` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `!x. abi_decoder_operand_live live (Var x) ==> not_fresh_at st x` by
+    (rpt strip_tac >> first_x_assum drule >>
+     simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `eval_operand src b = SOME (n2w sb) /\ op_taint tb src = {} /\ op_prov Gb src = NONE /\
+   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var (Var root) /\
+   not_fresh_at st q /\ not_fresh_at st root /\ (!x. src = Var x ==> not_fresh_at st x)` by
+    metis_tac[] >>
+  `!z. slot <= z /\ z < slot+32 ==> z NOTIN tb.t_mem` by
+    (qpat_x_assum `DISJOINT _ _` mp_tac >> simp[DISJOINT_ALT]) >>
+  `slot+32 <= b.vs_alloca_next /\ j < dimword (:256) /\
+    b.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
+  drule_all selected_array_setup >> disch_then (qspec_then `PG` strip_assume_tac) >>
+  rename1 `a.vs_inst_idx = LENGTH ready.cs_current_insts` >>
+  rename1 `ptr_covers Ga ta child a _` >>
+  `entry_decoder_obs s a` by metis_tac[entry_decoder_obs_trans] >>
+  `a.vs_call_ctx = s.vs_call_ctx /\ a.vs_data_section = s.vs_data_section` by
+    (qpat_assum `entry_decoder_obs s a` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+     asm_rewrite_tac[]) >>
+  `b.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `entry_decoder_obs s b` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `!op. abi_decoder_operand_live live op ==> eval_operand op a = eval_operand op s` by
+    (rpt strip_tac >> qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >> simp[] >> metis_tac[]) >>
+  `calldata_member_resource_frame ctx fn site limit L H live d span s a []` by
+    (irule calldata_member_resource_unchanged >> simp[]) >>
+  `allocas_from lower a` by
+    (rewrite_tac[allocas_from_def] >> asm_rewrite_tac[] >>
+     asm_rewrite_tac[GSYM allocas_from_def]) >>
+  qexistsl_tac [`a`,`Ga`,`ta`,`child`] >> asm_rewrite_tac[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[] >> metis_tac[])
+  >> rpt gen_tac >>
+  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+    (SPEC_ALL gas_origin_ptr_path_append))) >>
+  qexistsl_tac [`Gb`,`b`,`(OK b,Gb,tb)`,`tb`] >> simp[]
 QED
