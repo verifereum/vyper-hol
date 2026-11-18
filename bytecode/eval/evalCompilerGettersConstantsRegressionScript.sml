@@ -88,6 +88,20 @@ Proof
   EVAL_TAC
 QED
 
+(* An unresolved top-level reference survives substitution and folding. *)
+Theorem unsupported_constant_replacement_is_rejected:
+  ?tops.
+    tops = [regression_constant "A" (regression_ref "B")] /\
+    supported_declaration_headers tops /\
+    supported_declaration_names tops /\
+    ALL_DISTINCT (supported_internal_function_names tops) /\
+    EVERY (supported_declaration_body tops) tops /\
+    ~supported_program tops
+Proof
+  qexists_tac `[regression_constant "A" (regression_ref "B")]` >>
+  EVAL_TAC
+QED
+
 Theorem public_header_slot_and_constant_boundaries:
   supported_declaration_header []
     (VariableDecl (Public F) Storage "g" regression_uint (SOME 0)) /\
