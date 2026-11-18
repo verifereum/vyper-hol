@@ -4110,7 +4110,7 @@ Proof
         simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
         drule fragGasPathMemTheory.gas_path_mem_exec >>
         metis_tac[gas_path_code_labels]) >>
-     gen_tac >> drule_all registration_actual_endpoint_relations_nr >>
+     gen_tac >> drule_all registration_actual_endpoint_relations_from_prefix >>
      disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
 QED
 
