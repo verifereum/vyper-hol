@@ -277,6 +277,25 @@ Proof
   metis_tac[guard_nested_frame_outcome, optionTheory.NOT_SOME_NONE]
 QED
 
+Triviality guard_nested_call_result:
+  2 <= LENGTH e.contexts /\
+  call_external (SOME (MAP SND (call_trace e))) gs am tx = (res,am',rqs) /\
+  ~source_exempt tops (res,am',rqs) /\
+  call_result_rel_at gs tops am tx e r e' ==>
+  ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts
+Proof
+  strip_tac >>
+  `?exc out lgs. frame_outcome e r e' exc out lgs` suffices_by
+    metis_tac[guard_nested_frame_outcome] >>
+  qpat_x_assum `call_result_rel_at _ _ _ _ _ _ _` mp_tac >>
+  simp[call_result_rel_at_def] >>
+  Cases_on `res` >- (simp[] >> metis_tac[]) >>
+  rename1 `INR exc` >> Cases_on `exc = HaltException`
+  >- (gvs[] >> metis_tac[]) >>
+  Cases_on `exc` >> simp[exception_outcome_rel_def] >>
+  strip_tac >> gvs[source_exempt_def] >> metis_tac[]
+QED
+
 Triviality guard_trace_storage_induction:
   runtime_bc <> [] /\
   (!e am tx ret r e'.
