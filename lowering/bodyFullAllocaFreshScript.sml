@@ -4,9 +4,10 @@
  * with the frames the full-body callers rebuild their ghosts from.
  *
  * TOP-LEVEL:
- *   alloc_buffer_origin_ptr_path_exact - the ALLOCA as one joint path, its buffer
- *     disjoint from older sites and locals, the taint grown only above the
- *     old frontier, with its exact output provenance
+ *   alloc_buffer_origin_ptr_path_with_raw_endpoint - the ALLOCA joint path
+ *     with the raw instruction-run endpoint, final instruction index,
+ *     provenance, taint, and the fresh buffer's disjointness
+ *   alloc_buffer_origin_ptr_path_exact - the joint path and buffer frame
  *   alloc_buffer_origin_ptr_path - the existing covering-region interface
  *   alloc_buffer_ghost_inv_at - ghost_inv_at across that conclusion
  *   alloc_buffer_ghost_kept_at - ghost_kept_at across that conclusion
