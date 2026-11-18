@@ -720,11 +720,9 @@ QED
 
 (* Supply the single-frame proof whenever a child dispatches. The trace
    induction supplies storage preservation for that child's own calls. *)
-Triviality guard_closed_world_readings:
+Theorem guard_closed_world_readings:
   call_guard_gas_link_stmt /\
   s1_request_prefix tops /\
-  (!tx calldata ret. vyper_entry_call tops tx calldata ret ==>
-     dispatched_vyper_call tops tx calldata ret) /\
   vyper_call_staging fin policy tops runtime_bc am tx ret es /\
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
   run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
@@ -760,7 +758,7 @@ Proof
          asm_simp_tac bool_ss [] >>
          Cases_on `frame_resource_starved e r_e e'` >> simp[] >>
          `vyper_call_staging fin policy tops runtime_bc am_e tx_e ret_e e` by
-           metis_tac[vyper_call_staging_def] >>
+           fs[vyper_call_staging_def, vyper_entry_call_def, dispatched_vyper_call_def] >>
          mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
            `ret` |-> `ret_e`, `r` |-> `r_e`, `es'` |-> `e'`] guard_compiler_readings) >>
          impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
@@ -777,4 +775,12 @@ Proof
   disch_then (fn bridge => match_mp_tac (MATCH_MP
     (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
   BETA_TAC >> simp[]
+QED
+
+Theorem call_guard_gas_link:
+  call_guard_gas_link_stmt
+Proof
+  (* ADMISSION: the call-side gas link supplies the whole-run and
+     request-cut simulation obligations. *)
+  cheat
 QED

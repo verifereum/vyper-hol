@@ -86,8 +86,8 @@ Ancestors
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
-  (* closed-world request-cut texts awaiting their producers *)
-  e2eRequestCutDefs
+  (* closed-world request-cut guard and producer *)
+  e2eOutcomesProducer
   (* providers awaiting their consumers *)
   bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
   bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
