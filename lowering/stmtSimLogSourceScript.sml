@@ -1,5 +1,6 @@
 Theory stmtSimLogSource
 Ancestors
+  eventTopicProps
   vyperEventSoundness vyperTypeABI compileEnv exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
    supportedTypes e2eDefs vyperTyping vyperValue vyperABI
   vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
@@ -9,26 +10,19 @@ Theorem log_event_word_topic:
   evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
   encode_event_topic ty v = SOME (typed_val_to_w256 tv v)
 Proof
-  Cases_on `ty` >>
-  simp[supported_event_leaf_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def, is_bytestring_type_def]
-  >~ [`FlagT id`]
-  >- (simp[evaluate_type_def, AllCaseEqs()] >> rpt strip_tac >>
-      Cases_on `v` >>
-      gvs[value_has_type_def, encode_event_topic_def, event_value_to_word_def,
-          is_event_bytestring_type_def, event_topic_word_def,
-          typed_val_to_w256_def, val_to_w256_def]) >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[supported_word_type_def, supported_string_type_def, evaluate_type_def,
-       is_bytestring_type_def] >>
-  rpt strip_tac >> Cases_on `v` >>
-  gvs[value_has_type_def, encode_event_topic_def, event_value_to_word_def,
-      is_event_bytestring_type_def, event_topic_word_def,
-      typed_val_to_w256_def, val_to_w256_def] >>
-  Cases_on `b` >>
-  gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
-      is_bytestring_type_def, supported_word_type_def, supported_string_type_def] >>
-  simp[is_event_bytestring_type_def, event_topic_word_def]
+  strip_tac >>
+  `is_word_type ty` by
+    (Cases_on `ty` >>
+     gvs[supported_event_leaf_type_def, supported_scalar_type_def,
+         supported_word_type_def, supported_string_type_def,
+         is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[supported_word_type_def, supported_string_type_def,
+         is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[supported_word_type_def, supported_string_type_def,
+         is_bytestring_type_def, is_word_type_def]) >>
+  metis_tac[word_topic_encoding]
 QED
 
 Theorem log_scalar_abi_exists:

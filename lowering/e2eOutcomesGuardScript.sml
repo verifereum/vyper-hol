@@ -5,8 +5,12 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness e2eComposition frameOutcome guardTerminalBackend guardSourceAlignment
-  vyperCallFiniteStorageSupport
+  e2eCorrectness e2eComposition e2eProducers frameOutcome
+  guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
+  vfmAccountDeletion e2eEntry
+  vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
+  callRawVariant callCodeTrace sourceUnitExecution vyperLoweringCorrect gasSummary
+  stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
 
 Triviality guard_closed_world_inherit:
@@ -151,6 +155,65 @@ Proof
           asm_simp_tac bool_ss []) >>
       first_assum ACCEPT_TAC) >>
   strip_tac >> simp[] >> metis_tac[]
+QED
+
+Triviality guard_frame_runtime_nonempty:
+  vyper_frame_staging fin policy tops runtime_bc am tx es ==>
+  runtime_bc <> []
+Proof
+  strip_tac >> fs[vyper_frame_staging_def, accepted_finalizers_def]
+  >- (gvs[] >> metis_tac[compile_vyper_runtime_nonempty]) >>
+  gvs[] >> drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  gvs[] >> metis_tac[codegen_assembly_finalizer_nonempty]
+QED
+
+Triviality guard_staged_run_no_target_deletion:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  run_call es = SOME (r,es') /\
+  ~MEM tx.target es.rollback.toDelete /\
+  (2 <= LENGTH es.contexts ==> ~MEM tx.target (SND (HD es.contexts)).toDelete) ==>
+  ~MEM tx.target es'.rollback.toDelete
+Proof
+  strip_tac >> drule guard_frame_runtime_nonempty >> strip_tac >>
+  `wf_state es /\ ~NULL (lookup_account tx.target es.rollback.accounts).code` by
+    (fs[vyper_frame_staging_def, call_state_rel_def, evm_state_ok_def,
+        installed_code_rel_def, NULL_EQ] >> metis_tac[APPEND_eq_NIL]) >>
+  `~account_empty (lookup_account tx.target es.originalAccounts)` by
+    fs[vyper_closed_world_def] >>
+  spose_not_then assume_tac >>
+  drule_all run_call_to_delete >> simp[] >> metis_tac[]
+QED
+
+Triviality guard_valid_horizon_target:
+  cx'.txn.target = cx.txn.target ==>
+  (valid_horizon cx' st H obs <=> valid_horizon cx st H obs)
+Proof
+  strip_tac >>
+  `!s. storage_well_formed_on cx' s (FST H) <=>
+       storage_well_formed_on cx s (FST H)` by
+    metis_tac[storage_well_formed_on_target] >>
+  simp[valid_horizon_def, storage_observations_ok_def] >>
+  Induct_on `obs` >- simp[storage_trace_backends_well_formed_def] >>
+  Cases >> simp[storage_trace_backends_well_formed_def] >> metis_tac[]
+QED
+
+Triviality guard_opt_entry_code_update:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  fin rpolicy prog = SOME prog' /\ runtime_bc = assemble prog' ==>
+  tx with code := (opt_entry_state prog prog' cplan es).vs_code = tx \/
+  ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+  ~program_reads_self_code tops
+Proof
+  strip_tac >>
+  `call_state_rel tops (assemble prog') am tx es /\
+   fin IN accepted_finalizers /\
+   (fin = asm_opt_finalizer ==> ~program_reads_self_code tops)` by
+    fs[vyper_frame_staging_def] >>
+  Cases_on `fin = K SOME`
+  >- (gvs[] >> metis_tac[opt_entry_txp_identity]) >>
+  `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  fs[call_state_rel_def, source_deployment_rel_def]
 QED
 
 Triviality guard_reentry_staging:
@@ -443,6 +506,7 @@ Triviality guard_trace_storage_induction:
     vyper_closed_world fin policy tops runtime_bc am tx H e /\
     LENGTH (call_trace e) < 2 ** 64 /\
     2 <= LENGTH e.contexts /\ run_call e = SOME (r,e') /\
+    ~MEM tx.target (SND (HD e.contexts)).toDelete /\
     storage_well_formed_on
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (empty_state with <|accounts := (SND (HD e.contexts)).accounts;
@@ -499,6 +563,12 @@ Proof
     (map_every assume_tac o CONJUNCTS))) >>
   qpat_x_assum `calldata_dispatch _ _ = NONE \/ _` strip_assume_tac
   >- (drule_all guard_undispatched_reentry_rollback >> simp[]) >>
+  `(SND (HD e.contexts)).toDelete = e.rollback.toDelete` by
+    metis_tac[step_push_saved_to_delete] >>
+  `~MEM tx_e.target (SND (HD e.contexts)).toDelete` by
+    (qpat_assum `vyper_frame_staging fin policy tops runtime_bc am_e tx_e e`
+       (mp_tac o REWRITE_RULE [vyper_frame_staging_def]) >>
+     asm_simp_tac bool_ss []) >>
   `($< LEX $<) (contexts_weight 0 e.contexts) (contexts_weight 0 es.contexts)` by
     (drule_all guard_reached_step_weight >> simp[]) >>
   `!st. storage_well_formed_on
@@ -514,4 +584,203 @@ Proof
       simp[inv_image_def] >>
       disch_then (qspecl_then [`am_e`, `tx_e`, `rq'`, `co'`] mp_tac) >> simp[]) >>
   simp[]
+QED
+
+(* Each reading carries an outcome-prefix simulation and a result proof
+   conditional on storage. The re-entry induction closes that condition. *)
+Triviality guard_compiler_readings:
+  call_guard_gas_link_stmt /\
+  vyper_call_staging fin policy tops runtime_bc am tx ret es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  s1_request_prefix tops /\
+  run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
+  gas_readings_rel (gas_readings es)
+    (\gs.
+       (call_storage_ok am tx (MAP SND (call_trace es)) gs ==>
+        call_result_rel_at gs tops am tx es r es') /\
+       !res am' rqs obs pre rq co sfx.
+         call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+           (res,am',rqs,obs) /\
+         obs = pre ++ StorageOutcome rq co :: sfx /\
+         valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+           (initial_state am []) H pre ==>
+         (co.co_accounts = rq.cr_accounts /\ co.co_tStorage = rq.cr_tStorage) \/
+         ?rq'. MEM (rq',co) (call_trace es) /\ request_agree H tx.target rq rq')
+Proof
+  strip_tac >>
+  qpat_assum `call_guard_gas_link_stmt`
+    (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `am`,
+      `tx`, `ret`, `es`, `r`, `es'`] mp_tac o
+      REWRITE_RULE [call_guard_gas_link_stmt_def]) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (fn bridge => match_mp_tac (MATCH_MP
+    (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  qx_gen_tac `gs` >> BETA_TAC >>
+  disch_then (qx_choosel_then
+    [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`, `fmp`, `vs`, `marks`, `tail`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
+  qabbrev_tac `txp = tx with code := vs0.vs_code` >>
+  `txp.target = tx.target` by simp[Abbr `txp`] >>
+  qpat_assum `vyper_call_staging _ _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [vyper_call_staging_def]) >>
+  `external_return_type tops tx.function_name = ret` by
+    (qpat_assum `dispatched_vyper_call _ _ _ _`
+       (mp_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
+     strip_tac >> simp[external_return_type_def]) >>
+  qpat_assum `vyper_frame_staging _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [vyper_frame_staging_def]) >>
+  qpat_x_assum `?deploy_bc. compile_vyper _ _ _ = _`
+    (qx_choose_then `deploy_bc` assume_tac) >>
+  `call_state_rel tops (assemble prog') am tx es` by metis_tac[] >>
+  `source_typing_ok tops am txp /\
+   (!gobs. call_external_trace (SOME (MAP SND (call_trace es))) gobs am txp =
+           call_external_trace (SOME (MAP SND (call_trace es))) gobs am tx) /\
+   (call_storage_ok am txp (MAP SND (call_trace es)) gs <=>
+    call_storage_ok am tx (MAP SND (call_trace es)) gs) /\
+   (call_result_rel_at gs tops am txp es r es' <=>
+    call_result_rel_at gs tops am tx es r es')` by
+    (Cases_on `txp = tx` >- asm_simp_tac bool_ss [] >>
+     `tx with code := (opt_entry_state prog prog' cplan es).vs_code <> tx` by
+       fs[Abbr `txp`, Abbr `vs0`] >>
+     `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+      ~program_reads_self_code tops` by metis_tac[guard_opt_entry_code_update] >>
+     `LENGTH vs0.vs_code < 2 ** 256` by
+       (drule loweringShapeSourceTheory.supported_program_raw_shape_free_program >> strip_tac >>
+        `?art. vyperTypeContract$check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+          metis_tac[source_typing_ok_def] >>
+        drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+        drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+        drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+        drule_all o1PipelineCorrectTheory.run_venom_pipeline_output_shape >> strip_tac >>
+        `lowerDloadDefs$code_layout_valid vs0` by
+          metis_tac[Abbr `vs0`, opt_entry_code_layout_valid] >>
+        qpat_assum `lowerDloadDefs$code_layout_valid vs0`
+          (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.code_layout_valid_def]) >>
+        simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+        strip_tac >> irule LESS_EQ_LESS_TRANS >> qexists_tac `2 ** 255` >> fs[]) >>
+     asm_simp_tac list_ss [Abbr `txp`, source_typing_ok_code_update,
+       call_external_trace_no_self_code_update, call_storage_ok_code_update,
+       call_result_rel_at_code_update]) >>
+  conj_tac
+  >- (strip_tac >>
+      qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`,
+        `runtime_bc`, `rpolicy`, `unit`, `out`, `prog`, `prog'`,
+        `cplan`, `am`, `tx`, `txp`, `ret`, `es`, `vs0`, `fmp`,
+        `vs`, `marks`] mp_tac vyper_call_correct_at_marks >>
+      impl_tac
+      >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >>
+          metis_tac[]) >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  map_every qx_gen_tac [`res`, `am'`, `rqs`, `obs`, `pre`, `rq`,
+    `co`, `sfx`] >> strip_tac >>
+  `vs.vs_outcomes = MAP SND (call_trace es)` by
+    (drule raw_variant_outcomes >>
+     simp[Abbr `vs0`, opt_entry_state_def, entry_venom_state_frame_fields]) >>
+  `~source_exempt tops (res,am',rqs)` by
+    (drule call_external_trace_result >> strip_tac >>
+     fs[vyper_closed_world_def] >>
+     qpat_assum `call_external _ gs am tx = _` (fn source_result =>
+       qpat_assum `!gobs. ~source_exempt _ (call_external _ _ _ _)`
+         (qspec_then `gs` (ACCEPT_TAC o REWRITE_RULE [source_result])))) >>
+  `valid_horizon (initial_evaluation_context am.sources am.layouts txp NONE)
+    (initial_state am []) H pre` by
+    (`(initial_evaluation_context am.sources am.layouts txp NONE).txn.target =
+      (initial_evaluation_context am.sources am.layouts tx NONE).txn.target` by
+       simp[initial_evaluation_context_def] >>
+     metis_tac[guard_valid_horizon_target]) >>
+  qpat_assum `!tail' res am' rqs obs obs_pre rq outcome sfx H. _`
+    (qspecl_then [`tail`, `res`, `am'`, `rqs`, `obs`, `pre`,
+      `rq`, `co`, `sfx`, `H`] mp_tac) >>
+  impl_tac
+  >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >> metis_tac[]) >>
+  strip_tac >> Cases_on `computed_precompile rq` >- gvs[] >>
+  qpat_x_assum `~computed_precompile rq ==> _` (strip_assume_tac o
+    REWRITE_RULE [ASSUME ``~computed_precompile rq``]) >>
+  qabbrev_tac `k = recorded_outcomes_count pre` >>
+  qabbrev_tac `D = cx_dead H
+    (initial_evaluation_context am.sources am.layouts txp NONE)` >>
+  `k < LENGTH (call_requests es) /\
+   request_agree_except D (EL k s'.vs_requests) (EL k (call_requests es)) /\
+   s.vs_outcomes <> [] /\
+   MEM (EL k (call_requests es), HD s.vs_outcomes) (call_trace es)` by
+    (qspecl_then [`fin`, `tops`, `am`, `tx`, `rpolicy`, `unit`,
+      `out`, `prog`, `cplan`, `prog'`, `es`, `r`, `es'`, `vs0`, `D`,
+      `k`, `vs`, `fn`, `inst`, `s`, `fuel`, `s'`, `fn'`,
+      `inst'`, `t`, `fuel'`, `t'`] mp_tac codegen_request_cut_outcome >>
+     asm_simp_tac bool_ss [Abbr `k`, Abbr `D`, Abbr `vs0`, Abbr `txp`] >>
+     metis_tac[]) >>
+  disj2_tac >> qexists_tac `EL k (call_requests es)` >>
+  conj_tac >- fs[] >>
+  `D = external_call_dead H tx (res,am',rqs)` by
+    simp[Abbr `D`, cx_dead_def, external_call_dead_def, initial_evaluation_context_def] >>
+  `request_agree H tx.target rq (EL k s'.vs_requests)` by fs[Abbr `k`] >>
+  metis_tac[request_agree_dead_trans]
+QED
+
+(* Supply the single-frame proof whenever a child dispatches. The trace
+   induction supplies storage preservation for that child's own calls. *)
+Theorem guard_closed_world_readings:
+  call_guard_gas_link_stmt /\
+  s1_request_prefix tops /\
+  vyper_call_staging fin policy tops runtime_bc am tx ret es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
+  gas_readings_rel (gas_readings es)
+    (\gs. call_storage_ok am tx (MAP SND (call_trace es)) gs /\
+          call_result_rel_at gs tops am tx es r es')
+Proof
+  strip_tac >>
+  `vyper_frame_staging fin policy tops runtime_bc am tx es` by
+    metis_tac[vyper_call_staging_def] >>
+  `runtime_bc <> []` by (drule guard_frame_runtime_nonempty >> simp[]) >>
+  `!rq co.
+    MEM (rq,co) (call_trace es) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := rq.cr_accounts;
+                         tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)` by
+    (mp_tac guard_trace_storage_induction >>
+     asm_simp_tac bool_ss [] >>
+     impl_tac
+     >- (map_every qx_gen_tac [`e`, `am_e`, `tx_e`, `ret_e`, `r_e`, `e'`] >>
+         strip_tac >>
+         `~MEM tx_e.target e.rollback.toDelete` by fs[vyper_frame_staging_def] >>
+         `~MEM tx_e.target e'.rollback.toDelete` by
+           metis_tac[guard_staged_run_no_target_deletion] >>
+         irule guard_nested_storage_from_readings >>
+         asm_simp_tac bool_ss [] >>
+         qexistsl_tac [`fin`, `policy`, `runtime_bc`, `tops`] >>
+         asm_simp_tac bool_ss [] >>
+         Cases_on `frame_resource_starved e r_e e'` >> simp[] >>
+         `vyper_call_staging fin policy tops runtime_bc am_e tx_e ret_e e` by
+           fs[vyper_call_staging_def, vyper_entry_call_def, dispatched_vyper_call_def] >>
+         mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
+           `ret` |-> `ret_e`, `r` |-> `r_e`, `es'` |-> `e'`] guard_compiler_readings) >>
+         impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+         mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
+           `r` |-> `r_e`, `es'` |-> `e'`] guard_close_storage_readings) >>
+         impl_tac >- (asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+         disch_then (fn bridge => match_mp_tac (MATCH_MP
+           (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+         BETA_TAC >> simp[]) >>
+     disch_then (qspecl_then [`es`, `am`, `tx`] mp_tac) >> simp[]) >>
+  drule_all guard_compiler_readings >> strip_tac >>
+  mp_tac guard_close_storage_readings >>
+  impl_tac >- (asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+  disch_then (fn bridge => match_mp_tac (MATCH_MP
+    (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  BETA_TAC >> simp[]
+QED
+
+Theorem call_guard_gas_link:
+  call_guard_gas_link_stmt
+Proof
+  (* ADMISSION: the call-side gas link supplies the whole-run and
+     request-cut simulation obligations. *)
+  cheat
 QED

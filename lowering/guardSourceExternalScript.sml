@@ -3,6 +3,7 @@ Theory guardSourceExternal
 Ancestors
   guardSourceExternalPrimitives guardSourceExecution guardSourceGetter guardSourceEntryStorage
   vyperInterpreter vyperState vyperStorageFootprint vyperStorageTrace
+  vyperExternalEntryStorageFrame
   vyperFiniteStoragePreservation vyperTypeExprSoundness vyperTypeExternalDefaults
   vyperTypeContractSoundness vyperTypeEvalStoragePreservation vyperEvalOutcomeSuffix
   vyperContext vyperTypeInvariants vyperTypeInitialState e2eDefs
@@ -225,7 +226,7 @@ Proof
   pure_asm_rewrite_tac[pairTheory.pair_case_def, sumTheory.sum_case_def] >>
   BETA_TAC >> pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC
   >- (strip_tac >>
-      `storage_well_formed_on cx ss (FST H)` by metis_tac[send_call_value_storage] >>
+      `storage_well_formed_on cx ss (FST H)` by metis_tac[send_call_value_preserves_storage_well_formed_on] >>
       drule_all send_call_value_state_sound_c53 >> strip_tac >>
       drule send_call_value_trace_outcomes >> strip_tac >>
       `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx ss.immutables` by
@@ -236,7 +237,7 @@ Proof
         qpat_x_assum `bind _ _ ss = _` (assume_tac o REWRITE_RULE [GSYM th])) >>
       drule_all (PURE_REWRITE_RULE [ignore_bind_def] explicit_defaults_body_finite_prefix) >> simp[]) >>
   strip_tac >> project_result_state_tac >> drule send_call_value_trace_outcomes >> strip_tac >>
-  conj_tac >- metis_tac[send_call_value_storage] >> gvs[valid_horizon_def]
+  conj_tac >- metis_tac[send_call_value_preserves_storage_well_formed_on] >> gvs[valid_horizon_def]
 QED
 
 Theorem selected_explicit_finite_prefix:
