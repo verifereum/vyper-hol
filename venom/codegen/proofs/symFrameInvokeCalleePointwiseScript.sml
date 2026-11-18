@@ -725,8 +725,38 @@ Theorem sym_invoke_frame_sim_deep_pointwise:
                sym_terminal (sym_steps_mode allow_own prog env own n ss))
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_ok_pointwise >> simp[]) >>
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pat `step_inst`) sym_invoke_source_ok_pointwise >>
+      disch_then (drule_at (Pat `generate_inst_plan`)) >>
+      disch_then (drule_at (Pat `fn_frame_inv`)) >>
+      disch_then (drule_at (Pat `sym_frame_inv_own`)) >>
+      disch_then (drule_at (Pat `MEM _ (_.cp_regions)`)) >>
+      disch_then (drule_at (Pat `generated_plan_state_wf_marked`)) >>
+      disch_then (drule_at (Pat `codegen_context_obligations`)) >>
+      disch_then (drule_at (Pat `codegen_assembly`)) >>
+      disch_then match_mp_tac >> qexistsl [`nm`, `arg_ops`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_halt_pointwise >> simp[]) >>
-  rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_abort_pointwise >> simp[]
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pat `step_inst`) sym_invoke_source_halt_pointwise >>
+      disch_then (drule_at (Pat `generate_inst_plan`)) >>
+      disch_then (drule_at (Pat `fn_frame_inv`)) >>
+      disch_then (drule_at (Pat `sym_frame_inv_own`)) >>
+      disch_then (drule_at (Pat `MEM _ (_.cp_regions)`)) >>
+      disch_then (drule_at (Pat `generated_plan_state_wf_marked`)) >>
+      disch_then (drule_at (Pat `codegen_context_obligations`)) >>
+      disch_then (drule_at (Pat `codegen_assembly`)) >>
+      disch_then match_mp_tac >> qexistsl [`nm`, `arg_ops`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `step_inst`) sym_invoke_source_abort_pointwise >>
+  disch_then (drule_at (Pat `generate_inst_plan`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv_own`)) >>
+  disch_then (drule_at (Pat `MEM _ (_.cp_regions)`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations`)) >>
+  disch_then (drule_at (Pat `codegen_assembly`)) >>
+  disch_then match_mp_tac >> qexistsl [`nm`, `arg_ops`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
