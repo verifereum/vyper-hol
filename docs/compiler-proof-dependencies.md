@@ -1,6 +1,8 @@
 # Compiler proof dependencies
 
-Current Milestone 1 boundary: accepted primary `e4cb0914`, audited 2026-10-09.
+Milestone 1 boundary at `e4cb0914`, audited 2026-10-09. The current
+`vyper_call_correct` theorem takes a
+[fixed storage region set](compiler-correctness-specification.md#fixed-storage-regions).
 This is a dependency/assumption inventory, **not a fully verified compiler**.
 The [dated audit](compiler-proof-status-2026-10-09.md) contains the entire public
 schema, exact saved-object receipts and historical evidence identities.

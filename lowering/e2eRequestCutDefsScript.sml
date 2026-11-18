@@ -95,10 +95,10 @@
  *
  * Fitted to the current definitions:
  * - request_agree takes the call's target address; the arms pass
- *   tx.target, as call_result_rel does.  Its gas conjunct (a source gas cap
+ *   tx.target, as call_result_rel_guarded does.  Its gas conjunct (a source gas cap
  *   is the Venom request's) comes with it.  gas_readings_rel takes the
  *   predicate alone now, where it took a run and the outcome T; the link
- *   drops the T, as call_result_rel does.
+ *   drops the T, as call_result_rel_guarded does.
  * - The source call count bound is the length of the outcome list (vs, the
  *   S1 prefix) or of the call trace (es, staging and every re-entry), as
  *   the call tops state it.

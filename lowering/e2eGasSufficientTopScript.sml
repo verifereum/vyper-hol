@@ -1,9 +1,9 @@
 (* The sufficient-gas companions over the accepted finalizers: each joins
  * its identity case from e2eGasSufficient with its assembly-optimizer case,
- * as vyper_call_correct and e2e_deploy_correctness do.
+ * as vyper_call_correct_guarded and e2e_deploy_correctness do.
  *
  * TOP-LEVEL:
- *   vyper_call_gas_sufficient -- the companion of vyper_call_correct
+ *   vyper_call_gas_sufficient -- the companion of vyper_call_correct_guarded
  *   e2e_deploy_gas_sufficient -- the companion of e2e_deploy_correctness
  *)
 Theory e2eGasSufficientTop
@@ -610,7 +610,7 @@ QED
 (* ===== The companions ===== *)
 
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
-   vyper_call_correct's finalizer premises. *)
+   vyper_call_correct_guarded's finalizer premises. *)
 Theorem vyper_call_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\

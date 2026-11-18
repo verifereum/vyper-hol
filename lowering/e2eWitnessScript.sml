@@ -13,7 +13,7 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
-(* Mirrors the premises of e2e_deploy_correctness and vyper_call_correct at
+(* Mirrors the premises of e2e_deploy_correctness and vyper_call_correct_guarded at
    e1bf916782. Both require supported programs, and deployment requires a
    call-free constructor. The call premises bound the trace length and use
    calldata dispatch with external lookup.
@@ -359,10 +359,10 @@ Proof
 QED
 
 Theorem p23_call_result:
-  call_result_rel p23_tops p23_am_call p23_call_tx
+  call_result_rel_guarded p23_tops p23_am_call p23_call_tx
     p23_es_call (INR NONE) p23_es_call_post
 Proof
-  simp[call_result_rel_def, p23_call_trace] >>
+  simp[call_result_rel_guarded_def, p23_call_trace] >>
   irule gas_readings_rel_empty >>
   rpt strip_tac >>
   simp[call_result_rel_at_def, p23_call_trace, LET_THM] >>
@@ -415,7 +415,7 @@ Theorem vyper_deploy_and_call_premises_jointly_satisfiable:
     calldata_dispatch tops tx_call.calldata = SOME (tx_call.function_name, tx_call.args) /\
     call_storage_ok (next_source_machine am_dep' es_dep') tx_call
       (MAP SND (call_trace es_call)) [] /\
-    calldata_result_rel tops (next_source_machine am_dep' es_dep') tx_call
+    calldata_result_rel_guarded tops (next_source_machine am_dep' es_dep') tx_call
       es_call r_call es_call' /\
     FST (call_external (SOME []) [] (next_source_machine am_dep' es_dep')
            tx_call) = INL (IntV 42) /\
@@ -435,7 +435,7 @@ Proof
     EQF_ELIM p23_no_self_code, listTheory.MAP, p23_load,
     p23_deploy_storage_ok, p23_call_storage_ok, p23_dispatch_eval] >>
   simp[asmOptimizerTheory.accepted_finalizers_def,
-       calldata_result_rel_def, p23_dispatch_eval, p23_dispatched_tx,
+       calldata_result_rel_guarded_def, p23_dispatch_eval, p23_dispatched_tx,
        p23_call_result, p23_get_lookup_eval,
        creation_resource_starved_def, frame_outcome_def, p23_es_dep_def] >>
   simp[p23_call_tx_def, vyperContextTheory.empty_call_txn_def]
