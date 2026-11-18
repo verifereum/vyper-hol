@@ -17,6 +17,9 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   exprLowering vyperInterpreter vyperTypeEvalProofs vyperState vyperAST
   vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
+  exprLoweringProps[qualified,ignore_grammar]
+  loweringStateRelDefs[qualified,ignore_grammar]
+  vyperTypeInvariants[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
 
@@ -4554,6 +4557,22 @@ Proof
   qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
   qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+QED
+
+Theorem intcall_args_stmt_state_rel_push[local]:
+  stmt_state_rel H ctx func cenv (cx with stk updated_by CONS (NONE,name)) es s <=>
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.accounts_rel_def,
+       loweringStateRelDefsTheory.storage_vars_rel_def,
+       loweringStateRelDefsTheory.transient_vars_rel_def,
+       exprLoweringPropsTheory.immutable_alloca_sep_def,
+       exprLoweringPropsTheory.immutable_decl_sep_alt,
+       vyperTypeEvalProofsTheory.get_module_code_stk_irrelevant,
+       vyperTypeInvariantsTheory.lookup_var_slot_from_layout_context,
+       vyperTypeEvalProofsTheory.get_tenv_stk_irrelevant]
 QED
 
 (* (a) Arguments and frame setup, at (DF H, lo).  The caller's code up to
