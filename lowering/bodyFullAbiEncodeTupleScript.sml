@@ -7,7 +7,7 @@ Ancestors
   typedCopyTuplePtr logValueFramePtr typedCopyRobustTransportPtr
   bodyPtrSubscriptMemoryRebuild
   compileEnv context emitHelperProps exprLoweringProps fragGasOriginPtrLoop
-  abiTupleEncodeSlot
+  abiTupleEncodeSlot exprSimStorageCopy
   externalEntryShape exprLowering fragExec emitHelper
   abiTupleProps bodyPtrDefs robustCopyTransportPtr valueEncodingProps
   valueEncodingDefs venomExecSemantics venomState ptrDiscipline exprSimProps
@@ -200,7 +200,7 @@ Finalise abi_encode_tuple_step_layout
 (* The entry is the physical endpoint of argument compilation and fresh
    tuple allocation. Live source footprints exclude the tuple destination;
    source capacity bounds justify reads independently of this separation. *)
-Theorem abi_encode_tuple_staging_full:
+Theorem abi_encode_tuple_staging_full_with_frame:
   !a b ce root ops tys tvs vs total s bw G tn lo explicit ctx func PG
     d cx es origin G0 tn0 s0.
   compile_store_abi_tuple ce (Var root) 0 (ZIP (ops,tys)) a = ((),b) /\
@@ -265,7 +265,9 @@ Theorem abi_encode_tuple_staging_full:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
     (!oldop. (!x. oldop = Var x ==> not_fresh_at a x) ==>
       eval_operand oldop t = eval_operand oldop s /\
-      op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop)
+      op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop) /\
+    copy_static t = copy_static s /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rename1 `ptr_covers G tn root s capacity` >>
@@ -312,7 +314,9 @@ Proof
       FLOOKUP g x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!oldop. (!x. oldop = Var x ==> not_fresh_at a x) ==>
       eval_operand oldop t = eval_operand oldop s /\
-      op_taint u oldop = op_taint tn oldop /\ op_prov g oldop = op_prov G oldop)` >>
+      op_taint u oldop = op_taint tn oldop /\ op_prov g oldop = op_prov G oldop) /\
+    copy_static t = copy_static s /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory` >>
   `P [] (ZIP (ops,tys)) 0 a (s,G,tn)` by suspend "initial" >>
   `!done rest off st mid r op ty.
     compile_abi_tuple_slot ce (Var root) off op ty st = ((),mid) /\
@@ -326,14 +330,14 @@ Proof
   suspend "assemble"
 QED
 
-Resume abi_encode_tuple_staging_full[initial]:
+Resume abi_encode_tuple_staging_full_with_frame[initial]:
   simp[Abbr `P`, abi_tuple_bytes_def, cs_extends_def] >>
   conj_tac
   >- (gen_tac >> irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]) >>
   qpat_x_assum `ptr_covers G tn root s capacity` mp_tac >>
   asm_rewrite_tac[abi_tuple_bytes_def]
 QED
-Resume abi_encode_tuple_staging_full[step]:
+Resume abi_encode_tuple_staging_full_with_frame[step]:
   rpt gen_tac >> PairCases_on `r` >>
   simp[Abbr `P`] >> strip_tac >>
   `LENGTH done < LENGTH tys /\
@@ -411,7 +415,7 @@ Resume abi_encode_tuple_staging_full[step]:
    (!x. not_fresh_at origin x ==> not_fresh_at st x)` by metis_tac[] >>
   `ptr_covers r1 r2 root r0 capacity` by
     (qpat_x_assum `capacity = _` (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-  drule abi_encode_tuple_slot_origin >>
+  drule abi_encode_tuple_slot_origin_with_frame >>
   disch_then (qspecl_then [`EL (LENGTH done) tvs`, `EL (LENGTH done) vs`] mp_tac) >>
   disch_then (drule_at (Pat `abi_tuple_input _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -424,7 +428,7 @@ Resume abi_encode_tuple_staging_full[step]:
   qexists_tac `(t,Gf,tnf)` >>
   suspend "slot_post"
 QED
-Resume abi_encode_tuple_staging_full[assemble]:
+Resume abi_encode_tuple_staging_full_with_frame[assemble]:
   PairCases_on `z` >>
   qpat_x_assum `P _ [] _ _ _` mp_tac >>
   simp[Abbr `P`] >> strip_tac >>
@@ -438,10 +442,10 @@ Resume abi_encode_tuple_staging_full[assemble]:
   conj_tac >- first_assum ACCEPT_TAC >>
   once_rewrite_tac[ADD_COMM] >> first_assum ACCEPT_TAC
 QED
-Resume abi_encode_tuple_staging_full[slot_entry]:
+Resume abi_encode_tuple_staging_full_with_frame[slot_entry]:
   markerLib.RESUME_TAC >> asm_rewrite_tac[]
 QED
-Resume abi_encode_tuple_staging_full[slot_post]:
+Resume abi_encode_tuple_staging_full_with_frame[slot_post]:
   markerLib.RESUME_TAC >>
   CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
   asm_rewrite_tac[] >>
@@ -461,9 +465,10 @@ Resume abi_encode_tuple_staging_full[slot_post]:
   conj_tac >- metis_tac[] >>
   conj_tac >- suspend "exterior_post" >>
   conj_tac >- metis_tac[] >>
-  metis_tac[])
+  conj_tac >- metis_tac[] >>
+  irule LESS_EQ_TRANS >> qexists_tac `LENGTH r0.vs_memory` >> asm_rewrite_tac[])
 QED
-Resume abi_encode_tuple_staging_full[offset_take]:
+Resume abi_encode_tuple_staging_full_with_frame[offset_take]:
   markerLib.RESUME_TAC >>
   `LENGTH done < LENGTH tvs` by decide_tac >>
   `TAKE (LENGTH done + 1) tvs =
@@ -471,7 +476,7 @@ Resume abi_encode_tuple_staging_full[offset_take]:
     metis_tac[TAKE_SUC_BY_TAKE, ADD1] >>
   asm_rewrite_tac[MAP_SNOC, SUM_SNOC]
 QED
-Resume abi_encode_tuple_staging_full[prefix_post]:
+Resume abi_encode_tuple_staging_full_with_frame[prefix_post]:
   markerLib.RESUME_TAC >>
   rewrite_tac[GSYM ADD1] >>
   once_rewrite_tac[ADD_COMM] >>
@@ -493,19 +498,19 @@ Resume abi_encode_tuple_staging_full[prefix_post]:
   qpat_x_assum `off = SUM _` (fn th => pure_rewrite_tac[GSYM th]) >>
   first_x_assum irule >> asm_rewrite_tac[])
 QED
-Resume abi_encode_tuple_staging_full[coverage_post]:
+Resume abi_encode_tuple_staging_full_with_frame[coverage_post]:
   markerLib.RESUME_TAC >>
   irule ptr_covers_lookup_frame >>
   qexistsl_tac [`r1`, `r0`, `r2`] >>
   metis_tac[]
 QED
-Resume abi_encode_tuple_staging_full[locals_post]:
+Resume abi_encode_tuple_staging_full_with_frame[locals_post]:
   markerLib.RESUME_TAC >>
   irule (cj 1 abi_encode_tuple_local_frame) >>
   qexistsl_tac [`type_memory_bytes ce ty`, `w2n bw + off`, `r0`] >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
-Resume abi_encode_tuple_staging_full[regions_post]:
+Resume abi_encode_tuple_staging_full_with_frame[regions_post]:
   markerLib.RESUME_TAC >>
   `!name z k. local_region ce es.scopes t name z k <=>
     local_region ce es.scopes r0 name z k` by
@@ -515,7 +520,7 @@ Resume abi_encode_tuple_staging_full[regions_post]:
      asm_rewrite_tac[] >> metis_tac[]) >>
   metis_tac[]
 QED
-Resume abi_encode_tuple_staging_full[exterior_post]:
+Resume abi_encode_tuple_staging_full_with_frame[exterior_post]:
   markerLib.RESUME_TAC >> gen_tac >> disch_tac >>
   `~(w2n bw + off <= j /\
       j < w2n bw + off + type_memory_bytes ce ty)` by
@@ -526,4 +531,76 @@ Resume abi_encode_tuple_staging_full[exterior_post]:
     (qspec_then `j` mp_tac) >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
-Finalise abi_encode_tuple_staging_full
+Finalise abi_encode_tuple_staging_full_with_frame
+
+Theorem abi_encode_tuple_staging_full:
+  !a b ce root ops tys tvs vs total s bw G tn lo explicit ctx func PG
+    d cx es origin G0 tn0 s0.
+  compile_store_abi_tuple ce (Var root) 0 (ZIP (ops,tys)) a = ((),b) /\
+  LENGTH ops = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
+  total = abi_tuple_bytes ce (ZIP (ops,tys)) /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next /\ lookup_var root s = SOME bw /\
+  ptr_covers G tn root s total /\ not_fresh_at a root /\
+  w2n bw + total < dimword(:256) /\ lo <= w2n bw /\
+  (total = 0 \/ w2n bw + total <= s.vs_alloca_next) /\
+  (!i. i < LENGTH tys ==>
+    abi_tuple_input ce (EL i tys) (EL i tvs) (EL i vs) (EL i ops) s /\
+    type_memory_bytes ce (EL i tys) < dimword(:256) /\
+    (~is_word_type (EL i tys) ==> !w. eval_operand (EL i ops) s = SOME w ==>
+      (val_footprint (EL i tvs) (EL i vs) = 0 \/
+       loweringStateRelDefs$regions_disjoint (w2n bw) total (w2n w)
+         (val_footprint (EL i tvs) (EL i vs))))) /\
+  (!i x. i < LENGTH ops /\ EL i ops = Var x ==> not_fresh_at a x) /\
+  (!i. i < LENGTH tys ==>
+    if is_word_type (EL i tys) then op_taint tn (EL i ops) = {} else
+    ?x w. EL i ops = Var x /\ lookup_var x s = SOME w /\
+      ptr_covers G tn x s (type_memory_bytes ce (EL i tys)) /\
+      w2n w + type_memory_bytes ce (EL i tys) < dimword(:256) /\
+      (type_memory_bytes ce (EL i tys) = 0 \/
+       w2n w + type_memory_bytes ce (EL i tys) <= s.vs_alloca_next) /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory (EL i tvs) (EL i vs) (w2n w) mem)) /\
+  local_ptrs_rel func ce es.scopes s /\
+  (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at a x) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at a x) /\
+  (!x. not_fresh_at origin x ==> not_fresh_at a x) /\
+  (!name z k. local_region ce es.scopes s name z k ==>
+    regions_disjoint (w2n bw) total z k) /\
+  (!aid z k. FLOOKUP s0.vs_allocas aid = SOME (z,k) /\ aid < origin.cs_next_id ==>
+    regions_disjoint (w2n bw) total z k) /\
+  (!name z k. local_region ce es.scopes s0 name z k ==>
+    regions_disjoint (w2n bw) total z k) ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n bw) mem) /\
+    lookup_var root t = SOME bw /\ ptr_covers Gf tnf root t total /\
+    local_ptrs_rel func ce es.scopes t /\
+    (!D. ghost_inv_at D lo d ce cx es G tn s ==>
+      ghost_inv_at D lo d ce cx es Gf tnf t) /\
+    (ghost_kept_at lo ce es origin G0 tn0 s0 G tn ==>
+      ghost_kept_at lo ce es origin G0 tn0 s0 Gf tnf) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!code. abi_alloca_history code s ==> abi_alloca_history code t) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!i. ~(w2n bw <= i /\ i < w2n bw + total) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at a x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    (!oldop. (!x. oldop = Var x ==> not_fresh_at a x) ==>
+      eval_operand oldop t = eval_operand oldop s /\
+      op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop)
+Proof
+  rpt gen_tac >> disch_then (mp_tac o MATCH_MP abi_encode_tuple_staging_full_with_frame) >>
+  disch_then (qspecl_then [`explicit`, `PG`, `d`, `cx`, `G0`, `tn0`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
+QED
