@@ -6,13 +6,21 @@ Ancestors
 (* Weak frontier support: no definite assignment or all_reachable premise.
    Adapted from the proved makeSsaCurrentFrontier reference theory. *)
 Theorem current_frontier_not_entry:
-  wf_function fn /\ first_block_no_preds fn /\
+  ALL_DISTINCT (fn_labels fn) /\ first_block_no_preds fn /\
   MEM n (fn_labels fn) /\
   ALOOKUP (current_frontier_map fn) n = SOME fs /\ MEM y fs ==>
   fn_entry_label fn <> SOME y
 Proof
   strip_tac >> drule_all current_frontier_target_count >> strip_tac >>
-  strip_tac >> drule_all current_entry_preds_empty >> strip_tac >> gvs[]
+  strip_tac >>
+  `!p. ~MEM p (cfg_preds_of (cfg_analyze fn) y)` suffices_by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) y` >> gvs[] >> metis_tac[MEM]) >>
+  simp[cfg_analyze_preds, mem_build_preds] >>
+  gen_tac >> CCONTR_TAC >> gvs[] >>
+  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by
+    (irule cfg_succs_of_build_succs >> gvs[fn_labels_def]) >>
+  gvs[first_block_no_preds_def, EVERY_MEM, fn_entry_label_def,
+      entry_block_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem phi_pairs_build_phi_inst_supply:
@@ -149,7 +157,9 @@ Theorem add_phi_nodes_supply_entry:
   add_phi_nodes_supply s (current_frontier_map fn) pm li bbs defs = (bbs',s') ==>
   EVERY (\bb. bb.bb_label = entry ==> MEM bb bbs) bbs'
 Proof
-  strip_tac >> drule add_phi_nodes_supply_invariant >>
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
+  drule add_phi_nodes_supply_invariant >>
   disch_then irule >> conj_tac
   >- (rpt strip_tac >>
       `f <> entry` by

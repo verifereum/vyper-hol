@@ -6,11 +6,27 @@ Ancestors
 
 Theorem entry_code_function_body[local]:
   supported_function_body tops vis args fb ==>
-  !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmts ce lc rt fb)
 Proof
   simp[supported_function_body_def] >> rpt strip_tac >>
-  irule entry_code_supported_stmts >> goal_assum drule
+  irule entry_code_supported_stmts >>
+  qexistsl_tac [`args ++ supported_stmts_bindings T fb ++ supported_stmts_bindings F fb`, `tops`] >>
+  simp[]
+QED
+
+Theorem entry_code_build_defaults[local]:
+  supported_program tops ==>
+  EVERY (EVERY (supported_expr tops) o SND) (build_func_defaults tops)
+Proof
+  strip_tac >> simp[build_func_defaults_def, EVERY_MAP, EVERY_MEM] >>
+  qx_gen_tac `src` >> strip_tac >> gvs[MEM_MAP] >>
+  rename1 `MEM decl (FST (SND (classify_functions tops)))` >>
+  PairCases_on `decl` >>
+  drule_all entry_classified_internal_support >> strip_tac >>
+  gvs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
+  metis_tac[supportedExprsTheory.supported_expr_def]
 QED
 
 Theorem entry_code_build_getter[local]:
@@ -54,7 +70,11 @@ Proof
   drule_all entry_classified_external_support >> strip_tac >> gvs[] >>
   simp[package_external_fn_def, set_external_package_target_def] >>
   irule entry_code_external_function_body
-  >- (irule entry_code_function_body >> goal_assum drule) >>
+  >- (rpt gen_tac >> strip_tac >>
+      irule entry_code_function_body >> qexistsl_tac [`src4`, `tops`, `External`] >>
+      Cases_on `src6 = NoneT` >>
+      fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
+               build_compile_env_ce_func_defaults, entry_code_build_defaults]) >>
   metis_tac[entry_code_public_getter_body]
 QED
 
@@ -72,7 +92,11 @@ Proof
   drule_all entry_classified_internal_support >> strip_tac >> gvs[] >>
   simp[package_internal_fn_def, set_internal_package_target_def] >>
   irule entry_code_internal_function >>
-  irule entry_code_function_body >> goal_assum drule
+  rpt gen_tac >> strip_tac >>
+  irule entry_code_function_body >> qexistsl_tac [`src4`, `tops`, `Internal`] >>
+  Cases_on `src6 = NoneT` >>
+      fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
+           build_compile_env_ce_func_defaults, entry_code_build_defaults]
 QED
 
 Theorem entry_code_packaged_fallback:
@@ -92,5 +116,9 @@ Proof
   drule_all entry_classified_fallback_support >> strip_tac >> gvs[] >>
   simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   irule entry_code_fallback_body >>
-  irule entry_code_function_body >> goal_assum drule
+  rpt gen_tac >> strip_tac >>
+  irule entry_code_function_body >> qexistsl_tac [`src4`, `tops`, `External`] >>
+  Cases_on `src6 = NoneT` >>
+      fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
+           build_compile_env_ce_func_defaults, entry_code_build_defaults]
 QED

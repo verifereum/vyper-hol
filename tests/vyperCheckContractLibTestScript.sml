@@ -649,6 +649,53 @@ val () = List.app (fn (label, mutability, params, ret_ty, result) =>
       (builtin_modules mutability params ret_ty result))
   builtin_cases
 
+(* Minimum bounds observed at VYPER_PIN, functions.py:Uint2Str.fetch_call_return.
+   The annotated call takes the wider return type when its context widens it. *)
+val uint2str_widths =
+  [(8,3), (16,5), (24,8), (32,10), (40,13), (48,15), (56,17), (64,20),
+   (72,22), (80,25), (88,27), (96,29), (104,32), (112,34), (120,37),
+   (128,39), (136,41), (144,44), (152,46), (160,49), (168,51), (176,53),
+   (184,56), (192,58), (200,61), (208,63), (216,66), (224,68), (232,70),
+   (240,73), (248,75), (256,78)]
+
+fun check_uint2str_width bits bound = let
+  val k = numSyntax.term_of_int bits
+  val n = numSyntax.term_of_int bound
+  val modules = builtin_modules ``Pure`` ``[("x", BaseT (UintT ^k))]``
+    ``BaseT (StringT ^n)``
+    ``Builtin (BaseT (StringT ^n)) (Uint2Str ^n)
+        [Name (BaseT (UintT ^k)) "x"]``
+in
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address ^modules``
+end
+
+val () = List.app (fn (bits, digits) =>
+  (assert_some (check_uint2str_width bits digits);
+   assert_some (check_uint2str_width bits (digits + 7));
+   assert_none (check_uint2str_width bits (digits - 1)))) uint2str_widths
+
+(* Pinned Venom bytecode executed in Py-EVM returns these strings at zero
+   and the largest input, both at the minimum and widened bounds. *)
+Theorem uint2str_narrow_values:
+  evaluate_builtin cx acc (BaseT (StringT 3)) (Uint2Str 3)
+    [BaseT (UintT 8)] [IntV 0] = INL (StringV "0") /\
+  evaluate_builtin cx acc (BaseT (StringT 3)) (Uint2Str 3)
+    [BaseT (UintT 8)] [IntV 255] = INL (StringV "255") /\
+  evaluate_builtin cx acc (BaseT (StringT 10)) (Uint2Str 10)
+    [BaseT (UintT 8)] [IntV 255] = INL (StringV "255") /\
+  evaluate_builtin cx acc (BaseT (StringT 10)) (Uint2Str 10)
+    [BaseT (UintT 32)] [IntV 4294967295] = INL (StringV "4294967295") /\
+  evaluate_builtin cx acc (BaseT (StringT 20)) (Uint2Str 20)
+    [BaseT (UintT 64)] [IntV 18446744073709551615] =
+      INL (StringV "18446744073709551615") /\
+  evaluate_builtin cx acc (BaseT (StringT 78)) (Uint2Str 78)
+    [BaseT (UintT 256)] [IntV (2 ** 256 - 1)] =
+      INL (StringV "115792089237316195423570985008687907853269984665640564039457584007913129639935")
+Proof
+  EVAL_TAC
+QED
+
 (* An interface value has type address, so `i.address` on an interface
    parameter i is Acc Address applied to an address-typed name. *)
 val () = check_accepts "Acc Address" false empty_layouts

@@ -13,7 +13,7 @@ Theorem dload_normal_branch_block:
     resolve_phi lbl a.inst_operands = SOME op /\ op = Var w ==> w IN V) /\
   lower_dload_function_supply q f = (g,q') /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\ ~t1.vs_halted /\
@@ -27,18 +27,17 @@ Theorem dload_normal_branch_block:
       {id | ?ci. MEM ci (fn_insts (EL k (f::MAP (\c. c.cf_fn) cs))) /\
                  ci.inst_id = id}) /\
   (!k. k < LENGTH cs ==>
-    let c = EL k cs; d = EL k ds in
-    dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+    dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
       (DROP (SUC k) fs) /\
-    dload_equal_environment c.cf_state d.cf_state /\
-    c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
-    c.cf_inst = d.cf_inst /\
-    (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-      (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-    (?qc. ir_supply_covers_fn qc c.cf_fn /\
-      (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
-      dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-        c.cf_inst [c.cf_inst] 0)) ==>
+    dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+    (EL k cs).cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+    (EL k cs).cf_inst = (EL k ds).cf_inst /\
+    (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+      (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+    (?qc. ir_supply_covers_fn qc (EL k cs).cf_fn /\
+      (?qc'. lower_dload_function_supply qc (EL k cs).cf_fn = ((EL k ds).cf_fn,qc')) /\
+      dload_control_match qc (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+        (EL k cs).cf_inst [(EL k cs).cf_inst] 0)) ==>
   ?s1 s2 i' emitted'.
     step_inst fuel C i s = OK s1 /\ ~s1.vs_halted /\
     enters_block f s1 s2 /\
@@ -47,7 +46,7 @@ Theorem dload_normal_branch_block:
     dload_control_match q f g s2 t2 i' emitted' 0 /\ j = HD emitted' /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v s2 = NONE <=> lookup_var v t2 = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (entry_prov f s1 G) (entry_prov g t1 H)
       (entry_taint_vars f s1 tn) (entry_taint_vars g t1 un) s2 t2 cs ds /\
     LENGTH fs = SUC (LENGTH cs) /\ LENGTH cs = LENGTH ds /\
@@ -57,18 +56,17 @@ Theorem dload_normal_branch_block:
         {id | ?ci. MEM ci (fn_insts (EL k (f::MAP (\c. c.cf_fn) cs))) /\
                    ci.inst_id = id}) /\
     (!k. k < LENGTH cs ==>
-      let c = EL k cs; d = EL k ds in
-      dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+      dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
         (DROP (SUC k) fs) /\
-      dload_equal_environment c.cf_state d.cf_state /\
-      c.cf_state.vs_call_ctx.cc_address = s2.vs_call_ctx.cc_address /\
-      c.cf_inst = d.cf_inst /\
-      (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-        (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-      (?qc. ir_supply_covers_fn qc c.cf_fn /\
-        (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
-        dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0)) /\
+      dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+      (EL k cs).cf_state.vs_call_ctx.cc_address = s2.vs_call_ctx.cc_address /\
+      (EL k cs).cf_inst = (EL k ds).cf_inst /\
+      (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+        (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+      (?qc. ir_supply_covers_fn qc (EL k cs).cf_fn /\
+        (?qc'. lower_dload_function_supply qc (EL k cs).cf_fn = ((EL k ds).cf_fn,qc')) /\
+        dload_control_match qc (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+          (EL k cs).cf_inst [(EL k cs).cf_inst] 0)) /\
     ir_supply_covers_fn q f /\
     FDOM (entry_prov f s1 G) SUBSET fn_pv P f /\
     (!k b sz. k < LENGTH PG /\ EL k PG = SOME (b,sz) ==> k IN P f.fn_name) /\

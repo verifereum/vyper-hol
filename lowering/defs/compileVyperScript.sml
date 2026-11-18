@@ -533,6 +533,14 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Internal defaults use the same constant-substituted declarations as
+   the internal function bodies. classify_functions preserves source order. *)
+Definition build_func_defaults_def:
+  build_func_defaults (tops : toplevel list) : (string # expr list) list =
+    MAP (\(_,_,_,name,_,dflts,_,_). (name, dflts))
+      (FST (SND (classify_functions tops)))
+End
+
 (* Declared return types of the non-external functions, the first
    declaration of a name winning, as in build_func_param_types. *)
 Definition build_func_return_type_def:
@@ -705,6 +713,7 @@ Definition build_compile_env_def:
        ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_defaults := build_func_defaults tops;
        ce_func_return_type := build_func_return_type tops;
        ce_func_mutability := build_func_mutability tops;
        ce_func_ids := build_func_ids 0 tops;
@@ -762,6 +771,17 @@ Theorem build_compile_env_ce_func_param_types:
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_func_param_types =
     build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_defaults:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_defaults =
+    build_func_defaults tops
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -1134,8 +1154,8 @@ End
 
 (* Python allocates the return buffer each time it lowers a valued return
    of an external function that is neither @raw_return nor a word type.
-   Python does the same for a valued return in __default__; the fallback
-   isn't checked here, since its compile env keeps no ABI return encoding.
+   Python does the same for a valued return in __default__, which the
+   runtime unit checks with this predicate too.
    Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return. *)
 Definition external_return_buffer_ok_def:
   external_return_buffer_ok
@@ -1269,9 +1289,11 @@ Definition package_fallback_fn_def:
   package_fallback_fn tops use_trans nkey_map NONE = NONE ∧
   package_fallback_fn tops use_trans nkey_map
     (SOME (mut, nr, rr, fname, fargs, _, ret, body)) =
-    let cenv = (build_compile_env tops
-                  External mut fname fargs ret body use_trans)
-                 with ce_raw_return := rr in
+    let cenv0 = (build_compile_env tops
+                   External mut fname fargs ret body use_trans)
+                  with ce_raw_return := rr in
+    let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv0 ret
+               else cenv0 in
     let nkey = nkey_map fname in
     let is_payable = (mut = Payable) in
     let is_view = (mut = View) in
@@ -1428,7 +1450,7 @@ Proof
   >- simp[set_fallback_package_target_def, package_fallback_fn_def]
   >> Cases_on `x` >> PairCases_on `r` >>
   simp[set_fallback_package_target_def, package_fallback_fn_def] >>
-  irule compile_env_target_update_id >> simp[]
+  irule compile_env_target_update_id >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem set_constructor_package_target_all_capabilities[simp]:
@@ -1531,6 +1553,256 @@ Proof
   rpt gen_tac >> simp[package_external_group_def] >> REFL_TAC
 QED
 
+(* ===== Internal functions in the pinned compiler's order ===== *)
+
+(* Python (vyper/codegen_venom/module.py) emits, at runtime, the internal
+   functions of _runtime_reachable_functions: for each exposed function, its
+   reachable_internal_functions; at deploy, those of the constructor.
+   reachable_internal_functions is a DFS post-order over each function's
+   called_functions (vyper/semantics/analysis/module.py
+   _compute_and_validate_reachable_r), and called_functions lists the internal
+   callees in get_descendants(Call) order: a node before its children,
+   children in AST field order (vyper/ast/nodes.py _get_descendants). *)
+
+(* The operands of xs not supplied as keywords (indices from i), in order. *)
+Definition create_positional_def:
+  create_positional kws (i : num) [] = [] ∧
+  create_positional kws i (x :: xs) =
+    (if MEM i kws then [] else [x]) ++ create_positional kws (i + 1) xs
+End
+
+(* A create builtin's per-operand results, from the stored evaluation order
+   to source order: the operands not supplied as keywords in place, then the
+   supplied keywords in source order (kws). *)
+Definition create_source_order_def:
+  create_source_order kws xs =
+    create_positional kws 0 xs ++ MAP (λi. EL i xs) kws
+End
+
+(* Internal callees of an expression in get_descendants(Call) order.  This is
+   int_calls_expr except for create operands, which the AST stores in
+   evaluation order.  Builtins the frontend models as IntCall (shift) name no
+   internal function, so order_internals ignores them. *)
+Definition src_calls_expr_def:
+  src_calls_expr (IfExp _ c x y) =
+    src_calls_expr c ++ src_calls_expr x ++ src_calls_expr y ∧
+  src_calls_expr (StructLit _ _ kes) = src_calls_named kes ∧
+  src_calls_expr (Subscript _ x y) = src_calls_expr x ++ src_calls_expr y ∧
+  src_calls_expr (Attribute _ x _) = src_calls_expr x ∧
+  src_calls_expr (Builtin _ _ es) = FLAT (src_calls_each es) ∧
+  src_calls_expr (TypeBuiltin _ _ _ es) = FLAT (src_calls_each es) ∧
+  src_calls_expr (Pop _ tgt) = src_calls_target tgt ∧
+  src_calls_expr (Call _ (IntCall f) es _) =
+    nsid_to_string f :: FLAT (src_calls_each es) ∧
+  src_calls_expr (Call _ (CreateTarget _ _ _ kws) es _) =
+    FLAT (create_source_order kws (src_calls_each es)) ∧
+  src_calls_expr (Call _ _ es _) = FLAT (src_calls_each es) ∧
+  src_calls_expr _ = [] ∧
+
+  src_calls_target (SubscriptTarget tgt e) =
+    src_calls_target tgt ++ src_calls_expr e ∧
+  src_calls_target (AttributeTarget tgt _) = src_calls_target tgt ∧
+  src_calls_target _ = [] ∧
+
+  src_calls_each [] = [] ∧
+  src_calls_each (e :: es) = src_calls_expr e :: src_calls_each es ∧
+
+  src_calls_named [] = [] ∧
+  src_calls_named ((_,e) :: kes) = src_calls_expr e ++ src_calls_named kes
+Termination
+  WF_REL_TAC `measure (λx. case x of
+    | INL e => expr_size e
+    | INR (INL tgt) => base_assignment_target_size tgt
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR kes)) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def]
+End
+
+Definition src_calls_atarget_def:
+  src_calls_atarget (BaseTarget tgt) = src_calls_target tgt ∧
+  src_calls_atarget (TupleTarget tgts) = src_calls_atargets tgts ∧
+  src_calls_atargets [] = [] ∧
+  src_calls_atargets (t :: ts) = src_calls_atarget t ++ src_calls_atargets ts
+End
+
+Definition src_calls_iterator_def:
+  src_calls_iterator (Array e) = src_calls_expr e ∧
+  src_calls_iterator (Range x y) = src_calls_expr x ++ src_calls_expr y
+End
+
+Definition src_calls_assert_reason_def:
+  src_calls_assert_reason (AssertReason e) = src_calls_expr e ∧
+  src_calls_assert_reason (AssertCustomError err) =
+    FLAT (src_calls_each (custom_error_exprs err)) ∧
+  src_calls_assert_reason _ = []
+End
+
+Definition src_calls_raise_reason_def:
+  src_calls_raise_reason (RaiseReason e) = src_calls_expr e ∧
+  src_calls_raise_reason (RaiseCustomError err) =
+    FLAT (src_calls_each (custom_error_exprs err)) ∧
+  src_calls_raise_reason _ = []
+End
+
+(* int_calls_stmt, except that Vyper visits an assignment's value before its
+   target (vyper/ast/nodes.py Assign). *)
+Definition src_calls_stmt_def:
+  src_calls_stmt (Expr e) = src_calls_expr e ∧
+  src_calls_stmt (For _ _ iter _ body) =
+    src_calls_iterator iter ++ src_calls_stmts body ∧
+  src_calls_stmt (If e yes no) =
+    src_calls_expr e ++ src_calls_stmts yes ++ src_calls_stmts no ∧
+  src_calls_stmt (Assert e reason) =
+    src_calls_expr e ++ src_calls_assert_reason reason ∧
+  src_calls_stmt (Log _ es) = FLAT (src_calls_each es) ∧
+  src_calls_stmt (Raise reason) = src_calls_raise_reason reason ∧
+  src_calls_stmt (Return (SOME e)) = src_calls_expr e ∧
+  src_calls_stmt (Assign tgt e) = src_calls_expr e ++ src_calls_atarget tgt ∧
+  src_calls_stmt (AugAssign _ tgt _ e) =
+    src_calls_target tgt ++ src_calls_expr e ∧
+  src_calls_stmt (Append tgt e) = src_calls_target tgt ++ src_calls_expr e ∧
+  src_calls_stmt (AnnAssign _ _ e) = src_calls_expr e ∧
+  src_calls_stmt _ = [] ∧
+
+  src_calls_stmts [] = [] ∧
+  src_calls_stmts (s :: ss) = src_calls_stmt s ++ src_calls_stmts ss
+End
+
+(* A function's defaults come before its body (FunctionDef.args). *)
+Definition src_calls_fn_def:
+  src_calls_fn (mut, nr, rr, fname, fargs, dflts, ret, body) =
+    FLAT (src_calls_each dflts) ++ src_calls_stmts body
+End
+
+Definition internal_callees_def:
+  internal_callees ints g =
+    FLAT (MAP src_calls_fn
+      (FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body). fname = g)
+         ints))
+End
+
+(* _compute_and_validate_reachable_r: each callee not yet reached follows the
+   callees it reaches.  One seen list across all roots gives the same order
+   as Python's per-function sets, as a reached set is closed under calls.
+   check_contract rejects call cycles, so the number of internal functions
+   bounds the depth (the fuel). *)
+Definition reach_internals_def:
+  reach_internals ints 0 seen gs = seen ∧
+  reach_internals ints (SUC n) seen gs =
+    FOLDL (λseen g.
+      if MEM g seen then seen else
+      let seen' = reach_internals ints n seen (internal_callees ints g) in
+      if MEM g seen' then seen' else SNOC g seen') seen gs
+End
+
+(* Calls of an exposed function: the external functions, __default__ among
+   them, in declaration order (ModuleT.exposed_functions).  The public
+   getters that follow call no internal function, and the AST has no
+   exports. *)
+Definition external_calls_def:
+  external_calls (FunctionDecl External mut nr rr fname fargs dflts ret body) =
+    src_calls_fn (mut, nr, rr, fname, fargs, dflts, ret, body) ∧
+  external_calls _ = []
+End
+
+Definition runtime_internal_order_def:
+  runtime_internal_order tops ints =
+    reach_internals ints (LENGTH ints) [] (FLAT (MAP external_calls tops))
+End
+
+Definition deploy_internal_order_def:
+  deploy_internal_order ctor ints =
+    reach_internals ints (LENGTH ints) []
+      (case ctor of NONE => [] | SOME f => src_calls_fn f)
+End
+
+(* ints in the order of names, then the others in source order.  The
+   pipeline prunes those (prune_unit_fcg_unreachable): Python never emits
+   them. *)
+Definition order_internals_def:
+  order_internals names ints =
+    FLAT (MAP (λn. FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body).
+                             fname = n) ints) names) ++
+    FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body). ¬MEM fname names)
+      ints
+End
+
+Theorem PERM_key_order[local]:
+  !names l. ALL_DISTINCT names ==>
+    PERM (FLAT (MAP (\n. FILTER (\x. k x = n) l) names) ++
+          FILTER (\x. ~MEM (k x) names) l) l
+Proof
+  Induct
+  >- (simp[] >> TRY (Induct_on `l` >> simp[])) >>
+  rpt strip_tac >> fs[] >>
+  first_x_assum (qspec_then `FILTER (\x. k x <> h) l` mp_tac) >>
+  simp[rich_listTheory.FILTER_FILTER] >>
+  `FLAT (MAP (\n. FILTER (\x. k x = n /\ k x <> h) l) names) =
+   FLAT (MAP (\n. FILTER (\x. k x = n) l) names)`
+    by (AP_TERM_TAC >> irule listTheory.MAP_CONG >> rw[] >>
+        simp[rich_listTheory.FILTER_EQ] >> rw[] >> metis_tac[]) >>
+  `FILTER (\x. ~MEM (k x) names /\ k x <> h) l =
+   FILTER (\x. k x <> h /\ ~MEM (k x) names) l`
+    by (simp[rich_listTheory.FILTER_EQ] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  irule sortingTheory.PERM_TRANS >>
+  qexists_tac `FILTER (\x. k x = h) l ++ FILTER (\x. k x <> h) l` >>
+  conj_tac
+  >- ASM_REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+  ONCE_REWRITE_TAC [sortingTheory.PERM_SYM] >>
+  `FILTER (\x. k x <> h) l = FILTER ($~ o (\x. k x = h)) l`
+    by simp[combinTheory.o_DEF] >>
+  simp[sortingTheory.PERM_SPLIT]
+QED
+
+Theorem order_internals_key[local]:
+  order_internals names ints =
+    FLAT (MAP (\n. FILTER (\x. FST (SND (SND (SND x))) = n) ints) names) ++
+    FILTER (\x. ~MEM (FST (SND (SND (SND x)))) names) ints
+Proof
+  simp[order_internals_def, pairTheory.LAMBDA_PROD]
+QED
+
+Theorem MEM_order_internals[simp]:
+  !names ints x. MEM x (order_internals names ints) <=> MEM x ints
+Proof
+  rw[order_internals_key, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+     listTheory.MEM_FILTER, PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem PERM_order_internals:
+  !names ints. ALL_DISTINCT names ==> PERM (order_internals names ints) ints
+Proof
+  simp[order_internals_key, PERM_key_order]
+QED
+
+Theorem reach_internals_distinct[local]:
+  !n ints seen gs. ALL_DISTINCT seen ==>
+    ALL_DISTINCT (reach_internals ints n seen gs)
+Proof
+  Induct >> simp[reach_internals_def] >>
+  rpt gen_tac >> qid_spec_tac `seen` >> qid_spec_tac `gs` >>
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> rw[listTheory.ALL_DISTINCT_SNOC] >> gs[]
+QED
+
+Theorem PERM_order_runtime_internals:
+  !tops ints. PERM (order_internals (runtime_internal_order tops ints) ints) ints
+Proof
+  simp[PERM_order_internals, runtime_internal_order_def,
+       reach_internals_distinct]
+QED
+
+Theorem PERM_order_deploy_internals:
+  !ctor ints. PERM (order_internals (deploy_internal_order ctor ints) ints) ints
+Proof
+  simp[PERM_order_internals, deploy_internal_order_def,
+       reach_internals_distinct]
+QED
+
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
@@ -1549,7 +1821,9 @@ Definition lower_vyper_runtime_unit_def:
                package_external_fn tops use_trans nkey_map) ext_fns in
     let runtime_int_fns =
           MAP (set_internal_package_target rpolicy.rpol_target o
-               package_internal_fn tops use_trans nkey_map F 0) int_fns in
+               package_internal_fn tops use_trans nkey_map F 0)
+              (order_internals (runtime_internal_order tops int_fns)
+                 int_fns) in
     let fallback_fn =
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
@@ -1557,6 +1831,11 @@ Definition lower_vyper_runtime_unit_def:
     if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
+       OPTION_ALL (λ(cenv,pay,nr,nkey,ut,iv,body,ret_opt).
+                     external_return_buffer_ok
+                       ("", cenv, ([] : num list), 0, pay, nr, nkey, ut, iv, body,
+                        ret_opt))
+         fallback_fn ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
        EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
@@ -1598,6 +1877,13 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
          (MAP (set_external_package_target rpolicy.rpol_target o
            package_external_fn tops T
              (K global_nonreentrant_slot : string -> num)) ext_fns) ∧
+       OPTION_ALL (λ(cenv,pay,nr,nkey,ut,iv,body,ret_opt).
+                     external_return_buffer_ok
+                       ("", cenv, ([] : num list), 0, pay, nr, nkey, ut, iv, body,
+                        ret_opt))
+         (set_fallback_package_target rpolicy.rpol_target
+           (package_fallback_fn tops T
+             (K global_nonreentrant_slot : string -> num) fb_fn)) ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
        EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
@@ -1610,7 +1896,8 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
         (MAP (set_external_package_target rpolicy.rpol_target o
           package_external_fn tops T (K global_nonreentrant_slot : string -> num)) ext_fns)
         (MAP (set_internal_package_target rpolicy.rpol_target o
-          package_internal_fn tops T (K global_nonreentrant_slot : string -> num) F 0) int_fns)
+          package_internal_fn tops T (K global_nonreentrant_slot : string -> num) F 0)
+          (order_internals (runtime_internal_order tops int_fns) int_fns))
         (set_fallback_package_target rpolicy.rpol_target
           (package_fallback_fn tops T
             (K global_nonreentrant_slot : string -> num) fb_fn)) rpolicy
@@ -1692,7 +1979,8 @@ Definition lower_vyper_deploy_unit_def:
           if has_constructor then
             MAP (set_internal_package_target rpolicy.rpol_target o
                  package_internal_fn tops use_trans nkey_map T immutables_len)
-                int_fns
+                (order_internals (deploy_internal_order ctor_fn int_fns)
+                   int_fns)
           else [] in
     if ¬(immutables_len < 0x6000) ∨
        ¬EVERY (fn_allocs_ok tops)

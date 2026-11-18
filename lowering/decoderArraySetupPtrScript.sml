@@ -232,7 +232,7 @@ Proof
                      exec_pure2_def, eval_operand_def, GSYM word_mul_n2w] >>
      qpat_assum `eval_operand idx s1 = SOME (n2w j)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> strip_tac >> strip_tac >>
-     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+     FIRST [gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]]) >>
   qabbrev_tac `ss2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
   `run_inst_seq (emitted_insts c2 ready) ss2 = OK (t with vs_inst_idx := ss2.vs_inst_idx)` by
     (qpat_assum `emit_op ADD _ c2 = _` (mp_then Any mp_tac emit_op_run_pc) >>

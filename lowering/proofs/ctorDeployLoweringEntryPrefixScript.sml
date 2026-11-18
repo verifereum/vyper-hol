@@ -70,9 +70,7 @@ Proof
  simp[] >>
  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
  `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-   (gvs[o1_source_unit_ok_def, EVERY_MEM] >>
-    qpat_x_assum `!fn. MEM fn _ ==> !inst. _`
-      (drule_then assume_tac) >> simp[]) >>
+   (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
  gvs[] >>
  rename1 `fn_entry_label f = SOME "__deploy"` >>
  Cases_on `f.fn_blocks` >- gvs[fn_entry_label_def, entry_block_def] >>

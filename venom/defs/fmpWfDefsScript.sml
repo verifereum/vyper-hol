@@ -140,7 +140,7 @@ Definition publishing_invoke_wf_def:
       fmp_invoke_output_arity_ok callee sig inst
 End
 
-(* One producer step, parameterized by the already-rooted values available at
+(* One producer step, parameterized by the values still counted as rooted at
  * the smaller fuel.  Each accepted shape is intentionally exact. *)
 Definition fmp_inst_roots_def:
   fmp_inst_roots ctx sig fn rooted v inst <=>
@@ -171,8 +171,13 @@ Definition fmp_inst_roots_def:
      inst.inst_outputs <> [] /\ v = LAST inst.inst_outputs)
 End
 
+(* Greatest fixpoint, computed by iterating down from "everything rooted":
+ * cycles count as rooted (loop-carried runners form PHI/BUMP cycles), as the
+ * Python checker's visited set does, and a cycle is then rooted exactly when
+ * its loop-external inputs are.  The step is monotone and only defined values
+ * survive one step, so the fuel below reaches the fixpoint. *)
 Definition fmp_value_rooted_fuel_def:
-  fmp_value_rooted_fuel ctx sig fn 0 v = F /\
+  fmp_value_rooted_fuel ctx sig fn 0 v = T /\
   fmp_value_rooted_fuel ctx sig fn (SUC fuel) v =
     EXISTS
       (fmp_inst_roots ctx sig fn

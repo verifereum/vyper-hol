@@ -90,9 +90,7 @@ Proof
  rpt gen_tac >> strip_tac >> fs[deploy_ctor_code_def] >>
  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
  `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-  (gvs[o1_source_unit_ok_def, EVERY_MEM] >>
-   qpat_x_assum `!fn. MEM fn _ ==> !inst. _`
-    (drule_then assume_tac) >> simp[]) >>
+  (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
  `MEM bb func.fn_blocks` by
   metis_tac[lookup_block_MEM] >>
  Cases_on `bb.bb_instructions` >> simp[phi_prefix_length_def] >>

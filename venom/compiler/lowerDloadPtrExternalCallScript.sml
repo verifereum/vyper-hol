@@ -79,8 +79,8 @@ QED
 
 Theorem dload_memory_match_taint_cong:
   tn.t_mem = sn.t_mem /\ un.t_mem = vn.t_mem ==>
-  (dload_memory_match lo fs tn un s t <=>
-   dload_memory_match lo fs sn vn s t)
+  (dload_memory_match fl lo fs tn un s t <=>
+   dload_memory_match fl lo fs sn vn s t)
 Proof
   simp[dload_memory_match_def]
 QED
@@ -100,14 +100,15 @@ Theorem dload_external_call_memory:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL) /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
   source_memory_write_ranges i t = [(w2n rt,w2n rz)] /\
-  dload_memory_match lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\ dload_value_word fs {} p q ro rt /\
+  dload_memory_match fl lo fs tn un s t /\
+  dload_live_layout lo sf tf fs /\ dload_value_word fl fs {} p q ro rt /\
   exec_ext_call i s gs addr value ao az ro rz st = OK s1 /\
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
   s1.vs_returndata = t1.vs_returndata /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
-    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) ==>
-  dload_memory_match lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
+    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  tf <= fl ==>
+  dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all dload_exec_ext_call_memory_match >> strip_tac >>
@@ -235,13 +236,13 @@ Theorem dload_scalar_result_vars:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL \/
    i.inst_opcode = CREATE \/ i.inst_opcode = CREATE2 \/
    i.inst_opcode = DELEGATECALL) /\
-  dload_vars_match fs V G H tn un s t /\
+  dload_vars_match fl fs V G H tn un s t /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   (?out. i.inst_outputs = [out]) /\
   (!v. ~MEM v i.inst_outputs ==> lookup_var v s1 = lookup_var v s) /\
   (!v. ~MEM v i.inst_outputs ==> lookup_var v t1 = lookup_var v t) /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) ==>
-  dload_vars_match fs V (step_prov PG G i s1) (step_prov PH H i t1)
+  dload_vars_match fl fs V (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
   (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))
 Proof
@@ -267,12 +268,12 @@ QED
 
 Theorem dload_external_call_vars:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL) /\
-  dload_vars_match fs V G H tn un s t /\
+  dload_vars_match fl fs V G H tn un s t /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   exec_ext_call i s gs addr value ao az ro rz st = OK s1 /\
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) ==>
-  dload_vars_match fs V (step_prov PG G i s1) (step_prov PH H i t1)
+  dload_vars_match fl fs V (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
   (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))
 Proof
@@ -303,9 +304,9 @@ Theorem dload_external_call_boundary:
   (st <=> i.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
   source_memory_write_ranges i t = [(w2n rt,w2n rz)] /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_value_word fs {} p q ro rt /\
+  dload_value_word fl fs {} p q ro rt /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n bz) t /\
@@ -317,22 +318,23 @@ Theorem dload_external_call_boundary:
     s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
     t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)) ==>
-  dload_boundary_core lo fs V Ws PG PH
+  dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
   (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dload_vars_match fs V G H tn un s t /\
-   dload_memory_match lo fs tn un s t /\
+  `dload_vars_match fl fs V G H tn un s t /\
+   dload_memory_match fl lo fs tn un s t /\
    dload_shared_store tn un s t /\ dload_equal_environment s t /\
    dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs` by
     metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   drule_all dload_external_call_vars >> strip_tac >>
   `s1.vs_returndata = t1.vs_returndata` by
     (qpat_x_assum `dload_equal_environment s1 t1` mp_tac >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
-  `dload_memory_match lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
+  `dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
     (irule dload_external_call_memory >> metis_tac[]) >>
   `dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
     (drule_all dload_external_call_shared_store >> simp[]) >>
@@ -341,7 +343,7 @@ Proof
    s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params` by
     metis_tac[dload_ext_call_success_footprint, dload_external_call_frame_fields] >>
   simp[dload_boundary_core_def] >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[dload_boundary_core_def] >> strip_tac >>
   irule dload_allocation_neutral_tables >> metis_tac[]
 QED
@@ -373,10 +375,10 @@ Theorem dload_boundary_core_external_call_shaped[local]:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) (TL i.inst_operands) ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\
@@ -432,7 +434,7 @@ Proof
   `source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
    source_memory_write_ranges i t = [(w2n rt,w2n rz)]` by
     (conj_tac >> irule dload_external_call_write_range >> metis_tac[]) >>
-  `dload_value_word fs {} (op_prov G r) (op_prov H r) ro rt` by
+  `dload_value_word fl fs {} (op_prov G r) (op_prov H r) ro rt` by
     (first_x_assum irule >> simp[]) >>
   `(w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ op_prov G r <> NONE) ==>
     ?b n. op_prov G r = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n))` by
@@ -442,7 +444,7 @@ Proof
      qpat_assum `ops.iao_ofst = r` (SUBST1_TAC o SYM) >>
      rpt strip_tac >> irule dload_write_access_containment >> simp[] >>
      metis_tac[]) >>
-  `dload_boundary_core lo fs V Ws PG PH
+  `dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
    (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))` by
@@ -472,10 +474,10 @@ Theorem dload_boundary_core_external_call:
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. MEM (Var v) (TL i.inst_operands) ==> v IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t1 ==>
   ?s1. step_inst fuel Cs i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
     (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE)) /\

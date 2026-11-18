@@ -230,7 +230,7 @@ Proof
   abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi` by
    (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+    FIRST [fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]]) >>
  `loop_st.cs_next_var <= limit_st.cs_next_var` by
    fs[abi_decoder_recursive_loop_compiled_def] >>
  `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\ d+32 <= D+N` by

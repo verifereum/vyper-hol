@@ -836,19 +836,6 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Triviality bump_step_structure[local]:
-  !inst s s'.
-    inst.inst_opcode = BUMP /\ step_inst_base inst s = OK s' ==>
-    ?out1 val1 out2 val2.
-      inst.inst_outputs = [out1; out2] /\
-      s' = update_var out2 val2 (update_var out1 val1 s)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
 fun pure_step_finish_tac () =
   gvs[inst_wf_def] >>
   FIRST [
@@ -864,8 +851,6 @@ fun pure_step_finish_tac () =
       qexists_tac `[(out,val)]` >> simp[],
     drule direct_single_output_step_structure >> strip_tac >> gvs[] >>
       qexists_tac `[(out,val)]` >> simp[],
-    drule bump_step_structure >> strip_tac >> gvs[] >>
-      qexists_tac `[(out1,val1); (out2,val2)]` >> simp[],
     gvs[AllCaseEqs()] >>
       FIRST [
         qexists_tac `[]` >> simp[],
@@ -896,9 +881,6 @@ Proof
       direct_single_output_step_structure >>
       (impl_tac >- ASM_REWRITE_TAC[]) >> strip_tac >>
       qexists_tac `[(out,val)]` >> simp[],
-    qspecl_then [`inst`, `ss`, `v2`] mp_tac bump_step_structure >>
-      (impl_tac >- ASM_REWRITE_TAC[]) >> strip_tac >>
-      qexists_tac `[(out1,val1); (out2,val2)]` >> simp[],
     qpat_x_assum `step_inst_base inst ss = OK v2` mp_tac >>
       ASM_REWRITE_TAC[step_inst_base_def] >> strip_tac >>
       pure_step_finish_tac ()]
@@ -1447,15 +1429,15 @@ Proof
   `~is_alloca_op inst.inst_opcode /\
    ~is_ext_call_op inst.inst_opcode /\
    inst.inst_opcode <> INVOKE /\
-   Eff_FMP NOTIN write_effects inst.inst_opcode` by
+   inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DALLOCA` by
     (Cases_on `inst.inst_opcode` >>
-     gvs[is_effect_free_op_def, is_alloca_op_def, is_ext_call_op_def,
-         write_effects_def, empty_effects_def]) >>
+     gvs[is_effect_free_op_def, is_alloca_op_def, is_ext_call_op_def]) >>
   `step_inst_base inst s = OK s'` by
     metis_tac[effect_free_step_eq_base] >>
+  (* Not via the effects table: BUMP is effect-free but declares Eff_FMP. *)
   `s'.vs_fmp = s.vs_fmp` by (
     qspecl_then [`inst`, `s`, `s'`] mp_tac
-      step_inst_base_preserves_fmp_no_write >>
+      venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
     simp[]) >>
   `s'.vs_call_entry_fmp = s.vs_call_entry_fmp /\
    s'.vs_initial_fmp = s.vs_initial_fmp /\

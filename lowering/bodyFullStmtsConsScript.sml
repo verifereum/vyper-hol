@@ -148,14 +148,16 @@ Resume stmt_frag_full_cons_env[continue]:
     (qspec_then `H` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `cfin` strip_assume_tac) >>
   qexists_tac `cfin` >> fs[stmt_lands_def] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cfin`, `t`, `sm`] >> simp[]
+  `return_buf_frame d cfin sb t` by
+    (irule return_buf_frame_frame >>
+     qexistsl_tac [`cfin`, `t`, `sm`] >> simp[]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume stmt_frag_full_cons_env[tail]:
   `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   `mid with gas_obs := [] = mid` by
     gvs[evaluation_state_component_equality] >>
   `eval_stmt cx stmt
@@ -199,8 +201,25 @@ Resume stmt_frag_full_cons_env[post]:
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   qexists_tac `cfin` >> simp[] >>
-  irule cenv_top_ext_trans >> qexistsl_tac [`c`, `mid.scopes`] >>
-  gvs[preserves_scopes_dom_def]
+  `sa.cs_next_id <= sm.cs_next_id` by 
+    (qspecl_then [`cenv`, `lctx`, `ty`, `stmt`, `sa`, `c`, `sm`] mp_tac
+       stmt_env_next_id >> simp[]) >>
+  rpt conj_tac
+  >~ [`cenv_top_ext`]
+  >- (irule cenv_top_ext_trans >> qexistsl_tac [`c`, `mid.scopes`] >>
+      gvs[preserves_scopes_dom_def])
+  >~ [`alloca_frame`]
+  >- (mp_tac (Q.INST [`c0` |-> `cenv`, `e0` |-> `es`, `sa0` |-> `sa`,
+                      `c1` |-> `c`, `e1` |-> `mid`, `s1` |-> `t`, `sa1` |-> `sm`,
+                      `c2` |-> `cfin`, `e2` |-> `ee`, `s2` |-> `t'`]
+                     alloca_frame_trans) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  mp_tac (Q.INST [`c0` |-> `cenv`, `e0` |-> `es`, `sa0` |-> `sa`,
+                  `c1` |-> `c`, `e1` |-> `mid`, `s1` |-> `t`, `sa1` |-> `sm`,
+                  `tn2` |-> `tn'`] alloca_taint_kept_trans) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Finalise stmt_frag_full_cons_env

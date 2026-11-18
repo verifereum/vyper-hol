@@ -46,7 +46,7 @@ Theorem ld_normal_call_request_backward:
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
-  ~in_revert_forward fn s /\ MEM i.inst_opcode [CALL;STATICCALL] /\
+  ~in_revert_forward fn s /\ MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   step_inst fuel CT i t = OK t' /\
@@ -57,7 +57,7 @@ Proof
   strip_tac >>
   `inst_wf i` by (drule_all ld_annotated_inst_wf >> simp[]) >>
   `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]` by
-    fs[MEM] >>
+    gvs[MEM] >>
   drule_all ld_normal_external_operands >> strip_tac >>
   Cases_on `i.inst_opcode = CALL`
   >- (`?g a v off sz ro rs. i.inst_operands = [g;a;v;off;sz;ro;rs]` by
@@ -81,15 +81,27 @@ Proof
        fs[Excl "consume_call_outcome_eq"] >>
        qpat_x_assum `_ ==> ?out w rS rT. _` mp_tac >>
        asm_rewrite_tac[] >> strip_tac >> suspend "consume_growth") >>
-  `i.inst_opcode = STATICCALL` by fs[MEM] >>
+  `MEM i.inst_opcode [STATICCALL;DELEGATECALL]` by gvs[MEM] >>
   `?g a off sz ro rs. i.inst_operands = [g;a;off;sz;ro;rs]` by
-    (qpat_x_assum `inst_wf i` mp_tac >>
+    (qpat_assum `MEM i.inst_opcode [STATICCALL;DELEGATECALL]` mp_tac >>
+     simp_tac bool_ss [MEM] >> strip_tac >> qpat_x_assum `inst_wf i` mp_tac >>
      simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
   drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     ld_normal_external_input_correspondence >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   simp[] >> disch_then drule >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+  Cases_on `i.inst_opcode = DELEGATECALL`
+  >- (drule_at (Pat `step_inst _ _ _ _ = OK _`)
+        ld_delegatecall_step_backward_extract >>
+      simp[Excl "consume_call_outcome_eq"] >>
+      disch_then (qspecl_then [`un`,`tn`,`s`] mp_tac) >>
+      simp[Excl "consume_call_outcome_eq"] >>
+      disch_then (qspec_then `CS` strip_assume_tac) >>
+      qpat_x_assum `!op. MEM op i.inst_operands /\ _ ==> _` kall_tac >>
+      fs[Excl "consume_call_outcome_eq"] >>
+      suspend "consume_growth") >>
+  `i.inst_opcode = STATICCALL` by fs[MEM] >>
   drule_at (Pat `step_inst _ _ _ _ = OK _`) ld_call_step_backward >>
   simp[Excl "consume_call_outcome_eq"] >>
   disch_then (qspec_then `s` mp_tac) >>
@@ -170,7 +182,7 @@ Proof
   drule ld_normal_data_frame >> disch_then assume_tac >>
   drule_then assume_tac ld_frame_data_shared >>
   drule_all ld_annotated_external_clean >> strip_tac >>
-  Cases_on `MEM i.inst_opcode [CALL;STATICCALL]`
+  Cases_on `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL]`
   >- (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         ld_normal_call_request_backward >>
       disch_then (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -185,6 +197,8 @@ Proof
           (s.vs_transient s.vs_call_ctx.cc_address)` by
         (qpat_x_assum `taint_within D CS vs0` mp_tac >>
          rewrite_tac[taint_within_def] >> strip_tac >>
+         qpat_x_assum `?stk PG G. frame_reachable _ _ _ _ _ _ _ _ _ /\ _`
+           strip_assume_tac >>
          first_x_assum (drule_all_then assume_tac) >> simp[]) >>
       suspend "transport") >>
   `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[MEM] >> metis_tac[]) >>

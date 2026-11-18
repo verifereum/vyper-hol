@@ -53,21 +53,24 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem concretize_mcopy_execution_geometry:
+Theorem concretize_mcopy_execution_geometry_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -106,40 +109,44 @@ Proof
   `post = mcopy (w2n dst) (w2n src) (w2n sz) s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
   `eval_operand opn t = SOME sz` by suspend "size" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+w2n sz <= lo /\ w2n dstT = w2n dst) \/
-     (?d owner aid b len.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+w2n sz <= b+len /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "destination" >>
-  pop_assum strip_assume_tac >>
-  `?srcT. eval_operand ops t = SOME srcT /\
-    ((w2n src+w2n sz <= lo /\ w2n srcT = w2n src) \/
-     (?d owner aid b len.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
-       w2n src+w2n sz <= b+len /\
-       w2n srcT = concretize_positions C' owner aid + (w2n src-b)))` by
-    suspend "source" >>
-  pop_assum strip_assume_tac >>
+  (Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+w2n sz <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b len.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+w2n sz <= b+len /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (qx_choose_then `dstT` (CONJUNCTS_THEN2 assume_tac assume_tac))
+   >- suspend "destination") >>
+  (Q.SUBGOAL_THEN `?srcT. eval_operand ops t = SOME srcT /\
+      (((w2n src+w2n sz <= lo \/ dyn_floor C s <= w2n src) /\ w2n srcT = w2n src) \/
+       (?d owner aid b len.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
+         w2n src+w2n sz <= b+len /\
+         w2n srcT = concretize_positions C' owner aid + (w2n src-b)))`
+      (qx_choose_then `srcT` (CONJUNCTS_THEN2 assume_tac assume_tac))
+   >- suspend "source") >>
   qexistsl_tac [`dstT`, `srcT`] >>
   `step_inst_base inst t = OK (mcopy (w2n dstT) (w2n srcT) (w2n sz) t)` by
     simp[step_inst_base_def] >>
   asm_rewrite_tac[] >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >>
-     qexists_tac `w2n sz` >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (`c <= LENGTH es` by decide_tac >>
+     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n (dstT:bytes32)`,
+        `len:num` |-> `w2n (sz:bytes32)`, `positions` |-> `concretize_positions C'`]
+        access_geometry_relocation_pairs) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >> simp[]) >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n src+i) (w2n srcT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >>
-     qexists_tac `w2n sz` >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (`c <= LENGTH es` by decide_tac >>
+     mp_tac (Q.INST [`off:bytes32` |-> `src`, `offT:num` |-> `w2n (srcT:bytes32)`,
+        `len:num` |-> `w2n (sz:bytes32)`, `positions` |-> `concretize_positions C'`]
+        access_geometry_relocation_pairs) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >> simp[]) >>
   `post.vs_allocas = s.vs_allocas` by simp[mcopy_def, write_memory_with_expansion_def] >>
   (conj_tac >- (rpt gen_tac >> strip_tac >>
   `a = w2n dst+(a-w2n dst) /\ a-w2n dst < w2n sz` by decide_tac >>
@@ -186,7 +193,7 @@ Proof
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
    z NOTIN range_bytes (step_writes inst t t)` by
-    (irule concretize_positions_demand_write_complement >>
+    (irule concretize_positions_demand_write_complement_headroom_static >>
      conj_tac >- metis_tac[] >> asm_rewrite_tac[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >>
@@ -196,7 +203,7 @@ Proof
   asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac))
 QED
 
-Resume concretize_mcopy_execution_geometry[size]:
+Resume concretize_mcopy_execution_geometry_headroom_static[size]:
   `?Q. fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
     (`?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
        (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
@@ -206,6 +213,8 @@ Resume concretize_mcopy_execution_geometry[size]:
            fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
      drule_all ptr_frame_current_static >> strip_tac >>
      qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> strip_tac >>
      metis_tac[resolved_static_support]) >>
   `!v. opn = Var v ==> FLOOKUP rv v = NONE` by
     (metis_tac[mcopy_size_origin_free]) >>
@@ -215,7 +224,7 @@ Resume concretize_mcopy_execution_geometry[size]:
      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
      qexists_tac `inst` >> simp[]) >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[zero]:
+Resume concretize_mcopy_execution_geometry_headroom_static[zero]:
   `variable_domains s t` by metis_tac[local_rel_domains] >>
   `?dstT. eval_operand opd t = SOME dstT` by
     (Cases_on `eval_operand opd t` >> metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
@@ -228,27 +237,81 @@ Resume concretize_mcopy_execution_geometry[zero]:
           source_memory_write_ranges_def, sized_source_write_range_def] >> decide_tac) >>
   irule joint_relocation_demand_retained >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[destination]:
-  irule concretize_memory_access_geometry >> simp[] >>
+Resume concretize_mcopy_execution_geometry_headroom_static[destination]:
+  irule concretize_memory_access_geometry_headroom_static >> simp[] >>
   conj_tac
   >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
       simp[source_memory_write_ranges_def, sized_source_write_range_def,
            mem_write_ops_def]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[source]:
-  markerLib.RESUME_TAC >> (irule concretize_memory_access_geometry >> simp[] >>
+Resume concretize_mcopy_execution_geometry_headroom_static[source]:
+  markerLib.RESUME_TAC >> (irule concretize_memory_access_geometry_headroom_static >> simp[] >>
   conj_tac
   >- (qexists_tac `<| iao_ofst := ops; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
       simp[source_memory_read_ranges_def, mem_read_ops_def]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[])
 QED
-Finalise concretize_mcopy_execution_geometry
+Finalise concretize_mcopy_execution_geometry_headroom_static
+
+Theorem concretize_mcopy_execution_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
+  eval_operand opn s = SOME sz ==>
+  ?dstT srcT tpost. eval_operand opd t = SOME dstT /\
+    eval_operand ops t = SOME srcT /\ eval_operand opn t = SOME sz /\
+    step_inst_base inst t = OK tpost /\
+    tpost = mcopy (w2n dstT) (w2n srcT) (w2n sz) t /\
+    post = mcopy (w2n dst) (w2n src) (w2n sz) s /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      w2n dst <= a /\ a < w2n dst+w2n sz ==>
+      w2n dstT <= z /\ z < w2n dstT+w2n sz /\
+      a-w2n dst = z-w2n dstT /\
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c
+        (w2n src+(a-w2n dst)) (w2n srcT+(z-w2n dstT))) /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      ~(w2n dst <= a /\ a < w2n dst+w2n sz) ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+      ~(w2n dstT <= z /\ z < w2n dstT+w2n sz))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_mcopy_execution_geometry_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

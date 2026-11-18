@@ -184,7 +184,7 @@ Proof
   qexists `w` >> simp[]
 QED
 
-Theorem ptr_stage_owner_actual_interval_no_kill:
+Theorem ptr_stage_owner_actual_interval_no_kill_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
@@ -203,11 +203,10 @@ Theorem ptr_stage_owner_actual_interval_no_kill:
     ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
     byte NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
                                          (EL (SUC k) h).po_state)) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) ==>
   !k. i <= k /\ k < j ==>
@@ -230,10 +229,47 @@ Proof
      disch_then (qspecl_then [`(EL k h).po_state`,
                                `(EL (SUC k) h).po_state`] assume_tac) >>
      gvs[range_bytes_def] >> metis_tac[]) >>
-  match_mp_tac ptr_stage_owner_interval_no_kill >> simp[] >>
+  match_mp_tac ptr_stage_owner_interval_no_kill_static >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!k. _ /\ _ ==> ~in_revert_forward _ _ /\ !n off len. _`
     (qspec_then `k` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_stage_owner_actual_interval_no_kill:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  ptr_chrono_history vs C h endpoint /\ i <= j /\ j < LENGTH h /\
+  (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
+  (ptr_owner_view d (EL i h)).cf_fn = fn /\
+  FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+  b <= byte /\ byte < b + sz /\
+  (!k. i <= k /\ k < j ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    byte NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
+                                         (EL (SUC k) h).po_state)) /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
+  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) ==>
+  !k. i <= k /\ k < j ==>
+  ~ptr_ml_can_kill (Allocation aid)
+    (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn)
+    (\a. if context_alloca_size fn (imported_mems_used observed.cu_context fn) a = 0 then NONE
+         else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a))
+    (ptr_owner_view d (EL k h)).cf_inst
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_owner_actual_interval_no_kill_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 (* Integration boundary:

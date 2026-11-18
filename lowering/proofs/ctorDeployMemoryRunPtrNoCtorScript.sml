@@ -203,5 +203,5 @@ Proof
   drule deploy_imm_budget_ok >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   irule simple_deploy_entry_ptr_safe >>
-  simp[o1_source_unit_ok_no_dalloca]
+  simp[]
 QED

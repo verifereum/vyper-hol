@@ -471,6 +471,10 @@ in achoose "json_type" [
   check (field "typeclass" string) (fn s => s = "interface") "not interface" $
     JSONDecode.map mk_JT_Interface nominal_name,
 
+  (* A type expression (convert's and abi_decode's type argument) is
+     annotated with the type it denotes. *)
+  field "type_t" (delay d_json_type),
+
   (* A malformed dynamic bound must not fall through to a named type. *)
   check (field "name" string)
     (fn s => s <> "Bytes" andalso s <> "String") "invalid dynamic type" $

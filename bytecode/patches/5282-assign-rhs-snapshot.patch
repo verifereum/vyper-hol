@@ -20,7 +20,7 @@ diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
 @@ -46,7 +46,10 @@
  from .builtins.simple import get_empty_type
  from .calling_convention import returns_dynamic_count, returns_stack_count
- from .context import Constancy, LocalVariable, VenomCodegenContext
+ from .context import Constancy, LocalVariable, VenomCodegenContext, same_memory_layout
 -from .eval_order import later_expressions_can_mutate_memory_or_storage
 +from .eval_order import (
 +    expression_can_mutate_memory_or_storage,

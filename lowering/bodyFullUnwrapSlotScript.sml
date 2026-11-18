@@ -60,6 +60,8 @@ Theorem unwrap_slot_copy_origin_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v z G' tn'.
     read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) [] (OK z, G', tn') /\
@@ -519,6 +521,8 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
     (irule exprPtrUnwrapStoragePostTheory.unwrap_storage_pointer_posts >>
      metis_tac[]) >>
   `vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+     (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
+   vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z` by
     suspend "memory_vv" >>
   `vv_at cenv cx (post_value_type cenv e) sa sc ee tv
@@ -532,6 +536,7 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
      >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >> first_assum ACCEPT_TAC) >>
      metis_tac[]) >>
   qexistsl [`v`, `z`, `Gf`, `tnf`] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >-
     (gen_tac >> disch_tac >>
@@ -597,7 +602,8 @@ Resume unwrap_slot_copy_origin_ptr[memory_vv]:
   qpat_assum `sm.cs_next_id <= sb.cs_next_id` mp_tac >>
   qpat_assum `sb.cs_next_id < sc.cs_next_id` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
-  simp[vv_at_def, mk_ptr_def] >> rpt strip_tac >>
+  simp[vv_at_def, vv_own_def, mk_ptr_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> rpt strip_tac >>
   disj1_tac >>
   qexistsl [`sb.cs_next_id`, `w2n dstword`, `type_memory_bytes cenv t`] >>
   simp[] >> metis_tac[]

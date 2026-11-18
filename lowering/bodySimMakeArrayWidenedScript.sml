@@ -19,7 +19,7 @@ Ancestors
   exprSimSource exprSimAggregateBodyCase
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* As for body_struct_lit_widened_call_elem (bodySimStructLitWidened), for

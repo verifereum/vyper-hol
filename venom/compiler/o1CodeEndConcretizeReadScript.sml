@@ -9,7 +9,7 @@ Theorem code_end_concretize_read_value:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   opaque_use_ok fn /\ taint_ok fn tn inst s /\
   inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; off; sz] /\
-  ptr_ledger_erases births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
   ptr_mixed_vars births positions TG tn fn ft s t /\
   s.vs_labels = t.vs_labels ==>
   eval_operand off s = eval_operand off t
