@@ -42,6 +42,9 @@ Theorem dse_exec_create_ok:
     dse_local_agrees AddrSp_Memory P s1 t1 /\ s1.vs_allocas = s.vs_allocas
 Proof
   strip_tac >> drule_all dse_create_request >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def,
+       dse_frame_def, venom_state_component_equality] >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
   strip_tac >> gvs[AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
@@ -143,6 +146,8 @@ Proof
     (drule dse_local_agrees_frame >> simp[]) >>
   `dse_equiv AddrSp_Memory s t` by
     fs[dse_local_agrees_def, dse_pending_space_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dse_equiv_def, dse_frame_def, venom_state_component_equality] >>
   qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
   fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   IF_CASES_TAC

@@ -41,7 +41,7 @@ Proof
      >- metis_tac[ld_joint_assert_abort] >>
      Cases_on `MEM inst.inst_opcode [RETURNDATACOPY; CREATE; CREATE2]`
      >- (drule_all ld_joint_ordinary_abort >> simp[]) >>
-     Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL]`
+     Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL]`
      >- (drule_all ld_joint_static_abort >> simp[]) >>
      `inst.inst_opcode = INVALID` by
        (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>

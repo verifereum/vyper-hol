@@ -9,6 +9,12 @@ Ancestors
 
 (* ===== Exact equations ===== *)
 
+Theorem computed_precompile_gas[simp]:
+  computed_precompile (rq with cr_gas := gas_cap) = computed_precompile rq
+Proof
+  simp[computed_precompile_def]
+QED
+
 Theorem take_request_outcome_NONE:
   st.outcomes = NONE ==>
   take_request_outcome rq st =
@@ -19,7 +25,7 @@ QED
 
 Theorem take_call_outcome_NONE:
   st.outcomes = NONE ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (INR (Error (RuntimeError "take_call_outcome")), st)
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
@@ -27,10 +33,10 @@ Proof
 QED
 
 Theorem take_call_outcome_SOME:
-  st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  st.outcomes = SOME os /\ os <> [] /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   take_outcome rq os = (outcome, rest) ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (if outcome.co_success /\ ~rq.cr_static /\
         ~accounts_runtime_well_typed outcome.co_accounts
      then INR (Error (RuntimeError "call outcome accounts"))
@@ -39,14 +45,15 @@ Theorem take_call_outcome_SOME:
                requests := record_request rq st.requests;
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
+  rpt strip_tac >> Cases_on `os` >>
+  gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_ordinary:
   st.outcomes = SOME (outcome::rest) /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   ~computed_precompile rq ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (if outcome.co_success /\ ~rq.cr_static /\
         ~accounts_runtime_well_typed outcome.co_accounts
      then INR (Error (RuntimeError "call outcome accounts"))
@@ -59,23 +66,19 @@ Proof
 QED
 
 Theorem take_call_outcome_exhausted:
-  st.outcomes = SOME [] /\
-  rq = call_outcome_request target calldata value_opt st /\
-  ~computed_precompile rq ==>
-  take_call_outcome target calldata value_opt st =
-    (INL (rq, failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
-               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
+  st.outcomes = SOME [] ==>
+  take_call_outcome gas_cap target calldata value_opt st =
+    (INR (Error (RuntimeError "take_call_outcome")), st)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def]
+  simp[take_call_outcome_def, take_request_outcome_def]
 QED
 
 Theorem take_call_outcome_computed_valid:
   st.outcomes = SOME (outcome::rest) /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   rq.cr_value = 0 /\
   precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (if ~outcome.co_success then INL (rq, failed_outcome rq)
      else if ~rq.cr_static /\ ~accounts_runtime_well_typed st.accounts
      then INR (Error (RuntimeError "call outcome accounts"))
@@ -95,10 +98,10 @@ Proof
 QED
 
 Theorem take_call_outcome_computed_invalid:
-  st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  st.outcomes = SOME os /\ os <> [] /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (INL (rq, failed_outcome rq),
      st with <|outcomes := SOME (DROP 1 os);
        storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
@@ -122,17 +125,19 @@ QED
 
 Theorem take_call_outcome_guard_rejected:
   st.outcomes = SOME os /\
-  rq = call_outcome_request target calldata value_opt st /\
+  rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
   take_outcome rq os = (outcome,rest) /\
   outcome.co_success /\ ~rq.cr_static /\
   ~accounts_runtime_well_typed outcome.co_accounts ==>
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     (INR (Error (RuntimeError "call outcome accounts")),
      st with <|outcomes := SOME rest;
                requests := record_request rq st.requests;
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> drule_all take_call_outcome_SOME >> simp[]
+  rpt strip_tac >>
+  `os <> []` by (Cases_on `os` >> gvs[take_outcome_def, failed_outcome_def]) >>
+  drule_all take_call_outcome_SOME >> simp[]
 QED
 
 Theorem take_request_outcome_error:
@@ -141,11 +146,13 @@ Theorem take_request_outcome_error:
   exc = Error (RuntimeError "call outcome accounts")
 Proof
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_error:
-  take_call_outcome target calldata value_opt st = (INR exc, st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (INR exc, st') ==>
   exc = Error (RuntimeError "take_call_outcome") \/
   exc = Error (RuntimeError "call outcome accounts")
 Proof
@@ -154,14 +161,14 @@ Proof
 QED
 
 Theorem take_call_outcome_no_type_error_control:
-  FST (take_call_outcome target calldata value_opt st) <> INR (Error (TypeError msg)) /\
-  FST (take_call_outcome target calldata value_opt st) <> INR (AssertException msg) /\
-  FST (take_call_outcome target calldata value_opt st) <> INR BreakException /\
-  FST (take_call_outcome target calldata value_opt st) <> INR ContinueException /\
-  FST (take_call_outcome target calldata value_opt st) <> INR (ReturnException v)
+  FST (take_call_outcome gas_cap target calldata value_opt st) <> INR (Error (TypeError msg)) /\
+  FST (take_call_outcome gas_cap target calldata value_opt st) <> INR (AssertException msg) /\
+  FST (take_call_outcome gas_cap target calldata value_opt st) <> INR BreakException /\
+  FST (take_call_outcome gas_cap target calldata value_opt st) <> INR ContinueException /\
+  FST (take_call_outcome gas_cap target calldata value_opt st) <> INR (ReturnException v)
 Proof
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (res,st')` >>
+  Cases_on `take_call_outcome gas_cap target calldata value_opt st` >>
+  rename1 `take_call_outcome gas_cap target calldata value_opt st = (res,st')` >>
   Cases_on `res` >> simp[] >> drule take_call_outcome_error >> rw[]
 QED
 
@@ -178,14 +185,16 @@ Theorem take_request_outcome_success:
        accounts_runtime_well_typed outcome.co_accounts)
 Proof
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_success:
-  take_call_outcome target calldata value_opt st = (INL (rq,outcome), st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome), st') ==>
   ?os rest.
     st.outcomes = SOME os /\
-    rq = call_outcome_request target calldata value_opt st /\
+    rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
@@ -204,15 +213,18 @@ Theorem take_request_outcome_suffix:
     LENGTH prefix <= 1 /\
     (computed_precompile rq ==> st'.requests = st.requests)
 Proof
-  rpt strip_tac >> gvs[take_request_outcome_def] >> pairarg_tac >>
-  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  rpt strip_tac >> Cases_on `os`
+  >- (gvs[take_request_outcome_def] >> qexists_tac `[]` >> simp[]) >>
+  rename1 `head::tail` >> gvs[take_request_outcome_def] >>
+  pairarg_tac >>
+  `rest = tail` by
+    (mp_tac (Q.INST [`os` |-> `head::tail`] take_outcome_rest) >> simp[]) >>
   gvs[AllCaseEqs(), record_request_def] >>
-  Cases_on `os` >> simp[] >>
-  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
+  qexists_tac `[head]` >> simp[]
 QED
 
 Theorem take_call_outcome_suffix:
-  take_call_outcome target calldata value_opt st = (res,st') /\
+  take_call_outcome gas_cap target calldata value_opt st = (res,st') /\
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
@@ -220,7 +232,7 @@ Theorem take_call_outcome_suffix:
        st'.requests = st.requests)
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
-  MATCH_ACCEPT_TAC take_request_outcome_suffix
+  rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
 QED
 
 (* A successful non-static take is well typed; a failed one is adopted only
@@ -239,7 +251,7 @@ QED
 
 Theorem take_adopt_call_outcome_typed:
   accounts_runtime_well_typed st.accounts /\
-  take_call_outcome target calldata value_opt st = (INL (rq,outcome),st') /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st') /\
   adopt_call_outcome rq outcome st' = (INL (),st'') ==>
   accounts_runtime_well_typed st''.accounts
 Proof
@@ -252,7 +264,7 @@ QED
 
 Theorem take_delegate_outcome_NONE:
   st.outcomes = NONE ==>
-  take_delegate_outcome target calldata value_opt st =
+  take_delegate_outcome gas_cap target calldata value_opt st =
     (INR (Error (RuntimeError "take_call_outcome")), st)
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
@@ -260,7 +272,7 @@ Proof
 QED
 
 Theorem take_delegate_outcome_suffix:
-  take_delegate_outcome target calldata value_opt st = (res,st') /\
+  take_delegate_outcome gas_cap target calldata value_opt st = (res,st') /\
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
@@ -268,11 +280,11 @@ Theorem take_delegate_outcome_suffix:
        st'.requests = st.requests)
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
-  MATCH_ACCEPT_TAC take_request_outcome_suffix
+  rpt strip_tac >> drule_all take_request_outcome_suffix >> simp[]
 QED
 
 Theorem take_delegate_outcome_error:
-  take_delegate_outcome target calldata value_opt st = (INR exc, st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (INR exc, st') ==>
   exc = Error (RuntimeError "take_call_outcome") \/
   exc = Error (RuntimeError "call outcome accounts")
 Proof
@@ -281,10 +293,10 @@ Proof
 QED
 
 Theorem take_delegate_outcome_success:
-  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome), st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,outcome), st') ==>
   ?os rest.
     st.outcomes = SOME os /\
-    rq = delegate_outcome_request target calldata value_opt st /\
+    rq = (delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
@@ -298,7 +310,7 @@ QED
 
 Theorem take_adopt_delegate_outcome_typed:
   accounts_runtime_well_typed st.accounts /\
-  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st') /\
+  take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st') /\
   adopt_call_outcome rq outcome st' = (INL (),st'') ==>
   accounts_runtime_well_typed st''.accounts
 Proof

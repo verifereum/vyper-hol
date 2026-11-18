@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem take_call_outcome_outcome_suffix:
-  take_call_outcome target calldata value_opt st = (res,st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st') ==>
   outcome_suffix st.outcomes st'.outcomes
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem take_delegate_outcome_outcome_suffix:
-  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (res,st') ==>
   outcome_suffix st.outcomes st'.outcomes
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
@@ -73,7 +73,7 @@ QED
 
 Theorem take_call_outcome_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome target calldata value_opt st = (res,st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st') ==>
   contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
   outcome_suffix st.outcomes st'.outcomes
 Proof
@@ -83,7 +83,7 @@ QED
 
 Theorem take_delegate_outcome_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
-  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (res,st') ==>
   contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
   outcome_suffix st.outcomes st'.outcomes
 Proof
@@ -150,7 +150,7 @@ QED
 
 Theorem take_adopt_call_outcome_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>
   contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
   outcome_suffix st.outcomes st2.outcomes
@@ -163,7 +163,7 @@ QED
 
 Theorem take_adopt_delegate_outcome_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
-  take_delegate_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>
   contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
   outcome_suffix st.outcomes st2.outcomes
@@ -178,7 +178,7 @@ QED
    is ignored for static/failed outcomes. take still consumes atomically. *)
 Theorem take_adopt_call_outcome_no_adoption_storage:
   contract_storage_well_formed cx st /\
-  take_call_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,co),st1) /\
   (rq.cr_static \/ ~co.co_success) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>
   contract_storage_well_formed cx st2 /\ outcome_suffix st.outcomes st2.outcomes
@@ -198,7 +198,7 @@ QED
    comes from T6.2/computed snapshots; layout/context fields are unchanged. *)
 Theorem take_adopt_call_outcome_runtime_storage_suffix:
   runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>
   runtime_storage_consistent env cx st2 /\ oracle_storage_ok cx st2 /\
   outcome_suffix st.outcomes st2.outcomes
@@ -277,7 +277,7 @@ Theorem checked_call_outcome_storage_suffix:
     contract_storage_well_formed cx t /\ oracle_storage_ok cx t /\
     outcome_suffix s.outcomes t.outcomes) /\
   (do
-    (rq,co) <- take_call_outcome target calldata value_opt;
+    (rq,co) <- take_call_outcome gas_cap target calldata value_opt;
     check co.co_success msg;
     adopt_call_outcome rq co;
     k co.co_returnData
@@ -310,7 +310,7 @@ Theorem ExtCall_outcome_storage_suffix:
     (if ret_type = NoneT then
       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,co) <- take_call_outcome target calldata value_opt;
+    (rq,co) <- take_call_outcome gas_cap target calldata value_opt;
     check co.co_success "ExtCall reverted";
     adopt_call_outcome rq co;
     k co.co_returnData
@@ -328,7 +328,7 @@ QED
 Theorem Send_outcome_storage_suffix:
   runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
   (do
-    (rq,co) <- take_call_outcome target [] (SOME amount);
+    (rq,co) <- take_call_outcome gas_cap target [] (SOME amount);
     check co.co_success "send failed";
     adopt_call_outcome rq co;
     return (Value NoneV)
@@ -358,7 +358,7 @@ Theorem ExtCall_outcome_return_storage_suffix:
     (if ret_type = NoneT then
       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,co) <- take_call_outcome target calldata value_opt;
+    (rq,co) <- take_call_outcome gas_cap target calldata value_opt;
     check co.co_success "ExtCall reverted";
     adopt_call_outcome rq co;
     if co.co_returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
@@ -390,7 +390,7 @@ QED
 Theorem ExtCall_outcome_return_storage_preserved:
   runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
   (!rq co st1 st2 r t.
-    take_call_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+    take_call_outcome gas_cap target calldata value_opt st = (INL (rq,co),st1) /\
     co.co_success /\ adopt_call_outcome rq co st1 = (INL (),st2) /\
     co.co_returnData = [] /\ IS_SOME drv /\
     eval_expr cx (THE drv) st2 = (r,t) ==>
@@ -400,7 +400,7 @@ Theorem ExtCall_outcome_return_storage_preserved:
     (if ret_type = NoneT then
       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,co) <- take_call_outcome target calldata value_opt;
+    (rq,co) <- take_call_outcome gas_cap target calldata value_opt;
     check co.co_success "ExtCall reverted";
     adopt_call_outcome rq co;
     if co.co_returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
@@ -413,8 +413,8 @@ Theorem ExtCall_outcome_return_storage_preserved:
 Proof
   rpt gen_tac >> strip_tac >>
   `contract_storage_well_formed cx st` by fs[runtime_storage_consistent_def] >>
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
+  Cases_on `take_call_outcome gas_cap target calldata value_opt st` >>
+  rename1 `take_call_outcome gas_cap target calldata value_opt st = (answer,mid)` >>
   drule (ExtCall_outcome_continue |> INST_TYPE [alpha |-> ``:eval_result``]) >>
   disch_then (qspecl_then [`ret_type`,
     `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
@@ -424,7 +424,7 @@ Proof
   >- gvs[] >>
   gvs[] >> Cases_on `answer`
   >- (rename1 `INL ro` >> Cases_on `ro` >>
-      rename1 `take_call_outcome target calldata value_opt st = (INL (rq,co),mid)` >>
+      rename1 `take_call_outcome gas_cap target calldata value_opt st = (INL (rq,co),mid)` >>
       Cases_on `co.co_success`
       >- (Cases_on `adopt_call_outcome rq co mid` >>
           rename1 `adopt_call_outcome rq co mid = (ar,st2)` >>

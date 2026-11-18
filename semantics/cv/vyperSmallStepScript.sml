@@ -708,8 +708,7 @@ Definition apply_vals_def:
       amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs))
                   "raw_call value";
       eval_raw_call cx flags target_addr calldata amount
-        (forwarded_gas default_evm_gas_limit
-           (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
+        (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
@@ -720,8 +719,7 @@ Definition apply_vals_def:
       amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 1 vs))
                   "raw_call value";
       eval_raw_call cx flags target_addr cx.txn.calldata amount
-        (forwarded_gas default_evm_gas_limit
-           (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs)))
+        (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧

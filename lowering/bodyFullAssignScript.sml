@@ -2252,7 +2252,7 @@ Proof
   `~not_fresh_at sm out /\
    (!x. not_fresh_at sm x ==> x <> out) /\
    (!x. not_fresh_at sa x ==> not_fresh_at sm x)` by
-    (simp[Abbr `out`, not_fresh_at_def, toString_11] >>
+    (simp[Abbr `out`, not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
      metis_tac[LESS_LESS_EQ_TRANS]) >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     metis_tac[cj 1 compiler_compile_var] >>
@@ -2261,7 +2261,7 @@ Proof
    sn.cs_current_insts = sm.cs_current_insts ++ [i] /\ not_fresh_at sn out` by
     (gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def, Abbr `i`, Abbr `out`,
-        not_fresh_at_def, toString_11, mk_inst_def]) >>
+        not_fresh_at_def, ASCIInumbersTheory.toString_11, mk_inst_def]) >>
   `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
    q.vs_memory = s.vs_memory /\ q.vs_accounts = s.vs_accounts /\
    q.vs_transient = s.vs_transient /\ q.vs_call_ctx = s.vs_call_ctx /\
@@ -3009,7 +3009,7 @@ Resume body_assign_field_store_joint_frame[frame]:
   irule alloca_frame_region_write >> goal_assum (drule_at Any) >> simp[] >>
   drule find_containing_scope_structure >> strip_tac >>
   `id IN FDOM sc` by fs[FLOOKUP_DEF] >>
-  simp[ABSORPTION_RWT] >>
+  simp[pred_setTheory.ABSORPTION_RWT] >>
   rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
   decide_tac
 QED

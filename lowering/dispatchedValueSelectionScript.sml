@@ -1,6 +1,6 @@
 (* Arbitrary-calldata selection, independent of argument re-encoding. *)
 Theory dispatchedValueSelection
-Ancestors sourceEntrySelection checkedSelectorTableProps loweringShapeProps
+Ancestors calldataSelectorProps sourceEntrySelection checkedSelectorTableProps loweringShapeProps
   entryDispatchProps moduleLoweringProps selectorDispatch supportedProgram supportedNames
   vyperCalldata selectorCompilerProps vyperABIEntries compileVyper publicGetterProps
 Libs BasicProvers
@@ -34,17 +34,6 @@ Proof
   asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem source_cd_selector[local]:
-  !cd. 4 <= LENGTH cd ==> cd_selector cd = w2n (calldata_method_id cd)
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE 4 cd) = 4` by simp[listTheory.LENGTH_TAKE_EQ] >>
-  drule calldata_method_id_four_bytes >>
-  simp[GSYM cd_selector_def] >> strip_tac >>
-  qspec_then `TAKE 4 cd` mp_tac calldata_method_id_append >> simp[] >>
-  disch_then (qspec_then `DROP 4 cd` mp_tac) >> simp[listTheory.TAKE_DROP]
-QED
-
 Theorem table_no_hit[local]:
   !fns cd fb. 4 <= LENGTH cd /\
     (!name tys. MEM (name,tys)
@@ -57,7 +46,7 @@ Proof
   PairCases >> rpt strip_tac >>
   simp[build_selectors_def, compute_selector_method_id,
        linear_dispatch_target_def, calldata_hits_selector_def] >>
-  drule source_cd_selector >> strip_tac >>
+  drule cd_selector_method_id >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
 
@@ -169,7 +158,7 @@ Proof
       simp[compute_selector_method_id, listTheory.MEM_MAP] >> strip_tac >>
       qexists_tac `(cd_selector cd,"fn_" ++ name,
         selector_has_trailing_zeroes (cd_selector cd))` >> simp[]) >>
-  drule source_cd_selector >> simp[calldata_hits_selector_def]
+  drule cd_selector_method_id >> simp[calldata_hits_selector_def]
 QED
 
 Theorem source_dispatched_linear_target:
