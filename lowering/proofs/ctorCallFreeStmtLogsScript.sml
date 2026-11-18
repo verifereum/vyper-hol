@@ -159,7 +159,7 @@ Proof
   fs[(b7 outcomes_free_unwrap_value), (c7 [(c7 [outcomes_free_alloc_buffer, outcomes_free_unwrap_value, outcomes_free_store_memory] outcomes_free_materialize_vv)] outcomes_free_compile_log_save_arg)] >>
   simp[Once EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!ce ty e st. _` irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[EVERY_MEM]
+  conj_tac >- first_assum ACCEPT_TAC >> fs[EVERY_MEM]
 QED
 
 Theorem opcode_every_log_eval_all:
@@ -231,7 +231,7 @@ Proof
   rpt strip_tac >> irule every_state_insts_reason_message >>
   simp[(b7 outcomes_free_bytelike_literal)] >>
   rpt strip_tac >> qpat_x_assum `!ce ty e st. _` irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem opcode_every_reason_message:

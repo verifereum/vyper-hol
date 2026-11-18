@@ -100,17 +100,12 @@ val map_result_rands =
   [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND project)]
  end;
 
-(* Reduce only the discriminator and root of the large opcode case. *)
-fun outcomes_opcode_conv th tm =
-  let
-    val (_, args) = strip_comb tm
-    fun discriminator 1 = RAND_CONV (REWR_CONV th)
-      | discriminator n = RATOR_CONV (discriminator (n - 1))
-    val root = FIRST_CONV (map REWR_CONV
-      (CONJUNCTS venomInstTheory.opcode_case_def))
-  in
-    (discriminator (length args) THENC root) tm
-  end;
+(* Select the checked dispatch equation for the case split's opcode. *)
+fun outcomes_opcode_tac eq =
+  PURE_ONCE_REWRITE_TAC [MATCH_MP (valOf (List.find
+    (fn th => aconv (rhs (fst (dest_imp (snd (strip_forall (concl th))))))
+                    (rhs (concl eq)))
+    (CONJUNCTS step_inst_base_opcode_eqs))) eq];
 
 Theorem step_inst_base_outcomes_update[local]:
   ~MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE] ==>
@@ -118,10 +113,7 @@ Theorem step_inst_base_outcomes_update[local]:
   map_result_state (\t. t with vs_outcomes := os) (step_inst_base inst s)
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >> gvs[] >>
-  pure_once_rewrite_tac [step_inst_base_def] >>
-  qpat_assum `inst.inst_opcode = _` (fn th =>
-    CONV_TAC (LHS_CONV (outcomes_opcode_conv th) THENC
-              RHS_CONV (RAND_CONV (outcomes_opcode_conv th)))) >>
+  qpat_assum `inst.inst_opcode = _` outcomes_opcode_tac >>
   simp[exec_pure1_outcomes_update, exec_pure2_outcomes_update,
        exec_pure3_outcomes_update, exec_gas_outcomes_update, exec_alloca_outcomes_update] >>
   all_tac
