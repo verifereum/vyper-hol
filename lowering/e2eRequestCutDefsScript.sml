@@ -279,8 +279,8 @@ End
 
 (* ===== Staging and the closed world (C) ===== *)
 
-(* es is a fresh non-static call frame of the compiled contract, related to
-   am and tx: staging without the dispatched call. *)
+(* es is a fresh call frame of the compiled contract, related to am and tx.
+   Frame staging allows both static and non-static calls. *)
 Definition vyper_frame_staging_def:
   vyper_frame_staging fin policy tops runtime_bc am tx es <=>
     fin IN accepted_finalizers /\
