@@ -54,7 +54,7 @@ Theorem body_augassign_local_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (NameTarget id) bop e)))
       (eval_stmt cx (AugAssign aty (NameTarget id) bop e)) es
 Proof
-  cheat
+  suspend "use_ordinary"
 QED
 
 (* A scalar top-level variable. *)
@@ -193,7 +193,37 @@ Proof
   suspend "immutable"
 QED
 
-Resume body_augassign_other_full[ordinary]:
+(* Shared composition for the ordinary target-place route. *)
+Theorem augassign_ordinary_full[local]:
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_full_ok cx e) /\
+    body_base_target_full_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign aty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign aty t bop e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign aty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    (?pt. supported_target_info tops bindings t = SOME pt) /\
+    ~immutable_root cx t ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (eval_stmt cx (AugAssign aty t bop e)) es
+Proof
+  rpt gen_tac >> strip_tac >>
   `target_pre cenv cx env t es` by
     (drule_all augassign_entry_target_pre >> simp[]) >>
   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -388,7 +418,7 @@ Resume body_augassign_other_full[ordinary]:
   qexistsl_tac [`ms`,`res`,`ee`,`result`,`G'`,`tn'`] >> simp[]
 QED
 
-Resume body_augassign_other_full[ordinary_rhs]:
+Resume augassign_ordinary_full[ordinary_rhs]:
   qx_genl_tac [`ms`,`res`,`ee`,`Gq`,`tnq`,`q`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -485,7 +515,7 @@ Resume body_augassign_other_full[ordinary_rhs]:
   suspend "ordinary_operator_success"
 QED
 
-Resume body_augassign_other_full[ordinary_operator_error]:
+Resume augassign_ordinary_full[ordinary_operator_error]:
   drule_all augassign_operator_source_runtime_error >>
   disch_then (qspec_then `ee` (qx_choose_then `msg` STRIP_ASSUME_TAC)) >>
   drule_all (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
@@ -507,7 +537,7 @@ Resume body_augassign_other_full[ordinary_operator_error]:
   strip_tac >> simp[haltExitProjTheory.halt_exit_not_halt]
 QED
 
-Resume body_augassign_other_full[ordinary_operator_success]:
+Resume augassign_ordinary_full[ordinary_operator_success]:
   rename1 `evaluate_binop _ ptv bop cur rhs = INL value` >>
   `bop_result cx aty bop [aty;expr_type e] cur rhs ee = INL value` by
     (drule_all augassign_operator_source_representation >> simp[]) >>
@@ -536,7 +566,7 @@ Resume body_augassign_other_full[ordinary_operator_success]:
   suspend "ordinary_stage_frame"
 QED
 
-Resume body_augassign_other_full[ordinary_stage_frame]:
+Resume augassign_ordinary_full[ordinary_stage_frame]:
   asm "opSuccess" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `u.vs_memory = v.vs_memory /\ u.vs_allocas = v.vs_allocas` by
@@ -587,7 +617,7 @@ Resume body_augassign_other_full[ordinary_stage_frame]:
   suspend "ordinary_join_frame"
 QED
 
-Resume body_augassign_other_full[ordinary_join_frame]:
+Resume augassign_ordinary_full[ordinary_join_frame]:
   `ca.cs_next_var <= cb.cs_next_var /\ cc.cs_next_var <= cd.cs_next_var /\
    sa.cs_next_id <= ca.cs_next_id /\ ca.cs_next_id <= cb.cs_next_id /\
    cb.cs_next_id <= cc.cs_next_id /\ cd.cs_next_var <= sb.cs_next_var`
@@ -671,7 +701,7 @@ Resume body_augassign_other_full[ordinary_join_frame]:
   fs[target_post_def, place_ptr_rel_def]
 QED
 
-Resume body_augassign_other_full[ordinary_storage_write]:
+Resume augassign_ordinary_full[ordinary_storage_write]:
   rename1 `write_place cx (StoragePlace tr slot tv) value ee = (wr,ff)` >>
   `addr = slot /\ loc = slot_loc tr /\ evaluate_type (get_tenv cx) aty = SOME tv` by
     (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ (PlaceR (StoragePlace tr slot tv)) _ _ _`
@@ -718,7 +748,7 @@ Resume body_augassign_other_full[ordinary_storage_write]:
   qpat_assum `ctx_has_dalloca ctx ==> !u. _` mp_tac >> simp[]
 QED
 
-Resume body_augassign_other_full[ordinary_memory_write]:
+Resume augassign_ordinary_full[ordinary_memory_write]:
   rename1 `write_place cx (MemoryPlace id path) value ee = (wr,ff)` >>
   `read_place cx (MemoryPlace id path) (st with gas_obs := rhsReads) =
       (INL cur,st with gas_obs := rhsReads) /\
@@ -780,6 +810,28 @@ Resume body_augassign_other_full[ordinary_memory_write]:
   simp[] >> rpt gen_tac >> strip_tac >>
   simp[Abbr `stmtQ`] >> qexists_tac `cenv` >> simp[] >>
   first_assum ACCEPT_TAC
+QED
+
+Finalise augassign_ordinary_full
+
+Resume body_augassign_local_full[use_ordinary]:
+  rpt gen_tac >> strip_tac >>
+  drule_then strip_assume_tac augassign_name_target_info >>
+  `~immutable_root cx (NameTarget id)` by
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+  irule augassign_ordinary_full >>
+  qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
+  qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise body_augassign_local_full
+
+Resume body_augassign_other_full[ordinary]:
+  irule augassign_ordinary_full >>
+  qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
+  qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume body_augassign_other_full[immutable]:
