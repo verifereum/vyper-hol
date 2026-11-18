@@ -119,7 +119,7 @@ Proof
   gvs[ld_shared_agree_def]
 QED
 
-Theorem fmp_copy_write_value[local]:
+Theorem fmp_copy_write_value:
   inst.inst_outputs = [out] /\
   (~retpc_var fn out ==> fmp_value_rel sm (out_prov PG G inst s1)
     (out_taint tn inst s) x y) /\ s1 = update_var out x s ==>
