@@ -77,11 +77,44 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ## Calls and nested contexts
 
-### Current Milestone 1 runtime contract (2026-10-09)
+### Fixed storage regions
 
-The broader intended scope elsewhere in this planning specification is **future
-scope**, not today's certificate. The accepted primary source is `e4cb0914`.
-The saved `e2eCorrectness.vyper_call_correct` is composed from **ADMITTED S1–S7**;
+The public single-call theorem `vyper_call_correct` quantifies over a fixed
+set of storage regions and lock slots `H`. Its storage premises are
+`storage_ok H am tx`, which requires the initial source state to decode on
+those regions, and `call_within H tops am tx es`, which checks the dispatched
+source storage trace for every gas filling. The trace check includes the
+storage backends the source adopts from external call outcomes.
+
+```sml
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       calldata_result_rel H tops am tx es r es')
+```
+
+Outside the resource-starvation case, unmatched calldata raises an empty
+revert. For dispatched calldata, `call_result_rel H` requires result
+agreement at the run's own storage horizon and `storage_ok H am' tx` for the
+source machine returned by the call, for each filling covered by
+`gas_readings_rel`. The guarded theorem `vyper_call_correct_guarded` supplies
+the underlying per-filling result.
+
+### Milestone 1 runtime contract (2026-10-09)
+
+The following subsections document the Milestone 1 boundary at `e4cb0914`.
+At that revision, `e2eCorrectness.vyper_call_correct` composed **ADMITTED S1–S7**;
 clean generic composition and structural producers do not prove those stages.
 See the [dated audit](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
 and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
