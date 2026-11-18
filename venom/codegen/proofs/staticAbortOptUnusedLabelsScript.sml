@@ -1,7 +1,7 @@
 Theory staticAbortOptUnusedLabels
 Ancestors
   staticAbortOptUnusedLabelsWalk staticAbortOptUnusedLabelsSelect
-  staticAbortOptUnusedLabelsRoot staticAbortOptUnusedLabelsSlots
+  staticAbortOptUnusedLabelsRoot
   staticAbortOptUnusedLabelsFlow staticAbortOptUnusedLabelsCheck
   staticAbortOptMergeIszeroBranchPackage asmOptPruneUnused asmSplice
   asmSymSem asmSymBridge asmDataEnv codegenSymRel asmSem asmIR asmOptimizer

@@ -53,16 +53,6 @@ Proof
   gvs[]
 QED
 
-Triviality branch_new_occurrence:
-  FINITE (V:(num#num)->bool) ==> ?v. v NOTIN V
-Proof
-  strip_tac >>
-  `FINITE (IMAGE FST V)` by simp[] >>
-  `?n:num. n NOTIN IMAGE FST V` by
-    metis_tac[INFINITE_NUM_UNIV, EXTENSION, IN_UNIV] >>
-  qexists_tac `(n,0)` >> metis_tac[IN_IMAGE, pairTheory.FST]
-QED
-
 (* The workers spell out the same lexical packet in different orders.
    Normalize only the selected bindings, using exact matching for the join. *)
 val branch_norm = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
@@ -280,7 +270,9 @@ Proof
       (if keep (pc x) then next x=x else pc (next x)=b+2 /\ rank (next x)<rank x) /\
       (!k nm org. 0<k /\ tag (next x) k=SOME(nm,org) ==> tag x k=SOME(nm,org)) /\
       (!k. 0<k /\ boolean (next x) k ==> boolean x k)` by suspend "selector" >>
-  drule_then strip_assume_tac branch_new_occurrence >>
+  drule_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) []
+       (ISPEC (pred_setSyntax.mk_univ ``:num # num``) IN_INFINITE_NOT_FINITE)) >>
   rename1 `v NOTIN V` >>
   qabbrev_tac `fresh = (c=b+3)` >>
   qabbrev_tac `verts_q = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {})` >>

@@ -50,7 +50,6 @@ Theorem codegen_entry_asm_sim_abort_asm_opt:
          (s with as_code := assemble prog' ++ vs.vs_data_section) =
            AsmFault ast) /\
       ast.as_requests <<= vs'.vs_requests
-
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`prog`, `s`, `vs.vs_data_section`, `vs'.vs_requests`, `prog'`]

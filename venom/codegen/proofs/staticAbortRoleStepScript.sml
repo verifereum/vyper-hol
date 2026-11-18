@@ -90,27 +90,6 @@ Proof
   gvs[] >> IF_CASES_TAC >> simp[]
 QED
 
-(* The successor's geometric facts (slot bounds, origin and canonical
-   lookup) are structural.  The interpreter establishes the word part. *)
-Theorem role_inherit_values[local]:
-  let lab = \l w. ?off. FLOOKUP lo l = SOME off /\ w = (n2w off:bytes32) in
-  let bit = \(w:bytes32). w = 0w \/ w = 1w in
-  (!k l orig. tagx k = SOME (l,orig) ==> lab l (EL k xs)) /\
-  (!k. boolx k ==> bit (EL k xs)) /\
-  (!k a. k < hj /\ src k = SOME a /\ a < hi ==> EL k ys = EL a xs) /\
-  (!k l orig. fresh k = SOME(l,orig) ==> lab l (EL k ys)) /\
-  (!k. bnew k ==> bit (EL k ys)) /\
-  (!k l orig. tagy k = SOME (l,orig) ==>
-     k < hj /\ (fresh k = SOME (l,orig) \/
-       ?a. src k = SOME a /\ a < hi /\ tagx a = SOME (l,orig))) /\
-  (!k. booly k ==>
-     k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolx a)) ==>
-  (!k l orig. tagy k = SOME (l,orig) ==> lab l (EL k ys)) /\
-  (!k. booly k ==> bit (EL k ys))
-Proof
-  simp[] >> rpt strip_tac >> metis_tac[]
-QED
-
 Theorem role_terminal_dispatch[local]:
   (name = "INVALID" \/
    (name = "REVERT" /\ 2 <= LENGTH t.as_stack) \/

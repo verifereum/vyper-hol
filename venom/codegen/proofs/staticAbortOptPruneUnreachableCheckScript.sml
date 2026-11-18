@@ -57,67 +57,6 @@ fun prove_check_row_presentation g =
      (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
    CONV_TAC (DEPTH_CONV BETA_CONV) >> REFL_TAC) g
 
-Theorem check_row_presentation[local]:
-  !ins p cc pc tag x h fall arm legal next untagged stop Target.
-    (case ins of
-       AsmLabel l => next h
-     | AsmPush bs => next (h+1)
-     | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
-     | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
-     | AsmOp "INVALID" => stop 0
-     | AsmOp "REVERT" => stop 2
-     | AsmOp name =>
-         if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-         then cc.cc_static /\ stop (asm_op_arity name)
-         else
-           (case ALOOKUP dup_table name of
-              SOME n => n<h /\ next (h+1)
-            | NONE => case ALOOKUP swap_table name of
-                SOME n => 0<n /\ n<h /\ next h
-              | NONE =>
-                  if name="JUMP" then
-                     1<=h /\ arm (Target p pc tag x) (h-1) /\
-                     legal (Target p pc tag x) (h-1)
-                  else if name="JUMPI" then
-                     2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\
-                     arm (Target p pc tag x) (h-2) /\
-                     legal (\y. fall y \/ Target p pc tag x y) (h-2)
-                  else
-                     ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                         untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-     | _ => F) =
-    (let ordinary = \name.
-       if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-       then cc.cc_static /\ stop (asm_op_arity name)
-       else
-         (case ALOOKUP dup_table name of
-            SOME n => n<h /\ next (h+1)
-          | NONE => case ALOOKUP swap_table name of
-              SOME n => 0<n /\ n<h /\ next h
-            | NONE =>
-                if name="JUMP" then
-                   1<=h /\ arm (Target p pc tag x) (h-1) /\
-                   legal (Target p pc tag x) (h-1)
-                else if name="JUMPI" then
-                   2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\
-                   arm (Target p pc tag x) (h-2) /\
-                   legal (\y. fall y \/ Target p pc tag x y) (h-2)
-                else
-                   ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                       untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-     in
-     case ins of
-       AsmLabel l => next h
-     | AsmPush bs => next (h+1)
-     | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
-     | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
-     | AsmOp name => if name = "INVALID" then stop 0
-                     else if name = "REVERT" then stop 2 else ordinary name
-     | _ => F)
-Proof
-  rpt gen_tac >> prove_check_row_presentation
-QED
-
 Theorem prune_one_relocated_check:
   !pre t x tail (V:(num#num)->bool) cc pc height
     (tag:(num#num)->num->(string#num)option) edge.
@@ -268,7 +207,6 @@ Proof
      qpat_assum `EL (r (pc v)) q = EL (pc v) p` (rewrite_tac o single) >>
      Cases_on `EL (pc v) p` >>
      SIMP_TAC bool_ss [asmIRTheory.asm_inst_case_def,o_THM] *)
-  (* A depth rewrite by check_row_presentation did not match the literal row. *)
   SIMP_TAC bool_ss [LET_THM,o_THM] >>
   qpat_assum `EL (r (pc v)) q = EL (pc v) p` (rewrite_tac o single) >>
   Cases_on `EL (pc v) p` >>

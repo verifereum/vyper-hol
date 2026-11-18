@@ -102,16 +102,6 @@ Proof
   namedCases_on `stk` ["", "x xs"] >> simp[] >> Cases_on `xs` >> simp[]
 QED
 
-Theorem commcut_fresh_vertex[local]:
-  FINITE (V:(num#num)->bool) ==> ?v. v NOTIN V
-Proof
-  strip_tac >> qexists `(SUC (MAX_SET (IMAGE FST V)),0)` >> strip_tac >>
-  `SUC (MAX_SET (IMAGE FST V)) IN IMAGE FST V` by
-    (simp[IN_IMAGE] >> qexists `(SUC (MAX_SET (IMAGE FST V)),0)` >> simp[]) >>
-  `FINITE (IMAGE FST V)` by simp[] >>
-  drule_all (MP_CANON MAX_SET_PROPERTY) >> simp[]
-QED
-
 Theorem stack_comm_strict_endpoint_row:
 !pre a tail env s n ss cc req V rank pc height need tag boolean edge e.
 let p = pre ++ [AsmOp "SWAP1";a] ++ tail;
@@ -274,7 +264,9 @@ Proof
       (mp_tac o SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] ab,
                                   LET_THM, DIFF_EMPTY, EMPTY_SUBSET])) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule commcut_fresh_vertex >> disch_then (qx_choose_then `v` assume_tac) >>
+  drule_then (qx_choose_then `v` assume_tac)
+    (SIMP_RULE (srw_ss()) []
+       (ISPEC (pred_setSyntax.mk_univ ``:num # num``) IN_INFINITE_NOT_FINITE)) >>
   qabbrev_tac `src = \k:num. if k=0 then 1 else if k=1 then 0 else k` >>
   qabbrev_tac `pc1 = \x. if x=v then b else pc x` >>
   qabbrev_tac `h1 = \x. if x=v then height e else height x` >>

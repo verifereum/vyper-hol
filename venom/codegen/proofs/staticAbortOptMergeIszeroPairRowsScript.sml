@@ -72,18 +72,6 @@ Proof
   simp[asm_block_at_cons, EL_APPEND_EQN, GSYM ADD_ASSOC]
 QED
 
-Theorem pair_tag_inherit[local]:
-  !(g:(string#num)->(string#num)) (fresh:num->(string#num)option).
-  (!k (l:string) (i:num). ty k = SOME(l,i) ==>
-    k < hj /\ (fresh k = SOME(l,i) \/
-    ?a. src k = SOME a /\ a < hi /\ tx a = SOME(l,i))) ==>
-  !k l i. OPTION_MAP g (ty k) = SOME(l,i) ==>
-    k < hj /\ (OPTION_MAP g (fresh k) = SOME(l,i) \/
-    ?a. src k = SOME a /\ a < hi /\ OPTION_MAP g (tx a) = SOME(l,i))
-Proof
-  simp[optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD] >> metis_tac[]
-QED
-
 Theorem merge_iszero_pair_cut_rows:
   let Shape = \p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
