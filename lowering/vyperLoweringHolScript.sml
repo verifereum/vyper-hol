@@ -89,6 +89,8 @@ Ancestors
   (* closed-world request-cut texts awaiting their producers *)
   e2eRequestCutDefs
   (* providers awaiting their consumers *)
+  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
+  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   internalReturnMemoryMem bodyFullIntCallByteFrame
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
