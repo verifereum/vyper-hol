@@ -50,7 +50,7 @@ Theorem dispatch_nonpayable_check_ptr_safe:
   fresh_vars_wrt st ss /\ ~ss.vs_halted /\
   ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo ss /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
   ss.vs_call_ctx.cc_callvalue <> 0w /\
   compile_entry_checks min_cds F opened = ((),checked) /\
   fn_has_code opened checked fn /\ ~block_is_terminated opened /\
@@ -65,6 +65,9 @@ Proof
   drule_all compile_entry_checks_nonpayable_head >> strip_tac >>
   drule vars_pc_only_fields >> strip_tac >>
   drule vars_pc_only_allocas >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tt` by
+    (fs[vars_pc_only_def, venom_state_component_equality, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   irule ptr_safe_blocks_nonphi_run >>
   simp[] >> reverse conj_tac
   >- (qexistsl_tac [`bb`, `inst`] >> gvs[]) >>

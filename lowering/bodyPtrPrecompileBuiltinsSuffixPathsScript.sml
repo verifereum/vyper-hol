@@ -1,5 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsSuffixPaths
 Ancestors bodyPtrPrecompileBuiltinsSuffixGhost fragGasSeqPtr fragGasPathPtr
+          fragGasSeqPtrContext ptrDiscipline
           exprSimPrecompiles venomInst venomState venomExecSemantics
           compileEnv loweringStateRelDefs exprLoweringProps list
 
@@ -65,7 +66,7 @@ Theorem computed_emitted_suffix_paths:
   s.vs_outcomes <> [] /\
   ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s (w2n outsz) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -87,9 +88,16 @@ Theorem computed_emitted_suffix_paths:
         (Abort Revert_abort (t with vs_inst_idx := j)))
 Proof
   strip_tac >>
-  drule_all bodyPtrPrecompileBuiltinsEmittedSuffixTheory.computed_emitted_suffix_checked >>
-  disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   drule computed_suffix_shape >> strip_tac >>
+  `?G' tn'. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sm sb) s G' tn'` by
+    (mp_tac (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+       (SPEC_ALL bodyPtrPrecompileBuiltinsEmittedSuffixTheory.computed_emitted_suffix_checked)) >>
+     simp[ctx_has_dalloca_def] >>
+     strip_tac >>
+     qexistsl_tac [`G'`, `tn'`] >>
+     irule inst_seq_ptr_restore_ctx >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def] >>
+     qexists_tac `ctx with ctx_functions := []` >> simp[]) >>
   `src <> STRING #"%" (toString sm.cs_next_var) /\
    dst <> STRING #"%" (toString sm.cs_next_var)` by
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>

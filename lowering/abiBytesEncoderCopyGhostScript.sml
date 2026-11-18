@@ -21,7 +21,7 @@ Theorem bytes_encoder_copy_ghosts:
   ptr_covers G tn src a (32+n) /\
   ptr_covers G tn dst a (32+contractABI$ceil32 n) /\
   (!i. w2n p <= i /\ i < w2n p + 32 + n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\ allocas_from lo a /\
   run_inst_seq (TAKE 3 (DROP 4 (bytestring_encoder_insts id N (Var dst) (Var src)))) a = OK b ==>
   ?H tm.
     (!D k. inst_seq_ptr D lo ctx func PG G tn
@@ -131,6 +131,11 @@ Proof
   `~is_terminator i0.inst_opcode /\ ~is_terminator i1.inst_opcode /\
    ~is_terminator i2.inst_opcode` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, mk_inst_def, is_terminator_def] >>
+  `!k. (allocas_below_fmp (a with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a1 with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a2 with vs_inst_idx := k) <=> allocas_below_fmp a)` by
+    simp[allocas_below_fmp_def, Abbr `a1`, Abbr `a2`,
+         mstore_def, write_memory_with_expansion_def, update_var_def] >>
   `!D k. ptr_inst_ok D lo 0 ctx func G tn i0 (a with vs_inst_idx := k)` by
     (simp[Abbr `i0`, ptr_inst_ok_def, step_inst_non_invoke,
        step_inst_inst_idx_indep, exec_result_map_def] >>

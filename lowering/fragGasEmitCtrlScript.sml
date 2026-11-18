@@ -103,7 +103,7 @@ QED
 (* ptr_inst_ok_abort_zero at any reserved bound. *)
 Theorem ptr_inst_ok_abort_at[local]:
   ((opc = REVERT /\ ops = [Lit 0w; Lit 0w]) \/ (opc = INVALID /\ ops = [])) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id opc ops []) s
 Proof
   rpt strip_tac >> gvs[]
@@ -123,7 +123,7 @@ QED
 Theorem emit_abort_origin_ptr:
   emit_inst opc ops [] sa = ((), sb) /\ fn_has_code sa sb func /\
   ((opc = REVERT /\ ops = [Lit 0w; Lit 0w]) \/ (opc = INVALID /\ ops = [])) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   step_inst_base (mk_inst sa.cs_next_id opc ops []) s = Abort a t ==>
