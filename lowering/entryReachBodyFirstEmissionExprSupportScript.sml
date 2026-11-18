@@ -1313,7 +1313,7 @@ Proof
   simp[comp_return_def, cs_extends_refl]
 QED
 
-Theorem first_emission_create_ctor_args:
+Theorem first_emission_create_ctor_args[local]:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\

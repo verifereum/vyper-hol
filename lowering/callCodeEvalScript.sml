@@ -30,11 +30,14 @@ Theorem no_self_code_create_order[local]:
   ~supported_exprs_exists is_self_code es ==>
   ~supported_exprs_exists is_self_code (create_operand_order kind salt es)
 Proof
-  Cases_on `es` >- simp[create_operand_order_def] >>
-  Cases_on `t` >> Cases_on `kind` >>
-  simp[create_operand_order_def, supported_exprs_exists_every, EXISTS_MEM,
-       MEM_APPEND] >>
-  metis_tac[rich_listTheory.MEM_TAKE, rich_listTheory.MEM_DROP_IMP]
+  strip_tac >> fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
+  Cases_on `kind` >> Cases_on `es` >>
+  gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+      rich_listTheory.EVERY_DROP] >>
+  rename1 `create_operand_order RawCreate _ (operand :: rest)` >>
+  Cases_on `rest` >>
+  gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+      rich_listTheory.EVERY_DROP]
 QED
 
 (* Keep the callable closure atomic in ordinary recursive cases; unfold it
