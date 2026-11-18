@@ -1,6 +1,7 @@
 (* Focused checks against the activated evaluator, independent of preservation. *)
 Theory vyperExtCallModesTest
 Ancestors
+  vyperInterpreterCV
   vyperExtCallConsumptionTest vyperCallOutcome extCallOracle
   vyperInterpreter vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list finite_map words vfmTypes pair
