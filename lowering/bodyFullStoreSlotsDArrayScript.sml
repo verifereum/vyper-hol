@@ -436,9 +436,18 @@ Proof
         drule_all store_slots_addresses_origin_ptr_path >> simp[]) >>
     rpt gen_tac >> strip_tac >> irule store_slots_taint_fold_mono >> simp[])) >>
   disch_then (qspecl_then [`cenv`,`tenv`,`elem`,`etv`] mp_tac) >>
-  (impl_tac >- (rpt gen_tac >> strip_tac >>
-    asm "child" (qspec_then `elem` irule) >>
-    simp[typedCopyDomainTheory.type_rank_def] >> metis_tac[])) >>
+  (impl_tac >-
+    (`type_rank cenv.ce_struct_fields elem <
+      type_rank cenv.ce_struct_fields (ArrayT elem (Dynamic n))` by
+       simp[typedCopyDomainTheory.type_rank_def] >>
+     map_every qx_gen_tac [`v'`,`src'`,`dst'`,`tr'`,`sa'`,`sb'`,`s'`,`sw'`,`dw'`,
+                           `tn'`,`G'`,`writes'`,`func'`,`ctx'`,`lo'`,`explicit'`,`PG'`] >>
+     disch_then (fn premises =>
+       qpat_assum `type_rank _ elem < type_rank _ _` (fn rank =>
+         asm "child" (qspecl_then
+           [`elem`,`etv`,`v'`,`src'`,`dst'`,`tr'`,`sa'`,`sb'`,`s'`,`sw'`,`dw'`,
+            `tn'`,`G'`,`writes'`,`func'`,`ctx'`,`lo'`,`explicit'`,`PG'`]
+           (fn child => ACCEPT_TAC (MATCH_MP child (CONJ rank premises)))))))) >>
   disch_then (mk_asm "elements") >> suspend "payload"
 QED
 
