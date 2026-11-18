@@ -12,6 +12,7 @@
 Theory symBlockBody
 Ancestors
   symFrameBoundary symFrameControl symFrameInvoke symFrameInst symFnSimSpec
+  symBodyCanonicalSelected
   codegenSymRel fnBlockBody fnBlockBodySteps fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
   venomExecSemantics venomState venomInst fnPlanLineageEntryProduction symBodyAlgebra symBlockBodyOwnCore symBodyCanonicalClient symBodyStaticFacts symBodyOrdinaryOwn symBodyTerminalOwn symBodyInvokeCanonical symBodyJumpOwn symFrameBoundaryPairing asmSymOwnStep symBodyJumpPointwise
@@ -841,40 +842,11 @@ Theorem sym_body_nonterm_prefix:
     block_rest fuel ctx fn bb vs = block_rest fuel ctx fn bb vs' /\
     vs'.vs_call_ctx = vs.vs_call_ctx
 Proof
-  strip_tac >>
-  `?ops ps' rest' n as1 ss1.
-    generate_inst_plan liveness dfg cfg fn inst
-      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
-      (k + 1 < LENGTH bb.bb_instructions /\
-       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
-      bb.bb_label ps = SOME (ops, ps') /\
-    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions)
-      (SUC k - LENGTH (get_params bb.bb_instructions))
-      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
-      ps' = SOME (rest', ps_after) /\
-    rest_ops = ops ++ rest' /\
-    asm_steps lo o2pc prog n as = AsmOK as1 /\
-    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
-    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
-    sym_steps prog env n ss = SymOK ss1 /\
-    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1` by
-    (Cases_on `inst.inst_opcode = INVOKE`
-     >- (drule_all sym_body_invoke_step >> strip_tac >>
-         first_x_assum drule >> strip_tac >> metis_tac[]) >>
-     Cases_on `inst.inst_opcode = GAS`
-     >- (drule_all sym_body_gas_ok >> metis_tac[]) >>
-     drule_all sym_body_ordinary_ok >> metis_tac[]) >>
-  drule_all fnBlockBodyClassesTheory.body_inv_advance >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
-  drule_all body_inv_inst >> strip_tac >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all block_rest_advance >> strip_tac >>
-  `vs1.vs_call_ctx = vs.vs_call_ctx` by
-    metis_tac[venomInstPropsTheory.step_preserves_call_ctx] >>
-  qexistsl_tac [`prefix_ops ++ ops`, `rest'`, `ps'`,
-    `vs1 with vs_inst_idx := SUC k`, `as1`, `ss1`, `n`] >> simp[]
+  strip_tac >> drule sym_body_nonterm_prefix_selected_canonical >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  simp[] >> (impl_tac >- (strip_tac >> drule_all sym_body_invoke_step_canonical_kernel >> simp[])) >>
+  simp[]
 QED
 
 Theorem sym_body_out_of_range:
@@ -928,18 +900,12 @@ Theorem sym_body_nonok:
   sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
     as ss (block_rest fuel ctx fn bb vs)
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all block_rest_other >> disch_then (qspec_then `fn` SUBST1_TAC) >>
-  Cases_on `res` >> fs[sym_body_result_error]
-  >- (Cases_on `inst.inst_opcode = INVOKE`
-      >- (drule_all sym_body_invoke_step >> metis_tac[]) >>
-      drule_all sym_body_halt_step >> simp[])
-  >- (Cases_on `inst.inst_opcode = INVOKE`
-      >- (drule_all sym_body_invoke_step >> metis_tac[]) >>
-      drule_all sym_body_abort_step >> simp[]) >>
-  drule_all sym_body_ret_step >> simp[]
+  strip_tac >> rewrite_tac [sym_body_result_def] >>
+  drule sym_body_nonok_selected_canonical >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
+  simp[] >> (impl_tac >- (strip_tac >> drule_all sym_body_invoke_step_canonical_kernel >> simp[])) >>
+  simp[]
 QED
 
 Theorem sym_body_inst_bounds:
@@ -952,11 +918,8 @@ Theorem sym_body_inst_bounds:
   (inst.inst_opcode = LOG ==>
     ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4)
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >>
-  drule_all body_inv_inst >> strip_tac >>
-  conj_tac >- (drule_all body_operands_le_16 >> simp[]) >>
-  strip_tac >> irule log_case_topics >>
-  drule_all body_log_topics >> simp[]
+  strip_tac >> drule (iffLR body_inv_reloc_specialize) >> strip_tac >>
+  drule_all sym_body_inst_bounds_reloc_kernel >> simp[]
 QED
 
 Theorem sym_body_revert_result:

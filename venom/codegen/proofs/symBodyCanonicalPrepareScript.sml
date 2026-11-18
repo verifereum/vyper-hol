@@ -3,7 +3,7 @@ Theory symBodyCanonicalPrepare
 Ancestors
   symBodyOrdinaryOwn symBodyTerminalOwn symBodyStaticFacts symBodyJumpPointwise
   symBodyJumpOwn symBodySuccessorPointwise symBlockBodyOwnCore symBodyAlgebra
-  symFrameBoundaryPairing symFnSimSpec fnBlockBodySteps fnBlockBodyClasses
+  symBodyCanonicalSelected symFrameBoundaryPairing symFnSimSpec fnBlockBodySteps fnBlockBodyClasses
   fnBlockBody fnBlockBodyHelpers asmSymOwnStep codegenSymRel asmSymBridge frameRel
   contextCodegenRel codegenRel venomExecSemantics venomInst venomState
 
@@ -91,13 +91,19 @@ Theorem can_facts[local]:
   asm_data_env_lo_ok lo prog env vs.vs_code /\
   sym_frame_inv_own lo prog env vs.vs_code ctx cpl fn ret srest labs0 ps as ss
 Proof
-  strip_tac >>
-  `as.as_code = vs.vs_code` by
-    (gvs[body_inv_def, fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def]) >>
-  gvs[body_inv_reloc_specialize] >>
-  simp[sym_frame_inv_canonical_own] >>
-  gvs[sym_frame_inv_def, asm_data_env_lo_ok_canonical, asm_sym_rel_def]
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  drule_all sym_body_canonical_facts >> simp[]
 QED
+
+(* Specialize the cut only after the current instruction is known to be INVOKE. *)
+fun can_selected_invoke_tac shape outcome =
+  strip_tac >>
+  shape by (drule_all body_inv_inst >> strip_tac >>
+    irule invoke_operands_wf_shape_kernel >> gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
+  outcome suffices_by
+    (qpat_x_assum `can_invoke_cut` kall_tac >> simp[SF CONJ_ss] >> strip_tac >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+  qpat_assum `can_invoke_cut` irule >> simp[] >> metis_tac[];
 
 Theorem can_runs_prefix[local]:
   asm_steps lo o2pc prog n as = AsmOK as1 /\
@@ -124,54 +130,13 @@ Theorem can_nonterm_prefix[local]:
     sym_steps prog env n ss = SymOK ss1 /\
     block_rest fuel ctx fn bb vs = block_rest fuel ctx fn bb vs'
 Proof
-  strip_tac >> drule_all can_facts >> strip_tac >>
-  `?ops ps' rest' n as1 ss1.
-    generate_inst_plan liveness dfg cfg fn inst
-      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
-      (k + 1 < LENGTH bb.bb_instructions /\
-       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
-      bb.bb_label ps = SOME (ops, ps') /\
-    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions)
-      (SUC k - LENGTH (get_params bb.bb_instructions))
-      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
-      ps' = SOME (rest', ps_after) /\
-    rest_ops = ops ++ rest' /\
-    asm_steps lo o2pc prog n as = AsmOK as1 /\
-    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
-    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
-    sym_steps prog env n ss = SymOK ss1 /\
-    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1` by
-    (Cases_on `inst.inst_opcode = INVOKE`
-     >- (`?nm args. inst.inst_operands = Label nm :: args` by
-           (drule_all body_inv_inst >> strip_tac >>
-            irule invoke_operands_wf_shape_kernel >>
-            gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
-         `can_invoke_outcome k rest_ops ps vs as ss inst` by
-           (qpat_x_assum `can_invoke_cut` irule >> simp[] >> metis_tac[]) >>
-         first_x_assum drule >> strip_tac >> metis_tac[]) >>
-     Cases_on `inst.inst_opcode = GAS`
-     >- (drule_all (SRULE [sym_steps_mode_def]
-           (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`] sym_body_gas_ok_own_kernel)) >>
-         strip_tac >> gvs[sym_frame_inv_canonical_own] >> metis_tac[]) >>
-     `sym_data_label prog env "code_end"` by
-       ((irule codegen_sym_code_end_label_kernel >> gvs[body_inv_def] >> (metis_tac[]))) >>
-     `(MEM (Label "runtime_begin") inst.inst_operands ==>
-       sym_data_label prog env "runtime_begin")` by
-       (strip_tac >> irule codegen_sym_runtime_begin_label_kernel >>
-        drule body_inv_facts >> strip_tac >> drule_all body_inv_inst >> strip_tac >>
-        gvs[body_inv_def] >> metis_tac[]) >>
-     drule_all (SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
-       (SPEC_ALL sym_body_ordinary_ok_own_kernel))) >>
-     strip_tac >> gvs[sym_frame_inv_canonical_own] >> metis_tac[]) >>
-  drule_all body_inv_advance >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
-  drule_all body_inv_inst >> strip_tac >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all block_rest_advance >> strip_tac >>
-  qexistsl [`prefix_ops ++ ops`, `rest'`, `ps'`,
-    `vs1 with vs_inst_idx := SUC k`, `as1`, `ss1`, `n`] >> simp[]
+  strip_tac >> drule sym_body_nonterm_prefix_selected_canonical >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  simp[] >> (impl_tac >-
+    can_selected_invoke_tac `?nm args. inst.inst_operands = Label nm :: args`
+      `can_invoke_outcome k rest_ops ps vs as ss inst`) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem sym_body_canonical_branches_given_invoke:
@@ -212,53 +177,19 @@ QED
 
 Resume sym_body_canonical_branches_given_invoke[revert]:
   pop_assum strip_assume_tac >> disj1_tac >>
-  `MEM (AsmLabel "revert") prog` by
-    (irule placed_revert_sym_code_label_kernel >>
-     drule body_inv_facts >> strip_tac >> gvs[body_inv_def] >> metis_tac[]) >>
-  drule_all (SRULE [sym_steps_mode_def]
-    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
-      (SPEC_ALL sym_body_revert_step_own_kernel))) >> strip_tac >>
-  first_x_assum (qspec_then `fuel` strip_assume_tac) >>
-  qpat_x_assum `can_invoke_cut` kall_tac >>
-  Cases_on `exec_block fuel ctx bb vs` >>
-  gvs[block_rest_def, asm_sym_rel_own_canonical] >> metis_tac[]
+  drule_all sym_body_revert_result_canonical >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[]
 QED
 
 Resume sym_body_canonical_branches_given_invoke[nonok]:
-  drule_all body_inv_inst >> strip_tac >>
-  `get_instruction bb vs.vs_inst_idx = SOME (EL k bb.bb_instructions)` by metis_tac[] >>
   `!s. step_inst fuel ctx (EL k bb.bb_instructions) vs <> OK s` by metis_tac[] >>
-  `block_rest fuel ctx fn bb vs = step_inst fuel ctx (EL k bb.bb_instructions) vs` by
-    (irule block_rest_other >> simp[] >> metis_tac[]) >>
-  once_asm_rewrite_tac [] >>
-  Cases_on `(EL k bb.bb_instructions).inst_opcode = INVOKE`
-  >- (`?nm args. (EL k bb.bb_instructions).inst_operands = Label nm :: args` by
-        (irule invoke_operands_wf_shape_kernel >>
-         gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
-      `can_invoke_outcome k rest_ops ps vs as ss (EL k bb.bb_instructions)` by
-        (qpat_x_assum `can_invoke_cut` irule >> simp[] >> metis_tac[]) >>
-      qpat_x_assum `can_invoke_cut` kall_tac >>
-      Cases_on `step_inst fuel ctx (EL k bb.bb_instructions) vs` >> gvs[]
-      >- (qexistsl [`n`, `as'`] >> simp[])
-      >- (qexistsl [`n`, `as'`] >> simp[])
-      >- (qexistsl [`n`, `as'`] >> simp[]) >>
-      drule_all codegen_ready_intret_opcode >> simp[]) >>
-  qpat_x_assum `can_invoke_cut` kall_tac >>
-  Cases_on `step_inst fuel ctx (EL k bb.bb_instructions) vs` >> gvs[] >>
-  `EL vs.vs_inst_idx bb.bb_instructions = EL vs.vs_inst_idx bb.bb_instructions` by simp[]
-  >- (drule_all (SRULE [sym_steps_mode_def]
-        (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
-          (SPEC_ALL sym_body_halt_step_own_kernel))) >> simp[])
-  >- (`MEM (AsmLabel "revert") prog` by
-        (irule placed_revert_sym_code_label_kernel >>
-         drule body_inv_facts >> strip_tac >> gvs[body_inv_def] >> metis_tac[]) >>
-      metis_tac[SRULE [sym_steps_mode_def]
-        (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
-          (SPEC_ALL sym_body_abort_step_own_kernel))]) >>
-  drule_all (SRULE [sym_steps_mode_def]
-    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`]
-      (SPEC_ALL sym_body_ret_step_own_kernel))) >>
-  gvs[asm_sym_rel_own_canonical] >> metis_tac[]
+  drule (Q.INST [`inst` |-> `EL k bb.bb_instructions`, `fuel` |-> `fuel`,
+    `res` |-> `step_inst fuel ctx (EL k bb.bb_instructions) vs`]
+    sym_body_nonok_selected_canonical) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[] >> (impl_tac >-
+    can_selected_invoke_tac `?nm args. (EL k bb.bb_instructions).inst_operands = Label nm :: args`
+      `can_invoke_outcome k rest_ops ps vs as ss (EL k bb.bb_instructions)`) >> simp[]
 QED
 
 Resume sym_body_canonical_branches_given_invoke[jump]:
