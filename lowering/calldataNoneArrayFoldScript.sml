@@ -6,7 +6,10 @@ Ancestors
   entrySinkExtraction abiDecoderArrayInit abiDecoderArrayLoopInit
   abiDecoderIndexInit abiDecoderContract abiDecoderReentry abiDecoderExecution
   abiDecoderDynarrayPrefix allocaFrontierBound lowerDloadPtrTaint
-  abiDecoderGuards emitHelper calldataCountGuardRejectOrigin
+  abiDecoderGuards emitHelper calldataCountGuardRejectOrigin calldataNoneArrayIteration
+  abiDecoderCoherence calldataSourceCorrespondence calldataSourceSize calldataSourceDecisions
+  abiDecoderFrame abiCallerAllocation abiDecoderCounters abiDecoderRecursiveLoopLayout
+  calldataDynInit fragBlockPath valueEncoding exprLowering abiDecoderLoopEmit entryDecoderStateFrame
   compileEnv emitHelperProps venomState venomInst venomExecSemantics
   venomMemDefs bodyPtrDefs ptrSafetyTransport codegenRel contextCodegenRel
   loweringStateRelDefs words finite_map pred_set ptrDiscipline
@@ -278,4 +281,160 @@ Proof
   drule_all calldata_count_guard_rejected_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`z`,`H`,`u`] >> asm_rewrite_tac[]
+QED
+
+(* A child certificate is used only at the actually installed child interval. *)
+Theorem none_nonbulk_fold_paths:
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  (is_abi_dynamic ce.ce_struct_fields ty \/ dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),last) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\ last.cs_next_var <= limit.cs_next_var /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  (last.cs_current_insts = [] ==> !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  eval_operand src initial = SOME sw /\ eval_operand (Var root) initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var (Var root) /\
+  alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
+  (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP initial.vs_allocas id = SOME (p,k) ==>
+    k = 32 /\ p < dimword (:256) /\ p+32 <= initial.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+  FLOOKUP initial.vs_allocas oid = SOME (base_addr,owner_cap) /\
+  (oid < st.cs_next_id \/ last.cs_next_id <= oid) /\
+  base_addr <= d /\ d+(32+maxn*type_memory_size tv) <= base_addr+owner_cap /\
+  d+(32+maxn*type_memory_size tv) < dimword (:256) /\
+  ptr_covers G tn root initial (32+maxn*type_memory_size tv) /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  fresh_vars_wrt limit initial /\ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!a b child sop s p e A ta.
+    compile_abi_decode_to_buf (Var child) sop CALLDATALOAD (Lit 0w) (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) a = ((),b) /\
+    fn_has_code a b fn /\ b.cs_next_var <= limit.cs_next_var /\
+    (b.cs_current_insts = [] ==> !bb. lookup_block b.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+    eval_operand sop s = SOME p /\ eval_operand (Var child) s = SOME (n2w e) /\
+    abi_decoder_operand_live a.cs_next_var sop /\ abi_decoder_operand_live a.cs_next_var (Var child) /\
+    alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+    (!id q k. a.cs_next_id <= id /\ id < b.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
+      k = 32 /\ q < dimword (:256) /\ q+32 <= s.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,owner_cap) /\
+    (oid < a.cs_next_id \/ b.cs_next_id <= oid) /\
+    base_addr <= e /\ e+type_memory_size tv <= base_addr+owner_cap /\
+    e+type_memory_size tv < dimword (:256) /\ ptr_covers A ta child s (type_memory_size tv) /\
+    op_taint ta sop = {} /\ op_prov A sop = NONE /\
+    fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+    (?z B u. z.vs_returndata = [] /\
+        !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,A,ta) [] (Abort Revert_abort z,B,u)) \/
+    ?r sc B u. IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv (w2n p)) /\
+      ~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\ r.vs_inst_idx = LENGTH b.cs_current_insts /\
+      r.vs_call_ctx = s.vs_call_ctx /\ r.vs_data_section = s.vs_data_section /\
+      alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r /\
+      (!id q k. a.cs_next_id <= id /\ id < b.cs_next_id /\ FLOOKUP r.vs_allocas id = SOME (q,k) ==>
+        k = 32 /\ q < dimword (:256) /\ q+32 <= r.vs_alloca_next /\
+        ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+      s.vs_alloca_next <= r.vs_alloca_next /\
+      (!id q k. FLOOKUP s.vs_allocas id = SOME (q,k) ==> FLOOKUP r.vs_allocas id = SOME (q,k)) /\
+      (!id. id < a.cs_next_id \/ b.cs_next_id <= id ==> FLOOKUP r.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+      (!op. abi_decoder_operand_live a.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
+      abi_decode_footprint_frame ((e,type_memory_size tv)::sc) s r /\
+      (!q k. MEM (q,k) sc ==> ?id. a.cs_next_id <= id /\ id < b.cs_next_id /\ FLOOKUP r.vs_allocas id = SOME (q,k)) /\
+      fresh_vars_wrt limit r /\
+      (!x. not_fresh_at a x ==> FLOOKUP B x = FLOOKUP A x /\ op_taint u (Var x) = op_taint ta (Var x)) /\
+      u.t_mem SUBSET ta.t_mem /\ u.t_stor = ta.t_stor /\ u.t_trans = ta.t_trans /\ u.t_imm = ta.t_imm /\
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,A,ta) [] (OK r,B,u)) ==>
+  (?z B u. z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (initial,G,tn) [] (Abort Revert_abort z,B,u)) \/
+  ?v sc B u. IS_SOME (cd_decode F initial.vs_call_ctx.cc_calldata (ArrayTV tv (Dynamic maxn)) (w2n sw)) /\
+    ~v.vs_halted /\ v.vs_current_bb = last.cs_current_bb /\ v.vs_inst_idx = LENGTH last.cs_current_insts /\
+    v.vs_call_ctx = initial.vs_call_ctx /\ v.vs_data_section = initial.vs_data_section /\
+    alloca_inv v /\ alloca_frontier_inv ctx fn site v /\ allocas_from lo v /\
+    (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP v.vs_allocas id = SOME (p,k) ==>
+      k = 32 /\ p < dimword (:256) /\ p+32 <= v.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    initial.vs_alloca_next <= v.vs_alloca_next /\
+    (!id p k. FLOOKUP initial.vs_allocas id = SOME (p,k) ==> FLOOKUP v.vs_allocas id = SOME (p,k)) /\
+    (!id. id < st.cs_next_id \/ last.cs_next_id <= id ==> FLOOKUP v.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op v = eval_operand op initial) /\
+    abi_decode_footprint_frame ((d,32+maxn*type_memory_size tv)::sc) initial v /\
+    (!p k. MEM (p,k) sc ==> ?id. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP v.vs_allocas id = SOME (p,k)) /\
+    fresh_vars_wrt limit v /\ ptr_covers B u root v (32+maxn*type_memory_size tv) /\
+    (!x. not_fresh_at st x ==> FLOOKUP B x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (initial,G,tn) [] (OK v,B,u)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decoder_coherent ce env sf ty tv` by
+    (qpat_assum `abi_decoder_coherent _ _ _ (ArrayT _ _) _` mp_tac >>
+     simp[NoAsms,Once abi_decoder_coherent_array_iff]) >>
+  `type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
+     DecDynArray (type_to_abi_dec_info sf ce ty) (tv_abi_size tv) (type_memory_size tv)
+       (is_abi_dynamic ce.ce_struct_fields ty) maxn` by
+    (drule abi_decoder_coherent_header >> drule calldata_coherent_embedded_size >>
+     simp[abi_decoder_header_def,type_to_abi_dec_info_def]) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ st = _` mp_tac >>
+  qpat_assum `type_to_abi_dec_info _ _ (ArrayT _ _) = _` (once_rewrite_tac o single) >>
+  disch_tac >>
+  drule_all calldata_nonbulk_parent_shell_conditional >>
+  disch_then (qx_choose_then `ip` (qx_choose_then `cop` strip_assume_tac)) >>
+  Cases_on `maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD sw initial)`
+  >- (disj1_tac >> drule_all none_array_count_reject >>
+      disch_then (qspec_then `PG` ACCEPT_TAC)) >>
+  qabbrev_tac `cap = 32+maxn*type_memory_size tv` >>
+  `base_addr+owner_cap <= initial.vs_alloca_next` by
+    (qpat_assum `alloca_inv initial` mp_tac >>
+     pure_rewrite_tac[alloca_inv_def,alloca_next_valid_def] >>
+     strip_tac >> first_x_assum drule >> simp[NoAsms]) >>
+  `d < dimword (:256) /\ 32 <= cap /\ d+cap <= initial.vs_alloca_next` by
+    (conj_tac >- decide_tac >> conj_tac >- simp[NoAsms,Abbr `cap`] >> decide_tac) >>
+  `w2n (abi_decode_load CALLDATALOAD sw initial) <= maxn MOD dimword (:256)` by decide_tac >>
+  `?bb. lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH loop_st.cs_current_insts) =
+          SOME (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] [])` by
+    (qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
+     `labels = (FST labels, FST (SND labels), SND (SND labels))` by
+       (Cases_on `labels` >> Cases_on `r` >> simp[NoAsms]) >>
+     pop_assum (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     disch_tac >> drule_all calldataDynInitTheory.calldata_loop_prefix_entry_code >>
+     strip_tac >> qexists_tac `bb` >> asm_rewrite_tac[] >>
+     qpat_assum `bb.bb_instructions = _`
+       (fn th => simp[NoAsms, get_instruction_def, th, rich_listTheory.EL_LENGTH_APPEND_0])) >>
+  `header_st.cs_next_id < last.cs_next_id` by decide_tac >>
+  `FLOOKUP initial.vs_allocas oid = SOME (base_addr,owner_cap) /\
+   oid <> header_st.cs_next_id` by (conj_tac >- asm_rewrite_tac[] >> decide_tac) >>
+  drule_all calldataDynOwnedTheory.calldata_index_init_literal_site >> strip_tac >>
+  `initial.vs_alloca_next < dimword(:256)` by
+    (qpat_assum `alloca_frontier_inv ctx fn site initial` mp_tac >>
+     pure_rewrite_tac[alloca_frontier_inv_def] >> strip_tac >> decide_tac) >>
+  Q_TAC (fn tm => SUBGOAL_THEN tm
+    (qx_choose_then `slot` (map_every assume_tac o CONJUNCTS)))
+    `?slot. ((FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE /\
+            slot = initial.vs_alloca_next) \/
+           (FLOOKUP initial.vs_allocas header_st.cs_next_id = SOME (slot,32) /\
+            slot < dimword(:256) /\ slot+32 <= initial.vs_alloca_next)) /\
+          slot+32 < dimword(:256) /\ (d+cap <= slot \/ slot+32 <= d)`
+    >- (Cases_on `FLOOKUP initial.vs_allocas header_st.cs_next_id`
+     >- (`FLOOKUP initial.vs_allocas ins.inst_id = NONE` by asm_rewrite_tac[] >>
+         drule_all actualAllocExecTheory.actual_word_alloca_fresh_run >> strip_tac >>
+         qexists_tac `initial.vs_alloca_next` >> asm_rewrite_tac[]) >>
+     PairCases_on `x` >>
+     qpat_assum `!id p k. _ /\ _ /\ FLOOKUP initial.vs_allocas id = SOME (p,k) ==> _`
+       (qspecl_then [`header_st.cs_next_id`,`x0`,`x1`] mp_tac) >>
+     (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+     `FLOOKUP initial.vs_allocas header_st.cs_next_id = SOME (x0,32)` by asm_rewrite_tac[] >>
+     `base_addr+owner_cap <= x0 \/ x0+32 <= base_addr` by
+       (qpat_assum `alloca_inv initial` mp_tac >>
+        pure_rewrite_tac[alloca_inv_def,allocas_non_overlapping_def] >>
+        disch_then (qspecl_then [`oid`,`header_st.cs_next_id`,`base_addr`,`owner_cap`,`x0`,`32`] mp_tac o CONJUNCT1) >>
+        asm_rewrite_tac[]) >>
+     qexists_tac `x0` >> asm_rewrite_tac[] >> decide_tac) >>
+  `lookup_var root initial = SOME (n2w d)` by
+    (qpat_assum `eval_operand (Var root) initial = _` mp_tac >> simp[NoAsms,eval_operand_def]) >>
+  drule_all none_array_first_header >>
+  disch_then (qspec_then `PG` (qx_choose_then `first` (qx_choose_then `A0`
+    (qx_choose_then `tn0` (qx_choose_then `q` (map_every assume_tac o CONJUNCTS)))))) >>
+  FAIL_TAC "passing fold"
 QED
