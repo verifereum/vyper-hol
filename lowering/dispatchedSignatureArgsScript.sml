@@ -35,7 +35,7 @@ Theorem dispatched_signature_args:
   supported_program tops /\ source_typing_ok tops am tx /\
   MEM (name,tys) (abi_external_signatures tops) /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==> tys = MAP SND args
+    SOME (mut,nr,args,[],ret,fbody) ==> tys = MAP SND args
 Proof
   rpt strip_tac >>
   gvs[source_typing_ok_def] >>
@@ -53,7 +53,7 @@ Proof
   gvs[]
   >- (gvs[abi_decl_signatures_def, abi_function_signatures_no_defaults] >>
       Cases_on `name = "__default__"` >> gvs[]) >>
-  `public_getter decl = SOME (mut,F,F,name,args,([]:expr list),ret,fbody)` by
+  `public_getter decl = SOME (mut,nr,F,name,args,([]:expr list),ret,fbody)` by
     (rewrite_tac[public_getter_source_tuple] >>
      conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
   drule public_getter_signature >> strip_tac >> gvs[]

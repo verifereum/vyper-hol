@@ -84,18 +84,7 @@ QED
    source expr_val_at. Output coverage is destination-sized at the shifted PC;
    robust destination representation uses the same final memory.
 
-   Missing reusable semantic boundaries (not supplied by these certificates):
-   1. Cast actual-state success/abort and convert_result correspondence with
-      read-only frame. S1 convert_cast_narrow_run/abort_run work at arbitrary
-      states; success_frame assumes fresh_vars_wrt and needs replay or a raw
-      frame proof. Their exprSimConvertBytes theory currently fails immutable
-      ancestry name resolution (expr_body_pre_def/expr_sim_inv_def), so cannot
-      be imported here. Use raw opcode boundary or a new necessary leaf.
-   2. Widen actual-state successful allocation+copy execution and outer
-      expr_post framing, plus semantic success from footprint<=lowered size.
-      S1 convert_widen_copy_run is local and in that same unavailable theory;
-      its source construction is literal_alloc_buffer_run + buffer_emit_mcopy_run
-      + run_inst_seq_append. No erased path is sufficient for pointer safety.
-   3. Packaging memory suffix post (including whole-buffer coverage) is not
-      scalar_suffix_expr_post: allocation changes memory and ownership.
-   No full continuation, run existence or falsehood is claimed by this audit. *)
+   The actual-state prefixes are convert_cast_origin_path and
+   convert_widen_copy_origin_ptr_path. The continuations in
+   convert_bytes_vv_sim_full compose those prefixes with the child read
+   and carry the memory post, including whole-buffer coverage. *)
