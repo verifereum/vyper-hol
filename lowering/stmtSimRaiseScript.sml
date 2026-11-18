@@ -1,7 +1,7 @@
 (* Counted actual-source simulation for bare and unreachable raise. *)
 Theory stmtSimRaise
 Ancestors
-  stmtSimDefs stmtSimProps exprSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
+  stmtSimDefs stmtSimProps stmtSimAssertProps exprSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
   gasCount fragGasPath stmtLowering compileEnv emitHelper emitHelperProps loweringSlice
   exprLoweringProps vyperInterpreter vyperState venomInst venomState
   venomExecSemantics venomExecProofs fragExec list finite_map
@@ -28,12 +28,12 @@ Proof
   qmatch_goalsub_abbrev_tac `AssertException msg` >>
   qexistsl_tac [`INR (AssertException msg)`, `es`] >>
   fs[markerTheory.Abbrev_def] >>
-  `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
-         expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
-    (simp[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
+  `?a t. expr_exit (INR (AssertException msg) : unit + exception) (Abort a t) /\
+         gas_path ctx func s0 0 (Abort a t)` by
+    (qspecl_then [`opc`, `ops`, `msg`, `sa`, `sb`, `s0`, `func`, `ctx`] mp_tac
+       abort_zero_exit >>
+     impl_tac >- gvs[] >> simp[]) >>
   qexists_tac `Abort a t` >> simp[exit_result_def, stmt_exit_def] >>
-  (conj_tac >- (irule emit_abort_zero_path >> simp[] >>
-     qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[]) >>
-   gvs[expr_exit_def, halt_exit_def])
+  gvs[expr_exit_def, halt_exit_def]
 QED
 

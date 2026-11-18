@@ -1,6 +1,7 @@
 (* Custom-error declaration, typing, ABI payload, and execution regressions. *)
 Theory vyperCustomErrorTest
 Ancestors
+  vyperSmallStepCV
   vyperTypeContract vyperSmallStep[ignore_grammar] extCallOracle
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar] vyperState vyperContext vyperABI vyperAST
