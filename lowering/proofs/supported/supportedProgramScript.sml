@@ -40,12 +40,18 @@ Definition supported_function_body_def:
          ~supported_stmts_expr_exists expr_internal_call_root body)
 End
 
-(* Defaults are lowered at external entry points, so they obey the same
-   expression and main-module restrictions as function bodies. *)
+Definition expr_msg_gas_root_def:
+  expr_msg_gas_root (Builtin _ (Env MsgGas) _) = T /\
+  expr_msg_gas_root _ = F
+End
+
+(* Omitted defaults are lowered from the same expressions in both compiler
+   runs. They must be invariant under the explicit gas-read shadowing. *)
 Definition supported_default_expression_def:
   supported_default_expression tops e <=>
     supported_expr tops e /\
-    ~supported_expr_exists expr_nonmain_type_root e
+    ~supported_expr_exists expr_nonmain_type_root e /\
+    ~supported_expr_exists expr_msg_gas_root e
 End
 
 (* The source-shape restriction on internal names. supported_declaration_names
