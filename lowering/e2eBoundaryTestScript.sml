@@ -207,13 +207,16 @@ QED
 
 (* The compiler packages the same getter that source lookup selects. *)
 Theorem source_lookup_getter_supported:
-  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  EVERY (\tops.
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    supported_program tops
+    supported_program tops)
+    [[VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0);
+      EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),F)]]]
 Proof
-  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp_tac bool_ss [listTheory.EVERY_DEF, AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >>
   simp[supported_program_def, supported_declaration_headers_def,
     supported_declaration_header_def, supported_declaration_body_def,
     supportedNamesTheory.supported_declaration_names_def,
