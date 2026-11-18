@@ -3,6 +3,7 @@
    consumption gate remains in vyperExtCallCpsEquivalenceTest.  No big-step rewrites here. *)
 Theory vyperExtCallCpsCVTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep[ignore_grammar] extCallOracle
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar] vfmContext[ignore_grammar]
