@@ -32,7 +32,7 @@ Ancestors
   memoryLocalRhsProps pair stmtLoweringMono stmtSimDeclTypedCode stmtSimProps
   placeMemoryFieldRebuild assignTuplePtrStoreWord stmtSimDeclStore targetPlaceSim sum venomState stateRelProj stateRelProjStorage memoryPlaceStorePost
   stmtSimAssignStorage augAssignFullStore bodyPtrDefs stmtSimDefs bodyMemoryDefs
-  vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs
+  vyperStorageBackend fragExec fragGasOriginPtrExec gasExemptCert exprSimDefs haltExitProj
   exprSimUnwrap stmtSimAssignStorageFacts vyperTypeExprResult vyperTypeExprSoundness
   ptrDiscipline placeStore valueEncodingProps venomMemProofs
   bodyPtrPrecompileBuiltinsArithmeticValue vyperTypeDefaults
@@ -4059,7 +4059,11 @@ Resume body_assign_memory_place_joint[compose]:
   `aid < sc.cs_next_id` by decide_tac >>
   `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
   `i IN tu.t_mem` by metis_tac[] >>
-  metis_tac[]
+  qpat_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ _ ==>
+      i IN tn.t_mem`
+    (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 Finalise body_assign_memory_place_joint
 

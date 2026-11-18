@@ -437,14 +437,15 @@ Theorem sym_mstore_scratch_step:
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
   rpt gen_tac >> Cases_on `sv` >> strip_tac >>
-  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+  FIRST [simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
        sval_val_def, asm_op_arity_table_def, asmSemTheory.log_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       mem_labels_hit_def, Excl "GENLIST_NUMERALS"]] >>
+  FIRST [simp[sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
        asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
        asmSemTheory.asm_step_memory_def,
        asmSemTheory.asm_mstore_def, asmSemTheory.asm_next_def,
-       scratch_store_labels_def, Excl "GENLIST_NUMERALS"]
+       scratch_store_labels_def, Excl "GENLIST_NUMERALS"]]
 QED
 
 (* A run of n steps that ends ends the run with more fuel. *)
