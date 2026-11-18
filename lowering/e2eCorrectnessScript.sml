@@ -18,7 +18,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringCalldataCorrect callPremiseDispatch
+  loweringCalldataCorrect callPremiseDispatch dispatchedValueSelection entryStateRel
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout asmOptimizer codegenEncodingWf
@@ -2261,12 +2261,7 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    (!f vals.
-       calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-       ?mut args dflts ret body.
-         vyperInterpreter$lookup_function NONE f External tops =
-           SOME (mut, F, args, dflts, ret, body))
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -2283,7 +2278,8 @@ Proof
   gvs[]
   >- (drule_all vyper_call_reverts >> simp[]) >>
   rename1 `_ = SOME fv` >> PairCases_on `fv` >>
-  first_x_assum (qspecl_then [`fv0`, `fv1`] mp_tac) >> simp[] >> strip_tac >>
+  drule source_typing_ok_external_names_distinct >> strip_tac >>
+  drule_all calldata_dispatch_has_source_entry >> strip_tac >>
   qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`,
                `tx with <| function_name := fv0; args := fv1 |>`, `ret`, `es`]
     mp_tac vyper_call_correct_dispatched >>
