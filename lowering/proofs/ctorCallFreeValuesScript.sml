@@ -647,6 +647,14 @@ Proof
   rpt strip_tac >> irule (cj 2 outcomes_free_bytestring_copy) >> simp[]
 QED
 
+Theorem outcomes_free_copy_memory_dynamic:
+  P MCOPY /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_copy_memory_dynamic dst src len st)))
+Proof
+  simp[compile_copy_memory_dynamic_def, opcode_every_emit_void]
+QED
+
 Theorem opcode_every_copy_memory_dynamic:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -657,8 +665,7 @@ Theorem opcode_every_copy_memory_dynamic:
     (state_insts (SND (compile_copy_memory_dynamic dst src len st)))
   )
 Proof
-  strip_tac >>
-  simp[compile_copy_memory_dynamic_def, opcode_every_emit_void]
+  rpt strip_tac >> irule outcomes_free_copy_memory_dynamic >> simp[]
 QED
 
 Theorem opcode_every_typed_copy:
@@ -714,6 +721,23 @@ Proof
   rpt strip_tac >> irule outcomes_free_ifexp_arm >> simp[]
 QED
 
+Theorem outcomes_free_materialize_vv:
+  (!n st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_buffer n st)))) /\
+  (!v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce v st)))) /\
+  (!a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_materialize_vv ce ty vv s)))
+Proof
+  strip_tac >> simp[compile_materialize_vv_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> metis_tac[pairTheory.SND]
+QED
+
 Theorem opcode_every_materialize_vv:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -723,13 +747,9 @@ Theorem opcode_every_materialize_vv:
     (state_insts (SND (compile_materialize_vv ce ty vv st)))
   )
 Proof
-  strip_tac >>
-  qid_spec_tac `st` >> simp[compile_materialize_vv_def] >>
-  rpt (FIRST [
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[(UNDISCH opcode_every_alloc_buffer),
-      (UNDISCH opcode_every_unwrap_value), (UNDISCH opcode_every_store_memory), every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_materialize_vv >>
+  simp[UNDISCH opcode_every_unwrap_value, UNDISCH opcode_every_alloc_buffer,
+       UNDISCH opcode_every_store_memory]
 QED
 
 Theorem opcode_every_snapshot_vv:
