@@ -11,10 +11,7 @@ Theorem slots_readonly_machine_frame[local]:
   (!x. ~MEM x i.inst_outputs ==> lookup_var x u = lookup_var x s)
 Proof
   simp[MEM] >> strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_ASSIGN, step_inst_base_ADD,
-      step_inst_base_MUL, step_inst_base_EQ, step_inst_base_LT,
-      step_inst_base_ISZERO, step_inst_base_SHR, step_inst_base_MLOAD,
-      step_inst_base_JMP, step_inst_base_JNZ,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
       exec_pure1_def, exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
   simp[store_copy_normalize_def, update_var_def, jump_to_def,
        lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
