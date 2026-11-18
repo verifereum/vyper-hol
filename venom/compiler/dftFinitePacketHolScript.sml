@@ -40,6 +40,7 @@ Ancestors
   dftPacketPreterminalAgreement
   dftPacketPreterminalNativeAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
+  dftPacketPseudoCurrentCutArrays
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoFreshCut dftPacketPseudoKeyFreshness dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame
