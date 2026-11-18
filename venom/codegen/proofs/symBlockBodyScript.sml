@@ -12,7 +12,7 @@
 Theory symBlockBody
 Ancestors
   symFrameBoundary symFrameControl symFrameInvoke symFrameInst symFnSimSpec
-  symBodyCanonicalSelected
+  symBodyCanonicalSelected symBodyCanonicalSuccessor
   codegenSymRel fnBlockBody fnBlockBodySteps fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
   venomExecSemantics venomState venomInst fnPlanLineageEntryProduction symBodyAlgebra symBlockBodyOwnCore symBodyCanonicalClient symBodyStaticFacts symBodyOrdinaryOwn symBodyTerminalOwn symBodyInvokeCanonical symBodyJumpOwn symFrameBoundaryPairing asmSymOwnStep symBodyJumpPointwise
@@ -625,22 +625,8 @@ Theorem sym_body_jump_continue:
   sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
     as ss (run_blocks fuel ctx fn vs1)
 Proof
-  strip_tac >> drule_all body_jump_entry >> strip_tac >>
-  conj_tac >- simp[] >>
-  irule sym_body_result_prefix >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  `sym_frame_inv prog env ctx cpl fn ret srest labs0 pe as1 ss1` by
-    (irule sym_frame_inv_plan_transport >> goal_assum (drule_at Any) >> simp[]) >>
-  qhdtm_assum `sym_fn_frame_sim_at`
-    (mp_tac o REWRITE_RULE [sym_fn_frame_sim_at_def]) >>
-  pure_rewrite_tac [sym_body_result_def] >>
-  disch_then (drule_at (Pat `sym_frame_inv`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv`)) >>
-  disch_then (drule_at (Pat `generate_block_plan`)) >>
-  disch_then (drule_at (Pat `lineage_entry`)) >>
-  disch_then irule >>
-  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  gvs[] >> rpt conj_tac >> metis_tac[]
+  rewrite_tac [sym_body_result_def] >> strip_tac >>
+  drule_all (BETA_RULE sym_body_jump_continue_canonical) >> simp[]
 QED
 
 Theorem body_succ_sym_label:
@@ -690,23 +676,9 @@ Theorem sym_body_jmp_prefix:
     vs1 = jump_to t vs /\
     FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >>
-  drule_all jmp_wf_operands >> strip_tac >>
-  `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> drule_all body_succ_sym_label >> metis_tac[]) >>
-  `as.as_code = vs.vs_code` by
-    gvs[body_inv_def, fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
-  gvs[body_inv_reloc_specialize] >>
-  `asm_data_env_lo_ok (SND (compute_label_offsets prog)) prog env vs.vs_code` by
-    gvs[sym_frame_inv_def, asm_data_env_lo_ok_canonical, asm_sym_rel_def] >>
-  `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env vs.vs_code
-    ctx cpl fn ret srest labs0 ps as ss` by simp[sym_frame_inv_canonical_own] >>
-  drule_at (Pat `body_inv_reloc`) (SRULE [sym_steps_mode_def]
-    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`] sym_body_jmp_prefix_pointwise)) >>
-  simp[sym_frame_inv_canonical_own] >>
-  disch_then (drule_at (Pat `step_inst`)) >>
-  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[] >>
-  strip_tac >> qexistsl [`n`, `as1`, `ss1`, `t`, `off`] >> gvs[] >> metis_tac[]
+  strip_tac >> drule (BETA_RULE sym_body_jump_prefix_canonical) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
 
 Theorem jnz_wf_operands:
@@ -751,28 +723,9 @@ Theorem sym_body_jnz_prefix:
     vs1 = jump_to t vs /\
     FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >>
-  drule_all body_inv_static >> strip_tac >>
-  drule_all jnz_wf_operands >> strip_tac >>
-  `!c l1 l2. inst.inst_operands = [c; Label l1; Label l2] ==>
-    eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
-    (rpt strip_tac >> irule jnz_condition_frame_view >>
-     drule body_inv_facts >> strip_tac >> simp[] >> metis_tac[]) >>
-  `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> drule_all body_succ_sym_label >> metis_tac[]) >>
-  `as.as_code = vs.vs_code` by
-    gvs[body_inv_def, fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
-  gvs[body_inv_reloc_specialize] >>
-  `asm_data_env_lo_ok (SND (compute_label_offsets prog)) prog env vs.vs_code` by
-    gvs[sym_frame_inv_def, asm_data_env_lo_ok_canonical, asm_sym_rel_def] >>
-  `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env vs.vs_code
-    ctx cpl fn ret srest labs0 ps as ss` by simp[sym_frame_inv_canonical_own] >>
-  drule_at (Pat `body_inv_reloc`) (SRULE [sym_steps_mode_def]
-    (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`] sym_body_jnz_prefix_pointwise)) >>
-  simp[sym_frame_inv_canonical_own] >>
-  disch_then (drule_at (Pat `step_inst`)) >>
-  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[] >>
-  strip_tac >> qexistsl [`n`, `as1`, `ss1`, `t`, `off`] >> gvs[] >> metis_tac[]
+  strip_tac >> drule (BETA_RULE sym_body_jump_prefix_canonical) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
 
 Theorem sym_body_jmp_step:
@@ -791,8 +744,10 @@ Theorem sym_body_jmp_step:
   sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
     as ss (run_blocks fuel ctx fn vs1)
 Proof
-  strip_tac >> drule_all sym_body_jmp_prefix >> strip_tac >>
-  drule_all sym_body_jump_continue >> simp[]
+  rewrite_tac [sym_body_result_def] >> strip_tac >>
+  drule (BETA_RULE sym_body_jump_step_canonical) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
 
 Theorem sym_body_jnz_step:
@@ -811,8 +766,10 @@ Theorem sym_body_jnz_step:
   sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
     as ss (run_blocks fuel ctx fn vs1)
 Proof
-  strip_tac >> drule_all sym_body_jnz_prefix >> strip_tac >>
-  drule_all sym_body_jump_continue >> simp[]
+  rewrite_tac [sym_body_result_def] >> strip_tac >>
+  drule (BETA_RULE sym_body_jump_step_canonical) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
 
 Theorem sym_body_nonterm_prefix:
@@ -874,13 +831,10 @@ Theorem sym_body_terminator:
   sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
     as ss (block_rest fuel ctx fn bb vs)
 Proof
-  strip_tac >> drule_all body_inv_inst >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all fnBlockBodyHelpersTheory.step_ok_terminator_jump >> strip_tac
-  >- (drule_all sym_body_jmp_step >> strip_tac >> metis_tac[block_rest_jump])
-  >- (drule_all sym_body_jnz_step >> strip_tac >> metis_tac[block_rest_jump]) >>
-  gvs[inst_shape_ok_def]
+  rewrite_tac [sym_body_result_def] >> strip_tac >>
+  drule (BETA_RULE sym_body_terminator_canonical) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
 
 Theorem sym_body_nonok:
