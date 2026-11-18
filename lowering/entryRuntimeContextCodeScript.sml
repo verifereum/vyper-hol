@@ -50,7 +50,7 @@ Proof
   drule_at (Pos (el 2)) entry_code_run_lowering >>
   disch_then (qspec_then `f` mp_tac) >>
   (impl_tac >- (simp[] >> irule entry_code_generate_runtime >>
-               gvs[MAP_COMPOSE])) >>
+               gvs[MAP_COMPOSE, EVERY_MAP, EVERY_MEM])) >>
   simp[combinTheory.o_DEF]
 QED
 

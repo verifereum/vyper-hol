@@ -520,7 +520,9 @@ Resume append_nested_memory_cont_full[success]:
   drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sm sb)` by
-    (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+    (qpat_assum `EVERY (\i. MEM i.inst_opcode _) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
      gvs[venomInstTheory.is_terminator_def]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (t,G,tn) [] (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
@@ -719,7 +721,7 @@ Resume append_nested_memory_cont_full[success]:
              `tv0 = entry.type` by
                metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees,
                          optionTheory.SOME_11] >>
-             gvs[]) >>
+             FIRST [gvs[]]) >>
          conj_tac
          >- metis_tac[bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees] >>
          irule (cj 1 stmtSimDeclStoreTheory.typed_word_store) >>
@@ -1708,7 +1710,7 @@ Proof
        POP_ASSUM_LIST (K all_tac) >>
        simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
        metis_tac[]) >>
-    simp[unitMemInvTheory.dalloca_no_wrap_def])) >>
+    simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 R1` >>
   irule gas_outcome_full_bind_all >>
@@ -1733,6 +1735,9 @@ Resume append_nested_after_target_full[rhs_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
   rename1 `INR exc` >> Cases_on `exc` >>
+  qpat_x_assum `expr_exit _ _` mp_tac >>
+  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
       exprSimDefsTheory.halt_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >>
@@ -1836,7 +1841,10 @@ Resume append_nested_after_target_full[suffix]:
       state_well_typed (es with gas_obs := gs) /\ context_well_typed cx /\
       accounts_well_typed (es with gas_obs := gs).accounts /\
       functions_well_typed cx /\ env.type_defs = get_tenv cx` by
-       (fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+       (qpat_assum `target_pre cenv cx env bt (es with gas_obs := gs)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+        rpt strip_tac >>
         gvs[vyperTypeInvariantsTheory.env_consistent_def,
             vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>

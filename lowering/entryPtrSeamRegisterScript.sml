@@ -42,10 +42,10 @@ Proof
   strip_tac >>
   `raw_shape_free_program tops` by
     metis_tac[loweringShapeSourceTheory.supported_program_raw_shape_free_program] >>
-  `o1_source_unit_ok unit` by
-    (fs[e2eDefsTheory.source_typing_ok_def] >>
-     drule_all lower_vyper_runtime_unit_source_unit_ok >> simp[]) >>
-  metis_tac[o1PipelineCorrectTheory.o1_source_unit_ok_no_dalloca]
+  irule o1PipelineCorrectTheory.every_no_dalloca >>
+  fs[e2eDefsTheory.source_typing_ok_def] >>
+  drule_all loweringShapeSourceTheory.lower_vyper_runtime_unit_no_dalloca_checked >>
+  simp[]
 QED
 
 Theorem registration_fmp_room_necessary:
@@ -3872,7 +3872,8 @@ Resume registration_actual_endpoint_relations_nr[actual_state]:
       initial_state_def, initial_evaluation_context_def] >>
   `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
   simp[storage_rel_def, transient_rel_def, contract_storage_def,
-       contract_transient_def, logs_rel_def, accounts_rel_def]
+       contract_transient_def, logs_rel_def, accounts_rel_def,
+       accounts_agree_def, transient_agree_def]
 QED
 
 Resume registration_actual_endpoint_relations_nr[actual_immutables]:

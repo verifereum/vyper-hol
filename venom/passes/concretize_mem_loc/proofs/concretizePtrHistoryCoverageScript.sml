@@ -83,7 +83,8 @@ Proof
     (qpat_x_assum `ptr_chrono_step _ _ _` mp_tac >>
      simp[Once ptr_chrono_step_cases] >> rpt strip_tac >>
      gvs[ptr_observe_def, is_terminator_def] >>
-     gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+     (FIRST [gvs[step_inst_non_invoke]] >>
+       FIRST [gvs[step_inst_base_def, AllCaseEqs()]]) >>
      simp[update_var_def, write_memory_with_expansion_def, write_memory_def]) >>
   qexistsl_tac [`win`, `p`, `q`] >> simp[]
 QED

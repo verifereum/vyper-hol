@@ -17,8 +17,7 @@ Theorem deploy_ctor_entry_fmp_room:
     fmp_room dunit.cu_context func s
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
-  drule o1_source_unit_ok_no_dalloca >>
+  drule_all lower_vyper_deploy_unit_no_dalloca >>
   simp[fmp_room_def, ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
   metis_tac[]
 QED

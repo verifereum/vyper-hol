@@ -11,8 +11,7 @@ Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
     !os. oos = SOME os ==>
          EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
-                     (oc.co_success ==>
-                      accounts_runtime_well_typed oc.co_accounts)) os
+                     accounts_runtime_well_typed oc.co_accounts) os
 End
 
 (* Every local's popped history is typed, each snapshot sits at an element

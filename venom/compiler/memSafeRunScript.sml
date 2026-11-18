@@ -43,6 +43,7 @@ Theory memSafeRun
 Ancestors
   list venomExecSemantics venomExecProofs venomInstProofs venomInst
   venomState contextCodegenRel contextCodegenRelProps unitTransformDefs
+  contextRawReachable
 
 (* ===== Definitions ===== *)
 
@@ -543,7 +544,8 @@ QED
 
 (* The bridge: a memory-safe run from the unit's entry, and an invariant J
    that bounds the frontier (alloca_frontier_inv under the unit's alloca
-   budget), give raw_unit_memory_ok.  Distinct labels are needed: the
+   budget), with the two free-memory-pointer facts at every raw-reachable
+   state, give raw_unit_memory_ok.  Distinct labels are needed: the
    reachability clauses take any block with the current label (active_inst),
    the run takes the first (lookup_block).  A safe run that does not fail is
    safe at every fuel (mem_safe_blocks_all_fuel). *)
@@ -560,16 +562,26 @@ Theorem mem_safe_raw_unit_memory_ok:
     (!f inst s. J ctx f inst s ==> s.vs_alloca_next < dimword (:256)) /\
     (!fuel. mem_safe_blocks fuel ctx fn
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                          vs_inst_idx := 0 |>)) ==>
+                          vs_inst_idx := 0 |>)) /\
+    (!f inst s. raw_reachable vs ctx f inst s ==>
+       dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) ==>
     raw_unit_memory_ok ctx vs
 Proof
   rw[raw_unit_memory_ok_def, codegen_reachability_package_def] >>
-  qexists_tac `\c f i s. mem_safe_point c f i s /\ J c f i s` >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         (J c f i s /\ raw_reachable vs c f i s)` >>
   rpt conj_tac
-  >- (irule reachability_closed_conj >> simp[mem_safe_point_closed])
-  >- (irule fn_entry_inv_conj >> simp[] >>
-      irule mem_safe_point_entry >> simp[] >>
-      drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+  >- (irule (BETA_RULE (Q.SPECL
+        [`mem_safe_point`, `\c f i s. J c f i s /\ raw_reachable vs c f i s`]
+        reachability_closed_conj)) >> simp[mem_safe_point_closed] >>
+      irule reachability_closed_conj >> simp[raw_reachable_closed])
+  >- (irule (BETA_RULE (Q.ISPECL
+        [`mem_safe_point`, `\c f i s. J c f i s /\ raw_reachable vs c f i s`]
+        fn_entry_inv_conj)) >> conj_tac
+      >- (irule mem_safe_point_entry >> simp[] >>
+          drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+      irule fn_entry_inv_conj >> simp[] >>
+      rw[fn_entry_inv_def] >> metis_tac[raw_reachable_rules]) >>
   metis_tac[mem_safe_point_mem]
 QED
 
