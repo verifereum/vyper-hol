@@ -4,6 +4,7 @@ Ancestors
   codegen stackPlanGen unitTransformDefs o1PipelineCorrect
   unitMemInv staticAbortDefs contextRawReachable ptrDiscipline
   venomExecSemantics callTrace frameOutcome vfmExecution
+  guardRequestCutIdentity guardRequestCutOpt
 
 (* Match a witnessed request step to the corresponding non-precompile call
    in the EVM frame. The lowered witness lets the simulation stop at the
@@ -48,6 +49,18 @@ Theorem codegen_request_cut_outcome:
     s.vs_outcomes <> [] /\
     MEM (EL k (call_requests es), HD s.vs_outcomes) (call_trace es)
 Proof
-  (* ADMISSION: Match the lowered request to the EVM trace through nested INVOKEs. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  gvs[]
+  >- (`opt_entry_state prog prog cplan es = entry_venom_state prog cplan es` by
+        metis_tac[opt_entry_state_identity] >>
+      pop_assum (fn th => fs[th]) >>
+      qspecl_then [`fn'`, `inst'`, `fuel'`, `es'`, `LENGTH s.vs_requests`] mp_tac
+        codegen_request_cut_outcome_identity >>
+      impl_tac >- (simp[] >> metis_tac[]) >>
+      strip_tac >> gvs[]) >>
+  qspecl_then [`fn'`, `inst'`, `fuel'`, `es'`, `LENGTH s.vs_requests`] mp_tac
+    codegen_request_cut_outcome_opt >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[]
 QED

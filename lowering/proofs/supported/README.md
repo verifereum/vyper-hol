@@ -19,15 +19,18 @@ evaluator change, or a correctness theorem.
 - `supported_value_type tops`: scalar, nonempty shallow tuple, word-element
   fixed array of positive length, word-element dynamic array, or main-module
   declared struct with word fields.
-- `supported_storage_type tops`: full word, full-word-element arrays (fixed
-  length positive), or main-module declared struct with full-word fields.
+- `supported_storage_type tops`: full words and recursively nested arrays,
+  nonempty tuples, and nonempty main-module structs over full-word leaves.
+- `supported_place_type tops`: the same recursive shapes over scalar leaves.
 - `supported_hashmap_key_type`: supported integers, bool, address.
 - `supported_return_type tops`: NoneT or a value type.
 - `supported_main_nsid`; `supported_struct_fields tops id` (first type declaration
   wins, and a matching interface/flag blocks a later struct).
 
-No unlisted nested tuple/array/struct depth is admitted. Zero string/dynamic-array
-bounds are not excluded by this whitelist; typing and allocation are separate.
+Recursive type checks require positive fixed-array lengths and allow up to
+`LENGTH tops` named-struct expansions along a path. Tuple and array traversal
+uses no struct fuel. The whitelist accepts zero string and dynamic-array
+bounds where those types are supported. Typing and allocation are separate.
 
 ### `supportedDeclsTheory`
 

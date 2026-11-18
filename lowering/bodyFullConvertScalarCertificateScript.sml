@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarCertificate
 Ancestors
+  instSeqPtrUniform
   convertScalarBytesRun
   bodyFullAllocGeneric
   bodyUnopFragMemory
@@ -113,12 +114,12 @@ Theorem scalar_convert_uniform_ok[local]:
 Proof
   strip_tac >> drule_all scalar_dispatch_op >>
   disch_then (qspec_then `cenv` assume_tac) >>
-  drule_all scalar_op_fixed_ok >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all scalar_op_fixed_ok >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem scalar_convert_uniform_abort[local]:
@@ -136,12 +137,12 @@ Theorem scalar_convert_uniform_abort[local]:
 Proof
   strip_tac >> drule_all scalar_dispatch_op >>
   disch_then (qspec_then `cenv` assume_tac) >>
-  drule_all scalar_op_fixed_abort >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all scalar_op_fixed_abort >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem scalar_convert_code[local]:
