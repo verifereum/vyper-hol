@@ -1,6 +1,5 @@
 Theory deployOutcomesFreeBinaryBuiltinBody
 Ancestors
-  exprLoweringProps
   deployOutcomesFreeSelectors deployOutcomesFreeExprBody
   deployOutcomesFreeGenerators exprLowering list
 
@@ -28,11 +27,11 @@ Proof
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   simp[compile_builtin_dispatch_body_def] >>
   Cases_on `is_bytestring_type (expr_type (HD args))`
-  >- (simp[] >> pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+  >- (simp[] >> pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
       metis_tac[pairTheory.SND]) >>
   simp[] >> Cases_on `expr_type (HD args)` >>
   simp[] >> rpt (CASE_TAC >> simp[]) >>
-  pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+  pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -91,10 +90,10 @@ Proof
                (gvs[] >> metis_tac[outcomes_free_make_array_children]) >>
              pairarg_tac >> simp[] >>
              `Q st2` by metis_tac[pairTheory.SND] >>
-             Cases_on `op = In` >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]) >>
-          pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+             Cases_on `op = In` >> simp[exprBopLoweringTheory.as_stack_val_pair]) >>
+          pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
           fs[] >> metis_tac[pairTheory.SND]) >>
-      pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+      pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
       fs[] >> metis_tac[pairTheory.SND]) >>
   simp[] >>
   Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)`
@@ -108,9 +107,9 @@ Proof
       `Q st2` by metis_tac[pairTheory.SND] >>
       pairarg_tac >> simp[] >>
       `Q st4` by metis_tac[pairTheory.SND] >>
-      Cases_on `op = Eq` >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
-      pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+      Cases_on `op = Eq` >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
+      pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
       metis_tac[pairTheory.SND]) >>
-  simp[] >> ntac 2 (pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]) >>
+  simp[] >> ntac 2 (pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair]) >>
   metis_tac[pairTheory.SND]
 QED

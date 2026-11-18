@@ -1,6 +1,5 @@
 Theory deployOutcomesFreeGeneralBuiltinBody
 Ancestors
-  exprLoweringProps
   deployOutcomesFreeBuiltinBody deployOutcomesFreeSelectors
   deployOutcomesFreeExprBody deployOutcomesFreeGenerators exprLowering list
   deployOutcomesFreeBinaryBuiltinBody deployOutcomesFreeAggregateBuiltinBody
@@ -38,7 +37,7 @@ Proof
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   Cases_on `bi` >> gvs[] >>
   simp[compile_builtin_dispatch_body_def] >>
-  pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val, exprLoweringPropsTheory.ci_mono_as_ptr_val] >>
+  pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair, deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -66,11 +65,11 @@ Proof
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   simp[compile_builtin_dispatch_body_def] >>
   Cases_on `is_bytestring_type (expr_type (HD args))`
-  >- (simp[] >> pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+  >- (simp[] >> pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
       metis_tac[pairTheory.SND]) >>
   simp[] >> Cases_on `expr_type (HD args)` >>
   simp[] >> rpt (CASE_TAC >> simp[]) >>
-  pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+  pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -98,7 +97,7 @@ Proof
   `LENGTH args = 2 \/ LENGTH args = 3` by metis_tac[outcomes_free_builtin_arities] >>
   gvs[LENGTH_EQ_NUM_compute, vyperTypeSystemTheory.well_typed_builtin_app_def] >>
   simp[compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]) >>
+  rpt (pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair]) >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -142,7 +141,7 @@ Proof
   qpat_x_assum `!v st. Q st ==> Q (SND (unwrap_value _ _ _))` kall_tac >>
   gvs[LENGTH_EQ_NUM_compute] >>
   simp[compile_builtin_dispatch_body_def] >> rpt IF_CASES_TAC >>
-  rpt (pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >> rpt IF_CASES_TAC) >>
+  rpt (pairarg_tac >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >> rpt IF_CASES_TAC) >>
   `Q st1` by metis_tac[pairTheory.SND] >>
   `Q st2` by metis_tac[pairTheory.SND] >>
   metis_tac[pairTheory.SND]
@@ -181,8 +180,8 @@ Proof
   `!ity st. Q st ==> Q (SND (lower_value f ce ity (HD args) st))` by
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   Cases_on `bi` >> gvs[] >> simp[compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val, exprLoweringPropsTheory.ci_mono_as_ptr_val]) >>
-  rpt IF_CASES_TAC >> gvs[exprLoweringPropsTheory.ci_mono_as_stack_val, exprLoweringPropsTheory.ci_mono_as_ptr_val, AllCaseEqs()]
+  rpt (pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair, deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair]) >>
+  rpt IF_CASES_TAC >> gvs[exprBopLoweringTheory.as_stack_val_pair, deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair, AllCaseEqs()]
   >~ [`Q (SND (emit_op ISZERO [v] st1))`]
   >- (qpat_x_assum `!ops st. Q st ==> Q (SND (emit_op ISZERO ops st))`
         (qspecl_then [`[v]`, `st1`] mp_tac) >>
@@ -203,7 +202,7 @@ Proof
   qpat_x_assum `!ity st. Q st ==> Q (SND (lower_value _ _ ity _ st))`
     (qspecl_then [`expr_type (HD args)`, `s`] mp_tac) >>
   gvs[] >> strip_tac >> Cases_on `method_id_literal (HD args)` >>
-  simp[exprLoweringPropsTheory.ci_mono_as_stack_val, exprLoweringPropsTheory.ci_mono_as_ptr_val]
+  simp[exprBopLoweringTheory.as_stack_val_pair, deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair]
 QED
 
 Theorem outcomes_free_builtin_binary_general:
@@ -247,9 +246,9 @@ Proof
                 ~supported_expr_exists constructor_call_root e) es` by
                (gvs[] >> metis_tac[outcomes_free_make_array_children]) >>
              pairarg_tac >> simp[] >> `Q st2` by metis_tac[pairTheory.SND] >>
-             Cases_on `op = In` >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]) >>
-          pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >> fs[] >> metis_tac[pairTheory.SND]) >>
-      pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >> fs[] >> metis_tac[pairTheory.SND]) >>
+             Cases_on `op = In` >> simp[exprBopLoweringTheory.as_stack_val_pair]) >>
+          pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >> fs[] >> metis_tac[pairTheory.SND]) >>
+      pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >> fs[] >> metis_tac[pairTheory.SND]) >>
   simp[] >>
   Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)`
   >- (`!e ity st. (e = HD args \/ e = HD (TL args)) /\ Q st ==>
@@ -260,9 +259,9 @@ Proof
         (rpt strip_tac >> irule outcomes_free_literal_or_hash >> simp[]) >>
       simp[] >> pairarg_tac >> simp[] >> `Q st2` by metis_tac[pairTheory.SND] >>
       pairarg_tac >> simp[] >> `Q st4` by metis_tac[pairTheory.SND] >>
-      Cases_on `op = Eq` >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
-      pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >> metis_tac[pairTheory.SND]) >>
-  simp[] >> ntac 2 (pairarg_tac >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]) >>
+      Cases_on `op = Eq` >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
+      pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair] >> metis_tac[pairTheory.SND]) >>
+  simp[] >> ntac 2 (pairarg_tac >> simp[exprBopLoweringTheory.as_stack_val_pair]) >>
   metis_tac[pairTheory.SND]
 QED
 

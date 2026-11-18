@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeBuiltinGenerators
 Ancestors
-  ctorCallFreeRules exprLoweringProps
+  ctorCallFreeRules
   deployOutcomesFreeLowering deployOutcomesFreeGenerators builtinMisc builtinStrings builtinHashing
   builtinBytes builtinMath builtinSimple exprLowering context emitHelper
   compileEnv venomInst list pair
@@ -370,7 +370,7 @@ Theorem outcomes_free_compile_addmod_names:
     (state_insts (SND (compile_addmod_names ce rt aty a bty b mty m s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_addmod_names_def, ELIM_UNCURRY, exprLoweringPropsTheory.ci_mono_as_stack_val,
+  simp[compile_addmod_names_def, ELIM_UNCURRY, exprBopLoweringTheory.as_stack_val_pair,
     outcomes_free_compile_addmod,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_name_unwrap]
 QED
@@ -384,7 +384,7 @@ Theorem outcomes_free_compile_mulmod_names:
     (state_insts (SND (compile_mulmod_names ce rt aty a bty b mty m s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_mulmod_names_def, ELIM_UNCURRY, exprLoweringPropsTheory.ci_mono_as_stack_val,
+  simp[compile_mulmod_names_def, ELIM_UNCURRY, exprBopLoweringTheory.as_stack_val_pair,
     outcomes_free_compile_mulmod,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_name_unwrap]
 QED
@@ -398,7 +398,7 @@ Theorem outcomes_free_compile_powmod256_names:
     (state_insts (SND (compile_powmod256_names ce rt aty a bty b s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_powmod256_names_def, ELIM_UNCURRY, exprLoweringPropsTheory.ci_mono_as_stack_val,
+  simp[compile_powmod256_names_def, ELIM_UNCURRY, exprBopLoweringTheory.as_stack_val_pair,
     outcomes_free_compile_pow_mod256,
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_name_unwrap]
 QED

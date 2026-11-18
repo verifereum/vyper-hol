@@ -1,6 +1,5 @@
 Theory deployOutcomesFreeTypeBuiltinBody
 Ancestors
-  exprLoweringProps
   deployOutcomesFreeSelectors deployOutcomesFreeExprBody
   deployOutcomesFreeGenerators exprLowering list builtinAbi
 
@@ -39,8 +38,8 @@ Proof
   simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[] >>
   rename1 `lower_value f ce _ _ s = (v, st)` >>
   `Q st` by metis_tac[pairTheory.SND] >>
-  rpt IF_CASES_TAC >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
-  Cases_on `target_ty` >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val]
+  rpt IF_CASES_TAC >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
+  Cases_on `target_ty` >> simp[exprBopLoweringTheory.as_stack_val_pair]
 QED
 
 Theorem outcomes_free_type_builtin_extract32:
@@ -73,7 +72,7 @@ Proof
     (rpt strip_tac >>
      irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   simp[compile_type_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[]) >> simp[exprLoweringPropsTheory.ci_mono_as_stack_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[exprBopLoweringTheory.as_stack_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -97,7 +96,7 @@ Proof
      `args <> []` by (strip_tac >> gvs[]) >>
      drule_all outcomes_free_head >> simp[]) >>
   simp[compile_type_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[]) >> simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -130,9 +129,9 @@ Proof
         (rpt strip_tac >>
          irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
       IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
-      simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >>
+      simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
       metis_tac[pairTheory.SND]) >>
-  rpt (pairarg_tac >> simp[]) >> simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 

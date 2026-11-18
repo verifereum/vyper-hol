@@ -1,6 +1,5 @@
 Theory deployOutcomesFreeExpressions
 Ancestors
-  exprLoweringProps
   deployOutcomesFreeLowering deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
   deployOutcomesFreeExprBody deployOutcomesFreeBuiltinBody
@@ -216,8 +215,8 @@ Proof
         (rpt strip_tac >>
          irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
       IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
-      simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >> metis_tac[pairTheory.SND]) >>
-  rpt (pairarg_tac >> simp[]) >> simp[exprLoweringPropsTheory.ci_mono_as_ptr_val] >>
+      simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >> metis_tac[pairTheory.SND]) >>
+  rpt (pairarg_tac >> simp[]) >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
   metis_tac[pairTheory.SND]
 QED
 
