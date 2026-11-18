@@ -41,7 +41,7 @@ val () = cv_auto_trans outcome_test_snapshot_def;
 Definition outcome_test_take_adopt_def:
   outcome_test_take_adopt target data value os balance slot logs requests remaining =
     let st = outcome_test_state with outcomes := SOME os in
-    case take_call_outcome target data value st of
+    case take_call_outcome NONE target data value st of
       (INR _,_) => F
     | (INL (rq,outcome),st1) =>
         rq.cr_target = target /\ rq.cr_data = data /\
@@ -71,34 +71,42 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed call consumes one outcome for its success bit, records no
-   request, and keeps the request's state. *)
+(* Exhaustion leaves the entire state unchanged. A backed computed call
+   consumes one outcome for its success bit and records no request. *)
 Theorem outcome_exhausted_computed_cv:
-  outcome_test_take_adopt 9w [] (SOME 0) [] 3 4w 1 2 0 /\
+  take_call_outcome NONE 9w [] (SOME 0)
+    (outcome_test_state with outcomes := SOME []) =
+    (INR (Error (RuntimeError "take_call_outcome")),
+     outcome_test_state with outcomes := SOME []) /\
+  take_call_outcome NONE 1w [] NONE
+    (outcome_test_state with outcomes := SOME []) =
+    (INR (Error (RuntimeError "take_call_outcome")),
+     outcome_test_state with outcomes := SOME []) /\
   outcome_test_take_adopt 2w [] (SOME 0)
     [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 0 /\
   outcome_test_take_adopt 2w [] (SOME 0)
     [outcome_test_outcome T 17; outcome_test_outcome T 17] 3 4w 1 1 1 /\
-  outcome_test_take_adopt 1w [] NONE [] 3 4w 1 1 0 /\
+  outcome_test_take_adopt 1w [] NONE
+    [outcome_test_outcome T 17] 3 4w 1 1 0 /\
   outcome_test_take_adopt 6w (REPLICATE 63 0w ++ [1w]) (SOME 0)
     [outcome_test_outcome T 17] 3 4w 1 1 0
 Proof
-  CONV_TAC cv_eval
+  simp[take_call_outcome_exhausted] >> CONV_TAC cv_eval
 QED
 
 Definition outcome_test_error_observations_def:
   outcome_test_error_observations = (
-    (case take_call_outcome 9w [] (SOME 0) outcome_test_state of
+    (case take_call_outcome NONE 9w [] (SOME 0) outcome_test_state of
        (INR exc,st) => exc = Error (RuntimeError "take_call_outcome") /\
          IS_NONE st.outcomes /\ LENGTH st.requests = 1
      | _ => F) /\
-    (case take_call_outcome 9w [] (SOME 0)
+    (case take_call_outcome NONE 9w [] (SOME 0)
        (outcome_test_state with outcomes :=
          SOME [outcome_test_outcome T (2 ** 256); outcome_test_outcome T 17]) of
        (INR exc,st) => exc = Error (RuntimeError "call outcome accounts") /\
          outcome_test_snapshot 3 4w 1 2 1 st
      | _ => F) /\
-    (case take_call_outcome 2w [] (SOME 0)
+    (case take_call_outcome NONE 2w [] (SOME 0)
        (outcome_test_state with
          <|accounts := (outcome_test_outcome T (2 ** 256)).co_accounts;
            outcomes := SOME [outcome_test_outcome T 17]|>) of
@@ -118,7 +126,7 @@ QED
    with the evaluator's typed check already discharged by successful take. *)
 Theorem outcome_success_actual_client:
   accounts_runtime_well_typed st.accounts /\
-  take_call_outcome target calldata value st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target calldata value st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   accounts_runtime_well_typed st2.accounts /\
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
