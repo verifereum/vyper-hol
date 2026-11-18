@@ -93,9 +93,6 @@ Ancestors
   (* closed-world request-cut guard and producer *)
   e2eOutcomesProducer
   (* providers awaiting their consumers *)
-  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
-  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
-  bodyFullTypeBuiltinAbiEncode bodyFullTypeBuiltinAbiDecode
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
   bodyFullIntCall compileExprAllocaFresh
