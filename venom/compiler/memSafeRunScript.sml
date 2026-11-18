@@ -43,7 +43,7 @@ Theory memSafeRun
 Ancestors
   list venomExecSemantics venomExecProofs venomInstProofs venomInst
   venomState contextCodegenRel contextCodegenRelProps unitTransformDefs
-  contextRawReachable
+  contextRawReachable ptrDiscipline
 
 (* ===== Definitions ===== *)
 
@@ -87,7 +87,9 @@ QED
    too. *)
 Definition mem_safe_defs:
   (mem_safe_step fuel ctx inst s <=>
-    inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
+    (inst_mem_below_frontier inst s \/
+     (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
+    inst_dload_in_section inst s /\
     if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
         NONE => T
@@ -173,7 +175,9 @@ Theorem mem_safe_step_non_invoke:
   !fuel ctx inst s.
     inst.inst_opcode <> INVOKE ==>
     (mem_safe_step fuel ctx inst s <=>
-     inst_mem_below_frontier inst s /\ inst_dload_in_section inst s)
+     (inst_mem_below_frontier inst s \/
+      (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
+     inst_dload_in_section inst s)
 Proof
   rw[Once mem_safe_step_def]
 QED
@@ -186,7 +190,9 @@ Theorem mem_safe_step_invoke:
     eval_operands arg_ops s = SOME args /\
     setup_callee callee args s = SOME cs ==>
     (mem_safe_step fuel ctx inst s <=>
-     inst_mem_below_frontier inst s /\ mem_safe_blocks fuel ctx callee cs)
+     (inst_mem_below_frontier inst s \/
+      (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
+     mem_safe_blocks fuel ctx callee cs)
 Proof
   rw[Once mem_safe_step_def]
 QED
