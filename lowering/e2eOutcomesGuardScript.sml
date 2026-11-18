@@ -5,7 +5,8 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness frameOutcome guardTerminalBackend arithmetic list
+  e2eCorrectness frameOutcome guardTerminalBackend vyperCallFiniteStorageSupport
+  vfmDecreasesGas relation pair arithmetic list
 
 Triviality guard_closed_world_inherit:
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
@@ -222,4 +223,86 @@ Proof
   drule_all vyper_call_reverts >>
   simp[frame_resource_starved_def] >>
   metis_tac[guard_nested_frame_outcome, optionTheory.NOT_SOME_NONE]
+QED
+
+Triviality guard_trace_storage_induction:
+  runtime_bc <> [] /\
+  (!e am tx ret r e'.
+    vyper_frame_staging fin policy tops runtime_bc am tx e /\
+    vyper_entry_call tops tx
+      (buffer_to_list (FST (HD e.contexts)).msgParams.data) ret /\
+    vyper_closed_world fin policy tops runtime_bc am tx H e /\
+    LENGTH (call_trace e) < 2 ** 64 /\
+    2 <= LENGTH e.contexts /\ run_call e = SOME (r,e') /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := (SND (HD e.contexts)).accounts;
+                         tStorage := (SND (HD e.contexts)).tStorage|>) (FST H) /\
+    (!rq co. MEM (rq,co) (call_trace e) /\
+      storage_well_formed_on
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (empty_state with <|accounts := rq.cr_accounts;
+                           tStorage := rq.cr_tStorage|>) (FST H) ==>
+      storage_well_formed_on
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (empty_state with <|accounts := co.co_accounts;
+                           tStorage := co.co_tStorage|>) (FST H)) ==>
+    ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := e'.rollback.accounts;
+                         tStorage := e'.rollback.tStorage|>) (FST H)) ==>
+  !es am tx rq co.
+    vyper_frame_staging fin policy tops runtime_bc am tx es /\
+    vyper_closed_world fin policy tops runtime_bc am tx H es /\
+    MEM (rq,co) (call_trace es) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := rq.cr_accounts;
+                         tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)
+Proof
+  strip_tac >>
+  `WF (inv_image ($< LEX $<)
+    (\st:execution_state. contexts_weight 0 st.contexts))` by
+    (irule WF_inv_image >> irule WF_LEX >> simp[]) >>
+  pop_assum (fn th => ho_match_mp_tac (MATCH_MP WF_INDUCTION_THM th)) >>
+  qx_gen_tac `es` >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `call_state_rel tops runtime_bc am tx es /\ wf_state es` by
+    fs[vyper_frame_staging_def, call_state_rel_def, evm_state_ok_def] >>
+  mp_tac (Q.INST [`es` |-> `es`, `am` |-> `am`, `tx` |-> `tx`,
+    `tops` |-> `tops`, `runtime_bc` |-> `runtime_bc`,
+    `rq` |-> `rq`, `co` |-> `co`,
+    `regions` |-> `FST (H:(bool # bytes32 # type_value) list # num list)`]
+    guard_trace_storage_from_reentries) >>
+  reverse impl_tac >- disch_then ACCEPT_TAC >>
+  asm_simp_tac bool_ss [] >>
+  map_every qx_gen_tac [`s`, `u`, `e`, `r`, `e'`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `u` >>
+  `2 <= LENGTH e.contexts` by
+    (Cases_on `es.contexts` >> fs[wf_state_def] >> decide_tac) >>
+  drule_all guard_reentry_staging >>
+  disch_then (qx_choose_then `am_e` (qx_choose_then `tx_e`
+    (map_every assume_tac o CONJUNCTS))) >>
+  qpat_x_assum `calldata_dispatch _ _ = NONE \/ _` strip_assume_tac
+  >- (drule_all guard_undispatched_reentry_rollback >> simp[]) >>
+  `($< LEX $<) (contexts_weight 0 e.contexts) (contexts_weight 0 es.contexts)` by
+    (drule_all guard_reached_step_weight >> simp[]) >>
+  `!st. storage_well_formed_on
+          (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE) st (FST H) <=>
+        storage_well_formed_on
+          (initial_evaluation_context am.sources am.layouts tx NONE) st (FST H)` by
+    (gen_tac >> irule storage_well_formed_on_target >> simp[initial_evaluation_context_def]) >>
+  qpat_assum `!e am tx ret r e'. _`
+    (qspecl_then [`e`, `am_e`, `tx_e`, `ret_e`, `r`, `e'`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> map_every qx_gen_tac [`rq'`, `co'`] >> strip_tac >>
+      qpat_assum `!y. inv_image _ _ y es ==> _` (qspec_then `e` mp_tac) >>
+      simp[inv_image_def] >>
+      disch_then (qspecl_then [`am_e`, `tx_e`, `rq'`, `co'`] mp_tac) >> simp[]) >>
+  simp[]
 QED
