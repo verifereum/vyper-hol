@@ -1,6 +1,7 @@
 (* Immutable literal-load resources at the joint target endpoint. *)
 Theory augAssignFullLoadImmutableResources
 Ancestors
+  augAssignFullImmutableCertificate
   bodyImmutableAugAssignFacts bodyFullToplevelCtorSourceLayout
   bodyFullToplevelCtorSourceFrame bodyPtrDefs stateRelProj
   assignTuplePtrLoadStep exprSimHypsDefs stmtSimAugAssignPlace
@@ -53,11 +54,7 @@ Proof
   strip_tac >>
   drule_all immutable_augassign_metadata >> strip_tac >>
   drule_all immutable_augassign_entry >> strip_tac >>
-  `well_formed_type env.type_defs ty /\ ty <> NoneT` by
-    (drule aug_place_typing >> strip_tac >>
-     metis_tac[assignable_type_well_formed, assignable_type_not_NoneT]) >>
-  `expr_body_pre cenv cx env (TopLevelName ty (cenv.ce_module,id)) es` by
-    suspend "pre" >>
+  drule_all augassign_immutable_synthetic_pre >> strip_tac >>
   drule_all immutable_augassign_source_prefix >> strip_tac >>
   drule_all toplevel_ctor_source_layout >> strip_tac >>
   qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
@@ -68,23 +65,6 @@ Proof
   drule_all robust_typed_word_clean >> strip_tac >>
   qexistsl_tac [`off`, `tv`, `v`] >>
   suspend "finish"
-QED
-
-Resume augassign_immutable_load_resources[pre]:
-  `~cx_const_name cx (src,id)` by
-    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
-     strip_tac >> gvs[]) >>
-  simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
-       alloc_limits_expr_def, int_calls_expr_def, expr_has_evm_run_thm,
-       supported_expr_exists_def, call_operands_effect_root_def,
-       const_name_root_def, supportedProgramTheory.expr_abi_decode_target_root_def] >>
-  gvs[type_alloc_ok_def] >>
-  reverse conj_tac
-  >- (`cx_tops cx = tops` by
-        (irule gasContextTheory.cx_tops_module >>
-         gvs[bodySimTheory.body_inv_def]) >>
-      gvs[bodySimTheory.body_inv_def]) >>
-  metis_tac[stmtSimAugAssignTheory.well_formed_type_bits]
 QED
 
 Resume augassign_immutable_load_resources[finish]:

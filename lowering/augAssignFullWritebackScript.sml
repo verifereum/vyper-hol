@@ -5,7 +5,7 @@ Ancestors
   augAssignFullMemoryStorePath augAssignFullMstoreSafety
   augAssignFullMstoreGhostTransport augAssignFullImmutableWriteSource
   augAssignFullImmutableLocalResources augAssignFullImmutableDeadMask
-  augAssignFullStorageEndpoint gasOutcomeFullCompose bodySimFull
+  gasOutcomeFullCompose bodySimFull
   stateRelProj bodyMemoryDefs bodyFullTargetDefs loweringShapeRules
   bodyBinopFragMemory stmtSimAugAssignPlaceMemory exprOpenPrimitives
   vyperScopePreservation tuplePlaceStep wordLoadStorePtr

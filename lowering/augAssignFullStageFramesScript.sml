@@ -8,20 +8,6 @@ Ancestors
   vyperState exprSimSource
   bodyMemoryDefs bodyPtrDefs stmtSimDefs finite_map pred_set list arithmetic
 
-Theorem augassign_staged_target_lookup:
-  sb.cs_next_var <= sc.cs_next_var /\ sc.cs_next_var <= sd.cs_next_var /\
-  (!x z. not_fresh_at sb x /\ lookup_var x t = SOME z ==>
-    lookup_var x u = SOME z) /\
-  (!x z. not_fresh_at sc x /\ lookup_var x u = SOME z ==>
-    lookup_var x q = SOME z) /\
-  (!x z. not_fresh_at sd x /\ lookup_var x q = SOME z ==>
-    lookup_var x w = SOME z) ==>
-  !x z. not_fresh_at sb x /\ lookup_var x t = SOME z ==>
-    lookup_var x w = SOME z
-Proof
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
-QED
-
 Theorem augassign_staged_store_frame:
   eval_target_place cx bt es0 = (INL p,st) /\
   bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) /\

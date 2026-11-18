@@ -1,8 +1,7 @@
 (* Actual typed AugAssign operator execution, at the supplied machine state. *)
 Theory augAssignFullOperatorExec
 Ancestors
-  bodyPtrBopScalarRun augAssignFullOperatorIntegerExec
-  augAssignFullOperatorPowerExec augAssignFullOperatorWordExec
+  bodyPtrBopScalarRun
   exprBopBytes exprSimSource exprSimProps loweringPosts valueEncoding
   exprSimHypsDefs vyperTypeSystem exprSimBinopFrag
 

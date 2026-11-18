@@ -35,12 +35,3 @@ Proof
   gvs[op_taint_def, stor_taint_ok_at_def, allocas_from_def, mstore_def] >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Theorem augassign_mstore_ghost_kept:
-  tn' = (tn with t_mem := tn.t_mem DIFF {q | a <= q /\ q < a + 32}) /\
-  ghost_kept_at lo cenv es0 sa0 G0 tn0 s0 G tn ==>
-  ghost_kept_at lo cenv es0 sa0 G0 tn0 s0 G tn'
-Proof
-  simp[ghost_kept_at_def, op_taint_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
