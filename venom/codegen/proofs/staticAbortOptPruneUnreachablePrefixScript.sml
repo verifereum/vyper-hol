@@ -5,12 +5,12 @@ Ancestors
 
 (* Fetch at a retained index after deleting the singleton [x]. *)
 Theorem prune_one_fetch[local]:
+  !r. r = (\j. if j < LENGTH pre + 1 then j else j-1) ==>
   i <> LENGTH pre + 1 /\ i < LENGTH (pre ++ [t:asm_inst;x] ++ tail) ==>
-  let r = (\i. if i < LENGTH pre + 1 then i else i-1) in
     r i < LENGTH (pre ++ [t] ++ tail) /\
     EL (r i) (pre ++ [t] ++ tail) = EL i (pre ++ [t;x] ++ tail)
 Proof
-  strip_tac >> simp[] >>
+  SIMP_TAC (pure_ss ++ boolSimps.UNWIND_ss) [] >> BETA_TAC >> strip_tac >> simp[] >>
   Cases_on `i < LENGTH pre`
   >- (`i < LENGTH pre+1` by decide_tac >> simp[EL_APPEND_EQN]) >>
   Cases_on `i = LENGTH pre` >- simp[EL_APPEND_EQN] >>
@@ -40,14 +40,14 @@ Proof
 QED
 
 Theorem prune_one_step_ok[local]:
+  !r. r = (\i. if i < LENGTH pre + 1 then i else i-1) ==>
   p = pre ++ [t;x] ++ tail /\ q = pre ++ [t] ++ tail /\
   ~asm_reachable_marker x /\ u.sym_base.as_pc <> LENGTH pre + 1 /\
   v.sym_base.as_pc <> LENGTH pre + 1 /\ sym_step p env inst u = SymOK v ==>
-  let r = (\i. if i < LENGTH pre + 1 then i else i-1) in
   sym_step q env inst (sym_with_pc (r u.sym_base.as_pc) u) =
     SymOK (sym_with_pc (r v.sym_base.as_pc) v)
 Proof
-  strip_tac >>
+  SIMP_TAC (pure_ss ++ boolSimps.UNWIND_ss) [] >> BETA_TAC >> strip_tac >>
   qabbrev_tac `d = LENGTH pre + 1` >> simp[] >>
   qabbrev_tac `r = (\i:num. if i < d then i else i - 1)` >>
   `!a. sym_jump_dest q a = OPTION_MAP r (sym_jump_dest p a)`
@@ -90,19 +90,17 @@ Proof
 QED
 
 Theorem prune_one_stopped_prefix:
+  !d i. d = LENGTH pre + 1 ==> i = ss.sym_base.as_pc ==>
   p = pre ++ [t;x] ++ tail /\ q = pre ++ [t] ++ tail /\
   asm_terminal_op t /\ ~asm_reachable_marker x /\ s.as_pc = 0 /\
   sym_steps p env n (sym_init s) = SymOK ss ==>
-  let d = LENGTH pre + 1;
-      r = (\i. if i < d then i else i-1);
-      i = ss.sym_base.as_pc in
   i <> d /\
-  sym_steps q env n (sym_init s) = SymOK (sym_with_pc (r i) ss) /\
+  sym_steps q env n (sym_init s) = SymOK (sym_with_pc (if i < d then i else i-1) ss) /\
   (!k l. k < LENGTH ss.sym_stack /\ EL k ss.sym_stack = Lab l 0 ==>
     ?j. j < LENGTH q /\ (EL j q = AsmPushLabel l \/
       (?a. EL j q = AsmPushOfst l a) \/ EL j q = AsmDataLabel l))
 Proof
-  strip_tac >>
+  SIMP_TAC (pure_ss ++ boolSimps.UNWIND_ss) [] >> BETA_TAC >> strip_tac >>
   qpat_x_assum `p = pre ++ [t;x] ++ tail` (mk_asm "source_code") >>
   qpat_x_assum `q = pre ++ [t] ++ tail` (mk_asm "dest_code") >> simp[] >>
   `!m a. sym_steps p env m (sym_init s) = SymOK a ==>
@@ -132,12 +130,12 @@ Proof
         `u.sym_base.as_pc <> LENGTH pre+1` by metis_tac[] >>
         `r u.sym_base.as_pc < LENGTH q /\
          EL (r u.sym_base.as_pc) q = EL u.sym_base.as_pc p`
-          by (mp_tac (Q.INST [`i` |-> `u.sym_base.as_pc`] prune_one_fetch) >>
+          by (mp_tac (Q.INST [`i` |-> `u.sym_base.as_pc`] (SIMP_RULE bool_ss [] prune_one_fetch)) >>
               asm "source_code" (fn hp => asm "dest_code" (fn hq => fs[hp,hq,Abbr `r`]))) >>
         `sym_step q env (EL u.sym_base.as_pc p) (sym_with_pc (r u.sym_base.as_pc) u) =
          SymOK (sym_with_pc (r a.sym_base.as_pc) a)`
           by (asm "source_code" assume_tac >> asm "dest_code" assume_tac >>
-              drule_all prune_one_step_ok >> simp[Abbr `r`]) >>
+              drule_all (SIMP_RULE bool_ss [] prune_one_step_ok) >> simp[Abbr `r`]) >>
         ` (sym_with_pc (r u.sym_base.as_pc) u).sym_base.as_pc = r u.sym_base.as_pc`
           by simp[sym_with_pc_def] >>
         simp[sym_steps_pos, sym_steps_def]) >>
