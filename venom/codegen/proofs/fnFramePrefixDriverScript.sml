@@ -169,9 +169,11 @@ Proof
   simp[normal_frame_plan_def] >> metis_tac[]
 QED
 
-Theorem active_frame_call_entry:
+Theorem active_frame_call_entry_readonly[local]:
   frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn saved ra rest mem0 /\
-  frame_history vs0 unit.cu_context stk PG G tn fn inst s hs history /\
+  (s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes) /\
   active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 /\
   active_inst fn inst s /\ inst.inst_opcode = INVOKE /\
   inst.inst_operands = Label nm :: arg_ops /\
@@ -191,7 +193,7 @@ Proof
   strip_tac >>
   qpat_x_assum `active_frame_plan _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [active_frame_plan_def]) >>
-  drule_all frame_stack_plan_push >>
+  drule_all frame_stack_plan_push_readonly >>
   disch_then (qx_choosel_then [`n`, `cas`, `ret_off`, `residual`, `j`]
     strip_assume_tac) >>
   qpat_assum `body_plan_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -214,6 +216,29 @@ Proof
     `rest` |-> `residual ++ rest`] (SPEC_ALL entry_frame_plan_start)) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem active_frame_call_entry:
+  frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn saved ra rest mem0 /\
+  frame_history vs0 unit.cu_context stk PG G tn fn inst s hs history /\
+  active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 /\
+  active_inst fn inst s /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+  eval_operands arg_ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  enters_block callee cs s1 /\
+  f.cf_fn = fn /\ f.cf_inst = inst /\ f.cf_state = s ==>
+  ?n cas ret_off residual.
+    0 < n /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK cas /\
+    frame_stack_plan rpolicy unit cpl prog vs0 es0 (f::stk) callee cas
+      (n2w ret_off) (residual ++ rest) cas.as_memory /\
+    entry_frame_plan rpolicy unit cpl prog callee cs s1 cas (n2w ret_off)
+      (ast.as_pc + n) (residual ++ rest) cas.as_memory
+Proof
+  strip_tac >> drule_then strip_assume_tac frame_history_readonly >>
+  drule_all active_frame_call_entry_readonly >> simp[]
 QED
 
 Theorem normal_frame_jump_step:
@@ -243,6 +268,65 @@ Proof
   simp[normal_frame_plan_def] >> metis_tac[]
 QED
 
+(* The state projection is all the concrete stack constructors need. *)
+Theorem joint_config_readonly:
+  joint_config_reachable vs0 ctx
+    (JointConfig stk PG G tn fn inst s oms om hs h) ==>
+  (s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes)
+Proof
+  strip_tac >>
+  qpat_x_assum `joint_config_reachable _ _ _`
+    (assume_tac o REWRITE_RULE [joint_config_reachable_def]) >>
+  drule_then assume_tac joint_origin_history_projection >>
+  drule_then (ACCEPT_TAC o CONJUNCT1) frame_history_readonly
+QED
+
+Theorem normal_frame_return_step_readonly[local]:
+  normal_frame_plan rpolicy unit cpl prog vs0 es0
+    (JointConfig (f::stk) PG G tn fn inst s oms om hs h) ast /\
+  (s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes) /\
+  active_inst fn inst s /\
+  step_inst fuel unit.cu_context inst s = IntRet ret send /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state send)) = SOME post ==>
+  ?n ast1.
+    0 < n /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    normal_frame_plan rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG' G' tn' f.cf_fn inst'
+        (post with vs_inst_idx := SUC f.cf_state.vs_inst_idx) oms' om' hs' h') ast1
+Proof
+  strip_tac >>
+  `~is_param_opcode inst.inst_opcode` by
+    (spose_not_then assume_tac >> fs[is_param_opcode_iff] >>
+     gvs[step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  drule_all normal_frame_plan_active >>
+  disch_then (qx_choosel_then [`m`, `ready`, `saved`, `ra`, `rest`, `mem0`]
+    strip_assume_tac) >>
+  `inst.inst_opcode = RET` by
+    (qpat_assum `active_frame_plan _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [active_frame_plan_def]) >>
+     drule_all body_plan_active_inst >> strip_tac >>
+     drule_all body_plan_inv_inst >> strip_tac >>
+     metis_tac[codegen_ready_intret_opcode]) >>
+  drule_all frame_stack_plan_ret_readonly >>
+  disch_then (qx_choosel_then [`nr`, `asr`] strip_assume_tac) >>
+  drule_all frame_stack_plan_pop >>
+  disch_then (qx_choosel_then [`nc`, `fin`, `caller_saved`, `caller_ra`,
+    `caller_rest`, `caller_mem0`] strip_assume_tac) >>
+  qexistsl_tac [`m + (nr + nc)`, `fin`] >> rpt conj_tac >> TRY decide_tac
+  >- (irule asm_steps_compose_ok >> qexists_tac `ready` >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      irule asm_steps_compose_ok >> qexists_tac `asr` >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[normal_frame_plan_def] >> metis_tac[]
+QED
+
 Theorem normal_frame_return_step:
   normal_frame_plan rpolicy unit cpl prog vs0 es0
     (JointConfig (f::stk) PG G tn fn inst s oms om hs h) ast /\
@@ -260,32 +344,39 @@ Theorem normal_frame_return_step:
       (JointConfig stk PG' G' tn' f.cf_fn inst'
         (post with vs_inst_idx := SUC f.cf_state.vs_inst_idx) oms' om' hs' h') ast1
 Proof
+  strip_tac >> drule_then assume_tac joint_config_readonly >>
+  drule_all normal_frame_return_step_readonly >> simp[]
+QED
+
+Theorem normal_frame_call_progress_readonly[local]:
+  normal_frame_plan rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn callinst s oms om hs h) ast /\
+  (s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes) /\
+  active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
+  callinst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+  eval_operands arg_ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  enters_block callee cs s1 /\
+  f.cf_fn = fn /\ f.cf_inst = callinst /\ f.cf_state = s ==>
+  ?n ast1.
+    0 < n /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    normal_frame_plan rpolicy unit cpl prog vs0 es0
+      (JointConfig (f::stk) PG' G' tn' callee inst' s1 oms' om' hs' h') ast1
+Proof
   strip_tac >>
-  `frame_history vs0 unit.cu_context (f::stk) PG G tn fn inst s
-    (MAP origin_observations hs) (origin_observations h)` by
-    (fs[joint_config_reachable_def] >>
-     drule joint_origin_history_projection >> simp[]) >>
-  `~is_param_opcode inst.inst_opcode` by
-    (spose_not_then assume_tac >> fs[is_param_opcode_iff] >>
-     gvs[step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  `~is_param_opcode callinst.inst_opcode` by simp[is_param_opcode_def] >>
   drule_all normal_frame_plan_active >>
   disch_then (qx_choosel_then [`m`, `ready`, `saved`, `ra`, `rest`, `mem0`]
     strip_assume_tac) >>
-  `inst.inst_opcode = RET` by
-    (qpat_assum `active_frame_plan _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [active_frame_plan_def]) >>
-     drule_all body_plan_active_inst >> strip_tac >>
-     drule_all body_plan_inv_inst >> strip_tac >>
-     metis_tac[codegen_ready_intret_opcode]) >>
-  drule_all frame_stack_plan_ret >>
-  disch_then (qx_choosel_then [`nr`, `asr`] strip_assume_tac) >>
-  drule_all frame_stack_plan_pop >>
-  disch_then (qx_choosel_then [`nc`, `fin`, `caller_saved`, `caller_ra`,
-    `caller_rest`, `caller_mem0`] strip_assume_tac) >>
-  qexistsl_tac [`m + (nr + nc)`, `fin`] >> rpt conj_tac >> TRY decide_tac
-  >- (irule asm_steps_compose_ok >> qexists_tac `ready` >> conj_tac
-      >- first_assum ACCEPT_TAC >>
-      irule asm_steps_compose_ok >> qexists_tac `asr` >>
+  drule_all active_frame_call_entry_readonly >>
+  disch_then (qx_choosel_then [`n`, `cas`, `ret_off`, `residual`]
+    strip_assume_tac) >>
+  qexistsl_tac [`m+n`, `cas`] >> rpt conj_tac >> TRY decide_tac
+  >- (irule asm_steps_compose_ok >> qexists_tac `ready` >>
       conj_tac >> first_assum ACCEPT_TAC) >>
   simp[normal_frame_plan_def] >> metis_tac[]
 QED
@@ -308,22 +399,8 @@ Theorem normal_frame_call_progress:
     normal_frame_plan rpolicy unit cpl prog vs0 es0
       (JointConfig (f::stk) PG' G' tn' callee inst' s1 oms' om' hs' h') ast1
 Proof
-  strip_tac >>
-  `frame_history vs0 unit.cu_context stk PG G tn fn callinst s
-    (MAP origin_observations hs) (origin_observations h)` by
-    (fs[joint_config_reachable_def] >>
-     drule joint_origin_history_projection >> simp[]) >>
-  `~is_param_opcode callinst.inst_opcode` by simp[is_param_opcode_def] >>
-  drule_all normal_frame_plan_active >>
-  disch_then (qx_choosel_then [`m`, `ready`, `saved`, `ra`, `rest`, `mem0`]
-    strip_assume_tac) >>
-  drule_all active_frame_call_entry >>
-  disch_then (qx_choosel_then [`n`, `cas`, `ret_off`, `residual`]
-    strip_assume_tac) >>
-  qexistsl_tac [`m+n`, `cas`] >> rpt conj_tac >> TRY decide_tac
-  >- (irule asm_steps_compose_ok >> qexists_tac `ready` >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[normal_frame_plan_def] >> metis_tac[]
+  strip_tac >> drule_then assume_tac joint_config_readonly >>
+  drule_all normal_frame_call_progress_readonly >> simp[]
 QED
 
 Theorem normal_frame_call_step:
@@ -390,9 +467,10 @@ QED
 
 (* Every non-RF actual edge advances assembly or decreases the remaining
    ordinary instruction rank in the same source activation and block. *)
-Theorem normal_frame_joint_progress:
-  joint_config_reachable vs0 unit.cu_context
-    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+Theorem normal_frame_joint_progress_readonly:
+  (s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+     vs0.vs_code, vs0.vs_prev_hashes) /\
   normal_frame_plan rpolicy unit cpl prog vs0 es0
     (JointConfig stk PG G tn fn inst s oms om hs h) ast /\
   ~in_revert_forward fn s /\
@@ -453,10 +531,39 @@ Proof
             (om::oms) FEMPTY (h::hs)
             [OriginCallee cs; OriginObserve
               (OriginSnapshot fn' (MAP (op_prov G) ops) FEMPTY FEMPTY inst' t)]) ast1` by
-        (irule normal_frame_call_progress >>
+        (irule normal_frame_call_progress_readonly >>
          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> metis_tac[]) >>
       metis_tac[]) >>
-  drule_all normal_frame_return_step >> metis_tac[]
+  (metis_tac[normal_frame_return_step_readonly])
+QED
+
+Theorem normal_frame_joint_progress:
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  normal_frame_plan rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast /\
+  ~in_revert_forward fn s /\
+  (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst s /\
+    context_source_memory_writes_disjoint cpl inst s) /\
+  joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) ev
+    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  ?n ast1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    normal_frame_plan rpolicy unit cpl prog vs0 es0
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 /\
+    (0 < n \/
+     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        LENGTH bb.bb_instructions - t.vs_inst_idx <
+          LENGTH bb.bb_instructions - s.vs_inst_idx))
+Proof
+  strip_tac >> drule_then assume_tac joint_config_readonly >>
+  drule_all normal_frame_joint_progress_readonly >> disch_then ACCEPT_TAC
 QED
 
 (* Only the local range obligations at earlier occurrences are requested.
