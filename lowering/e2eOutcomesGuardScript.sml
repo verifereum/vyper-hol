@@ -234,7 +234,7 @@ Triviality guard_reentry_staging:
     (calldata_dispatch tops (buffer_to_list (FST (HD e.contexts)).msgParams.data) = NONE \/
      vyper_closed_world fin policy tops runtime_bc am_e tx_e H e /\
      LENGTH (call_trace e) < 2 ** 64 /\
-     ?ret_e. vyper_entry_call tops tx_e
+     ?ret_e. dispatched_vyper_call tops tx_e
        (buffer_to_list (FST (HD e.contexts)).msgParams.data) ret_e)
 Proof
   strip_tac >>
@@ -501,7 +501,7 @@ Triviality guard_trace_storage_induction:
   runtime_bc <> [] /\
   (!e am tx ret r e'.
     vyper_frame_staging fin policy tops runtime_bc am tx e /\
-    vyper_entry_call tops tx
+    dispatched_vyper_call tops tx
       (buffer_to_list (FST (HD e.contexts)).msgParams.data) ret /\
     vyper_closed_world fin policy tops runtime_bc am tx H e /\
     LENGTH (call_trace e) < 2 ** 64 /\
@@ -758,7 +758,7 @@ Proof
          asm_simp_tac bool_ss [] >>
          Cases_on `frame_resource_starved e r_e e'` >> simp[] >>
          `vyper_call_staging fin policy tops runtime_bc am_e tx_e ret_e e` by
-           fs[vyper_call_staging_def, vyper_entry_call_def, dispatched_vyper_call_def] >>
+           fs[vyper_call_staging_def] >>
          mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
            `ret` |-> `ret_e`, `r` |-> `r_e`, `es'` |-> `e'`] guard_compiler_readings) >>
          impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
