@@ -17,6 +17,7 @@ Ancestors
   ptrDiscipline
   emitHelper emitHelperProps words rich_list
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState vyperContext
+  vyperCallOutcome vyperCallOutcomeProps
   vyperAST vyperTyping vyperValue vyperTypeSystem valueEncodingProps list finite_map
 Libs
   monadsyntax
@@ -108,9 +109,18 @@ Proof
   >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> simp[])
   >~ [`storage_trace_frame (eval_exprs _ _)`]
   >- simp[evaluate_storage_trace_frame]
-  >- (gen_tac >> rw[storage_trace_frame_def] >>
-      simp[ignore_bind_def,bind_def,return_def,ecrecover_source_outcome_step] >>
-      rpt (CASE_TAC >> simp[])) >>
+  >- (qx_gen_tac `vs` >>
+      `!(w:value). storage_trace_frame
+         (do precompile_call_success ECRecover vs; return w od)` by
+        simp[storage_trace_frame_ignore_bind, storage_trace_frame_return,
+             storage_trace_frame_precompile_call_success] >>
+      simp[storage_trace_frame_def] >> rpt gen_tac >>
+      Cases_on `builtin_result cx st.accounts (BaseT AddressT) ECRecover
+        (MAP expr_type args) vs` >> simp[] >>
+      qpat_x_assum `!w. storage_trace_frame _` (qspec_then `x` mp_tac) >>
+      disch_then (mp_tac o Q.SPECL [`st`, `observations`] o
+                  PURE_ONCE_REWRITE_RULE [storage_trace_frame_def]) >>
+      simp[]) >>
   qexists_tac `(\H rr ee G tn t. argsQ H rr ee G tn t /\ ~t.vs_halted)` >>
   reverse conj_tac
   >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
@@ -272,6 +282,18 @@ Proof
        NONE => 0w | SOME addr => addr))` by
     (drule_all ecrecover_typed_result >>
      disch_then (qspec_then `mid.accounts` strip_assume_tac) >> gvs[]) >>
+  `precompile_input ECRecover vals = read_memory (w2n wi) 128 sbuf` by
+    (drule_all ecrecover_typed_result >>
+     disch_then (qspec_then `mid.accounts` strip_assume_tac) >>
+     gvs[LIST_REL_THM, ZIP, venomStateTheory.read_memory_def,
+         GSYM valueEncodingDefsTheory.mem_bytes_at_def]) >>
+  qabbrev_tac `after_call =
+    SND (take_call_outcome NONE 1w (precompile_input ECRecover vals) NONE mid)` >>
+  `storage_trace_domain cx st0 after_call.storage_trace` by
+    (qpat_assum `storage_trace_domain cx st0 mid.storage_trace` mp_tac >>
+     simp[storage_trace_domain_def, Abbr `after_call`]) >>
+  `!H. valid_horizon cx st0 H after_call.storage_trace <=>
+       valid_horizon cx st0 H mid.storage_trace` by simp[Abbr `after_call`] >>
   qabbrev_tac `data = case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
     NONE => [] | SOME addr => PAD_LEFT 0w 32 (word_to_bytes addr T)` >>
   `precompile_result (venom_call_request sbuf 1w 0w wi 128w T).cr_target
@@ -601,7 +623,14 @@ Proof
              (strip_assume_tac o MATCH_MP th)) >> simp[] >>
          rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then (qx_choose_then `scall` (qx_choose_then `Gc`
-        (qx_choose_then `tnc` strip_assume_tac))) >>
+        (qx_choose_then `tnc` (fn suffix =>
+          qpat_assum `precompile_input ECRecover vals = _`
+            (fn bytes => qpat_assum `Abbrev (after_call = _)`
+              (fn state => strip_assume_tac
+                (SIMP_RULE (srw_ss()) [GSYM bytes, wordsTheory.dimword_def,
+                  wordsTheory.w2w_n2w, fcpLib.INDEX_CONV ``dimindex(:160)``,
+                  GSYM (REWRITE_RULE [markerTheory.Abbrev_def] state)]
+                  suffix))))))) >>
       qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         gas_origin_ptr_path _ _ _ _ /\ _`
         (fn th => qpat_assum
@@ -780,9 +809,9 @@ Proof
       `!H:(bool # 256 word # type_value) list # num list.
          valid_horizon cx st0 H mid.storage_trace ==>
          stmt_state_rel H ctx func cenv cx
-           (mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)) sfin /\
+           after_call sfin /\
          ghost_inv_at (DF H) lo d cenv cx
-           (mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)) Gfin tnfin sfin` by
+           after_call Gfin tnfin sfin` by
         (gen_tac >> strip_tac >>
          qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
            gas_origin_ptr_path _ _ _ _ /\ _`
@@ -793,11 +822,11 @@ Proof
              pure_rewrite_tac[stmt_state_rel_inst_idx] >>
              irule stmt_state_rel_update_var >> rpt conj_tac >>
              FIRST [first_assum ACCEPT_TAC,
-               (simp[NoAsms,Abbr `outv`] >>
+               (simp[NoAsms,Abbr `outv`,Abbr `after_call`] >>
                 MATCH_MP_TAC (Q.SPECL [`cenv`,`cz`,`mid.scopes`,`cq.cs_next_var`]
                   local_ptrs_reserved_fresh) >> simp[])]) >>
          irule ghost_inv_at_exterior_frame >>
-         qexistsl_tac [`Gc`,`mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)`,
+         qexistsl_tac [`Gc`,`after_call`,
            `scall`,`cz`,`tnc`] >>
          rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
            simp[Abbr `sfin`,Abbr `loaded`,update_var_def]]) >>
@@ -840,7 +869,7 @@ Proof
             in MATCH_MP_TAC (Q.SPECL [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,
               `mid`,`mid`,`sf`,`sarg`,`sbuf`,`ctx`] provider) end) >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      `wb_frame cenv es (mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes))
+      `wb_frame cenv es after_call
          sa s0 scall` by
         (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx es s0`
            (fn state => let
@@ -853,7 +882,7 @@ Proof
                 (free_vars (concl typed)));
               val provider = INST [hv |-> actualH] typed;
             in MATCH_MP_TAC (Q.SPECL [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,
-              `mid`,`mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)`,
+              `mid`,`after_call`,
               `sf`,`sbuf`,`scall`,`ctx`] provider) end) >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `!x w. not_fresh_at cz x /\ lookup_var x scall = SOME w ==>
@@ -865,10 +894,10 @@ Proof
              (fn fresh => qpat_assum `lookup_var x scall = SOME resultword`
                (fn value => ACCEPT_TAC (TRANS
                  (CONJUNCT1 (MATCH_MP (Q.SPEC `x` frame) fresh)) value))))) >>
-      `wb_frame cenv es (mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes))
+      `wb_frame cenv es after_call
          sa s0 sfin` by
         (MATCH_MP_TAC (Q.SPECL [`cenv`,`es`,
-           `mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)`,
+           `after_call`,
            `sa`,`s0`,`scall`,`cz`,`sfin`] wb_frame_readonly_tail) >>
          rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
            simp[Abbr `sfin`,Abbr `loaded`,update_var_def]]) >>
@@ -1095,7 +1124,7 @@ Proof
            (free_vars (concl typed)));
          val provider = INST [sv |-> actualSource] typed;
        in MATCH_MP_TAC (Q.INST [`marks` |-> `[F]`,`res` |-> `INL retval`,
-         `ee` |-> `mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)`,
+         `ee` |-> `after_call`,
          `r` |-> `OK sfin`,`G'` |-> `Gfin`,`tn'` |-> `tnfin`] provider) (asl,goal) end) >>
       conj_tac
       >- (gen_tac >> qunabbrev_tac `retval` >>
@@ -1103,15 +1132,21 @@ Proof
             (fn result => qpat_assum `mid.outcomes = SOME sbuf.vs_outcomes`
               (fn outcomes => qpat_assum `sbuf.vs_outcomes = co::rest`
                 (fn runtime => qpat_assum `co.co_success`
-                  (fn success => POP_ASSUM_LIST (K all_tac) >>
-                    MAP_EVERY assume_tac [result,outcomes,runtime,success])))) >>
+                  (fn success => qpat_assum `Abbrev (after_call = _)`
+                    (fn state => POP_ASSUM_LIST (K all_tac) >>
+                      MAP_EVERY assume_tac [result,outcomes,runtime,success,state]))))) >>
           Cases_on `sarg.vs_gas_readings` >>
           simp[gas_explicit_def,
             SIMP_RULE (srw_ss()) [] (Q.INST [`n` |-> `0`] gasOracleReplayTheory.gas_prefix_suc),
             ZIP,MAP,FILTER,
-            ignore_bind_def,bind_def,return_def,ecrecover_source_outcome_step]) >>
+            ignore_bind_def,bind_def,return_def,ecrecover_source_outcome_step,Abbr `after_call`]) >>
       conj_tac >- (simp[NoAsms] >> first_assum ACCEPT_TAC) >>
       gen_tac >> simp[NoAsms] >> DISCH_TAC >>
+      `valid_horizon cx st0 H mid.storage_trace` by
+        (qpat_assum `!H. valid_horizon cx st0 H after_call.storage_trace <=> _`
+           (qspec_then `H` (fn eq =>
+             qpat_assum `valid_horizon cx st0 H after_call.storage_trace`
+               (ACCEPT_TAC o EQ_MP eq)))) >>
       qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
         stmt_state_rel _ _ _ _ _ _ sfin /\ _`
         (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
@@ -1148,9 +1183,15 @@ Proof
             FIRST_PROVE [simp[NoAsms,expr_has_effect_thm] >>
               qpat_assum `~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 sfin`
                 (ACCEPT_TAC o REWRITE_RULE [listTheory.NOT_EXISTS])],
-            (pure_rewrite_tac [SIMP_RULE (srw_ss()) [] (Q.INST
-              [`st` |-> `mid`,`st'` |-> `mid with <|outcomes := SOME (DROP 1 sbuf.vs_outcomes); gas_obs := []|>`]
-              storage_well_formed_on_backends)] >> first_assum ACCEPT_TAC)]) >>
+            (`(after_call with gas_obs := []).accounts = mid.accounts /\
+              (after_call with gas_obs := []).tStorage = mid.tStorage` by
+                simp[Abbr `after_call`] >>
+             qpat_assum `(after_call with gas_obs := []).accounts = mid.accounts`
+               (fn accounts =>
+                 qpat_assum `(after_call with gas_obs := []).tStorage = mid.tStorage`
+                   (fn transient => pure_rewrite_tac
+                     [MATCH_MP storage_well_formed_on_backends (CONJ accounts transient)])) >>
+             first_assum ACCEPT_TAC)]) >>
       rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
         FIRST_PROVE [simp[NoAsms,exprSimMemDefsTheory.expr_store_bound_def,
           expr_type_def,is_word_type_def,ptr_val_ok_def] >>
@@ -1236,7 +1277,7 @@ Proof
      val provider = INST [sv |-> actualSource] typed;
    in MATCH_MP_TAC (Q.INST [`marks` |-> `[F]`,
      `res` |-> `INR (Error (RuntimeError "precompile failed"))`,
-     `ee` |-> `mid with outcomes := SOME (DROP 1 sbuf.vs_outcomes)`,
+     `ee` |-> `after_call`,
      `r` |-> `Abort Revert_abort tabort`,`G'` |-> `Ga`,`tn'` |-> `tna`]
      provider) (asl,goal) end) >>
   conj_tac
@@ -1244,15 +1285,23 @@ Proof
       qpat_assum `builtin_result cx mid.accounts _ _ _ vals = _`
         (fn result => qpat_assum `mid.outcomes = SOME sbuf.vs_outcomes`
           (fn outcomes => qpat_assum `~?co rest. sbuf.vs_outcomes = co::rest /\ co.co_success`
-            (fn neg => POP_ASSUM_LIST (K all_tac) >>
-              MAP_EVERY assume_tac [result,outcomes,neg]))) >>
+            (fn neg => qpat_assum `sbuf.vs_outcomes <> []`
+              (fn nonempty => qpat_assum `Abbrev (after_call = _)`
+                (fn state => POP_ASSUM_LIST (K all_tac) >>
+                  MAP_EVERY assume_tac [result,outcomes,neg,nonempty,state]))))) >>
       Cases_on `sbuf.vs_outcomes` >> gvs[] >> Cases_on `sarg.vs_gas_readings` >>
       simp[gas_explicit_def,
         SIMP_RULE (srw_ss()) [] (Q.INST [`n` |-> `0`] gasOracleReplayTheory.gas_prefix_suc),
         ZIP,MAP,FILTER,ignore_bind_def,bind_def,return_def,ecrecover_source_outcome_step,
-        evaluation_state_component_equality]) >>
+        evaluation_state_component_equality,Abbr `after_call`]) >>
   conj_tac >- (simp[NoAsms] >> first_assum ACCEPT_TAC) >>
-  gen_tac >> simp[NoAsms] >> DISCH_TAC >> conj_tac
+  gen_tac >> simp[NoAsms] >> DISCH_TAC >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `!H. valid_horizon cx st0 H after_call.storage_trace <=> _`
+       (qspec_then `H` (fn eq =>
+         qpat_assum `valid_horizon cx st0 H after_call.storage_trace`
+           (ACCEPT_TAC o EQ_MP eq)))) >>
+  conj_tac
   >- (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
         gas_origin_ptr_path _ (sarg,G1,tn1) [F] (Abort Revert_abort tabort,Ga,tna)`
         (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`

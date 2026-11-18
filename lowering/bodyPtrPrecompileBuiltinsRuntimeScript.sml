@@ -20,7 +20,9 @@ Theorem computed_static_exec_eq:
        with <|vs_returndata :=
           (FST (take_outcome (venom_call_request s addr 0w ai an T)
                  s.vs_outcomes)).co_returnData;
-              vs_outcomes := DROP 1 s.vs_outcomes|>))
+              vs_outcomes := DROP 1 s.vs_outcomes;
+              vs_requests := s.vs_requests ++
+                [venom_call_request s addr 0w ai an T with cr_gas := SOME (w2n gas)]|>))
 Proof
   ACCEPT_TAC (Q.INST [`rq` |-> `venom_call_request s addr 0w ai an T`]
     computed_static_exec |> SIMP_RULE bool_ss [])
