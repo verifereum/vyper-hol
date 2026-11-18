@@ -233,6 +233,15 @@ Definition sym_kinds_ok_def:
     (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b)
 End
 
+Theorem sym_kinds_ok_plan_transport:
+  !ps' ps cp fn ret srest ss.
+  ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\
+  sym_kinds_ok cp fn ret srest ps ss ==>
+  sym_kinds_ok cp fn ret srest ps' ss
+Proof
+  simp[sym_kinds_ok_def]
+QED
+
 (* The symbolic state ss of program p against the concrete state cs: related
    (asm_sym_rel), of the right kinds, with the memory labels outside the
    frame's closure those at the frame's entry, labs0, and the return label

@@ -16,15 +16,6 @@ Proof
   >> simp[sym_steps_mode_add]
 QED
 
-Theorem sym_kinds_ok_plan_transport:
-  !ps' ps cp fn ret srest ss.
-  ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\
-  sym_kinds_ok cp fn ret srest ps ss ==>
-  sym_kinds_ok cp fn ret srest ps' ss
-Proof
-  simp[sym_kinds_ok_def]
-QED
-
 Theorem sym_frame_inv_plan_transport_own:
   !ps' ps lo prog env own ctx cp fn ret srest labs0 cs ss.
   ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\

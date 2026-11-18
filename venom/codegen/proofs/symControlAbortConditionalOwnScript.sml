@@ -6,6 +6,7 @@ Ancestors
   asmSplice asmSymSem frameRel contextCodegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   frameViewFacts genBlockSim genFrameSim fnFrameDeepAbort stackPlanCfgIrrelevance
+  symControlForwardSourceFacts[qualified]
 
 (* Syntax abbreviations only, with the same structural interface as preparation. *)
 val conditional_bridge_core_tm = let
@@ -57,32 +58,6 @@ Proof
   disch_then (qspecl_then [`p`, `env`] assume_tac) >> simp[]
 QED
 
-Theorem sym_assert_revert_postamble_steps_mode:
-  asm_block_at p ss.sym_base.as_pc (execute_plan fmp revert_postamble) ==>
-  sym_terminal (sym_steps_mode allow_own p env own 4 ss)
-Proof
-  strip_tac >>
-  `sym_terminal (sym_steps p env 4 ss)` suffices_by
-    metis_tac[sym_steps_mode_nonbad, sym_terminal_def] >>
-  fs[revert_postamble_def, execute_plan_def, exec_stack_op_def,
-     stackOpSimTheory.asm_block_at_cons] >>
-  rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
-              arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
-  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes_fuel 32 0)) = 0w`
-    by EVAL_TAC >>
-  simp[Once sym_step_def, sym_lift_def, asm_step_def, asm_next_def] >>
-  simp[Once sym_step_def, sym_lift_def, asm_step_def, asm_next_def] >>
-  simp[Once sym_step_def] >>
-  simp[sym_step_op_def, asmSemTheory.dup_table_def, asmSemTheory.swap_table_def,
-       sym_dup_def, sym_set_stack_def, asm_next_def] >>
-  simp[Once sym_step_def, sym_terminal_opcode_concrete] >>
-  simp[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
-       sval_val_def, asm_op_mem_reads_def, asmSemTheory.log_table_def,
-       mem_labels_hit_def, in_mem_range_def] >>
-  simp[SRULE [asm_step_def] stackOpAsmSimTheory.asm_step_revert,
-       asm_revert_op_def, sym_lift_def, sym_terminal_def]
-QED
-
 Theorem sym_assert_suffix_terminal_mode:
   asm_block_at p ss.sym_base.as_pc
     [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"] /\
@@ -111,7 +86,8 @@ Proof
   `sym_terminal (sym_steps_mode allow_own p env own 4
      (ss with <|sym_base := (ss.sym_base with as_stack := []) with as_pc := pc;
                 sym_stack := stk|>))` by
-    (irule sym_assert_revert_postamble_steps_mode >> simp[] >> metis_tac[]) >>
+    (irule symControlForwardSourceFactsTheory.sym_revert_postamble_steps_mode >>
+     simp[] >> metis_tac[]) >>
   once_rewrite_tac[GSYM (numLib.REDUCE_CONV ``1 + (2 + 4):num``)] >>
   asm_rewrite_tac[sym_steps_mode_add] >> simp[] >> gvs[]
 QED

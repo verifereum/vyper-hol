@@ -1601,15 +1601,6 @@ Proof
       listTheory.MAP_REVERSE]
 QED
 
-Theorem sym_kinds_relevant_fields:
-  !ps' ps cp fn ret srest ss.
-  ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\
-  sym_kinds_ok cp fn ret srest ps ss ==>
-  sym_kinds_ok cp fn ret srest ps' ss
-Proof
-  simp[sym_kinds_ok_def]
-QED
-
 Theorem op_kinds_forget_map:
   !xs ys f fn ret.
     LIST_REL (op_kind_ok fn ret) xs ys /\

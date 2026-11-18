@@ -1528,7 +1528,7 @@ Theorem sym_kinds_relevant_fields:
   sym_kinds_ok cp fn ret srest ps ss ==>
   sym_kinds_ok cp fn ret srest ps' ss
 Proof
-  MATCH_ACCEPT_TAC symFrameBoundaryNumericTheory.sym_kinds_relevant_fields
+  MATCH_ACCEPT_TAC codegenSymRelTheory.sym_kinds_ok_plan_transport
 QED
 
 Theorem op_kinds_forget_map:

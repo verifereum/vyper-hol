@@ -3038,9 +3038,10 @@ Theorem terminal_operand_word_kind:
   MEM op (compute_operands inst) /\ op <> dead_stack_marker /\
   op_kind_ok fn ret op sv ==> ?w. sv = Val w
 Proof
-  simp [listTheory.MEM] >>
-  MATCH_ACCEPT_TAC (SRULE []
-    (Q.INST [`allow_own` |-> `F`] (SPEC_ALL terminal_operand_word_kind_mode)))
+  strip_tac >>
+  irule (SRULE []
+    (Q.INST [`allow_own` |-> `F`] (SPEC_ALL terminal_operand_word_kind_mode))) >>
+  rpt (goal_assum (drule_at Any)) >> metis_tac[listTheory.MEM]
 QED
 
 Theorem word_prepared_symbolic_stack:
