@@ -2,8 +2,8 @@
  * Memory-safe runs
  *
  * mem_safe_run fuel ctx fn s says that every instruction the run of fn from
- * s executes, in callee frames too, reads and writes memory only below the
- * allocation frontier of the state it runs in (inst_mem_below_frontier),
+ * s executes, in callee frames too, reads and writes within the ALLOCA
+ * frontier or, in contexts with DALLOCA, within the two allocation regions,
  * and reads the data section only from offsets within it
  * (inst_dload_in_section).
  * The check follows the runner's own recursion (step_inst, exec_block,
@@ -155,6 +155,29 @@ End
 val mem_safe_step_def = save_thm("mem_safe_step_def", cj 1 mem_safe_defs);
 val mem_safe_block_def = save_thm("mem_safe_block_def", cj 2 mem_safe_defs);
 val mem_safe_blocks_def = save_thm("mem_safe_blocks_def", cj 3 mem_safe_defs);
+
+Theorem mem_safe_step_no_dalloca:
+  !fuel ctx inst s.
+    ~ctx_has_dalloca ctx ==>
+    (mem_safe_step fuel ctx inst s <=>
+     inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
+     if inst.inst_opcode = INVOKE then
+       case decode_invoke inst of
+         NONE => T
+       | SOME (callee_name, arg_ops) =>
+           case lookup_function callee_name ctx.ctx_functions of
+             NONE => T
+           | SOME callee_fn =>
+               case eval_operands arg_ops s of
+                 NONE => T
+               | SOME args =>
+                   case setup_callee callee_fn args s of
+                     NONE => T
+                   | SOME callee_s => mem_safe_blocks fuel ctx callee_fn callee_s
+     else T)
+Proof
+  simp[Once mem_safe_step_def]
+QED
 
 (* The check along run_from: the rest of the current block, then the blocks
    after it. *)

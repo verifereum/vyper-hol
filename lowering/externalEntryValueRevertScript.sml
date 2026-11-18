@@ -218,7 +218,7 @@ Proof
          simp[exit_result_def] >>
          conj_tac >- gvs[] >>
          simp[Abbr `ai`, gas_events_step_def, mk_inst_def,
-              mem_safe_step_def] >> disj2_tac >>
+              mem_safe_step_no_dalloca] >> disj2_tac >>
          irule below_frontier_no_ranges >> simp[]) >>
      simp[gas_path_ptr_edge_def] >>
      qexistsl_tac [`0`, `ai`] >>
