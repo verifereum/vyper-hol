@@ -284,3 +284,27 @@ Resume symbolic_frame_stmt_cond[if_get]:
   simp[]
 QED
 Finalise symbolic_frame_stmt_cond
+
+Theorem symbolic_frame_revert_with_reason:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!opc args outs. symbolic_frame R (emit_inst opc args outs)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!c v. symbolic_frame R (unwrap_value c v)) ==>
+  symbolic_frame R (compile_revert_with_reason cenv msg ty n)
+Proof
+  strip_tac >> simp[compile_revert_with_reason_def, comp_ignore_bind_def] >>
+  rpt gen_tac >>
+  rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+QED
+
+Theorem symbolic_frame_reason_message:
+  (!c t e. symbolic_frame R (compile_expr c t e)) /\
+  (!bs n. symbolic_frame R (compile_bytelike_literal bs n)) ==>
+  symbolic_frame R (compile_reason_message cenv e)
+Proof
+  strip_tac >> Cases_on `e` >> simp[compile_reason_message_def] >>
+  rename1 `Literal t l` >> Cases_on `t` >> simp[compile_reason_message_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> simp[compile_reason_message_def] >>
+  Cases_on `l` >> simp[compile_reason_message_def]
+QED

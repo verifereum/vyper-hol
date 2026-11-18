@@ -6,7 +6,7 @@
 Theory runtimeSymSrcUnit
 Ancestors
   runtimeSymSrcInstructions runtimeSymSrcData o1LabelFlowSourceBoundary
-  e2eProducers codegenSymRel compileVyper
+  e2eProducers codegenSymRel compileVyper runtimeLabelReadiness
 
 (* The runtime unit's source-side static facts: no CODESIZE, CODECOPY only
    from runtime_begin, no code_end label yet, and a byte-only data segment
@@ -35,5 +35,5 @@ Proof
                 runtime_sym_runtime_codecopy_source]) >>
   conj_tac >- metis_tac[runtime_sym_runtime_no_code_end] >>
   conj_tac >- metis_tac[lower_vyper_runtime_unit_data_bytes] >>
-  metis_tac[runtime_sym_runtime_no_runtime_begin]
+  metis_tac[lower_vyper_runtime_unit_no_runtime_begin]
 QED

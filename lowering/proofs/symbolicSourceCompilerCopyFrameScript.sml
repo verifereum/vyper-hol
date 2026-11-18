@@ -99,3 +99,94 @@ Proof
   simp[compile_load_immutable_ctor_def, comp_ignore_bind_def] >>
   rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
 QED
+
+Theorem symbolic_frame_cond:
+  symbolic_frame R (if b then m else n) <=>
+  (if b then symbolic_frame R m else symbolic_frame R n)
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+val _ = augment_srw_ss [rewrites [symbolic_frame_cond]];
+
+Theorem symbolic_frame_zero_loop:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) ==>
+  !p i n. symbolic_frame R (compile_zero_memory_loop p i n)
+Proof
+  strip_tac >> recInduct compile_zero_memory_loop_ind >> rpt strip_tac >>
+  pure_once_rewrite_tac[compile_zero_memory_loop_def] >>
+  IF_CASES_TAC >> simp[] >>
+  rpt (irule symbolic_frame_bind >>
+       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_zero:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) ==>
+  symbolic_frame R (compile_zero_memory p n)
+Proof
+  strip_tac >> Cases_on `n` >> simp[compile_zero_memory_def, symbolic_frame_zero_loop]
+QED
+
+Theorem symbolic_frame_ensure_memory:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!src dst n. symbolic_frame R (compile_storage_to_memory src dst n)) /\
+  (!src dst n. symbolic_frame R (compile_transient_to_memory src dst n)) /\
+  (!ctor imm src dst n i. symbolic_frame R (compile_imm_copy_to_memory ctor imm src dst n i)) ==>
+  symbolic_frame R (compile_ensure_in_memory p loc n wc ctor imm)
+Proof
+  strip_tac >> Cases_on `loc` >> simp[compile_ensure_in_memory_def, comp_ignore_bind_def] >>
+  rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_load_memory:
+  (!opc args. symbolic_frame R (emit_op opc args)) ==>
+  symbolic_frame R (compile_load_memory p b)
+Proof
+  strip_tac >> simp[compile_load_memory_def]
+QED
+
+Theorem symbolic_frame_load_calldata:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) ==>
+  symbolic_frame R (compile_load_calldata p b wc n)
+Proof
+  strip_tac >> simp[compile_load_calldata_def, comp_ignore_bind_def] >>
+  rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_load_storage:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!src dst n. symbolic_frame R (compile_storage_to_memory src dst n)) ==>
+  symbolic_frame R (compile_load_storage slot b wc n)
+Proof
+  strip_tac >> simp[compile_load_storage_def, comp_ignore_bind_def] >>
+  rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_load_transient:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!src dst n. symbolic_frame R (compile_transient_to_memory src dst n)) ==>
+  symbolic_frame R (compile_load_transient slot b wc n)
+Proof
+  strip_tac >> simp[compile_load_transient_def, comp_ignore_bind_def] >>
+  rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_load_immutable:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!src dst n. symbolic_frame R (compile_code_to_memory src dst n)) ==>
+  symbolic_frame R (compile_load_immutable off b wc n ctor)
+Proof
+  strip_tac >> simp[compile_load_immutable_def, comp_ignore_bind_def] >>
+  rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED

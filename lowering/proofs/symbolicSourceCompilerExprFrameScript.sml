@@ -1,5 +1,5 @@
 Theory symbolicSourceCompilerExprFrame
-Ancestors symbolicSourceCompilerFrame exprLowering compileEnv emitHelper
+Ancestors symbolicSourceCompilerFrame symbolicSourceCompilerCreateFrame exprLowering compileEnv emitHelper
 
 val _ = augment_srw_ss [rewrites [symbolic_frame_bind, symbolic_frame_ignore_bind]];
 
@@ -324,4 +324,85 @@ Theorem symbolic_frame_snapshot_vv:
   symbolic_frame R (compile_snapshot_vv cenv copy vv)
 Proof
   strip_tac >> rw[compile_snapshot_vv_def] >> simp[]
+QED
+
+Theorem symbolic_frame_multi_exprs:
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) ==>
+  !es. (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+  symbolic_frame R (compile_multi_exprs cfn cenv es)
+Proof
+  strip_tac >> Induct >> simp[compile_multi_exprs_def] >>
+  rpt strip_tac >> match_mp_tac symbolic_frame_bind >> conj_tac
+  >- (irule symbolic_frame_lower_value >> simp[]) >>
+  simp[]
+QED
+
+Theorem symbolic_frame_make_tuple:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) ==>
+  !es tys buf off.
+    (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+    symbolic_frame R (compile_make_tuple cfn cenv es tys buf off)
+Proof
+  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> simp[compile_make_tuple_def] >>
+  rpt strip_tac >> simp[comp_ignore_bind_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_make_array_elems:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) ==>
+  !es et sz lw buf idx.
+    (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+    symbolic_frame R (compile_make_array_elems cfn cenv es et sz lw buf idx)
+Proof
+  strip_tac >> Induct >> simp[compile_make_array_elems_def] >>
+  rpt strip_tac >> simp[comp_ignore_bind_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_make_array:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) /\
+  (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+  symbolic_frame R (compile_make_array cfn cenv es et sz lw buf)
+Proof
+  strip_tac >> simp[compile_make_array_def, comp_ignore_bind_def] >>
+  match_mp_tac symbolic_frame_bind >> conj_tac
+  >- (Cases_on `lw` >> simp[]) >>
+  simp[symbolic_frame_make_array_elems]
+QED
+
+Theorem symbolic_frame_concat:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) ==>
+  !es dp infos off.
+    (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+    symbolic_frame R (compile_concat cfn cenv es dp infos off)
+Proof
+  strip_tac >> Induct >> simp[compile_concat_def] >> rpt gen_tac >>
+  Cases_on `infos` >> simp[compile_concat_def] >> Cases_on `h'` >>
+  strip_tac >> Cases_on `q` >> simp[compile_concat_def, comp_ignore_bind_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac
+       >- simp[symbolic_frame_lower_value] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_struct_lit:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) ==>
+  !fields ty buf off.
+    (!nm e. MEM (nm,e) fields ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+    symbolic_frame R (compile_struct_lit cfn cenv ty fields buf off)
+Proof
+  strip_tac >> Induct >> simp[compile_struct_lit_def] >>
+  gen_tac >> PairCases_on `h` >> rpt strip_tac >>
+  simp[compile_struct_lit_def, comp_ignore_bind_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >>
+       gen_tac >> BETA_TAC) >> first_x_assum irule >> metis_tac[]
 QED

@@ -161,19 +161,14 @@ Theorem deploy_blocks_frame_revert_with_reason:
   (!c v. deploy_blocks_frame (unwrap_value c v)) ==>
   deploy_blocks_frame (compile_revert_with_reason cenv msg ty n)
 Proof
-  strip_tac >> simp[compile_revert_with_reason_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_revert_with_reason) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_reason_message:
   (!c t e. deploy_blocks_frame (compile_expr c t e)) ==>
   deploy_blocks_frame (compile_reason_message cenv e)
 Proof
-  strip_tac >> Cases_on `e` >> simp[compile_reason_message_def] >>
-  rename1 `Literal t l` >> Cases_on `t` >> simp[compile_reason_message_def] >>
-  rename1 `BaseT b` >> Cases_on `b` >> simp[compile_reason_message_def] >>
-  Cases_on `l` >> simp[compile_reason_message_def]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_reason_message) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_log_save_arg:

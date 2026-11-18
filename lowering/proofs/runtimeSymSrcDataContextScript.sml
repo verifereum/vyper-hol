@@ -3,11 +3,17 @@ Ancestors
   symbolicSourceCompilerCopyFrame
   runtimeSymSrcDataFrame context compileEnv emitHelper
 
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
+
 Theorem runtime_data_frame_cond[simp]:
   runtime_data_frame (if b then m else n) <=>
   (if b then runtime_data_frame m else runtime_data_frame n)
 Proof
-  Cases_on `b` >> simp[]
+  REWRITE_TAC [specialize_frame symbolic_frame_cond]
 QED
 
 Theorem runtime_data_frame_imm_load[simp]:
@@ -69,17 +75,13 @@ QED
 Theorem runtime_data_frame_zero_loop[simp]:
   !p i n. runtime_data_frame (compile_zero_memory_loop p i n)
 Proof
-  recInduct compile_zero_memory_loop_ind >> rpt strip_tac >>
-  pure_once_rewrite_tac[compile_zero_memory_loop_def] >>
-  IF_CASES_TAC >> simp[] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_zero_loop >> simp[]
 QED
 
 Theorem runtime_data_frame_zero[simp]:
   runtime_data_frame (compile_zero_memory p n)
 Proof
-  Cases_on `n` >> simp[compile_zero_memory_def]
+  apply_symbolic_frame symbolic_frame_zero >> simp[]
 QED
 
 Theorem runtime_data_frame_lit_offset[simp]:
@@ -182,35 +184,32 @@ QED
 Theorem runtime_data_frame_ensure_memory[simp]:
   runtime_data_frame (compile_ensure_in_memory p loc n wc ctor imm)
 Proof
-  Cases_on `loc` >> simp[compile_ensure_in_memory_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_ensure_memory >> simp[]
 QED
 
 Theorem runtime_data_frame_load_memory[simp]:
   runtime_data_frame (compile_load_memory p b)
-Proof simp[compile_load_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_load_memory >> simp[]
 QED
 
 Theorem runtime_data_frame_load_calldata[simp]:
   runtime_data_frame (compile_load_calldata p b wc n)
 Proof
-  simp[compile_load_calldata_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_calldata >> simp[]
 QED
 
 
 Theorem runtime_data_frame_load_storage[simp]:
   runtime_data_frame (compile_load_storage slot b wc n)
 Proof
-  simp[compile_load_storage_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_storage >> simp[]
 QED
 
 Theorem runtime_data_frame_load_transient[simp]:
   runtime_data_frame (compile_load_transient slot b wc n)
 Proof
-  simp[compile_load_transient_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_transient >> simp[]
 QED
 
 Theorem runtime_data_frame_code_to_memory[simp]:
@@ -222,8 +221,7 @@ QED
 Theorem runtime_data_frame_load_immutable[simp]:
   runtime_data_frame (compile_load_immutable off b wc n ctor)
 Proof
-  simp[compile_load_immutable_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_immutable >> simp[]
 QED
 
 Theorem runtime_data_frame_fixed_region[simp]:
@@ -280,10 +278,6 @@ Theorem runtime_data_frame_store_immutable[simp]:
 Proof
   simp[compile_store_immutable_def]
 QED
-
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
-    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_store_slots[simp]:
   (!cenv src slot ty trans.

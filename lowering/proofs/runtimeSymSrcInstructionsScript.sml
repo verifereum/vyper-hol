@@ -121,13 +121,3 @@ Proof
   strip_tac >> drule_all runtime_sym_runtime_insts >>
   simp[EVERY_MEM, runtime_sym_inst_def] >> metis_tac[]
 QED
-
-Theorem runtime_sym_runtime_no_runtime_begin:
-  supported_program tops /\ ~program_reads_self_code tops /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-  ~MEM (Label "runtime_begin") inst.inst_operands
-Proof
-  strip_tac >> drule_all runtime_sym_runtime_insts >>
-  simp[EVERY_MEM, runtime_sym_inst_def] >> metis_tac[]
-QED

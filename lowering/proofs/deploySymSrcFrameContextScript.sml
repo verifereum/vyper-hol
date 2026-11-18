@@ -3,10 +3,17 @@ Ancestors
   symbolicSourceCompilerCopyFrame
   deploySymSrcBlockFrame context compileEnv emitHelper
 
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks` (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
+
 Theorem deploy_blocks_frame_cond[simp]:
   deploy_blocks_frame (if b then m else n) <=>
   (if b then deploy_blocks_frame m else deploy_blocks_frame n)
-Proof Cases_on `b` >> simp[]
+Proof
+  REWRITE_TAC [specialize_frame symbolic_frame_cond]
 QED
 
 (* These compositional rules are local simplifier rules, not new axioms. *)
@@ -69,16 +76,13 @@ QED
 Theorem deploy_blocks_frame_zero_loop[simp]:
   !p i n. deploy_blocks_frame (compile_zero_memory_loop p i n)
 Proof
-  recInduct compile_zero_memory_loop_ind >> rpt strip_tac >>
-  pure_once_rewrite_tac[compile_zero_memory_loop_def] >>
-  IF_CASES_TAC >> simp[] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_zero_loop >> simp[]
 QED
 
 Theorem deploy_blocks_frame_zero[simp]:
   deploy_blocks_frame (compile_zero_memory p n)
-Proof Cases_on `n` >> simp[compile_zero_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_zero >> simp[]
 QED
 
 Theorem deploy_blocks_frame_lit_offset[simp]:
@@ -175,34 +179,31 @@ QED
 Theorem deploy_blocks_frame_ensure_memory[simp]:
   deploy_blocks_frame (compile_ensure_in_memory p loc n wc ctor imm)
 Proof
-  Cases_on `loc` >> simp[compile_ensure_in_memory_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_ensure_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_memory[simp]:
   deploy_blocks_frame (compile_load_memory p b)
-Proof simp[compile_load_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_load_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_calldata[simp]:
   deploy_blocks_frame (compile_load_calldata p b wc n)
 Proof
-  simp[compile_load_calldata_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_calldata >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_storage[simp]:
   deploy_blocks_frame (compile_load_storage slot b wc n)
 Proof
-  simp[compile_load_storage_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_storage >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_transient[simp]:
   deploy_blocks_frame (compile_load_transient slot b wc n)
 Proof
-  simp[compile_load_transient_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_transient >> simp[]
 QED
 
 Theorem deploy_blocks_frame_code_to_memory[simp]:
@@ -213,8 +214,7 @@ QED
 Theorem deploy_blocks_frame_load_immutable[simp]:
   deploy_blocks_frame (compile_load_immutable off b wc n ctor)
 Proof
-  simp[compile_load_immutable_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_immutable >> simp[]
 QED
 
 Theorem deploy_blocks_frame_fixed_region[simp]:
@@ -263,10 +263,6 @@ Theorem deploy_blocks_frame_store_immutable[simp]:
   deploy_blocks_frame (compile_store_immutable imm src dst n)
 Proof simp[compile_store_immutable_def]
 QED
-
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks` (Q.GEN `R` theorem)))
 
 Theorem deploy_blocks_frame_store_slots[simp]:
   (!cenv src slot ty trans.

@@ -1,5 +1,6 @@
 Theory runtimeSymSrcDataExprCallbacks
 Ancestors
+  symbolicSourceCompilerCallFrame
   symbolicSourceCompilerCreateFrame
   symbolicSourceCompilerExprFrame
   runtimeSymSrcDataFrame exprLowering compileEnv
@@ -46,10 +47,7 @@ Theorem runtime_data_frame_multi_exprs:
   !es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_multi_exprs cfn cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_multi_exprs_def] >>
-  rpt strip_tac >> match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (irule runtime_data_frame_lower_value >> simp[]) >>
-  simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_multi_exprs >> simp[]
 QED
 
 Theorem runtime_data_frame_make_tuple:
@@ -59,9 +57,7 @@ Theorem runtime_data_frame_make_tuple:
     (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_make_tuple cfn cenv es tys buf off)
 Proof
-  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> simp[compile_make_tuple_def] >>
-  rpt strip_tac >> simp[comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_make_tuple >> simp[]
 QED
 
 Theorem runtime_data_frame_make_array_elems:
@@ -71,9 +67,7 @@ Theorem runtime_data_frame_make_array_elems:
     (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_make_array_elems cfn cenv es et sz lw buf idx)
 Proof
-  strip_tac >> Induct >> simp[compile_make_array_elems_def] >>
-  rpt strip_tac >> simp[comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_make_array_elems >> simp[]
 QED
 
 Theorem runtime_data_frame_make_array:
@@ -82,10 +76,7 @@ Theorem runtime_data_frame_make_array:
   (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_make_array cfn cenv es et sz lw buf)
 Proof
-  strip_tac >> simp[compile_make_array_def, comp_ignore_bind_def] >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (Cases_on `lw` >> simp[]) >>
-  simp[runtime_data_frame_make_array_elems]
+  strip_tac >> apply_symbolic_frame symbolic_frame_make_array >> simp[]
 QED
 
 Theorem runtime_data_frame_concat:
@@ -94,11 +85,7 @@ Theorem runtime_data_frame_concat:
     (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_concat cfn cenv es dp infos off)
 Proof
-  strip_tac >> Induct >> simp[compile_concat_def] >> rpt gen_tac >>
-  Cases_on `infos` >> simp[compile_concat_def] >> Cases_on `h'` >>
-  strip_tac >> Cases_on `q` >> simp[compile_concat_def, comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
-       >- simp[runtime_data_frame_lower_value] >> gen_tac >> BETA_TAC) >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_concat >> simp[]
 QED
 
 fun apply_symbolic_frame theorem =
@@ -149,11 +136,7 @@ Theorem runtime_data_frame_struct_lit:
     (!nm e. MEM (nm,e) fields ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_struct_lit cfn cenv ty fields buf off)
 Proof
-  strip_tac >> Induct >> simp[compile_struct_lit_def] >>
-  gen_tac >> PairCases_on `h` >> rpt strip_tac >>
-  simp[compile_struct_lit_def, comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
-       gen_tac >> BETA_TAC) >> first_x_assum irule >> metis_tac[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_struct_lit >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_encode_args:
@@ -162,10 +145,7 @@ Theorem runtime_data_frame_abi_encode_args:
   !es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_abi_encode_args cfn cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_abi_encode_args_def] >> rpt strip_tac >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
-  gen_tac >> BETA_TAC >> match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[]) >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_abi_encode_args >> simp[]
 QED
 
 Theorem runtime_data_frame_ext_call_kwarg:
@@ -174,8 +154,7 @@ Theorem runtime_data_frame_ext_call_kwarg:
   (!ty. runtime_data_frame (cfn cenv ty e)) ==>
   runtime_data_frame (compile_ext_call_kwarg cfn cenv rt k e)
 Proof
-  strip_tac >> rw[compile_ext_call_kwarg_def] >>
-  simp[runtime_data_frame_lower_value]
+  strip_tac >> apply_symbolic_frame symbolic_frame_ext_call_kwarg >> simp[]
 QED
 
 Theorem runtime_data_frame_ext_call_kwargs:
@@ -185,10 +164,7 @@ Theorem runtime_data_frame_ext_call_kwargs:
     (!e ty. MEM e es ==> runtime_data_frame (cfn cenv ty e)) ==>
     runtime_data_frame (compile_ext_call_kwargs cfn cenv rt ks es)
 Proof
-  strip_tac >> Induct >> Cases_on `ks` >> simp[compile_ext_call_kwargs_def] >>
-  rpt strip_tac >> match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (irule runtime_data_frame_ext_call_kwarg >> simp[]) >>
-  simp[pairTheory.FORALL_PROD]
+  strip_tac >> apply_symbolic_frame symbolic_frame_ext_call_kwargs >> simp[]
 QED
 
 Theorem runtime_data_frame_create_salt:

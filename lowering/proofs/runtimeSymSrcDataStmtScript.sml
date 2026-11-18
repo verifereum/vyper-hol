@@ -121,9 +121,7 @@ Theorem runtime_data_frame_compile_revert_with_reason:
   (!c v. runtime_data_frame (unwrap_value c v)) ==>
   runtime_data_frame (compile_revert_with_reason cenv msg ty n)
 Proof
-  strip_tac >> simp[compile_revert_with_reason_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_revert_with_reason) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_reason_message:
@@ -131,10 +129,7 @@ Theorem runtime_data_frame_compile_reason_message:
   (!bs n. runtime_data_frame (compile_bytelike_literal bs n)) ==>
   runtime_data_frame (compile_reason_message cenv e)
 Proof
-  strip_tac >> Cases_on `e` >> simp[compile_reason_message_def] >>
-  rename1 `Literal t l` >> Cases_on `t` >> simp[compile_reason_message_def] >>
-  rename1 `BaseT b` >> Cases_on `b` >> simp[compile_reason_message_def] >>
-  Cases_on `l` >> simp[compile_reason_message_def]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_reason_message) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_log_save_arg:

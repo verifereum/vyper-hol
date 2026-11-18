@@ -1,5 +1,6 @@
 Theory runtimeSymSrcDataExprNonCallback
 Ancestors
+  symbolicSourceCompilerCallFrame
   symbolicSourceCompilerExprFrame
   runtimeSymSrcDataFrame runtimeSymSrcDataContext exprLowering compileEnv
 
@@ -201,9 +202,7 @@ Theorem runtime_data_frame_extcall_store_values:
   (!v dst. runtime_data_frame (compile_store_bytestring v dst)) ==>
   !vs buf off. runtime_data_frame (compile_extcall_store_values cenv vs buf off)
 Proof
-  strip_tac >> Induct >> simp[compile_extcall_store_values_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >> simp[compile_extcall_store_values_def] >>
-  Cases_on `is_word_type h1` >> Cases_on `is_bytestring_type h1` >> simp[] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_extcall_store_values >> simp[]
 QED
 
 Theorem runtime_data_frame_default_return_path:
@@ -212,7 +211,7 @@ Theorem runtime_data_frame_default_return_path:
   (!dst src opc lo hi info. runtime_data_frame (compile_abi_decode_to_buf dst src opc lo hi info)) ==>
   runtime_data_frame (compile_default_return_path cenv rt dt buf res dop addr skip lo hi info)
 Proof
-  strip_tac >> Cases_on `skip` >> simp[compile_default_return_path_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_default_return_path >> simp[]
 QED
 
 Theorem runtime_data_frame_external_call_kwargs:
@@ -225,8 +224,7 @@ Theorem runtime_data_frame_external_call_kwargs:
   (!dst src opc lo hi info. runtime_data_frame (compile_abi_decode_to_buf dst src opc lo hi info)) ==>
   runtime_data_frame (compile_external_call_kwargs cenv addr vals tys mem abi mid rabi lo rmem static value gas skip has_default dop rt dt einfo dinfo)
 Proof
-  strip_tac >> simp[compile_external_call_kwargs_def] >>
-  frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  strip_tac >> apply_symbolic_frame symbolic_frame_external_call_kwargs >> simp[]
 QED
 
 Theorem runtime_data_frame_dynarray_append:
@@ -256,12 +254,7 @@ Theorem runtime_data_frame_stage_intcall_args:
     (!e. MEM e vs ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_stage_intcall_args cfn cenv vs flags tys)
 Proof
-  strip_tac >> Induct >> simp[compile_stage_intcall_args_def] >>
-  rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
-  simp[compile_stage_intcall_args_def] >>
-  TRY (rename1 `compile_stage_intcall_args _ _ (_ :: _) (by_value :: _) (_ :: _)` >>
-       Cases_on `by_value` >> simp[compile_stage_intcall_args_def]) >>
-  strip_tac >> frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  strip_tac >> apply_symbolic_frame symbolic_frame_stage_intcall_args >> simp[]
 QED
 
 Theorem runtime_data_frame_store_multi_results[simp]:
