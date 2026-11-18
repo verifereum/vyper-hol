@@ -1034,18 +1034,28 @@ Proof
          vyperContextTheory.get_tenv_def,
          vyperContextTheory.current_module_def] >>
      strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[expr_sim_inv_def, cenv_without_defaults_def,
-       vyperTypeInvariantsTheory.context_well_typed_def,
-       vyperContextTheory.get_module_code_def,
-       vyperContextTheory.get_tenv_def,
-       cx_const_name_def, gasContextTheory.cx_tops_def,
-       placeTypingPropsTheory.place_map_tables_agree_on_defined_def,
-       bare_globals_layout_def] >>
-  strip_tac >> simp[] >> conj_tac
-  >- gvs[] >> conj_tac
-  >- (qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
-        mp_tac >> simp[] >> metis_tac[]) >>
-  conj_tac >- gvs[] >> gvs[]
+  `!src. get_module_code (cx with stk updated_by CONS (NONE,name)) src =
+         get_module_code cx src` by simp[vyperContextTheory.get_module_code_def] >>
+  `get_tenv (cx with stk updated_by CONS (NONE,name)) = get_tenv cx` by
+    simp[vyperContextTheory.get_tenv_def] >>
+  `context_well_typed (cx with stk updated_by CONS (NONE,name)) =
+   context_well_typed cx` by simp[vyperTypeInvariantsTheory.context_well_typed_def] >>
+  `place_map_tables_agree_on_defined (cenv_without_defaults ce name)
+      (env with current_src := NONE) = place_map_tables_agree_on_defined ce env` by
+    (match_mp_tac placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >>
+     simp[cenv_without_defaults_def]) >>
+  pure_rewrite_tac[expr_sim_inv_def] >> strip_tac >> rpt conj_tac >>
+  TRY (simp[cenv_without_defaults_def] >> first_assum ACCEPT_TAC) >>
+  TRY (first_assum ACCEPT_TAC) >>
+  TRY (first_assum irule >> first_assum ACCEPT_TAC)
+  >- (`cx_tops (cx with stk updated_by CONS (NONE,name)) = cx_tops cx` by
+        simp[gasContextTheory.cx_tops_def] >>
+      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+        mp_tac >> simp[cenv_without_defaults_def, cx_const_name_def] >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  qpat_x_assum `bare_globals_layout _ _ _ _ cx _ _` mp_tac >>
+  simp[cenv_without_defaults_def, bare_globals_layout_def] >>
+  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem intcall_args_defaults_typed:
