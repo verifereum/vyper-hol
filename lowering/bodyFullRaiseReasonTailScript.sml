@@ -122,7 +122,13 @@ Theorem reason_tail_run_mem_split:
 Proof
   strip_tac >>
   fs[reason_tail_def] >>
-  ntac 6
+  ntac 3
+    (qpat_x_assum `run_inst_seq (_::_) _ = Abort Revert_abort _`
+       (mp_tac o PURE_ONCE_REWRITE_RULE [run_inst_seq_def]) >>
+     reverse TOP_CASE_TAC >> simp[]
+     >- (drule step_inst_base_abort_opcodes >> simp[mk_inst_def]) >>
+     strip_tac) >>
+  ntac 3
     (qpat_x_assum `run_inst_seq (_::_) _ = Abort Revert_abort _`
        (mp_tac o PURE_ONCE_REWRITE_RULE [run_inst_seq_def]) >>
      reverse TOP_CASE_TAC >> simp[]
