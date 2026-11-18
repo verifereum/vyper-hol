@@ -53,13 +53,66 @@ Theorem supported_storage_event_program_positive:
      VariableDecl Private Storage "items" (ArrayT (BaseT (UintT 256)) (Dynamic 4)) (SOME 2);
      HashMapDecl Private F "map" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 7);
      EventDecl "Updated" [(("value",BaseT (UintT 256)),F)];
+     EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),F)];
      program_test_deploy
        [Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record")) "second")) expr_test_int;
         Append (TopLevelNameTarget (NONE,"items")) expr_test_uint;
         Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"map")) expr_test_address)) expr_test_uint;
-        Log (NONE,"Updated") [expr_test_uint]]]]
+        Log (NONE,"Updated") [expr_test_uint];
+        Log (NONE,"Batch")
+          [TopLevelName (ArrayT (BaseT (UintT 256)) (Dynamic 4)) (NONE,"items")]]]]
 Proof
   EVAL_TAC
+QED
+
+Theorem supported_event_aggregate_indexed_reject:
+  ~supported_declaration_header []
+    (EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),T)])
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_event_field_leaves_positive:
+  EVERY (\ty. EVERY (\indexed.
+    EVERY (\tops. IS_SOME (check_contract F layouts addr [(NONE,tops)]) /\
+                  supported_program tops)
+      [[FlagDecl "Mode" ["A"]; EventDecl "Changed" [(("value",ty),indexed)]]])
+    [F;T])
+    [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0)); BaseT (BytesT (Fixed 20))]
+Proof
+  EVAL_TAC >>
+  simp[finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Event headers recurse through typed leaves independently of the separate
+   StructDecl whitelist header. The checker still validates all declarations. *)
+Theorem supported_event_nested_leaves_positive:
+  EVERY (\tops. EVERY (\ty.
+    IS_SOME (check_contract F layouts addr
+      [(NONE,tops ++ [EventDecl "Changed" [(("value",ty),F)]])]) /\
+    supported_declaration_header tops
+      (EventDecl "Changed" [(("value",ty),F)]))
+    [ArrayT (FlagT (NONE,"Mode")) (Fixed 2);
+     ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 3);
+     TupleT [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0));
+             BaseT (BytesT (Fixed 20))];
+     StructT (NONE,"Payload");
+     ArrayT (TupleT [StructT (NONE,"Payload");
+                    ArrayT (BaseT (BytesT (Fixed 20))) (Dynamic 3)]) (Fixed 2)])
+    [[FlagDecl "Mode" ["A"];
+      StructDecl "Payload"
+        [("mode",FlagT (NONE,"Mode"));
+         ("empty",BaseT (BytesT (Fixed 0)));
+         ("tag",BaseT (BytesT (Fixed 20)))]]]
+Proof
+  EVAL_TAC >>
+  simp[finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FLOOKUP_UPDATE,
+       vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def,
+       vyperTypeSystemTheory.assignable_type_def,
+       vyperTypeSystemTheory.well_formed_type_def,
+       wordsTheory.dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
+  simp[vyperValueTheory.type_slot_size_def]
 QED
 
 Theorem supported_internal_locals_and_loops:

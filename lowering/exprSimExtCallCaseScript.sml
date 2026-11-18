@@ -218,8 +218,7 @@ Theorem eval_ext_call_request:
            "ExtCall target has no code";
      value_opt' <- frame_call_value cx value_opt;
      returnData <- eval_ext_call_effects cx target calldata value_opt'
-       (forwarded_gas default_evm_gas_limit
-          (ext_call_kwarg EKGas opts (DROP (LENGTH arg_types) rest))) accounts;
+       (ext_call_kwarg EKGas opts (DROP (LENGTH arg_types) rest)) accounts;
      case (if returnData = []
            then ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest)
            else NONE) of

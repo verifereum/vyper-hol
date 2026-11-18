@@ -3,13 +3,13 @@
 Theory e2eBoundaryTest
 Ancestors
   e2eDefs frameOutcome callTrace
-  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue
+  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue vyperCalldata
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeContract
   vyperStorageLayoutSafety vyperRuntimeAccounts
   supportedProgram supportedDecls contractABI selectorDispatch
   vfmState[ignore_grammar] vfmExecution[ignore_grammar]
   list alist option pair words
-Libs wordsLib
+Libs wordsLib cv_transLib
 
 val _ = Parse.hide "body";
 
@@ -64,7 +64,7 @@ Proof
   strip_tac >>
   drule call_state_rel_parsed >> strip_tac >>
   drule call_state_rel_code_length >> strip_tac >>
-  fs[call_state_rel_def] >>
+  fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def] >>
   qpat_x_assum `es.contexts = _` (fn th => gvs[th])
 QED
 
@@ -82,7 +82,8 @@ Theorem boundary_pending_deletions:
   call_state_rel tops code am tx es ==>
   es.rollback.toDelete = am.pending_deletions
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  simp[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+       world_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -204,15 +205,63 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
+(* ===== Raw calldata dispatch through the source boundary ===== *)
+val dispatch_entry =
+  ``FunctionDecl External Nonpayable F F "f"
+      [("a",BaseT (UintT 8))] [] NoneT []``
+val dispatch_default =
+  ``FunctionDecl External Payable F F "__default__" [] [] NoneT []``
+val dispatch_selector = ``[0x31w;0x20w;0xd4w;0x34w] : word8 list``
+
+Triviality dispatch_method_id:
+  vyperABIEntries$abi_method_id FEMPTY "f" [BaseT (UintT 8)] = 0x3120d434
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem calldata_dispatch_decodes_exact_head:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 255) = SOME ("f", [IntV 255])
+Proof
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_miss_and_short_fallback:
+  calldata_dispatch [^dispatch_entry] [0w;0w;0w;0w] = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default] [0w;0w;0w;0w] =
+    SOME ("__default__", []) /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (TAKE 3 ^dispatch_selector) = SOME ("__default__", [])
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_bad_head_or_argument_rejects:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ TAKE 31 (cd_example_word 255)) = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 256) = NONE
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
 (* The compiler packages the same getter that source lookup selects. *)
 Theorem source_lookup_getter_supported:
-  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  EVERY (\tops.
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    supported_program tops
+    supported_program tops)
+    [[VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0);
+      EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),F)]]]
 Proof
-  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp_tac bool_ss [listTheory.EVERY_DEF, AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >>
   simp[supported_program_def, supported_declaration_headers_def,
     supported_declaration_header_def, supported_declaration_body_def,
     supportedNamesTheory.supported_declaration_names_def,

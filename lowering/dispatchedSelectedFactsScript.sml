@@ -8,7 +8,7 @@ Theorem dispatched_selected_source_facts:
   calldata_dispatch tops cd = SOME (tx.function_name,tx.args) /\
   tx.function_name <> "__default__" /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
+    SOME (mut,nr,args,[],ret,fbody) ==>
   ?tvs.
     4 <= LENGTH cd /\
     FIND (\(name,tys). abi_method_id (type_env tops) name tys = cd_selector cd)

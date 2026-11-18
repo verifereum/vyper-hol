@@ -32,15 +32,18 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
 ### `supportedDeclsTheory`
 
 - `supported_declaration_header tops top`, `supported_declaration_headers tops`:
-  no raw return, defaults only on external functions, value arguments and
-  NoneT/value return (nonreentrant guards and external defaults are admitted;
-  `check_contract` separately validates their headers);
-  private explicitly slotted storage of storage types; private explicitly slotted
-  transient full words; private non-transient non-nested maps with permitted
-  keys and full-word values; value-typed struct/interface fields; word/string
-  event fields (thus no indexed aggregates or bytes20), at most three of them
-  indexed; no flags, constants,
-  immutables, public storage, or missing slots.
+  Internal function arguments use supported value types, and only Internal
+  functions may have defaults. External functions may return NoneT or a
+  supported place type. Other returns use `supported_return_type`.
+  Storage and transient variables require explicit slots and supported
+  storage types. Hash maps require slots and supported keys and values,
+  including nested maps. Private immutable declarations use supported
+  value types and have no slot. Structs require nonempty fields of supported
+  place types. Event fields follow the rules below.
+- Indexed event fields must have `supported_event_leaf_type` (scalars, flags,
+  or fixed bytes of any width from 0 to 32). At most three fields may be
+  indexed. Non-indexed fields also allow arrays, tuples, and structs through
+  `supported_nested_type supported_event_leaf_type`.
 - `supported_interface_signature tops (name,args,ret,mut)` checks types only.
 - `supported_variable_decl tops id`: option of `(visibility,mutability,type,slot)`.
 - `supported_hashmap_decl tops id`: option of `(visibility,transient,key,value,slot)`.

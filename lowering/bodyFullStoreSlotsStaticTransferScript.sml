@@ -178,12 +178,12 @@ Proof
     `OK (mid with vs_call_ctx := (mid.vs_call_ctx with cc_static := T))`] >>
   simp[] >>
   qpat_x_assum `~is_terminator _ /\ _ \/ _` mp_tac >>
-  strip_tac >> gvs[exit_result_def] >>
-  TRY (rename1 `eval_phis mid target.bb_instructions = OK entered` >>
-       drule slots_static_phis >> strip_tac >> disj1_tac >>
-       qexists_tac `entered with vs_call_ctx := (entered.vs_call_ctx with cc_static := T)` >>
-       simp[venom_state_component_equality] >> NO_TAC) >>
-  metis_tac[]
+  strip_tac >> gvs[exit_result_def]
+  >>~- ([`eval_phis mid target.bb_instructions = OK entered`],
+    drule slots_static_phis >> strip_tac >> disj1_tac >>
+    qexists_tac `entered with vs_call_ctx := (entered.vs_call_ctx with cc_static := T)` >>
+    simp[venom_state_component_equality]) >>
+  disj2_tac >> qexists_tac `lbl` >> simp[]
 QED
 
 Theorem store_slots_readonly_prefix_static:

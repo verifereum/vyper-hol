@@ -2,17 +2,18 @@
 Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
-  calldataArrayIterationProbe calldataArrayLiveMemory calldataArrayModularSetup
+  calldataArrayLiveMemory calldataArrayModularSetup calldataArrayRawCallsite
   calldataBulkOperationalCertificate calldataBulkSourceOutcome calldataCoherentOwnedEndpoint
-  calldataExactBytesJoint calldataExactMemberValues calldataExactMembersJoint
+  calldataExactBytesJoint calldataExactMemberValues calldataMembersRawCallsite
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
-  calldataNoneMetadata calldataRegistrationRawAddress calldataRegistrationSingletonProbe
+  calldataNoneMetadata calldataRegistrationRawAddress
   calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
   dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
   dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
+  e2eLifecycle e2eTransactionWorld
   e2eCodeFrame
   (* definitions *)
   moduleLowering
@@ -48,6 +49,7 @@ Ancestors
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
+  immutableRepSensitivity
   immutableCodeLayout
   e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
@@ -56,6 +58,7 @@ Ancestors
   loweringShapeProps
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
@@ -84,8 +87,13 @@ Ancestors
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* closed-world request-cut texts awaiting their producers *)
+  e2eRequestCutDefs
   (* providers awaiting their consumers *)
+  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
+  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   internalReturnMemoryMem bodyFullIntCallByteFrame
+  bodyFullIntCall
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy

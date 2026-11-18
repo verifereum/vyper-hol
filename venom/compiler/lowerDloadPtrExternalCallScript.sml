@@ -16,7 +16,8 @@ Theorem dload_external_call_frame_fields:
 Proof
   namedCases_on `i.inst_outputs` ["", "out outs"]
   >- simp[exec_ext_call_def] >>
-  Cases_on `outs` >> simp[exec_ext_call_def, update_var_def] >>
+  Cases_on `outs` >> Cases_on `s.vs_outcomes = []` >>
+  simp[exec_ext_call_def, update_var_def] >>
   rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -65,16 +66,16 @@ Theorem dload_external_call_adoption:
     s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st)
+  Cases_on `consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome _ _ _ s = (w,ss)` >>
   drule dload_consume_call_adopted >> strip_tac >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   pure_rewrite_tac[exec_ext_call_def] >> pure_asm_rewrite_tac[LET_THM] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >- simp[] >>
-  Cases_on `outs` >> simp[] >> strip_tac >>
+  Cases_on `outs` >> Cases_on `s.vs_outcomes = []` >> simp[] >> strip_tac >>
   qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
-  gvs[update_var_def]
+  gvs[update_var_def, extCallOracleTheory.computed_precompile_def]
 QED
 
 Theorem dload_memory_match_taint_cong:
@@ -449,8 +450,8 @@ Proof
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
    (!v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))` by
     (gvs[wordsTheory.w2n_eq_0] >>
-     irule (Q.INST_TYPE [`:'a` |-> `:256`, `:'b` |-> `:bytes32`,
-                        `:'c` |-> `:bytes32`] dload_external_call_boundary) >>
+     irule (Q.INST_TYPE [`:'a` |-> `:256`, `:'b` |-> `:256`,
+                        `:'c` |-> `:256`] dload_external_call_boundary) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qexists `s1` >> simp[] >>
   qpat_x_assum `exec_ext_call _ s _ _ _ _ _ _ _ _ = _` mp_tac >>
