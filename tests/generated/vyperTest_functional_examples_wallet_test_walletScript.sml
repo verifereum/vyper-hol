@@ -1,0 +1,4 @@
+Theory vyperTest_functional_examples_wallet_test_wallet[no_sig_docs]
+Ancestors vyperTestDefs_functional_examples_wallet_test_wallet
+Libs vyperTestRunnerLib
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_examples_wallet_test_wallet";
