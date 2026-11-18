@@ -496,9 +496,9 @@ End
    MEM/selector-uniqueness premise. Supported-program restrictions are separate. *)
 Definition valid_vyper_call_def:
   valid_vyper_call tops tx calldata ret <=>
-    ?mut args body.
+    ?mut nr args body.
       vyperInterpreter$lookup_function NONE tx.function_name External tops =
-        SOME (mut, F, args, [], ret, body) /\
+        SOME (mut, nr, args, [], ret, body) /\
       tx.function_name <> "__default__" /\
       LENGTH tx.args = LENGTH args /\
       IS_SOME (bind_arguments (type_env tops) args tx.args) /\

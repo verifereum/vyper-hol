@@ -272,21 +272,24 @@ QED
    observations, since the source run S4 relates the compiled run to may
    read other GAS values than the EVM run does. *)
 Theorem vyper_call_gas_sufficient_identity:
-  !policy tops deploy_bc runtime_bc am tx ret es.
+  !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs. call_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops tx
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx)) /\
+      (case calldata_dispatch tops tx.calldata of
+         NONE => T
+       | SOME (f, vals) =>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>)))) /\
       LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
       ==>
       ?r es'.

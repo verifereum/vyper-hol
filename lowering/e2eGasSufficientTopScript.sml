@@ -96,22 +96,25 @@ QED
    The storage and source exemption guards transfer because the program
    cannot observe its own code. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx ret es.
+  !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs. call_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops tx
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx)) /\
+      (case calldata_dispatch tops tx.calldata of
+         NONE => T
+       | SOME (f, vals) =>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>)))) /\
       LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
       ==>
       ?r es'.
@@ -678,25 +681,28 @@ QED
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
    vyper_call_correct's finalizer premises. *)
 Theorem vyper_call_gas_sufficient:
-  !fin policy tops deploy_bc runtime_bc am tx ret es.
+  !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((!gs. call_storage_ok am tx
-            (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-         (!obs. ~gas_source_exempt tops tx
-            (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-               obs am tx)) /\
+        ((case calldata_dispatch tops tx.calldata of
+            NONE => T
+          | SOME (f, vals) =>
+              (!gs. call_storage_ok am
+                 (tx with <| function_name := f; args := vals |>)
+                 (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+              (!obs. ~gas_source_exempt tops
+                 (tx with <| function_name := f; args := vals |>)
+                 (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                    obs am (tx with <| function_name := f; args := vals |>)))) /\
          LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
