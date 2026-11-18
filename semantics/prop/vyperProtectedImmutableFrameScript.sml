@@ -102,7 +102,8 @@ val PROTECTED_TRANSITIVITY =
   end;
 val PROTECTED_STEP = evalWalkLib.STEP
   {net = protected_frame_net, at = RAND_CONV,
-   unfolds = [switch_BoolV_def, ignore_bind_def],
+   unfolds = [switch_BoolV_def, ignore_bind_def,
+     vyperCreateTheory.eval_create_operands_def],
    intros = [PROTECTED_TRANSITIVITY,
      CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac,
      conj_tac, CONV_TAC (RAND_CONV ETA_CONV)],
@@ -205,15 +206,6 @@ Theorem protected_writes_frame_mutual:
       stmts_writes_ok (runtime_write_root R) body) /\
     EVERY (atarget_writes_ok (runtime_write_root R)) gs ==>
     !st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
-      !sid nm. protected sid nm ==> lookup_immutable cx st' sid nm = lookup_immutable cx st sid nm) /\
-  (!cx es.
-    (!sid fn ts mut nr args dflts ret body.
-      get_module_code cx sid = SOME ts /\
-      lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
-      EVERY (expr_writes_ok (runtime_write_root R)) dflts /\
-      stmts_writes_ok (runtime_write_root R) body) /\
-    EVERY (expr_writes_ok (runtime_write_root R)) es ==>
-    !st res st'. eval_expr_results cx es st = (res,st') ==>
       !sid nm. protected sid nm ==> lookup_immutable cx st' sid nm = lookup_immutable cx st sid nm)
 Proof
   disch_tac >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
@@ -269,8 +261,6 @@ Proof
   >~ [`eval_stmts cx (_::_)`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_exprs cx []`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_exprs cx (_::_)`] >- (PROTECTED_CASE >> metis_tac[])
-  >~ [`eval_expr_results cx []`] >- (PROTECTED_CASE >> metis_tac[])
-  >~ [`eval_expr_results cx (_::_)`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_expr cx (Literal _ _)`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_expr cx (Name _ _)`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_expr cx (TopLevelName _ _)`] >- (PROTECTED_CASE >> metis_tac[])
@@ -377,7 +367,15 @@ Proof
       >>~- ([`state_rel_frame _ (eval_create _ _ _ _ _ _ _)`],
         simp[protected_frame_result] >>
         metis_tac[eval_create_preserves_scopes_immutables, lookup_immutable_def]) >>
-      metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP])
+      PROTECTED_GUARDS >> fs[ETA_THM] >>
+      Cases_on `kind` >> Cases_on `es` >>
+      gvs[vyperCreateTheory.create_operand_order_def, rich_listTheory.EVERY_TAKE,
+          rich_listTheory.EVERY_DROP] >>
+      rename1 `EVERY _ rest` >> Cases_on `rest` >>
+      gvs[vyperCreateTheory.create_operand_order_def, rich_listTheory.EVERY_TAKE,
+          rich_listTheory.EVERY_DROP] >>
+      first_x_assum irule >> fs[EVERY_MEM] >>
+      metis_tac[MEM, rich_listTheory.MEM_TAKE, rich_listTheory.MEM_DROP_IMP])
   >~ [`eval_expr cx (Call _ RawLog _ _)`]
   >- (simp_tac bool_ss [Once evaluate_def] >>
       MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac

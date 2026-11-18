@@ -31,5 +31,5 @@ Proof
   conj_tac >- MATCH_ACCEPT_TAC finite_prefix_Expr_Call_RawLog >>
   conj_tac >- MATCH_ACCEPT_TAC finite_prefix_Expr_Call_RawRevert >>
   conj_tac >- MATCH_ACCEPT_TAC finite_prefix_Expr_Call_SelfDestructTarget >>
-  MATCH_ACCEPT_TAC (discharge_primitive finite_prefix_Expr_Call_CreateTarget eval_create_finite_prefix)
+  MATCH_ACCEPT_TAC (discharge_primitive finite_prefix_Expr_Call_CreateTarget eval_create_operands_finite_prefix)
 QED

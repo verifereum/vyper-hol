@@ -261,10 +261,8 @@ Proof
   irule shape_step_bind >>
   qexists_tac `\vs st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) vs /\ LENGTH vs = LENGTH args` >>
   reverse conj_tac >- (
-    drule compile_multi_vvs_shape >>
-    disch_then (qspecl_then [`cenv`, `args`, `\st. cenv_shape_ok st cenv`] mp_tac) >>
-    simp[cenv_shape_ok_stable, shape_step_def] >>
-    metis_tac[compile_multi_vvs_length]) >>
+    irule shape_step_conseq >> irule_at Any compile_create_ctor_args_shape >>
+    qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
   qx_gen_tac `vs` >> BETA_TAC >>
   irule shape_step_bind >>
   qexists_tac `\buf st. (cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) vs /\ LENGTH vs = LENGTH args) /\ plain_operand st buf.buf_operand` >>
@@ -412,26 +410,26 @@ Proof
     irule_at Any compile_create_snapshot_shape >>
     qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
   qx_gen_tac `bytecode` >> BETA_TAC >>
-  irule shape_step_bind >>
-  qexists_tac `\v st. (cenv_shape_ok st cenv /\ plain_operand st bytecode) /\ plain_operand st v` >>
-  reverse conj_tac >- (irule shape_step_conseq >> irule_at Any lower_value_callback_shape >>
-    qexists_tac `\st. cenv_shape_ok st cenv /\ plain_operand st bytecode` >> simp[] >>
-    ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
-    simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
-  qx_gen_tac `value` >> BETA_TAC >>
-  qabbrev_tac `B = \st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [bytecode;value]` >>
+  qabbrev_tac `B = \st. cenv_shape_ok st cenv /\ plain_operand st bytecode` >>
   `shape_stable B` by (simp[Abbr `B`] >> ho_match_mp_tac shape_stable_conj >>
     simp[cenv_shape_ok_stable] >>
-    mp_tac (Q.SPEC `[bytecode;value]` shape_stable_plain_operands) >> simp[]) >>
+    simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
   irule shape_step_bind >> qexists_tac `\len st. B st /\ plain_operand st len` >>
   reverse conj_tac >- suspend "raw_load" >> qx_gen_tac `len` >> BETA_TAC >>
   irule shape_step_bind >>
   qexists_tac `\data st. (B st /\ plain_operand st len) /\ plain_operand st data` >>
   reverse conj_tac >- suspend "raw_data" >> qx_gen_tac `data` >> BETA_TAC >>
   irule shape_step_bind >>
-  qexists_tac `\pair st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [value;FST pair;SND pair]` >>
+  qexists_tac `\pair st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [FST pair;SND pair]` >>
   reverse conj_tac >- suspend "raw_ctor" >>
   qx_gen_tac `pair` >> PairCases_on `pair` >> simp[] >>
+  irule shape_step_bind >>
+  qexists_tac `\value st. (cenv_shape_ok st cenv /\ EVERY (plain_operand st) [pair0;pair1]) /\ plain_operand st value` >>
+  reverse conj_tac >- (irule shape_step_conseq >> irule_at Any lower_value_callback_shape >>
+    qexists_tac `\st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [pair0;pair1]` >> simp[] >>
+    ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
+    mp_tac (Q.SPEC `[pair0;pair1]` shape_stable_plain_operands) >> simp[]) >>
+  qx_gen_tac `value` >> BETA_TAC >>
   irule shape_step_bind >>
   qexists_tac `\salt st. (cenv_shape_ok st cenv /\ EVERY (plain_operand st) [value;pair0;pair1]) /\ (case salt of NONE => T | SOME op => plain_operand st op)` >>
   reverse conj_tac >- suspend "raw_salt" >> qx_gen_tac `salt` >> BETA_TAC >>
@@ -468,20 +466,22 @@ Resume compile_raw_create_shape[raw_ctor]:
   qabbrev_tac `C = \st. B st /\ EVERY (plain_operand st) [len;data]` >>
   `shape_stable C` by (simp[Abbr `C`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
     mp_tac (Q.SPEC `[len;data]` shape_stable_plain_operands) >> simp[]) >>
-  irule shape_step_bind >> qexists_tac `\buf st. C st /\ plain_operand st buf.buf_operand` >>
+  irule shape_step_bind >> qexists_tac `\src st. C st /\ plain_operand st src` >>
+  reverse conj_tac >- (irule shape_step_frame_from >> irule_at Any compile_create_ctor_tuple_shape >>
+    qexists_tac `C` >> simp[Abbr `C`, Abbr `B`]) >>
+  qx_gen_tac `src` >> BETA_TAC >>
+  irule shape_step_bind >> qexists_tac `\buf st. (C st /\ plain_operand st src) /\ plain_operand st buf.buf_operand` >>
   reverse conj_tac >- (irule shape_step_conseq >> irule_at Any compile_alloc_buffer_shape_framed >>
-    qexists_tac `C` >> simp[Abbr `C`]) >>
-  qx_gen_tac `buf` >> BETA_TAC >>
-  qabbrev_tac `D = \st. C st /\ plain_operand st buf.buf_operand` >>
-  `shape_stable D` by (simp[Abbr `D`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+    qexists_tac `\st. C st /\ plain_operand st src` >> simp[] >>
+    ho_match_mp_tac shape_stable_conj >> simp[] >>
     simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `buf` >> BETA_TAC >>
+  qabbrev_tac `D = \st. C st /\ EVERY (plain_operand st) [src;buf.buf_operand]` >>
+  `shape_stable D` by (simp[Abbr `D`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+    mp_tac (Q.SPEC `[src;buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
   irule shape_step_ignore_bind >> qexists_tac `\u st. D st` >>
   reverse conj_tac >- (irule shape_step_frame_from >> irule_at Any compile_copy_memory_dynamic_shape >>
     qexists_tac `D` >> simp[Abbr `D`, Abbr `C`]) >> gen_tac >> BETA_TAC >>
-  irule shape_step_bind >> qexists_tac `\src st. D st /\ plain_operand st src` >>
-  reverse conj_tac >- (irule shape_step_frame_from >> irule_at Any compile_create_ctor_tuple_shape >>
-    qexists_tac `D` >> simp[Abbr `D`, Abbr `C`, Abbr `B`]) >>
-  qx_gen_tac `src` >> BETA_TAC >>
   irule shape_step_bind >> qexists_tac `\dst st. (D st /\ plain_operand st src) /\ plain_operand st dst` >>
   reverse conj_tac >- suspend "raw_destination" >> qx_gen_tac `dst` >> BETA_TAC >>
   irule shape_step_bind >> qexists_tac `\n st. D st /\ plain_operand st n` >>

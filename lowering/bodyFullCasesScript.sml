@@ -502,40 +502,6 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
 
-(* Vacuous: expr_body_pre excludes create (expr_evm_run_root). *)
-Theorem body_create_case_full:
-  !cx ty kind has_salt rof v26 es v27.
-    (!raw_args s'' prefix t s'3' code_size t'.
-       kind = CreateFromBlueprint raw_args /\
-       eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' =
-       (INL prefix,t) /\
-       check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
-       body_results_full_ok cx (DROP (if has_salt then 4 else 3) es)) /\
-    (!raw_args.
-       kind = CreateFromBlueprint raw_args ==>
-       body_exprs_full_ok cx (TAKE (if has_salt then 4 else 3) es)) /\
-    (!s'' prefix t ctor_es nargs s'3' results t' s'4' args t''.
-       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
-       ctor_es = DROP 2 es /\
-       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) /\
-       eval_expr_results cx (TAKE nargs ctor_es) s'3' = (INL results,t') /\
-       read_results cx results s'4' = (INL args,t'') ==>
-       body_exprs_full_ok cx (DROP nargs ctor_es)) /\
-    (!s'' prefix t ctor_es nargs.
-       kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
-       ctor_es = DROP 2 es /\
-       nargs = LENGTH ctor_es - (if has_salt then 1 else 0) ==>
-       body_results_full_ok cx (TAKE nargs ctor_es)) /\
-    (kind = CreateCopyOf ==> body_exprs_full_ok cx es) /\
-    (kind = CreateMinimalProxy ==> body_exprs_full_ok cx es) /\
-    (kind = RawCreate ==> body_exprs_full_ok cx (TAKE 2 es)) ==>
-    body_expr_full_ok cx (Call ty (CreateTarget kind has_salt rof v26) es v27)
-Proof
-  rw[body_expr_full_ok_def] >>
-  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm,
-      supportedExprTraverseTheory.expr_evm_run_root_def]
-QED
 
 (* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_expr_stmt_case_full:

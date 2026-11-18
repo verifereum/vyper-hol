@@ -1,7 +1,7 @@
 Theory callCodeEval
 Ancestors
   callCodeEvalPrims callCodeEvalSlice callCodeEvalInternal supportedStmtTraverse
-  vyperInterpreter vyperContext vyperState vyperAST exprLowering list sorting
+  vyperInterpreter vyperContext vyperState vyperAST vyperCreate exprLowering list sorting
   supportedExprTraverse finite_map
 Libs
   monadsyntax
@@ -12,6 +12,32 @@ Theorem call_code_bind_eq[local]:
   (ignore_bind f k s = ignore_bind f l s <=> !x t. f s = (INL x,t) ==> k t = l t)
 Proof
   Cases_on `f s` >> Cases_on `q` >> simp[bind_def, ignore_bind_def]
+QED
+
+Theorem call_code_create_updates[local]:
+  (blueprint_literal_offset (cx with txn := cx.txn with code := c) salt es =
+   blueprint_literal_offset cx salt es) /\
+  (eval_create_operands (cx with txn := cx.txn with code := c)
+     kind salt rof ts literal_offset vs =
+   eval_create_operands cx kind salt rof ts literal_offset vs)
+Proof
+  conj_tac
+  >- simp[oneline blueprint_literal_offset_def, call_code_primitive_updates] >>
+  Cases_on `kind` >> simp[eval_create_operands_def, call_code_primitive_updates]
+QED
+
+Theorem no_self_code_create_order[local]:
+  ~supported_exprs_exists is_self_code es ==>
+  ~supported_exprs_exists is_self_code (create_operand_order kind salt es)
+Proof
+  strip_tac >> fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
+  Cases_on `kind` >> Cases_on `es` >>
+  gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+      rich_listTheory.EVERY_DROP] >>
+  rename1 `create_operand_order RawCreate _ (operand :: rest)` >>
+  Cases_on `rest` >>
+  gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+      rich_listTheory.EVERY_DROP]
 QED
 
 (* Keep the callable closure atomic in ordinary recursive cases; unfold it
@@ -42,9 +68,7 @@ Theorem evaluate_no_self_code_update_aux[local]:
      assign_tuple_targets (cx with txn := cx.txn with code := c) g v = assign_tuple_targets cx g v) /\
   (!cx gs vs c. closed cx /\ ~supported_assignments_exists is_self_code gs ==>
      assign_tuple_target_list (cx with txn := cx.txn with code := c) gs vs =
-       assign_tuple_target_list cx gs vs) /\
-  (!cx es c. closed cx /\ ~supported_exprs_exists is_self_code es ==>
-     eval_expr_results (cx with txn := cx.txn with code := c) es = eval_expr_results cx es)
+       assign_tuple_target_list cx gs vs)
 Proof
   disch_then (mk_asm "closure") >>
   ho_match_mp_tac evaluate_ind >>
@@ -55,6 +79,7 @@ Proof
   >>~- ([`eval_expr _ (Call _ (IntCall _) _ _) = _`], suspend "internal")
   >>~- ([`eval_stmt _ (Raise (RaiseCustomError err)) = _`], suspend "custom_raise")
   >>~- ([`eval_stmt _ (Assert _ (AssertCustomError err)) = _`], suspend "custom_assert")
+  >>~- ([`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) = _`], suspend "create")
   >>~- ([`eval_expr _ (Builtin _ _ _) = _`], suspend "builtin") >>
   PURE_ONCE_REWRITE_TAC [evaluate_def] >>
   gvs[call_code_primitive_updates, no_self_code_operands] >>
@@ -115,17 +140,20 @@ Resume evaluate_no_self_code_update_aux[custom_assert]:
   qpat_x_assum `!s tv t. eval_expr _ _ s = _ ==> _` drule >> simp[]
 QED
 
+Resume evaluate_no_self_code_update_aux[create]:
+  PURE_ONCE_REWRITE_TAC [evaluate_def] >>
+  simp[call_code_create_updates] >>
+  qpat_x_assum `!c. closed cx /\ _ ==> _` (qspec_then `c` mp_tac) >>
+  impl_tac >- simp[no_self_code_create_order] >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
 Resume evaluate_no_self_code_update_aux[remaining]:
   markerLib.RESUME_TAC >>
   rpt (CHANGED_TAC (simp[call_code_bind_eq, switch_BoolV_def,
                         call_code_primitive_updates] >> rpt strip_tac)) >>
   rpt (first_x_assum (drule_all_then assume_tac) >>
        rpt (CHANGED_TAC (simp[call_code_bind_eq] >> rpt strip_tac)))
-  >>> SELECT_LT_THEN
-    (qpat_assum `~is_self_code (Call _ (CreateTarget _ _ _ _) _ _)`
-       (K (Cases_on `kind` >> gvs[])))
-    (rpt (CHANGED_TAC (simp[call_code_bind_eq] >> rpt strip_tac) >>
-          rpt (first_x_assum (drule_all_then assume_tac))))
   >>> SELECT_LT_THEN
     (qpat_assum `!vs. v = ArrayV (TupleV vs) ==> _`
        (K (Cases_on `v` >> gvs[])))

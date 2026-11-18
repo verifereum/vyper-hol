@@ -375,6 +375,21 @@ Proof
   simp[rb_lower_value, rb_step_return]
 QED
 
+Theorem rb_compile_create_ctor_args:
+  !args. rb_env_ok ce /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step (EVERY rb_value_ok) (compile_create_ctor_args cfn ce args)
+Proof
+  Induct >> simp[compile_create_ctor_args_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_snapshot_vv] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  simp[rb_step_return]
+QED
+
 Theorem rb_compile_create_ctor_tuple:
   rb_env_ok ce /\
   (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
@@ -382,7 +397,7 @@ Theorem rb_compile_create_ctor_tuple:
 Proof
   strip_tac >> pure_rewrite_tac[compile_create_ctor_tuple_def, LET_THM] >> BETA_TAC >>
   irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_multi_vvs] >> gen_tac >> strip_tac >>
+  reverse conj_tac >- simp[rb_compile_create_ctor_args] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
@@ -396,25 +411,29 @@ Theorem rb_compile_create_blueprint_args:
   rb_env_ok ce /\
   (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
   rb_step (\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p))
-    (compile_create_blueprint_args cfn ce raw args)
+    (compile_create_blueprint_args cfn ce raw later_es args)
 Proof
   strip_tac >> pure_rewrite_tac[compile_create_blueprint_args_def] >>
   Cases_on `raw` >> simp[]
   >- (Cases_on `args` >> simp[]
       >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]) >>
       Cases_on `t` >> simp[]
-      >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-          reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
+      >- (irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+          reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+          irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+          reverse conj_tac >- simp[rb_compile_snapshot_vv] >> gen_tac >> strip_tac >>
+          irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+          reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
           irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
           irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]) >>
   Cases_on `args = []` >> simp[rb_step_return] >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_step_return]
 QED
@@ -459,25 +478,25 @@ Proof
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_create_snapshot] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind >>
   qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
   reverse conj_tac
   >- (Cases_on `args = []` >> simp[rb_step_return] >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
       irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_copy_memory_dynamic] >>
-      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-      reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
   Cases >> simp[] >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_create_salt, rb_compile_create_dispatch] >>
   Cases >> simp[rb_compile_create_dispatch]
@@ -518,8 +537,10 @@ Proof
   >~ [`compile_raw_create _ _ _ _ _ _ _`]
   >- suspend "raw" >>
   (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-   reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac)
+  >~ [`compile_create_blueprint_args _ _ _ _ _`]
+  >- suspend "blueprint" >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac)
   >~ [`compile_create_proxy_buf _`] >- suspend "proxy"
   >~ [`compile_create_copy _ _ _ _`] >- suspend "copy" >>
@@ -550,7 +571,15 @@ Resume rb_compile_create_call[copy]:
 QED
 Resume rb_compile_create_call[blueprint]:
   Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  (irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+  (irule rb_step_bind >>
+   qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
+   reverse conj_tac
+   >- (irule rb_compile_create_blueprint_args >> simp[] >>
+       metis_tac[MEM_TL, MEM]) >>
+   Cases >> simp[] >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
    Cases >> simp[] >>
    (rpt strip_tac >>
@@ -562,13 +591,7 @@ Resume rb_compile_create_call[blueprint]:
    gen_tac >> strip_tac >>
    irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_compile_create_blueprint_check] >>
-   gen_tac >> strip_tac >>
-   irule rb_step_bind >>
-   qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
-   reverse conj_tac
-   >- (irule rb_compile_create_blueprint_args >> simp[] >>
-       metis_tac[MEM_TL, MEM]) >>
-   Cases >> simp[rb_compile_create_blueprint_append]))
+   gen_tac >> strip_tac >> simp[rb_compile_create_blueprint_append]))
 QED
 Finalise rb_compile_create_call
 
