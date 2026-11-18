@@ -29,24 +29,26 @@ Theorem abi_encode_word_pack_origin:
   stmt_state_rel (Hentry:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
   s0.vs_alloca_next <= s.vs_alloca_next /\ wb_frame ce es ee origin s0 s /\
   ghost_kept_at lo ce es origin G0 tn0 s0 G tn ==>
-  let k = (case mid of NONE => 0 | SOME _ => 4) in
-  let N = 32+32*word_size (32+k) in
   ?p q t Gt tnt.
     out = Var q /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gt,tnt)) /\
     ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
     t.vs_inst_idx = LENGTH final.cs_current_insts /\
-    eval_operand out t = SOME (n2w p) /\ ptr_covers Gt tnt q t N /\
-    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,N) /\
-    p+N <= t.vs_alloca_next /\ t.vs_alloca_next < dimword(:256) /\
+    eval_operand out t = SOME (n2w p) /\
+    ptr_covers Gt tnt q t (32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) /\
+    FLOOKUP t.vs_allocas st.cs_next_id =
+      SOME (p,(32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4)))) /\
+    p+(32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) <= t.vs_alloca_next /\
+    t.vs_alloca_next < dimword(:256) /\
     (!mem. mem_agree_outside tnt.t_mem t.vs_memory mem ==>
-      mem_word_at p mem = n2w (32+k) /\
-      mem_bytes_at (p+32+k) 32 mem = enc at av /\
+      mem_word_at p mem = n2w (32+(case mid of NONE => 0 | SOME _ => 4)) /\
+      mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4)) 32 mem = enc at av /\
       (case mid of NONE => T | SOME selector =>
         mem_bytes_at (p+32) 4 mem = abi_builtin_encode_method_bytes selector)) /\
     alloca_history func t /\ allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     (!H. stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee s ==>
-      abi_encode_staged_observation H ctx func ce cx ee st out mid N p at av s t) /\
+      abi_encode_staged_observation H ctx func ce cx ee st out mid
+        (32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) p at av s t) /\
     (!H D. stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee s /\
       ghost_inv_at D lo ret ce cx ee G tn s ==> ghost_inv_at D lo ret ce cx ee Gt tnt t) /\
     ghost_kept_at lo ce es origin G0 tn0 s0 Gt tnt /\ wb_frame ce es ee origin s0 t /\

@@ -211,17 +211,6 @@ Finalise abi_encode_alloc_rows_origin
 
 (* Allocate the output and run setup on the supplied staging endpoint. *)
 Theorem abi_encode_staged_tuple_ready_origin:
-  let tys = MAP (lowered_value_type ce) args in
-  let n = abi_tuple_bytes ce (ZIP (ops,tys)) in
-  let M = abi_size_bound ce.ce_struct_fields (TupleT tys) in
-  let mid' = OPTION_MAP bytes_method_id_word mid in
-  let k = case mid' of NONE => 0 | SOME _ => 4 in
-  let wlen = case mid' of NONE => 0 | SOME _ => 32 in
-  let N = 32+32*word_size (M+k) in
-  let ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT tys) in
-  let tv = TupleTV tvs in
-  let v = ArrayV (TupleV vs) in
-  let cap = val_footprint tv v in
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\
@@ -234,28 +223,41 @@ Theorem abi_encode_staged_tuple_ready_origin:
     value_has_type (EL i tvs) (EL i vs) /\
     type_memory_bytes ce (lowered_value_type ce (EL i args)) = type_memory_size (EL i tvs)) /\
   compile_abi_encode_args compile_expr ce args origin = (ops,st) /\
-  compile_alloc_buffer n st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,tys)) allocated = ((),staged) /\
-  lower_abi_encode ensure mid' buf.buf_operand ei M staged = (out,final_st) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
+  lower_abi_encode ensure (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final_st) /\
   fn_has_code st allocated func /\ fn_has_code staged final_st func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce origin /\
   buf.buf_operand = Var src /\ not_fresh_at staged src /\
-  lookup_var src prepared = SOME (n2w sb) /\ ptr_covers Gp tnp src prepared n /\
-  sb+n < dimword(:256) /\ lo <= sb /\
-  FLOOKUP prepared.vs_allocas st.cs_next_id = SOME (sb,n) /\
-  sb+n <= prepared.vs_alloca_next /\
+  lookup_var src prepared = SOME (n2w sb) /\
+  ptr_covers Gp tnp src prepared (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) /\
+  sb+(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) < dimword(:256) /\ lo <= sb /\
+  FLOOKUP prepared.vs_allocas st.cs_next_id =
+    SOME (sb,(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))) /\
+  sb+(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) <= prepared.vs_alloca_next /\
   (!mem. mem_agree_outside tnp.t_mem prepared.vs_memory mem ==>
-    val_in_memory tv v sb mem) /\
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) sb mem) /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = staged.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH staged.cs_current_insts /\
-  prepared.vs_allocas = (abi_builtin_allocate_state st.cs_next_id n initial).vs_allocas /\
-  prepared.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id n initial).vs_alloca_next /\
+  prepared.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
+  prepared.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ alloca_history func prepared ==>
   ?a t Gt tnt u Gu tnu p root dp ct rv ready len body_end output_buf.
-    (compile_alloc_buffer N staged = (output_buf,a) /\ output_buf.buf_operand = Var root /\
-     abi_builtin_encode_setup mid' M staged = ((Var root,Var dp),ready) /\
-     compile_abi_encode_to_buf (Var dp) buf.buf_operand ei ready = (len,body_end) /\
-     abi_builtin_encode_finish (Var root) len k body_end = ((),final_st) /\
+    (compile_alloc_buffer
+      (32 + 32 * word_size
+         (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+          (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) staged = (output_buf,a) /\
+     output_buf.buf_operand = Var root /\
+     abi_builtin_encode_setup (OPTION_MAP bytes_method_id_word mid)
+       (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = ((Var root,Var dp),ready) /\
+     compile_abi_encode_to_buf (Var dp) buf.buf_operand
+       (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args))) ready = (len,body_end) /\
+     abi_builtin_encode_finish (Var root) len
+       (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4) body_end = ((),final_st) /\
      out = Var root /\ cs_extends staged a /\ cs_extends a ready /\
      fn_has_code ready body_end func /\ fn_has_code body_end final_st func) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -263,43 +265,92 @@ Theorem abi_encode_staged_tuple_ready_origin:
     (~u.vs_halted /\ u.vs_current_bb = ready.cs_current_bb /\
      u.vs_inst_idx = LENGTH ready.cs_current_insts /\ alloca_history func u /\
      alloca_inv u /\ alloca_room ctx func u /\ allocas_from lo u /\
-     lo <= u.vs_alloca_next /\ p+N <= u.vs_alloca_next /\ p+N < dimword(:256) /\ lo <= p) /\
+     lo <= u.vs_alloca_next /\
+     p+(32 + 32 * word_size
+        (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+         (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) <=
+       u.vs_alloca_next /\
+     p+(32 + 32 * word_size
+        (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+         (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) < dimword(:256) /\
+     lo <= p) /\
     (eval_operand buf.buf_operand u = SOME (n2w sb) /\ not_fresh_at ready src /\
-     ptr_covers Gu tnu src u cap /\ sb+cap <= u.vs_alloca_next /\ op_taint tnu (Var src) = {} /\
-     lookup_var root u = SOME (n2w p) /\ not_fresh_at ready root /\ ptr_covers Gu tnu root u N /\
-     eval_operand (Var dp) u = SOME (n2w (p+32+k)) /\ not_fresh_at ready dp /\
-     ptr_covers Gu tnu dp u M /\ op_taint tnu (Var dp) = {}) /\
-    (FLOOKUP u.vs_allocas st.cs_next_id = SOME (sb,n) /\
-     FLOOKUP u.vs_allocas staged.cs_next_id = SOME (p,N) /\
-     cap = n /\ venomMemDefs$regions_disjoint (sb,cap) (p,N) /\
+     ptr_covers Gu tnu src u (val_footprint (TupleTV tvs) (ArrayV (TupleV vs))) /\
+     sb+(val_footprint (TupleTV tvs) (ArrayV (TupleV vs))) <= u.vs_alloca_next /\
+     op_taint tnu (Var src) = {} /\
+     lookup_var root u = SOME (n2w p) /\
+     not_fresh_at ready root /\
+     ptr_covers Gu tnu root u
+       (32 + 32 * word_size
+          (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) /\
+     eval_operand (Var dp) u =
+       SOME (n2w (p+32+(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) /\
+     not_fresh_at ready dp /\
+     ptr_covers Gu tnu dp u (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) /\
+     op_taint tnu (Var dp) = {}) /\
+    (FLOOKUP u.vs_allocas st.cs_next_id =
+      SOME (sb,(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))) /\
+     FLOOKUP u.vs_allocas staged.cs_next_id =
+       SOME (p,(32 + 32 * word_size
+          (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4)))) /\
+     (val_footprint (TupleTV tvs) (ArrayV (TupleV vs))) =
+       (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) /\
+     venomMemDefs$regions_disjoint (sb,val_footprint (TupleTV tvs) (ArrayV (TupleV vs)))
+       (p,32 + 32 * word_size
+         (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+          (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) /\
      (!mem. mem_agree_outside tnu.t_mem u.vs_memory mem ==>
-       abi_encoder_window_input ei ct rv sb cap mem) /\
+       abi_encoder_window_input
+         (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args))) ct rv sb
+         (val_footprint (TupleTV tvs) (ArrayV (TupleV vs))) mem) /\
      enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-     LENGTH (enc ct rv) <= M /\ 32+k+LENGTH (enc ct rv) <= N /\
-     (case mid' of NONE => T | SOME w =>
+     LENGTH (enc ct rv) <= (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) /\
+     32+(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4)+LENGTH (enc ct rv) <=
+       (32 + 32 * word_size
+          (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))) /\
+     (case OPTION_MAP bytes_method_id_word mid of NONE => T | SOME w =>
        !mem. mem_agree_outside tnu.t_mem u.vs_memory mem ==> mem_word_at (p+32) mem = w << 224) /\
      (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
        inst.inst_id IN frag_ids ready body_end /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
-       sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
-       venomMemDefs$regions_disjoint (p+32+k,LENGTH (enc ct rv)) (b,sz) /\
-       venomMemDefs$regions_disjoint (p+32,k) (b,sz))) /\
+       sz = 32 /\
+       venomMemDefs$regions_disjoint (sb,(val_footprint (TupleTV tvs) (ArrayV (TupleV vs)))) (b,sz) /\
+       venomMemDefs$regions_disjoint
+         (p+32+(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4),
+          LENGTH (enc ct rv)) (b,sz) /\
+       venomMemDefs$regions_disjoint (p+32,(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4)) (b,sz))) /\
     ((!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (prepared,Gp,tnp) [] (OK t,Gt,tnt)) /\
      alloca_history func t /\
-     t.vs_allocas = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_allocas /\
-     t.vs_alloca_next = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_alloca_next /\
+     t.vs_allocas = (abi_builtin_allocate_state staged.cs_next_id
+       (32 + 32 * word_size
+          (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4)))
+       prepared).vs_allocas /\
+     t.vs_alloca_next = (abi_builtin_allocate_state staged.cs_next_id
+       (32 + 32 * word_size
+          (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4)))
+       prepared).vs_alloca_next /\
      (t with <|vs_vars := prepared.vs_vars; vs_allocas := prepared.vs_allocas;
        vs_alloca_next := prepared.vs_alloca_next; vs_inst_idx := prepared.vs_inst_idx|>) = prepared /\
      prepared.vs_alloca_next <= t.vs_alloca_next /\
      (!x. not_fresh_at staged x ==>
        lookup_var x t = lookup_var x prepared /\ FLOOKUP Gt x = FLOOKUP Gp x /\
        op_taint tnt (Var x) = op_taint tnp (Var x)) /\
-     (!i. i IN tnt.t_mem <=> i IN tnp.t_mem \/ (prepared.vs_alloca_next <= i /\ i < p+N)) /\
+     (!i. i IN tnt.t_mem <=> i IN tnp.t_mem \/ (prepared.vs_alloca_next <= i /\
+       i < p+(32 + 32 * word_size
+        (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+         (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4))))) /\
      tnt.t_stor = tnp.t_stor /\ tnt.t_trans = tnp.t_trans /\ tnt.t_imm = tnp.t_imm) /\
     ((!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,Gt,tnt) [] (OK u,Gu,tnu)) /\
-     typed_copy_state_frame a (p+32) wlen t u /\
+     typed_copy_state_frame a (p+32)
+       (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 32) t u /\
      u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
-     tnu.t_mem = tnt.t_mem DIFF {i | p+32 <= i /\ i < p+32+wlen} /\
+     tnu.t_mem = tnt.t_mem DIFF {i | p+32 <= i /\
+       i < p+32+(case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 32)} /\
      tnu.t_stor = tnt.t_stor /\ tnu.t_trans = tnt.t_trans /\ tnu.t_imm = tnt.t_imm /\
      (!op. (!x. op = Var x ==> not_fresh_at a x) ==>
        eval_operand op u = eval_operand op t /\ op_taint tnu op = op_taint tnt op /\
@@ -311,7 +362,8 @@ Theorem abi_encode_staged_tuple_ready_origin:
        (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
        (!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at a x) /\
        (!name b sz. local_region ce es.scopes t name b sz ==>
-         loweringStateRelDefs$regions_disjoint (p+32) wlen b sz) ==>
+         loweringStateRelDefs$regions_disjoint (p+32)
+           (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 32) b sz) ==>
        ghost_inv_at D lo d ce cx es Gu tnu u) /\
      (!ce es origin G0 tn0 s0.
        ghost_kept_at lo ce es origin G0 tn0 s0 Gt tnt /\
