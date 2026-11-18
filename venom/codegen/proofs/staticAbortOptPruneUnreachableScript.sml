@@ -9,7 +9,8 @@ Ancestors
 
 Theorem prune_unreachable_abort_certificate:
   !orig s data req_bound.
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape target Flow Rows Open bytes env0 M_R.
+  Shape = (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -23,24 +24,22 @@ Theorem prune_unreachable_abort_certificate:
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let target = \p (pc:(num#num)->num) tag x y.
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  target = (\p (pc:(num#num)->num) tag x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi hj ins inherit.
+    hi = height x ==> hj = height y ==> ins = EL (pc x) p ==>
+    inherit = (
       \(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
            ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -70,7 +69,7 @@ Theorem prune_unreachable_abort_certificate:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
              | NONE =>
-             let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             !a m. a = asm_op_arity name ==> m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\
              ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -79,9 +78,8 @@ Theorem prune_unreachable_abort_certificate:
                    asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                      ins t = AsmOK u ==>
                    (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Rows = \p cc (V:(num#num)->bool) rank pc height need tag boolean edge.
+    | _ => F) ==>
+  Rows = (\p cc (V:(num#num)->bool) rank pc height need tag boolean edge.
     (!x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -94,13 +92,13 @@ Theorem prune_unreachable_abort_certificate:
        Flow p pc height tag boolean x y) /\
     (!x. x IN V ==>
       pc x < LENGTH p /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+      (!h fall arm legal next untagged stop.
+      h = height x ==> fall = (\y. pc y = pc x+1) ==>
+      arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+      legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+      next = (\n. arm fall n /\ legal fall n) ==>
+      untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+      stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
       case EL (pc x) p of
         AsmLabel l => next h
       | AsmPush bs => next (h+1)
@@ -125,12 +123,11 @@ Theorem prune_unreachable_abort_certificate:
                    else
                       ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                           untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
+      | _ => F))) ==>
+  Open = (\p cc req (V:(num#num)->bool) X rank pc height need
       (tag:(num#num)->num->(string#num)option)
       (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
+    !S. S = Shape p cc req pc height need tag boolean ==>
       FINITE V /\ X SUBSET V /\
       (!x. x IN V ==> ?t. S x t) /\
       (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -148,18 +145,12 @@ Theorem prune_unreachable_abort_certificate:
                       p 1 t = AsmFault u) /\ u.as_requests=req) \/
          (?y u. edge x y /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK u /\ S y u))
-  in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
-    ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-  in
-  let bytes = \p. assemble p ++ data in
-  let env0 = asm_data_env orig (bytes orig) in
-  let M_R = \p.
-    let envp = asm_data_env p (bytes p) in
-    let start = s with as_code := bytes p in
-    let run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p in
+              p 1 t = AsmOK u /\ S y u))) ==>
+  bytes = (\p. assemble p ++ data) ==>
+  env0 = asm_data_env orig (bytes orig) ==>
+  M_R = (\p.
+    !start run. start = (s with as_code := bytes p) ==>
+    run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p ==>
     s.as_pc = 0 /\ s.as_code = bytes orig /\
     asm_static_wf orig /\ asm_static_wf p /\
     FILTER is_data_inst p = FILTER is_data_inst orig /\
@@ -171,26 +162,24 @@ Theorem prune_unreachable_abort_certificate:
          pc height need tag boolean edge.
         run j start = AsmOK t /\
         sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p envp t u /\
+        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
         Rows p cc V rank pc height need tag boolean edge /\
         Open p cc req V {} rank pc height need tag boolean edge /\
-        e IN V /\ (!x. x IN V ==> Reach edge e x) /\
+        e IN V /\ (!x. x IN V ==> ?n (path:num->num#num).
+          path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) /\
         Shape p cc req pc height need tag boolean e t /\
         (!k l origin. tag e k = SOME(l,origin) ==>
            k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
         (!k. boolean e k ==>
-           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))
-  in
+           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))) ==>
   !p. M_R p ==> M_R (FST (prune_unreachable_code p))
 Proof
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ Shape`, `LET _ target`, `LET _ Flow`, `LET _ Rows`,
-     `LET _ Open`, `LET _ Reach`, `LET _ bytes`, `LET _ env0`, `LET _ M_R`] >>
+  ntac 12 gen_tac >>
+  ntac 8 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def] o
+    BETA_RULE o SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) [])) >>
   ho_match_mp_tac prune_unreachable_walk_preserves_contextual >>
   map_every qx_gen_tac [`pre`,`opn`,`x`,`tail`] >>
   qabbrev_tac `p = pre ++ [opn;x] ++ tail` >>
@@ -214,7 +203,7 @@ QED
 Resume prune_unreachable_abort_certificate[terminal]:
   map_every (fn q => qpat_x_assum q kall_tac)
     [`Abbrev (Shape = _)`, `Abbrev (target = _)`, `Abbrev (Flow = _)`,
-     `Abbrev (Rows = _)`, `Abbrev (Open = _)`, `Abbrev (Reach = _)`] >>
+     `Abbrev (Rows = _)`, `Abbrev (Open = _)`] >>
   asm_x "terminal" (qx_choose_then `n` (qx_choose_then `out`
     (map_every assume_tac o CONJUNCTS))) >>
   qabbrev_tac `exec = \g k. asm_steps (SND (compute_label_offsets g))
@@ -282,6 +271,8 @@ Resume prune_unreachable_abort_certificate[terminal]:
 QED
 
 val prune_lets = REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV);
+val prune_unwind = SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) [];
+val prune_worker = CONV_RULE prune_lets o prune_unwind;
 fun prune_eqs [] k = k []
   | prune_eqs (pat::pats) k = qpat_assum pat (fn th =>
       prune_eqs pats (fn eqs => k (REWRITE_RULE [markerTheory.Abbrev_def] th :: eqs)));
@@ -310,7 +301,7 @@ Resume prune_unreachable_abort_certificate[pending]:
        name="JUMP" \/ name="JUMPI" \/ (?m. static_abort_straight name m)` by
     suspend "source_dispatch" >>
   mp_tac (foldl (fn (a, th) => Q.SPEC a th)
-    (CONV_RULE prune_lets prune_one_covered_rows)
+    (prune_worker prune_one_covered_rows)
     [`pre`,`opn`,`x`,`tail`,`s`,`env0`,`j`,`u`,
      `(t:asm_state).as_call_ctx`,`(t:asm_state).as_requests`,
      `V`,`e`,`\z. rat_of_num (level z)`,`pc`,`height`,`need`,`tag`,`boolean`,`edge`]
@@ -324,7 +315,6 @@ Resume prune_unreachable_abort_certificate[source_rows]:
     pure_once_rewrite_tac (map GSYM eqs)) >>
   simp_tac bool_ss [DIFF_EMPTY, RIGHT_EXISTS_AND_THM] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (prune_fact [`Abbrev (Reach = _)`] `!v. v IN V ==> Reach edge e v` ACCEPT_TAC) >>
   TRY (prune_fact [`Abbrev (Shape = _)`] `!v. v IN V ==> ?u. Shape p _ _ _ _ _ _ _ v u`
         (ACCEPT_TAC o SIMP_RULE bool_ss [RIGHT_EXISTS_AND_THM])) >>
   prune_fact [`Abbrev (Rows = _)`, `Abbrev (Flow = _)`, `Abbrev (target = _)`]
@@ -369,7 +359,7 @@ Resume prune_unreachable_abort_certificate[packed_rows]:
   disch_then (CONJUNCTS_THEN2 (map_every assume_tac o CONJUNCTS) (mk_asm "pack")) >>
   mp_tac (CONV_RULE prune_lets (Q.SPECL
     [`pre`,`opn`,`x`,`tail`,`V`,`e`,`pc`,`height`,`tag`,`boolean`,`edge`]
-    (CONV_RULE prune_lets prune_one_rooted_flow))) >>
+    (prune_worker prune_one_rooted_flow))) >>
   (impl_tac >- suspend "flow_input") >>
   disch_then (fn flow =>
     mk_asm "dst_flow" (CONJUNCT2 flow) >>
@@ -381,15 +371,16 @@ QED
 Resume prune_unreachable_abort_certificate[flow_input]:
   prune_eqs [`Abbrev (p = _)`, `Abbrev (q = _)`] (fn eqs =>
     pure_once_rewrite_tac (map GSYM eqs)) >>
-  ntac 2 (conj_tac >- (TRY (prune_fact [`Abbrev (Reach = _)`]
-    `!v. v IN V ==> Reach edge e v` ACCEPT_TAC) >> first_assum ACCEPT_TAC)) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac
   >- (rpt gen_tac >> disch_tac >>
       qpat_assum `!x y. edge x y ==> _ /\ _ /\ _ /\ _ /\ _`
         (drule_then (map_every assume_tac o CONJUNCTS)) >>
       prune_expand [`Abbrev (Flow = _)`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      prune_fact [`Abbrev (Flow = _)`] `Flow p pc height tag boolean _ _` ACCEPT_TAC) >>
+      simp_tac bool_ss [] >>
+      prune_fact [`Abbrev (Flow = _)`] `Flow p pc height tag boolean _ _`
+        (ACCEPT_TAC o SIMP_RULE bool_ss [])) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   prune_fact [`Abbrev (p = _)`, `Abbrev (q = _)`]
     `!a. a IN V ==> pc a <> _ /\ _ /\ _`
@@ -401,7 +392,7 @@ Resume prune_unreachable_abort_certificate[actual_root]:
     (CONJUNCTS_THEN2 (mk_asm "dst_legal") kall_tac)) >>
   mp_tac (Q.SPECL [`opn`,`orig`,`j`,`u`,`t`,`t.as_call_ctx`,`t.as_requests`]
     (Q.GENL [`t`,`p0`,`n`,`ss`,`a`,`cc`,`req`]
-      (CONV_RULE prune_lets prune_one_actual_root))) >>
+      (prune_worker prune_one_actual_root))) >>
   (impl_tac >- suspend "actual_root_inputs") >>
   suspend "interpret_rows"
 QED
@@ -495,6 +486,9 @@ Resume prune_unreachable_abort_certificate[destination_package]:
     (CONJUNCTS_THEN2 (mk_asm "live_reach")
     (CONJUNCTS_THEN2 (mk_asm "live_rows")
     (CONJUNCTS_THEN2 (mk_asm "live_open") (mk_asm "live_shape"))))) >>
+  qabbrev_tac `Reach = \(edge:(num#num)->(num#num)->bool) e x.
+    ?n (path:num->num#num).
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))` >>
   qabbrev_tac `live_set = {x | x IN V /\ Reach edge e x}` >>
   qabbrev_tac `live_edge = \x y. x IN live_set /\ edge x y` >>
   qexistsl [`j`,`tq`,`uq`,`live_set`,`e`,`level`,`(r:num->num) o pc`,

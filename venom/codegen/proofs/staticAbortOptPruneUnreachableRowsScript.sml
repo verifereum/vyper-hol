@@ -8,13 +8,12 @@ Ancestors
   staticAbortStraight asmOptimizer asmSplice asmSymBridge asmSymSem asmSem asmIR asmSymPc
   finite_map words list rich_list arithmetic pred_set pair alist
 
-val bind_rows_lets = map_every (fn pat =>
-  qmatch_goalsub_abbrev_tac pat >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV));
+val rows_unwind = SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) [];
 
 Theorem prune_one_covered_rows:
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape Flow Hit Target Legal Check Rows.
+  Shape =
+    (\p cc req pc height need tag boolean i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -26,15 +25,16 @@ Theorem prune_one_covered_rows:
           off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
           EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-        (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Flow = \p pc height tag boolean (a:num#num) (b:num#num).
-    let hi = height a; hj = height b; ins = EL (pc a) p in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+        (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  Flow = (\p pc height tag boolean (a:num#num) (b:num#num).
+    !hi hj ins inherit.
+    hi = height a ==> hj = height b ==> ins = EL (pc a) p ==>
+    inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
       (!k l origin. tag b k = SOME(l,origin) ==>
         k < hj /\ (fresh k = SOME(l,origin) \/
           ?j. src k = SOME j /\ j < hi /\ tag a j = SOME(l,origin))) /\
       (!k. boolean b k ==> k < hj /\
-        (bnew k \/ ?j. src k = SOME j /\ j < hi /\ boolean a j)) in
+        (bnew k \/ ?j. src k = SOME j /\ j < hi /\ boolean a j))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -58,7 +58,7 @@ Theorem prune_one_covered_rows:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a0 = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a0 m. a0 = asm_op_arity name ==> m = hj + asm_op_arity name - hi ==>
                a0 <= hi /\ hj = m+(hi-a0) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a0)) (\k. NONE)
@@ -67,25 +67,23 @@ Theorem prune_one_covered_rows:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w))
-    | _ => F in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e v.
-    ?n (path:num->num#num).
-      path 0=e /\ path n=v /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  let Hit = \p l j. ?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j in
-  let Target = \p pc tag a b. ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b) in
-  let Legal = \p pc tag a b.
+    | _ => F) ==>
+  Hit = (\p l j. ?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j) ==>
+  Target = (\p pc tag (a:num#num) (b:num#num).
+    ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b)) ==>
+  Legal = (\p pc tag a b.
     if EL (pc a) p = AsmOp "JUMP" then Target p pc tag a b
     else if EL (pc a) p = AsmOp "JUMPI" then pc b=pc a+1 \/ Target p pc tag a b
-    else pc b=pc a+1 in
-  let Check = \p cc pc height tag edge x.
-    let h = height x in
-    let fall = \y. pc y = pc x+1 in
-    let arm = \P n. ?y. edge x y /\ P y /\ height y=n in
-    let legal = \P n. !y. edge x y ==> P y /\ height y=n in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tag x k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+    else pc b=pc a+1) ==>
+  Check = (\p cc pc height tag edge x.
+    !h fall arm legal next untagged stop.
+    h = height x ==> fall = (\y. pc y = pc x+1) ==>
+    arm = (\P n. ?y. edge x y /\ P y /\ height y=n) ==>
+    legal = (\P n. !y. edge x y ==> P y /\ height y=n) ==>
+    next = (\n. arm fall n /\ legal fall n) ==>
+    untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+    stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
     case EL (pc x) p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -108,8 +106,8 @@ Theorem prune_one_covered_rows:
                 legal (\y. fall y \/ Target p pc tag x y) (h-2)
               else ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                 untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let Rows = \p cc V X rank pc height need tag boolean edge.
+    | _ => F) ==>
+  Rows = (\p cc V X rank pc height need tag boolean edge.
     (!x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -119,25 +117,25 @@ Theorem prune_one_covered_rows:
         ?dest. Hit p l dest)) /\
     (!x y. edge x y ==>
       x IN V DIFF X /\ y IN V /\ rank y < rank x /\ Flow p pc height tag boolean x y) /\
-    (!x. x IN V DIFF X ==> pc x < LENGTH p /\ Check p cc pc height tag edge x) in
+    (!x. x IN V DIFF X ==> pc x < LENGTH p /\ Check p cc pc height tag edge x)) ==>
   !pre t x tail s env n ss cc req V e rank pc height need tag boolean edge.
-    let p = pre ++ [t;x] ++ tail in
-    let q = pre ++ [t] ++ tail in
-    let d = LENGTH pre+1 in
-    let r = \i. if i<d then i else i-1 in
-    let Z = \l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0) in
-    let pick = \l. @j. Z l j in
-    let tagQ = \v k. OPTION_MAP (\(l,i). (l,if i=d then pick l else r i)) (tag v k) in
-    let fall = \a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b=pc a+1 in
-    let taken = \a l b. edge a b /\
+  !p q d r tagQ fall taken.
+    p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+    d = LENGTH pre+1 ==> r = (\i. if i<d then i else i-1) ==>
+    tagQ = (\v k. OPTION_MAP (\(l,i). (l,if i=d then
+      (@j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0))
+      else r i)) (tag v k)) ==>
+    fall = (\a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b=pc a+1) ==>
+    taken = (\a l b. edge a b /\
       (EL (pc a) p=AsmOp "JUMP" \/ EL (pc a) p=AsmOp "JUMPI") /\
-      (?i. tag a 0=SOME(l,i)) /\ Hit p l (pc b) in
+      (?i. tag a 0=SOME(l,i)) /\ Hit p l (pc b)) ==>
     asm_terminal_op t /\ ~asm_reachable_marker x /\ asm_static_wf p /\ asm_static_wf q /\
     s.as_pc=0 /\ sym_steps p env n (sym_init s)=SymOK ss /\ pc e=ss.sym_base.as_pc /\
     (!k l i. tag e k=SOME(l,i) ==> k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
     (!k. boolean e k ==> k<LENGTH ss.sym_stack /\
       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w)) /\
-    e IN V /\ (!v. v IN V ==> Reach edge e v) /\
+    e IN V /\ (!v. v IN V ==> ?n (path:num->num#num).
+       path 0=e /\ path n=v /\ !k. k<n ==> edge (path k) (path (SUC k))) /\
     (!v. v IN V ==> ?u. Shape p cc req pc height need tag boolean v u) /\
     (!a b. edge a b ==> Legal p pc tag a b) /\
     Rows p cc V {} rank pc height need tag boolean edge ==>
@@ -151,12 +149,12 @@ Theorem prune_one_covered_rows:
      (!a b. edge a b ==> Legal q (r o pc) tagQ a b) /\
      (!v. v IN V ==> ?u. Shape q cc req (r o pc) height need tagQ boolean v u))
 Proof
-  bind_rows_lets [`LET _ Shape`, `LET _ Flow`, `LET _ Reach`, `LET _ Hit`,
-    `LET _ Target`, `LET _ Legal`, `LET _ Check`, `LET _ Rows`] >>
+  ntac 7 gen_tac >>
+  ntac 7 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def] o rows_unwind)) >>
   rpt gen_tac >>
-  bind_rows_lets [`LET _ p`, `LET _ q`, `LET _ d`, `LET _ r`, `LET _ Z`,
-    `LET _ pick`, `LET _ tagQ`, `LET _ fall`, `LET _ taken`] >>
+  ntac 7 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
   strip_tac >>
+  qabbrev_tac `Z = \l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0)` >>
   qpat_assum `Abbrev (Rows = _)` (fn eq =>
     qpat_x_assum `Rows p _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [REWRITE_RULE [markerTheory.Abbrev_def] eq])) >>
@@ -204,15 +202,15 @@ QED
 
 Resume prune_one_covered_rows[geometry]:
   `(!v. v IN V ==> pc v < LENGTH p /\
-      Reach (\a b. fall a b \/ ?l. taken a l b) e v) /\
+      ?n (path:num->num#num). path 0=e /\ path n=v /\
+        !k. k<n ==> fall (path k) (path (SUC k)) \/ ?l. taken (path k) l (path (SUC k))) /\
    (!a b. fall a b ==> a IN V /\ b IN V /\
       ~asm_terminal_op (EL (pc a) p) /\ pc b = pc a+1) /\
    (!a l b. taken a l b ==> a IN V /\ b IN V /\ Hit p l (pc b))` by
     (conj_tac >- (
        rpt strip_tac >- (qpat_assum `!a. a IN V ==> pc a < LENGTH p /\ _`
                           (drule_then strip_assume_tac) >> simp[]) >>
-       qpat_assum `!a. a IN V ==> Reach edge e a` drule >>
-       simp[Abbr `Reach`, NoAsms] >>
+       qpat_assum `!a. a IN V ==> ?n path. _` drule >>
        disch_then (qx_choose_then `m` (qx_choose_then `path` strip_assume_tac)) >>
        qexistsl [`m`,`path`] >> simp[] >>
        qpat_assum `!a b. edge a b <=> _` (fn th => simp[GSYM th])) >>
@@ -221,8 +219,8 @@ Resume prune_one_covered_rows[geometry]:
      qpat_assum `!a b. edge a b ==> a IN V /\ _` (drule_then strip_assume_tac) >>
      simp[]) >>
   qspecl_then [`pre`,`t`,`x`,`tail`,`V`,`e`,`pc`,`fall`,`taken`] mp_tac
-    prune_one_arm_geometry >>
-  simp[Abbr `p`, Abbr `q`, Abbr `d`, Abbr `r`, Abbr `Hit`, Abbr `Reach`] >>
+    (rows_unwind prune_one_arm_geometry) >>
+  simp[Abbr `p`, Abbr `q`, Abbr `d`, Abbr `r`, Abbr `Hit`] >>
   (impl_tac >- (gvs[] >> conj_tac >> rpt strip_tac >>
     (qpat_assum `!a b. fall a b ==> _` (drule_then strip_assume_tac) ORELSE
      qpat_assum `!a l b. taken a l b ==> _` (drule_then strip_assume_tac)) >>
@@ -324,7 +322,7 @@ Resume prune_one_covered_rows[pack]:
       Target p pc tag a b ==> Target q (r o pc) tagQ a b) /\
    (!a b. edge a b ==> Legal q (r o pc) tagQ a b)` by
     (qspecl_then [`pre`,`t`,`x`,`tail`,`V`,`pc`,`tag`,`edge`] rows_contract
-       prune_one_relocated_legal) >>
+       (rows_unwind prune_one_relocated_legal)) >>
   `!v. v IN V ==> (r o pc) v < LENGTH q /\ Check q cc (r o pc) height tagQ edge v` by
     (* E0665: rows_contract alone left an unmatched Check premise. *)
     (qpat_x_assum `Abbrev (Check = _)`
@@ -332,7 +330,7 @@ Resume prune_one_covered_rows[pack]:
          (QCHANGED_CONV (ONCE_DEPTH_CONV
            (HO_REWR_CONV (GSYM check_case_presentation))))))) >>
      qspecl_then [`pre`,`t`,`x`,`tail`,`V`,`cc`,`pc`,`height`,`tag`,`edge`]
-       mp_tac prune_one_relocated_check >>
+       mp_tac (rows_unwind prune_one_relocated_check) >>
      unabbrev_all_tac >> rule_assum_tac (CONV_RULE rows_normalize) >>
      CONV_TAC rows_normalize >>
      (impl_tac >- (rpt conj_tac >>
@@ -345,7 +343,7 @@ Resume prune_one_covered_rows[pack]:
     (qspecl_then [`pre`,`t`,`x`,`tail`,`V`,`e`,`height`,`need`,`tag`,
                   `boolean`,`cc`,`env`,`n`,`s`,`ss`]
        (fn th => qpat_assum `pc e = ss.sym_base.as_pc` (rows_contract o
-         (fn eq => REWRITE_RULE [GSYM eq] th))) prune_one_strict_slots) >>
+         (fn eq => REWRITE_RULE [GSYM eq] th))) (rows_unwind prune_one_strict_slots)) >>
   `!v k l j. v IN V /\ tagQ v k=SOME(l,j) ==>
       k < height v /\ Z l j /\ ?dest. Hit q l dest` by
     (rpt gen_tac >> strip_tac >>
@@ -360,7 +358,7 @@ Resume prune_one_covered_rows[pack]:
     (* The unnormalized Shape application does not match modulo LET/beta. *)
     qspecl_then [`pre`,`t`,`x`,`tail`,`s`,`env`,`n`,`ss`,`cc`,`req`,
                  `V`,`edge`,`e`,`pc`,`height`,`need`,`tag`,`boolean`]
-      mp_tac (CONV_RULE rows_normalize prune_one_strict_shapes) >>
+      mp_tac (CONV_RULE rows_normalize (rows_unwind prune_one_strict_shapes)) >>
     unabbrev_all_tac >> rule_assum_tac (CONV_RULE rows_normalize) >>
     CONV_TAC rows_normalize >>
     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
