@@ -6,9 +6,9 @@ Ancestors
   asmOptimizer words list
 
 Theorem focus_static_selected_code_end_exit:
-  let rds = raw ++ [0w] in
-  let v7 = vs0 with vs_gas_readings := rds in
-  let vi = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> in
+  rds = raw ++ [0w] /\
+  v7 = (vs0 with vs_gas_readings := rds) /\
+  vi = (v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
   run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
@@ -63,10 +63,6 @@ Theorem focus_static_selected_code_end_exit:
     !fuel. terminates (run_context fuel unit.cu_context vi) ==>
       ?u. run_context fuel unit.cu_context vi = Abort ExHalt_abort u))
 Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qabbrev_tac `rds = raw ++ [0w]` >>
-  qabbrev_tac `v7 = vs0 with vs_gas_readings := rds` >>
-  qabbrev_tac `vi = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   MATCH_MP_TAC (Q.INST [`opt` |-> `fin = asm_opt_finalizer`] focus_static_code_end_exit) >>
   (reverse conj_tac >- first_assum ACCEPT_TAC) >>
@@ -77,13 +73,13 @@ Proof
        fs[codegen_asm_entry_rel_def] >>
      qspecl_then [`out.po_unit.cu_context`, `cpl`, `vs0`] mp_tac
        generate_context_plan_eom_room >> simp[]) >>
-  `v7 = (vs0 with vs_gas_readings := rds)` by simp[Abbr `v7`] >>
-  `vi = (v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>)` by simp[Abbr `vi`] >>
   qpat_assum `fin = asm_opt_finalizer ==> _` (fn th => drule th >> strip_tac) >>
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
       s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
     unit.cu_context vi` by
-    (qpat_assum `mem_inv _ _ vi` mp_tac >> simp[NoAsms, Abbr `vi`, Abbr `v7`]) >>
+    (qpat_assum `mem_inv _ _ vi` mp_tac >>
+     qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [th]) >> simp[NoAsms]) >>
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
   qpat_assum `!k. k <= 9 ==> _`
     (map_every assume_tac o CONJUNCTS o
