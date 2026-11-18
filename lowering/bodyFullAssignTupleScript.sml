@@ -4576,8 +4576,40 @@ Proof
       venom_state_component_equality]
 QED
 
-(* Both count instructions have clean scalar inputs and leave the ambient
-   ghost and machine data unchanged. The step equation fixes their result. *)
+(* The count and loop control consume the same clean scalar boundary. *)
+Theorem tuple_runtime_scalar_cursor[local]:
+  i.inst_outputs = [x] /\ augAssignPtrScalarCertificate$scalar_shape i /\
+  EVERY (\p. op_prov G p = NONE /\ op_taint tn p = {}) i.inst_operands /\
+  step_inst_base i s = OK (update_var x w s) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf. t = (update_var x w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    eval_operand (Var x) t = SOME w /\ op_taint tf (Var x) = {} /\
+    op_prov Gf (Var x) = NONE /\
+    (!p. p <> x ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  qexistsl_tac [`update_var x w s with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G i (update_var x w s)`, `step_taint i s (update_var x w s) tn`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
+      drule augAssignPtrScalarCertificateTheory.scalar_shape_control >> strip_tac >>
+      `ptr_inst_ok D lo 0 ctx fn G tn i s` by
+        (irule augAssignPtrScalarSafetyTheory.scalar_ptr_inst_ok_lo >> simp[]) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  drule_all augAssignPtrScalarSafetyTheory.scalar_ambient_taint >> strip_tac >>
+  drule_all augAssignPtrScalarRunTheory.scalar_step_prov >> strip_tac >>
+  drule_all augAssignPtrScalarRunTheory.scalar_step_var_taint >> strip_tac >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem tuple_runtime_count_scalar[local]:
   emit_op opc [l;r] sa = (v,sm) /\ MEM opc [ADD; SHR] /\
   (!x. step_inst_base (mk_inst sa.cs_next_id opc [l;r] [x]) s =
@@ -4594,22 +4626,21 @@ Theorem tuple_runtime_count_scalar[local]:
     (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
-    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-    tf.t_imm = tn.t_imm /\ ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   qabbrev_tac `x = STRING #"%" (toString sa.cs_next_var)` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id opc [l;r] [x]` >>
-  qabbrev_tac `u = update_var x w s` >>
-  `step_inst_base i s = OK u` by simp[Abbr `i`, Abbr `u`] >>
+  `i.inst_outputs = [x] /\ step_inst_base i s = OK (update_var x w s)` by
+    simp[Abbr `i`, mk_inst_def] >>
   `augAssignPtrScalarCertificate$scalar_shape i /\
      EVERY (\p. op_prov G p = NONE /\ op_taint tn p = {}) i.inst_operands` by
     gvs[MEM, Abbr `i`, mk_inst_def, augAssignPtrScalarCertificateTheory.scalar_shape_def,
         augAssignPtrScalarCertificateTheory.scalar_binary_def] >>
-  `!D. ptr_inst_ok D lo 0 ctx fn G tn i s` by
-    (gen_tac >> irule augAssignPtrScalarSafetyTheory.scalar_ptr_inst_ok_lo >> simp[]) >>
-  `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\ i.inst_opcode <> GAS` by
+  `inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
     gvs[MEM, Abbr `i`, mk_inst_def, inst_mem_below_frontier_def, inst_dload_in_section_def,
         source_memory_read_ranges_def, source_memory_write_ranges_def] >>
   `sm.cs_current_bb = sa.cs_current_bb` by
@@ -4617,29 +4648,14 @@ Proof
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME i` by
     (qpat_assum `!j. j < LENGTH _ ==> _` (qspec_then `0` mp_tac) >> simp[] >> gvs[]) >>
-  drule augAssignPtrScalarCertificateTheory.scalar_shape_control >> strip_tac >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i u,
-        step_taint i s u tn)` by
-    (gen_tac >>
-     `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-       (OK (u with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i u,
-         step_taint i s u tn)` by
-       (mp_tac (Q.INST [`func` |-> `fn`] straight_line_origin_ptr_edge) >> simp[]) >>
-     irule (gas_origin_ptr_path_rules |> cj 2 |> SPEC_ALL |>
-       Q.INST [`left` |-> `[]`, `right` |-> `[]`] |> SRULE []) >>
-     goal_assum (drule_at Any) >> irule (cj 1 gas_origin_ptr_path_rules) >>
-     simp[Abbr `u`, update_var_def]) >>
-  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-    `step_prov PG G i u`, `step_taint i s u tn`, `x`] >>
-  drule_all augAssignPtrScalarSafetyTheory.scalar_ambient_taint >> strip_tac >>
-  drule_all augAssignPtrScalarRunTheory.scalar_step_prov >> strip_tac >>
-  drule_all augAssignPtrScalarRunTheory.scalar_step_var_taint >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  drule_all tuple_runtime_scalar_cursor >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tf`,`x`] >>
   `!p. not_fresh_at sa p ==> p <> x` by simp[Abbr `x`, not_fresh_at_def] >>
-  gvs[Abbr `i`, mk_inst_def] >>
-  gvs[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
-      not_fresh_at_def, Abbr `x`, ASCIInumbersTheory.toString_11, FLOOKUP_UPDATE,
-      venom_state_component_equality]
+  `v = Var x` by simp[Abbr `x`] >>
+  gvs[update_var_def, not_fresh_at_def, Abbr `x`, ASCIInumbersTheory.toString_11,
+      venom_state_component_equality] >> metis_tac[]
 QED
 
 (* The runtime count includes the header even at length zero. *)
