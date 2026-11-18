@@ -83,7 +83,7 @@ Proof
     (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
      disch_then drule >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-       unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+       unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
   Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce rest`
   >- suspend "capture" >>
