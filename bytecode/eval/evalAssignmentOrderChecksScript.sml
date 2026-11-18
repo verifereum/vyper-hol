@@ -1,0 +1,9 @@
+Theory evalAssignmentOrderChecks
+Ancestors
+  evalAssignmentOrder
+  evalAssignmentOrderC08StorageArrAssignComputedRhs
+  evalAssignmentOrderC09StorageMapAssignComputedRhs
+  evalAssignmentOrderG6WriteOrderSide
+  evalAssignmentOrderX04AssignSideeffectOrder
+  evalAssignmentOrderG19AugRhsModifiesTarget
+  evalAssignmentOrderS11StorageMapAssignExtcallRhs
