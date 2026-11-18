@@ -80,3 +80,34 @@ Theorem supported_stmt_raise_reason:
 Proof
   simp[Once supported_stmt_def]
 QED
+
+Theorem stmt_state_rel_fmp_room:
+  stmt_state_rel H ctx func cenv cx vs ss ==> fmp_room ctx func ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_immutable_alloca_sep:
+  stmt_state_rel H ctx func cenv cx vs ss ==>
+  immutable_alloca_sep func cenv cx vs ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_immutable_base_zero:
+  stmt_state_rel H ctx func cenv cx vs ss ==> immutable_base_zero cenv ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_intro:
+  state_rel H func cenv cx vs ss /\ alloca_inv ss /\ alloca_room ctx func ss /\
+  fmp_room ctx func ss /\ immutable_alloca_sep func cenv cx vs ss /\
+  immutable_base_zero cenv ss /\
+  (!inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\
+    FLOOKUP ss.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n) ==>
+  stmt_state_rel H ctx func cenv cx vs ss
+Proof
+  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
+QED

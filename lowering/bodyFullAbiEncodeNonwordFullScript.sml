@@ -653,8 +653,11 @@ Resume abi_encode_nonword_vv_full_from_packaging[state_rel]:
        (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   drule_then assume_tac stateRelProjTheory.stmt_state_rel_state_rel >>
-  qpat_assum `stmt_state_rel H ctx func ce cx ee u`
-    (strip_assume_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  drule_then strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
+  drule_then assume_tac stateRelProjTheory.stmt_state_rel_alloca_room >>
+  drule_then assume_tac stateRelProjTheory.stmt_state_rel_fmp_room >>
+  drule_then assume_tac stateRelProjTheory.stmt_state_rel_immutable_alloca_sep >>
+  drule_then assume_tac stateRelProjTheory.stmt_state_rel_immutable_base_zero >>
   qpat_assum `window_alloca_growth u t`
     (CONJUNCTS_THEN2 assume_tac (assume_tac o ONCE_REWRITE_RULE [boolTheory.CONJ_COMM]) o
      REWRITE_RULE [abiEncoderWindowContractTheory.window_alloca_growth_def]) >>
@@ -695,7 +698,7 @@ Resume abi_encode_nonword_vv_full_from_packaging[state_rel]:
      ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- (rpt strip_tac >> first_assum ACCEPT_TAC) >>
      rpt strip_tac) >>
-  rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  match_mp_tac stateRelProjTheory.stmt_state_rel_intro >>
   ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "literal_rows"
 QED
