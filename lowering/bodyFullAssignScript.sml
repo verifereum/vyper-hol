@@ -246,46 +246,6 @@ Proof
 QED
 
 (* A word local. *)
-(* TEMPORARILY CHEATED - the statement's normal post now carries alloca_frame and the older allocations' taint clause; the helpers this proof closes the post with export no memory or taint frame for the store. Original proof:
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all assign_base_local_rhs_pre >> strip_tac >>
-  `expr_type e = ty` by metis_tac[type_widens_to_word] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ty e es` by metis_tac[body_expr_full_ok_def] >>
-  `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
-    metis_tac[expr_sim_inv_def] >>
-  `cenv.ce_var_type id = SOME ty` by metis_tac[expr_sim_inv_def] >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
-  `is_word_type (expr_type e)` by simp[] >>
-  gvs[] >> drule_all body_assign_local_word_full_setup >> strip_tac >> gvs[] >>
-  rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
-  drule assign_local_admissible_rhs >> strip_tac >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-     not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
-    `op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
-  irule body_assign_local_word_full_source >>
-  conj_tac >- metis_tac[] >> qexists_tac `Q1` >>
-  reverse conj_tac >- (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-    goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >>
-    POP_ASSUM_LIST (K all_tac) >> strip_tac >>
-    Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
-    Cases_on `y` >> Cases_on `r` >>
-    gvs[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,
-        exprSimDefsTheory.halt_exit_def] >>
-    rename1 `Error err` >> Cases_on `err` >>
-    gvs[exprSimDefsTheory.expr_exit_def]) >>
-  rpt gen_tac >> strip_tac >>
-  irule body_assign_local_word_full_continue >>
-  goal_assum (drule_at Any) >> simp[Abbr `Q1`] >> metis_tac[]
-QED
-*)
-
 Theorem body_assign_local_word_full:
   !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -777,7 +737,6 @@ Proof
 QED
 
 (* Compose a normal forced RHS with the actual top-level storage action. *)
-
 Theorem body_assign_toplevel_word_full_normal[local]:
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr typ,id_str) /\
@@ -865,10 +824,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-(* Complete the Assign store for both valid and invalid extended traces. *)
-
-(* The normal RHS endpoint feeds the joint top-level store. *)
-
 (* The rejected write still evaluates the RHS and records its root. *)
 
 Theorem body_assign_toplevel_word_full_static_rhs[local]:
@@ -931,24 +886,7 @@ Proof
   qexistsl_tac [`op`,`sm`,`sb`,`w`] >> simp[]
 QED
 
-(* Instantiate the RHS judgment in the paired Assign frame. *)
-
-(* A scalar top-level variable. *)
-(* TEMPORARILY CHEATED - the statement's normal post now carries alloca_frame and the older allocations' taint clause; the helpers this proof closes the post with export no memory or taint frame for the store. Original proof:
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all body_assign_toplevel_word_full_setup >> strip_tac >> gvs[] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- simp[evaluate_storage_trace_frame] >>
-  conj_tac >- simp[] >> strip_tac >>
-  irule body_assign_toplevel_word_full_framed >>
-  simp[] >> metis_tac[]
-QED
-*)
-
+(* Complete the Assign store for both valid and invalid extended traces. *)
 Theorem body_assign_toplevel_word_full_residual_frame[local]:
   ~cx.txn.is_static /\ get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
@@ -1057,6 +995,7 @@ Proof
   Cases_on `cx.txn.is_static` >> Cases_on `tr` >> simp[set_storage_def]
 QED
 
+(* The normal RHS endpoint feeds the joint top-level store. *)
 Theorem body_assign_toplevel_word_full_after_rhs_frame[local]:
   ~cx.txn.is_static /\ get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
@@ -1159,6 +1098,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+(* Instantiate the RHS judgment in the paired Assign frame. *)
 Theorem body_assign_toplevel_word_full_framed_frame[local]:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es /\ expr_body_pre cenv cx env e es /\
@@ -1275,6 +1215,7 @@ Proof
   metis_tac[]
 QED
 
+(* A scalar top-level variable. *)
 Theorem body_assign_toplevel_word_full:
   !cx nsid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
