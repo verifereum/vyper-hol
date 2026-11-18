@@ -11,7 +11,10 @@ val () = holbuild_extra_deps ["../raw-system/parity-fixtures.txt"]
 
 val suffix = "_matches_python_oracle"
 val checked_names = List.concat (map DB.theorems
-  ["evalCompilerRawSystemRl021topic",
+  ["evalCompilerRawSystem1",
+   "evalCompilerRawSystem3",
+   "evalCompilerRawSystem4",
+   "evalCompilerRawSystemRl021topic",
    "evalCompilerRawSystemRl042topicsBytes32data",
    "evalCompilerRawSystemRl073topicsConcatNolit",
    "evalCompilerRawSystemRr05StorageData",
