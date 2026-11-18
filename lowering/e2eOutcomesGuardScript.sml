@@ -349,6 +349,37 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Triviality guard_nested_storage_from_readings:
+  vyper_closed_world fin policy tops runtime_bc am tx H e /\
+  2 <= LENGTH e.contexts /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (empty_state with <|accounts := (SND (HD e.contexts)).accounts;
+                       tStorage := (SND (HD e.contexts)).tStorage|>) (FST H) /\
+  ~MEM tx.target e'.rollback.toDelete /\
+  (frame_resource_starved e r e' \/
+   gas_readings_rel (gas_readings e)
+     (\gs. call_result_rel_at gs tops am tx e r e' /\
+       ?res am' rqs obs.
+         call_external_trace (SOME (MAP SND (call_trace e))) gs am tx =
+           (res,am',rqs,obs) /\
+         storage_well_formed_on
+           (initial_evaluation_context am.sources am.layouts tx NONE)
+           (initial_state am' []) (FST H))) ==>
+  ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (empty_state with <|accounts := e'.rollback.accounts;
+                       tStorage := e'.rollback.tStorage|>) (FST H)
+Proof
+  strip_tac
+  >- (fs[frame_resource_starved_def] >>
+      metis_tac[guard_nested_frame_outcome, optionTheory.NOT_SOME_NONE]) >>
+  drule guard_gas_readings_witness >>
+  disch_then (qx_choose_then `gs` (strip_assume_tac o BETA_RULE)) >>
+  drule_all guard_nested_result_storage >> simp[]
+QED
+
 Triviality guard_trace_storage_induction:
   runtime_bc <> [] /\
   (!e am tx ret r e'.
