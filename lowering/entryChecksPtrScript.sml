@@ -13,7 +13,7 @@ Theorem value_check_ptr_safe[local]:
   get_instruction bb (s.vs_inst_idx + 2) =
     SOME (mk_inst (id+2) ASSERT [Var nv] []) /\
   cv <> nv /\ s.vs_call_ctx.cc_callvalue <> 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_run D lo fuel ctx fn PG G tn s
 Proof
   strip_tac >>
@@ -35,7 +35,7 @@ Proof
            exec_pure1_def, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE, step_taint_def, op_taint_def,
            allocas_from_def, update_var_def, out_taint_def, set_var_taint_def] >>
-      gvs[allocas_from_def]) >>
+      gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        mk_inst_def, exec_pure1_def, eval_operand_def, lookup_var_def,
        FLOOKUP_UPDATE, is_terminator_def, ghost_step_def, update_var_def] >>
@@ -50,7 +50,7 @@ Proof
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        Abbr `tn2`, step_taint_def, op_taint_def, out_taint_def,
        set_var_taint_def, update_var_def, allocas_from_def] >>
-  gvs[allocas_from_def]
+  gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
 Theorem compile_entry_checks_value_revert_ptr_safe:
@@ -59,7 +59,7 @@ Theorem compile_entry_checks_value_revert_ptr_safe:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   s.vs_call_ctx.cc_callvalue <> 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s
 Proof
   strip_tac >>
