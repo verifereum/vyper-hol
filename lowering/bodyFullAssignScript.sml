@@ -66,7 +66,7 @@ Ancestors
   exprSimAggregateEncoding bodyDynArraySource vyperTypeArgFits
   immutableBytestringRuntime fragGasCopyLoop fragGasSeqAbort immutableAssignEmpty abiEncoderProps immutableDeployAssignFacts
   bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout
-  stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte bodyFullAllocGeneric bodyCopyMemoryBase exprSimBufferStore bodyPtrIfExpCopyHeader bodyPtrIfExpBytesPost bytesCopyCode eventTopicValueProps reasonCopySourcePtr vfmConstants valueTypingMemoryProps
+  stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte bodyFullAllocGeneric bodyCopyMemoryBase exprSimBufferStore bodyPtrIfExpCopyHeader bodyPtrIfExpBytesPost bytesCopyCode eventTopicValueProps reasonCopySourcePtr vfmConstants valueTypingMemoryProps stmtSimAssignMem memoryValueEncoding
 Libs
   monadsyntax
 
@@ -5089,3 +5089,187 @@ Proof
      simp[] >> qexistsl_tac [`ce`,`e`] >> simp[]) >>
   qexists_tac `xs` >> gvs[eval_operand_def]
 QED
+
+Theorem body_assign_local_memory_empty_full:
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx (NameTarget id)) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    FLOOKUP env.var_types id = SOME ty /\
+    ~is_word_type ty /\
+    0 < type_memory_bytes cenv ty /\
+    (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
+     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) \/
+     is_bytestring_type (lowered_value_type cenv e) \/
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+    has_length_word (expr_type e) /\ is_empty_value_expr e ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `has_length_word ty` by metis_tac[type_widens_to_has_length_word] >>
+  rename1 `lookup_scopes id es.scopes = SOME ent` >>
+  `evaluate_type (get_tenv cx) ty = SOME ent.type` by metis_tac[] >>
+  `!gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+         (INL (default_value ent.type), es with gas_obs := gs)` by
+    (gen_tac >> metis_tac[memory_rhs_empty_read_destination]) >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  conj_tac >- simp[] >> strip_tac >>
+  drule_all assign_local_identity_rhs_all_tails >> strip_tac >>
+  drule_all assign_local_empty_code_parts >> strip_tac >>
+  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `entry = ent` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `entry = ent` (SUBST_ALL_TAC o SYM) >>
+  qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0 /\
+   ghost_inv_at (DF H0) lo d cenv cx es G0 tn0 s0` by metis_tac[] >>
+  drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+  drule_all local_ptr_below_frontier >> strip_tac >>
+  `type_memory_size entry.type <= sz` by
+    (qpat_assum `local_ptrs_rel _ _ _ _`
+       (qspecl_then [`id`,`entry`,`p`,`sz`] mp_tac o
+        CONJUNCT1 o REWRITE_RULE [local_ptrs_rel_def]) >> simp[] >>
+     disch_then (qx_choose_then `u` strip_assume_tac) >> simp[]) >>
+  `val_in_memory entry.type (default_value entry.type) (w2n w)
+      (mstore (w2n w) 0w s0).vs_memory /\
+   val_wf entry.type (default_value entry.type) /\ 32 <= type_memory_size entry.type` by
+    (irule memory_length_word_layout >>
+     simp[mstore_mem_word_at_same] >> qexistsl_tac [`get_tenv cx`,`ty`] >> simp[]) >>
+  `ptr_covers G0 tn0 p s0 sz /\ allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at (DF H0) lo d cenv cx es G0 tn0 s0`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     simp[] >>
+     qpat_assum `!name entry p sz. lookup_scopes name es.scopes = SOME entry /\ _ ==> _`
+       (qspecl_then [`id`,`entry`,`p`,`sz`] mp_tac) >> simp[]) >>
+  `32 <= sz` by decide_tac >>
+  `ptr_covers G0 tn0 p s0 32` by metis_tac[ptr_covers_mono] >>
+  `op_taint tn0 (Var p) = {}` by fs[ptr_covers_def] >>
+  `w2n w + 32 <= s0.vs_alloca_next` by decide_tac >>
+  `compile_store_at_loc cenv.ce_imm_alloca (Var p) (Lit 0w) (SOME LocMemory)
+       sa = ((),sb)` by simp[compile_store_at_loc_def] >>
+  `eval_operand (Var p) s0 = SOME w` by simp[eval_operand_def] >>
+  drule_at (Pat `compile_store_at_loc _ _ _ _ _ = _`) body_assign_empty_scalar_suffix >>
+  disch_then (qspecl_then [`w`,`tn0`,`s0`,`lo`,`func`,
+    `gas_explicit_sites ctx shadow_ctx`,`ctx`,`PG`,`G0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tf`
+    (map_every assume_tac o CONJUNCTS o SRULE [])))) >>
+  qabbrev_tac `ee = es with scopes := pre ++
+    (env'' |+ (id,entry with <|value := default_value entry.type; popped := []|>)) :: rest` >>
+  irule gas_outcome_full_pure >> simp[] >>
+  qexistsl_tac [`Gf`,`ee`,`INL ()`,`t`,`tf`] >>
+  `ee.storage_trace = es.storage_trace` by simp[Abbr `ee`] >>
+  simp[] >> gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ es.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~block_is_terminated sb` by
+    (irule emit_void_nonterminator_open >> goal_assum (drule_at Any) >>
+     simp[is_terminator_def]) >>
+  simp[stmt_lands_def, cenv_top_ext_refl] >>
+  `local_region cenv es.scopes s0 id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule find_containing_scope_structure >> strip_tac >>
+     simp[Abbr `ee`, PULL_EXISTS] >>
+     `id IN FDOM env''` by fs[FLOOKUP_DEF] >>
+     simp[pred_setTheory.ABSORPTION_RWT]) >>
+  `stmt_state_rel H ctx func cenv cx ee t` by suspend "state" >>
+  `return_buf_frame d cenv sb t` by suspend "ret" >>
+  `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) Gf tf t` by
+    suspend "ghost" >>
+  `alloca_frame cenv es sa s0 cenv ee t` by suspend "allocation" >>
+  `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx es b` by
+    (gen_tac >> Cases_on `b` >> simp[Abbr `ee`, get_storage_def]) >>
+  `storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+    (pure_rewrite_tac[storage_well_formed_on_def] >>
+     qpat_assum `!b. get_storage cx (ee with gas_obs := []) b = _`
+       (pure_rewrite_tac o single) >>
+     qpat_assum `storage_well_formed_on cx es (FST H)`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [storage_well_formed_on_def])) >>
+  simp[] >> (bossLib.gvs [pred_setTheory.SUBSET_DEF])
+QED
+
+Resume body_assign_local_memory_empty_full[state]:
+  simp[Abbr `ee`, stmt_state_rel_inst_idx] >>
+  irule local_header_store_state >> simp[] >>
+  irule val_in_memory_memory_value_rel >> simp[vyperTypingTheory.default_value_well_typed]
+QED
+
+Resume body_assign_local_memory_empty_full[ret]:
+  irule return_buf_frame_frame >>
+  qexistsl_tac [`cenv`,`s0`,`sa`] >>
+  drule emitted_insts_emit_void >> strip_tac >> simp[] >>
+  rpt strip_tac >>
+  qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Resume body_assign_local_memory_empty_full[ghost]:
+  `dead_lo_ok H (DF H) lo cenv cx` by simp[] >>
+  `0 < sz` by decide_tac >>
+  `lo <= w2n w` by metis_tac[body_full_local_region_lower_bound] >>
+  `stor_taint_ok_at (DF H) tf t` by
+    (qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     fs[stor_taint_ok_at_def, mstore_def]) >>
+  `mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s0.vs_memory` by
+    (simp[] >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+     val_in_memory entry.type (default_value entry.type) (w2n w) mem` by
+    (rpt strip_tac >>
+     `mem_word_at (w2n w) mem = 0w` by metis_tac[clean_word_mem_agree] >>
+     metis_tac[memory_length_word_layout]) >>
+  simp[Abbr `ee`, vyperStateTheory.evaluation_state_fupdcanon] >>
+  qmatch_goalsub_abbrev_tac `es' with scopes := _` >>
+  `ghost_inv_at (DF H) lo d cenv cx es' G0 tn0 s0` by
+    (fs[Abbr `es'`, ghost_inv_at_def] >> (metis_tac[Abbr `es'`, ghost_inv_at_def])) >>
+  `find_containing_scope id es'.scopes = SOME (pre,env'',entry,rest) /\
+   local_ptrs_rel func cenv es'.scopes s0 /\
+   local_region cenv es'.scopes s0 id (w2n w) sz` by simp[Abbr `es'`] >>
+  irule body_full_local_scope_ghost_post >>
+  ntac 4 (conj_tac >- gvs[]) >>
+  qexistsl_tac [`G0`,`w`,`func`,`32`,`p`,`s0`,`sa`,`sz`,`tn0`] >>
+  gnvs[ret_pc_ok_def, pred_setTheory.SUBSET_DEF] >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume body_assign_local_memory_empty_full[allocation]:
+  `alloca_frame cenv es sa s0 cenv es s0` by simp[alloca_frame_same] >>
+  drule_then irule alloca_frame_region_write >>
+  simp[] >> conj_tac >- simp[lookup_var_def, mstore_def] >>
+  qexistsl_tac [`w2n w`,`id`,`sz`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Finalise body_assign_local_memory_empty_full
