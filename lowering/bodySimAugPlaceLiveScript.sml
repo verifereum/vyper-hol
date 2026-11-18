@@ -2,6 +2,7 @@ Theory bodySimAugPlaceLive
 Ancestors
   bodySimAugPlaceMemory bodySimAugPlaceScopes supportedTargets
   vyperInterpreter vyperState vyperMisc pair sum
+  vyperLocalAccessFrame[qualified,ignore_grammar]
 
 Theorem aug_place_target_induct[local]:
   !P. (!id. P (NameTarget id)) /\ (!nsid. P (TopLevelNameTarget nsid)) /\
@@ -25,8 +26,8 @@ Proof
            type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
       rpt strip_tac >> rename1 `IS_SOME (lookup_scopes name st.scopes)` >>
       Cases_on `lookup_scopes name st.scopes` >> gvs[evaluate_subscripts_def])
-  >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
-      metis_tac[aug_place_lookup_global_not_memory])
+  >- (PairCases_on `nsid` >>
+      simp[Once evaluate_def, vyperLocalAccessFrameTheory.lookup_global_not_memory])
   >- suspend "subscript"
   >> suspend "attribute"
 QED

@@ -69,7 +69,10 @@ Theorem external_entry_reaches_registration_ptr_nr:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
@@ -124,7 +127,6 @@ Theorem external_entry_reaches_registration_ptr_nr:
                                vs_inst_idx := 0 |>)
 Proof
   rpt gen_tac >> strip_tac >>
-  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
   `o1_source_unit_ok unit` by
     (irule lower_vyper_runtime_unit_source_unit_ok_shape >>
@@ -196,7 +198,7 @@ Resume external_entry_reaches_registration_ptr_nr[dispatch]:
   (impl_tac >- (simp[Abbr `ss`] >> metis_tac[])) >> strip_tac >>
   rename1 `vars_pc_only ss tt` >> rename1 `tn1.t_mem = entry_taint.t_mem` >>
   rename1 `ptr_safe_blocks _ _ _ _ _ _ G1 tn1 tt` >>
-  drule_all source_valid_linear_dispatch_target >> strip_tac >>
+  drule_all source_selected_linear_dispatch_target >> strip_tac >>
   `tt.vs_current_bb = opened.cs_current_bb /\
    tt.vs_call_ctx = vs.vs_call_ctx /\ fresh_vars_wrt opened tt` by
     (imp_res_tac vars_pc_only_fields >> fs[Abbr `ss`] >>
@@ -221,7 +223,7 @@ Resume external_entry_reaches_registration_ptr_nr[checks]:
      `raw3 = min_calldata_size raw1 args 0` by
        (qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
         simp[package_external_fn_def] >> rw[] >> simp[]) >>
-     gvs[valid_vyper_call_def, optionTheory.IS_SOME_EXISTS] >>
+     gvs[] >>
      irule calldata_encodes_min_calldata_size >>
      qexistsl_tac [`tx.function_name`, `type_env tops`, `tx.args`] >> simp[] >>
      rpt strip_tac >>
@@ -338,8 +340,9 @@ Theorem external_entry_reaches_registration_ptr:
                    (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                                vs_inst_idx := 0 |>)
 Proof
-  rpt gen_tac >>
-  MATCH_ACCEPT_TAC (SPEC_ALL
-    (Q.SPEC `F` (Q.SPECL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`]
-      external_entry_reaches_registration_ptr_nr)))
+  rpt gen_tac >> strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  irule external_entry_reaches_registration_ptr_nr >>
+  simp[] >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
