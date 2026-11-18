@@ -17,6 +17,8 @@ Ancestors
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
   bodyFullMakeArray
+  bodyFullBuiltinConcat bodyFullBuiltinSlice bodyFullBuiltinCalldataSlice
+  bodyFullBuiltinUint2Str
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -380,7 +382,7 @@ Proof
   ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
+(* Joint bytestring suppliers, including Slice's code-source child order. *)
 Theorem bytestring_builtin_expr_full_ok:
   !cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
@@ -394,7 +396,17 @@ Theorem bytestring_builtin_expr_full_ok:
             body_exprs_full_ok cx [addr])) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `(?n. bt = CalldataSlice n) \/ _` mp_tac >> strip_tac
+      >- (gvs[code_slice_source_def] >>
+          metis_tac[calldata_slice_expr_sim_full, calldata_slice_vv_sim_full])
+      >- (gvs[code_slice_source_def] >> irule concat_sim_full >> metis_tac[])
+      >- (gvs[] >> irule slice_builtin_sim_full >> metis_tac[]) >>
+      gvs[code_slice_source_def] >> irule uint2str_builtin_sim_full >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
