@@ -87,13 +87,6 @@ Proof
   simp[stmt_state_rel_def]
 QED
 
-Theorem stmt_state_rel_immutable_alloca_sep:
-  stmt_state_rel H ctx func cenv cx vs ss ==>
-  immutable_alloca_sep func cenv cx vs ss
-Proof
-  simp[stmt_state_rel_def]
-QED
-
 Theorem stmt_state_rel_immutable_base_zero:
   stmt_state_rel H ctx func cenv cx vs ss ==> immutable_base_zero cenv ss
 Proof

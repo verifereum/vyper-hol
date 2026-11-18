@@ -1,5 +1,6 @@
 Theory bodyFullAbiEncodeNonwordFull
 Ancestors exprSimAbiEncodeStateTransport[qualified,ignore_grammar] abiBuiltinEncodeSource[qualified,ignore_grammar]
+  bodyFullIntCallReturnFrame[qualified,ignore_grammar]
   bodyFullPreds bodySimFull bodyInvNoDalloca bodyFullAbiEncodeArgStep
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish bodyFullAbiEncodeAllocOrigin
   bodyFullAbiEncodeSuffix bodyFullAbiEncodeUniformTranslation
@@ -656,7 +657,7 @@ Resume abi_encode_nonword_vv_full_from_packaging[state_rel]:
   drule_then strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
   drule_then assume_tac stateRelProjTheory.stmt_state_rel_alloca_room >>
   drule_then assume_tac stateRelProjTheory.stmt_state_rel_fmp_room >>
-  drule_then assume_tac stateRelProjTheory.stmt_state_rel_immutable_alloca_sep >>
+  drule_then assume_tac bodyFullIntCallReturnFrameTheory.return_stmt_immutable_sep >>
   drule_then assume_tac stateRelProjTheory.stmt_state_rel_immutable_base_zero >>
   qpat_assum `window_alloca_growth u t`
     (CONJUNCTS_THEN2 assume_tac (assume_tac o ONCE_REWRITE_RULE [boolTheory.CONJ_COMM]) o
