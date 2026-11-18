@@ -42,3 +42,5 @@ Ancestors
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
+  (* frozen supplier composition for optimized assembly *)
+  e2eGasCompositionChecks
