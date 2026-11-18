@@ -21,6 +21,7 @@ Ancestors
   vyperTypeInvariants vyperPlaceInvariants vyperTypeEvalSoundness
   vyperTypeExprSoundness vyperTypeSystem vyperTypeCallGraph vyperTypeValues
   vyperTypeCallStackSoundness vyperTypeEnvPreservation vyperTypeStatePreservation
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 Libs
   pairLib
 

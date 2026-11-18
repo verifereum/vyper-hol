@@ -80,7 +80,8 @@ Proof
       simp[entry_venom_state_frame_fields]) >>
   qpat_x_assum `(entry_venom_state _ _ _).vs_code = _` kall_tac >>
   `LENGTH (entry_venom_state prog cplan es).vs_code <= 24576` by
-    gvs[call_state_rel_def, entry_venom_state_frame_fields] >>
+    (drule call_state_rel_code_length >>
+     simp[entry_venom_state_frame_fields]) >>
   simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac
 QED
 

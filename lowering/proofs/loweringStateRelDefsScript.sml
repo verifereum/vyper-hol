@@ -388,32 +388,30 @@ End
    running contract's, whose accounts are equal but for their storage, which
    agrees up to the bytes dead in a1's. *)
 Definition accounts_agree_def:
-  accounts_agree H cx (a1:evm_accounts) (a2:evm_accounts) ⇔
-    (∀addr. addr ≠ cx.txn.target ⇒ a1 addr = a2 addr) ∧
-    (a1 cx.txn.target with storage := (a2 cx.txn.target).storage) =
-      a2 cx.txn.target ∧
-    storage_agree (storage_dead H F (a1 cx.txn.target).storage)
-      (a1 cx.txn.target).storage (a2 cx.txn.target).storage
+  accounts_agree H (target:address) (a1:evm_accounts) (a2:evm_accounts) ⇔
+    (∀addr. addr ≠ target ⇒ a1 addr = a2 addr) ∧
+    (a1 target with storage := (a2 target).storage) = a2 target ∧
+    storage_agree (storage_dead H F (a1 target).storage)
+      (a1 target).storage (a2 target).storage
 End
 
 (* Transient storage t1 (source) and t2 (Venom): equal at every address but
    the running contract's, which agrees up to the bytes dead in t1's. *)
 Definition transient_agree_def:
-  transient_agree H cx (t1:transient_storage) (t2:transient_storage) ⇔
-    (∀addr. addr ≠ cx.txn.target ⇒ t1 addr = t2 addr) ∧
-    storage_agree (storage_dead H T (t1 cx.txn.target))
-      (t1 cx.txn.target) (t2 cx.txn.target)
+  transient_agree H (target:address) (t1:transient_storage) (t2:transient_storage) ⇔
+    (∀addr. addr ≠ target ⇒ t1 addr = t2 addr) ∧
+    storage_agree (storage_dead H T (t1 target)) (t1 target) (t2 target)
 End
 
 (* A call request recorded by the source (r1) and by Venom (r2): equal but
    for the snapshots of the accounts and transient storage, which agree as
    above. *)
 Definition request_agree_def:
-  request_agree H cx (r1:call_request) (r2:call_request) ⇔
+  request_agree H (target:address) (r1:call_request) (r2:call_request) ⇔
     r1 with <| cr_accounts := r2.cr_accounts;
                cr_tStorage := r2.cr_tStorage |> = r2 ∧
-    accounts_agree H cx r1.cr_accounts r2.cr_accounts ∧
-    transient_agree H cx r1.cr_tStorage r2.cr_tStorage
+    accounts_agree H target r1.cr_accounts r2.cr_accounts ∧
+    transient_agree H target r1.cr_tStorage r2.cr_tStorage
 End
 
 (* The running contract's storage, Vyper accounts against Venom state. *)
@@ -442,8 +440,8 @@ End
    state_rel H and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
   accounts_rel H cx (vs:evaluation_state) ss ⇔
-    accounts_agree H cx vs.accounts ss.vs_accounts ∧
-    transient_agree H cx vs.tStorage ss.vs_transient ∧
+    accounts_agree H cx.txn.target vs.accounts ss.vs_accounts ∧
+    transient_agree H cx.txn.target vs.tStorage ss.vs_transient ∧
     ss.vs_code = cx.txn.code
 End
 
@@ -758,7 +756,7 @@ Definition state_rel_def:
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     LIST_REL (request_agree H cx) vs.requests ss.vs_requests ∧
+     LIST_REL (request_agree H cx.txn.target) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
 End
 
@@ -766,7 +764,7 @@ Definition halt_rel_def:
   halt_rel H cx (vs:evaluation_state) ss <=>
     accounts_rel H cx vs ss /\
     vs.logs = ss.vs_logs /\
-    LIST_REL (request_agree H cx) vs.requests ss.vs_requests /\
+    LIST_REL (request_agree H cx.txn.target) vs.requests ss.vs_requests /\
     vs.pending_deletions = ss.vs_pending_deletions
 End
 

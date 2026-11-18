@@ -147,7 +147,7 @@ Proof
   simp[lookup_var_def]
 QED
 
-Theorem fmp_env_rel_step[local]:
+Theorem fmp_env_rel_step:
   fmp_env_rel sm fn live G tn.t_var s t /\
   (!v. MEM v live' /\ ~MEM v inst.inst_outputs ==> MEM v live) /\
   (!v. ~MEM v inst.inst_outputs ==>
