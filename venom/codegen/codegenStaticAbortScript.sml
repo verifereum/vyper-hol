@@ -44,7 +44,9 @@ Theorem codegen_entry_asm_sim_abort_asm_opt:
       inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
       IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
     label_flow_ok unit.cu_context /\
-    code_end_offset_ok Inv unit.cu_context /\ sym_unit_static_ok unit /\
+    code_end_offset_ok
+      (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
+      unit.cu_context /\ sym_unit_static_ok unit /\
     vs.vs_code = assemble prog ++ vs.vs_data_section /\
     s.as_code = assemble prog ++ vs.vs_data_section /\
     codegen_asm_entry_rel cp prog vs s /\
@@ -95,7 +97,9 @@ Theorem codegen_correct_static_abort_asm_opt:
       inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
       IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
     label_flow_ok unit.cu_context /\
-    code_end_offset_ok Inv unit.cu_context /\ sym_unit_static_ok unit /\
+    code_end_offset_ok
+      (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
+      unit.cu_context /\ sym_unit_static_ok unit /\
     vs.vs_code = assemble prog ++ vs.vs_data_section /\
     codegen_asm_entry_rel cp prog vs (entry_asm_state vs es) /\
     asm_frame_rel prog' vs.vs_data_section es

@@ -57,24 +57,6 @@ Proof
   simp[entry_loop_fields_def] >> metis_tac[]
 QED
 
-Theorem entry_loop_header_fields[local]:
-  t = jump_to lbl (abi_decode_header_state iv cv cmp done j n s) ==>
-  entry_loop_fields s t /\ t.vs_halted = s.vs_halted /\
-  t.vs_current_bb = lbl /\ t.vs_inst_idx = 0
-Proof
-  simp[abi_decode_header_state_def, update_var_def, jump_to_def,
-       entry_loop_fields_def]
-QED
-
-Theorem entry_loop_backedge_fields[local]:
-  t = jump_to hdr (mstore p (n2w (SUC j)) (update_var nv (n2w (SUC j)) s)) ==>
-  entry_loop_fields s t /\ t.vs_halted = s.vs_halted /\
-  t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
-Proof
-  simp[update_var_def, jump_to_def, mstore_def,
-       write_memory_with_expansion_def, entry_loop_fields_def]
-QED
-
 Definition entry_loop_prefix_def:
   entry_loop_prefix tv xs d j s <=>
     !k. k < j ==> val_in_memory tv (EL k xs)
@@ -85,15 +67,6 @@ Theorem entry_loop_prefix_zero[local]:
   entry_loop_prefix tv xs d 0 s
 Proof
   simp[entry_loop_prefix_def]
-QED
-
-Theorem entry_loop_prefix_extend[local]:
-  entry_loop_prefix tv xs d j s /\
-  val_in_memory tv (EL j xs) (d+32+j*type_memory_size tv) s.vs_memory ==>
-  entry_loop_prefix tv xs d (SUC j) s
-Proof
-  simp[entry_loop_prefix_def] >> rpt strip_tac >>
-  Cases_on `k = j` >> gvs[] >> first_x_assum irule >> decide_tac
 QED
 
 Theorem entry_loop_prefix_header[local]:
@@ -361,35 +334,4 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   irule (cj 2 calldata_terminal_array_memory) >>
   fs[entry_loop_shell_def] >> goal_assum (drule_at Any) >> simp[]
-QED
-
-(* Interface checks: zero iterations have an explicit, memory-preserving
-   endpoint; one iteration retains the particular supplied source value. *)
-Theorem entry_exact_array_loop_empty[local]:
-  entry_loop_shell ctx fn hdr body_lbl exit hid tail prefix bid ip src iv cv cmp done nv
-    p srcaddr tv [] d J /\
-  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr 0 0 s ==>
-  ?t. t = jump_to exit (abi_decode_header_state iv cv cmp done 0 0 s) /\
-    ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
-    t.vs_memory = s.vs_memory /\ entry_loop_fields s t /\ abi_decode_sim ctx fn s t
-Proof
-  strip_tac >>
-  `abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH ([]:value list)) 0 s`
-    by simp[] >>
-  drule_all entry_loop_shell_header_sim >> simp[] >> strip_tac >>
-  gvs[abi_decode_loop_ready_def, jump_to_def, abi_decode_header_state_def,
-    update_var_def, entry_loop_fields_def]
-QED
-
-Theorem entry_exact_array_loop_singleton[local]:
-  entry_loop_shell ctx fn hdr body_lbl exit hid tail prefix bid ip src iv cv cmp done nv
-    p srcaddr tv [x] d J /\
-  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr 1 0 s /\ J s ==>
-  ?t. ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\ J t /\
-    val_in_memory tv x (d+32) t.vs_memory /\
-    entry_loop_fields s t /\ abi_decode_sim ctx fn s t
-Proof
-  strip_tac >>
-  `abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH [x]) 0 s` by simp[] >>
-  drule_all entry_exact_array_loop >> simp[]
 QED
