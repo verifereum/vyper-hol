@@ -66,14 +66,8 @@ Proof
 QED
 
 
-val _ = augment_srw_ss [rewrites [symbolic_frame_bind, symbolic_frame_ignore_bind]];
-
-Theorem symbolic_frame_stmt_conditional[local,simp]:
-  symbolic_frame R (if b then m else n) <=>
-  (if b then symbolic_frame R m else symbolic_frame R n)
-Proof
-  Cases_on `b` >> simp[]
-QED
+val _ = augment_srw_ss [rewrites [symbolic_frame_bind, symbolic_frame_ignore_bind,
+                                symbolic_frame_cond]];
 
 Theorem symbolic_frame_get_terminated[local]:
   (!g s t. R g s t ==> block_is_terminated s = block_is_terminated t) /\

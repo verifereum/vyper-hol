@@ -100,13 +100,6 @@ Proof
   rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
-Theorem symbolic_frame_cond:
-  symbolic_frame R (if b then m else n) <=>
-  (if b then symbolic_frame R m else symbolic_frame R n)
-Proof
-  Cases_on `b` >> simp[]
-QED
-
 val _ = augment_srw_ss [rewrites [symbolic_frame_cond]];
 
 Theorem symbolic_frame_zero_loop:

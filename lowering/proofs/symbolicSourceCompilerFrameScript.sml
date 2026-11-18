@@ -33,6 +33,13 @@ Proof
   simp[comp_ignore_bind_def, symbolic_frame_bind]
 QED
 
+Theorem symbolic_frame_cond:
+  symbolic_frame R (if b then m else n) <=>
+  (if b then symbolic_frame R m else symbolic_frame R n)
+Proof
+  Cases_on `b` >> simp[]
+QED
+
 (* Decompose the compiler monad until a primitive or induction
    hypothesis applies. Normalize the branch facts before using the IH. *)
 fun abi_frame_tac goal =
