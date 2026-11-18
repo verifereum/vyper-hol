@@ -128,24 +128,11 @@ Proof
   drule set_immutable_key_frame >> simp[]
 QED
 
-Theorem immutable_frame_refl[local]:
-  ^immutable_frame cx A st st
-Proof
-  simp[]
-QED
-
 Theorem immutable_frame_trans[local]:
   ^immutable_frame cx A st mid /\ ^immutable_frame cx A mid st' ==>
   ^immutable_frame cx A st st'
 Proof
   metis_tac[]
-QED
-
-Theorem immutable_frame_stack[local]:
-  ^immutable_frame (cx with stk := stk) A st st' =
-  ^immutable_frame cx A st st'
-Proof
-  simp[]
 QED
 
 (* Target provenance: indices may have effects, but cannot change the root. *)
@@ -486,7 +473,7 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
       accesses_expr_def, int_calls_expr_def, accesses_named_exprs_map,
-      vyperTypeEvalSoundnessTheory.int_calls_exprs_MAP_SND] >>
+      vyperTypeEvalProofsTheory.int_calls_exprs_MAP_SND] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -927,34 +914,10 @@ Proof
   first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem immutable_results_frame_rule[local]:
-  ^im_results cx es /\ ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
-  !st res st'. eval_expr_results cx es st = (res,st') ==>
-    ^immutable_frame cx A st st'
-Proof
-  BETA_TAC >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-  simp[] >> disch_tac >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
-QED
-
 Theorem immutable_exprs_frame_rule[local]:
   ^im_exprs cx es /\ ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
   !st res st'. eval_exprs cx es st = (res,st') ==>
-    ^immutable_frame cx A st st'
-Proof
-  BETA_TAC >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-  simp[] >> disch_tac >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
-QED
-
-Theorem immutable_stmts_frame_rule[local]:
-  ^im_stmts cx ss /\ ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_stmts ss) (int_calls_stmts ss) ==>
-  !st res st'. eval_stmts cx ss st = (res,st') ==>
     ^immutable_frame cx A st st'
 Proof
   BETA_TAC >> strip_tac >> gvs[] >>
@@ -1379,15 +1342,6 @@ Proof
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   Cases_on `y` >> gvs[handle_function_def, return_def, raise_def] >>
   metis_tac[]
-QED
-
-Theorem immutable_intcall_cleanup_frame[local]:
-  ignore_bind (pop_function prev) (unlock_if_nr cx nr view) st = (res,st') ==>
-  ^immutable_frame cx A st st'
-Proof
-  simp[pop_function_def, set_scopes_def, ignore_bind_def, bind_def,
-       return_def, Excl "unlock_if_nr_def"] >>
-  strip_tac >> drule unlock_if_nr_immutables >> simp[]
 QED
 
 val immutable_intcall_prefix = ``\cx src fn (es:expr list) ts mut nr args dflts ret body.
