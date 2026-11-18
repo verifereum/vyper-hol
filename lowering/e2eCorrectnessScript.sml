@@ -770,27 +770,6 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes:
-  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
-
-Theorem gas_variant_call_ctx:
-  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
-
-Theorem gas_variant_initial_venom_state_rel:
-  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
-  initial_venom_state_rel tops am tx si
-Proof
-  rw[gas_variant_def] >>
-  qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  gvs[initial_venom_state_rel_def, venom_env_rel_def]
-QED
-
 (* entry_venom_state_initial_venom_state_rel for opt_entry_state.  Stated
    here rather than in e2eEntry because the proof uses e2eProducers. *)
 Theorem opt_entry_initial_venom_state_rel:
@@ -1050,52 +1029,6 @@ QED
    the S4 simulation facts at every trace horizon, and S1's selected-run
    certificate at marks; the result relation holds at every filling past the
    marked readings where the storage guards hold. *)
-Theorem o1_pipeline_memory_obligations_raw[local]:
-  !out cplan vs.
-    generate_context_plan out.po_unit.cu_context = SOME cplan /\
-    o1_lowered_inv out.po_unit.cu_context vs /\
-    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp
-    ==>
-    codegen_memory_obligations (raw_reachable vs) out.po_unit.cu_context cplan /\
-    codegen_reachability_package (raw_reachable vs) out.po_unit.cu_context vs
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule generate_context_plan_spill_gap >> strip_tac >>
-  `?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-         mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
-           out.po_unit.cu_context vs` by
-    (fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-     rpt strip_tac >> first_x_assum drule >>
-     drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >>
-     simp[lowered_mem_fact_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
-  gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
-QED
-
-Theorem o1_pipeline_sym_unit_static_ok[local]:
-  !rpolicy unit out.
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                    ds.ds_items) unit.cu_data_segment /\
-  ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
-              MEM inst (fn_insts fn) /\
-              MEM (Label "runtime_begin") inst.inst_operands) ==>
-   EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) ==>
-  sym_unit_static_ok out.po_unit
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`rpolicy`, `unit`, `out`] mp_tac
-    o1_pipeline_runtime_reference_reflects >>
-  impl_tac >- simp[] >> strip_tac >>
-  fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
-  drule_all run_venom_pipeline_bytes_only >> strip_tac >>
-  drule run_venom_pipeline_success_unit_wf >> strip_tac >>
-  fs[sym_unit_static_ok_def, unit_wf_def, venom_wf_def] >>
-  metis_tac[]
-QED
-
 Theorem opt_entry_codegen_asm_entry_rel[local]:
   !tops prog prog' am tx es cplan u.
   call_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u ==>
