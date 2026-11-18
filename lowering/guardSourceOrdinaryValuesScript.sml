@@ -6,7 +6,7 @@ Ancestors
   vyperPlaceFrames vyperTypeBuiltins
   vyperTypeStmtSoundness vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperEvalOutcomeSuffix vyperTypeEvalStoragePreservation vyperStatePreservation
-  vyperTypeEvalProofs vyperTypeEvalCaseProofs
+  vyperTypeEvalProofs vyperTypeEvalCaseProofs vyperCallOutcome
 Libs
   guardSourceSchemaLib
 
@@ -649,6 +649,43 @@ Proof
        storage_trace_locks_append, EVERY_APPEND])
 QED
 
+Theorem precompile_call_success_horizon[local]:
+  valid_horizon cx initial_st H
+    (SND (precompile_call_success bt vs st)).storage_trace <=>
+  valid_horizon cx initial_st H st.storage_trace
+Proof
+  Cases_on `precompile_builtin bt` >>
+  simp[precompile_call_success_def, return_def] >>
+  Cases_on `st.outcomes` >> simp[return_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[check_def, assert_def, bind_def] >>
+  qabbrev_tac `call = take_call_outcome NONE (precompile_address bt)
+    (precompile_input bt vs) NONE st` >>
+  `valid_horizon cx initial_st H (SND call).storage_trace <=>
+   valid_horizon cx initial_st H st.storage_trace` by simp[Abbr`call`] >>
+  Cases_on `call` >> rename1 `Abbrev ((call_res,call_st) = _)` >>
+  Cases_on `call_res` >> gvs[raise_def] >>
+  rename1 `INL payload` >> PairCases_on `payload` >>
+  Cases_on `payload1.co_success` >> gvs[check_def, assert_def]
+QED
+
+Theorem precompile_builtin_tail_frame[local]:
+  precompile_call_success bt vs st = (res,st') ==>
+  st'.accounts = st.accounts /\ st'.tStorage = st.tStorage /\
+  (?suffix. st'.storage_trace = st.storage_trace ++ suffix) /\
+  (valid_horizon cx initial_st H st'.storage_trace <=>
+   valid_horizon cx initial_st H st.storage_trace)
+Proof
+  strip_tac >>
+  `?suffix. st'.storage_trace = st.storage_trace ++ suffix` by
+    metis_tac[storage_trace_frame_prefix, storage_trace_frame_precompile_call_success] >>
+  `valid_horizon cx initial_st H st'.storage_trace <=>
+   valid_horizon cx initial_st H st.storage_trace` by
+    (mp_tac (Q.INST [`bt` |-> `bt`, `vs` |-> `vs`, `st` |-> `st`]
+       precompile_call_success_horizon) >> simp[]) >>
+  drule precompile_call_success_state >> strip_tac >> gvs[]
+QED
+
 Theorem finite_prefix_Expr_Builtin:
   ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Expr_Builtin")
 Proof
@@ -733,24 +770,36 @@ Resume finite_prefix_Expr_Builtin[args]:
   asm_rewrite_tac[type_check_def, assert_def] >> strip_tac >>
   strip_tac >>
   `st'.accounts = args_st.accounts /\ st'.tStorage = args_st.tStorage /\
-   st'.storage_trace = args_st.storage_trace` by
+   (?suffix. st'.storage_trace = args_st.storage_trace ++ suffix) /\
+   (valid_horizon cx initial_st H args_st.storage_trace ==>
+    valid_horizon cx initial_st H st'.storage_trace)` by
     (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
      Cases_on `args_res` >>
      gvs[bind_def, ignore_bind_def, return_def, raise_def,
        lift_option_type_def, assert_def, get_accounts_def, AllCaseEqs()] >>
-     imp_res_tac precompile_call_success_state >>
+     imp_res_tac precompile_builtin_tail_frame >>
      gvs[AllCaseEqs(), vyperMiscTheory.option_CASE_rator,
        vyperMiscTheory.sum_CASE_rator, return_def, raise_def]) >>
   qpat_x_assum `!initial_st selected env st res st0. _`
     (qspecl_then [`initial_st`, `selected`, `env`, `st`, `args_res`, `args_st`] mp_tac) >>
-  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
-  (conj_tac >- (irule (iffRL storage_well_formed_on_backends) >>
-    qexists `args_st` >> simp[]) >> simp[]) ) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[APPEND_ASSOC])) >> strip_tac >>
+  (conj_tac
+   >- (irule (iffRL storage_well_formed_on_backends) >>
+       qexists `args_st` >> simp[]) >>
+   `valid_horizon cx initial_st H args_st.storage_trace` by
+     (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
+      simp[valid_horizon_def]) >>
+   qpat_x_assum `valid_horizon cx initial_st H args_st.storage_trace ==> _`
+     (mp_tac o UNDISCH) >>
+   simp[valid_horizon_def])) >>
   suspend "code_slice"
 QED
 
 Resume finite_prefix_Expr_Builtin[code_slice]:
   PairCases_on `x` >> rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+  `~precompile_builtin bt` by
+    (drule (iffLR code_slice_source_SOME) >> strip_tac >>
+     simp[precompile_builtin_def]) >>
   `~(bt = Bop In \/ bt = Bop NotIn)` by
     (drule (iffLR code_slice_source_SOME) >> strip_tac >> simp[]) >>
   drule_all code_slice_operand_typing >> strip_tac >>
@@ -788,13 +837,13 @@ Resume finite_prefix_Expr_Builtin[code_slice]:
   `st'.accounts = addr_st.accounts /\ st'.tStorage = addr_st.tStorage /\
    st'.storage_trace = addr_st.storage_trace` by
     (qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')` mp_tac >>
-     asm_simp_tac(srw_ss())[bind_def, raise_def, return_def] >>
+     asm_simp_tac(srw_ss())[bind_def, raise_def, return_def,
+                           precompile_call_success_not_builtin] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `addr_res` >>
      simp_tac(srw_ss())[AllCaseEqs(), bind_def, ignore_bind_def,
        get_accounts_def, lift_sum_def, return_def, raise_def,
-       vyperMiscTheory.sum_CASE_rator] >> rpt strip_tac >> gvs[] >>
-     imp_res_tac precompile_call_success_state >> gvs[]) >>
+       vyperMiscTheory.sum_CASE_rator] >> rpt strip_tac >> gvs[]) >>
   `?delta. addr_st.storage_trace = tail_st.storage_trace ++ delta` by
     metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame] >>
   `storage_well_formed_on cx tail_st (FST H) /\
