@@ -26,6 +26,16 @@ Proof
   metis_tac[]
 QED
 
+(* Decompose the compiler monad until a primitive or induction
+   hypothesis applies. Normalize the branch facts before using the IH. *)
+fun abi_frame_tac goal =
+  (rpt (FIRST [
+    irule compiler_preserves_bind >> conj_tac,
+    gen_tac,
+    CHANGED_TAC (full_simp_tac bool_ss
+      [comp_ignore_bind_def, compiler_preserves_return, arithmeticTheory.ADD_COMM]),
+    IF_CASES_TAC])) goal
+
 Theorem compiler_preserves_abi_encode:
   (!opc ops. compiler_preserves R (emit_op opc ops)) /\
   (!opc ops. compiler_preserves R (emit_void opc ops)) /\
@@ -49,13 +59,7 @@ Proof
   strip_tac >> ho_match_mp_tac compile_abi_encode_child_ind >>
   rpt strip_tac >>
   simp[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
-  rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM, compiler_preserves_return] >>
-  rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- asm_simp_tac bool_ss [comp_ignore_bind_def, compiler_preserves_return] >>
-       gen_tac >> BETA_TAC) >> asm_simp_tac bool_ss [comp_ignore_bind_def, compiler_preserves_return]
+  abi_frame_tac
 QED
 
 Theorem compiler_preserves_abi_decode:
@@ -87,14 +91,7 @@ Proof
   strip_tac >> ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt strip_tac >>
   simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
-  rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  rpt (FIRST
-    [irule compiler_preserves_bind >>
-       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC,
-     CHANGED_TAC (pure_asm_rewrite_tac [COND_CLAUSES, comp_ignore_bind_def]),
-     IF_CASES_TAC]) >> asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM, compiler_preserves_return]
+  abi_frame_tac
 QED
 
 Theorem compiler_preserves_expr:

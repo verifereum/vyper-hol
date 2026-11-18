@@ -126,10 +126,11 @@ Resume runtime_sym_type_builtin_body[encode_word]:
     (first_x_assum (drule_at_then (Pat `lower_value _ _ _ _ _ = _`) mp_tac) >>
      disch_then irule >> metis_tac[]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
+  rename1 `emit_void MSTORE [tmp_alloc.buf_operand; v'] st2 = (store_result,st3)` >>
   `EVERY runtime_sym_inst (state_insts st3)` by
     (irule runtime_sym_emit_void >> goal_assum (drule_at Any) >>
-     qexistsl [`MSTORE`, `[tmp_alloc.buf_operand; v']`, `_2`] >>
-     Cases_on `_2` >> simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qexistsl [`MSTORE`, `[tmp_alloc.buf_operand; v']`, `store_result`] >>
+     Cases_on `store_result` >> simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[NoAsms, runtime_sym_value_def, mk_ptr_def] >>
   conj_tac >> first_assum ACCEPT_TAC

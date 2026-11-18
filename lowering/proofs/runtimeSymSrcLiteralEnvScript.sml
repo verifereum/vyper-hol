@@ -42,14 +42,15 @@ Theorem runtime_sym_literal_vv:
 Proof
   Cases_on `lit` >> simp[compile_literal_vv_def, comp_return_def,
     runtime_sym_value_def, is_label_operand_def]
-  >- (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def,
+  >- (rename1 `compile_literal_vv _ (BoolL flag) _ = _` >>
+      Cases_on `flag` >> simp[compile_literal_vv_def, comp_return_def,
         runtime_sym_value_def, is_label_operand_def]) >>
   Cases_on `ty` >> simp[compile_literal_vv_def, comp_return_def,
     runtime_sym_value_def, is_label_operand_def, comp_bind_def] >>
-  TRY (Cases_on `b` >>
+  TRY (rename1 `BaseT base_ty` >> Cases_on `base_ty` >>
     simp[compile_literal_vv_def, comp_return_def, runtime_sym_value_def,
          is_label_operand_def, comp_bind_def] >>
-    TRY (Cases_on `b'` >> simp[compile_literal_vv_def, comp_return_def,
+    TRY (rename1 `BytesT width` >> Cases_on `width` >> simp[compile_literal_vv_def, comp_return_def,
       runtime_sym_value_def, is_label_operand_def, comp_bind_def])) >>
   rpt gen_tac >> strip_tac >>
   qmatch_asmsub_abbrev_tac `compile_bytelike_literal bytes len st` >>

@@ -174,7 +174,8 @@ Proof
   simp[NoAsms, compile_entry_point_kwargs_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> pure_asm_rewrite_tac[] >>
   CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> strip_tac >>
-  Cases_on `_0` >>
+  rename1 `compile_init_kwargs _ _ _ _ _ _ = (init_result,_)` >>
+  Cases_on `init_result` >>
   first_x_assum (drule_at (Pat `compile_init_kwargs _ _ _ _ _ _ = _`)) >>
   disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
   drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_jump >> simp[]
