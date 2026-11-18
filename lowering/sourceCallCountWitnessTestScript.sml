@@ -1,6 +1,7 @@
 (* Concrete source executions for the strict synthetic call bound. *)
 Theory sourceCallCountWitnessTest
 Ancestors
+  vyperSmallStepCV
   sourceCallCount vyperInterpreter vyperSmallStep vyperCreate vyperCallOutcome
   vyperRuntimeAccounts vyperState vyperContext vyperValue extCallOracle
   vfmState vfmContext list words combin option
