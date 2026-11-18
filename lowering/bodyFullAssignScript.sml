@@ -1874,7 +1874,7 @@ Resume body_assign_field_store_joint_frame[frame]:
   irule alloca_frame_region_write >> goal_assum (drule_at Any) >> simp[] >>
   drule find_containing_scope_structure >> strip_tac >>
   `id IN FDOM sc` by fs[FLOOKUP_DEF] >>
-  simp[ABSORPTION_RWT] >>
+  simp[pred_setTheory.ABSORPTION_RWT] >>
   rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
   decide_tac
 QED
