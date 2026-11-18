@@ -2,7 +2,7 @@
 Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
-  fragGasOriginPtrExec
+  fragGasOriginPtrExec entryCompileIntervals moduleLowering
   nonreentrantSource accountsRelProps ghostPcTransportPtr
   fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
   fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
@@ -561,4 +561,53 @@ Proof
     (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
   qexistsl_tac [`a`, `t with vs_inst_idx := j`, `G'`, `tn'`] >>
   simp[] >> fs[exprSimDefsTheory.expr_exit_def]
+QED
+
+(* Fragments of the compiled guarded body entered after registration. *)
+Theorem guarded_body_code_from_registration:
+  compile_guarded_body cenv nr nkey T iv stmts rt sa = ((),st') /\
+  fn_has_code sa st' func ==>
+  ?sl se. (if nr then compile_nonreentrant_lock nkey T iv
+           else comp_return ()) sa = ((),sl) /\
+          compile_stmts cenv NoLoop
+            (case rt of SOME ty => ty | NONE => BaseT BoolT) stmts sl =
+              ((),se) /\
+          fn_has_code sa sl func /\ fn_has_code sl se func /\
+          fn_has_code se st' func
+Proof
+  strip_tac >>
+  Cases_on `(if nr then compile_nonreentrant_lock nkey T iv
+             else comp_return ()) sa` >>
+  rename1 `_ = (answer,sl)` >> Cases_on `answer` >>
+  Cases_on `compile_stmts cenv NoLoop
+              (case rt of SOME ty => ty | NONE => BaseT BoolT) stmts sl` >>
+  rename1 `_ = (answer,se)` >> Cases_on `answer` >>
+  `cs_extends sa sl` by
+    (Cases_on `nr` >> gvs[comp_return_def, cs_extends_refl] >>
+     metis_tac[cs_appends_def,
+       entryCompileIntervalsTheory.cs_appends_nonreentrant]) >>
+  `cs_extends sl se` by
+    (irule (REWRITE_RULE [cs_appends_def]
+       entryCompileIntervalsTheory.cs_appends_stmts) >>
+     goal_assum (drule_at Any)) >>
+  `cs_extends se st'` by
+    (qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _`
+       (mp_tac o REWRITE_RULE [moduleLoweringTheory.compile_guarded_body_def,
+          comp_bind_def, comp_ignore_bind_def, comp_get_def]) >>
+     simp[] >> Cases_on `block_is_terminated se`
+     >- simp[comp_return_def, cs_extends_refl] >>
+     Cases_on `(if nr then compile_nonreentrant_unlock nkey T iv
+                else comp_return ()) se` >>
+     rename1 `_ = (answer,su)` >> Cases_on `answer` >>
+     simp[] >> strip_tac >>
+     `cs_extends se su` by
+       (Cases_on `nr` >> gvs[comp_return_def, cs_extends_refl] >>
+        metis_tac[cs_appends_def,
+          entryCompileIntervalsTheory.cs_appends_nonreentrant]) >>
+     irule cs_extends_trans >> qexists_tac `su` >> simp[] >>
+     Cases_on `rt` >> gvs[comp_ignore_bind_def, comp_bind_def] >>
+     metis_tac[cs_extends_emit_inst]) >>
+  qexistsl_tac [`sl`, `se`] >> simp[] >>
+  `cs_extends sl st'` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_split]
 QED

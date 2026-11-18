@@ -4,6 +4,7 @@ Ancestors
   loweringHalt fragExecMem instMemFrontier
   context compileEnv exprLoweringProps venomState venomInst venomExecSemantics
   transientLockPtr fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
+  fragGasEmitCtrl emitHelperProps gasCount gasEvents
   fragExec fragGasMode unitTransformDefs memSafeRun
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   nonreentrantEquiv bodyPtrDefs ghostPcTransportPtr sourceUnitExecution
@@ -184,6 +185,103 @@ Proof
   rename1 `storage_dead H T _ (w2n slot) byte` >>
   qpat_x_assum `!x. x IN tn.t_trans ==> _`
     (qspec_then `(slot,byte)` mp_tac) >> simp[]
+QED
+
+(* Explicit Return and body fallthrough share this terminal suffix. *)
+Theorem optional_transient_unlock_stop_joint:
+  (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ()) st =
+    ((),su) /\
+  emit_inst STOP [] [] su = ((),sb) /\
+  fn_has_code st su func /\ fn_has_code su sb func /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ss tn'.
+    ss.vs_returndata = [] /\ ss.vs_accounts = s.vs_accounts /\
+    ss.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions /\
+    (!H explicit.
+       dead_lo_ok H (DF H) lo cenv cx /\ stor_taint_ok_at (DF H) tn s ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+         (s,G,tn) [] (Halt ss,G,tn'))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`st'` |-> `su`] optional_transient_unlock_paths_joint) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `allocas_from lo u` by
+    (PURE_REWRITE_TAC[allocas_from_def] >>
+     qpat_assum `u.vs_allocas = s.vs_allocas`
+       (fn eq => PURE_ONCE_REWRITE_TAC[eq]) >>
+     qpat_assum `allocas_from lo s`
+       (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
+  drule emit_inst_extends >> strip_tac >>
+  `?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb u.vs_inst_idx = SOME (mk_inst su.cs_next_id STOP [] [])` by
+    (qspecl_then [`su`, `sb`, `func`, `[mk_inst su.cs_next_id STOP [] []]`]
+       mp_tac fn_has_code_same_block >>
+     impl_tac >- simp[] >> strip_tac >>
+     qpat_x_assum `!i. i < _ ==> get_instruction _ _ = _`
+       (qspec_then `0` mp_tac) >>
+     simp[] >> strip_tac >> qexists_tac `bb` >> metis_tac[]) >>
+  qexistsl_tac [`halt_state (u with vs_returndata := [])`, `tn'`] >>
+  ntac 6 (conj_tac >- (Cases_on `nr /\ ~iv` >>
+    gvs[halt_state_def, tstore_def])) >>
+  rpt gen_tac >> strip_tac >>
+  `stor_taint_ok_at (DF H) tn' u` by
+    (irule optional_transient_unlock_stor_taint >> metis_tac[]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,G,tn') []
+     (Halt (halt_state (u with vs_returndata := [])),G,tn')` by
+    (irule exit_inst_origin_ptr >> simp[exit_result_def] >>
+     qexists_tac `mk_inst su.cs_next_id STOP [] []` >>
+     simp[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+          gas_events_step_def, gas_count_step_def, mem_safe_step_def,
+          inst_mem_below_frontier_def, source_memory_read_ranges_def,
+          source_memory_write_ranges_def] >>
+     fs[mk_inst_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+        source_memory_read_ranges_def, source_memory_write_ranges_def,
+        stor_taint_ok_at_def, step_inst_non_invoke,
+        step_inst_base_opcode_eqs, step_taint_def, ret_taint_def,
+        store_taint_def, imm_taint_def, adopt_reset_def, halt_state_def,
+        allocas_from_def] >>
+     Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
+     first_assum ACCEPT_TAC) >>
+  metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
+QED
+
+(* The compiler uses the same optional release and STOP on fallthrough. *)
+Theorem compile_guarded_body_stop_unlock_parts:
+  compile_guarded_body cenv nr nkey T iv stmts NONE st = ((),sb) /\
+  (if nr then compile_nonreentrant_lock nkey T iv else comp_return ()) st =
+    ((),sl) /\
+  compile_stmts cenv NoLoop (BaseT BoolT) stmts sl = ((),se) /\
+  ~block_is_terminated se ==>
+  ?su. (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ())
+          se = ((),su) /\
+       emit_inst STOP [] [] su = ((),sb) /\
+       cs_extends se su /\ cs_extends su sb
+Proof
+  strip_tac >>
+  `?su. (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ())
+          se = ((),su) /\
+       emit_inst STOP [] [] su = ((),sb)` by
+    (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[moduleLoweringTheory.compile_guarded_body_def,
+          comp_ignore_bind_def, comp_bind_def,
+          comp_get_def] >>
+     Cases_on `(if nr then compile_nonreentrant_unlock nkey T iv
+                else comp_return ()) se` >>
+     rename1 `_ = (answer,su)` >> Cases_on `answer` >> simp[]) >>
+  qexists_tac `su` >> simp[] >>
+  reverse conj_tac >- metis_tac[cs_extends_emit_inst] >>
+  mp_tac (Q.INST [`st` |-> `se`, `st'` |-> `su`, `ut` |-> `T`]
+    (SPEC_ALL optional_unlock_code)) >> simp[] >>
+  disch_then SUBST1_TAC >>
+  Cases_on `nr /\ ~iv` >> simp[cs_extends_refl] >>
+  irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]
 QED
 
 (* Zeroing transient storage preserves each horizon relation. *)
