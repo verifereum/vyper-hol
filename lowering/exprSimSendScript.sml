@@ -47,7 +47,7 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
-  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperCallFrame vyperState vyperValue vyperTyping
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperCallOutcomeProps vyperCallFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState
