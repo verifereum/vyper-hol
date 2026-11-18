@@ -1,7 +1,8 @@
 Theory bodyFullAbiDecodeLoopBody
 Ancestors
   bodyFullAbiDecodeInterface bodyFullAbiDecodeLoopSetup
-  bodyFullAbiDecodeLoopBackedge gasOriginPtrLabels abiDecoderCoherence
+  bodyFullAbiDecodeLoopBackedge bodyFullAbiDecodeLoopResource
+  gasOriginPtrLabels abiDecoderCoherence
   abiDecoderMemberInfos abiDecoderReentry abiDecoderOffset abiEncoder compileEnv
   venomInst venomExecSemantics venomState loweringStateRelDefs stateRelProj
   words list rich_list finite_map arithmetic valueEncodingProps ptrDiscipline
@@ -530,20 +531,37 @@ Proof
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `?ci cp. MEM ci (fn_insts fn) /\ _ /\ _ /\ ci.inst_id = aid /\ _`
     (qx_choose_then `ci` (qx_choose_then `counter_owner` strip_assume_tac)) >>
-  qpat_assum `abi_decode_ptr_window G' tn' t input input_word _`
-    (mp_then (Pat `abi_decode_ptr_window _ _ _ _ _ _`)
-      (fn th => qpat_assum `!D. V D ==> ghost_inv_at _ _ _ _ _ _ G' tn' t /\ _`
-        (mp_then (Pat `!H. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _ /\ _`)
-          (mp_tac o SPEC_ALL) th))
-      (Q.INST [`sa` |-> `returned`, `id` |-> `returned.cs_next_id`,
-        `prefix` |-> `returned.cs_current_insts`,
-        `bb` |-> `<|bb_label := returned.cs_current_bb; bb_instructions :=
-          returned.cs_current_insts ++
-            abi_decode_backedge_insts returned.cs_next_id iv nv (Var counter) hdr|>`]
-        (SPEC_ALL abi_decode_loop_backedge_joint))) >>
-  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >>
-  disch_then (qx_choose_then `back` (qx_choose_then `Gb`
-    (qx_choose_then `tnb` strip_assume_tac))) >>
+  `?back Gb tnb.
+    back = jump_to hdr (mstore cell (n2w (SUC j)) (update_var nv (n2w (SUC j)) t)) /\
+    (!D. V D ==> gas_origin_ptr_path (DF D,lo,explicit,ctx,fn,PG)
+      (t,G',tn') [] (OK back,Gb,tnb)) /\
+    mem_word_at cell back.vs_memory = n2w (SUC j) /\
+    EVERY (\(a,bytes). mem_bytes_at a (LENGTH bytes) back.vs_memory = bytes) snapshots /\
+    back.vs_allocas = t.vs_allocas /\ back.vs_alloca_next = t.vs_alloca_next /\
+    back.vs_labels = t.vs_labels /\
+    (!x. not_fresh_at returned x ==> lookup_var x back = lookup_var x t /\
+      FLOOKUP Gb x = FLOOKUP G' x /\ op_taint tnb (Var x) = op_taint tn' (Var x)) /\
+    ptr_covers Gb tnb counter back 32 /\
+    DISJOINT {a | cell <= a /\ a < cell+32} tnb.t_mem /\
+    tnb.t_mem SUBSET tn'.t_mem /\ tnb.t_stor = tn'.t_stor /\
+    tnb.t_trans = tn'.t_trans /\ tnb.t_imm = tn'.t_imm /\
+    (!name b k. local_region ce es.scopes back name b k ==>
+      cell+32 <= b \/ b+k <= cell) /\
+    (!D. V D ==>
+      abi_decode_ptr_window Gb tnb back input input_word (LENGTH input_bytes) /\
+      ghost_inv_at (DF D) lo delta ce cx es Gb tnb back /\
+      ghost_kept_at lo ce es0 origin G0 tn0 s0 Gb tnb /\
+      stmt_state_rel D ctx fn ce cx es back)` by
+    (irule abi_decode_loop_backedge_joint >>
+     asm_rewrite_tac[] >>
+     rpt conj_tac
+     >- (qexists_tac `n` >> simp[])
+     >- (qexists_tac `hdr_bb` >> simp[])
+     >- (qexistsl_tac [`<|bb_label := returned.cs_current_bb;
+           bb_instructions := returned.cs_current_insts ++
+             abi_decode_backedge_insts returned.cs_next_id iv nv (Var counter) hdr|>`,
+           `returned.cs_next_id`, `iv`, `returned.cs_current_insts`] >> simp[]) >>> NTH_GOAL (simp[]) 1 >>
+     qexistsl_tac [`aid`, `ci`, `counter_owner`] >> simp[]) >>
   `~back.vs_halted /\ back.vs_current_bb = hdr /\ back.vs_inst_idx = 0` by
     (qpat_assum `back = jump_to hdr _` (fn th => rewrite_tac[th]) >>
      simp[jump_to_def, venomStateTheory.mstore_def, update_var_def]) >>
@@ -554,5 +572,54 @@ Proof
      qpat_assum `!D. V D ==> gas_origin_ptr_path _ (t,G',tn') _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]) >>
-  FAIL_TAC "reconstruct anchor resource"
+  `!x. not_fresh_at anchor x ==> lookup_var x back = lookup_var x s /\
+       FLOOKUP Gb x = FLOOKUP G x /\
+       op_taint tnb (Var x) = op_taint tn (Var x)` by
+    (qpat_assum `!x. not_fresh_at returned x ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at anchor x ==> _` mp_tac >>
+     qpat_assum `anchor.cs_next_var <= returned.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `alloca_history fn back` by
+    (qpat_assum `alloca_history fn t` mp_tac >>
+     qpat_assum `back.vs_allocas = t.vs_allocas` mp_tac >>
+     qpat_assum `back.vs_inst_idx = 0` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[allocaHistoryTheory.alloca_history_jump]) >>
+  qpat_assum `!D. V D ==> gas_origin_ptr_path _ (s,G,tn) [] (OK back,Gb,tnb)`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `back.vs_labels = s.vs_labels` by
+    (irule gas_origin_ptr_path_preserves_labels >>
+     goal_assum (drule_at Any)) >>
+  `allocas_from lo back` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK back,Gb,tnb)`
+       (mp_then Any mp_tac member_origin_allocas_from) >> simp[]) >>
+  `EVERY (\(a,bytes). mem_bytes_at a (LENGTH bytes) back.vs_memory = bytes)
+    ((w2n input_word,input_bytes)::
+      (MAP (\(id,p,b,k,bytes). (b,bytes)) live ++ protected))` by
+    (unabbrev_all_tac >>
+     qpat_assum `EVERY (\(a,bytes). mem_bytes_at a (LENGTH bytes) back.vs_memory = bytes)
+       (_::_::_)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_DEF] >> metis_tac[]) >>
+  `abi_decode_ptr_window Gb tnb back input input_word (LENGTH input_bytes) /\
+   (!D. V D ==> stmt_state_rel D ctx fn ce cx es back /\
+      ghost_inv_at (DF D) lo delta ce cx es Gb tnb back /\
+      ghost_kept_at lo ce es0 origin G0 tn0 s0 Gb tnb)` by
+    (qpat_assum `!D. V D ==>
+        abi_decode_ptr_window Gb tnb back input input_word (LENGTH input_bytes) /\ _` mp_tac >>
+     qpat_assum `V H` mp_tac >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  disj2_tac >> qexistsl_tac [`back`,`Gb`,`tnb`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule abi_decode_loop_resource_reconstruct >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qexistsl_tac [`G'`,`returned`,`t`,`tn'`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G`,`s`,`tn`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
