@@ -1,0 +1,3 @@
+Theory bodyFullAbiDecodeArrayBulk
+Ancestors
+  bodyFullAbiDecodeArrayBulkPayload

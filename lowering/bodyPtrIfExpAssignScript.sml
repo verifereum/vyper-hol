@@ -6,7 +6,7 @@ Ancestors
 
 Theorem emit_assign_zero_path_ptr:
   emit_inst ASSIGN [src] [out] sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand src s = SOME w ==>

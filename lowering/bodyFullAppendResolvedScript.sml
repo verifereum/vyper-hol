@@ -3,7 +3,7 @@ Theory bodyFullAppendResolved
 Ancestors
   stateRelProj stmtSimDefs vyperScopePreservation
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyInvNoDalloca
-  bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
+  bodyFullShared bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath
   normalizationPrefixPtr robustCopyTransportPtr exprSimAggregateEncoding allocaHistoryFragment
   exprSimHypsDefs exprSimDefs exprSimSource exprSimProps loweringPosts
@@ -286,6 +286,13 @@ Resume body_append_local_word_full[rhs_full]:
          >> fs[ghost_inv_at_def] >> metis_tac[]) >>
      metis_tac[])) >>
   strip_tac >>
+  `return_buf_sep d cenv (es with gas_obs := []) s0` by
+    simp[return_buf_sep_gas_obs] >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv (es with gas_obs := []) s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 R1` >>
   irule (Q.INST [`es` |-> `es with gas_obs := []`] gas_outcome_full_bind_all) >>
   conj_tac >- suspend "value_storage_frame" >>
@@ -681,6 +688,14 @@ Resume body_append_local_word_full[append_success]:
      qpat_assum `sa.cs_next_var <= sm.cs_next_var` mp_tac >>
      rpt (pop_assum kall_tac) >>
      metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==>
+      lookup_var x (u with vs_inst_idx :=
+        LENGTH sm.cs_current_insts + LENGTH (emitted_insts sm sb)) = SOME z` by
+    (rpt strip_tac >>
+     `not_fresh_at sm x` by
+       (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     `lookup_var x t = SOME z` by (fs[expr_post_def] >> metis_tac[]) >>
+     simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`, `ff`, `INL ()`,
     `u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sb)`, `tnf`] >>
@@ -748,6 +763,31 @@ Resume body_append_local_word_full[append_success]:
       qpat_assum `lookup_block t.vs_current_bb _ = _` mp_tac >>
       qpat_assum `t.vs_current_bb = _` mp_tac >> qpat_assum `t.vs_inst_idx = _` mp_tac >>
       rpt (pop_assum kall_tac) >> simp[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[]) >>
+  all_tac >~ [`return_buf_sep _ _ _ _`]
+  >- (`MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+        (qpat_assum `bind (eval_expr cx e) _ _ = _`
+           (mp_then Any mp_tac eval_read_preserves_scopes_dom) >> simp[]) >>
+      `MAP FDOM ff.scopes = MAP FDOM mid.scopes` by
+        (qpat_assum `!tail. write_place _ _ _ _ = _`
+           (qspec_then `[]` (mp_then Any mp_tac write_place_scopes_dom)) >>
+         simp[]) >>
+      `MAP FDOM ff.scopes = MAP FDOM es.scopes` by simp[] >>
+      `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+         es.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+        (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+           (drule_then (ACCEPT_TAC o cj 1))) >>
+      irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+      conj_tac
+      >- (rpt gen_tac >> disch_tac >>
+          qpat_assum `!bw capacity. d = SOME (bw,capacity) ==> _`
+            (qspecl_then [`bw`,`capacity`] mp_tac) >>
+          pure_rewrite_tac[allocas_from_def] >>
+          simp[arithmeticTheory.ADD_COMM]) >>
+      qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`es`,
+                    `func`,`s0`,`sa`] >>
+      simp[]) >>
   all_tac >~ [`ghost_inv_at _ _ _ _ _ _ _ _ _`]
   >- (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
         (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -782,12 +822,6 @@ Resume body_append_local_word_full[append_success]:
       rpt (pop_assum kall_tac) >> simp[ghost_inv_at_def] >> metis_tac[]) >>
   all_tac >~ [`alloca_frame _ _ _ _ _ _ _`]
   >- suspend "success_alloca_frame" >>
-  all_tac >~ [`lookup_var _ _ = SOME _`]
-  >-
-    (`not_fresh_at sm x` by
-       (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-     `lookup_var x t = SOME w'` by (fs[expr_post_def] >> metis_tac[]) >>
-     simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
   all_tac >~ [`FLOOKUP _.vs_allocas _ = SOME _`]
   >- (fs[expr_post_def] >> metis_tac[]) >>
   simp[] >>

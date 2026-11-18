@@ -1112,8 +1112,7 @@ End
    lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    ~ctx_has_dalloca unit.cu_context ==>
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
     ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
         EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
 Proof

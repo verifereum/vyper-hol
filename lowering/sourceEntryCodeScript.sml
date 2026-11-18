@@ -17,17 +17,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_external_lookup_member:
-  supported_program tops /\ name <> "__default__" /\
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  ?rr. MEM (mut,nr,rr,name,args,dflts,ret,fbody)
-    (FST (classify_functions tops))
-Proof
-  strip_tac >> irule supported_headers_external_member >>
-  gvs[supported_program_def]
-QED
-
 Theorem source_runtime_entry_witness:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
@@ -39,7 +28,7 @@ Theorem source_runtime_entry_witness:
     cenv pos_args min_cds nkey transient view ret_type.
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     MEM ("fn_" ++ name,cenv,pos_args,min_cds,mut = Payable,F,nkey,
-      transient,view,fbody,ret_type) extpkgs /\
+      transient,view,subst_consts_stmts (module_consts_env tops []) fbody,ret_type) extpkgs /\
     EVERY external_fn_shape_ok extpkgs /\
     fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
     compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
@@ -52,20 +41,22 @@ Theorem source_runtime_entry_witness:
     ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
     fn_has_code label_st dispatch_st efn /\ fn_has_code dispatch_st external_st efn
 Proof
-  strip_tac >> drule_all supported_external_lookup_member >> strip_tac >>
+  strip_tac >> drule_all lookup_function_external_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
   qexistsl_tac [`build_selectors (type_env tops) (FST (classify_functions tops))`,
     `extpkgs`, `fallback`, `label_st`, `dispatch_st`, `external_st`, `entry_end`] >>
   simp[] >>
   `MEM (set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
-        (mut,F,rr,name,args,([] : expr list),ret,fbody))) extpkgs` by
+        (subst_consts_fn (module_consts_env tops [])
+          (mut,F,rr,name,args,([] : expr list),ret,fbody)))) extpkgs` by
     (simp_tac pure_ss [Once EQ_SYM_EQ] >>
      qpat_x_assum `extpkgs = _` (fn th => rewrite_tac[th]) >>
      simp[MEM_MAP] >>
-     qexists_tac `(mut,F,rr,name,args,([] : expr list),ret,fbody)` >> simp[]) >>
+     goal_assum (drule_at Any) >> simp[]) >>
   pop_assum mp_tac >>
-  simp[package_external_fn_def, set_external_package_target_def] >>
+  simp[package_external_fn_def, set_external_package_target_def,
+       constSubstTheory.subst_consts_fn_def] >>
   metis_tac[]
 QED
 

@@ -209,9 +209,11 @@ Both assembly-optimizer cases have proofs that inherit upstream admissions.
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
 and the full request list `call_requests es` (every trace entry's request,
-computed precompiles included) via `request_agree`.
+computed precompiles included) via `request_agree`. A source halt relates the
+same logs, accounts, transient storage and requests (`effects_agree`) with empty output.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
-abort kind are not compared. `unspecified_behaviour_exempt` covers exact
+abort kind are not compared, except that calldata with `calldata_dispatch` `NONE`
+requires a raised `Reverted` outcome with empty output outside resource starvation. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
 function body; it may also cover a callee-return rejection with that exact
 message, not arbitrary ReturnReject/conversion/static decode failure.
@@ -228,7 +230,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares the full request list on success and halt via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests on success or halt | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares the full request list on success and halt via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
 | D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion. The entry uses `gas_readings es`, and `call_result_rel H` checks all source gas fillings allowed by `gas_readings_rel`. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, every request recorded (`record_request`, `call_requests`); helper purity is proved, EVM purity bridge is deferred. | 2.1 |
@@ -255,7 +257,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded too, so the constructor, which runs with the frame's outcome list, takes no outcome from it. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -664,7 +666,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,
    including internal Call/Send/nested reasons, and free of the precompile
-   builtins (sha256/ecrecover/ecadd/ecmul), since it runs without the oracle.
+   builtins (sha256/ecrecover/ecadd/ecmul), so it takes no outcome from the
+   frame's outcome list it runs with.
    Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
    `constructor_call_exclusion` is a named negative boundary check;
    `constructor_precompile_builtin_excluded` checks SHA256 excluded, Keccak256 not.

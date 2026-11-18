@@ -33,6 +33,7 @@ Proof
 QED
 
 Theorem runtime_sym_fallback_classified_body:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!bindings ce lc ty ss. runtime_sym_stmts_contract tops bindings compile_stmts ce lc ty ss) /\
   set_fallback_package_target target
@@ -60,6 +61,7 @@ Theorem runtime_sym_runtime_boundary:
   (!n s v s'. EVERY runtime_sym_inst (state_insts s) /\
     compile_fixed_region_with_id n s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand (SND v).buf_operand) /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
   !fn. MEM fn unit.cu_context.ctx_functions ==>

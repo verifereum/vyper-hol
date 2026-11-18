@@ -148,7 +148,7 @@ presumed or proved.
 
 Success relates `tx_return_bytes`, accounts after EVM pending deletions,
 transient storage modulo dead target storage, logs and the full request
-list (computed precompiles included) via `request_agree`. Requests are success-only; leftover outcomes are not final
+list (computed precompiles included) via `request_agree`. A source halt relates the same effects (`effects_agree`) with empty output. Requests and these effects are compared only on success or halt, never on failure; leftover outcomes are not final
 observations. Non-exempt source failure requires target failure, without
 revert-data/reason/general-kind equality. The sole exemption is exact
 `RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function
@@ -158,9 +158,8 @@ body (including a return rejection producing that same message); not arbitrary
 The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
 threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,
 returning zero on exhaustion.
-There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read
-gas-reading correspondence; the result relation existentially chooses source
-gas observations without tying them to EVM readings. Combined environmental satisfiability and transaction/callee
+There is no msg.gas guarantee beyond `gas_readings_rel` and no caller-read
+gas-reading correspondence; the result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: it fixes some slots of the source's gas observations so that the fixed (`SOME`) slots together with the unused readings are a permutation of `gas_readings es`, and the result must hold for every value in an unfixed (`NONE`) slot and every appended tail, which the EVM readings do not constrain. For `gas=`, only the forwarded gas operand is related: on success or halt `request_agree` requires it to equal an explicit source `gas=` value; a `send` without `gas=` must forward 0; other calls without `gas=` and the gas the callee actually receives are unconstrained. Combined environmental satisfiability and transaction/callee
 producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts

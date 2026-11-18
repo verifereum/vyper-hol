@@ -687,5 +687,208 @@
         "trace_type": "call"
       }
     ]
+  },
+  "test_raw_without_deployer_nonce": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01"
+      }
+    ]
+  },
+  "test_raw_deployer_nonce": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01",
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0xBCedD280CebEaa2aca82a8db879bA678191a2a4a",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01",
+        "deployer_nonce": null
+      }
+    ]
+  },
+  "test_raw_deployer_nonce_rewind": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01",
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01",
+        "deployer_nonce": 1
+      }
+    ]
+  },
+  "test_raw_deployer_nonce_address_mismatch": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "600160005360016000f3",
+        "calldata": null,
+        "value": 0,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "runtime_bytecode": "01",
+        "deployer_nonce": 2
+      }
+    ]
   }
 }

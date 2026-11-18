@@ -6,6 +6,7 @@ Ancestors
   supportedExprTraverse compileVyper compileEnv list
 
 Theorem deploy_sym_constructor_source:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ supported_program_deploy tops /\
   ~program_reads_self_code tops /\
   SND (SND (SND (classify_functions tops))) =
@@ -15,13 +16,14 @@ Theorem deploy_sym_constructor_source:
   ~supported_stmts_expr_exists is_self_code stmts
 Proof
   strip_tac >> drule classify_functions_ctor_mem >> strip_tac >>
-  gvs[runtime_sym_supported_subst_consts_fn] >>
+  imp_res_tac runtime_sym_supported_function_subst >> gvs[] >>
   drule_all supported_program_deploy_function >>
   simp[supported_function_body_def] >> strip_tac >>
   drule_all runtime_sym_source_exclusions >> simp[]
 QED
 
 Theorem deploy_sym_constructor_package:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ supported_program_deploy tops /\
   ~program_reads_self_code tops /\
   SND (SND (SND (classify_functions tops))) =

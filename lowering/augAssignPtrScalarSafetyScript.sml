@@ -40,7 +40,8 @@ QED
 Theorem scalar_ptr_inst_ok:
   scalar_shape i /\
   EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) i.inst_operands /\
-  ~ctx_has_dalloca ctx ==> ptr_inst_ok D 0 fuel ctx fn G tn i s
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn i s
 Proof
   strip_tac >> irule scalar_ptr_inst_ok_lo >> simp[allocas_from_def]
 QED

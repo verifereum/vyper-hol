@@ -12,6 +12,9 @@ from tests.evm_backends.revm_env import RevmEnv
 from tests.exports import TestExporter
 from vyper.evm.opcodes import EVM_VERSIONS
 
+# deployment_type values the replay decoder reads as raw deployments.
+RAW_DEPLOYMENT_TYPES = {"raw_bytecode", "ir"}
+
 
 def pytest_configure(config: pytest.Config) -> None:
     latest = max(EVM_VERSIONS, key=EVM_VERSIONS.__getitem__)
@@ -39,14 +42,31 @@ def pytest_fixture_setup(fixturedef: pytest.FixtureDef, request: pytest.FixtureR
     if fixturedef.argname != "env" or not isinstance(env, BaseEnv) or env.exporter is None:
         return env
     exporter = env.exporter
+    # The module-scoped env keeps the deployer's nonce across tests, so a raw
+    # fixture can be created at a nonce its own trace doesn't account for.
+    # Record the nonce each deployment starts from; replay derives the CREATE
+    # address from it.
+    deploy = env._deploy
+    deployer_nonce: int | None = None
+
+    def nonce_recording_deploy(*args: Any, **kwargs: Any) -> str:
+        nonlocal deployer_nonce
+        deployer_nonce = env._evm.basic(env.deployer).nonce
+        return deploy(*args, **kwargs)
 
     def trace_deployment(**kwargs: Any) -> None:
+        nonlocal deployer_nonce
         if isinstance(env, RevmEnv) and kwargs["deployment_succeeded"]:
             account = env._evm.basic(kwargs["deployed_address"])
             # basic().code includes analysis padding; upstream get_code strips
             # every trailing zero, including real STOP/data bytes.
             kwargs["runtime_bytecode"] = original_code(account.code, account.code_hash).hex()
+        if kwargs["deployment_type"] in RAW_DEPLOYMENT_TYPES:
+            kwargs["deployer_nonce"] = deployer_nonce
+        deployer_nonce = None
         TestExporter.trace_deployment(exporter, **kwargs)
 
+    if isinstance(env, RevmEnv):
+        env._deploy = nonce_recording_deploy
     exporter.trace_deployment = trace_deployment
     return env

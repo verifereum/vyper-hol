@@ -90,6 +90,7 @@ Proof
   `ptr_covers G tn root initial (abi_decode_bytes_copy_size n)` by metis_tac[] >>
   `abi_decode_bytes_copy_size n = 32 + 32 * ((n + 31) DIV 32)` by
     simp[abi_decode_bytes_copy_size_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_bytestring_overwrite_prefix >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `val_in_memory tv v d actual.vs_memory` by metis_tac[] >>

@@ -6,7 +6,7 @@
  *)
 Theory bodyFullExprStmt
 Ancestors
-  bodyFullExprCore
+  bodyFullExprCore bodyFullShared
   bodySimFull gasOutcomeFullStmts gasOutcomeFullCompose gasOutcomeFull
   stmtSimExpr stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   exprSimDefs gasShadow gasShadowState loweringPosts exprLoweringProps
@@ -56,11 +56,22 @@ Proof
     metis_tac[expr_stmt_admissible] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
     by fs[ret_pc_ok_def] >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     simp[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`, `vv`,
                            `s0`, `G0`, `tn0`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   disch_then (irule o MATCH_MP
     (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_expr_stmt)) >>
   rpt conj_tac
@@ -75,23 +86,25 @@ Proof
          rpt (pop_assum mp_tac) >> rpt strip_tac >>
          drule_then irule return_buf_frame_frame >> fs[vv_post_def]) >>
       fs[vv_post_def, ghost_kept_at_def, stmt_lands_def, cenv_top_ext_refl] >>
-      `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-      `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
-        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
-           (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-         (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
       `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
         (qpat_assum `locals_kept _ _ _ _ _`
            (strip_assume_tac o REWRITE_RULE [locals_kept_def]) >>
          first_assum ACCEPT_TAC) >>
+      `return_buf_sep d cenv ee t` by
+        (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+         conj_tac >- fs[] >>
+         qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`,
+                       `cx`, `es`, `func`, `s0`, `sa`] >> simp[]) >>
       rpt conj_tac >>
       FIRST [first_assum ACCEPT_TAC,
              irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
              rpt conj_tac >>
              FIRST [first_assum ACCEPT_TAC,
                     qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`,
-                                  `cx`, `func`] >> first_assum ACCEPT_TAC]]) >>
+                                  `cx`, `func`] >>
+                    qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+                      (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+                    simp[]]]) >>
   rpt gen_tac >> strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
   rename1 `expr_exit (INR exc) r` >> simp[stmt_exit_ptr_def] >>
   Cases_on `r` >> Cases_on `exc` >> gvs[expr_exit_def, halt_exit_def] >>

@@ -29,6 +29,69 @@ Unless later brought into scope, the following are not verified by the first com
 
 These exclusions must remain visible in theorem statements or in a clearly referenced boundary predicate.
 
+### Executions outside the current theorems
+
+`vyper_call_correct` and `e2e_deploy_correctness` say nothing about an execution
+their premises do not describe. Each limit below follows from a single conjunct
+or check and is easy to miss:
+
+- **A call frame runs the code installed at its own address.** `call_state_rel`
+  (`lowering/e2eDefsScript.sml`) requires
+  `(lookup_account tx.target es.rollback.accounts).code = ctxt.msgParams.code`,
+  and its `frame_tx_rel` conjunct requires `ctxt.msgParams.callee = tx.target`.
+  In a frame entered by DELEGATECALL or CALLCODE from a proxy, the callee is the
+  proxy but the executing bytecode is the implementation's; in a call to an
+  EIP-7702 delegated account, the executing bytecode is the delegate's, not the
+  delegation designator installed at `tx.target`. Such a frame is outside
+  `vyper_call_correct` whenever its executing bytecode differs from the code
+  installed at `tx.target`, which is the usual proxy and delegation case; the
+  conjunct compares only bytecode, so a frame whose executing bytecode equals
+  that code (a self-DELEGATECALL, say) is not excluded by it. The conjunct makes the
+  target an account with installed (nonempty) code, so a nested CREATE cannot
+  land on it, bounds the length of the executing
+  code (`call_state_rel_code_length`), and ties the account code the source reads
+  for `self.codesize` and `self.codehash` to the code the frame executes.
+- **Deployment is a single creation frame.** `deploy_state_rel`
+  (`lowering/e2eDeployDefsScript.sml`) requires `es.contexts = [(ctxt, rb)]`. A
+  creation frame running under a caller (CREATE or CREATE2 from a factory) is not
+  an instance of `e2e_deploy_correctness`. The source models such a creation on
+  the caller's side, through `eval_create` and the call-outcome oracle, but no
+  current theorem covers that caller (next item).
+- **A caller that creates contracts or makes a delegate `raw_call` is not
+  covered.** `vyper_call_correct` assumes `supported_program tops`, which rejects
+  these bodies twice (`lowering/proofs/supported/`): `body_stmts_safe` rejects
+  every `expr_evm_run_root` expression (every `create_*` call and every `raw_call`
+  with `is_delegate_call=True`), and `supported_stmts` admits no `create_*` or
+  `raw_call` at all. The source semantics already models both on the caller's
+  side through the call-outcome oracle (`eval_create`, `eval_raw_call`); these
+  `supported_program` checks are what keep such bodies outside the theorem.
+  Constructors are narrower still: `e2e_deploy_correctness` also assumes
+  `constructor_call_free tops`, which rejects every call and the precompile
+  builtins in `__init__`. The constructor source runs with the frame's outcome
+  list, `load_contract (SOME (MAP SND (call_trace es))) ...` in
+  `deploy_call_result_rel`, and `constructor_call_free` ensures it takes no
+  outcome from it.
+- **Initcode is the deploy bytecode followed by the canonical constructor
+  arguments.** `deploy_state_rel` requires
+  `ctxt.msgParams.code = deploy_bc ++ args_bytes` and
+  `constructor_args_encode tops tx args_bytes`. Initcode with trailing bytes, or
+  with a non-canonical encoding of the constructor arguments, is outside the
+  theorem; the source `load_contract` takes typed argument values, not raw
+  initcode.
+
+One conjunct reads like a limit but is not one: a deployment target that already
+holds ether is covered. `deploy_state_rel` requires
+`account_empty (lookup_account tx.target es.originalAccounts)`, which constrains
+only the original-accounts snapshot. Verifereum resets the creation target's
+entry in that snapshot to `empty_account_state` when a creation starts (both the
+transaction-level creation and `proceed_create`). The live account comes from
+`es.rollback.accounts = accounts_after_transfer tx am.accounts`, and nothing
+constrains its balance to zero.
+
+What the theorems compare on the executions they do cover is in
+[Observational correctness](#observational-correctness) and
+[Observations, resources and limits](#observations-resources-and-limits).
+
 ## Compiler stages
 
 The first end-to-end result should compose:
@@ -51,7 +114,7 @@ Subject to language features represented by the formal AST and pinned lowering d
 - contract creation supported by lowering;
 - nested EVM contexts;
 - fallback and selector dispatch;
-- ABI arguments, return data, and revert data;
+- ABI arguments and return data (for revert data, see [Revert data](#revert-data));
 - persistent and transient storage;
 - memory and immutables;
 - logs and externally visible account effects;
@@ -64,7 +127,8 @@ Unsupported pinned-compiler features must be listed explicitly rather than hidde
 The source and EVM executions need not have identical internal states. Correctness should relate externally meaningful observations, expected to include:
 
 - execution outcome;
-- ABI-encoded return or revert data;
+- ABI-encoded return data, and on failure that the frame failed (revert data is
+  not compared; see [Revert data](#revert-data));
 - persistent account state and balances;
 - transient storage where visible within the transaction model;
 - logs;
@@ -74,6 +138,34 @@ The source and EVM executions need not have identical internal states. Correctne
 Internal Venom variables, compiler temporary memory, spills, labels, stack layout, and program counters are simulation details rather than source observations.
 
 The exact observation type/relation is a phase-2 deliverable. It should support composition and nested calls without requiring equality of irrelevant target internals.
+
+### Revert data
+
+The current theorems observe that a frame failed, not the bytes it returned on
+failure. For a source `AssertException s`, `exception_outcome_rel`
+(`lowering/e2eDefsScript.sml`) requires a failed frame outcome that is `Reverted`
+and raised by the frame itself (`frame_raises es Reverted`), or any failure when
+`s = "UNREACHABLE"`; `deploy_result_rel` (`lowering/e2eDeployDefsScript.sml`)
+requires `Reverted` or, for `"UNREACHABLE"`, any failure. For a source `Error e`
+(for example the bubbled failure of an `extcall`) both relations
+accept any failed frame outcome; when `unspecified_behaviour_exempt tops e` holds
+(see the exemption under
+[Observations, resources and limits](#observations-resources-and-limits)) they
+constrain the frame not at all. Wherever a failure is required, the output
+bytes of `frame_outcome` are existentially quantified, so reason strings, custom
+error payloads and bubbled revert data are not compared. The one exception is
+calldata for which `calldata_dispatch tops tx.calldata = NONE`
+(`semantics/vyperCalldataScript.sml`): a selector miss in a contract without
+`__default__`, fewer than 4 bytes without `__default__`, or a selector hit whose
+calldata is shorter than its static head or whose arguments fail to decode. There
+`calldata_result_rel` requires `frame_raises es Reverted` and a `Reverted` frame
+outcome with empty return data, unless the frame is resource-starved
+(`frame_resource_starved`), the other disjunct of the conclusion. Deployment
+failures carry these obligations only where its result relation applies:
+`e2e_deploy_correctness` concludes `creation_resource_starved es r es' \/
+deploy_call_result_rel ...`, and `deploy_call_result_rel` requires
+`deploy_result_rel` only for gas fillings that satisfy `deploy_storage_ok`.
+Whether the theorems should promise revert bytes is an open scope question.
 
 ## Calls and nested contexts
 
@@ -121,7 +213,10 @@ and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
 partial/absent producers and built evidence. [TASK060 final validation](compiler-proof-milestone-1-exit-2026-10-09.md)
 is complete, without proving the admitted stages.
 
-The entire public theorem is:
+The current statement is under [Fixed storage regions](#fixed-storage-regions);
+its unmatched-calldata arm is described under [Revert data](#revert-data).
+
+The entire public theorem was then:
 
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
@@ -149,8 +244,8 @@ with 101 fixture membership proofs; it is not typing or semantic correctness.
 
 A call frame is the head EVM context. `run_call` is Verifereum's execution until
 that frame ends; parent frames below it are arbitrary. It is not a claim about
-running the entire transaction. `call_state_rel` requires a fresh **nonstatic**
-frame: wf_state/Collect mode, memory output, code `runtime_bc ++ section` with
+running the entire transaction. `call_state_rel` requires a fresh frame, static or
+not (`ctxt.msgParams.static = tx.is_static`): wf_state/Collect mode, memory output, code `runtime_bc ++ section` with
 `immutables_section_rel tops (account_immutables am tx.target) section`, its
 `parse_code 0 FEMPTY` map, size <=24576, jumpDest NONE, PC0 and empty stack,
 memory, logs and return data. Message caller/callee/value and transaction/block
@@ -164,10 +259,11 @@ The exact singleton main source must already be installed at `tx.target`, with
 no exports and declared layout slots. Runtime typing readiness likewise requires
 installed sources and ready immutables; it is not readiness for an uninstalled
 source target. The live target account's code must equal the executing frame's
-code. `valid_vyper_call` selects
+code. In the 2026-10-09 statement, `valid_vyper_call` selected
 the exact External declaration, nonreentrant flag F, no defaults, no
 `__default__`, exact argument count, successful bounded binding and encoded
-calldata for the declared argument types; `ret` is the looked-up return type.
+calldata for the declared argument types, and `ret` was the looked-up return type;
+the current theorem has no such premise and cases on `calldata_dispatch` instead.
 
 `frame_outcome` describes both single-frame and nested completion. In the nested
 case our frame is popped, the parent receives the success flag/return data,
@@ -202,7 +298,8 @@ an ecadd/ecmul argument that is not a valid curve point makes the source raise
 before any request, while the compiled STATICCALL records one before its
 ASSERT aborts; `call_result_rel` compares effects only on success or halt, so
 this mismatch is outside what the theorem relates. Constructors, which run
-without the oracle, exclude them (`constructor_call_free`). Other
+with the frame's outcome list but take nothing from it, exclude them
+(`constructor_call_free`). Other
 calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner
@@ -222,9 +319,16 @@ records readiness/input/constants/protected-storage/oracle hypotheses.
 The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
 FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
 when exhausted; assembly also uses frame-local EVM gas readings. There is **no caller-read
-gas-reading correspondence**, source `msg.gas` guarantee or `gas=` keyword guarantee.
-The result relation existentially chooses source gas observations without tying
-them to EVM readings. The old
+gas-reading correspondence** and no source `msg.gas` guarantee. For `gas=`, the
+theorem relates only the operand: where requests are compared (success or halt),
+`request_agree` requires `r1.cr_gas = SOME g ==> r2.cr_gas = SOME g` of every
+compared request. Among the call forms `supported_program` admits (`extcall`,
+`staticcall` and `send`), a call with an explicit source `gas=` value therefore
+forwards exactly that gas operand on its CALL or STATICCALL, and a `send` without
+`gas=` records 0, so its operand must be 0. The operand of any other call without `gas=` is unconstrained,
+creations and the precompile builtins record none, and the gas the callee
+actually receives is not related.
+The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: it fixes some slots of the source's gas observations so that the fixed (`SOME`) slots together with the unused readings are a permutation of `gas_readings es`, and the result must hold for every value in an unfixed (`NONE`) slot and every appended tail, which the EVM readings do not constrain. The old
 2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
 
 ### Observations, resources and limits
@@ -232,14 +336,20 @@ them to EVM readings. The old
 - Success requires a successful frame outcome, `tx_return_bytes` (raw return
   bytes for raw-return functions, otherwise `return_bytes`), account agreement
   after EVM pending deletions and transient-storage agreement modulo dead target
-  storage, ordered concrete logs and `LIST_REL (request_agree cx)` against
-  `call_requests es`. Requests are compared only
-  on success; terminal leftover outcome lists are not related observations.
+  storage, ordered concrete logs and
+  `LIST_REL (request_agree H tx.target) rqs (call_requests es)`, where `H` is the
+  run's own storage horizon in `call_result_rel_at`, not the theorem's fixed
+  `H`. A source halt (`HaltException`) requires a successful
+  frame outcome with empty output, the source's ordered logs and the same account,
+  transient-storage and request agreement (`effects_agree`). Requests and these effects are compared
+  only on success or halt; `exception_outcome_rel` compares none of them on
+  failure. Terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
   Non-exempt source Error requires a failed frame. Lowering requires a
   terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
   escaped Break/Continue/Return control has no corresponding result clause.
-  There is **no revert-data/reason/general abort-kind equality**. The pipeline
+  There is **no revert-data/reason/general abort-kind equality** (see
+  [Revert data](#revert-data)). The pipeline
   is a forward simulation with deliberately weaker failure observations.
 - The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
   body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
@@ -263,9 +373,11 @@ them to EVM readings. The old
   storage premises, OutOfGas implies oversized deposited code or a reached
   `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
   code-size-only alternative. Its assembly-optimizer case also remains admitted.
-- Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
-  arbitrary unsupported programs are outside this runtime contract. Outgoing
-  STATICCALL is not a static-entry guarantee. Environmental satisfiability,
+- msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
+  arbitrary unsupported programs are outside this runtime contract. Static entry
+  (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`
+  over `account_immutables am tx.target`) and a `__default__` reached by
+  `calldata_dispatch` are covered. Environmental satisfiability,
   transaction entry/storage and callee-outcome producers remain Milestone 7
   obligations; selected boundary regressions do not discharge them.
 
@@ -319,6 +431,8 @@ The final statements will need explicit assumptions concerning at least:
 - absence or treatment of target resource exhaustion.
 
 Phase 2 must distinguish genuine environment assumptions from compiler invariants that earlier stages are responsible for proving.
+
+The executions the current theorems do not cover at all (proxy and delegated frames whose executing bytecode differs from the target's code, nested creation frames, callers that create, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
 
 ## Planned theorem family
 

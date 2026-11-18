@@ -44,12 +44,12 @@ Supported declaration headers admit public storage/transient variables and
 hashmaps. External-entry proofs distinguish explicit functions from synthesized
 getters and use the checked getter argument/body typing package.
 
-Module constants are substituted into function bodies and defaults, rather than
-lowered as immutables. The general replay proof remains conditional, including
-its restriction on SHA256 expressions. Every `Constant` declaration, and public
-immutable declarations, still fails the supported-header gate. Concrete parity
-for these forms does not discharge constant bare-global simulation invariants
-without that gate.
+The declaration-header gate accepts module constants. The program gate requires
+each folded replacement expression to be a supported pure expression.
+Substitution reaches function bodies, defaults, and synthesized public constant
+getters. The general replay proof remains conditional, including its restriction
+on SHA256 expressions. Public immutable declarations still fail the
+supported-header gate.
 
 ## Pending nonreentrancy fixture
 
