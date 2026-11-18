@@ -41,6 +41,7 @@ Ancestors
   dftPacketPreterminalNativeAgreement dftPacketCallFreshCaller dftPacketPreterminalGeometry
   dftPacketPseudoAdvance
   dftPacketPseudoCurrentCutArrays
+  dftPacketPseudoNextClauses
   dftPacketPseudoCursor
   dftPacketPseudoSegment dftPacketPseudoFreshCut dftPacketPseudoKeyFreshness dftPacketPseudoHistory
   dftPacketPseudoCutFrame dftPacketPseudoReplayFrame dftPacketPseudoPrefixFrame

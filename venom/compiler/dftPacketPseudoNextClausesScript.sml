@@ -4,7 +4,7 @@ Ancestors
   dftPacketPseudoKeyFreshness dftPacketExistingPathRows dftPacketExistingPathInsertion
   dftPacketPseudoHistoryFrame dftPacketPseudoHistoryCuts dftPacketPseudoHistoryReplay
   dftPacketFirstBodyObservation dftPacketFreshRow dftPacketEntryReplay
-  dftPacketCallInsertionConservation
+  dftPacketCallInsertionConservation dftPacketPseudoCurrentCutArrays
   dftGasFromListTraceDefs dftRunRel dftIndexedExec o1PassContract
   frameJointTransition unitMemInv gasEvents finite_map pred_set list rich_list
   venomInst venomState venomExecSemantics
@@ -3112,5 +3112,397 @@ Resume dft_packet_pseudo_next_clauses[current_cut_ancestor_record]:
 QED
 
 Resume dft_packet_pseudo_next_clauses[current_cut_flatten]:
+  qabbrev_tac `Mcut1 = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ms1 (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP ms1 (ai,ei))))) cuts1)` >>
+  qabbrev_tac `Ecut1 = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP es1 (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP es1 (ai,ei))))) cuts1)` >>
+  qabbrev_tac `Kcut1 = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ks1 (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP ks1 (ai,ei))))) cuts1)` >>
+  qabbrev_tac `mrow = if SUC k < LENGTH ps then [] else cm` >>
+  qabbrev_tac `erow = if SUC k < LENGTH ps then [] else ce` >>
+  qabbrev_tac `krow = if SUC k < LENGTH ps then [] else ck` >>
+  `FST (HD cuts) = []` by
+    (qpat_assum `MAP _ cuts = _` (mp_tac o Q.AP_TERM `HD`) >>
+     qpat_assum `cuts <> []` mp_tac >> rpt (pop_assum kall_tac) >>
+     Cases_on `cuts` >> simp[HD_REVERSE,GENLIST_EQ_NIL,GENLIST_LAST,DROP_LENGTH_TOO_LONG] >>
+     rename1 `FST hd` >> PairCases_on `hd` >> simp[]) >>
+  `(!i ai dsi ei qi zi. i < LENGTH cuts /\ EL i cuts = (ai,dsi,ei,qi,zi) ==>
+     ?sfi tfi inci enti orderi resi nresti later.
+       FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+       orderi = dsi ++ ei::later /\
+       (SUC i < LENGTH cuts ==> ?cid ch b done ent ret.
+          FLOOKUP calls (ai,ei,cid) = SOME (qi,ch,b,done,ent,ret) /\
+          FST (EL (SUC i) cuts) = (ei,cid)::ai))` by suspend "current_cut_array_geometry" >>
+  `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+    ALL_DISTINCT order /\ (a = p ==> LAST order = d) /\
+    (!i. i < LENGTH p /\ a = DROP (SUC i) p ==> LAST order = FST (EL i p))` by
+      suspend "current_cut_array_order" >>
+  `FLOOKUP ms1 (p,d) = SOME mrow /\ FLOOKUP es1 (p,d) = SOME erow /\
+   FLOOKUP ks1 (p,d) = SOME krow /\ q0 <= LENGTH mrow /\
+   LIST_REL (\m e. LENGTH m = LENGTH e) mrow erow /\
+   LIST_REL (\m k. LENGTH m = LENGTH k) mrow krow` by suspend "current_cut_array_rows" >>
   suspend "current_cut_array_join"
 QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_geometry]:
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN assume_tac) >>
+  qpat_assum `!i ai ds ei qi zi. _ ==> ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi ini hi bei counti fronti closedi resti later. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_assum `FLOOKUP acts ai = SOME (_,_,_,_,_,_,_)` (irule_at Any) >>
+  qpat_assum `orderi = dsi ++ ei::later'` (irule_at Any) >>
+  disch_tac >> `SUC i <> LENGTH cuts` by simp[] >>
+  qpat_assum `SUC i <> LENGTH cuts` (fn ne =>
+    qpat_x_assum `if SUC i = LENGTH cuts then _ else _`
+      (strip_assume_tac o REWRITE_RULE [ne])) >>
+  goal_assum (drule_at Any) >>
+  qpat_assum `SUC i < LENGTH cuts` (fn lt =>
+    qpat_assum `EL (SUC i) (MAP _ cuts) = _` (mp_tac o REWRITE_RULE [MATCH_MP listTheory.EL_MAP lt])) >>
+  simp[NoAsms,pairTheory.ELIM_UNCURRY]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_order]:
+  map_every qx_gen_tac [`cut_path0`,`cut_sf0`,`cut_tf0`,`cut_inc0`,`cut_ent0`,
+    `cut_order0`,`cut_res0`,`cut_rest0`] >>
+  disch_tac >> conj_tac
+  >- (asm "activations" (drule_then (fn th => SUBST1_TAC (cj 6 th))) >>
+      simp[NoAsms,ALL_DISTINCT_GENLIST,arithmeticTheory.ADD_CLAUSES]) >>
+  conj_tac
+  >- (disch_then SUBST_ALL_TAC >>
+      qpat_assum `FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE)` (fn th =>
+        qpat_assum `FLOOKUP acts p = SOME (cut_sf0,cut_tf0,cut_inc0,cut_ent0,cut_order0,cut_res0,cut_rest0)`
+          (mp_tac o REWRITE_RULE [th,optionTheory.SOME_11,pairTheory.PAIR_EQ])) >>
+      qpat_assum `LAST order = d` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]) >>
+  qx_gen_tac `cut_idx0` >> strip_tac >>
+  qsuff_tac `?pf pt pi pe po.
+     FLOOKUP acts (DROP (SUC cut_idx0) p) = SOME (pf,pt,pi,pe,po,NONE,NONE) /\
+     LAST po = FST (EL cut_idx0 p)`
+  >- (qpat_assum `FLOOKUP acts cut_path0 = SOME _` mp_tac >>
+      qpat_assum `cut_path0 = DROP (SUC cut_idx0) p` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      metis_tac[optionTheory.SOME_11,pairTheory.PAIR_EQ]) >>
+  asm "parents" (qspec_then `cut_idx0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  rpt (pop_assum kall_tac) >> metis_tac[pairTheory.FST]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_rows]:
+  asm "block_records" (drule_then strip_assume_tac) >>
+  qpat_assum `(case (NONE:(venom_state # num) option) of NONE => _ | SOME _ => _)`
+    (strip_assume_tac o REWRITE_RULE [optionTheory.option_case_def]) >>
+  Cases_on `SUC k < LENGTH ps` >- suspend "current_cut_array_interior" >>
+  suspend "current_cut_array_boundary"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_interior]:
+  `q0 = 0` by
+    (qpat_assum `IS_SOME (if SUC k < LENGTH ps then NONE else SOME _) /\ _ \/ _` mp_tac >>
+     qpat_assum `SUC k < LENGTH ps` (fn th => simp[NoAsms,th])) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`Abbrev (mrow = _)`,`Abbrev (erow = _)`,`Abbrev (krow = _)`,
+     `Abbrev (ms1 = _)`,`Abbrev (es1 = _)`,`Abbrev (ks1 = _)`,
+     `FLOOKUP ms_tab (p,d) = SOME []`,`FLOOKUP es_tab (p,d) = SOME []`,
+     `FLOOKUP ks_tab (p,d) = SOME []`,`q0 = 0`,`SUC k < LENGTH ps`] >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  simp[Abbr `mrow`,Abbr `erow`,Abbr `krow`,Abbr `ms1`,Abbr `es1`,Abbr `ks1`]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_boundary]:
+  `q0 < LENGTH xs` by
+    (qpat_assum `IS_SOME (if SUC k < LENGTH ps then NONE else SOME _) /\ _ \/ _` mp_tac >>
+     qpat_assum `~(SUC k < LENGTH ps)` (fn th => simp[NoAsms,th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`Abbrev (mrow = _)`,`Abbrev (erow = _)`,`Abbrev (krow = _)`,
+     `Abbrev (cm = _)`,`Abbrev (ce = _)`,`Abbrev (ck = _)`,
+     `FLOOKUP ms_new (p,d) = SOME cm`,`FLOOKUP es_new (p,d) = SOME ce`,
+     `FLOOKUP ks_new (p,d) = SOME ck`,
+     `Abbrev (ms1 = _)`,`Abbrev (es1 = _)`,`Abbrev (ks1 = _)`,
+     `q0 < LENGTH xs`,`~(SUC k < LENGTH ps)`] >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  simp[Abbr `mrow`,Abbr `erow`,Abbr `krow`,Abbr `ms1`,Abbr `es1`,Abbr `ks1`,
+       Abbr `cm`,Abbr `ce`,Abbr `ck`,LIST_REL_EL_EQN,EL_GENLIST] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_join]:
+  `Mcut1 = Mcut ++ FLAT (TAKE q0 mrow) /\ (?rest. AM1 [] = Mcut1 ++ rest) /\
+   Ecut1 = Ecut ++ FLAT (TAKE q0 erow) /\ (?rest. AE1 [] = Ecut1 ++ rest) /\
+   Kcut1 = Kcut ++ FLAT (TAKE q0 krow) /\ (?rest. AK1 [] = Kcut1 ++ rest) /\
+   LENGTH Mcut1 = LENGTH Ecut1 /\ LENGTH Mcut1 = LENGTH Kcut1` by
+    suspend "current_cut_array_apply" >>
+  qmatch_asmsub_rename_tac `AM1 [] = Mcut1 ++ mr1` >>
+  qmatch_asmsub_rename_tac `AE1 [] = Ecut1 ++ er1` >>
+  qmatch_asmsub_rename_tac `AK1 [] = Kcut1 ++ kr1` >>
+  qexistsl [`cuts1`,`levels1`,`Mcut1`,`Ecut1`,`Kcut1`,`mr1`,`er1`,`kr1`] >>
+  conj_tac >- (qpat_assum `MAP _ cuts1 = MAP _ cuts` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  map_every (fn x => conj_tac >- simp[NoAsms,Abbr x]) [`Mcut1`,`Ecut1`,`Kcut1`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  suspend "current_cut_eval"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_array_apply]:
+  pure_rewrite_tac[GSYM CONJ_ASSOC] >>
+  MATCH_MP_TAC (PURE_REWRITE_RULE [GSYM CONJ_ASSOC]
+    dft_packet_pseudo_current_cut_arrays) >>
+  qpat_assum `cuts = cut_pre ++ [(p,ds,d,0,zold)]` (irule_at Any) >>
+  qpat_assum `Abbrev (cuts1 = _)`
+    (irule_at Any o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qexistsl [`ms1`,`ms_tab`,`ks1`,`ks_tab`,`es1`,`es_tab`,`calls`,`acts`] >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (rpt gen_tac >> strip_tac >>
+    map_every (fn label => asm label (drule_all_then assume_tac o cj 1))
+      ["mask_history","site_history","key_history"] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (conj_tac >- (rpt gen_tac >> disch_tac >>
+    map_every (fn label => asm label (fn th =>
+      drule_then (assume_tac o CONJUNCT1) (cj 3 th) >>
+      drule_then assume_tac (cj 8 th)))
+      ["mask_history","site_history","key_history"] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
+  map_every (fn ab => conj_tac >- simp[NoAsms,Abbr ab])
+    [`AM1`,`AE1`,`AK1`] >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  map_every (fn ab => conj_tac >- simp[NoAsms,Abbr ab])
+    [`Mcut1`,`Ecut1`,`Kcut1`] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_eval]:
+  `MAP (\(ai,ds,ei,qi,zi). case THE (FLOOKUP acts ai) of
+    (sfi,tfi,inci,enti,orderi,resi,nresti) => inci) cuts1 =
+   MAP (\(ai,ds,ei,qi,zi). case THE (FLOOKUP acts ai) of
+    (sfi,tfi,inci,enti,orderi,resi,nresti) => inci) cuts` by
+    (qpat_assum `cuts = cut_pre ++ [_]` SUBST1_TAC >> simp[NoAsms,Abbr `cuts1`]) >>
+  `!fuel gs tail. N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut1 gs ==>
+    levels_ok fuel C7 levels1 (MAP (\(ai,ds,ei,qi,zi). ai) cuts1)
+      (MAP (\(ai,ds,ei,qi,zi). case THE (FLOOKUP acts ai) of
+        (sfi,tfi,inci,enti,orderi,resi,nresti) => inci) cuts1)
+      root_sf (root_entry with vs_gas_readings := gs ++ tail) [] 0 /\
+    (?extra. Ecut1 = FST (rooted_eval fuel C7 levels1
+      (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
+    (case SND (rooted_eval fuel C7 levels1 (root_entry with vs_gas_readings := gs ++ tail)) of
+      OK v => FST (rooted_eval fuel C7 levels1 (root_entry with vs_gas_readings := gs ++ tail)) = Ecut1 /\
+        v.vs_gas_readings = tail /\
+        (?before after. trace_blocks [] 0 fuel C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
+          before ++ [((p,d,(EL (LENGTH z0) (DROP l bb.bb_instructions)).inst_id),sf,
+            EL (LENGTH z0) (DROP l bb.bb_instructions),v)] ++ after /\
+          trace_gas before = ZIP (Kcut1,gs)) /\
+        (!tail'. rooted_eval fuel C7 levels1 (root_entry with vs_gas_readings := gs ++ tail') =
+          (Ecut1,OK (v with vs_gas_readings := tail'))) /\
+        (SUC k < LENGTH ps ==> v with vs_gas_readings := s1.vs_gas_readings = s1)
+    | stopped => run_blocks fuel C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
+        gas_events_blocks fuel C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
+          FST (rooted_eval fuel C7 levels1 (root_entry with vs_gas_readings := gs ++ tail)))` by
+    suspend "current_cut_fresh_apply" >>
+  suspend "current_cut_replay_join"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_fresh_apply]:
+  map_every (fn pat => qpat_assum pat SUBST1_TAC)
+    [`Mcut1 = Mcut ++ FLAT (TAKE q0 mrow)`,
+     `Ecut1 = Ecut ++ FLAT (TAKE q0 erow)`,
+     `Kcut1 = Kcut ++ FLAT (TAKE q0 krow)`] >>
+  MATCH_MP_TAC (GEN_ALL (cj 3 dft_packet_pseudo_fresh_cut)) >>
+  suspend "current_cut_fresh_inputs"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_fresh_inputs]:
+  qexistsl [`zold`,`xs`,`u`,`s`,`rows_pre`,`row_eval`,`q0`,`plan_ok`,`plan_eval`,
+    `MAP (\(ai,ds,ei,qi,zi). ai) cuts`,`cm`,`levels`,`level_pre`,`ck`,
+    `N-d`,`ce`,`ds`,`cuts`,`cut_pre`,`call_setup`,`C8`] >>
+  ntac 6 (asm_x "evaluators" assume_tac) >>
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (sym_tac >> first_assum ACCEPT_TAC)) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >-
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`lookup_block s.vs_current_bb fn.fn_blocks = SOME bt`,
+       `lookup_block bb.bb_label sf.fn_blocks = SOME bb`,`bt.bb_label = bb.bb_label`] >>
+     rpt (pop_assum kall_tac) >> metis_tac[venomExecPropsTheory.lookup_block_label])) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (qpat_assum `phi_prefix_length bb.bb_instructions = l` (fn eq =>
+     qpat_assum `s.vs_inst_idx = k` (fn idx => simp[NoAsms,Abbr `zold`,eq,idx])))) >>
+  map_every (fn ab => conj_tac >- simp[NoAsms,Abbr ab]) [`cm`,`ce`,`ck`] >>
+  (conj_tac >- suspend "current_cut_phase_inputs") >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- simp[NoAsms,Abbr `cuts1`]) >>
+  (conj_tac >- REFL_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- simp[NoAsms,Abbr `levels1`]) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_assum `MAP (\(ai,ds,ei,qi,zi). case THE (FLOOKUP acts ai) of
+    (sfi,tfi,inci,enti,orderi,resi,nresti) => inci) cuts1 = _` SUBST1_TAC >>
+  qpat_assum `phi_prefix_length bb.bb_instructions = l` (SUBST1_TAC o SYM) >>
+  qpat_assum `!F gs tail. N <= F /\ LIST_REL _ Mcut gs ==>
+    levels_ok F C7 levels _ _ _ _ [] 0 /\ _` mp_tac >>
+  simp[NoAsms]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_phase_inputs]:
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`IS_SOME (if SUC k < LENGTH ps then NONE else SOME _) /\ _ \/ _`,
+     `s1 = u with vs_inst_idx := SUC k`,`k < LENGTH ps`,
+     `phi_prefix_length bb.bb_instructions = l`,
+     `Abbrev (mrow = _)`,`Abbrev (erow = _)`,`Abbrev (krow = _)`] >>
+  rpt (pop_assum kall_tac) >> rpt (disch_then assume_tac) >>
+  Cases_on `SUC k < LENGTH ps` >>
+  gvs[Abbr `mrow`,Abbr `erow`,Abbr `krow`] >> metis_tac[]
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_replay_join]:
+  qx_gen_tac `fuel` >> qx_gen_tac `gs` >> qx_gen_tac `tail` >> strip_tac >>
+  qpat_assum `!fuel gs tail. N <= fuel /\ LIST_REL _ Mcut1 gs ==> _`
+    (qspecl_then [`fuel`,`gs`,`tail`] mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  `sf0 = sf` by
+    (qpat_assum `FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE)` (fn th =>
+       qpat_assum `FLOOKUP acts p = SOME (sf0,_,_,_,_,_,_)`
+         (mp_tac o REWRITE_RULE [th])) >>
+     simp[NoAsms,pairTheory.PAIR_EQ]) >>
+  map_every (fn pat => qpat_assum pat SUBST1_TAC)
+    [`sf0 = sf`,`phi_prefix_length bb.bb_instructions = l`] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (mk_asm "fresh_semantics"))) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  Cases_on `rooted_eval fuel C7 levels1 (root_entry with vs_gas_readings := gs ++ tail)` >>
+  rename1 `rooted_eval fuel C7 levels1 _ = (events,result)` >>
+  Cases_on `result` >>
+  asm_x "fresh_semantics" mp_tac >>
+  simp[NoAsms] >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  Cases_on `SUC k < LENGTH ps`
+  >- (qpat_assum `SUC k < LENGTH ps` (fn th => simp[NoAsms,th])) >>
+  qpat_assum `~(SUC k < LENGTH ps)` (fn th => simp[NoAsms,th]) >>
+  strip_tac >> suspend "current_cut_observation"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_observation]:
+  `SUC k = LENGTH ps` by
+    (qpat_assum `~(SUC k < LENGTH ps) ==> SUC k = LENGTH ps` drule >> simp[]) >>
+  qpat_assum `SUC k = LENGTH ps ==> dft_remaining_inv sf bb xs s1` drule >> strip_tac >>
+  qpat_assum `SUC k = LENGTH ps ==> ys <> [] /\ _` drule >> strip_tac >>
+  `Mcut1 = Mcut ++ FLAT (TAKE q0 cm)` by
+    (qpat_assum `Mcut1 = Mcut ++ FLAT (TAKE q0 mrow)` SUBST1_TAC >>
+     qpat_assum `~(SUC k < LENGTH ps)` (fn th => simp[NoAsms,Abbr `mrow`,th])) >>
+  `?gs0 gs1. gs = gs0 ++ gs1 /\
+     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs0 /\
+     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT (TAKE q0 cm)) gs1` by
+    (qpat_assum `LIST_REL _ Mcut1 gs` mp_tac >>
+     qpat_assum `Mcut1 = Mcut ++ FLAT (TAKE q0 cm)` SUBST1_TAC >>
+     simp[NoAsms,LIST_REL_SPLIT1]) >>
+  pop_assum strip_assume_tac >>
+  qpat_assum `LIST_REL _ (FLAT (TAKE q0 cm)) gs1`
+    (mp_then (Pat `LIST_REL _ (FLAT _) _`) strip_assume_tac
+       dftPacketFillingBoundaryTheory.dft_packet_flat_filling_split) >>
+  rename1 `gs1 = FLAT kgss` >>
+  `!ev w. rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+      (ev,OK w) ==> w = s with vs_gas_readings := FLAT kgss ++ tail` by
+    suspend "current_cut_old_endpoint" >>
+  suspend "current_cut_observation_apply"
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_old_endpoint]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!F gs tail. N <= F /\ LIST_REL _ Mcut gs ==> _`
+    (qspecl_then [`fuel`,`gs0`,`gs1 ++ tail`] mp_tac) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+  qpat_assum `gs = gs0 ++ gs1` (fn th =>
+    qpat_assum `rooted_eval fuel C7 levels _ = (ev,OK w)`
+      (fn eq => simp[NoAsms,REWRITE_RULE [th,GSYM APPEND_ASSOC] eq])) >>
+  strip_tac >>
+  qpat_assum `w with vs_gas_readings := s.vs_gas_readings = s` (fn th =>
+    GEN_REWRITE_TAC (RHS_CONV o ONCE_DEPTH_CONV) empty_rewrites [GSYM th]) >>
+  qpat_assum `w.vs_gas_readings = gs1 ++ tail` (fn th =>
+    qpat_assum `gs1 = FLAT kgss` (fn eq => simp[NoAsms,GSYM eq,GSYM th]))
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_observation_apply]:
+  `bb_well_formed bt` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`dft_fn_rel sf fn`,`fn = dft_fn sf`,
+       `lookup_block bb.bb_label fn.fn_blocks = SOME bt`] >>
+     rpt (pop_assum kall_tac) >> simp[dft_fn_rel_def] >>
+     metis_tac[dftCorrectnessTheory.dft_fn_blocks_well_formed,
+               venomExecPropsTheory.lookup_block_MEM]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) xs)` by
+    (qpat_assum `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` mp_tac >>
+     qpat_assum `bb.bb_instructions = ps ++ xs` SUBST1_TAC >>
+     simp[NoAsms,ALL_DISTINCT_APPEND]) >>
+  `q0 < LENGTH xs /\ z0 = DROP l ps ++ TAKE q0 xs /\
+   EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) (TAKE q0 xs)` by
+    suspend "current_cut_observation_prefix" >>
+  `EL q0 xs = HD ys` by
+    (qpat_assum `i1 = HD ys` (fn eq => simp[NoAsms,GSYM eq]) >>
+     first_assum ACCEPT_TAC) >>
+  `inv_memory_observation (EL q0 xs).inst_opcode` by
+    (qpat_assum `EL q0 xs = i1` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `l = phi_prefix_length bb.bb_instructions` by
+    (sym_tac >> first_assum ACCEPT_TAC) >>
+  `zold = DROP l (TAKE k ps)` by
+    (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+      [`l = phi_prefix_length bb.bb_instructions`, `k = s.vs_inst_idx`] >>
+     simp[NoAsms,Abbr `zold`]) >>
+  qpat_assum `Abbrev (levels1 = _)` (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_assum `Abbrev (cm = _)` (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  ntac 6 (asm_x "evaluators" assume_tac) >>
+  map_every (fn pat => qpat_assum pat
+    (fn th => assume_tac (BETA_RULE (Q.AP_THM (Q.AP_THM th `fuel`) `C7`))))
+    [`row_eval = _`, `plan_eval = _`, `rooted_eval = _`] >>
+  qpat_assum `call_setup = _`
+    (fn th => assume_tac (BETA_RULE (Q.AP_THM th `C7`))) >>
+  qpat_assum `EL q0 xs = i1` (SUBST1_TAC o SYM) >>
+  let
+    fun apply [] th = ACCEPT_TAC (CONJUNCT2 th)
+      | apply (pat::pats) th = qpat_assum pat (mp_then (Pos hd) (apply pats) th)
+  in
+    apply
+      [`row_eval fuel C7 = _`, `plan_eval fuel C7 = _`, `call_setup C7 = _`,
+       `rooted_eval fuel C7 = _`, `LIST_REL dft_fn_rel C7.ctx_functions C8.ctx_functions`,
+       `dft_fn_rel sf fn`, `MEM bb sf.fn_blocks`,
+       `lookup_block bb.bb_label sf.fn_blocks = SOME bb`,
+       `lookup_block bb.bb_label fn.fn_blocks = SOME bt`,
+       `bb.bb_instructions = ps ++ xs`, `bt.bb_instructions = ps ++ ys`,
+       `EVERY (\i. is_pseudo i.inst_opcode) ps`,
+       `EVERY (\i. ~is_pseudo i.inst_opcode) xs`,
+       `EVERY inst_shape_ok bb.bb_instructions`, `bb_well_formed bt`,
+       `ALL_DISTINCT (MAP (\i. i.inst_id) xs)`, `l = phi_prefix_length bb.bb_instructions`,
+       `l <= k`, `k < LENGTH ps`, `SUC k = LENGTH ps`, `s.vs_inst_idx = k`,
+       `step_inst (N-d) C8 (EL k ps) s = OK u`, `s1 = u with vs_inst_idx := SUC k`,
+       `dft_remaining_inv sf bb xs s1`, `q0 < LENGTH xs`, `ys <> []`,
+       `EL q0 xs = HD ys`, `inv_memory_observation (EL q0 xs).inst_opcode`,
+       `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) (TAKE q0 xs)`,
+       `cm = GENLIST _ _`, `LIST_REL _ (TAKE q0 cm) kgss`,
+       `zold = DROP l (TAKE k ps)`, `z0 = DROP l ps ++ TAKE q0 xs`,
+       `levels = level_pre ++ [(sf,rows_pre ++ [(bb,d,zold)],NONE)]`,
+       `levels1 = level_pre ++ [(sf,rows_pre ++ [(bb,d,z0)],NONE)]`,
+       `!ev w. rooted_eval fuel C7 levels _ = (ev,OK w) ==> w = s with vs_gas_readings := _`,
+       `rooted_eval fuel C7 levels1 _ = (events,OK v)`]
+      (Q.SPEC `fuel` dft_packet_first_body_rooted_observation)
+  end
+QED
+
+Resume dft_packet_pseudo_next_clauses[current_cut_observation_prefix]:
+  qpat_assum `IS_SOME (if SUC k < LENGTH ps then NONE else SOME _) /\ _ \/ _` mp_tac >>
+  qpat_assum `~(SUC k < LENGTH ps)` (fn th =>
+    qpat_assum `phi_prefix_length bb.bb_instructions = l` (fn eq => simp[NoAsms,th,eq])) >>
+  strip_tac >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms,EVERY_CONJ] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms,EVERY_EL] >> qx_gen_tac `r` >> strip_tac >>
+  `r < q0` by
+    (qpat_assum `r < LENGTH (TAKE q0 xs)` mp_tac >> simp[NoAsms,LENGTH_TAKE_EQ]) >>
+  qpat_assum `!r. (EL r xs).inst_opcode = INVOKE ==> ~(r < q0)`
+    (qspec_then `r` mp_tac) >>
+  qpat_assum `r < q0` (fn th => simp[NoAsms,th,EL_TAKE])
+QED
+
+Finalise dft_packet_pseudo_next_clauses
