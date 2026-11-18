@@ -633,6 +633,117 @@ val runtime_compose_halt_tac =
      `tx`, `am.sources`, `am.exports`, `am.layouts`] mp_tac) >>
   simp[initial_evaluation_context_def, finalize_pending_deletions_def];
 
+Theorem eval_stmts_missing_gas_reading_empty:
+  !cx body st st'.
+    eval_stmts cx body st =
+      (INR (Error (RuntimeError "msg.gas: no gas reading")), st') ==>
+    st'.gas_obs = []
+Proof
+  ACCEPT_TAC (cj 2 evaluate_missing_reading_state)
+QED
+
+(* A nonempty unread tail rules out the missing-reading error in the body.
+   The selected-call wrapper either forwards the body exception or produces
+   a different result (including TypeError on a failed return conversion). *)
+val selected_call_readings_tac =
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `res <> INR (Error (RuntimeError "msg.gas: no gas reading"))` by
+    (disch_tac >>
+     qpat_x_assum `!tail. eval_stmts _ compiled_body _ = (_,_)`
+       (qspec_then `[0w:bytes32]` mp_tac) >>
+     asm_rewrite_tac[] >>
+     disch_then (mp_tac o MATCH_MP eval_stmts_missing_gas_reading_empty) >>
+     simp[]) >>
+  `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+     fbody (es0 with gas_obs := gx) = (res, ee with gas_obs := [])` by
+    (qpat_x_assum `!tail. eval_stmts _ compiled_body _ = (_,_)`
+       (qspec_then `[]` mp_tac) >>
+     qpat_assum `!gx. eval_stmts _ compiled_body _ = _` (fn th => simp[th])) >>
+  drule_all selected_call_trace_body >> strip_tac >>
+  namedCases_on `res` ["u", "e"]
+  >- (Cases_on `u` >> gvs[]) >>
+  Cases_on `e` >> gvs[AllCaseEqs()];
+fun runtime_selected_readings_finish_tac (marks_tac, unpack_tac) =
+  disch_then (qx_choose_then `marks` assume_tac) >>
+  marks_tac >>
+  qpat_x_assum `_ \/ _` mp_tac >>
+  simp[call_external_trace_observations] >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac
+    (qx_choosel_then [`cr`, `am'`, `rqs`, `obs`]
+      (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
+  >- (`!tail. ~call_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings ++ tail)` by
+        (gen_tac >> strip_tac >>
+         drule source_storage_guards_domain >> simp[]) >>
+      conj_tac
+      >- (unpack_tac >>
+          pure_rewrite_tac[source_unit_execution_correct_with_def] >>
+          qexistsl_tac [`func`, `shadow_func`] >> simp[] >> metis_tac[]) >>
+      simp[]) >>
+  conj_tac
+  >- (unpack_tac >>
+      pure_rewrite_tac[source_unit_execution_correct_with_def] >>
+      qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
+      disj2_tac >> qexistsl_tac [`cr`, `am'`, `rqs`, `obs`] >> simp[]) >>
+  disch_tac >> qx_gen_tac `unread` >>
+  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+    (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
+  simp[];
+
+Theorem runtime_body_joint_from_start_with_readings:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody) ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  rpt gen_tac >> strip_tac >>
+  runtime_body_endpoint_tac >>
+  runtime_body_source_tac >>
+  runtime_body_shadow_tac >>
+  runtime_body_outcome_tac >>
+  runtime_body_compose_tac
+    (Q.ISPEC `\(cr : value + exception).
+       cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
+       unit_execution_compose_result) >>
+  impl_tac
+  >- (runtime_compose_prefix_tac
+      >- runtime_compose_stop_tac
+      >- (runtime_compose_exit_tac
+          >- (runtime_compose_abort_halt_cases_tac >>
+              gvs[expr_exit_def, external_call_result_rel_def] >>
+              runtime_compose_halt_tac)
+          >> gvs[abstract_machine_from_state_def])
+      >> selected_call_readings_tac) >>
+  runtime_selected_readings_finish_tac
+    ((qexistsl_tac [`shadow_unit`,`marks`] >>
+      conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
+QED
+
 Theorem runtime_body_joint_from_start_with_shadow:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -656,35 +767,7 @@ Theorem runtime_body_joint_from_start_with_shadow:
       source_unit_execution_correct_with shadow_unit.cu_context marks
         tops ret am tx unit vs
 Proof
-  rpt gen_tac >> strip_tac >>
-  runtime_body_endpoint_tac >>
-  runtime_body_source_tac >>
-  runtime_body_shadow_tac >>
-  runtime_body_outcome_tac >>
-  runtime_body_compose_tac unit_execution_compose >>
-  impl_tac
-  >- (runtime_compose_prefix_tac
-      >- runtime_compose_stop_tac
-      >> runtime_compose_exit_tac
-      >- (runtime_compose_abort_halt_cases_tac >>
-          gvs[expr_exit_def, external_call_result_rel_def] >>
-          runtime_compose_halt_tac)
-      >> gvs[abstract_machine_from_state_def]) >>
-  disch_then (qx_choose_then `marks` assume_tac) >>
-  qexistsl_tac [`shadow_unit`, `marks`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-  qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
-  qpat_x_assum `_ \/ _` mp_tac >>
-  simp[call_external_trace_observations] >>
-  disch_then (DISJ_CASES_THEN2 strip_assume_tac assume_tac)
-  >- (disj1_tac >> conj_tac
-      >- (gen_tac >> strip_tac >>
-          qpat_x_assum `!tail. ~storage_trace_domain _ _ _`
-            (qspec_then `tail` mp_tac) >>
-          simp[source_storage_guards_domain])
-      >> metis_tac[]) >>
-  disj2_tac >> first_assum ACCEPT_TAC
+  metis_tac[runtime_body_joint_from_start_with_readings]
 QED
 
 Theorem runtime_body_joint_from_start:
@@ -1139,15 +1222,6 @@ Proof
   Cases_on `r` >> gvs[exit_result_def, terminates_def]
 QED
 
-Theorem eval_stmts_missing_gas_reading_empty:
-  !cx body st st'.
-    eval_stmts cx body st =
-      (INR (Error (RuntimeError "msg.gas: no gas reading")), st') ==>
-    st'.gas_obs = []
-Proof
-  ACCEPT_TAC (cj 2 evaluate_missing_reading_state)
-QED
-
 Theorem gas_marked_eval_stmts_readings_available:
   !memory ctx func cx body st vs marks res st' rv.
     gas_marked_exec memory (ctx,func) (eval_stmts cx body)
@@ -1177,28 +1251,6 @@ Proof
   metis_tac[]
 QED
 
-(* A nonempty unread tail rules out the missing-reading error in the body.
-   The selected-call wrapper either forwards the body exception or produces
-   a different result (including TypeError on a failed return conversion). *)
-val selected_call_readings_tac =
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
-  rpt gen_tac >> BETA_TAC >> strip_tac >>
-  `res <> INR (Error (RuntimeError "msg.gas: no gas reading"))` by
-    (disch_tac >>
-     qpat_x_assum `!tail. eval_stmts _ compiled_body _ = (_,_)`
-       (qspec_then `[0w:bytes32]` mp_tac) >>
-     asm_rewrite_tac[] >>
-     disch_then (mp_tac o MATCH_MP eval_stmts_missing_gas_reading_empty) >>
-     simp[]) >>
-  `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
-     fbody (es0 with gas_obs := gx) = (res, ee with gas_obs := [])` by
-    (qpat_x_assum `!tail. eval_stmts _ compiled_body _ = (_,_)`
-       (qspec_then `[]` mp_tac) >>
-     qpat_assum `!gx. eval_stmts _ compiled_body _ = _` (fn th => simp[th])) >>
-  drule_all selected_call_trace_body >> strip_tac >>
-  namedCases_on `res` ["u", "e"]
-  >- (Cases_on `u` >> gvs[]) >>
-  Cases_on `e` >> gvs[AllCaseEqs()];
 Triviality runtime_package_source_body:
   set_external_package_target target
     (package_external_fn tops use_trans keys
@@ -1312,33 +1364,6 @@ val runtime_locked_unlock_tac =
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `eu` strip_assume_tac) >>
   drule_all selected_call_trace_result_nr >> strip_tac;
-
-fun runtime_selected_readings_finish_tac (marks_tac, unpack_tac) =
-  disch_then (qx_choose_then `marks` assume_tac) >>
-  marks_tac >>
-  qpat_x_assum `_ \/ _` mp_tac >>
-  simp[call_external_trace_observations] >>
-  disch_then (DISJ_CASES_THEN2 strip_assume_tac
-    (qx_choosel_then [`cr`, `am'`, `rqs`, `obs`]
-      (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
-  >- (`!tail. ~call_storage_ok am tx vs.vs_outcomes
-           (gas_explicit marks vs.vs_gas_readings ++ tail)` by
-        (gen_tac >> strip_tac >>
-         drule source_storage_guards_domain >> simp[]) >>
-      conj_tac
-      >- (unpack_tac >>
-          pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-          qexistsl_tac [`func`, `shadow_func`] >> simp[] >> metis_tac[]) >>
-      simp[]) >>
-  conj_tac
-  >- (unpack_tac >>
-      pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-      qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
-      disj2_tac >> qexistsl_tac [`cr`, `am'`, `rqs`, `obs`] >> simp[]) >>
-  disch_tac >> qx_gen_tac `unread` >>
-  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-    (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
-  simp[];
 
 Theorem runtime_selected_lock_readings:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock source_lbl lbl cenv0 pos_args min_cds is_payable
@@ -1617,19 +1642,22 @@ Proof
                (qspec_then `[]` mp_tac) >>
              qpat_assum `!gas. eval_stmts _ compiled_body _ = eval_stmts _ fbody _` (fn th => simp[th])) >>
           runtime_locked_unlock_tac >>
-          qpat_assum `call_external_trace _ gx am tx = (cr,_,_,_)` (fn trace =>
-            qpat_assum `call_external_trace _ gx am tx = (r,_,_,_)`
-              (mp_tac o REWRITE_RULE [trace, pairTheory.PAIR_EQ])) >>
-          qpat_assum `res <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
-            mp_tac >>
-          qpat_assum `res = INL () ==> r = INL NoneV /\ _` mp_tac >>
-          qpat_assum `!v. res = INR (ReturnException v) ==> _` mp_tac >>
-          qpat_assum `res = INR HaltException ==> r = INR HaltException /\ _` mp_tac >>
-          qpat_assum `!e. res = INR e /\ _ ==> r = INR e /\ _` mp_tac >>
+          `cr = r` by
+            (qpat_assum `call_external_trace _ gx _ _ = (cr,_,_,_)` (fn trace =>
+               qpat_assum `call_external_trace _ gx _ _ = (r,_,_,_)`
+                 (mp_tac o REWRITE_RULE [trace])) >> simp[]) >>
+          pop_assum SUBST1_TAC >>
+          (* Only the source result laws matter for this case split. *)
+          MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+            [`res <> INR (Error (RuntimeError "msg.gas: no gas reading"))`,
+             `res = INL () ==> r = _ /\ _`,
+             `!v. res = INR (ReturnException v) ==> _`,
+             `res = INR HaltException ==> r = _ /\ _`,
+             `!e. res = INR e /\ _ ==> r = _ /\ _`] >>
           POP_ASSUM_LIST (K ALL_TAC) >>
           namedCases_on `res` ["u", "e"]
           >- (Cases_on `u` >> simp[]) >>
-          Cases_on `e` >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[])) >>
+          Cases_on `e` >> simp[AllCaseEqs()] >> strip_tac >> gvs[])) >>
   runtime_selected_readings_finish_tac
     ((qexistsl_tac [`shadow_unit`,`marks`] >>
       conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
@@ -1657,27 +1685,10 @@ Proof
   selected_entry_split_tac
   >- (rename1 `INL u` >> Cases_on `u` >>
       drule_all external_entry_joint_endpoint >> strip_tac >>
-      runtime_body_endpoint_tac >>
-      runtime_body_source_tac >>
-      runtime_body_shadow_tac >>
-      runtime_body_outcome_tac >>
-      runtime_body_compose_tac
-        (Q.ISPEC `\(cr : value + exception).
-           cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
-           unit_execution_compose_result) >>
-      impl_tac
-      >- (runtime_compose_prefix_tac
-          >- runtime_compose_stop_tac
-          >- (runtime_compose_exit_tac
-              >- (runtime_compose_abort_halt_cases_tac >>
-                  gvs[expr_exit_def, external_call_result_rel_def] >>
-                  runtime_compose_halt_tac)
-              >> gvs[abstract_machine_from_state_def])
-          >> selected_call_readings_tac) >>
-      runtime_selected_readings_finish_tac
-        (qexists_tac `marks`,
-         PURE_REWRITE_TAC [source_unit_execution_correct_at_with] >>
-         qexists_tac `shadow_unit.cu_context`)) >>
+      drule_all runtime_body_joint_from_start_with_readings >>
+      disch_then (qx_choosel_then [`shadow_unit`,`marks`] strip_assume_tac) >>
+      qexists_tac `marks` >>
+      metis_tac[source_unit_execution_correct_at_with]) >>
   drule_all external_entry_value_revert >>
   rewrite_tac[source_unit_execution_correct_def] >>
   disch_then (qx_choose_then `marks` assume_tac) >>

@@ -1704,7 +1704,7 @@ QED
 
 (* ===== Every calldata ===== *)
 
-Theorem raw_variant_revert_facts[local]:
+Theorem raw_variant_revert_facts:
   !tops rpolicy unit am tx vs vi.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\

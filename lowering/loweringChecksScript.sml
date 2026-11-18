@@ -28,7 +28,7 @@ Ancestors
   (* compiled creation code *)
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
   ctorImmutableAppendTest
-  e2eWitnessCompute e2eWitness e2eCompose e2eERC20Witness
+  e2eWitnessCompute e2eWitness e2eNonreentrantWitness e2eCompose e2eERC20Witness
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
   (* operand-stack checker: pinned internal-call bytecode and deep call chains *)
