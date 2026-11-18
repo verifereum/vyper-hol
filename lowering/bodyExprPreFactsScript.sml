@@ -15,6 +15,7 @@ Ancestors
   supportedExprTraverse supportedExprs supportedDecls supportedStmts
   vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperInterpreter vyperState compileEnv allocLimits
+  vyperTypeEvalProofs
 Libs
   monadsyntax
 

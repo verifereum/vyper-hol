@@ -5,13 +5,11 @@ Ancestors
   alist byte integer_word option
 Libs
   memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib
-  evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+  evalCompilerBytecodeLib compilerParityCompsetLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../create-builtins"]
-val () = computeLib.upd_compset add_finite_map_compset
-val () = computeLib.upd_compset (computeLib.add_thms
-  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+val () = compilerParityCompsetLib.prepare {byte_updates = true}
 val fixture_root = "../create-builtins/oracle"
 
 val cb15_blueprint_membership_flag = memoryStoreWitnessLib.evaluate fixture_root "cb15_blueprint_membership_flag"
