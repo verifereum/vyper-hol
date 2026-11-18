@@ -27,6 +27,27 @@ Proof
     every_state_insts_return]
 QED
 
+Theorem outcomes_free_multi_exprs:
+  !es s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_multi_exprs f ce es s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_multi_exprs_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
+      every_state_insts_lower_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
+    gen_tac, strip_tac, irule every_state_insts_bind, conj_tac,
+    first_assum irule]) >> simp[]
+QED
+
 Theorem opcode_every_multi_exprs:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -44,15 +65,30 @@ Theorem opcode_every_multi_exprs:
       (state_insts (SND (compile_multi_exprs cfn cenv es st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_multi_exprs_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[compile_multi_exprs_def] >>
-  ho_match_mp_tac every_state_insts_bind >> conj_tac
-  >- (ho_match_mp_tac every_state_insts_lower_value >> simp[ ]) >>
-  gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
-  >- simp[] >>
-  simp[every_state_insts_return]
+  rpt strip_tac >> irule outcomes_free_multi_exprs >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_make_tuple:
+  !es tys buf off s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_make_tuple f ce es tys buf off s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  Cases_on `tys` >> simp[compile_make_tuple_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  simp[]
 QED
 
 Theorem opcode_every_make_tuple:
@@ -75,15 +111,30 @@ Theorem opcode_every_make_tuple:
       (state_insts (SND (compile_make_tuple cfn cenv es tys buf off st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_make_tuple_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> Cases
-  >- simp[compile_make_tuple_def, every_state_insts_return] >>
-  rpt gen_tac >> qid_spec_tac `st` >>
-  simp[compile_make_tuple_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_make_tuple >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_make_array_elems:
+  !es ety sz lw buf idx s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_make_array_elems f ce es ety sz lw buf idx s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_make_array_elems_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  simp[]
 QED
 
 Theorem opcode_every_make_array_elems:
@@ -107,13 +158,25 @@ Theorem opcode_every_make_array_elems:
       (state_insts (SND (compile_make_array_elems cfn cenv es ety sz len_word buf idx st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_make_array_elems_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >> qid_spec_tac `st` >>
-  simp[compile_make_array_elems_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_make_array_elems >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_make_array:
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_make_array f ce es ety sz lw buf s)))
+Proof
+  strip_tac >> simp[compile_make_array_def] >>
+  irule every_state_insts_ignore_bind >> conj_tac
+  >- (Cases_on `lw` >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+      simp[every_state_insts_return, opcode_every_emit_op, opcode_every_emit_void,
+          opcode_every_emit_inst]) >>
+  rpt strip_tac >> simp[outcomes_free_make_array_elems]
 QED
 
 Theorem opcode_every_make_array:
@@ -135,11 +198,32 @@ Theorem opcode_every_make_array:
       (state_insts (SND (compile_make_array cfn cenv es ety sz len_word buf st)))
   )
 Proof
-  strip_tac >>
-  strip_tac >> strip_tac >> simp[compile_make_array_def] >> Cases_on `len_word` >> simp[] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    CHANGED_TAC (simp[(UNDISCH opcode_every_make_array_elems), opcode_every_emit_void,
-      every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_make_array >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_struct_lit:
+  !fields buf off s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT] ==> P opc) /\
+  (!nm e ty st. MEM (nm,e) fields /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_struct_lit f ce ty fields buf off s)))
+Proof
+  Induct_on `fields` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_struct_lit_def, every_state_insts_return] >>
+  PairCases_on `h` >> simp[compile_struct_lit_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  metis_tac[]
 QED
 
 Theorem opcode_every_struct_lit:
@@ -163,13 +247,35 @@ Theorem opcode_every_struct_lit:
       (state_insts (SND (compile_struct_lit cfn cenv sty fields buf off st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_struct_lit_def, every_state_insts_return] >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >> gvs[] >>
-  rpt gen_tac >> qid_spec_tac `st` >> simp[compile_struct_lit_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])]) >> metis_tac[]
+  rpt strip_tac >> irule outcomes_free_struct_lit >> simp[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt strip_tac >> qpat_x_assum `!name e ty st. MEM _ fields ==> _` drule >>
+  disch_then irule >> simp[]
+QED
+
+Theorem outcomes_free_concat:
+  !es infos dp off s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; MCOPY] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_concat f ce es dp infos off s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_concat_def, every_state_insts_return] >>
+  Cases_on `infos` >> simp[compile_concat_def, every_state_insts_return] >>
+  rename1 `compile_concat _ _ (e::es) _ (info::rest)` >> PairCases_on `info` >>
+  simp[compile_concat_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
+      every_state_insts_lower_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC, first_assum irule]) >>
+  simp[]
 QED
 
 Theorem opcode_every_concat:
@@ -190,16 +296,30 @@ Theorem opcode_every_concat:
       (state_insts (SND (compile_concat cfn cenv es data_op infos off_op st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_concat_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >>
-  Cases_on `infos` >> simp[compile_concat_def, every_state_insts_return] >>
-  rename1 `compile_concat _ _ _ _ (info::rest) _` >> PairCases_on `info` >>
-  Cases_on `info0` >> qid_spec_tac `st` >> simp[compile_concat_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_lower_value >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_concat >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_abi_encode_args:
+  !es s.
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY] ==> P opc) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  (!ty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_materialize_vv ce ty vv st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_abi_encode_args f ce es s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_abi_encode_args_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    conj_tac, IF_CASES_TAC, first_assum irule]) >> simp[]
 QED
 
 Theorem opcode_every_abi_encode_args:
@@ -222,13 +342,21 @@ Theorem opcode_every_abi_encode_args:
       (state_insts (SND (compile_abi_encode_args cfn cenv es st)))
   )
 Proof
-  strip_tac >>
-  rpt disch_tac >> Induct >- simp[compile_abi_encode_args_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> simp[compile_abi_encode_args_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_abi_encode_args >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_attribute:
+  P ADD /\
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn cenv ty base_e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_attribute cfn cenv ret_ty ty base_e field_name s)))
+Proof
+  strip_tac >> qpat_x_assum `EVERY _ (state_insts s)` mp_tac >>
+  qid_spec_tac `s` >> simp[compile_attribute_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
 QED
 
 Theorem opcode_every_attribute:
@@ -243,10 +371,21 @@ Theorem opcode_every_attribute:
       (state_insts (SND (compile_attribute cfn cenv ret_ty ty base_e field_name st)))
   )
 Proof
-  strip_tac >>
-  strip_tac >> simp[compile_attribute_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_attribute >> simp[]
+QED
+
+Theorem outcomes_free_acc:
+  P BALANCE /\ P EXTCODEHASH /\ P EXTCODESIZE /\ P GT /\ P INVALID /\
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (lower_value cfn cenv (BaseT AddressT) addr_e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_acc cfn cenv addr_e accessor st)))
+Proof
+  strip_tac >> Cases_on `accessor` >> simp[compile_acc_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[opcode_every_emit_op, opcode_every_emit_inst, SND]
 QED
 
 Theorem opcode_every_acc:
@@ -261,15 +400,7 @@ Theorem opcode_every_acc:
       (state_insts (SND (compile_acc cfn cenv addr_e accessor st)))
   )
 Proof
-  strip_tac >>
-  strip_tac >> Cases_on `accessor` >> simp[compile_acc_def] >>
-  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  `P BALANCE /\
-   P EXTCODEHASH /\
-   P EXTCODESIZE /\
-   P GT /\
-   P INVALID` by simp[] >>
-  metis_tac[opcode_every_emit_op, opcode_every_emit_inst, SND]
+  rpt strip_tac >> irule outcomes_free_acc >> simp[]
 QED
 
 Theorem every_state_insts_subscript:
