@@ -50,25 +50,26 @@ Theorem slots_readonly_bank_replay:
       EL (SUC n) L =
         (if is_terminator i.inst_opcode then u
          else u with vs_inst_idx := SUC (EL n L).vs_inst_idx)) ==>
-  let K = MAP (\s. s with <|vs_transient := ts; vs_accounts := ac|>) L in
-    LENGTH K = LENGTH L /\
+  !replay. replay = MAP (\s. s with <|vs_transient := ts; vs_accounts := ac|>) L ==>
+    LENGTH replay = LENGTH L /\
     (!n. n < LENGTH L ==>
-      (EL n K).vs_current_bb = (EL n L).vs_current_bb /\
-      (EL n K).vs_inst_idx = (EL n L).vs_inst_idx /\
-      (!op. eval_operand op (EL n K) = eval_operand op (EL n L)) /\
-      (!a. mload a (EL n K) = mload a (EL n L))) /\
+      (EL n replay).vs_current_bb = (EL n L).vs_current_bb /\
+      (EL n replay).vs_inst_idx = (EL n L).vs_inst_idx /\
+      (!op. eval_operand op (EL n replay) = eval_operand op (EL n L)) /\
+      (!a. mload a (EL n replay) = mload a (EL n L))) /\
     (!n. SUC n < LENGTH L ==>
       ?bb i u.
-        lookup_block (EL n K).vs_current_bb func.fn_blocks = SOME bb /\
-        get_instruction bb (EL n K).vs_inst_idx = SOME i /\
+        lookup_block (EL n replay).vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb (EL n replay).vs_inst_idx = SOME i /\
         get_instruction bb (EL n L).vs_inst_idx = SOME i /\
         MEM i.inst_opcode [ASSIGN; ADD; MUL; EQ; LT; ISZERO; SHR; MLOAD; JMP; JNZ] /\
-        step_inst fuel ctx i (EL n K) = OK u /\
-        EL (SUC n) K =
+        step_inst fuel ctx i (EL n replay) = OK u /\
+        EL (SUC n) replay =
           (if is_terminator i.inst_opcode then u
-           else u with vs_inst_idx := SUC (EL n K).vs_inst_idx))
+           else u with vs_inst_idx := SUC (EL n replay).vs_inst_idx))
 Proof
-  rpt gen_tac >> strip_tac >> simp[LET_THM] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_then SUBST1_TAC >>
+  simp[] >>
   conj_tac >- simp[EL_MAP, mload_def] >>
   rpt strip_tac >>
   first_x_assum drule >> strip_tac >>

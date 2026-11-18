@@ -69,8 +69,8 @@ Proof
       (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
   qabbrev_tac `A = start_relabel ell ids sa` >>
   qabbrev_tac `B = start_swap sa ell ids sb` >>
-  qpat_x_assum `let a = _ in _` mp_tac >>
-  simp[LET_THM] >>
+  qpat_x_assum `?a. a = _ /\ ?b. b = _ /\ _` mp_tac >>
+  simp[UNWIND_THM2] >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qabbrev_tac `s0 = s with vs_call_ctx := (s.vs_call_ctx with cc_static := F)` >>
   qabbrev_tac `a0 = s0 with vs_current_bb := ell` >>
@@ -663,8 +663,8 @@ Resume compile_store_slots_static_origin_ptr_path[bank_replay]:
       (CONJUNCTS_THEN2 kall_tac (qx_choose_then `bb` (qx_choose_then `i`
         (qx_choose_then `mid` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
     qexistsl_tac [`bb`,`i`,`mid`] >> asm_rewrite_tac[])) >>
-  rewrite_tac[LET_THM] >> BETA_TAC >>
-  qpat_assum `Abbrev (bm = _)` (fn th => rewrite_tac [GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
+  disch_then (qspec_then `bm` mp_tac) >>
+  (impl_tac >- simp[Abbr `bm`]) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!n. SUC n < LENGTH bm ==>
     abi_observer_step ctx canon (frag_observer_cut B) (EL n bm) (EL (SUC n) bm)` by

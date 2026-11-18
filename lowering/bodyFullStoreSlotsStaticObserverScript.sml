@@ -91,8 +91,8 @@ Theorem store_slots_canonical_observer_exists:
     L <> sb.cs_current_bb /\
     ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
     EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb) /\
-    let a = start_relabel L ids sa in
-    let b = start_swap sa L ids sb in
+    (?a. a = start_relabel L ids sa /\
+     ?b. b = start_swap sa L ids sb /\
       cs_extends a b /\ frag_code a b = frag_code sa sb /\
       frag_gas_free a b /\ fn_has_code a b obs /\
       fn_inst_ids_distinct obs /\ obs.fn_name = func.fn_name /\
@@ -120,9 +120,9 @@ Theorem store_slots_canonical_observer_exists:
       (sa.cs_blocks = sb.cs_blocks ==>
         b.cs_current_bb = L /\
         b.cs_current_insts = MAP (\k. mk_inst k NOP [] []) ids ++
-          DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts)
+          DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts))
 Proof
-  strip_tac >>
+  rewrite_tac[UNWIND_THM2] >> strip_tac >>
   `?L. L <> sb.cs_current_bb /\
        ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
        EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb)` by

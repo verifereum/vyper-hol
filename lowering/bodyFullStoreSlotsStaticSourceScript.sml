@@ -19,8 +19,8 @@ Theorem store_slots_fragment_source_certificate:
     L <> sb.cs_current_bb /\
     ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
     EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb) /\
-    let a = start_relabel L ids sa in
-    let b = start_swap sa L ids sb in
+    (?a. a = start_relabel L ids sa /\
+     ?b. b = start_swap sa L ids sb /\
       compile_store_slots cenv src dst ty tr a = ((),b) /\
       cs_extends a b /\ frag_code a b = frag_code sa sb /\
       frag_gas_free a b /\ fn_has_code a b obs /\
@@ -66,9 +66,9 @@ Theorem store_slots_fragment_source_certificate:
       (sa.cs_blocks = sb.cs_blocks ==>
         b.cs_current_bb = L /\
         b.cs_current_insts = MAP (\k. mk_inst k NOP [] []) ids ++
-          DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts)
+          DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts))
 Proof
-  strip_tac >>
+  rewrite_tac[UNWIND_THM2] >> strip_tac >>
   `!L ids. LENGTH ids = LENGTH sa.cs_current_insts ==>
     compile_store_slots cenv src dst ty tr (start_relabel L ids sa) =
       ((),start_swap sa L ids sb)` by
@@ -83,7 +83,7 @@ Proof
         (start_swap sa L ids sb))))` by
     metis_tac[store_slots_fragment_label_operand_target] >>
   drule store_slots_fragment_syntax_shape >> strip_tac >>
-  drule_all store_slots_canonical_observer_exists >>
+  drule_all (REWRITE_RULE [UNWIND_THM2] store_slots_canonical_observer_exists) >>
   simp[] >> strip_tac >>
   qexistsl_tac [`L`, `ids`, `id`, `obs`] >> simp[] >>
   `compile_store_slots cenv src dst ty tr (start_relabel L ids sa) =
