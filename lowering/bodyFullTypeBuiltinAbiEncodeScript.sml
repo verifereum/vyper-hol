@@ -1,8 +1,8 @@
 Theory bodyFullTypeBuiltinAbiEncode
 Ancestors
-  bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
-  gasOutcomeFullCompose exprSimHyps exprSimSource exprSimAbiEncode
-  bodyInvNoDalloca bodySimFull
+  bodyFullPreds bodyFullOfVV bodyFullExprGeneric
+  bodyFullAbiEncodeWordFull bodyFullAbiEncodeNonwordFull bodyFullAbiEncodeTupleFull
+  exprSimAbiEncodeRuntimeInputs exprSimHyps exprSimSource bodySimFull
   vyperContext vyperInterpreter vyperState vyperAST
 
 Theorem abi_encode_expr_full_ok:
@@ -16,7 +16,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   conj_asm2_tac
   >- suspend "value" >>
   suspend "vv"
@@ -35,39 +34,31 @@ Resume abi_encode_expr_full_ok[value]:
 QED
 
 Resume abi_encode_expr_full_ok[vv]:
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `LENGTH es = 1 /\ ~b`
   >- suspend "singleton" >>
-  suspend "tuple"
+  irule abi_encode_tuple_vv_full_from_packaging >> metis_tac[]
 QED
 
 Resume abi_encode_expr_full_ok[singleton]:
-  gvs[] >> Cases_on `es` >> gvs[] >> rename1 `body_exprs_full_ok cx [e]` >>
+  gvs[] >> Cases_on `es` >> gvs[] >>
+  rename1 `TypeBuiltin _ (AbiEncode F _) _ [e]` >>
   `body_exprs_full_ok cx [e]` by
     (first_x_assum irule >> simp[type_check_def,
-      vyperContextTheory.type_builtin_args_length_ok_def, assert_def]) >>
-  `expr_body_pre cenv cx env e es'` by
-    (irule exprSimAbiEncodeRuntimeInputsTheory.abi_encode_body_arg_pre >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es'` by
-    (gvs[body_exprs_full_ok_def] >>
-     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     once_rewrite_tac[body_expr_full_ok_def] >> metis_tac[]) >>
+      type_builtin_args_length_ok_def, assert_def, return_def]) >>
+  `body_expr_full_ok cx e` by fs[body_exprs_full_ok_def] >>
   Cases_on `is_word_type (expr_type e)`
-  >- suspend "word" >> suspend "nonword"
+  >- suspend "word" >>
+  irule abi_encode_nonword_vv_full_from_packaging >> metis_tac[]
 QED
 
 Resume abi_encode_expr_full_ok[word]:
-  FAIL_TAC "word full"
-QED
-
-Resume abi_encode_expr_full_ok[nonword]:
-  FAIL_TAC "nonword full"
-QED
-
-Resume abi_encode_expr_full_ok[tuple]:
-  FAIL_TAC "tuple full"
+  `expr_body_pre cenv cx env e es'` by
+    (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es'` by
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     once_rewrite_tac[body_expr_full_ok_def] >> metis_tac[]) >>
+  irule abi_encode_word_vv_full_from_packaging >> metis_tac[]
 QED
 
 Finalise abi_encode_expr_full_ok
