@@ -160,7 +160,8 @@ Proof
   `MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; INVALID;
     CREATE; CREATE2; RETURNDATACOPY]` by (simp[] >> metis_tac[]) >>
   `context_source_memory_writes_disjoint cp inst vs` by
-    gvs[context_source_memory_writes_disjoint_def, source_memory_write_ranges_def] >>
+    gvs[context_source_memory_writes_disjoint_def,
+        codegenRelTheory.source_memory_write_ranges_def] >>
   drule_all terminal_source_memory_reads_safe >> disch_tac >>
   `MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
     "CREATE"; "CREATE2"; "RETURNDATACOPY"]` by
