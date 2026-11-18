@@ -4,6 +4,21 @@ Ancestors
   vyperStorageBackend loweringStateRelDefs frameOutcome vfmProg vfmState
   vyperState vyperContext list arithmetic
 
+Theorem guard_nested_frame_outcome:
+  2 <= LENGTH e.contexts /\ frame_outcome e r e' exc out lgs ==>
+  ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
+  (exc <> NONE ==> e'.rollback = SND (HD e.contexts))
+Proof
+  rpt strip_tac >> fs[frame_outcome_def] >>
+  rename1 `e.contexts = (ctxt,rb)::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `e.contexts = (ctxt,rb)::parent::tail` >>
+  PairCases_on `parent` >> gvs[] >>
+  qpat_assum `MAP FST _ = MAP FST _`
+    (mp_tac o AP_TERM ``LENGTH:context list -> num``) >>
+  simp[] >> decide_tac
+QED
+
 Theorem guard_processed_backend_well_formed[local]:
   cx.txn.target = tx.target /\ regions_consistent (FST H) /\
   EVERY (\region. MEM region (FST H)) (FST h) /\
@@ -71,11 +86,7 @@ Proof
     storage_well_formed_on cx
       (empty_state with <|accounts := e'.rollback.accounts;
                          tStorage := e'.rollback.tStorage|>) (FST H)` by
-    (rpt strip_tac >> fs[frame_outcome_def] >>
-     rename1 `e.contexts = (ctxt,rb)::rest` >>
-     Cases_on `rest` >> gvs[] >>
-     rename1 `e.contexts = (ctxt,rb)::parent::tail` >>
-     PairCases_on `parent` >> gvs[]) >>
+    (rpt strip_tac >> drule_all guard_nested_frame_outcome >> simp[]) >>
   `accounts_agree h cx.txn.target am'.accounts
       (process_deletions e'.rollback.toDelete e'.rollback.accounts) /\
     transient_agree h cx.txn.target am'.tStorage e'.rollback.tStorage ==>
