@@ -1970,6 +1970,7 @@ Resume body_assign_storage_expr_cases[builtin]:
   gvs[reason_result_shape_def] >>
   (simp[exprCallBoundsTheory.builtin_child_callback_def] >>
    pure_once_rewrite_tac [CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)] >>
+   rename1 `compile_builtin_dispatch_body _ _ _ _ bi _ _` >>
    Cases_on `bi` >> strip_tac
    >~ [`Acc item`] >- suspend "acc"
    >~ [`AsWeiValue denom`] >- suspend "wei"
@@ -1992,6 +1993,7 @@ Resume body_assign_storage_expr_cases[typebuiltin]:
   simp[compile_expr_body_def, expr_type_def] >>
   simp[exprCallBoundsTheory.type_child_callback_def] >>
   pure_once_rewrite_tac [CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)] >>
+  rename1 `compile_type_builtin_dispatch_body _ _ _ _ tb _ _ _` >>
   strip_tac >> Cases_on `tb` >> gvs[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
