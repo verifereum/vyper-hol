@@ -49,28 +49,3 @@ Proof
   simp_tac bool_ss [entry_loop_prefix_def] >> rpt strip_tac >>
   Cases_on `k = j` >> gvs[] >> first_x_assum irule >> decide_tac
 QED
-
-(* Ownership postcondition expected by an exact-value recursive callback. *)
-Theorem entry_child_exact_callback_ownership[local]:
-  abi_decode_footprint_frame
-    ((d+32+j*type_memory_size tv,type_memory_size tv)::scratch) s t /\ alloca_inv t /\
-  (!id. id < lo \/ hi <= id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
-  (oid < lo \/ hi <= oid) /\ FLOOKUP s.vs_allocas oid = SOME (d,cap) /\
-  32+j*type_memory_size tv <= cap /\
-  (!q len. MEM (q,len) scratch ==>
-    ?id. lo <= id /\ id < hi /\ FLOOKUP t.vs_allocas id = SOME (q,len)) /\
-  j < LENGTH xs /\ EVERY (val_wf tv) xs /\ entry_loop_prefix tv xs d j s /\
-  val_in_memory tv (EL j xs) (d+32+j*type_memory_size tv) t.vs_memory /\
-  (counter_id < lo \/ hi <= counter_id) /\
-  FLOOKUP s.vs_allocas counter_id = SOME (counter,32) /\
-  (counter+32 <= d+32+j*type_memory_size tv \/
-    d+32+j*type_memory_size tv+type_memory_size tv <= counter) ==>
-  entry_loop_prefix tv xs d (SUC j) t /\
-  FLOOKUP t.vs_allocas counter_id = SOME (counter,32) /\
-  mload counter t = mload counter s
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all entry_child_exact_prefix_extend >> disch_tac >>
-  drule_all calldata_child_preserves_counter >>
-  strip_tac >> asm_rewrite_tac []
-QED
