@@ -6,6 +6,138 @@ Ancestors
   fmpStageFmpStepsInvokePosition lowerDloadPtrRawReachable
   fmpLowerSequenceExec fmpStageRel o1PassContract unitShapeDefs
   venomState venomInst venomExecProofs finite_map words list
+  fmpStageControl fmpLowerReclaimPlan fmpStepReclaim fmpReclaimDefs
+  fmpAnalysisDefs venomWf gasFocusFmpStagePin fmpLedgerProps fmpStepStack
+  fmpStepAnalysis venomFnInstsProofs venomInstProofs1
+
+Theorem cut_ordinary_not_reclaim[local]:
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA] ==>
+  ~fmp_is_reclaim_point infos inst
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule fmp_reclaim_point_opcodes >>
+  gvs[] >> metis_tac[is_terminator_def]
+QED
+
+Theorem cut_ordinary_analysis_suc[local]:
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  wf_function fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP] /\
+  df_at NONE states lbl idx = SOME st ==>
+  ?st'. df_at NONE states lbl (SUC idx) = SOME st' /\
+    st'.frs_stack = st.frs_stack
+Proof
+  strip_tac >>
+  `~fmp_is_reclaim_point infos inst` by (irule cut_ordinary_not_reclaim >> gvs[]) >>
+  `~fmp_clears_marks infos inst` by
+    gvs[fmp_clears_marks_def, fmp_callee_info_def, fmp_invoke_target_def] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  fs[wf_function_def, fn_labels_def] >>
+  drule_all fmp_reclaim_states_df_at_suc >>
+  simp[fmp_transfer_def, fmp_reclaim_step_def, fmp_pop_at_def,
+       fmp_apply_effect_def] >> gvs[]
+QED
+
+Theorem cut_ordinary_control_suc[local]:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM] /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) ==>
+  (lbl,idx) NOTIN FDOM (fmp_stage_plan infos ctx fn) /\
+  (!rp. fmp_stage_root infos ctx fn = SOME (lbl,rp) ==> rp <> SUC idx) /\
+  fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+    lbl bb.bb_instructions (SUC idx) =
+  SUC (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+    lbl bb.bb_instructions idx)
+Proof
+  strip_tac >> conj_asm1_tac
+  >- (strip_tac >> drule_all fmp_stage_plan_point >> strip_tac >>
+      `~fmp_is_reclaim_point infos inst` by (irule cut_ordinary_not_reclaim >> gvs[]) >>
+      gvs[]) >>
+  conj_asm1_tac
+  >- (rpt strip_tac >> metis_tac[fmp_stage_root_crossing, MEM]) >>
+  irule fmp_stage_tidx_suc >> fs[] >> metis_tac[]
+QED
+
+(* An ordinary instruction cannot redefine a saved DALLOCA mark in SSA. *)
+Theorem cut_ordinary_ledger[local]:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode <> DALLOCA /\
+  fmp_reclaim_states infos fn = SOME states /\
+  df_at NONE states lbl idx = SOME st /\
+  MAP (\r. r.fr_mark) regions = st.frs_stack /\
+  fmp_ledger_ok (fn_insts fn) env t lo regions /\
+  (!v. ~MEM v inst.inst_outputs ==> lookup_var v t1 = lookup_var v t) ==>
+  fmp_ledger_ok (fn_insts fn) env (t1 with vs_inst_idx := j) lo regions
+Proof
+  strip_tac >> irule fmp_ledger_frame >> qexists `t` >> simp[] >>
+  rpt strip_tac >>
+  `EVERY (fmp_dalloca_output fn) st.frs_stack` by
+    metis_tac[fmp_reclaim_states_stack] >>
+  `MEM r.fr_mark st.frs_stack` by
+    (qpat_assum `MAP _ regions = _` (SUBST1_TAC o SYM) >> simp[MEM_MAP] >>
+     qexists `r` >> simp[]) >>
+  `fmp_dalloca_output fn r.fr_mark` by metis_tac[EVERY_MEM] >>
+  `~MEM r.fr_mark inst.inst_outputs` by
+    (gvs[fmp_dalloca_output_def, ssa_form_def] >>
+     metis_tac[all_distinct_flat_map_unique]) >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+Theorem cut_ordinary_root_suc[local]:
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  wf_function fn /\ ssa_form fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst /\
+  MEM inst (fn_insts fn) /\ ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP] /\
+  df_at NONE states lbl idx = SOME st /\
+  (lbl = rl ==> rp <> SUC idx) /\ ~MEM runner inst.inst_outputs /\
+  s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
+  (!v. ~MEM v inst.inst_outputs ==> lookup_var v t1 = lookup_var v t) /\
+  (if lbl = rl /\ idx < rp then
+     lo = elo /\ st.frs_stack = [] /\
+     (fn_is_context_entry ctx fn ==> fmp0 = elo) /\
+     (~fn_is_context_entry ctx fn ==>
+       LENGTH s.vs_params = LENGTH (fn_user_param_insts fn) /\
+       LENGTH s.vs_params < LENGTH t.vs_params /\
+       EL (LENGTH s.vs_params) t.vs_params = n2w elo)
+   else lookup_var runner t = SOME (n2w lo) /\
+     ?regions. fmp_ledger_ok (fn_insts fn) env t lo regions /\
+       MAP (\r. r.fr_mark) regions = st.frs_stack /\
+       EVERY (\r. elo <= r.fr_lo) regions /\ fmp_ledger_link sm eb lo regions) ==>
+  ?st'. df_at NONE states lbl (SUC idx) = SOME st' /\
+    (if lbl = rl /\ SUC idx < rp then
+       lo = elo /\ st'.frs_stack = [] /\
+       (fn_is_context_entry ctx fn ==> fmp0 = elo) /\
+       (~fn_is_context_entry ctx fn ==>
+         LENGTH s1.vs_params = LENGTH (fn_user_param_insts fn) /\
+         LENGTH s1.vs_params < LENGTH t1.vs_params /\
+         EL (LENGTH s1.vs_params) t1.vs_params = n2w elo)
+     else lookup_var runner (t1 with vs_inst_idx := j) = SOME (n2w lo) /\
+       ?regions. fmp_ledger_ok (fn_insts fn) env (t1 with vs_inst_idx := j) lo regions /\
+         MAP (\r. r.fr_mark) regions = st'.frs_stack /\
+         EVERY (\r. elo <= r.fr_lo) regions /\ fmp_ledger_link sm eb lo regions)
+Proof
+  strip_tac >> drule_all cut_ordinary_analysis_suc >>
+  disch_then (qx_choose_then `st'` strip_assume_tac) >>
+  `lbl = rl /\ SUC idx < rp <=> lbl = rl /\ idx < rp` by
+    (Cases_on `lbl = rl` >> fs[] >> decide_tac) >>
+  qexists `st'` >> simp[] >>
+  IF_CASES_TAC >- fs[] >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  conj_tac
+  >- (simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
+  `inst.inst_opcode <> DALLOCA` by fs[] >>
+  drule_all cut_ordinary_ledger >> disch_then (qspec_then `j` assume_tac) >>
+  qexists `regions` >> simp[]
+QED
 
 Theorem focus_fmp_cut_dalloca_segment:
   o1_ctx_shape C /\ EVERY (o1_fn_row 3) C.ctx_functions /\
