@@ -3,7 +3,7 @@ Theory runtimePeakMemorySourceGate
 Ancestors
   e2eDefs compileVyper constSubst constSubstCorrect vyperAST vyperTypeContract
   supportedExprTraverse supportedStmtTraverse loweringShapeProps loweringShapeSource
-  publicGetterProps list alist
+  publicGetterProps compileEnv exprLowering list rich_list alist
 
 Definition blueprint_create_root_def:
   blueprint_create_root e <=>
@@ -225,4 +225,34 @@ Proof
   simp[build_func_defaults_def, EVERY_MAP, combinTheory.o_DEF] >>
   simp[EVERY_MEM, pairTheory.FORALL_PROD] >>
   metis_tac[SIMP_RULE (srw_ss()) [EVERY_MEM] classify_internal_blueprint_free]
+QED
+
+Definition compile_env_blueprint_free_def:
+  compile_env_blueprint_free env <=>
+    EVERY (EVERY (\d. ~supported_expr_exists blueprint_create_root d) o SND)
+      env.ce_func_defaults
+End
+
+Theorem build_compile_env_blueprint_free:
+  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  compile_env_blueprint_free
+    (build_compile_env source_tops vis mut name args ret stmts ut)
+Proof
+  simp[compile_env_blueprint_free_def, build_compile_env_ce_func_defaults] >>
+  metis_tac[build_func_defaults_blueprint_free]
+QED
+
+Theorem omitted_defaults_blueprint_free:
+  compile_env_blueprint_free env ==>
+  EVERY (\d. ~supported_expr_exists blueprint_create_root d)
+    (omitted_defaults env name nargs) /\
+  compile_env_blueprint_free (cenv_without_defaults env name)
+Proof
+  simp[compile_env_blueprint_free_def, omitted_defaults_def, cenv_without_defaults_def] >>
+  strip_tac >> conj_tac
+  >- (Cases_on `ALOOKUP env.ce_func_defaults name` >> simp[] >>
+      irule EVERY_DROP >> fs[EVERY_MEM, combinTheory.o_DEF] >>
+      drule ALOOKUP_MEM >> disch_tac >>
+      first_x_assum (qspec_then `(name,x)` mp_tac) >> simp[]) >>
+  fs[EVERY_MEM, MEM_FILTER] >> metis_tac[]
 QED
