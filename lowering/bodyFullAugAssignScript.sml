@@ -86,7 +86,7 @@ Theorem body_augassign_toplevel_word_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
       (eval_stmt cx (AugAssign aty (TopLevelNameTarget nsid) bop e)) es
 Proof
-  cheat
+  suspend "use_ordinary"
 QED
 
 (* A field of a struct local. *)
@@ -826,6 +826,18 @@ Resume body_augassign_local_full[use_ordinary]:
 QED
 
 Finalise body_augassign_local_full
+
+Resume body_augassign_toplevel_word_full[use_ordinary]:
+  rpt gen_tac >> strip_tac >>
+  drule_all (Q.INST [`bindings` |-> `bindings`] augassign_scalar_target_route) >>
+  disch_then strip_assume_tac >>
+  irule augassign_ordinary_full >>
+  qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
+  qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise body_augassign_toplevel_word_full
 
 Resume body_augassign_other_full[ordinary]:
   irule augassign_ordinary_full >>
