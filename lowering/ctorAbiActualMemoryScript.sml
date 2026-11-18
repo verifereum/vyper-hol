@@ -69,10 +69,3 @@ Theorem ctor_actual_update_var_observations[simp]:
 Proof
   simp[update_var_def, alloca_frontier_inv_def, remaining_alloca_budget_def]
 QED
-
-Theorem ctor_actual_index_frontier[simp]:
-  alloca_frontier_inv ctx fn site (s with vs_inst_idx := ix) <=>
-  alloca_frontier_inv ctx fn site s
-Proof
-  simp[alloca_frontier_inv_def, remaining_alloca_budget_def]
-QED

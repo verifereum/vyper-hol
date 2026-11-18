@@ -5,42 +5,6 @@ Ancestors
   emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
   finite_map words arithmetic list fragExecMem
 
-Theorem calldata_index_init_local_frontier_after_alloca[local]:
-  abi_decode_index_init st = (ip,st') /\
-  (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts fn)) /\
-  step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit 32w]
-    [STRING #"%" (toString st.cs_next_var)]) s = OK allocated /\
-  alloca_inv s /\ alloca_frontier_inv ctx fn site s ==>
-  alloca_inv (mstore p 0w allocated) /\
-  alloca_frontier_inv ctx fn site (mstore p 0w allocated) /\
-  s.vs_alloca_next <= (mstore p 0w allocated).vs_alloca_next /\
-  (!id b cap. FLOOKUP s.vs_allocas id = SOME (b,cap) ==>
-    FLOOKUP (mstore p 0w allocated).vs_allocas id = SOME (b,cap))
-Proof
-  strip_tac >>
-  qabbrev_tac `inst = mk_inst st.cs_next_id ALLOCA [Lit 32w]
-    [STRING #"%" (toString st.cs_next_var)]` >>
-  `inst.inst_opcode = ALLOCA` by simp[Abbr `inst`, mk_inst_def] >>
-  `MEM inst (fn_insts fn)` by
-    (first_x_assum irule >> drule calldata_index_init_instructions >>
-     simp[Abbr `inst`]) >>
-  `alloca_inv allocated` by metis_tac[actual_alloca_slots_preserved] >>
-  `alloca_frontier_inv ctx fn site allocated` by
-    metis_tac[actual_alloca_frontier_member_preserved] >>
-  conj_tac
-  >- (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-          mstore_def, write_memory_with_expansion_def] >> metis_tac[]) >>
-  conj_tac
-  >- gvs[alloca_frontier_inv_def, remaining_alloca_budget_def,
-         mstore_def, write_memory_with_expansion_def] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
-  Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
-  gvs[AllCaseEqs(), update_var_def, mstore_def,
-      write_memory_with_expansion_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `id = inst.inst_id` >> gvs[FLOOKUP_UPDATE]
-QED
-
 Theorem calldata_index_init_local_frontier_fields:
   abi_decode_index_init st = (ip,st') /\
   (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts fn)) /\
