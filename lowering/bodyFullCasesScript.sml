@@ -40,7 +40,7 @@ Proof
        flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
-(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+(* Joint annotated declaration, split by the source and destination layouts. *)
 Theorem body_annassign_case_full:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -114,6 +114,8 @@ QED
 (* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
 Theorem body_assign_case_full:
   !cx t e.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+            struct_args_unique tops) /\
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
@@ -121,6 +123,7 @@ Theorem body_assign_case_full:
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
   rw[body_stmt_full_ok_def] >>
+  `struct_args_unique tops` by (fs[body_inv_def] >> metis_tac[]) >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
                     is_word_type ty`
   >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
