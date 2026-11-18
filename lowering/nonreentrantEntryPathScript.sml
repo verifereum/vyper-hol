@@ -89,6 +89,24 @@ Proof
        vyperStateTheory.raise_def] >> rw[]
 QED
 
+Theorem nonreentrant_lock_success_source_with_view:
+  is_view_mut mut = (mut = View) /\
+  cx.nonreentrant_slot = SOME nkey /\
+  lock_if_nr cx T (is_view_mut mut) es_reg = (INL (),es_lock) ==>
+  (mut <> View ==> ~cx.txn.is_static) /\
+  acquire_nonreentrant_lock cx.txn.target nkey (mut = View) es_reg =
+    (INL (),es_lock)
+Proof
+  strip_tac >>
+  `(mut <> View ==> ~cx.txn.is_static)` by
+    metis_tac[lock_if_nr_success_not_static] >>
+  simp[] >> Cases_on `mut = View` >>
+  gvs[lock_if_nr_def, check_not_static_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.bind_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()]
+QED
+
 Theorem nonreentrant_lock_success_source:
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = SOME nkey /\
@@ -100,13 +118,8 @@ Proof
   strip_tac >>
   `is_view_mut mut = (mut = View)` by
     (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
-  `(mut <> View ==> ~cx.txn.is_static)` by
-    metis_tac[lock_if_nr_success_not_static] >>
-  simp[] >> Cases_on `mut = View` >>
-  gvs[lock_if_nr_def, check_not_static_def, vyperStateTheory.check_def,
-      vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.bind_def, vyperStateTheory.return_def,
-      vyperStateTheory.raise_def, AllCaseEqs()]
+  drule_all nonreentrant_lock_success_source_with_view >>
+  disch_then ACCEPT_TAC
 QED
 
 (* The ghost update is independent of the mask used to check the prefix. *)
@@ -273,8 +286,8 @@ Proof
     nonreentrant_ghost_inv_frame) >> simp[]
 QED
 
-Theorem nonreentrant_entry_success_joint:
-  function_header_ok vis mut T rr name args dflts ret /\
+Theorem nonreentrant_entry_success_joint_with_view:
+  is_view_mut mut = (mut = View) /\
   cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
   lock_if_nr cx T (is_view_mut mut) es_reg = (INL (), es_lock) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
@@ -316,7 +329,7 @@ Theorem nonreentrant_entry_success_joint:
        ghost_inv H NONE cenv cx es_lock G_lock tn_lock s_lock)
 Proof
   strip_tac >>
-  drule_all nonreentrant_lock_success_source >> strip_tac >>
+  drule_all nonreentrant_lock_success_source_with_view >> strip_tac >>
   qpat_assum `!H. _`
     (qspec_then `([], [nkey])` strip_assume_tac) >>
   `state_rel ([], [nkey]) func cenv cx es_reg s_reg` by
@@ -424,8 +437,57 @@ Proof
   rpt strip_tac >> fs[] >> metis_tac[]
 QED
 
-Theorem nonreentrant_entry_abort_joint:
+Theorem nonreentrant_entry_success_joint:
   function_header_ok vis mut T rr name args dflts ret /\
+  cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
+  lock_if_nr cx T (is_view_mut mut) es_reg = (INL (), es_lock) /\
+  compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
+  fn_has_code sa body_sa func /\ fn_inst_ids_distinct func /\
+  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  ~block_is_terminated sa /\
+  s_reg.vs_current_bb = sa.cs_current_bb /\
+  s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s_reg /\ local_ptrs_reserved cenv sa /\
+  return_buf_frame NONE cenv sa s_reg /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  alloca_history func s_reg /\
+  (!H : (bool # 'a word # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es_reg s_reg /\
+       ghost_inv H NONE cenv cx es_reg G_reg tn_reg s_reg) ==>
+  ?s_lock G_lock tn_lock.
+    gas_path ctx func s_reg 0 (OK s_lock) /\
+    gas_path_mem ctx func s_reg 0 (OK s_lock) /\
+    (!D explicit.
+       gas_origin_ptr_path (D, 0, explicit, ctx, func, [])
+         (s_reg, G_reg, tn_reg) [] (OK s_lock, G_lock, tn_lock)) /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel ctx func []
+                    G_lock tn_lock s_lock) ==>
+         !fuel. ptr_safe_run D 0 fuel ctx func []
+                    G_reg tn_reg s_reg) /\
+    alloca_history func s_lock /\
+    return_buf_frame NONE cenv body_sa s_lock /\
+    fresh_vars_wrt body_sa s_lock /\ local_ptrs_reserved cenv body_sa /\
+    ~block_is_terminated body_sa /\ ~s_lock.vs_halted /\
+    s_lock.vs_current_bb = body_sa.cs_current_bb /\
+    s_lock.vs_inst_idx = LENGTH body_sa.cs_current_insts /\
+    s_lock.vs_gas_readings = s_reg.vs_gas_readings /\
+    s_lock.vs_code = s_reg.vs_code /\ s_lock.vs_labels = s_reg.vs_labels /\
+    (mut <> View ==> ~cx.txn.is_static) /\
+    (!H : (bool # 'a word # type_value) list # num list.
+       storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+       stmt_state_rel H ctx func cenv cx es_lock s_lock /\
+       ghost_inv H NONE cenv cx es_lock G_lock tn_lock s_lock)
+Proof
+  strip_tac >>
+  `is_view_mut mut = (mut = View)` by
+    (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
+  drule_all nonreentrant_entry_success_joint_with_view >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem nonreentrant_entry_abort_joint_with_view:
+  is_view_mut mut = (mut = View) /\
   cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
   lock_if_nr cx T (is_view_mut mut) es_reg = (INR exc, es_abort) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
@@ -455,8 +517,6 @@ Theorem nonreentrant_entry_abort_joint:
     s_abort.vs_code = s_reg.vs_code /\ s_abort.vs_labels = s_reg.vs_labels
 Proof
   strip_tac >>
-  `is_view_mut mut = (mut = View)` by
-    (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
   qpat_assum `!H. _`
     (qspec_then `([], [nkey])` strip_assume_tac) >>
   `state_rel ([], [nkey]) func cenv cx es_reg s_reg` by
@@ -561,6 +621,43 @@ Proof
     (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
   qexistsl_tac [`a`, `t with vs_inst_idx := j`, `G'`, `tn'`] >>
   simp[] >> fs[exprSimDefsTheory.expr_exit_def]
+QED
+
+Theorem nonreentrant_entry_abort_joint:
+  function_header_ok vis mut T rr name args dflts ret /\
+  cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
+  lock_if_nr cx T (is_view_mut mut) es_reg = (INR exc, es_abort) /\
+  compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
+  fn_has_code sa body_sa func /\
+  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  s_reg.vs_current_bb = sa.cs_current_bb /\
+  s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!H : (bool # 'a word # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es_reg s_reg /\
+       ghost_inv H NONE cenv cx es_reg G_reg tn_reg s_reg) ==>
+  ?a s_abort G_abort tn_abort.
+    gas_path ctx func s_reg 0 (Abort a s_abort) /\
+    gas_path_mem ctx func s_reg 0 (Abort a s_abort) /\
+    (!D explicit.
+       gas_origin_ptr_path (D, 0, explicit, ctx, func, [])
+         (s_reg, G_reg, tn_reg) [] (Abort a s_abort, G_abort, tn_abort)) /\
+    expr_exit (INR exc : unit + exception) (Abort a s_abort) /\
+    ((tload (n2w nkey) s_reg = 1w /\ a = Revert_abort /\
+      exc = Error (RuntimeError "nonreentrant lock")) \/
+     (tload (n2w nkey) s_reg <> 1w /\ mut <> View /\ cx.txn.is_static /\
+      a = ExHalt_abort /\
+      exc = Error (RuntimeError "write in static context"))) /\
+    s_abort.vs_gas_readings = s_reg.vs_gas_readings /\
+    s_abort.vs_memory = s_reg.vs_memory /\
+    s_abort.vs_allocas = s_reg.vs_allocas /\
+    s_abort.vs_alloca_next = s_reg.vs_alloca_next /\
+    s_abort.vs_code = s_reg.vs_code /\ s_abort.vs_labels = s_reg.vs_labels
+Proof
+  strip_tac >>
+  `is_view_mut mut = (mut = View)` by
+    (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
+  drule_all nonreentrant_entry_abort_joint_with_view >>
+  disch_then ACCEPT_TAC
 QED
 
 (* Fragments of the compiled guarded body entered after registration. *)
