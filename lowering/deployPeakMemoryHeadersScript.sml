@@ -1,26 +1,21 @@
 (* Parse the deployment-unit dynamic peak-memory headers without asserting them.
- * Revised deployment twin of lowering/peakMemoryHeadersScript.sml (H5/H5b/H6)
+ * Revised deployment twin of lowering/peakMemoryHeadersScript.sml (H5/H6)
  * and replacement for superseded 4a5e29ca03:lowering/proofs/deployDallocaBoundScript.sml:
  *   - D1 (lower_vyper_deploy_unit_dynamic_peak_memory_bound) drops the circular
  *     memory-erased gas_origin_path F / marks / tail premise and uses the
  *     non-vacuous blueprint-free gate on Deploy/Internal declarations covering
  *     the Venom-bounded DALLOCA forms (raw_call forwarding msg.data and
  *     create_copy_of).
- *   - D1b (lower_vyper_deploy_unit_blueprint_dynamic_peak_memory_bound) is the
- *     split companion covering create_from_blueprint under P13's widened
- *     deploy_source_ok and universal storage/exemption observations, also
- *     without gas_origin_path F.
  *   - D2 (lower_vyper_deploy_unit_memory_ptr_dynamic_companion) is unchanged.
- *   - D3 (deploy_ctor_frag_dalloca_no_wrap) and D3b
- *     (deploy_ctor_blueprint_frag_dalloca_no_wrap) are the constructor body
- *     frag_reachable corollaries of D1 and D1b.
+ *   - D3 (deploy_ctor_frag_dalloca_no_wrap) is the constructor body
+ *     frag_reachable corollary of D1.
  *)
 Theory deployPeakMemoryHeaders
 Ancestors
   ctorDeployDefs e2eDeployDefs immSectionDead
   fmpLowerSequenceExec venomLayout
   exprSimHypsDefs compileEnv fragExec fragGasPath
-  compileVyper vyperCompiler vyperInterpreter e2eDefs
+  compileVyper vyperCompiler e2eDefs
   vyperAST supportedStmtTraverse supportedExprTraverse
   o1PassContract unitMemInv unitTransformDefs ptrSafeRun
   contextRawReachable contextCodegenRel
@@ -63,50 +58,6 @@ val lower_vyper_deploy_unit_dynamic_peak_memory_bound_quote : term = “
                   (CreateTarget (CreateFromBlueprint raw) salted rof order)
                   es d)
          d0) dflts) /\
-    vs = deploy_entry_state prog cplan tops es /\
-    vs.vs_initial_fmp = n2w cp_fmp /\
-    vs.vs_fmp = n2w cp_fmp /\
-    cp_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    imm_len tops + unit_alloca_budget dunit.cu_context +
-      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
-    raw_variant fmp vs0 vs /\
-    LENGTH vs0.vs_outcomes < 2 ** 64 /\
-    outcomes_accounts_typed (SOME vs0.vs_outcomes) /\
-    LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 ==>
-    !fn i s.
-      raw_reachable vs0 dunit.cu_context fn i s ==>
-      s.vs_initial_fmp = fmp /\
-      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
-      fmp_frontier_rel cp_fmp (w2n fmp)
-        (cp_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
-      (i.inst_opcode = DALLOCA ==>
-       w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64 /\
-       !sz_op sz.
-         i.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
-         w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))
-”;
-
-(*
- * 1b. [DEPLOYMENT BLUEPRINT COMPANION D1b — all three DALLOCA forms including
- *      create_from_blueprint under P13's widened deploy_source_ok]
- *
- * Split companion covering CreateFromBlueprint (including raw_args=True) on the
- * deployment unit via joint prefix simulation along lower_budget_path F under
- * P13's widened deploy_source_ok and universal storage/exemption observations,
- * without any circular gas_origin_path F premise.
- *)
-val lower_vyper_deploy_unit_blueprint_dynamic_peak_memory_bound_quote : term = “
-  !policy tops deploy_bc runtime_bc rpolicy (dunit:compilation_unit) dout
-   prog cplan (cp_fmp:num) am tx es (fmp:bytes32) vs vs0.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    (!obs.
-       deploy_storage_ok tops am tx vs0.vs_outcomes obs /\
-       ~deploy_source_exempt tops
-         (load_contract (SOME vs0.vs_outcomes) obs am tx [(NONE, tops)] [])) /\
     vs = deploy_entry_state prog cplan tops es /\
     vs.vs_initial_fmp = n2w cp_fmp /\
     vs.vs_fmp = n2w cp_fmp /\
@@ -231,53 +182,6 @@ val deploy_ctor_frag_dalloca_no_wrap_quote : term = “
        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 ”;
 
-(*
- * 3b. [CONSTRUCTOR BODY BLUEPRINT FRAG_REACHABLE COROLLARY D3b — from D1b]
- *
- * Constructor body frag_reachable corollary of D1b covering all three DALLOCA
- * forms (including CreateFromBlueprint) under P13's widened deploy_source_ok
- * and universal storage/exemption observations.
- *)
-val deploy_ctor_blueprint_frag_dalloca_no_wrap_quote : term = “
-  !policy tops deploy_bc runtime_bc rpolicy (dunit:compilation_unit) dout
-   prog cplan (cp_fmp:num) am tx es (fmp:bytes32) vs vs0
-   func (s0:venom_state).
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    (!obs.
-       deploy_storage_ok tops am tx vs0.vs_outcomes obs /\
-       ~deploy_source_exempt tops
-         (load_contract (SOME vs0.vs_outcomes) obs am tx [(NONE, tops)] [])) /\
-    vs = deploy_entry_state prog cplan tops es /\
-    vs.vs_initial_fmp = n2w cp_fmp /\
-    vs.vs_fmp = n2w cp_fmp /\
-    cp_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    imm_len tops + unit_alloca_budget dunit.cu_context +
-      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
-    raw_variant fmp vs0 vs /\
-    LENGTH vs0.vs_outcomes < 2 ** 64 /\
-    outcomes_accounts_typed (SOME vs0.vs_outcomes) /\
-    LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
-    dunit.cu_context.ctx_entry = SOME "__deploy" /\
-    lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__deploy" /\
-    gas_path dunit.cu_context func
-      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
-                   vs_inst_idx := 0 |>) 0 (OK s0) ==>
-    !fn inst s.
-      frag_reachable dunit.cu_context func s0 fn inst s ==>
-      s.vs_initial_fmp = fmp /\
-      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
-      fmp_frontier_rel cp_fmp (w2n fmp)
-        (cp_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
-      dalloca_no_wrap inst s /\
-      (inst.inst_opcode = DALLOCA ==>
-       w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
-”;
-
 val check_peak_memory_header = fn (name, tm) =>
   let
     val fv = free_vars tm
@@ -294,20 +198,14 @@ val deploy_peak_memory_headers : (string * term) list =
   map check_peak_memory_header
     [("lower_vyper_deploy_unit_dynamic_peak_memory_bound",
       lower_vyper_deploy_unit_dynamic_peak_memory_bound_quote),
-     ("lower_vyper_deploy_unit_blueprint_dynamic_peak_memory_bound",
-      lower_vyper_deploy_unit_blueprint_dynamic_peak_memory_bound_quote),
      ("lower_vyper_deploy_unit_memory_ptr_dynamic_companion",
       lower_vyper_deploy_unit_memory_ptr_dynamic_companion_quote),
      ("deploy_ctor_frag_dalloca_no_wrap",
-      deploy_ctor_frag_dalloca_no_wrap_quote),
-     ("deploy_ctor_blueprint_frag_dalloca_no_wrap",
-      deploy_ctor_blueprint_frag_dalloca_no_wrap_quote)];
+      deploy_ctor_frag_dalloca_no_wrap_quote)];
 
 val expected_constant_owners =
-  [("ctorDeployDefs", ["deploy_phases", "deploy_entry_state",
-                       "deploy_source_ok", "deploy_source_exempt"]),
-   ("e2eDeployDefs", ["deploy_typing_ok", "deploy_state_rel",
-                      "deploy_storage_ok"]),
+  [("ctorDeployDefs", ["deploy_phases", "deploy_entry_state"]),
+   ("e2eDeployDefs", ["deploy_typing_ok", "deploy_state_rel"]),
    ("immSectionDead", ["imm_len"]),
    ("vyperAST", ["FunctionDecl", "Deploy", "Internal", "Call",
                  "CreateTarget", "CreateFromBlueprint"]),
@@ -316,7 +214,6 @@ val expected_constant_owners =
    ("venomInst", ["lookup_function", "lookup_block", "fn_entry_label",
                   "DALLOCA"]),
    ("fragGasPath", ["gas_path"]),
-   ("vyperInterpreter", ["load_contract"]),
    ("vyperCompiler", ["unit_alloca_budget"]),
    ("lowerDloadDefs", ["ctx_dload_count"]),
    ("o1PassContract", ["raw_variant"]),
