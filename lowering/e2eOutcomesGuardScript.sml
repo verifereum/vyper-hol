@@ -7,7 +7,7 @@ Ancestors
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
   e2eCorrectness e2eComposition e2eProducers frameOutcome
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
-  vfmAccountDeletion
+  vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport
   vfmDecreasesGas relation pair arithmetic list
 
@@ -181,6 +181,37 @@ Proof
     fs[vyper_closed_world_def] >>
   spose_not_then assume_tac >>
   drule_all run_call_to_delete >> simp[] >> metis_tac[]
+QED
+
+Triviality guard_valid_horizon_target:
+  cx'.txn.target = cx.txn.target ==>
+  (valid_horizon cx' st H obs <=> valid_horizon cx st H obs)
+Proof
+  strip_tac >>
+  `!s. storage_well_formed_on cx' s (FST H) <=>
+       storage_well_formed_on cx s (FST H)` by
+    metis_tac[storage_well_formed_on_target] >>
+  simp[valid_horizon_def, storage_observations_ok_def] >>
+  Induct_on `obs` >- simp[storage_trace_backends_well_formed_def] >>
+  Cases >> simp[storage_trace_backends_well_formed_def] >> metis_tac[]
+QED
+
+Triviality guard_opt_entry_code_update:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  fin rpolicy prog = SOME prog' /\ runtime_bc = assemble prog' ==>
+  tx with code := (opt_entry_state prog prog' cplan es).vs_code = tx \/
+  ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+  ~program_reads_self_code tops
+Proof
+  strip_tac >>
+  `call_state_rel tops (assemble prog') am tx es /\
+   fin IN accepted_finalizers /\
+   (fin = asm_opt_finalizer ==> ~program_reads_self_code tops)` by
+    fs[vyper_frame_staging_def] >>
+  Cases_on `fin = K SOME`
+  >- (gvs[] >> metis_tac[opt_entry_txp_identity]) >>
+  `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  fs[call_state_rel_def, source_deployment_rel_def]
 QED
 
 Triviality guard_reentry_staging:
