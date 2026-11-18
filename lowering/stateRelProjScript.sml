@@ -49,7 +49,7 @@ Theorem stmt_state_rel_alloca_size:
     i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w
 Proof
-  simp[stmt_state_rel_def]
+  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem state_rel_call_ctx_rel:
