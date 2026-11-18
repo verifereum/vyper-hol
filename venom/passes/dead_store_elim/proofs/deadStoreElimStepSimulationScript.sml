@@ -12,6 +12,7 @@ Ancestors
   deadStoreElimMemoryTerminalSteps deadStoreElimTerminalSteps deadStoreElimEquiv
   deadStoreElimDefs deadStoreElimLocal deadStoreElimPending deadStoreElimStructure
   deadStoreElimPositional passSharedDefs stateEquiv
+  deadStoreElimSafety deadStoreElimFrame deadStoreElimTerminalEquiv
   venomExecSemantics venomExecProofs venomExecProps venomInst venomState venomWf venomEffects venomMemDefs list
 
 Theorem dse_nonterminator_step:
@@ -259,6 +260,9 @@ Theorem dse_nonbarrier_result_cases:
   ~dse_barrier_case sp inst.inst_opcode /\ ~s.vs_call_ctx.cc_static ==>
   (?s1. step_inst fuel ctx inst s = OK s1) \/
   (?e. step_inst fuel ctx inst s = Error e) \/
+  (inst.inst_opcode IN {CALL; STATICCALL; DELEGATECALL} /\
+   step_inst fuel ctx inst s =
+     Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
   inst.inst_opcode IN {STOP; SINK; RETURN; REVERT; SELFDESTRUCT;
                        RET; RETFMP; INVALID; PHI; ASSERT; ASSERT_UNREACHABLE;
                        CREATE; CREATE2; RETURNDATACOPY}
@@ -300,7 +304,7 @@ QED
 Resume dse_nonbarrier_result_cases[residual_results]:
   Cases_on `inst.inst_opcode IN {STOP; SINK; RETURN; REVERT; SELFDESTRUCT;
     RET; RETFMP; INVALID; PHI; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2}`
-  >- (disj2_tac >> disj2_tac >>
+  >- (disj2_tac >> disj2_tac >> disj2_tac >>
       qpat_x_assum `inst.inst_opcode IN {STOP; SINK; RETURN; REVERT; SELFDESTRUCT;
         RET; RETFMP; INVALID; PHI; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2}` mp_tac >>
       simp[] >> metis_tac[]) >>
@@ -318,9 +322,9 @@ Resume dse_nonbarrier_result_cases[residual_results]:
   Cases_on `inst.inst_opcode = ISTORE`
   >- (drule dse_istore_result_cases >> metis_tac[]) >>
   Cases_on `inst.inst_opcode IN {CALL; STATICCALL}`
-  >- (drule_all dse_call_results >> metis_tac[]) >>
+  >- (drule_all dse_call_results >> fs[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DELEGATECALL`
-  >- (drule dse_delegatecall_results >> metis_tac[]) >>
+  >- (drule dse_delegatecall_results >> simp[]) >>
   `inst.inst_opcode IN {DRET; INVOKE}` by fs[] >>
   gvs[dse_barrier_case_def]
 QED
@@ -335,6 +339,32 @@ Proof
   irule fmp_fn_insts_blocks_intro >> qexists_tac `bb` >>
   conj_tac >- metis_tac[lookup_block_MEM] >>
   fs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]
+QED
+
+Theorem dse_call_memory_abort[local]:
+  inst.inst_opcode IN {CALL; STATICCALL; DELEGATECALL} /\
+  ~s.vs_call_ctx.cc_static /\
+  dse_local_agrees AddrSp_Memory P s t /\
+  step_inst fuel ctx inst s = Abort reason s1 ==>
+  ?t1. step_inst fuel ctx inst t = Abort reason t1 /\
+    dse_equiv AddrSp_Memory s1 t1
+Proof
+  strip_tac >>
+  `!op. eval_operand op s = eval_operand op t` by
+    (fs[dse_local_agrees_def] >> metis_tac[dse_safety_agrees_eval_operand]) >>
+  `!ops. eval_operands ops s = eval_operands ops t` by
+    (Induct >> simp[eval_operands_def] >> gen_tac >> CASE_TAC >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    (drule dse_local_agrees_frame >> simp[]) >>
+  `dse_equiv AddrSp_Memory s t` by
+    fs[dse_local_agrees_def, dse_pending_space_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dse_equiv_def, dse_frame_def, venom_state_component_equality] >>
+  qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
+  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+    AllCaseEqs(), exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+  strip_tac >> gvs[] >>
+  irule dse_equiv_halt_state >> irule dse_equiv_set_returndata >> simp[]
 QED
 
 Theorem dse_non_ok_step:
@@ -360,7 +390,8 @@ Proof
       drule_all dse_barrier_result >> simp[]) >>
   drule_all dse_nonbarrier_result_cases >>
   disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
-  strip_tac >- metis_tac[] >- metis_tac[] >>
+  strip_tac >- metis_tac[] >- metis_tac[]
+  >- suspend "call_result" >>
   suspend "nonbarrier_terminal"
 QED
 
@@ -458,6 +489,23 @@ Resume dse_non_ok_step[rdc_result]:
   drule_all dse_returndatacopy_non_ok >> simp[]
 QED
 
+Resume dse_non_ok_step[call_result]:
+  `sp = AddrSp_Memory` by
+    (qpat_assum `sp IN _` mp_tac >>
+     qpat_assum `inst.inst_opcode IN {CALL; STATICCALL; DELEGATECALL}` mp_tac >>
+     qpat_assum `~dse_barrier_case _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[dse_barrier_case_def] >> metis_tac[]) >>
+  qpat_x_assum `sp = AddrSp_Memory` SUBST_ALL_TAC >>
+  `inst.inst_outputs <> []` by
+    (qpat_x_assum `step_inst _ _ _ s = Abort _ _` mp_tac >>
+     fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       AllCaseEqs(), exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+     rpt strip_tac >> gvs[]) >>
+  `dse_inst ids AddrSp_Memory inst = inst` by
+    (irule dse_nonempty_outputs_retained >> metis_tac[]) >>
+  drule_all dse_call_memory_abort >> strip_tac >> simp[lift_result_def]
+QED
+
 Finalise dse_non_ok_step
 
 (* Storage and transient DSE treat every opcode that can halt or return as a
@@ -472,6 +520,7 @@ Proof
   `sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient}` by fs[] >>
   drule_all dse_nonbarrier_result_cases >>
   disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac)
+  >- simp[]
   >- simp[]
   >- simp[] >>
   `inst.inst_opcode IN {REVERT; INVALID; PHI; ASSERT; ASSERT_UNREACHABLE;
