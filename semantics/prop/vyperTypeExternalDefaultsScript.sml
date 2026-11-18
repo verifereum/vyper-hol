@@ -10,6 +10,7 @@ Ancestors
   vyperTypeStmtResult vyperTypeEnvExtension
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   alist rich_list vyperStorageTrace
+  vyperTypeEvalProofs
 
 val _ = Parse.hide "body";
 
