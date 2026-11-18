@@ -483,20 +483,6 @@ QED
 (* ===== Counted gas: the CALL and the ASSERT as a gas path ===== *)
 
 (* The oracle's take and adopt never read or write the gas observations. *)
-Theorem take_call_outcome_gas_obs[local]:
-  take_call_outcome gas_cap target calldata value_opt (st with gas_obs := tail) =
-  (FST (take_call_outcome gas_cap target calldata value_opt st),
-   SND (take_call_outcome gas_cap target calldata value_opt st) with gas_obs := tail)
-Proof
-  `call_outcome_request target calldata value_opt (st with gas_obs := tail) =
-   call_outcome_request target calldata value_opt st` by
-    simp[call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[take_call_outcome_def, take_request_outcome_def] >>
-  rename1 `st.outcomes = SOME os` >>
-  Cases_on `os` >> simp[] >>
-  pairarg_tac >> simp[] >> rw[]
-QED
-
 Theorem adopt_call_outcome_gas_obs[local]:
   adopt_call_outcome rq outcome (st with gas_obs := tail) =
   (FST (adopt_call_outcome rq outcome st),

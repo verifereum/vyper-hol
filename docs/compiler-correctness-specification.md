@@ -158,10 +158,16 @@ source semantics.
 
 Computed value-zero precompiles 1/2/6/7 take their success from the next
 outcome (the EVM can fail them for lack of gas) and, on success, their return
-data from pure input. They record no request: `call_trace` keeps them and
-`call_requests` filters them out. The source's sha256/ecrecover/ecadd/ecmul
-builtins take that outcome too; constructors, which run without the oracle,
-exclude them (`constructor_call_free`). Other
+data from pure input. They record a request like any other call, so
+`call_requests es = MAP FST (call_trace es)` and the k-th source request is the
+k-th trace entry's. The source's sha256/ecrecover/ecadd/ecmul builtins take
+that outcome too, through a static value-zero request to 2/1/6/7 carrying the
+input bytes the lowering passes (`precompile_input`). One path still differs:
+an ecadd/ecmul argument that is not a valid curve point makes the source raise
+before any request, while the compiled STATICCALL records one before its
+ASSERT aborts; `call_result_rel` compares effects only on success or halt, so
+this mismatch is outside what the theorem relates. Constructors, which run
+without the oracle, exclude them (`constructor_call_free`). Other
 calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner

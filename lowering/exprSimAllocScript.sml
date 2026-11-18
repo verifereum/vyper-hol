@@ -67,7 +67,7 @@ Proof
   goal_assum drule >> simp[] >> metis_tac[]
 QED
 
-Theorem compile_alloc_buffer_world:
+Theorem alloc_buffer_fields:
   compile_alloc_buffer sz sa = (buf,sm) /\
   run_inst_seq (emitted_insts sa sm) s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\

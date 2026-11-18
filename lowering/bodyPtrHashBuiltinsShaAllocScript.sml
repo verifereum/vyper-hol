@@ -92,7 +92,7 @@ Proof
   drule_all hash_alloc_sha256_code_split >> strip_tac >>
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
   `a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
-   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[compile_alloc_buffer_world] >>
+   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[alloc_buffer_fields] >>
   `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
     simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
   `isPREFIX (emitted_insts sa sn) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -229,7 +229,7 @@ Proof
   drule_all hash_alloc_sha256_code_split >> strip_tac >>
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
   `a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
-   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[compile_alloc_buffer_world] >>
+   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[alloc_buffer_fields] >>
   `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
     simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
   `isPREFIX (emitted_insts sa sn) (DROP s.vs_inst_idx bb.bb_instructions) /\

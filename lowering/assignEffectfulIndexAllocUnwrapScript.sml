@@ -43,7 +43,7 @@ Proof
   `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
-  drule_all compile_alloc_buffer_world >> strip_tac >>
+  drule_all alloc_buffer_fields >> strip_tac >>
   `contract_storage t = contract_storage s /\
    contract_transient t = contract_transient s` by
     metis_tac[alloc_buffer_storage] >>

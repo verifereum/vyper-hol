@@ -174,7 +174,7 @@ QED
 
 Resume hash_fixed_prepare_endpoint[post]:
   `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-   t.vs_call_ctx = s.vs_call_ctx` by metis_tac[compile_alloc_buffer_world] >>
+   t.vs_call_ctx = s.vs_call_ctx` by metis_tac[alloc_buffer_fields] >>
   `tn2.t_stor = tn.t_stor /\ tn2.t_trans = tn.t_trans` by
     gvs[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
   `(mstore (w2n a) v t).vs_accounts = s.vs_accounts /\
