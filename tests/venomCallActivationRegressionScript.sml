@@ -91,31 +91,39 @@ Proof
   simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
+val inherited_static_state = ``call_probe_state with <|
+  vs_outcomes := [call_probe_outcome];
+  vs_call_ctx := empty_call_context with cc_static := T |>``;
+val inherited_static_request = ``
+  venom_call_request ^inherited_static_state 8w 0w 0w 1w F with cr_gas := SOME 7``;
+
 Theorem activated_inherited_static:
-  let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
-    vs_call_ctx := empty_call_context with cc_static := T |>;
-    rq = venom_call_request s 8w 0w 0w 1w F with cr_gas := SOME 7
-  in ?t. step_inst_base (probe_call 8w) s = OK t /\
-    rq.cr_static /\ lookup_var "result" t = SOME 1w /\
-    t.vs_outcomes = [] /\ t.vs_requests = [rq] /\
+  ?t. step_inst_base (probe_call 8w) ^inherited_static_state = OK t /\
+    (^inherited_static_request).cr_static /\ lookup_var "result" t = SOME 1w /\
+    t.vs_outcomes = [] /\ t.vs_requests = [^inherited_static_request] /\
     t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w] /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_logs = s.vs_logs
+    t.vs_accounts = (^inherited_static_state).vs_accounts /\
+    t.vs_transient = (^inherited_static_state).vs_transient /\
+    t.vs_logs = (^inherited_static_state).vs_logs
 Proof
   simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
+val staticcall_state = ``call_probe_state with vs_outcomes := [call_probe_outcome]``;
+val staticcall_request = ``
+  venom_call_request ^staticcall_state 8w 0w 0w 1w T with cr_gas := SOME 7``;
+
 Theorem activated_staticcall_zero_value:
-  let s = call_probe_state with vs_outcomes := [call_probe_outcome];
-    rq = venom_call_request s 8w 0w 0w 1w T with cr_gas := SOME 7;
-    inst = mk_inst 1 STATICCALL [Lit 7w; Lit 8w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]
-      ["result"]
-  in ?t. step_inst_base inst s = OK t /\
-    rq.cr_static /\ rq.cr_value = 0 /\ lookup_var "result" t = SOME 1w /\
-    t.vs_outcomes = [] /\ t.vs_requests = [rq] /\ t.vs_returndata = [9w] /\
-    t.vs_memory = [1w; 9w; 3w; 4w] /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_logs = s.vs_logs
+  ?t. step_inst_base
+        (mk_inst 1 STATICCALL [Lit 7w; Lit 8w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]
+          ["result"]) ^staticcall_state = OK t /\
+    (^staticcall_request).cr_static /\ (^staticcall_request).cr_value = 0 /\
+    lookup_var "result" t = SOME 1w /\
+    t.vs_outcomes = [] /\ t.vs_requests = [^staticcall_request] /\
+    t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w] /\
+    t.vs_accounts = (^staticcall_state).vs_accounts /\
+    t.vs_transient = (^staticcall_state).vs_transient /\
+    t.vs_logs = (^staticcall_state).vs_logs
 Proof
   simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
          exec_ext_call_def] @ call_clauses) >> EVAL_TAC
@@ -237,17 +245,20 @@ Proof
   imp_res_tac probe_computed_dispatch >> gvs[]
 QED
 
+val nonzero_precompile_state = ``call_probe_state with <|
+  vs_outcomes := [call_probe_outcome; failed_outcome call_probe_request];
+  vs_requests := [call_probe_request] |>``;
+
 Theorem activated_nonzero_precompile_ordinary:
-  let s = call_probe_state with <|
-    vs_outcomes := [call_probe_outcome; failed_outcome call_probe_request];
-    vs_requests := [call_probe_request] |>;
-    rq = venom_call_request s 2w 1w 0w 1w F with cr_gas := SOME 7;
-    inst = mk_inst 1 CALL
-      [Lit 7w; Lit 2w; Lit 1w; Lit 0w; Lit 1w; Lit 1w; Lit 3w] ["result"]
-  in ?t. step_inst_base inst s = OK t /\ lookup_var "result" t = SOME 1w /\
+  ?t. step_inst_base
+        (mk_inst 1 CALL
+          [Lit 7w; Lit 2w; Lit 1w; Lit 0w; Lit 1w; Lit 1w; Lit 3w] ["result"])
+        ^nonzero_precompile_state = OK t /\
+    lookup_var "result" t = SOME 1w /\
     t.vs_outcomes = [failed_outcome call_probe_request] /\
-    t.vs_requests = [call_probe_request; rq] /\ t.vs_returndata = [9w] /\
-    t.vs_memory = [1w; 9w; 3w; 4w]
+    t.vs_requests = [call_probe_request;
+      venom_call_request ^nonzero_precompile_state 2w 1w 0w 1w F with cr_gas := SOME 7] /\
+    t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w]
 Proof
   simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
          exec_ext_call_def] @ call_clauses) >> EVAL_TAC
