@@ -215,10 +215,12 @@ Theorem adoption_deletion_prefix_all_stages:
       as_memory := TAKE off asm.as_memory ++ TAKE ret_size outcome.co_returnData ++
         DROP (off + LENGTH (TAKE ret_size outcome.co_returnData)) asm.as_memory |>))
 Proof
+  strip_tac >>
+  `asm.as_outcomes <> []` by
+    (strip_tac >> gvs[take_outcome_def]) >>
   simp[adopt_call_outcome_equation, consume_call_outcome_def,
        asm_consume_call_outcome_def, adopt_outcome_def,
-       adopt_outcome_deletions_def] >>
-  rpt strip_tac >> simp[]
+       adopt_outcome_deletions_def]
 QED
 
 Theorem static_and_failed_deletions_are_ignored:
