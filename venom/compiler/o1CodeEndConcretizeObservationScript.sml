@@ -17,12 +17,13 @@ Ancestors
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage
   concretizePtrCoverageStaticMemReachability concretizePtrChronologicalHistory
 
-Theorem concretize_codecopy_reflect:
+Theorem concretize_codecopy_reflect_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C Ct /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_inv D 2 C vs /\
-  ~ctx_has_dalloca C /\
-  max_live_eom Ct = SOME eom /\ raw_reachable vs Ct ft j t /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\ o1_inv D 2 C vs /\
+  max_live_eom Ct = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  raw_reachable vs Ct ft j t /\
   j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
   code_end_var ft x /\ eval_operand (Var x) t = SOME w ==>
   ?f i s. raw_reachable vs C f i s /\ i.inst_opcode = CODECOPY /\
@@ -31,14 +32,13 @@ Theorem concretize_codecopy_reflect:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[o1_inv_def, o1_src_inv_def] >>
-  `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by simp[] >>
   `EVERY all_reachable C.ctx_functions /\
    EVERY fn_defs_reach_uses C.ctx_functions` by
     (fs[EVERY_MEM, make_ssa_input_ok_def] >> metis_tac[]) >>
   `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_paired_bridge) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_paired_bridge_static) >>
   disch_then (qx_choosel_then [`R`,`lp`,`positions`] strip_assume_tac) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_frame_retpc_shape) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_frame_retpc_shape_static) >>
   strip_tac >>
   `EVERY (\f. fn_inst_wf f /\ unitShapeDefs$retpc_shape_ok f /\ opaque_use_ok f /\
      first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
@@ -48,7 +48,7 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[]) >>
   `C.ctx_entry = Ct.ctx_entry` by fs[ctx_pass_stage_def] >>
   `vs.vs_vars = FEMPTY` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+    gvs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `!ht at. ptr_chrono_history vs Ct ht at ==>
      (?h a done tokens registry births PT TG saved entries H calls ws.
        ptr_paired_prefix R lp positions lo vs C Ct h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -59,7 +59,7 @@ Proof
        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)` by
     (match_mp_tac ptr_paired_history_coverage >> rpt conj_tac
      >~ [`ptr_chrono_step`]
-     >- (rpt strip_tac >> drule_all ptr_paired_universal_extension >>
+     >- (rpt strip_tac >> drule_all ptr_paired_universal_extension_static >>
          disch_then ACCEPT_TAC) >>
      fs[EVERY_MEM] >> metis_tac[]) >>
   drule ptr_raw_reachable_frame >> strip_tac >>
@@ -69,7 +69,7 @@ Proof
   suspend "corridor"
 QED
 
-Resume concretize_codecopy_reflect[paired]:
+Resume concretize_codecopy_reflect_static[paired]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   rename1 `ptr_paired_prefix R lp positions lo vs C Ct source_history a _ _ done tokens registry births PT TG saved entries H calls ws` >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
@@ -80,7 +80,7 @@ Resume concretize_codecopy_reflect[paired]:
      a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -104,7 +104,7 @@ Resume concretize_codecopy_reflect[paired]:
   suspend "scalar"
 QED
 
-Resume concretize_codecopy_reflect[scalar]:
+Resume concretize_codecopy_reflect_static[scalar]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
@@ -124,7 +124,7 @@ Resume concretize_codecopy_reflect[scalar]:
   suspend "provenance"
 QED
 
-Resume concretize_codecopy_reflect[provenance]:
+Resume concretize_codecopy_reflect_static[provenance]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `code_end_var (concretize_function_with_positions (lp a.po_fn) a.po_fn) x` by
     (fs[ptr_paired_code_def, ptr_observe_def] >>
@@ -135,7 +135,7 @@ Resume concretize_codecopy_reflect[provenance]:
   metis_tac[ld_frame_reachable_raw]
 QED
 
-Resume concretize_codecopy_reflect[corridor]:
+Resume concretize_codecopy_reflect_static[corridor]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   gvs[ptr_observe_def] >>
   drule raw_reachable_active >>
@@ -150,4 +150,21 @@ Resume concretize_codecopy_reflect[corridor]:
   drule_all ld_revert_pair_suffix_opcode >> simp[]
 QED
 
-Finalise concretize_codecopy_reflect
+Finalise concretize_codecopy_reflect_static
+
+Theorem concretize_codecopy_reflect:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_inv D 2 C vs /\
+  ~ctx_has_dalloca C /\
+  max_live_eom Ct = SOME eom /\ raw_reachable vs Ct ft j t /\
+  j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
+  code_end_var ft x /\ eval_operand (Var x) t = SOME w ==>
+  ?f i s. raw_reachable vs C f i s /\ i.inst_opcode = CODECOPY /\
+    i.inst_operands = [dst; Var x; sz] /\ code_end_var f x /\
+    eval_operand (Var x) s = SOME w /\ s.vs_labels = t.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule concretize_codecopy_reflect_static >>
+  fs[o1_run_state_ok_def] >> metis_tac[]
+QED

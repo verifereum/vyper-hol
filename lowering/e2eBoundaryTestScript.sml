@@ -3,13 +3,13 @@
 Theory e2eBoundaryTest
 Ancestors
   e2eDefs frameOutcome callTrace
-  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue
+  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue vyperCalldata
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeContract
   vyperStorageLayoutSafety vyperRuntimeAccounts
   supportedProgram supportedDecls contractABI selectorDispatch
   vfmState[ignore_grammar] vfmExecution[ignore_grammar]
   list alist option pair words
-Libs wordsLib
+Libs wordsLib cv_transLib
 
 val _ = Parse.hide "body";
 
@@ -203,6 +203,51 @@ Proof
   simp[valid_vyper_call_def, vyperInterpreterTheory.lookup_function_def,
        empty_call_txn_def, bind_arguments_def, vyperValueTheory.evaluate_type_def,
        vyperValueOperationTheory.safe_cast_def]
+QED
+
+(* ===== Raw calldata dispatch through the source boundary ===== *)
+val dispatch_entry =
+  ``FunctionDecl External Nonpayable F F "f"
+      [("a",BaseT (UintT 8))] [] NoneT []``
+val dispatch_default =
+  ``FunctionDecl External Payable F F "__default__" [] [] NoneT []``
+val dispatch_selector = ``[0x31w;0x20w;0xd4w;0x34w] : word8 list``
+
+Triviality dispatch_method_id:
+  vyperABIEntries$abi_method_id FEMPTY "f" [BaseT (UintT 8)] = 0x3120d434
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem calldata_dispatch_decodes_exact_head:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 255) = SOME ("f", [IntV 255])
+Proof
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_miss_and_short_fallback:
+  calldata_dispatch [^dispatch_entry] [0w;0w;0w;0w] = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default] [0w;0w;0w;0w] =
+    SOME ("__default__", []) /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (TAKE 3 ^dispatch_selector) = SOME ("__default__", [])
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_bad_head_or_argument_rejects:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ TAKE 31 (cd_example_word 255)) = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 256) = NONE
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
 QED
 
 (* The compiler packages the same getter that source lookup selects. *)
