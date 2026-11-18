@@ -4,55 +4,82 @@ Ancestors
   list compileEnv venomInst loweringShapeDefs emitHelper context abiEncoder
   ctorCallFreeRules ctorCallFreeValues
 
-Theorem opcode_every_abi_encode_static[local]:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_static dst src st)))
-  )
+val abi_preserve_tac =
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return,
+    every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+        every_state_insts_new_block, outcomes_free_alloc_buffer,
+    outcomes_free_copy_memory]),
+    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
+
+Theorem outcomes_free_abi_encode_static:
+  P MLOAD /\ P MSTORE /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_abi_encode_static dst src s)))
 Proof
-  strip_tac >>
-  qid_spec_tac `st` >> simp[compile_abi_encode_static_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      every_state_insts_return])])
+  strip_tac >> simp[compile_abi_encode_static_def] >> abi_preserve_tac
 QED
 
-Theorem opcode_every_abi_encode_static_info[local]:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+Theorem outcomes_free_abi_encode_static_info:
+  P MLOAD /\ P MSTORE /\ P MCOPY /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_static_info dst src info st)))
-  )
+    (state_insts (SND (compile_abi_encode_static_info dst src info s)))
 Proof
-  strip_tac >>
-  Cases_on `info` >> simp[compile_abi_encode_static_info_def,
-    (UNDISCH opcode_every_abi_encode_static), every_state_insts_ignore_bind,
-    opcode_every_emit_void, every_state_insts_return]
+  strip_tac >> Cases_on `info` >>
+  simp[compile_abi_encode_static_info_def, outcomes_free_abi_encode_static] >>
+  abi_preserve_tac
 QED
 
-Theorem opcode_every_abi_encode_dyn_static_loop[local]:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+Theorem outcomes_free_abi_encode_dyn_static_loop:
+  (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
+    ADD; MUL] ==> P opc) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_dyn_static_loop dst src info asz msz len_op st)))
-  )
+    (state_insts (SND (compile_abi_encode_dyn_static_loop dst src info asz msz len s)))
 Proof
-  strip_tac >>
-  qid_spec_tac `st` >> simp[compile_abi_encode_dyn_static_loop_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst, every_state_insts_new_block,
-      every_state_insts_fresh_label, (UNDISCH opcode_every_alloc_buffer),
-      (UNDISCH opcode_every_abi_encode_static_info), every_state_insts_return])])
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_abi_encode_static_info]),
+    CHANGED_TAC abi_preserve_tac])
+QED
+
+val abi_encode_case_tac =
+  simp[Once compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_abi_encode_static,
+    outcomes_free_abi_encode_dyn_static_loop, DISJ_IMP_THM, FORALL_AND_THM]),
+    CHANGED_TAC abi_preserve_tac, CHANGED_TAC (gvs[]),
+    first_x_assum irule]) >> gvs[];
+
+Theorem outcomes_free_abi_encode:
+  (!dst src info dyn off dp s.
+    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
+      ADD; MUL; AND; NOT] ==> P opc) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_child dst src info dyn off dp s)))) /\
+  (!dst src info s.
+    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
+      ADD; MUL; AND; NOT] ==> P opc) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_to_buf dst src info s)))) /\
+  (!dst src elems so ho dp s.
+    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
+      ADD; MUL; AND; NOT] ==> P opc) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_complex_elems dst src elems so ho dp s)))) /\
+  (!dst src info asz msz len s.
+    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
+      ADD; MUL; AND; NOT] ==> P opc) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_dyn_loop dst src info asz msz len s))))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >> abi_encode_case_tac
 QED
 
 Theorem opcode_every_abi_encode:
@@ -77,25 +104,7 @@ Theorem opcode_every_abi_encode:
       (state_insts (SND (compile_abi_encode_dyn_loop dst src info asz msz len_op st))))
   )
 Proof
-  strip_tac >>
-  ho_match_mp_tac compile_abi_encode_child_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once compile_abi_encode_child_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst, every_state_insts_new_block,
-      every_state_insts_fresh_label, (UNDISCH opcode_every_alloc_buffer),
-      (UNDISCH opcode_every_abi_encode_static), (UNDISCH opcode_every_abi_encode_dyn_static_loop),
-      every_state_insts_return])]) >>
-  simp[every_state_insts_bind, every_state_insts_ignore_bind,
-    opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
-    every_state_insts_new_block, every_state_insts_fresh_label,
-    (UNDISCH opcode_every_alloc_buffer), every_state_insts_return] >>
-  pop_assum mp_tac >> qid_spec_tac `st` >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      every_state_insts_return])])
+  strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  FIRST (map irule (CONJUNCTS outcomes_free_abi_encode)) >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
