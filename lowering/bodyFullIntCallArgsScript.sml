@@ -7204,6 +7204,81 @@ Proof
      qpat_assum `lock_if_nr _ _ _ (ed with gas_obs := tail) = (INL (),_)`
        (mp_then Any (fn th => rewrite_tac[th])
          (SIMP_RULE std_ss [lift_option_type_def] intcall_args_lock_push_success))) >>
+  `!tail. FST (after_defaults ed.scopes dvs (ed with gas_obs := tail)) =
+     FST (bind (intcall_rest cx name mut nr ss ed.scopes rtv) f
+       ((ed with scopes := [penv]) with gas_obs := tail))` by
+    (qpat_assum `!locked. lock_if_nr _ _ _ _ = (INL (),_) ==> _` mp_tac >>
+     qpat_assum `!err locked. lock_if_nr _ _ _ _ = (INR err,locked) ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `lock_if_nr cx nr (is_view_mut mut) ed` >>
+     rename1 `lock_if_nr _ _ _ _ = (lr,locked)` >>
+     Cases_on `lr` >> simp[oneTheory.one] >> metis_tac[pairTheory.FST]) >>
+  `gas_admissible (bind (intcall_rest cx name mut nr ss ed.scopes rtv) f)
+     P (ed with scopes := [penv])` by
+    (rewrite_tac[gasContextTheory.gas_admissible_def] >>
+     map_every qx_gen_tac [`tail`,`res`,`out_src`] >> disch_tac >>
+     Cases_on `after_defaults ed.scopes dvs (ed with gas_obs := tail)` >>
+     qpat_assum `after_defaults _ _ _ = (_,_)` (fn ath =>
+       qpat_assum `bind (intcall_rest _ _ _ _ _ _ _) f _ = (_,_)` (fn bth =>
+         qpat_assum `!tail. FST (after_defaults _ _ _) = _`
+           (qspec_then `tail` (SUBST1_TAC o REWRITE_RULE [ath,bth,pairTheory.FST] o SYM)))) >>
+     qpat_assum `gas_admissible ((\dvs src. after_defaults src.scopes dvs src) dvs) P ed`
+       (qspecl_then [`tail`,`q`,`r`] mp_tac o BETA_RULE o
+        REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+     qpat_assum `after_defaults _ _ _ = (q,r)`
+       (fn th => simp[NoAsms,th])) >>
+  `gas_admissible (intcall_rest cx name mut nr ss ed.scopes rtv)
+     expr_vv_res_ok (ed with scopes := [penv])` by
+    (rewrite_tac[gasContextTheory.gas_admissible_def] >>
+     map_every qx_gen_tac [`tail`,`res`,`out_src`] >> disch_tac >>
+     Cases_on `res` >-
+       (qpat_assum `intcall_rest _ _ _ _ _ _ _ _ = (INL _,_)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[intcall_rest_def, vyperStateTheory.bind_def, ignore_bind_def,
+             return_def, CaseEq "prod", CaseEq "sum",
+             exprSimDefsTheory.expr_vv_res_ok_def] >>
+        rpt strip_tac >> metis_tac[]) >>
+     first_x_assum irule >>
+     qpat_assum `gas_admissible (bind (intcall_rest _ _ _ _ _ _ _) f) P _`
+       (qspec_then `tail` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+     simp[Once vyperStateTheory.bind_def]) >>
+  `eval_exprs cxd ds
+       ((ee with gas_obs := gas_explicit dm t.vs_gas_readings) with scopes := [FEMPTY]) =
+     (INL dvs, (ed with gas_obs := []) with scopes := [FEMPTY])` by
+    (drule_all intcall_args_defaults_scope_action >>
+     disch_then (qspecl_then [`cxd`,`ee with gas_obs := gas_explicit dm t.vs_gas_readings`,
+                              `[FEMPTY]`] mp_tac) >>
+     qpat_assum `!tail. eval_exprs cxd ds _ = _` (qspec_then `[]` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+      (int_calls_stmts ss)` by
+    (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_push_body >>
+     qpat_assum `lookup_callable_function cx.in_deploy name tops = SOME _` (irule_at Any) >>
+     qpat_assum `get_module_code cx NONE = SOME tops` (irule_at Any) >>
+     qpat_assum `call_evaluation_safe cx ((NONE,name)::_)` (irule_at Any) >> simp[NoAsms]) >>
+  qpat_assum `!src dst a u v. wb_frame (cenv_without_defaults cenv name) src dst a u v = _`
+    (fn th => qpat_assum `wb_frame (cenv_without_defaults cenv name) es0 ed sa s0 u`
+       (strip_assume_tac o REWRITE_RULE [th,wb_frame_def])) >>
+  `((ed with scopes := [penv]) with scopes := ed.scopes) = ed` by
+    simp[NoAsms,evaluation_state_component_equality] >>
+  `(ed with scopes := [penv]).scopes = [penv]` by simp[NoAsms] >>
+  `!H. valid_horizon cx st0 H ed.storage_trace ==>
+     intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv rtv
+       (ed with scopes := [penv]) u Gd tnd` by
+    (qx_gen_tac `H` >> disch_tac >>
+     rewrite_tac[intcall_entry_full_def] >>
+     qpat_assum `((ed with scopes := [penv]) with scopes := ed.scopes) = ed`
+       (fn th => rewrite_tac[th]) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qexistsl_tac [`dflts`,`es0 with gas_obs := gas_explicit marks entry.vs_gas_readings ++ []`,
+                       `xs`,`ee with gas_obs := []`,
+                       `ee with gas_obs := gas_explicit dm t.vs_gas_readings`,
+                       `dvs`,`(ed with gas_obs := []) with scopes := [FEMPTY]`] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         qpat_assum `ds = DROP _ dflts` (SUBST1_TAC o SYM) >>
+         qunabbrev_tac `cxd` >> first_assum ACCEPT_TAC) >>
+     FAIL_TAC "assemble common post-defaults entry packet") >>
   Q_TAC ASM_CASES_TAC `?err failed. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed)`
   >- (qpat_x_assum `?err failed. lock_if_nr _ _ _ _ = (INR err,failed)`
         (qx_choose_then `err` (qx_choose_then `failed` assume_tac)) >>
