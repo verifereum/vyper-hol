@@ -13,9 +13,7 @@ Theorem lower_vyper_runtime_unit_call_budget_from_count:
     k <= 2 ** 64 /\
     (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
