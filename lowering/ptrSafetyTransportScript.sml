@@ -217,18 +217,27 @@ QED
 
 (* ===== Counted paths ===== *)
 
+Theorem gas_path_ptr_edge_allocas_from[local]:
+  gas_path_ptr_edge D lo ctx fn PG G tn s n G' tn' (OK t) /\
+  allocas_from lower s /\ lower <= s.vs_alloca_next ==>
+  allocas_from lower t /\ lower <= t.vs_alloca_next
+Proof
+  rw[gas_path_ptr_edge_def] >> gvs[fragExecTheory.exit_result_def] >>
+  imp_res_tac step_inst_allocas_from >>
+  imp_res_tac eval_phis_allocas_from >>
+  gvs[allocas_from_def] >> metis_tac[]
+QED
+
 Theorem gas_path_ptr_edge_lower_bound_transport:
   gas_path_ptr_edge D lo0 ctx fn PG G tn s n G' tn' r /\ lo0 <= lo /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   gas_path_ptr_edge D lo ctx fn PG G tn s n G' tn' r /\
   !t. r = OK t ==> allocas_from lo t /\ lo <= t.vs_alloca_next
 Proof
-  rewrite_tac[gas_path_ptr_edge_def] >> strip_tac >>
-  (conj_tac >- metis_tac[ptr_safe_lower_bound_transport]) >>
-  rpt strip_tac >> gvs[fragExecTheory.exit_result_def] >>
-  imp_res_tac step_inst_allocas_from >>
-  imp_res_tac eval_phis_allocas_from >>
-  gvs[allocas_from_def] >> metis_tac[]
+  strip_tac >> conj_tac
+  >- (qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_path_ptr_edge_def] >> metis_tac[ptr_safe_lower_bound_transport]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[gas_path_ptr_edge_allocas_from]
 QED
 
 Theorem gas_path_ptr_lower_bound_transport:
@@ -308,6 +317,22 @@ Proof
   drule gas_path_ptr_lower_bound_transport >> simp[]
 QED
 
+(* Allocation transport uses the instructions on the path. Its floor is
+   independent of the floor used to check pointer safety. *)
+Theorem gas_path_ptr_allocas_from:
+  !D lo ctx fn PG G tn s marks H u r.
+    gas_path_ptr D lo ctx fn PG G tn s marks H u r ==>
+    !lower t. r = OK t /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next ==>
+      allocas_from lower t /\ lower <= t.vs_alloca_next
+Proof
+  ho_match_mp_tac gas_path_ptr_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[])
+  >- (rpt strip_tac >> drule_all gas_path_ptr_edge_allocas_from >>
+      strip_tac >> metis_tac[]) >>
+  rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+QED
+
 Theorem member_path_allocas_from:
   !D lo ctx fn PG G tn s marks H u r.
     gas_path_ptr D lo ctx fn PG G tn s marks H u r ==>
@@ -315,10 +340,5 @@ Theorem member_path_allocas_from:
       lower <= s.vs_alloca_next /\ lo <= lower ==>
       allocas_from lower t /\ lower <= t.vs_alloca_next
 Proof
-  ho_match_mp_tac gas_path_ptr_ind >> rpt conj_tac
-  >- (rpt strip_tac >> gvs[])
-  >- (rpt strip_tac >>
-      drule_all gas_path_ptr_edge_lower_bound_transport >> strip_tac >>
-      metis_tac[]) >>
-  rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+  metis_tac[gas_path_ptr_allocas_from]
 QED

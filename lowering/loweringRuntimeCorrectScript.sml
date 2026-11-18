@@ -460,7 +460,7 @@ val runtime_body_outcome_tac =
                            `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
   impl_tac
   >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
-      simp[dead_lo_ok_def, ret_pc_ok_def, gas_admissible_def] >>
+      simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def] >>
       rpt strip_tac
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok]
       >~ [`dalloca_no_wrap`]
@@ -1391,7 +1391,7 @@ Proof
                            `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
   impl_tac
   >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
-      simp[dead_lo_ok_def, ret_pc_ok_def, gas_admissible_def] >>
+      simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def] >>
       rpt strip_tac
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok_nr]
       >~ [`dalloca_no_wrap`]

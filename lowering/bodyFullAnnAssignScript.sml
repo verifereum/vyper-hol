@@ -9,7 +9,7 @@
 Theory bodyFullAnnAssign
 Ancestors
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
-  bodyFullAnnAssignMemory bodyFullAnnAssignOther exprSimAggregateLayout typedMemoryCopy
+  bodyFullAnnAssignMemory bodyFullAnnAssignOther bodyFullShared exprSimAggregateLayout typedMemoryCopy
   bodyDeclCopyMemory vyperTypeInvariants allocLimits
   bodyInvNoDalloca loweringPosts
   vyperTypeCallGraph supportedExprTraverse
@@ -163,7 +163,17 @@ Proof
      Cases_on `lookup_scopes id es.scopes` >> simp[] >>
      qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
        (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
-  drule_all annassign_word_full_execution >> simp[]
+  drule_all annassign_word_full_execution_sep >>
+  disch_then (qspec_then `RetQ` assume_tac) >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+    irule_at Any th) >>
+  simp[] >> rpt strip_tac >>
+  qexists_tac `ce` >> simp[] >> metis_tac[]
 QED
 
 (* A memory local whose source is stored at its own layout. *)

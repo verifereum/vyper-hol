@@ -27,7 +27,8 @@ Ancestors
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyInvNoDalloca targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
-  vyperTypeCallStackSoundness
+  vyperTypeCallStackSoundness bodyFullShared vyperStorageTrace vyperStorageFootprint
+  vyperEvalExprPreservesScopesDom
 
 val _ = Parse.hide "body";
 
@@ -2940,6 +2941,126 @@ Proof
   rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[]
 QED
 
+Theorem append_outcome_scopes[local]:
+  eval_stmt cx (Append bt e) es = (res,ee) ==>
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  res <> INR BreakException /\ res <> INR ContinueException
+Proof
+  pure_once_rewrite_tac[evaluate_def] >>
+  simp[bind_def, AllCaseEqs()] >> strip_tac >>
+  (conj_tac
+  >- (imp_res_tac eval_target_place_preserves_scopes_dom >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac read_result_state >> imp_res_tac append_place_scopes_dom >>
+      gvs[] >> metis_tac[]) >>
+  gvs[] >> rpt strip_tac >> gvs[] >>
+  FIRST [
+    qpat_assum `append_place _ _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP append_place_no_control),
+    qpat_assum `read_result _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP read_result_no_control),
+    qpat_assum `eval_expr _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP (cj 1 eval_expr_no_control)),
+    qpat_assum `eval_target_place _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP eval_target_place_no_control)] >>
+  simp[no_control_exc_def])
+QED
+
+Theorem append_return_buf_sep[local]:
+  return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
+  local_ptrs_reserved cenv sa /\ cenv' = cenv /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (Append bt e)) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==>
+           FLOOKUP G x = FLOOKUP G0 x /\
+           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 cenv'' ee t /\
+      (!aid off sz i.
+         FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+         (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                    off + sz <= b \/ b + sz' <= off) /\
+         off <= i /\ i < off + sz /\ i IN tn.t_mem ==>
+         i IN tn0.t_mem)) R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (Append bt e)) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      return_buf_sep d cenv'' ee t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==>
+           FLOOKUP G x = FLOOKUP G0 x /\
+           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 cenv'' ee t /\
+      (!aid off sz i.
+         FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+         (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                    off + sz <= b \/ b + sz' <= off) /\
+         off <= i /\ i < off + sz /\ i IN tn.t_mem ==>
+         i IN tn0.t_mem)) R
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ (\H res ee G tn t. _ /\
+       (!bw cap. d = SOME (bw,cap) ==> allocas_from _ t)) R` (irule_at Any) >>
+  simp[] >> rpt gen_tac >>
+  disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_x_assum `ee.gas_obs = []` (fn th => simp[GSYM th])) >>
+  `eval_stmt cx (Append bt e) (es with gas_obs := xs) = (res,ee)` by
+    (qpat_assum `ee with gas_obs := [] = ee` (fn eq =>
+       qpat_assum `!tail. eval_stmt _ _ _ = _`
+         (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.APPEND_NIL,eq])))) >>
+  drule_then strip_assume_tac append_outcome_scopes >>
+  `res = INL ()` by
+    (qpat_assum `stmt_lands lctx sb res t`
+       (strip_assume_tac o REWRITE_RULE [stmt_lands_def]) >> gvs[]) >>
+  `cenv'' = cenv'` by fs[] >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (mp_tac (Q.INST [`st` |-> `es with gas_obs := xs`,
+       `f` |-> `eval_stmt cx (Append bt e)`,
+       `res` |-> `res`, `st'` |-> `ee`, `H` |-> `H`,
+       `st0` |-> `st0`, `cx` |-> `cx`]
+       (INST_TYPE [alpha |-> oneSyntax.one_ty] valid_horizon_frame)) >>
+     simp[evaluate_storage_trace_frame]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  qexists_tac `cenv''` >> asm_rewrite_tac[] >>
+  irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- fs[arithmeticTheory.ADD_COMM] >>
+  qexistsl_tac [`H`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >> simp[]
+QED
+
 Theorem append_nested_suffix_frame_post[local]:
   alloca_frame cenv es sa s0 cenv mid t /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -3585,6 +3706,13 @@ Theorem body_append_nested_full:
 Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
+  `cenv' = cenv` by
+    (qpat_assum `stmt_env _ _ _ (Append _ e) sa = (cenv',sb)` (fn code =>
+       qpat_assum `fn_has_code sa sb func` (fn has_code =>
+         ACCEPT_TAC (CONJUNCT1 (MATCH_MP stmtSimAppendResolvedTheory.append_resolved_target_prefix
+           (CONJ code has_code)))))) >>
+  irule append_return_buf_sep >>
+  asm_simp_tac bool_ss [] >>
   `supported_full_word_type (expr_type e)` by
     (Cases_on `t` >> fs[supported_stmt_append_form]) >>
   `~(?nm. t = TopLevelNameTarget nm)` by metis_tac[] >>
@@ -3771,6 +3899,13 @@ Proof
 QED
 
 Resume body_append_storage_full[compose]:
+  `cenv' = cenv` by
+    (qpat_assum `stmt_env _ _ _ (Append _ e) sa = (cenv',sb)` (fn code =>
+       qpat_assum `fn_has_code sa sb func` (fn has_code =>
+         ACCEPT_TAC (CONJUNCT1 (MATCH_MP stmtSimAppendResolvedTheory.append_resolved_target_prefix
+           (CONJ code has_code)))))) >>
+  irule append_return_buf_sep >>
+  asm_simp_tac bool_ss [] >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   simp[] >> strip_tac >>
