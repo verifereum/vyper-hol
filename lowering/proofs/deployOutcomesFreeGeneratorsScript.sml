@@ -316,21 +316,6 @@ Proof
     conj_tac, IF_CASES_TAC])
 QED
 
-Theorem outcomes_free_lower_value_with_loc:
-  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
-    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
-    TSTORE; CALLDATACOPY] ==> P opc) /\
-  (!s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-       EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn cenv ty e s)))) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (lower_value_with_loc cfn cenv ty e s)))
-Proof
-  strip_tac >> simp[lower_value_with_loc_def] >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> rpt strip_tac >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return, outcomes_free_unwrap_value]
-QED
-
 Theorem outcomes_free_imm_store_words:
   !n off s. P ADD /\ P MLOAD /\ P ISTORE /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -343,51 +328,6 @@ Proof
     outcomes_free_imm_store, outcomes_free_emit_ops]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, first_assum irule])
-QED
-
-Theorem outcomes_free_zero_memory_loop:
-  !ptr_op i words s. P ADD /\ P MSTORE /\
-  EVERY (\j. P j.inst_opcode) (state_insts s) ==>
-  EVERY (\j. P j.inst_opcode)
-    (state_insts (SND (compile_zero_memory_loop ptr_op i words s)))
-Proof
-  recInduct compile_zero_memory_loop_ind >> rpt strip_tac >>
-  simp[Once compile_zero_memory_loop_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops]),
-    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC, first_assum irule])
-QED
-
-Theorem outcomes_free_zero_memory:
-  P ADD /\ P MSTORE /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_zero_memory ptr_op sz s)))
-Proof
-  Cases_on `sz` >> simp[compile_zero_memory_def, outcomes_free_return,
-    outcomes_free_zero_memory_loop]
-QED
-
-Theorem outcomes_free_context_loads:
-  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
-    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
-    TSTORE] ==> P opc) /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_load_storage src prim n sz s))) /\
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_load_transient src prim n sz s))) /\
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_code_to_memory src dst n s))) /\
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_load_immutable src prim n sz ctor s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_load_storage_def, compile_load_transient_def,
-    compile_code_to_memory_def, compile_load_immutable_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops,
-    outcomes_free_alloc_buffer, compile_code_to_memory_def,
-    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_slot_copies,
-    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_word_copy]),
-    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
-    conj_tac, IF_CASES_TAC])
 QED
 
 Theorem outcomes_free_nonreentrant:
@@ -483,23 +423,6 @@ Proof
     SRULE [DISJ_IMP_THM, FORALL_AND_THM] (cj 1 outcomes_free_typed_copy)]
 QED
 
-Theorem outcomes_free_alloc_dynamic:
-  P DALLOCA /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_dynamic sz s)))
-Proof
-  simp[compile_alloc_dynamic_def, outcomes_free_emit_ops]
-QED
-
-Theorem outcomes_free_fixed_region:
-  P ASSIGN /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_fixed_region_with_id sz s)))
-Proof
-  simp[compile_fixed_region_with_id_def, fresh_id_def, fresh_var_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def, outcomes_free_emit,
-    outcomes_free_state_insts, mk_inst_def, emit_def]
-QED
-
 Theorem outcomes_free_bytestring_word_count:
   P MLOAD /\ P ADD /\ P SHR /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
@@ -534,14 +457,6 @@ Theorem outcomes_free_slot_to_memory:
 Proof
   strip_tac >> simp[compile_slot_to_memory_def] >>
   irule (cj 1 outcomes_free_word_copy) >> simp[]
-QED
-
-Theorem outcomes_free_copy_memory_dynamic:
-  P MCOPY /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_copy_memory_dynamic dst src len s)))
-Proof
-  simp[compile_copy_memory_dynamic_def, outcomes_free_emit_ops]
 QED
 
 Theorem outcomes_free_encode_log_topic:

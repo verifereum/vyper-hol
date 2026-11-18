@@ -9,7 +9,7 @@ Proof
   simp[active_inst_def]
 QED
 
-Theorem operand_outcomes_update[simp]:
+Theorem operand_outcomes_update:
   eval_operand op (s with vs_outcomes := os) = eval_operand op s
 Proof
   mp_tac (eval_operand_oracle_updates |> SPEC_ALL |> Q.INST [`rqs` |-> `s.vs_requests`]) >>
@@ -117,7 +117,7 @@ Proof
   simp[entry_taint_vars_def]
 QED
 
-Theorem write_ranges_outcomes_update[local]:
+Theorem write_ranges_outcomes_update:
   source_memory_write_ranges i (s with vs_outcomes := os) =
     source_memory_write_ranges i s
 Proof
@@ -126,7 +126,7 @@ Proof
     eval_operands_outcomes_update]
 QED
 
-Theorem ghost_components_outcomes_update[local]:
+Theorem ghost_components_outcomes_update:
   mem_taint tn i (s with vs_outcomes := xs) (t with vs_outcomes := ys) =
     mem_taint tn i s t /\
   out_taint tn i (s with vs_outcomes := xs) = out_taint tn i s /\

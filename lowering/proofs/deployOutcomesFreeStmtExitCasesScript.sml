@@ -52,31 +52,6 @@ Proof
        outcomes_free_emit_ops, outcomes_free_return] >> metis_tac[]
 QED
 
-Theorem outcomes_free_stmt_raise:
-  P REVERT /\ P INVALID /\
-  (!e s. reason = RaiseReason e /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_reason_message ce e s)))) /\
-  (!op ty n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_revert_with_reason ce op (ty : type) n s)))) /\
-  (!err s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_revert_with_custom_error ce err s)))) ==>
-  !lc ty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_stmt ce lc ty (Raise reason) s)))
-Proof
-  strip_tac >> Cases_on `reason` >> gvs[] >> rpt gen_tac >> simp[compile_stmt_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_fresh, outcomes_free_new_block,
-                    outcomes_free_emit_ops, outcomes_free_return]),
-              irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
-              irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
-              gen_tac, disch_tac, first_assum irule]) >>
-  simp[outcomes_free_emit_ops, outcomes_free_return]
-QED
-
 Theorem outcomes_free_stmt_return_none:
   P MLOAD /\ P RET /\ P JMP /\ P STOP /\
   (!s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>

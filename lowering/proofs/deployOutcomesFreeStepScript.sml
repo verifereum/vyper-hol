@@ -142,42 +142,15 @@ Proof
   simp[exec_alloca_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[map_result_state_def])
 QED
 
-Theorem map_result_list_case[local]:
-  map_result_state f (list_CASE xs a b) =
-  list_CASE xs (map_result_state f a) (\h t. map_result_state f (b h t))
-Proof
-  Cases_on `xs` >> simp[]
-QED
-
-Theorem map_result_option_case[local]:
-  map_result_state f (option_CASE x a b) =
-  option_CASE x (map_result_state f a) (\y. map_result_state f (b y))
-Proof
-  Cases_on `x` >> simp[]
-QED
-
-Theorem map_result_pair_case[local]:
-  map_result_state f (pair_CASE x g) =
-  pair_CASE x (\a b. map_result_state f (g a b))
-Proof
-  Cases_on `x` >> simp[]
-QED
-
-Theorem map_result_if[local]:
-  map_result_state f (if p then a else b) =
-  if p then map_result_state f a else map_result_state f b
-Proof
-  Cases_on `p` >> simp[]
-QED
-
-Theorem map_result_operand_case[local]:
-  map_result_state f (operand_CASE x a b c) =
-  operand_CASE x (\v. map_result_state f (a v))
-                 (\v. map_result_state f (b v))
-                 (\v. map_result_state f (c v))
-Proof
-  Cases_on `x` >> simp[]
-QED
+(* map_result_state pushed through the case and if shapes of step_inst. *)
+val map_result_rands =
+ let
+  val project = ``\r:exec_result. map_result_state f r``
+  fun through ty = BETA_RULE (ISPEC project (TypeBase.case_rand_of ty))
+ in
+  map through [``:'a list``, ``:'a option``, ``:'a # 'b``, ``:operand``] @
+  [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND project)]
+ end;
 
 (* Reduce only the discriminator and root of the large opcode case. *)
 fun outcomes_opcode_conv th tm =
@@ -212,17 +185,14 @@ Proof
   >~ [`inst.inst_opcode = SSTORE`] >- suspend "sstore"
   >~ [`inst.inst_opcode = TSTORE`] >- suspend "tstore" >>
   CONV_TAC (REDEPTH_CONV patternMatchesLib.PMATCH_ELIM_CONV) >>
-  simp_tac bool_ss [map_result_list_case, map_result_option_case,
-                   map_result_pair_case, map_result_operand_case,
-                   map_result_if, map_result_state_def] >>
+  simp_tac bool_ss (map_result_state_def :: map_result_rands) >>
   simp[halt_state_def, revert_state_def, set_returndata_def]
 QED
 Resume outcomes_step_inst_base[dret]:
   simp[outcomes_pack_dret_dynamic] >>
   CONV_TAC (REDEPTH_CONV patternMatchesLib.PMATCH_ELIM_CONV) >>
-  simp_tac bool_ss [map_result_list_case, map_result_option_case,
-                   map_result_pair_case, map_result_operand_case,
-                   map_result_if, map_result_state_def, pairTheory.ELIM_UNCURRY] >>
+  simp_tac bool_ss (map_result_state_def :: pairTheory.ELIM_UNCURRY ::
+                   map_result_rands) >>
   simp[]
 QED
 Resume outcomes_step_inst_base[sstore]:

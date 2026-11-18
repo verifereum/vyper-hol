@@ -131,13 +131,14 @@ Proof
   conj_tac >- (first_assum ACCEPT_TAC) >> metis_tac[]
 QED
 
-val safe_aggregates = map
-  (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
-   Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\
-      op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`])
-  [cj 1 outcomes_free_aggregate_typed, cj 2 outcomes_free_aggregate_typed,
-   cj 3 outcomes_free_aggregate_typed, cj 4 outcomes_free_aggregate_typed,
-   outcomes_free_acc_typed, outcomes_free_multi_exprs_typed];
+val safe_op =
+  SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
+  Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\
+     op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`]
+
+val safe_aggregate_typed = safe_op o C cj outcomes_free_aggregate_typed
+val safe_acc_typed = safe_op outcomes_free_acc_typed
+val safe_multi_exprs_typed = safe_op outcomes_free_multi_exprs_typed
 
 Theorem outcomes_free_builtin_generators[local]:
   Q = (\s. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
@@ -172,15 +173,15 @@ Resume outcomes_free_builtin_generators[generators]:
        i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE)
        (state_insts (SND (f ce ty e st)))` by metis_tac[] >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
-    irule (List.nth (safe_aggregates, 4)) >> simp[] >>
+    irule safe_acc_typed >> simp[] >>
     qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
   conj_tac >- (metis_tac[]) >>
-  conj_tac >- (metis_tac[List.nth (safe_aggregates, 5)]) >>
-  conj_tac >- (rpt strip_tac >> irule (List.nth (safe_aggregates, 0)) >>
+  conj_tac >- (metis_tac[safe_multi_exprs_typed]) >>
+  conj_tac >- (rpt strip_tac >> irule (safe_aggregate_typed 1) >>
     simp[] >> qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> irule (List.nth (safe_aggregates, 2)) >>
+  conj_tac >- (rpt strip_tac >> irule (safe_aggregate_typed 3) >>
     simp[] >> qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
-  conj_tac >- (metis_tac[List.nth (safe_aggregates, 1)]) >> simp[]
+  conj_tac >- (metis_tac[safe_aggregate_typed 2]) >> simp[]
 QED
 Finalise outcomes_free_builtin_generators
 
@@ -195,20 +196,14 @@ Proof
   rpt (pairarg_tac >> simp[]) >> metis_tac[pairTheory.SND]
 QED
 
-val safe_type_bodies = map
-  (SRULE [] o Q.INST [`Q` |-> `\s. EVERY (\i.
+val safe_state =
+  SRULE [] o Q.INST [`Q` |-> `\s. EVERY (\i.
     i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
     i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
-    i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`])
-  [outcomes_free_type_builtin_constants, outcomes_free_type_builtin_convert,
-   outcomes_free_type_builtin_extract32, outcomes_free_type_builtin_decode,
-   outcomes_free_type_builtin_encode, outcomes_free_materialize];
+    i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`]
 
-val safe_abi = map
-  (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
-   Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\
-      op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`])
-  [outcomes_free_store_abi_tuple, outcomes_free_abi_encode_args_typed];
+val safe_store_abi_tuple = safe_op outcomes_free_store_abi_tuple
+val safe_abi_encode_args_typed = safe_op outcomes_free_abi_encode_args_typed
 
 Theorem outcomes_free_type_generators[local]:
   Q = (\s. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
@@ -227,23 +222,24 @@ Proof
   gvs[well_typed_expr_def, supported_expr_exists_def, constructor_call_root_def] >>
   Cases_on `tb`
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert`] >-
-    (irule (List.nth (safe_type_bodies, 1)) >> safe_simp >> metis_tac[])
+    (irule (safe_state outcomes_free_type_builtin_convert) >> safe_simp >> metis_tac[])
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Extract32`] >-
-    (irule (List.nth (safe_type_bodies, 2)) >> safe_simp >> metis_tac[])
+    (irule (safe_state outcomes_free_type_builtin_extract32) >> safe_simp >> metis_tac[])
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode _)`] >-
-    (irule (List.nth (safe_type_bodies, 3)) >> safe_simp >> metis_tac[])
+    (irule (safe_state outcomes_free_type_builtin_decode) >> safe_simp >> metis_tac[])
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiEncode _ _)`] >-
     suspend "encode" >>
-  irule (List.nth (safe_type_bodies, 0)) >> safe_simp
+  irule (safe_state outcomes_free_type_builtin_constants) >> safe_simp
 QED
 
 Resume outcomes_free_type_generators[encode]:
-  irule (List.nth (safe_type_bodies, 4)) >> safe_simp >> simp safe_abi >>
+  irule (safe_state outcomes_free_type_builtin_encode) >> safe_simp >>
+  simp [safe_store_abi_tuple, safe_abi_encode_args_typed] >>
   qexists_tac `env` >> simp[] >>
   conj_tac >- (metis_tac[]) >> rpt gen_tac >> strip_tac >>
-  irule (List.nth (safe_abi, 1)) >> simp[] >>
+  irule safe_abi_encode_args_typed >> simp[] >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
-    irule (List.nth (safe_type_bodies, 5)) >> safe_simp) >>
+    irule (safe_state outcomes_free_materialize) >> safe_simp) >>
   qexistsl [`env`, `constructor_call_root`] >> simp[] >>
   conj_tac >- (metis_tac[]) >>
   metis_tac[outcomes_free_typed_children]

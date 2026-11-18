@@ -8,10 +8,12 @@ Ancestors
   supportedStmtTraverse deployOutcomesFreeBodyGenerators
   exprLowering deployOutcomesFreeLowering deployOutcomesFreeStoreSlots
 
-val safe_generators = map
-  (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
-   Q.INST [`P` |-> `\opc. ~MEM opc
-     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`])
+val safe_generator =
+  SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
+  Q.INST [`P` |-> `\opc. ~MEM opc
+    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`]
+
+val safe_generators = map safe_generator
   [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
    outcomes_free_store_memory, cj 1 outcomes_free_typed_copy,
    outcomes_free_copy_memory, cj 1 outcomes_free_store_slots_mutual,
@@ -45,7 +47,7 @@ Proof
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_expr] >>
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_get_target_ptr] >>
     rpt gen_tac >> strip_tac >>
-    irule (List.nth (safe_generators, 17)) >> simp[] >>
+    irule (safe_generator outcomes_free_compile_log_save_arg) >> simp[] >>
     rpt gen_tac >> strip_tac >>
     simp[compile_materialize_vv_def] >>
     irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp safe_generators >>

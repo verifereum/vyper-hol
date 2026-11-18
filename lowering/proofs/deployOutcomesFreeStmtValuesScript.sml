@@ -56,18 +56,6 @@ Proof
   Cases_on `x` >> simp[compile_store_at_loc_def, outcomes_free_emit_ops]
 QED
 
-Theorem outcomes_free_compile_mcopy_guard:
-  P INVALID /\
-  (!s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (supported s)))) ==>
-  !cenv s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_mcopy_guard cenv supported s)))
-Proof
-  rpt strip_tac >> simp[compile_mcopy_guard_def] >>
-  IF_CASES_TAC >> simp[outcomes_free_emit_ops]
-QED
-
 Theorem outcomes_free_compile_internal_return:
   P RET /\ P ADD /\ P MLOAD /\
   (!cenv value buf ty src s.

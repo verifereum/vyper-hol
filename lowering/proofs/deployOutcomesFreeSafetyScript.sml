@@ -14,7 +14,7 @@ Theorem outcomes_memory_checks[simp]:
     inst_dload_in_section inst s)
 Proof
   simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
-       outcomes_memory_ranges,
+       outcomes_memory_read_ranges, write_ranges_outcomes_update,
        operand_outcomes_update, eval_operands_outcomes_update]
 QED
 
@@ -81,8 +81,10 @@ Proof
       simp[outcomes_ptr_inst_ok, outcomes_step_inst, outcomes_ghost_step] >>
       Cases_on `step_inst fuel ctx inst s` >>
       simp[dftCommutationTheory.map_result_state_def] >>
-      Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
-      Cases_on `v.vs_halted` >> simp[] >>
+      Cases_on `is_terminator inst.inst_opcode` >> simp[]
+      >>~- ([`OK s1`], Cases_on `s1.vs_halted` >>
+        gvs[venom_state_fupdcanon, entry_prov_outcomes_update,
+            entry_taint_outcomes_update]) >>
       gvs[venom_state_fupdcanon, entry_prov_outcomes_update,
           entry_taint_outcomes_update]) >>
   rpt gen_tac >> strip_tac >> strip_tac >> gen_tac >>

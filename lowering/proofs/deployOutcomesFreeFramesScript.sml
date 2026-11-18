@@ -3,40 +3,34 @@ Ancestors
   loweringBudgetFrameOracleTransport
   ptrDiscipline deployOutcomesFreeStep venomState venomExecSemantics codegenRel contextCodegenRel ctxLookupAgreeHelpers
 
+(* Outcome-update invariance facts from the frame oracle transport. *)
+val _ = export_rewrites
+  ["loweringBudgetFrameOracleTransport.operand_outcomes_update",
+   "loweringBudgetFrameOracleTransport.step_prov_outcomes_update",
+   "loweringBudgetFrameOracleTransport.entry_prov_outcomes_update",
+   "loweringBudgetFrameOracleTransport.entry_taint_outcomes_update",
+   "loweringBudgetFrameOracleTransport.write_ranges_outcomes_update",
+   "loweringBudgetFrameOracleTransport.ghost_components_outcomes_update"];
+
 Theorem outcomes_lookup_var[simp]:
   lookup_var v (s with vs_outcomes := os) = lookup_var v s
 Proof
   simp[lookup_var_def]
 QED
 
-Theorem outcomes_provenance[simp]:
-  step_prov PG G inst (s with vs_outcomes := os) = step_prov PG G inst s /\
-  entry_prov fn (s with vs_outcomes := os) G = entry_prov fn s G /\
-  entry_taint_vars fn (s with vs_outcomes := os) tn = entry_taint_vars fn s tn
-Proof
-  simp[step_prov_def, out_prov_def, entry_prov_def, entry_taint_vars_def]
-QED
-
 Theorem outcomes_taint_parts[simp]:
   written_taint tn inst (s with vs_outcomes := os) = written_taint tn inst s /\
-  out_taint tn inst (s with vs_outcomes := os) = out_taint tn inst s /\
-  store_taint opc tn inst (s with vs_outcomes := os) X = store_taint opc tn inst s X /\
-  imm_taint tn inst (s with vs_outcomes := os) = imm_taint tn inst s /\
   ret_taint tn inst (s with vs_outcomes := os) = ret_taint tn inst s
 Proof
-  simp[written_taint_def, out_taint_def, store_taint_def, imm_taint_def,
-       ret_taint_def]
+  simp[written_taint_def, ret_taint_def]
 QED
 
 
-Theorem outcomes_memory_ranges[simp]:
-  source_memory_write_ranges inst (s with vs_outcomes := os) = source_memory_write_ranges inst s /\
+Theorem outcomes_memory_read_ranges[simp]:
   source_memory_read_ranges inst (s with vs_outcomes := os) = source_memory_read_ranges inst s
 Proof
-  simp[source_memory_write_ranges_def, source_memory_read_ranges_def,
-       fixed_source_write_range_def, sized_source_write_range_def,
-       dret_memory_read_ranges_def, memory_range_of_operands_def,
-       eval_operands_outcomes_update]
+  simp[source_memory_read_ranges_def, dret_memory_read_ranges_def,
+       memory_range_of_operands_def, eval_operands_outcomes_update]
 QED
 
 

@@ -14,52 +14,6 @@ Proof
   disch_then (qspecl_then [`[]`, `[]`] mp_tac) >> simp[]
 QED
 
-Theorem outcomes_free_expr_child_callback:
-  (!ce ty e s. expr_size e < bound /\
-     ~supported_expr_exists constructor_call_root e /\
-     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e s)))) /\
-  P INVALID ==>
-  !ce ty e s. ~supported_expr_exists constructor_call_root e /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (expr_child_callback bound f ce ty e s)))
-Proof
-  rpt strip_tac >> simp[expr_child_callback_def] >>
-  IF_CASES_TAC >> simp[outcomes_free_invalid_expr_call]
-QED
-
-Theorem outcomes_free_builtin_child_callback:
-  (!ce rt ty bi args s. list_size expr_size args < bound /\
-     ~precompile_builtin bi /\ ~supported_exprs_exists constructor_call_root args /\
-     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce rt ty bi args s)))) /\
-  P INVALID ==>
-  !ce rt ty bi args s.
-    ~precompile_builtin bi /\ ~supported_exprs_exists constructor_call_root args /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (builtin_child_callback bound f ce rt ty bi args s)))
-Proof
-  rpt strip_tac >> simp[builtin_child_callback_def] >>
-  IF_CASES_TAC >> simp[outcomes_free_invalid_expr_call]
-QED
-
-Theorem outcomes_free_type_child_callback:
-  (!ce vt ty tb rt args s. list_size expr_size args < bound /\
-     ~supported_exprs_exists constructor_call_root args /\
-     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce vt ty tb rt args s)))) /\
-  P INVALID ==>
-  !ce vt ty tb rt args s. ~supported_exprs_exists constructor_call_root args /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (type_child_callback bound f ce vt ty tb rt args s)))
-Proof
-  rpt strip_tac >> simp[type_child_callback_def] >>
-  IF_CASES_TAC >> simp[outcomes_free_invalid_expr_call]
-QED
-
 (* These wrappers are parametric in the state invariant.  The join supplies
    opcode exclusion and the generator contracts proved independently. *)
 Theorem outcomes_free_lower_value:
