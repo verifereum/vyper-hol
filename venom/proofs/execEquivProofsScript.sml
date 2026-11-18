@@ -1012,7 +1012,9 @@ Proof
   asm_rewrite_tac[] >>
   rw[state_equiv_def, execution_equiv_def] >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  Cases_on `out = v` >> simp[]
+  Cases_on `out = v` >> simp[] >>
+  rw[result_equiv_def, state_equiv_def, execution_equiv_def, halt_state_def,
+     set_returndata_def, lookup_var_def, FLOOKUP_UPDATE] >> gvs[]
 QED
 
 (* Original concrete-call proof retained:
@@ -1056,7 +1058,9 @@ Proof
   asm_rewrite_tac[] >>
   rw[state_equiv_def, execution_equiv_def] >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  Cases_on `out = v` >> simp[]
+  Cases_on `out = v` >> simp[] >>
+  rw[result_equiv_def, state_equiv_def, execution_equiv_def, halt_state_def,
+     set_returndata_def, lookup_var_def, FLOOKUP_UPDATE] >> gvs[]
 QED
 
 (* exec_create preserves equiv when states and operands match *)
@@ -1084,7 +1088,9 @@ Proof
   Cases_on `rest_outputs` >> simp[exec_create_def, result_equiv_def] >>
   rw[state_equiv_def, execution_equiv_def, lookup_var_def,
      update_var_def, FLOOKUP_UPDATE] >>
-  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
+  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[] >>
+  rw[result_equiv_def, state_equiv_def, execution_equiv_def, halt_state_def,
+     set_returndata_def, lookup_var_def, FLOOKUP_UPDATE] >> gvs[]
 QED
 
 (* Helper: exec_alloca preserves equiv (operands are literals) *)

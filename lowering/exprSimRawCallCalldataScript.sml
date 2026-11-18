@@ -100,17 +100,23 @@ QED
      of exprSimSend). *)
 
 Theorem raw_call_typed_outcome:
-  !target data vo es.
+  !target data vo es gas_cap.
   IS_SOME es.outcomes /\ outcomes_accounts_typed es.outcomes /\
   accounts_runtime_well_typed es.accounts ==>
-  ?rq outcome es1. take_call_outcome target data vo es =
+  (es.outcomes = SOME [] /\ take_call_outcome gas_cap target data vo es =
+    (INR (Error (RuntimeError "take_call_outcome")),es)) \/
+  ?rq outcome es1. take_call_outcome gas_cap target data vo es =
     (INL (rq,outcome),es1)
 Proof
   rpt strip_tac >>
-  `FST (take_call_outcome target data vo es) <>
+  Cases_on `es.outcomes = SOME []`
+  >- simp[take_call_outcome_def, take_request_outcome_def] >>
+  disj2_tac >>
+  `FST (take_call_outcome gas_cap target data vo es) <>
     INR (Error (RuntimeError "call outcome accounts"))` by
     metis_tac[take_call_outcome_typed] >>
   Cases_on `es.outcomes` >> gvs[] >>
+  rename1 `es.outcomes = SOME os` >> Cases_on `os` >> gvs[] >>
   qpat_x_assum `FST _ <> _` mp_tac >>
   simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >>
   IF_CASES_TAC >> simp[]
@@ -120,7 +126,7 @@ Theorem raw_call_oracle_result:
   !cx flags target data amount gas es es1 es2 rq outcome.
   (cx.txn.is_static ==> amount = 0) /\ ~flags.rcf_is_delegate /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME es.outcomes /\
-  take_call_outcome target data
+  take_call_outcome (OPTION_BIND gas dest_NumV) target data
     (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) es =
       (INL (rq,outcome),es1) /\
   adopt_call_outcome rq outcome es1 = (INL (),es2) ==>
@@ -247,7 +253,8 @@ Theorem raw_call_oracle_step:
     eval_operand zop s = SOME iz /\ eval_operand rop s = SOME rp /\
     eval_operand cop s = SOME cap /\
   (cx.txn.is_static ==> stat \/ vw = 0w) /\
-    take_call_outcome (w2w aw) (read_memory (w2n ip) (w2n iz) s)
+    (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_call_outcome gas_cap (w2w aw) (read_memory (w2n ip) (w2n iz) s)
       (if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)) es = (INL (rq,outcome),es1) /\
     local_ptrs_rel func cenv es.scopes
       (write_memory_with_expansion (w2n rp) (TAKE (w2n cap) outcome.co_returnData) s) /\
@@ -280,7 +287,8 @@ Proof
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
-     qexists_tac `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)` >>
+     qexistsl_tac [`gas_cap`,
+       `if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)`] >>
      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
   `write_memory_with_expansion (w2n rp)
       (TAKE (w2n cap) outcome.co_returnData) s = s with vs_memory := t.vs_memory` by
@@ -301,7 +309,9 @@ Proof
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
       Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
       pure_once_rewrite_tac[step_inst_base_def] >>
-      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >> simp[]) >>
+      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
+      asm_simp_tac bool_ss
+        [list_case_def, pair_case_def, optionTheory.option_case_def]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -356,14 +366,19 @@ Proof
 QED
 
 Theorem raw_call_finish_prefix:
-  compile_raw_call_finish aop dp dl gop vop RegularCall n rev ov op sa =
+  compile_raw_call_finish aop dp dl gop vop call_ty n rev ov op sa =
     (result,sb) ==>
-  ?success sc. emit_op CALL [gop;aop;vop;dp;dl;op;Lit (n2w n)] sa =
+  ?success sc.
+    (case call_ty of
+       RegularCall => emit_op CALL [gop;aop;vop;dp;dl;op;Lit (n2w n)]
+     | StaticCall => emit_op STATICCALL [gop;aop;dp;dl;op;Lit (n2w n)]
+     | DelegateCall => emit_op DELEGATECALL [gop;aop;dp;dl;op;Lit (n2w n)]) sa =
     (success,sc) /\ cs_extends sc sb
 Proof
+  Cases_on `call_ty` >>
   rewrite_tac[compile_raw_call_finish_def] >>
   simp[Once comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `emit_op CALL _ sa = (success,sc)` >>
+  rename1 `emit_op opc _ sa = (success,sc)` >>
   qmatch_asmsub_abbrev_tac `tail sc = (result,sb)` >>
   `ci_mono sc (SND (tail sc))` by
     (qunabbrev_tac `tail` >> rpt (pop_assum kall_tac) >>
@@ -387,7 +402,7 @@ Theorem raw_call_finish_static_abort:
   frag_path ctx sa sb (\u. u = s) Q
     (\r. ?t. r = Abort ExHalt_abort t)
 Proof
-  strip_tac >> drule raw_call_finish_prefix >> strip_tac >>
+  strip_tac >> drule raw_call_finish_prefix >> strip_tac >> gvs[] >>
   `cs_extends sa sc` by
     (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
      irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
@@ -398,6 +413,45 @@ Proof
   fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
+QED
+
+Theorem raw_call_finish_exhausted:
+  compile_raw_call_finish aop dp dl gop vop call_ty n rev ov op sa =
+    (result,sb) /\ s.vs_outcomes = [] /\
+  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
+  eval_operand vop s = SOME vw /\
+  eval_operand dp s = SOME ip /\ eval_operand dl s = SOME iz /\
+  eval_operand op s = SOME rp ==>
+  frag_path ctx sa sb (\u. u = s) Q
+    (\r. ?t. r = Abort ExHalt_abort t)
+Proof
+  strip_tac >> drule raw_call_finish_prefix >> strip_tac >>
+  Cases_on `call_ty` >> gvs[] >>
+  `cs_extends sa sc` by
+    (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
+     irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  irule frag_path_exit_prefix >> qexists_tac `sc` >> simp[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  irule frag_path_run_inst_seq >>
+  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       eval_operand_def, exec_ext_call_def, exec_delegatecall_def] >>
+  Cases_on `s.vs_call_ctx.cc_static /\ vw <> 0w` >> simp[]
+QED
+
+Theorem raw_call_exhausted:
+  (cx.txn.is_static ==> amount = 0) /\ ~flags.rcf_is_delegate /\
+  (flags.rcf_is_static ==> amount = 0) /\ es.outcomes = SOME [] ==>
+  eval_raw_call cx flags target data amount gas es =
+    (INR (Error (RuntimeError "take_call_outcome")),es)
+Proof
+  strip_tac >>
+  Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
+  gvs[eval_raw_call_def, frame_call_value_def, take_call_outcome_def,
+      take_request_outcome_def, bind_def, ignore_bind_def, type_check_def,
+      check_def, assert_def, return_def]
 QED
 
 (* The failure path copies the complete returndata, not the capped output. *)
@@ -1086,7 +1140,7 @@ Proof
 QED
 
 Theorem raw_call_take_adopt_fields:
-  take_call_outcome addr data value es = (INL (rq,outcome),es1) ==>
+  take_call_outcome gas_cap addr data value es = (INL (rq,outcome),es1) ==>
     (SND (adopt_call_outcome rq outcome es1)).scopes = es.scopes /\
     (SND (adopt_call_outcome rq outcome es1)).immutables = es.immutables
 Proof
@@ -1441,11 +1495,12 @@ QED
 
 Theorem calldata_take_call_outcome_bound:
   outcomes_accounts_typed es.outcomes /\
-  take_call_outcome target data amount es = (INL (rq,oc),consumed) ==>
+  take_call_outcome gas_cap target data amount es = (INL (rq,oc),consumed) ==>
   LENGTH oc.co_returnData < dimword(:256)
 Proof
   Cases_on `es.outcomes` >>
   simp[vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def] >>
+  rename1 `es.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
   pairarg_tac >> simp[] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule calldata_take_outcome_bound >>
@@ -1458,14 +1513,16 @@ QED
 
 (* In oracle mode raw_call reads no gas observation. *)
 Theorem calldata_take_call_outcome_gas_obs[local]:
-  !target cd vo st g.
-    take_call_outcome target cd vo (st with gas_obs := g) =
-      (FST (take_call_outcome target cd vo st),
-       SND (take_call_outcome target cd vo st) with gas_obs := g) /\
-    (SND (take_call_outcome target cd vo st)).gas_obs = st.gas_obs
+  !target cd vo st g gas_cap.
+    take_call_outcome gas_cap target cd vo (st with gas_obs := g) =
+      (FST (take_call_outcome gas_cap target cd vo st),
+       SND (take_call_outcome gas_cap target cd vo st) with gas_obs := g) /\
+    (SND (take_call_outcome gas_cap target cd vo st)).gas_obs = st.gas_obs
 Proof
   rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
+  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[LET_THM, UNCURRY] >> rw[]
 QED
 
 Theorem calldata_adopt_call_outcome_gas_obs[local]:
@@ -1501,10 +1558,10 @@ Proof
          bind_def, vyperStateTheory.return_def]) >>
   simp[eval_raw_call_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
-  qmatch_goalsub_abbrev_tac `take_call_outcome target data vo` >>
-  qspecl_then [`target`, `data`, `vo`, `st`, `g`] mp_tac
+  qmatch_goalsub_abbrev_tac `take_call_outcome gas_cap target data vo` >>
+  qspecl_then [`target`, `data`, `vo`, `st`, `g`, `gas_cap`] mp_tac
     calldata_take_call_outcome_gas_obs >>
-  Cases_on `take_call_outcome target data vo st` >> rename1 `_ = (q, st1)` >>
+  Cases_on `take_call_outcome gas_cap target data vo st` >> rename1 `_ = (q, st1)` >>
   reverse (Cases_on `q`) >> simp[] >> strip_tac >>
   rename1 `INL rqoc` >> PairCases_on `rqoc` >> simp[] >>
   qspecl_then [`rqoc0`, `rqoc1`, `st1`, `g`] mp_tac

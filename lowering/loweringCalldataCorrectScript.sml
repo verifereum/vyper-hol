@@ -2,7 +2,7 @@
 Theory loweringCalldataCorrect
 Ancestors
   e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution
-  sourceUnitExitSafe ptrDiscipline vyperCalldata sourceCallCount
+  sourceUnitExitSafe ptrDiscipline vyperCalldata
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -72,7 +72,7 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_with:
       LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
       initial_venom_state_rel tops am tx vs /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-      (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+      LENGTH vs.vs_outcomes < 2 ** 64 /\
       vs.vs_fmp = vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254 /\
       unit_alloca_budget unit.cu_context +
