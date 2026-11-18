@@ -12,7 +12,7 @@ val () = computeLib.upd_compset intReduce.add_int_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
-(* The supported-program gate excludes constants (supported_constants_rejected).
+(* This fixture uses ordinary function declarations for both getters.
    Both getters meet the call correctness and outer gas-sufficiency premises
    after the same optimized deployment. The ordinary getter also satisfies
    valid_vyper_call. The trace and storage facts here hold at the fixture's
