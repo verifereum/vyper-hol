@@ -140,6 +140,11 @@ Theorem ptr_create_family_mixed_execution[local]:
         (step_taint inst s u tn) f g u z
 Proof
   strip_tac >>
+  `t.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
+  `s.vs_outcomes <> []` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
   `venom_create_request s value off sz salt = venom_create_request t value ot sz salt` by
     (irule ptr_create_family_request >> metis_tac[]) >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = OK _` mp_tac >>
@@ -180,15 +185,20 @@ Theorem ptr_create_family_delegate_mixed_execution[local]:
         (step_taint inst s u tn) f g u z
 Proof
   strip_tac >>
+  `t.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
+  `s.vs_outcomes <> []` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
   `venom_call_request s addr 0w ao az F with
      <|cr_accounts := t.vs_accounts; cr_tStorage := t.vs_transient|> =
    venom_call_request t addr 0w at az F` by
     (irule ptr_create_family_delegate_request >> metis_tac[]) >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
   Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
-    cr_kind := DelegateMessageCall) (w2n rt) (w2n rz) t` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n rt) (w2n rz) t` >>
   Cases_on `consume_call_outcome (venom_call_request s addr 0w ao az F with
-    cr_kind := DelegateMessageCall) (w2n ro) (w2n rz) s` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome _ (w2n rt) _ t = (wt,zt)` >>
   rename1 `consume_call_outcome _ (w2n ro) _ s = (ws,us)` >>
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>

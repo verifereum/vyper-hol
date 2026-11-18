@@ -41,7 +41,8 @@ Theorem exec_ext_call_not_Halt:
   exec_ext_call inst s gas addr value ao az ro rz stat <> Halt t
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
-  rename1 `h::rest` >> Cases_on `rest` >> simp[exec_ext_call_def]
+  rename1 `h::rest` >> Cases_on `rest` >> simp[exec_ext_call_def] >>
+  Cases_on `s.vs_outcomes = []` >> simp[]
 QED
 
 Theorem call_step_not_Halt:
@@ -182,6 +183,7 @@ Theorem exec_ext_call_storage_cases:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
   rename1 `h::outs` >> Cases_on `outs` >> simp[exec_ext_call_def] >>
+  Cases_on `s.vs_outcomes = []` >> simp[] >>
   strip_tac >> gvs[update_var_def] >>
   qmatch_goalsub_abbrev_tac `take_outcome rq s.vs_outcomes` >>
   Cases_on `computed_precompile rq`
