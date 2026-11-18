@@ -536,20 +536,6 @@ Proof
      simp[cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
   `fn_has_code body_st middle fn /\ fn_has_code middle end_st fn` by
     (drule_all fn_has_code_split >> simp_tac bool_ss []) >>
-  `abi_decode_sim ctx fn t r /\ ~r.vs_halted /\
-    r.vs_current_bb = middle.cs_current_bb /\
-    r.vs_inst_idx = LENGTH middle.cs_current_insts` by
-    (qpat_assum `frag_exec_ptr _ _ _ _ body_st middle _ _ _` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`fn_has_code body_st middle fn`,`~ctx_has_dalloca ctx`,
-        `~t.vs_halted`,`t.vs_current_bb = body_lbl`,
-        `body_st.cs_current_bb = body_lbl`,`t.vs_inst_idx = 0`,
-        `body_st.cs_current_insts = []`,
-        `LENGTH (emitted_insts body_st middle) + _ = _`] >>
-     simp_tac bool_ss [Abbr `r`] >> POP_ASSUM_LIST (K ALL_TAC) >>
-     rpt strip_tac >> fs[frag_exec_ptr_def] >>
-     first_x_assum (qspec_then `fn` mp_tac) >>
-     simp[] >> strip_tac >> gvs[abi_decode_sim_def] >> metis_tac[]) >>
   `allocas_from lower t` by
     (qpat_assum `t.vs_allocas = s.vs_allocas` mp_tac >>
      qpat_assum `allocas_from lower s` mp_tac >>
@@ -582,6 +568,22 @@ Proof
        `type_to_abi_dec_info sf ce ty`, `Var root`, `Var q`,
        `type_memory_size tv`, `ops`, `n2w slot`, `src`, `body_st`] >>
      simp[]) >>
+  `abi_decode_sim ctx fn t r /\ ~r.vs_halted /\
+    r.vs_current_bb = middle.cs_current_bb /\
+    r.vs_inst_idx = LENGTH middle.cs_current_insts` by
+    (conj_tac
+     >- (qpat_assum `gas_path_mem ctx fn t 0 (OK r)`
+           (mp_tac o CONJUNCT2 o MATCH_MP gas_path_mem_exec) >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[exit_result_def, abi_decode_sim_def] >> metis_tac[]) >>
+     drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_shape >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >>
+     drule_all entrySinkExtractionTheory.run_inst_seq_preserves_entry_control >> strip_tac >>
+     simp_tac bool_ss [Abbr `r`] >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`~t.vs_halted`, `t'.vs_halted <=> t.vs_halted`,
+        `t'.vs_current_bb = t.vs_current_bb`, `t.vs_current_bb = body_lbl`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   `r.vs_memory = t.vs_memory /\ r.vs_call_ctx = t.vs_call_ctx /\
     r.vs_data_section = t.vs_data_section /\ r.vs_allocas = t.vs_allocas /\
     r.vs_alloca_next = t.vs_alloca_next /\
