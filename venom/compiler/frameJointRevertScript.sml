@@ -34,7 +34,7 @@ Definition joint_revert_suffix_def:
     revert_forward_pair bb i r /\ i <= s.vs_inst_idx /\ s.vs_inst_idx <= r
 End
 
-Theorem forwarding_active_lookup[local]:
+Theorem forwarding_active_lookup:
   ALL_DISTINCT (fn_labels fn) /\ active_inst fn inst s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
   get_instruction bb s.vs_inst_idx = SOME inst
