@@ -43,6 +43,7 @@ Ancestors
   contextStaticAbortRel
   list callRawVariant ctorDeployRunBounded rawReachableFmp ctxLookupAgreeHelpers
   callCodeTrace callCodeStorage
+  fragGasOriginEvents fragGasOriginPtrSafeUpto o1SafeUpto acceptedContextPhi
 
 
 (* =====================================================================
@@ -1068,6 +1069,33 @@ Proof
   fs[code_layout_valid_def] >> decide_tac
 QED
 
+Theorem opt_entry_focus_setup:
+  fin IN accepted_finalizers /\
+  fin rpolicy prog = SOME prog' /\
+  call_state_rel tops (assemble prog') am tx es /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  vs0 = opt_entry_state prog prog' cplan es ==>
+  code_layout_valid vs0 /\ o1_initial_state_ok vs0 /\
+  vs0.vs_fmp = vs0.vs_initial_fmp /\
+  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+  LENGTH vs0.vs_data_section < dimword (:256) DIV 2 /\
+  codegen_asm_entry_rel cplan prog vs0 (entry_asm_state vs0 es) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es
+    (entry_asm_state vs0 es with as_code := assemble prog' ++ vs0.vs_data_section)
+    es
+Proof
+  strip_tac >>
+  drule codegenAsmProgOkTheory.codegen_assembly_nonempty >> strip_tac >>
+  `assemble prog' <> []` by
+    (qpat_x_assum `fin IN accepted_finalizers` mp_tac >>
+     simp[accepted_finalizers_def] >> strip_tac >> gvs[] >>
+     metis_tac[codegen_assembly_finalizer_nonempty]) >>
+  drule_all opt_entry_fields >> strip_tac >>
+  rpt conj_tac >> gvs[asm_frame_rel_tail_nil] >>
+  metis_tac[opt_entry_code_layout_valid, opt_entry_data_section_bound,
+            opt_entry_codegen_asm_entry_rel, opt_entry_asm_frame_rel]
+QED
+
 Theorem abort_context_obligations_raw[local]:
   !Inv ctx cp vs.
   codegen_context_obligations_abort Inv ctx cp /\
@@ -1354,6 +1382,125 @@ Proof
   >- (gvs[Abbr `D`, cx_dead_def, external_call_dead_def,
           initial_evaluation_context_def] >> metis_tac[]) >> gvs[]
 QED
+
+Theorem call_certificate_raw_entry_boundary:
+  lower_vyper_runtime_unit tops rp = SOME unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+  source_unit_execution_correct_with shadow_ctx marks tops ret am tx unit vs /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME func ==>
+  ?D fuel extra.
+    dead_wf D /\
+    (!fn inst s. raw_reachable vs unit.cu_context fn inst s /\
+       gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
+       inst_dload_in_section inst s) /\
+    o1_safe_upto D 0 (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings))
+      unit.cu_context vs /\
+    MAP (\key. key IN gas_explicit_sites unit.cu_context shadow_ctx)
+      (gas_events_blocks fuel unit.cu_context func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                  vs_inst_idx := 0|>)) = marks ++ extra
+Proof
+  strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule vyperCompilerTheory.lowering_context_ok_bridge >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[EVERY_MEM] >>
+  `?P. EVERY (\f. fn_ptr_ok P f /\ fn_ptr_ok P (reachable_fn f))
+       unit.cu_context.ctx_functions` by
+    (drule lower_vyper_runtime_unit_fn_ptr_ok >> simp[EVERY_MEM] >>
+     strip_tac >> qexists_tac `P` >> simp[]) >>
+  `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
+    (drule lower_vyper_runtime_unit_global_reserved >>
+     simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  `fixed_region_reserved 0 unit.cu_context /\
+   fmp_free_ctx unit.cu_context` by
+    simp[fixed_region_reserved_def, source_fmp_free] >>
+  `mem_inv dload_headroom_ok unit.cu_context vs` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> simp[] >>
+     metis_tac[]) >>
+  `!H:(bool # bytes32 # type_value) list # num list.
+     dead_wf (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))` by
+    (gen_tac >> simp[cx_dead_def, initial_evaluation_context_def] >>
+     MATCH_ACCEPT_TAC
+       (SIMP_RULE (srw_ss()) [external_call_dead_def]
+         (Q.INST [`src` |-> `(INL NoneV, am, [])`] external_call_dead_wf))) >>
+  qpat_x_assum `source_unit_execution_correct_with _ _ _ _ _ _ _ _` mp_tac >>
+  simp[source_unit_execution_correct_with_def] >> strip_tac >> gvs[] >>
+  rename1 `lookup_function "__entry" unit.cu_context.ctx_functions = SOME func` >>
+  `?bb. lookup_block "__entry" func.fn_blocks = SOME bb` by
+    (gvs[fn_entry_label_def, entry_block_def, AllCaseEqs()] >>
+     Cases_on `func.fn_blocks` >> gvs[lookup_block_def, FIND_thm]) >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (irule lower_vyper_runtime_unit_block_phi >> metis_tac[]) >>
+  all_tac
+  >~ [`gas_origin_ptr_focus _ _ _ _`]
+  >- suspend "focus"
+  >~ [`gas_origin_ptr_focus _ _ _ _`]
+  >- suspend "focus"
+  >> suspend "exit"
+QED
+
+Resume call_certificate_raw_entry_boundary[focus]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  qabbrev_tac `D = cx_dead H
+    (initial_evaluation_context am.sources am.layouts tx NONE)` >>
+  `dead_wf D` by
+    (simp[Abbr `D`] >>
+     first_assum (fn th => ACCEPT_TAC (Q.SPEC `H` th))) >>
+  `o1_safe_upto D 0 (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings))
+     unit.cu_context vs` by
+    (irule gas_origin_ptr_focus_o1_safe_upto >> simp[] >> metis_tac[]) >>
+  `!fn inst s. raw_reachable vs unit.cu_context fn inst s /\
+     gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
+     inst_dload_in_section inst s` by
+    (drule gas_origin_ptr_focus_dload_upto >> simp[] >> metis_tac[]) >>
+  drule fragGasOriginPtrTheory.gas_origin_ptr_focus_origin >> strip_tac >>
+  drule_at (Pat `gas_origin_focus _ _ _ _ _ _`)
+    gas_origin_focus_entry_events_prefix >> simp[] >> strip_tac >>
+  qexistsl_tac [`D`, `fuel`, `extra`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume call_certificate_raw_entry_boundary[exit]:
+  rpt strip_tac >>
+  drule_all selected_run >> strip_tac >>
+  `valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) (storage_trace_horizon obs) obs` by
+    metis_tac[storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `storage_trace_horizon obs` mp_tac) >>
+  simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `ptr_safe_blocks D` >>
+  `raw_unit_memory_ok unit.cu_context vs /\
+   ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
+   mem_inv dload_offset_ok unit.cu_context vs /\
+   mem_inv dload_headroom_ok unit.cu_context vs /\
+   mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+     unit.cu_context vs` by
+    (irule selected_raw_memory >> metis_tac[]) >>
+  `mem_inv raw_mem_ok unit.cu_context vs` by
+    (qpat_x_assum `raw_unit_memory_ok _ _` mp_tac >>
+     simp[unitTransformDefsTheory.raw_unit_memory_ok_def, mem_inv_def,
+          raw_mem_ok_def]) >>
+  `o1_src_inv D unit.cu_context vs` by
+    (simp[o1_src_inv_def] >> metis_tac[]) >>
+  drule_all o1_src_inv_ptr_safe_upto >> strip_tac >>
+  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+     inst_dload_in_section inst s` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\ _) _ _`
+       (drule o CONJUNCT2 o REWRITE_RULE [mem_inv_raw_reachable]) >>
+     simp[]) >>
+  drule_at (Pat `gas_origin_path _ _ _ _ _ _ _`)
+    gas_origin_path_entry_events >> simp[] >> strip_tac >>
+  qexistsl_tac [`D`, `fuel'`, `[]`] >> simp[Abbr `D`] >>
+  rpt strip_tac >> first_x_assum irule >> goal_assum (drule_at Any)
+QED
+
+Finalise call_certificate_raw_entry_boundary
 
 (* ADMISSION (argon, 2026-11-13; the call twin of deploy_pipeline_gas_link).
    Where the frame is not starved, every filling of its gas readings that
