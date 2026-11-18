@@ -57,7 +57,7 @@ Theorem default_entry_prefix_joint:
   fresh_vars_wrt ds s /\ ~s.vs_halted /\
   s.vs_current_bb = ds.cs_current_bb /\
   s.vs_inst_idx = 0 /\ ds.cs_current_insts = [] /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\
+  allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   (m <= 4 \/ m <= LENGTH s.vs_call_ctx.cc_calldata) /\
   (pay \/ s.vs_call_ctx.cc_callvalue = 0w) ==>
@@ -85,6 +85,9 @@ Proof
     (irule fresh_vars_wrt_mono >> qexists_tac `de` >> simp[]) >>
   `allocas_from 0 t` by
     (fs[allocas_from_def] >> metis_tac[vars_pc_only_fields]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (fs[vars_pc_only_def, venom_state_component_equality, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   drule default_entry_checks_ptr_endpoint >>
   disch_then (qspecl_then [`tn1`, `t`, `0`, `fn`, `ctx`, `[]`, `G1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>

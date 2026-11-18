@@ -9,7 +9,7 @@ Ancestors
 
 Theorem bop_assert_ptr_inst_ok:
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [op] []) s
 Proof
   strip_tac >> gvs[] >>
@@ -46,7 +46,7 @@ QED
 
 Theorem bop_assert_counted_edge:
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc [op] []) /\
   step_inst_base (mk_inst id opc [op] []) s = OK u ==>
@@ -67,7 +67,7 @@ QED
 
 Theorem bop_assert_abort_path:
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc [op] []) /\
   step_inst_base (mk_inst id opc [op] []) s = Abort a t ==>
@@ -84,7 +84,7 @@ QED
 
 Theorem bop_assert_success_path:
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc [op] []) /\
   step_inst_base (mk_inst id opc [op] []) s = OK u ==>

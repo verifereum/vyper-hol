@@ -34,7 +34,7 @@ Theorem convert_scalar_ptr_inst_ok:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
   op_taint tn x = {} /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc [x;y] [z]) s = OK u ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id opc [x;y] [z]) s
 Proof

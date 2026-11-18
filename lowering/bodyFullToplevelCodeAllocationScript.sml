@@ -5,13 +5,14 @@ Ancestors
   exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation bodyMemEcArithPrefix
   exprPtrUnwrapCodeCopyShape exprPtrCodeCopyEndpoint exprPtrCodeCopyFrame bufferAllocationExecution
   fragGasOriginPtr fragGasSeqPtr bodyFullUnwrapRun exprSimCopy exprSimAlloc exprLoweringProps context compileEnv
-  ptrDiscipline loweringPosts venomState venomInst venomMemDefs fragExec list rich_list words finite_map
+  ptrDiscipline loweringPosts loweringStateRelDefs exprLoweringProps
+  venomState venomInst venomMemDefs fragExec list rich_list words finite_map
 
 Theorem toplevel_code_allocation_full_at:
   compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm0) /\
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?root u Gm tm a.
@@ -28,7 +29,16 @@ Theorem toplevel_code_allocation_full_at:
     ptr_covers Gm tm root a nb /\
     eval_operand buf.buf_operand a = SOME (n2w (buffer_allocation_base s sm.cs_next_id))
 Proof
-  strip_tac >> drule_all unwrap_alloc_entry >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+          alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  drule_all unwrap_alloc_entry >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`ARB`] strip_assume_tac) >>
   drule unwrap_alloc_generated_code >> strip_tac >>
   qpat_x_assum `out = _` SUBST_ALL_TAC >>
@@ -85,7 +95,7 @@ Theorem toplevel_code_runtime_execution_full_at:
   compile_imm_copy_to_memory F imm src buf.buf_operand n 0 mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\
@@ -140,6 +150,13 @@ Proof
      simp[Abbr `d`, update_var_def]) >>
   `compile_imm_copy_to_memory F imm src (Var root) n 0 mid = ((),sb)` by
     (qpat_x_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (mp_tac (Q.INST [`out` |-> `root`] unwrap_alloc_below_fmp) >>
+     impl_tac >- simp[] >> strip_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (qpat_x_assum `a = _` SUBST1_TAC >>
+     qpat_x_assum `u = _` SUBST_ALL_TAC >>
+     fs[allocas_below_fmp_def, update_var_def] >> strip_tac >> fs[]) >>
   `0+32*n <= nb /\ (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
    w2n d+0+32*n <= a.vs_alloca_next /\
    w2n p+0+32*n <= LENGTH a.vs_data_section /\
@@ -174,7 +191,7 @@ Theorem toplevel_code_allocation_full:
   compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm) /\
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?root u Gm tm a.
@@ -211,7 +228,7 @@ Theorem toplevel_code_runtime_execution_full:
   compile_imm_copy_to_memory F imm src buf.buf_operand n 0 mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\
