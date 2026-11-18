@@ -69,4 +69,4 @@ Ancestors
   dftPacketBlockPathConservation dftPacketBlockReplayClosed
   dftPacketReturnNewCuts dftPacketBlockPathUpdate dftPacketBlockReplayFrame
   dftPacketBlockInitializedHistory dftPacketBlockInitializedReplay
-  dftPacketBlockInitializedStructure
+  dftPacketBlockInitializedStructure dftPacketBlockInitializedFreshCut
