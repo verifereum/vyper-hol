@@ -69,14 +69,6 @@ val member_child = ``\ctx fn site limit lo PG di tv.
       (^member_path) lo ctx fn PG s G tn (OK t) H u /\
       (^member_frame) mid en ctx fn site limit lo s G tn d (type_memory_size tv) t H u sc``;
 
-Theorem finite_member_frame_refl[local]:
-  (^member_resources) a a ctx fn site limit lo s ==>
-  (^member_frame) a a ctx fn site limit lo s G tn d sz s G tn []
-Proof
-  simp[abiDecoderFrameTheory.abi_decode_footprint_frame_refl] >>
-  strip_tac >> rpt gen_tac >> strip_tac >> decide_tac
-QED
-
 Theorem finite_member_frame_join[local]:
   a.cs_next_id <= b.cs_next_id /\ b.cs_next_id <= c.cs_next_id /\
   a.cs_next_var <= b.cs_next_var /\
@@ -222,19 +214,19 @@ Proof
   `ptr_covers H u root t extent` by
     metis_tac[assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame] >>
   `op_taint u src = {} /\ op_prov H src = NONE` by
-    (Cases_on `src` >>
-     TRY (simp[NoAsms, ptrDisciplineTheory.op_taint_def,
-                ptrDisciplineTheory.op_prov_def] >> NO_TAC) >>
-     rename1 `op_taint u (Var x) = _` >>
-     `not_fresh_at a x` by
-       (qpat_assum `!q. Var x = Var q ==> _` (qspec_then `x` mp_tac) >>
-        simp[NoAsms]) >>
-     qpat_assum `!name. not_fresh_at a name ==> FLOOKUP H name = _ /\ _`
-       (qspec_then `x` (drule_then mp_tac)) >>
-     qpat_assum `op_prov G (Var x) = NONE` mp_tac >>
-     qpat_assum `op_taint tn (Var x) = {}` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+    (Cases_on `src` >|
+     [simp[NoAsms, ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def],
+        rename1 `op_taint u (Var x) = _` >>
+        `not_fresh_at a x` by
+          (qpat_assum `!q. Var x = Var q ==> _` (qspec_then `x` mp_tac) >>
+           simp[NoAsms]) >>
+        qpat_assum `!name. not_fresh_at a name ==> FLOOKUP H name = _ /\ _`
+          (qspec_then `x` (drule_then mp_tac)) >>
+        qpat_assum `op_prov G (Var x) = NONE` mp_tac >>
+        qpat_assum `op_taint tn (Var x) = {}` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[ptrDisciplineTheory.op_prov_def] >> metis_tac[],
+      simp[NoAsms, ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def]]) >>
   `FLOOKUP t.vs_allocas oid = SOME (owner,cap)` by metis_tac[] >>
   `t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `abi_decode_footprint_frame _ s t` mp_tac >>
@@ -350,11 +342,13 @@ Proof
      `FLOOKUP r.vs_allocas oid = SOME (owner,cap)` by
        (qpat_assum `r.vs_allocas = s.vs_allocas` (fn th => rewrite_tac[th]) >>
         first_assum ACCEPT_TAC) >>
+     `d + vo + type_memory_size tv <= owner + cap` by
+       (qpat_assum `d + vo + _ <= owner + cap` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     `d + vo + type_memory_size tv < dimword (:256)` by
+       (qpat_assum `d + vo + _ < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (qpat_assum `d + vo + _ <= owner + cap` mp_tac >>
-          POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-     TRY (qpat_assum `d + vo + _ < dimword (:256)` mp_tac >>
-          POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
      qx_genl_tac [`id`,`slot_base`,`k`] >> strip_tac >>
      qpat_assum `!id q k. b.cs_next_id <= id /\ id < c.cs_next_id /\ FLOOKUP r.vs_allocas id = SOME (q,k) ==> _`
        (qspecl_then [`id`,`slot_base`,`k`] mp_tac) >>

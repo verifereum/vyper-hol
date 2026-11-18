@@ -215,9 +215,6 @@ Proof
 QED
 
 Theorem none_array_iteration_paths:
-  let e = d+32+j*type_memory_size tv in
-  let pos = cd_member_ptr F s.vs_call_ctx.cc_calldata tv
-                (cd_at F sb 32) (j*tv_abi_size tv) in
   abi_decoder_coherent ce env sf ty tv /\
   abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD
     (Lit 0w) (Lit 0w) (type_to_abi_dec_info sf ce ty)
@@ -271,8 +268,9 @@ Theorem none_array_iteration_paths:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
   (!a A ta child.
     SND (SND ops) = Var child /\
-    eval_operand (FST (SND ops)) a = SOME (n2w pos) /\
-    lookup_var child a = SOME (n2w e) /\
+    eval_operand (FST (SND ops)) a = SOME (n2w (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
+        (cd_at F sb 32) (j*tv_abi_size tv))) /\
+    lookup_var child a = SOME (n2w (d+32+j*type_memory_size tv)) /\
     abi_decoder_operand_live ready.cs_next_var (FST (SND ops)) /\
     abi_decoder_operand_live ready.cs_next_var (Var child) /\
     ptr_covers A ta child a (type_memory_size tv) /\
@@ -286,7 +284,9 @@ Theorem none_array_iteration_paths:
        !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
           (a,A,ta) [] (Abort Revert_abort z,Z,tz)) \/
     ?r R tr scratch.
-      IS_SOME (cd_decode F a.vs_call_ctx.cc_calldata tv (w2n (n2w pos:bytes32))) /\
+      IS_SOME (cd_decode F a.vs_call_ctx.cc_calldata tv
+        (w2n (n2w (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
+          (cd_at F sb 32) (j*tv_abi_size tv)):bytes32))) /\
       ~r.vs_halted /\ r.vs_current_bb = last.cs_current_bb /\
       r.vs_inst_idx = LENGTH last.cs_current_insts /\
       fresh_vars_wrt limit r /\
@@ -301,7 +301,7 @@ Theorem none_array_iteration_paths:
         k = 32 /\ p < dimword (:256) /\ p+32 <= r.vs_alloca_next /\
         ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
           ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
-      abi_decode_footprint_frame ((e,type_memory_size tv)::scratch) a r /\
+      abi_decode_footprint_frame ((d+32+j*type_memory_size tv,type_memory_size tv)::scratch) a r /\
       (!p k. MEM (p,k) scratch ==> ?id. ready.cs_next_id <= id /\ id < last.cs_next_id /\
         FLOOKUP r.vs_allocas id = SOME (p,k)) /\
       (!op. abi_decoder_operand_live ready.cs_next_var op ==> eval_operand op r = eval_operand op a) /\
@@ -314,7 +314,8 @@ Theorem none_array_iteration_paths:
      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (s,G,tn) [] (Abort Revert_abort z,Z,tz)) \/
   ?t H u scratch.
-    IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv pos) /\
+    IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
+        (cd_at F sb 32) (j*tv_abi_size tv))) /\
     ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
     fresh_vars_wrt limit t /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
@@ -330,7 +331,7 @@ Theorem none_array_iteration_paths:
       k = 32 /\ p < dimword (:256) /\ p+32 <= t.vs_alloca_next /\
       ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
         ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
-    abi_decode_footprint_frame ((e,type_memory_size tv)::(slot,32)::scratch) s t /\
+    abi_decode_footprint_frame ((d+32+j*type_memory_size tv,type_memory_size tv)::(slot,32)::scratch) s t /\
     (!p k. MEM (p,k) scratch ==> ?id. ready.cs_next_id <= id /\ id < last.cs_next_id /\
       FLOOKUP t.vs_allocas id = SOME (p,k)) /\
     (!x. x IN protect ==> lookup_var x t = lookup_var x s /\
@@ -338,7 +339,6 @@ Theorem none_array_iteration_paths:
     u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u))
 Proof
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV THENC REWR_CONV LET_THM THENC BETA_CONV) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by simp[] >>
   `!x. src = Var x ==> ~MEM x [iv;cv;cmp;done]` by metis_tac[] >>

@@ -681,7 +681,6 @@ Resume none_nonbulk_fold_paths[iteration]:
      `st.cs_next_id <= id /\ id < last.cs_next_id` by decide_tac >>
      (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   mp_tac (none_array_iteration_paths |>
-    CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV THENC REWR_CONV LET_THM THENC BETA_CONV) |>
     Q.INST [`st` |-> `st0`, `ready` |-> `middle`, `last` |-> `st1`, `j` |-> `i`,
       `G` |-> `A`, `tn` |-> `ta`, `hid` |-> `loop_st.cs_next_id+1`,
       `hdr` |-> `FST (labels:string#string#string)`,
