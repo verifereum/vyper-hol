@@ -55,5 +55,11 @@ Proof
   drule_all augassign_operator_source_representation >> simp[] >> strip_tac >>
   drule_all bop_typed_source_result_ok >>
   simp[expr_res_ok_def] >>
-  FAIL_TAC "runtime classification"
+  strip_tac >- metis_tac[] >>
+  qpat_x_assum `evaluate_binop _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `err = RevertData _` (SUBST_ALL_TAC) >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `bop` >> simp[evaluate_binop_def] >>
+  simp[bounded_int_op_def, bounded_decimal_op_def, wrapped_int_op_def,
+       oneline binop_negate_def, AllCaseEqs()]
 QED
