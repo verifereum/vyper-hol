@@ -80,3 +80,4 @@ Ancestors
   (* symbolic assembly finalizers and their codegen correctness bridge *)
   asmOptNonemptyFinalizer codegenAsmOpt
   codegenAsmOptRevert
+  codegenGasAsmOpt
