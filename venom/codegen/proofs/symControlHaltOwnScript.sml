@@ -168,7 +168,7 @@ Proof
           codegenRelTheory.source_memory_write_ranges_def]) >>
   drule_all terminal_source_memory_reads_safe >> disch_tac >>
   `MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
-    "CREATE"; "CREATE2"; "RETURNDATACOPY"]` by
+    "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"]` by
     gvs[asmIRTheory.venom_to_evm_name_def] >>
   `?tail. ss_mid.sym_stack = MAP Val args ++ tail` by metis_tac[] >>
   irule sym_terminal_opcode_transfer_mode_conditional >>
