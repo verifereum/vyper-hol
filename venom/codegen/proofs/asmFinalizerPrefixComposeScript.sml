@@ -6,24 +6,25 @@ Ancestors
 
 (* A quotation abbreviation only: no logical transport constant is introduced. *)
 val transport = ``\p q.
-  ?K. 0 < K /\
-    !env s n a.
-      s.as_pc = 0 /\
-      sym_steps p env n (sym_init s) = SymOK a ==>
-      (?m b. sym_steps q env m (sym_init s) = SymOK b /\
-             n <= K * (m + 1)) /\
-      (a.sym_base.as_pc < LENGTH p /\
-       EL a.sym_base.as_pc p = AsmOp "GAS" ==>
-       ?m b. sym_steps q env m (sym_init s) = SymOK b /\
-             b.sym_base.as_pc < LENGTH q /\
-             EL b.sym_base.as_pc q = AsmOp "GAS" /\
-             b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)``;
+  ?K. 0 < K /\ !env s n a.
+    s.as_pc = 0 /\ sym_steps p env n (sym_init s) = SymOK a ==>
+    (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
+    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+       a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
+     ?m b. sym_steps q env m (sym_init s) = SymOK b /\
+       b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
+       (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+       MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+       FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
 
 Theorem prefix_transport_refl:
   !p. ^transport p p
 Proof
-  BETA_TAC >> gen_tac >> qexists_tac `1` >> simp[] >>
-  rpt strip_tac >> metis_tac[arithmeticTheory.LE_ADD]
+  BETA_TAC >> gen_tac >> qexists_tac `1` >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
+  rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]
 QED
 
 Theorem prefix_transport_trans:
@@ -47,11 +48,15 @@ Proof
       pure_rewrite_tac[GSYM MULT_ASSOC] >> irule LESS_MONO_MULT2 >> simp[] >>
       irule LESS_EQ_TRANS >> qexists_tac `k2 * (m' + 1) + 1` >>
       simp[LEFT_ADD_DISTRIB]) >>
-  strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
+  disch_then (qx_choosel_then [`m1`, `b1`] strip_assume_tac) >>
   qpat_assum `!env s n a. _ /\ sym_steps q _ _ _ = _ ==> _`
-    (qspecl_then [`env`, `s`, `m'`, `b'`] mp_tac) >>
-  (impl_tac >- simp[]) >> disch_then strip_assume_tac >> metis_tac[]
+    (qspecl_then [`env`, `s`, `m1`, `b1`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
+  disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+  qexistsl_tac [`m2`, `b2`] >> gvs[]
 QED
 
 Theorem optimize_round_relation[local]:

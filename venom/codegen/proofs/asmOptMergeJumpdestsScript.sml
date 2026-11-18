@@ -828,6 +828,13 @@ Proof
   simp[]
 QED
 
+Theorem sv_rel_list_vals[local]:
+  !l l'. LIST_REL (sv_rel x y) l l' ==> MAP sval_val l' = MAP sval_val l
+Proof
+  Induct >> simp[LIST_REL_CONS1, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
+  gvs[sv_rel_def, sval_val_def]
+QED
+
 (* A successful prefix either stops inside the redirect, or has reached
    the destination with at most three additional source instructions. *)
 Theorem rename_prefix_skip[local]:
@@ -838,7 +845,8 @@ Theorem rename_prefix_skip[local]:
     t.sym_base.as_pc = LENGTH pre /\ t.sym_base.as_stack = [] /\
     sym_steps (pre ++ AsmLabel x::next::third::more) env n t = SymOK a ==>
     (n <= 2 /\ a.sym_base.as_pc < LENGTH (pre ++ AsmLabel x::next::third::more) /\
-      EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) <> AsmOp "GAS") \/
+      !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} ==>
+        EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) <> AsmOp op) \/
     (?k j. 0 < k /\ k <= 3 /\ k <= n /\
       INDEX_OF (AsmLabel y) (pre ++ AsmLabel x::next::third::more) = SOME j /\
       sym_steps (pre ++ AsmLabel x::next::third::more) env (n-k)
@@ -882,11 +890,12 @@ Theorem rename_prefix_boundaries[local]:
       rn_rel x y ss ss' /\ sym_steps p env n ss = SymOK a ==>
       (?m b. sym_steps (MAP (rename_push_label x y) p) env m ss' = SymOK b /\
         n <= 4 * (m+1)) /\
-      (a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS" ==>
+      (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
        ?m b. sym_steps (MAP (rename_push_label x y) p) env m ss' = SymOK b /\
          b.sym_base.as_pc < LENGTH p /\
-         EL b.sym_base.as_pc (MAP (rename_push_label x y) p) = AsmOp "GAS" /\
-         b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)
+         EL b.sym_base.as_pc (MAP (rename_push_label x y) p) = AsmOp op /\
+         rn_rel x y a b)
 Proof
   rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac
@@ -910,7 +919,7 @@ Proof
       qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
       simp[Once sym_steps_def] >> disch_then SUBST_ALL_TAC >> conj_tac
       >- (qexistsl_tac [`0`, `ss'`] >> simp[sym_steps_def]) >>
-      strip_tac >> qexistsl_tac [`0`, `ss'`] >>
+      rpt strip_tac >> qexistsl_tac [`0`, `ss'`] >>
       simp[sym_steps_def, EL_MAP, rename_push_label_facts]) >>
   `ss.sym_base.as_pc < LENGTH p`
     by (spose_not_then assume_tac >>
@@ -927,7 +936,9 @@ Proof
       simp[] >> disch_then drule_all >> strip_tac >> conj_tac
       >- (qexistsl_tac [`SUC m`, `b`] >>
           conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
-      strip_tac >> first_x_assum drule_all >> strip_tac >>
+      gen_tac >> disch_tac >>
+      qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
+      (impl_tac >- fs[]) >> strip_tac >>
       qexistsl_tac [`SUC m'`, `b'`] >>
       simp[Once sym_steps_def, EL_MAP]) >>
   `t.sym_base.as_stack = []`
@@ -945,7 +956,9 @@ Proof
   conj_tac
   >- (qexistsl_tac [`SUC m`, `b`] >>
       conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
-  strip_tac >> first_x_assum drule_all >> strip_tac >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
+  (impl_tac >- fs[]) >> strip_tac >>
   qexistsl_tac [`SUC m'`, `b'`] >> simp[Once sym_steps_def, EL_MAP]
 QED
 
@@ -960,22 +973,29 @@ Theorem rename_site_prefix_transport:
       (?m b. sym_steps (MAP (rename_push_label x y)
         (pre ++ AsmLabel x::next::third::more)) env m (sym_init s) = SymOK b /\
         n <= K * (m+1)) /\
-      (a.sym_base.as_pc < LENGTH (pre ++ AsmLabel x::next::third::more) /\
-       EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) = AsmOp "GAS" ==>
+      (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH (pre ++ AsmLabel x::next::third::more) /\
+         EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) = AsmOp op ==>
        ?m b. sym_steps (MAP (rename_push_label x y)
          (pre ++ AsmLabel x::next::third::more)) env m (sym_init s) = SymOK b /\
          b.sym_base.as_pc < LENGTH (MAP (rename_push_label x y)
            (pre ++ AsmLabel x::next::third::more)) /\
          EL b.sym_base.as_pc (MAP (rename_push_label x y)
-           (pre ++ AsmLabel x::next::third::more)) = AsmOp "GAS" /\
-         b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)
+           (pre ++ AsmLabel x::next::third::more)) = AsmOp op /\
+         (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+         MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+         FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)
 Proof
   rpt gen_tac >> disch_tac >> qexists_tac `4` >>
   conj_tac >- decide_tac >>
   rpt gen_tac >> strip_tac >> pure_rewrite_tac[LENGTH_MAP] >>
-  irule rename_prefix_boundaries >>
-  conj_tac >- metis_tac[] >> conj_tac
-  >- (qexistsl_tac [`more`, `next`, `pre`, `third`] >> metis_tac[]) >>
-  qexists_tac `sym_init s` >>
-  simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def]
+  qspecl_then [`pre ++ AsmLabel x::next::third::more`, `pre`, `x`, `y`, `next`,
+    `third`, `more`, `env`] mp_tac rename_prefix_boundaries >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspecl_then [`n`, `sym_init s`, `sym_init s`, `a`] mp_tac) >>
+  (impl_tac >- simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def]) >>
+  strip_tac >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qexistsl_tac [`m'`, `b'`] >> fs[rn_rel_def] >>
+  metis_tac[sv_rel_list_vals, ml_rel_fdom]
 QED

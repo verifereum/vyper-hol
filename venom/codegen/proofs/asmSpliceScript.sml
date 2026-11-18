@@ -1224,8 +1224,11 @@ Theorem bounded_splice_prefix_transport:
     sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
     ?d. 0 < d /\ d <= D /\
       (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
-        ~(a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS")) /\
+        !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+          a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
+          i = 0 /\ repl <> [] /\ HD repl = HD pat) /\
       (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
         ?e. sym_steps (pre ++ repl ++ post) env e u =
           SymOK (sym_with_pc
@@ -1239,12 +1242,16 @@ Theorem bounded_splice_prefix_transport:
     sym_steps (pre ++ pat ++ post) env n (sym_init s) = SymOK a ==>
     (?m b. sym_steps (pre ++ repl ++ post) env m (sym_init s) = SymOK b /\
        n <= K * (m+1)) /\
-    (a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-      EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS" ==>
+    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+      a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+      EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
       ?m b. sym_steps (pre ++ repl ++ post) env m (sym_init s) = SymOK b /\
         b.sym_base.as_pc < LENGTH (pre ++ repl ++ post) /\
-        EL b.sym_base.as_pc (pre ++ repl ++ post) = AsmOp "GAS" /\
-        b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)
+        EL b.sym_base.as_pc (pre ++ repl ++ post) = AsmOp op /\
+        (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+        MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+        FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)
 Proof
   rpt gen_tac >> strip_tac >>
   (* The public sym_steps_add is downstream in codegenSymRel, so prove
@@ -1271,22 +1278,30 @@ Proof
         (sym_with_pc (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)
            u.sym_base.as_pc) u) = SymOK b /\
       n <= C*m + D*(if u.sym_base.as_pc = LENGTH pre then 2 else 1)) /\
-    (a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-      EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS" ==>
+    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+      a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+      EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
       ?m b. sym_steps (pre ++ repl ++ post) env m
         (sym_with_pc (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)
            u.sym_base.as_pc) u) = SymOK b /\
         b.sym_base.as_pc < LENGTH (pre ++ repl ++ post) /\
-        EL b.sym_base.as_pc (pre ++ repl ++ post) = AsmOp "GAS" /\
-        b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)` by
+        EL b.sym_base.as_pc (pre ++ repl ++ post) = AsmOp op /\
+        (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+        MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+        FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)` by
     suspend "induction" >>
   qexists_tac `C` >> simp[] >> rpt gen_tac >> strip_tac >>
   first_x_assum (qspecl_then [`n`, `env`, `sym_init s`, `a`] mp_tac) >>
   simp[sym_init_def, sym_state_labels_in_def, listTheory.MEM_MAP,
        splice_pc_def, sym_with_pc_def] >>
-  strip_tac >> qexistsl_tac [`m`, `b`] >> simp[] >>
-  Cases_on `pre = []` >> gvs[arithmeticTheory.RIGHT_ADD_DISTRIB] >>
-  decide_tac
+  strip_tac >> conj_tac
+  >- (qexistsl_tac [`m`, `b`] >> simp[] >>
+      Cases_on `pre = []` >> gvs[arithmeticTheory.RIGHT_ADD_DISTRIB] >>
+      decide_tac) >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
+  (impl_tac >- fs[]) >> simp[]
 QED
 
 Resume bounded_splice_prefix_transport[induction]:
@@ -1305,7 +1320,7 @@ Resume bounded_splice_prefix_transport[zero]:
   pure_rewrite_tac[sym_steps_def, sym_result_11] >>
   disch_then (SUBST_ALL_TAC o SYM) >> conj_tac
   >- (qexists_tac `0` >> simp[sym_steps_def]) >>
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   (Q.SUBGOAL_THEN `u.sym_base.as_pc < LENGTH pre \/
     LENGTH pre + LENGTH pat <= u.sym_base.as_pc` assume_tac
     >- decide_tac) >>
@@ -1325,8 +1340,23 @@ Resume bounded_splice_prefix_transport[window]:
   disch_then (qx_choose_then `d` strip_assume_tac) >>
   Cases_on `n < d`
   >- (conj_tac
-      >- (qexists_tac `0` >> simp[sym_steps_def] >> decide_tac) >>
-      metis_tac[]) >>
+      >- (qexistsl_tac [`0`, `u`] >>
+          qpat_x_assum `sym_with_pc _ u = u` (fn th => rewrite_tac[th]) >>
+          qpat_x_assum `u.sym_base.as_pc = LENGTH pre`
+            (fn th => rewrite_tac[th]) >>
+          conj_tac >- simp_tac (srw_ss()) [sym_steps_def] >>
+          simp_tac arith_ss [] >> decide_tac) >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!i a. i < d /\ _ ==> _` (qspecl_then [`n`, `a`] mp_tac) >>
+      (impl_tac >- simp[]) >> disch_then drule_all >> strip_tac >>
+      qpat_x_assum `n = 0` SUBST_ALL_TAC >>
+      qpat_x_assum `sym_steps _ _ 0 _ = _` mp_tac >>
+      pure_rewrite_tac[sym_steps_def, sym_result_11] >>
+      disch_then (SUBST_ALL_TAC o SYM) >>
+      `pat <> []` by metis_tac[asm_splice_ok_def] >>
+      qexistsl_tac [`0`, `u`] >> asm_rewrite_tac[sym_steps_def] >>
+      Cases_on `repl` >> Cases_on `pat` >> gvs[listTheory.EL_APPEND_EQN]) >>
+  qpat_x_assum `!i a. i < d /\ _ ==> _` kall_tac >>
   `?mid. sym_steps (pre ++ pat ++ post) env d u = SymOK mid /\
      sym_steps (pre ++ pat ++ post) env (n-d) mid = SymOK a` by
     (qpat_x_assum `sym_steps _ _ n _ = _` mp_tac >>
@@ -1392,8 +1422,8 @@ Resume bounded_splice_prefix_transport[outside]:
       >- asm "steps_add" (fn th => simp[th]) >>
       simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >>
       Cases_on `mid.sym_base.as_pc = LENGTH pre` >> fs[] >> decide_tac) >>
-  strip_tac >>
-  qpat_x_assum `_ /\ _ ==> ?m b. _` drule_all >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
   disch_then (qx_choose_then `j` (qx_choose_then `c` strip_assume_tac)) >>
   qexistsl_tac [`1+j`, `c`] >> asm "steps_add" (fn th => simp[th])
 QED
@@ -1410,8 +1440,8 @@ Resume bounded_splice_prefix_transport[window_bound]:
   simp[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
 QED
 Resume bounded_splice_prefix_transport[window_gas]:
-  strip_tac >>
-  qpat_x_assum `_ /\ _ ==> ?m b. _` drule_all >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
   disch_then (qx_choose_then `j` (qx_choose_then `c` strip_assume_tac)) >>
   qexistsl_tac [`e+j`, `c`] >> asm "steps_add" (fn th => simp[th])
 QED

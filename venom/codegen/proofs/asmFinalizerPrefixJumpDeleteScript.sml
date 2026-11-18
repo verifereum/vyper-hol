@@ -11,9 +11,10 @@ Theorem jump_delete_prefix_chunk:
       (sym_with_pc (LENGTH pre + 2) ss) /\
     (!i a. i < 2 /\ sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) env i ss
       = SymOK a ==>
-       a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) /\ EL
-         a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) <> AsmOp
-         "GAS")
+       a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) /\
+       !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} ==>
+         EL a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) <>
+         AsmOp op)
 Proof
   simp_tac bool_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
   `~MEM (AsmLabel x) pre`

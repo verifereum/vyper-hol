@@ -195,7 +195,7 @@ QED
 
 (* ===== Oracle fields of a planned configuration ===== *)
 
-Theorem entry_bind_pairs_oracle[local]:
+Theorem entry_bind_pairs_oracle:
   !pairs s. (entry_bind_pairs pairs s).vs_requests = s.vs_requests /\
             (entry_bind_pairs pairs s).vs_outcomes = s.vs_outcomes
 Proof
