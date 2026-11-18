@@ -634,3 +634,212 @@ Proof
   rpt strip_tac >> first_assum irule >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+
+(* Moving the literal output allocation from pending to registered bytes does
+   not increase the total charge.  This is a property of the allocation model. *)
+Theorem abi_encode_literal_allocation_charge[local]:
+  MEM (mk_inst site ALLOCA [Lit (n2w n)] [root]) (fn_insts func) /\
+  n < dimword(:256) ==>
+  (abi_builtin_allocate_state site n s).vs_alloca_next +
+    pending_alloca_size func (abi_builtin_allocate_state site n s) <=
+  s.vs_alloca_next + pending_alloca_size func s
+Proof
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas site = NONE`
+  >- (drule exprLoweringPropsTheory.exec_alloca_static_charge >>
+      simp[venomInstTheory.mk_inst_def] >>
+      disch_then (qspecl_then
+        [`s`, `update_var root (n2w s.vs_alloca_next) (abi_builtin_allocate_state site n s)`]
+        mp_tac) >>
+      simp[venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
+           abiBuiltinAllocationTheory.abi_builtin_allocate_state_def,
+           w2n_n2w, update_var_def, pending_alloca_size_def]) >>
+  simp[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def]
+QED
+
+(* The setup cut is observed through the existing allocation and store frames. *)
+Theorem abi_encode_tuple_setup_frames[local]:
+  MEM (mk_inst staged.cs_next_id ALLOCA [Lit (n2w N)] [root]) (fn_insts func) /\
+  N < dimword(:256) /\ staged.cs_next_var <= a.cs_next_var /\
+  alloc.vs_allocas = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_allocas /\
+  alloc.vs_alloca_next = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_alloca_next /\
+  (alloc with <|vs_vars := prepared.vs_vars; vs_allocas := prepared.vs_allocas;
+     vs_alloca_next := prepared.vs_alloca_next; vs_inst_idx := prepared.vs_inst_idx|>) = prepared /\
+  (!x. not_fresh_at staged x ==> lookup_var x alloc = lookup_var x prepared) /\
+  typed_copy_state_frame a (p+32) wlen alloc ready_state /\
+  ready_state.vs_allocas = alloc.vs_allocas /\
+  ready_state.vs_alloca_next = alloc.vs_alloca_next /\
+  FLOOKUP ready_state.vs_allocas staged.cs_next_id = SOME (p,N) ==>
+  abi_builtin_encode_setup_frame staged.cs_next_var staged.cs_next_id N p wlen prepared ready_state /\
+  abi_encode_exec_frame func prepared ready_state /\
+  ready_state.vs_accounts = prepared.vs_accounts /\
+  ready_state.vs_transient = prepared.vs_transient /\
+  ready_state.vs_logs = prepared.vs_logs /\
+  ready_state.vs_requests = prepared.vs_requests /\
+  ready_state.vs_pending_deletions = prepared.vs_pending_deletions /\
+  ready_state.vs_labels = prepared.vs_labels /\
+  ((FLOOKUP prepared.vs_allocas staged.cs_next_id = NONE /\ p = prepared.vs_alloca_next) \/
+    FLOOKUP prepared.vs_allocas staged.cs_next_id = SOME (p,N)) /\
+  (!i row. FLOOKUP prepared.vs_allocas i = SOME row ==>
+     FLOOKUP ready_state.vs_allocas i = SOME row)
+Proof
+  strip_tac >>
+  qpat_assum `typed_copy_state_frame _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [typedMemoryCopyTheory.typed_copy_state_frame_def,
+      typedMemoryCopyTheory.typed_copy_frame_def]) >>
+  `abi_builtin_allocation_frame staged.cs_next_var staged.cs_next_id N prepared alloc` by
+    (simp_tac bool_ss [abiBuiltinAllocationTheory.abi_builtin_allocation_frame_def] >>
+     conj_tac
+     >- (qpat_assum `(alloc with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|>) = prepared`
+           (assume_tac o SIMP_RULE (srw_ss()) [] o AP_TERM ``\s:venom_state. s.vs_labels``) >>
+         Cases >> gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+              abiDecoderReentryTheory.abi_decoder_older_vars_def,
+              loweringStateRelDefsTheory.not_fresh_at_def, eval_operand_def]) >>
+     simp[] >>
+     qpat_assum `(alloc with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|>) = prepared`
+       (SUBST1_TAC o SYM) >> simp[]) >>
+  conj_tac
+  >- (irule abiBuiltinEncodeSetupTheory.abi_builtin_encode_setup_frame_compose >>
+      qexistsl_tac [`alloc`, `a.cs_next_var`] >>
+      qpat_assum `(ready_state with <|vs_vars := _; vs_memory := _; vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = alloc`
+        (fn th => map_every (assume_tac o SIMP_RULE (srw_ss()) [] o C AP_TERM th)
+           [``\s:venom_state. s.vs_labels``, ``\s:venom_state. s.vs_halted``,
+            ``\s:venom_state. s.vs_call_ctx``, ``\s:venom_state. s.vs_data_section``]) >>
+      simp[abiDecoderContractTheory.abi_decode_frame_def] >>
+      conj_tac
+      >- (Cases >> gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+              abiDecoderReentryTheory.abi_decoder_older_vars_def,
+              loweringStateRelDefsTheory.not_fresh_at_def, eval_operand_def]) >>
+      rpt strip_tac >> first_assum irule >> decide_tac) >>
+  `ready_state.vs_alloca_next + pending_alloca_size func ready_state <=
+   prepared.vs_alloca_next + pending_alloca_size func prepared` by
+    (drule_all abi_encode_literal_allocation_charge >>
+     simp[pending_alloca_size_def]) >>
+  conj_tac
+  >- (simp[exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_def,
+           exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_fields] >>
+      qpat_assum `(alloc with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|>) = prepared`
+        (SUBST1_TAC o SYM) >>
+      qpat_assum `(ready_state with <|vs_vars := _; vs_memory := _; vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = alloc`
+        (SUBST1_TAC o SYM) >> simp[]) >>
+  `ready_state.vs_accounts = prepared.vs_accounts /\
+   ready_state.vs_transient = prepared.vs_transient /\
+   ready_state.vs_logs = prepared.vs_logs /\
+   ready_state.vs_requests = prepared.vs_requests /\
+   ready_state.vs_pending_deletions = prepared.vs_pending_deletions /\
+   ready_state.vs_labels = prepared.vs_labels` by
+    (qpat_assum `(alloc with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|>) = prepared`
+        (SUBST1_TAC o SYM) >>
+     qpat_assum `(ready_state with <|vs_vars := _; vs_memory := _; vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = alloc`
+        (SUBST1_TAC o SYM) >> simp[]) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (qpat_x_assum `FLOOKUP ready_state.vs_allocas _ = _` mp_tac >>
+      Cases_on `FLOOKUP prepared.vs_allocas staged.cs_next_id = NONE` >>
+      simp[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP prepared.vs_allocas staged.cs_next_id = NONE` >>
+  simp[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[optionTheory.NOT_SOME_NONE]
+QED
+
+(* The caller supplies all cuts of its chosen execution. *)
+Theorem abi_encode_tuple_pure_frame_join:
+  (~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==>
+    pure_frame ce func es origin s0 initial) /\
+  wb_frame ce es ee origin s0 initial /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce st /\
+  local_ptrs_reserved ce staged /\
+  origin.cs_next_id <= st.cs_next_id /\ st.cs_next_id <= staged.cs_next_id /\
+  compile_alloc_buffer n st = (buf,allocated) /\ fn_has_code st allocated func /\
+  FLOOKUP prepared.vs_allocas st.cs_next_id = SOME (w2n bw,n) /\
+  (!name z k. local_region ce ee.scopes initial name z k ==>
+     loweringStateRelDefs$regions_disjoint (w2n bw) n z k) /\
+  (!z k. loweringStateRelDefs$regions_disjoint (w2n bw) n z k ==>
+     mem_bytes_at z k prepared.vs_memory = mem_bytes_at z k initial.vs_memory) /\
+  (!i row. FLOOKUP initial.vs_allocas i = SOME row ==>
+     FLOOKUP prepared.vs_allocas i = SOME row) /\
+  (!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x initial) /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee prepared /\
+  abi_builtin_encode_setup (OPTION_MAP bytes_method_id_word mid) M staged = ((Var root,Var dp),ready) /\
+  compile_abi_encode_to_buf (Var dp) buf.buf_operand ei ready = (len,body_end) /\
+  fn_has_code staged ready func /\ fn_has_code ready body_end func /\
+  fn_inst_ids_distinct func /\ staged.cs_next_var <= a.cs_next_var /\
+  k = (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4) /\
+  wlen = (case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 32) /\
+  N = 32+32*word_size (M+k) /\ p+N < dimword(:256) /\
+  32+k+LENGTH (enc ct rv) <= N /\
+  alloc.vs_allocas = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_allocas /\
+  alloc.vs_alloca_next = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_alloca_next /\
+  (alloc with <|vs_vars := prepared.vs_vars; vs_allocas := prepared.vs_allocas;
+     vs_alloca_next := prepared.vs_alloca_next; vs_inst_idx := prepared.vs_inst_idx|>) = prepared /\
+  (!x. not_fresh_at staged x ==> lookup_var x alloc = lookup_var x prepared) /\
+  typed_copy_state_frame a (p+32) wlen alloc ready_state /\
+  ready_state.vs_allocas = alloc.vs_allocas /\
+  ready_state.vs_alloca_next = alloc.vs_alloca_next /\
+  FLOOKUP ready_state.vs_allocas staged.cs_next_id = SOME (p,N) /\
+  window_strong_result ctx func ready body_end len ct rv (p+32+k) ready_state body_state /\
+  abi_encoder_registered_effect {} [(p,32)] body_state actual /\
+  actual.vs_allocas = body_state.vs_allocas /\ actual.vs_alloca_next = body_state.vs_alloca_next /\
+  (!op. (!x. op = Var x ==> not_fresh_at body_end x) ==>
+     eval_operand op actual = eval_operand op body_state) /\
+  abi_encode_exec_frame func ready_state actual /\ actual.vs_labels = ready_state.vs_labels ==>
+  ~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==>
+  pure_frame ce func es origin s0 actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> strip_tac >>
+  drule_all_then assume_tac abi_encode_prepared_pure_frame >>
+  `N < dimword(:256)` by decide_tac >>
+  `MEM (mk_inst staged.cs_next_id ALLOCA [Lit (n2w N)]
+       [STRING #"%" (toString staged.cs_next_var)]) (fn_insts func)` by
+    (drule_all exprSimAbiEncodePrefixWindowTheory.abi_encode_setup_alloca_code >>
+     asm_rewrite_tac[]) >>
+  drule_all_then (MAP_EVERY assume_tac o CONJUNCTS) abi_encode_tuple_setup_frames >>
+  drule_all_then assume_tac exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_trans >>
+  `staged.cs_next_var <= ready.cs_next_var` by
+    (drule abiBuiltinEncodeCodeTheory.abi_builtin_encode_setup_shape >> simp[]) >>
+  `staged.cs_next_var <= body_end.cs_next_var` by
+    (drule abiEncodeVarFlowTheory.compile_abi_encode_next_var >> decide_tac) >>
+  `32+wlen <= N` by
+    (Cases_on `OPTION_MAP bytes_method_id_word mid` >> gs[] >>
+     qspecl_then [`4`,`M+4`] mp_tac exprSimPropsTheory.word_size_monotone >>
+     simp[] >> `word_size 4 = 1` by EVAL_TAC >> decide_tac) >>
+  `!op v. abi_decoder_operand_live body_end.cs_next_var op /\
+     eval_operand op body_state = SOME v ==> eval_operand op actual = SOME v` by
+    (gen_tac >> gen_tac >> strip_tac >>
+     qpat_assum `!op. (!x. op = Var x ==> _) ==> eval_operand op actual = _`
+       (qspec_then `op` mp_tac) >>
+     simp[] >> Cases_on `op` >>
+     gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+         abiDecoderReentryTheory.abi_decoder_older_vars_def,
+         loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  `pure_frame ce func ee staged prepared actual` by
+    (irule exprSimAbiEncodeStateTransportTheory.abi_encode_phases_caller_pure_frame >>
+     conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup _ _ staged = _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+     simp_tac bool_ss [pairTheory.SND] >>
+     qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+     asm_rewrite_tac[] >>
+     qexistsl_tac [`cx`,`ctx`,`H0`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     fs[] >> (gvs[])) >>
+  `!i row. FLOOKUP prepared.vs_allocas i = SOME row ==>
+     FLOOKUP actual.vs_allocas i = SOME row` by
+    (drule_then assume_tac abiEncoderWindowContractTheory.window_strong_result_effect >>
+     rpt strip_tac >>
+     qpat_assum `actual.vs_allocas = body_state.vs_allocas` SUBST1_TAC >>
+     irule abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_allocated >>
+     qpat_assum `abi_encoder_registered_effect _ _ ready_state body_state` (irule_at Any) >>
+     first_assum (irule_at Any) >>
+     asm_rewrite_tac[]) >>
+  `pure_frame ce func ee st initial actual` by
+    (irule exprSimPropsTheory.pure_frame_trans >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`ee`,`staged`,`prepared`] >> simp[]) >>
+  irule exprSimPropsTheory.pure_frame_trans >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`ee`,`st`,`initial`] >> simp[] >>
+  rpt strip_tac >>
+  drule_all exprSimWordArgsTheory.wb_frame_vars >> simp[]
+QED
