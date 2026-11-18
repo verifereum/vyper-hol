@@ -15,8 +15,9 @@ local
     #Name (dest_thy_const t) = name)) tm;
   val resources = concl registration_argument_prepare_guarded_robust_resources;
 in
-  val _ = check "Availability: guarded joint is NOT exported."
-    (not (available "registration_argument_prepare_guarded_joint"));
+  val _ = check "Availability: guarded joint is exported with its origin path."
+    (has_const "gas_origin_ptr_path"
+      (concl (DB.fetch "entryPtrSeamRegister" "registration_argument_prepare_guarded_joint")));
   val _ = check "Availability: guarded robust resources IS exported."
     (available "registration_argument_prepare_guarded_robust_resources");
   val _ = check "Resources projection contains robustness but no origin path."
