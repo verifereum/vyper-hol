@@ -6,7 +6,7 @@ Ancestors
   bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget
   e2eDeployDefs ctorDeployDefs compileEnv emitHelper
   vyperStorageLayoutSafety vyperLookupStorage vyperContext
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState ctorDeployDeadLoad
 
 val _ = Parse.hide "body";
 
@@ -72,6 +72,8 @@ Proof
     (qpat_assum `deploy_ctor_start _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
      metis_tac[]) >>
+  `struct_args_unique tops` by
+    metis_tac[deploy_source_ok_struct_args_unique] >>
   qspecl_then [`\H. deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
     `NONE`, `[]`, `tops`, `bindings`, `dunit.cu_context`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `deploy_evaluation_context tops am tx`,
