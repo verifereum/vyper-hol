@@ -474,7 +474,7 @@ val lower_history_window_quote = “\h q a.
           ?jp ji jf jt jq.
             EL j h = BudgetStep j jp ji jf (OK jt) jq /\
             ~lower_event_consumes (EL j h) /\
-            ~lower_event_allocates (EL j h)”;
+            ~lower_event_allocates (EL j h) /\ ~is_terminator ji.inst_opcode”;
 
 Theorem lower_history_pairs_from_windows:
   (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
@@ -591,7 +591,8 @@ Proof
           first_assum ACCEPT_TAC) >>
       rpt strip_tac >> `j = n + 1` by decide_tac >>
       qexistsl_tac [`cpre`, `ci`, `cf`, `cu`, `cpost`] >>
-      fs[lower_event_allocates_def, lower_event_consumes_def, Abbr `ci`, mk_inst_def]) >>
+      fs[lower_event_allocates_def, lower_event_consumes_def, Abbr `ci`,
+         mk_inst_def, is_terminator_def]) >>
   qexists_tac `LENGTH h` >> simp[] >>
   `LENGTH h <= n + 2` by decide_tac >>
   mp_tac (Q.INST [`steps` |-> `[ai;ci]`, `effect` |-> `call`]
@@ -606,7 +607,8 @@ Proof
   `j = n + 1 /\ j - n = 1` by decide_tac >>
   qpat_x_assum `!j. n < j /\ j < LENGTH h ==> _` drule_all >>
   strip_tac >>
-  fs[lower_event_allocates_def, lower_event_consumes_def, Abbr `ci`, mk_inst_def] >>
+  fs[lower_event_allocates_def, lower_event_consumes_def, Abbr `ci`,
+     mk_inst_def, is_terminator_def] >>
   metis_tac[]
 QED
 
@@ -660,4 +662,77 @@ Proof
   `op = Var x` by gvs[mk_inst_def] >>
   `w2n sz < 2 ** 64` by metis_tac[optionTheory.SOME_11] >>
   decide_tac
+QED
+
+(* Recover the start of an emitted prologue, including prefixes that reach
+   its DALLOCA without reaching its consuming effect. *)
+Theorem lower_budget_before_window:
+  !len k root h marks q start bb.
+    root.bp_stack = [] /\
+    enters_block root.bp_fn start root.bp_state /\
+    lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+    ALL_DISTINCT (fn_labels q.bp_fn) /\
+    lookup_block q.bp_state.vs_current_bb q.bp_fn.fn_blocks = SOME bb /\
+    q.bp_state.vs_inst_idx = k + len /\ k + len < LENGTH bb.bb_instructions /\
+    (!j. k <= j /\ j < k + len ==>
+      (EL j bb.bb_instructions).inst_opcode <> PHI /\
+      (EL j bb.bb_instructions).inst_opcode <> INVOKE) ==>
+    ?h0 m p.
+      isPREFIX h0 h /\ LENGTH h0 + len = LENGTH h /\
+      lower_budget_path F (D,lo,explicit,ctx) root h0 m p /\
+      p.bp_fn = q.bp_fn /\ p.bp_stack = q.bp_stack /\
+      p.bp_state.vs_current_bb = q.bp_state.vs_current_bb /\
+      p.bp_state.vs_inst_idx = k
+Proof
+  Induct >- (simp[] >> metis_tac[IS_PREFIX_REFL]) >>
+  rpt gen_tac >> strip_tac >>
+  `q.bp_state.vs_inst_idx = SUC (k + len) /\
+   k + len < LENGTH bb.bb_instructions` by decide_tac >>
+  `(EL (k + len) bb.bb_instructions).inst_opcode <> PHI /\
+   (EL (k + len) bb.bb_instructions).inst_opcode <> INVOKE` by
+    (first_x_assum (qspec_then `k + len` mp_tac) >> simp[ADD_CLAUSES]) >>
+  drule_all (Q.INST [`k` |-> `k + len`] lower_budget_window_has_prev) >> strip_tac >>
+  `lookup_block p.bp_state.vs_current_bb p.bp_fn.fn_blocks = SOME bb` by metis_tac[] >>
+  first_x_assum (qspecl_then [`k`, `root`, `h0`, `m`, `p`, `start`, `bb`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  strip_tac >>
+  qexistsl_tac [`h0'`, `m'`, `p'`] >>
+  fs[IS_PREFIX_APPEND, APPEND_ASSOC, ADD_CLAUSES]
+QED
+
+(* Calls, returns and loop back edges cannot interrupt a live allocation
+   window. The bound carries the reservation across the straight-line
+   steps, then charges its effect before any transfer of control. *)
+Theorem lower_history_window_before_control_transfer:
+  ^lower_history_window_quote h q a /\ a < j /\ j < LENGTH h /\
+  (case EL j h of
+     BudgetStep _ _ i _ _ _ => is_terminator i.inst_opcode
+   | _ => T) ==>
+  ?b. a < b /\ b < j /\ lower_event_consumes (EL b h)
+Proof
+  BETA_TAC >> strip_tac >>
+  `~(j < b)` by
+    (strip_tac >> qpat_x_assum `!j. a < j /\ j < b ==> _` drule_all >>
+     strip_tac >> gvs[]) >>
+  `j <> b` by
+    (strip_tac >> gvs[] >>
+     Cases_on `EL b h` >> gvs[lower_event_consumes_def, is_terminator_def]) >>
+  `b < j /\ b < LENGTH h` by decide_tac >>
+  qexists_tac `b` >> simp[]
+QED
+
+Theorem lower_history_window_before_next_allocation:
+  ^lower_history_window_quote h q a /\ a < j /\ j < LENGTH h /\
+  lower_event_allocates (EL j h) ==>
+  ?b. a < b /\ b < j /\ lower_event_consumes (EL b h)
+Proof
+  BETA_TAC >> strip_tac >>
+  `~(j < b)` by
+    (strip_tac >> qpat_x_assum `!j. a < j /\ j < b ==> _` drule_all >>
+     metis_tac[]) >>
+  `j <> b` by
+    (strip_tac >> gvs[] >>
+     Cases_on `EL b h` >> gvs[lower_event_allocates_def, lower_event_consumes_def]) >>
+  `b < j /\ b < LENGTH h` by decide_tac >>
+  qexists_tac `b` >> simp[]
 QED
