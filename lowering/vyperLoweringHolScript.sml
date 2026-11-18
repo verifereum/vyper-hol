@@ -13,7 +13,7 @@ Ancestors
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
-  e2eLifecycle
+  e2eLifecycle e2eTransactionWorld
   e2eCodeFrame
   (* definitions *)
   moduleLowering
@@ -49,6 +49,7 @@ Ancestors
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
+  immutableRepSensitivity
   immutableCodeLayout
   e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
@@ -86,6 +87,8 @@ Ancestors
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
   (* providers awaiting their consumers *)
+  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
+  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   internalReturnMemoryMem bodyFullIntCallByteFrame
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
