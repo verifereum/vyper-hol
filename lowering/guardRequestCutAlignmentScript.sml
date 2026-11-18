@@ -48,7 +48,6 @@ Theorem codegen_request_cut_outcome:
     s.vs_outcomes <> [] /\
     MEM (EL k (call_requests es), HD s.vs_outcomes) (call_trace es)
 Proof
-  (* ADMISSION: S7 request-cut simulation through nested INVOKEs.
-     The backend lane owns its discharge. *)
+  (* ADMISSION: Match the lowered request to the EVM trace through nested INVOKEs. *)
   cheat
 QED
