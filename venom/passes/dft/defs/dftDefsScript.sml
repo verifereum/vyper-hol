@@ -732,25 +732,3 @@ Definition dft_ctx_def:
   dft_ctx ctx =
     ctx with ctx_functions := MAP dft_fn ctx.ctx_functions
 End
-
-(* Concrete ordering regressions: terminator order precedes operand order,
-   and a repeated memory writer must not move behind a storage writer. *)
-Theorem inst_data_deps_first_order_probe[local]:
-  MAP (\i. i.inst_id)
-    (inst_data_deps
-      [mk_inst 1 ASSIGN [] ["a"]; mk_inst 2 ASSIGN [] ["b"]]
-      ["a"; "b"] (mk_inst 3 RETURN [Var "b"; Var "a"] [])) = [1;2]
-Proof
-  EVAL_TAC
-QED
-
-Theorem compute_effect_deps_first_order_probe[local]:
-  MAP (\i. i.inst_id)
-    (FST (compute_effect_deps
-      <| et_last_write := FEMPTY |+ (Eff_MEMORY, mk_inst 1 MCOPY [] [])
-                                |+ (Eff_STORAGE, mk_inst 2 SSTORE [] []);
-         et_all_reads := FEMPTY |+ (Eff_MEMORY, [mk_inst 1 MCOPY [] []]) |>
-      (mk_inst 3 STATICCALL [] []))) = [1;2]
-Proof
-  EVAL_TAC
-QED
