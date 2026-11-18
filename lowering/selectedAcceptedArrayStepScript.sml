@@ -3,7 +3,6 @@ Theory selectedAcceptedArrayStep
 Ancestors
   selectedAcceptedInterfaces calldataArrayRawCallsite calldataMemberResourceFrame
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr robustCopyTransportPtr
-  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr
   fragGasOriginPtrExec vyperCalldataProps vyperCalldata words arithmetic
   calldataSourceCorrespondence calldataDynStep decoderArraySetupPtr
   abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs abiDecoderExecution
@@ -144,7 +143,7 @@ Proof
   strip_tac >>
   mp_tac (Q.INST [`lo` |-> `lower`, `id` |-> `hid`, `iv` |-> `hv`,
     `done` |-> `dn`, `ncount` |-> `cnt`, `srcaddr` |-> `n2w sb`]
-    (SPEC_ALL source_array_header_origin_ptr_exact_frame)) >>
+    (SPEC_ALL decoder_index_header_ptr_core_uniform_origin_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qexistsl_tac [`t`, `H`, `u`] >>
   `fresh_vars_wrt limit (abi_decode_header_state hv cv cmp dn j cnt s)` by
@@ -274,7 +273,7 @@ Theorem selected_array_backedge[local]:
 Proof
   strip_tac >>
   mp_tac (Q.INST [`s` |-> `v`, `lo` |-> `lower`, `P` |-> `{}`, `ncount` |-> `cnt`]
-    (SPEC_ALL source_array_backedge_origin_ptr_exact_frame)) >>
+    (SPEC_ALL decoder_index_backedge_ptr_core_uniform_origin_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `t = jump_to hdr _` >>
   drule_all decoder_index_backedge_replay_frame >> strip_tac >>

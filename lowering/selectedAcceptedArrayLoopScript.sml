@@ -3,7 +3,7 @@
 Theory selectedAcceptedArrayLoop
 Ancestors
   selectedAcceptedArrayStep
-  selectedAcceptedInterfaces sourceArrayHeaderOriginPtr decoderGhostFramePtr
+  selectedAcceptedInterfaces decoderLoopHeaderCorePtr decoderGhostFramePtr
   calldataMemberResourceFrame calldataSourceCorrespondence
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderExecution
   abiDecoderCoherence entryDecoderStateFrame valueEncodingProps emitHelperProps
@@ -69,7 +69,7 @@ Proof
   `src <> Var hv` by (strip_tac >> fs[]) >>
   mp_tac (Q.INST [`lo` |-> `lower`, `id` |-> `hid`, `iv` |-> `hv`,
     `done` |-> `dn`, `ncount` |-> `cnt`, `j` |-> `cnt`, `srcaddr` |-> `n2w sb`]
-    (SPEC_ALL source_array_header_origin_ptr_exact_frame)) >>
+    (SPEC_ALL decoder_index_header_ptr_core_uniform_origin_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `t = jump_to exit_lbl (abi_decode_header_state hv cv cmp dn cnt cnt s)` by simp[] >>
   `fresh_vars_wrt limit (abi_decode_header_state hv cv cmp dn cnt cnt s)` by
