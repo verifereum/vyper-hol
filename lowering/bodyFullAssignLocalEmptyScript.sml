@@ -2,7 +2,7 @@
 Theory bodyFullAssignLocalEmpty
 Ancestors
   allocaFootprint arithmetic assignBasePtrLocalBodyFacts augAssignFullStore
-  bodyBinopFragMemory bodyFullMemoryFrames bodyFullUnwrapRun bodyMemoryDefs
+  bodyBinopFragMemory bodyFullMemoryFrames bodyFullPreds bodyFullUnwrapRun bodyMemoryDefs
   bodyPtrBytestringBuiltinsUintGhost bodyPtrDefs bodyPtrPrecompileBuiltinsArithmeticValue
   bodySimFull codegenRel context contextCodegenRel emitHelperProps exprLoweringProps
   exprPtrCtorImmStore exprPtrUnwrapCopyEdges exprSimCopy exprSimHypsDefs finite_map fragExec
