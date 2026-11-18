@@ -13,6 +13,7 @@ Ancestors
   ptrDiscipline o1LowerDloadRelocationKernel o1LowerDloadShared
   livenessProofs venomExecSemantics rich_list codegenRel pred_set
   analysisSimDefs venomWfProps ctxLookupAgreeHelpers cfgWf gasEvents
+  fmpStageReclaimSound ptrStaticDiscipline arithmetic
 
 Theorem cut_ordinary_not_reclaim[local]:
   ~is_terminator inst.inst_opcode /\
@@ -374,7 +375,7 @@ Theorem cut_ordinary_stage_suc[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
   ~is_terminator inst.inst_opcode /\
-  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; SETFMP] /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; SETFMP; PHI] /\
   ~is_alloca_op inst.inst_opcode /\
   (!infos ctx runner rl rp.
     fmp_stage_lowered infos ctx runner fn fn' /\
@@ -383,10 +384,10 @@ Theorem cut_ordinary_stage_suc[local]:
     ~MEM runner inst.inst_outputs) /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
-  step_inst_base inst s = OK s1 /\ step_inst_base inst t = OK t1 /\
-  (!env. fmp_base_analyze (fn_insts fn) = SOME env /\
-     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo G ==>
-     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo (step_prov PG G inst s1)) /\
+  active_inst fn inst s /\ fn_static_ptr_ok P fn /\ fn_inst_wf fn /\
+  EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\ pre_fmp_ops fn /\
+  EVERY (\h. !b z. h = SOME (b,z) /\ 0 < z ==> b + z <= fmp_frame_base raw0 stk) PG /\
+  step_inst k C inst s = OK s1 /\ step_inst_base inst t = OK t1 /\
   (!v x. MEM v inst.inst_outputs /\ FLOOKUP s1.vs_vars v = SOME x ==>
     ?y. FLOOKUP t1.vs_vars v = SOME y /\
       (~retpc_var fn v ==> fmp_value_rel sm
@@ -402,6 +403,24 @@ Theorem cut_ordinary_stage_suc[local]:
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
 Proof
   strip_tac >>
+  `step_inst_base inst s = OK s1` by (fs[step_inst_non_invoke] >> (gvs[step_inst_non_invoke])) >>
+  `!env. fmp_base_analyze (fn_insts fn) = SOME env /\
+     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo G ==>
+     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo (step_prov PG G inst s1)` by
+    (rpt strip_tac >> irule fmp_stage_covers_step >> simp[] >>
+     conj_tac >- metis_tac[fmp_stage_rel_def, fmp_sites_ok_def] >>
+     conj_tac >- fs[MEM] >>
+     conj_tac >-
+       (qpat_x_assum `EVERY _ PG` mp_tac >>
+        simp[EVERY_MEM] >> disch_then assume_tac >>
+        qx_gen_tac `h` >> disch_tac >>
+        map_every qx_gen_tac [`b`, `z`] >> strip_tac >>
+        qpat_x_assum `!h. MEM h PG ==> _`
+          (qspec_then `h` mp_tac) >>
+        impl_tac >- first_assum ACCEPT_TAC >>
+        disch_then (qspecl_then [`b`, `z`] mp_tac) >>
+        impl_tac >- simp[] >> decide_tac) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
   map_every (fn eq => qpat_assum eq
     (mp_then (Pat `step_inst_base _ _ = OK _`) mp_tac step_inst_base_preserves_all) >>
     simp[] >> strip_tac)
