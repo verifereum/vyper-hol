@@ -586,13 +586,6 @@ Proof
     symInstLocalizeCoreTheory.sym_prepared_emit_localize_maps_core))
 QED
 
-Theorem prepared_suffix_concrete_height[local]:
-  venom_asm_rel lo ps vs cs /\ ps.ps_stack = residual ++ selected ==>
-  LENGTH selected <= LENGTH cs.as_stack
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.prepared_suffix_concrete_height
-QED
-
 Theorem sym_named_inst_symbolic_run:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -874,21 +867,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem reverse_two_operands[local]:
-  2 <= LENGTH (xs:operand list) ==>
-  ?a b tail. REVERSE xs = a :: b :: tail
-Proof
-  MATCH_ACCEPT_TAC symInstLogOwnTheory.reverse_two_operands
-QED
-
-Theorem successful_log_operand_shape[local]:
-  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
-  step_inst fuel ctx inst vs = OK vsout ==>
-  ?offop lenop topicops. REVERSE selected = offop :: lenop :: topicops
-Proof
-  MATCH_ACCEPT_TAC symInstLogOwnTheory.successful_log_operand_shape
-QED
-
 Theorem sym_log_inst_symbolic_run:
   lo = SND (compute_label_offsets prog) /\
   inst.inst_opcode = LOG /\ inst_wf inst /\
@@ -1145,97 +1123,6 @@ Theorem asm_static_block_label_index:
   INDEX_OF (AsmLabel lbl) p = SOME (pc + i)
 Proof
   MATCH_ACCEPT_TAC symInstPiecesFactsTheory.asm_static_block_label_index
-QED
-
-Theorem sym_assert_unreachable_frame_prepare[local]:
-  lo = SND (compute_label_offsets prog) /\ inst.inst_opcode = ASSERT_UNREACHABLE /\
-  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
-  sym_frame_inv prog env ctx cplan fn ret srest labs0 ps cs ss /\
-  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\ qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-  generated_plan_state_wf_marked sb ps /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
-  ~is_param_opcode inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
-  MEM inst (fn_insts fn) /\ fn_shape_ok fn /\ dfg = dfg_build_function fn /\
-  source_memory_reads_disjoint cplan inst vs /\ context_source_memory_writes_disjoint cplan inst vs /\
-  step_inst fuel ctx inst vs = OK vsout /\
-  emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared) /\
-  reorder_plan dfg [cond] prepared = (rops,arranged) /\
-  fresh_label "reachable" (arranged with ps_stack := stack_pop 1 arranged.ps_stack) = (lbl,p3) /\
-  qs = release_dead_spills nl p3 /\
-  LENGTH [cond] <= LENGTH (SND (emit_input_plan ASSERT_UNREACHABLE [cond] nl ps)).ps_stack /\
-  (!l. MEM (Label l) [cond] ==> IS_SOME (FLOOKUP lo l)) /\
-  (!op. MEM op [cond] /\ is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  EVERY (\op. op <> dead_stack_marker /\
-    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [cond] /\
-  (!op at. MEM op [cond] /\
-    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at [cond]) /\
-    operand_equiv dfg op at ==> operand_val (frame_view fn ra vs) lo op =
-      operand_val (frame_view fn ra vs) lo at) /\
-  EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) ops /\
-  ops = iops ++ rops ++ [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl] /\
-  asm_static_wf prog /\ asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp ops) ==>
-  ?mid ready localtop.
-    arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
-    venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := cs.as_memory) mid /\
-    sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) ss = SymOK ready /\
-    sym_kinds_ok cplan fn ret srest arranged ready /\
-    ready.sym_base.as_pc = cs.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
-    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
-      FLOOKUP ready.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
-    ready.sym_stack = localtop ++ srest /\
-    asm_sym_rel prog env mid (ready with sym_stack := localtop) /\
-    sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
-    asm_block_at prog ready.sym_base.as_pc
-      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl]
-Proof
-  strip_tac >> qpat_x_assum `lo = _` SUBST_ALL_TAC >>
-  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[NoAsms, sym_frame_inv_def] >> strip_tac >>
-  `!n cs ss ss'. asm_sym_rel prog env cs ss /\ sym_steps prog env n ss = SymOK ss' ==>
-    ?cs'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
-      asm_sym_rel prog env cs' ss'` by metis_tac[asm_sym_steps_lockstep] >>
-  drule_all (REWRITE_RULE [sym_steps_mode_def, asmSymBridgeTheory.asm_sym_rel_core_canonical]
-    (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
-      `code_ok` |-> `asm_data_env_ok prog env`]
-      symInstAssertPrepareOwnTheory.sym_assert_unreachable_frame_prepare_mode_core)) >> simp[]
-QED
-
-Theorem sym_assert_fresh_release_kinds[local]:
-  sym_kinds_ok cplan fn ret srest
-    (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack)) ss /\
-  fresh_label prefix (ps with ps_stack := stack_pop 1 ps.ps_stack) = (lbl,qs) ==>
-  sym_kinds_ok cplan fn ret srest (release_dead_spills nl qs) ss
-Proof
-  MATCH_ACCEPT_TAC symInstAssertOwnTheory.sym_assert_fresh_release_kinds
-QED
-
-Theorem sym_assert_unreachable_prepared_suffix[local]:
-  inst.inst_opcode = ASSERT_UNREACHABLE /\ inst.inst_operands = [cond] /\
-  step_inst fuel ctx inst vs = OK vsout /\
-  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
-  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  asm_sym_rel prog env mid (ready with sym_stack := localtop) /\
-  sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
-  sym_kinds_ok cplan fn ret srest arranged ready /\ ready.sym_stack = localtop ++ srest /\
-  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
-  arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
-  EVERY (\op. op <> dead_stack_marker) [cond] /\
-  (!op. MEM op [cond] ==> eval_operand op (frame_view fn ra vs) =
-    operand_val (frame_view fn ra vs) lo op) /\
-  asm_static_wf prog /\ asm_block_at prog ready.sym_base.as_pc
-    [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
-  fresh_label "reachable" (arranged with ps_stack := stack_pop 1 arranged.ps_stack) = (lbl,p3) ==>
-  ?full. sym_steps prog env 3 ready = SymOK full /\
-    full.sym_mem_labels = ready.sym_mem_labels /\
-    sym_kinds_ok cplan fn ret srest (release_dead_spills nl p3) full
-Proof
-  strip_tac >>
-  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets prog)) sv = SOME w)
-    localtop mid.as_stack` by gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  drule_all (REWRITE_RULE [sym_steps_mode_def] (Q.INST
-    [`allow_own` |-> `F`, `slo` |-> `SND (compute_label_offsets prog)`]
-    symInstAssertSuffixOwnTheory.sym_assert_unreachable_prepared_suffix_mode_core)) >> simp[]
 QED
 
 Theorem sym_assert_unreachable_inst_symbolic_run:

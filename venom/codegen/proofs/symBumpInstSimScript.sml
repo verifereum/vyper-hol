@@ -64,46 +64,6 @@ Proof
   ACCEPT_TAC symBumpRunOwnTheory.selected_prefix_outputs_absent
 QED
 
-Theorem bump_plan_length[local]:
-  LENGTH (execute_plan fmp (xs ++ ys ++ bump_emit_ops ++ zs ++ ws)) =
-  LENGTH (execute_plan fmp (xs ++ ys)) + (2 + LENGTH (execute_plan fmp (zs ++ ws)))
-Proof
-  ACCEPT_TAC symBumpRunOwnTheory.bump_plan_length
-QED
-
-Theorem bump_success_operand_values[local]:
-  inst.inst_opcode = BUMP /\ inst.inst_operands = [bop;sop] /\
-  step_inst fuel ctx inst s = OK t /\
-  (!op. MEM op [bop;sop] ==> eval_operand op s = operand_val s lo op) ==>
-  ?bv sz. operand_val s lo bop = SOME bv /\ operand_val s lo sop = SOME sz
-Proof
-  ACCEPT_TAC symBumpRunOwnTheory.bump_success_operand_values
-QED
-
-Theorem sym_bump_endpoint_compose[local]:
-  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
-  sym_steps p env (LENGTH (execute_plan fmp (xs ++ ys))) ss = SymOK ready /\
-  sym_steps p env 2 ready = SymOK full /\
-  sym_steps p env (LENGTH (execute_plan fmp (zs ++ ws))) full = SymOK final /\
-  sym_kinds_ok cplan fn ret srest qs final /\
-  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
-    FLOOKUP ready.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
-  full.sym_mem_labels = ready.sym_mem_labels /\
-  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
-    FLOOKUP final.sym_mem_labels b = FLOOKUP full.sym_mem_labels b) ==>
-  ?last. sym_steps p env
-      (LENGTH (execute_plan fmp (xs ++ ys ++ bump_emit_ops ++ zs ++ ws))) ss = SymOK last /\
-    sym_kinds_ok cplan fn ret srest qs last /\
-    (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
-      FLOOKUP last.sym_mem_labels b = FLOOKUP labs0 b)
-Proof
-  strip_tac >>
-  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [sym_frame_inv_def]) >>
-  drule_all (REWRITE_RULE [sym_steps_mode_def]
-    (Q.INST [`allow_own` |-> `F`] sym_bump_endpoint_compose_mode)) >> simp[]
-QED
-
 Theorem sym_bump_inst_symbolic_run:
   lo = SND (compute_label_offsets prog) /\
   inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\

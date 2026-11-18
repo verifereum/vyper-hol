@@ -5,15 +5,6 @@ Ancestors
   fnPlanLineageInventory deepResidualSim fnPlanPrefix
   symGeneratedAssignOwn symGeneratedZeroOwn
 
-Theorem sym_zero_spill_offsets[local]:
-  EVERY (\s. case s of SOSpill off => off < dimword (:256)
-    | SORestore off => off < dimword (:256) | _ => T) ops ==>
-  !off. MEM (SOSpill off) ops ==> off < dimword (:256)
-Proof
-  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum (qspec_then `SOSpill off` mp_tac) >> simp[]
-QED
-
 Theorem sym_generated_phi_sim:
   inst.inst_opcode = PHI /\ inst_wf inst /\
   codegen_ready_fn fn /\ fn_shape_ok fn /\ label_flow_ok ctx /\

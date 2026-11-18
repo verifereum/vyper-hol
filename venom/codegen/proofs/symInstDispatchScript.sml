@@ -3,22 +3,6 @@ Ancestors
   symInstPieces symZeroInstSim symEmitSim codegenSymRel stackPlanGen
   fnPlanLineageInventory venomWf asmIR venomInst symInstDispatchOwn
 
-Theorem istore_operand_shape[local]:
-  inst.inst_opcode = ISTORE /\ inst_wf inst ==>
-  ?dst value. inst.inst_operands = [dst; value] /\
-    compute_operands inst = [dst; value]
-Proof
-  MATCH_ACCEPT_TAC symInstDispatchOwnTheory.istore_operand_shape
-QED
-
-Theorem assertion_operand_shape[local]:
-  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
-  inst_wf inst ==>
-  ?cond. inst.inst_operands = [cond] /\ compute_operands inst = [cond]
-Proof
-  MATCH_ACCEPT_TAC symInstDispatchOwnTheory.assertion_operand_shape
-QED
-
 Theorem sym_non_bump_inst_symbolic_run:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0

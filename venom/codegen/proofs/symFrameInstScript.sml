@@ -15,16 +15,6 @@ Ancestors
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst dfgDefs symFrameInstOwn symFrameBoundaryPairing symEmitSim
 
-Theorem bump_operand_shape[local]:
-  inst.inst_opcode = BUMP /\ inst_wf inst ==>
-  ?base_op size_op ptr next.
-    inst.inst_operands = [base_op; size_op] /\
-    inst.inst_outputs = [ptr; next] /\
-    compute_operands inst = [base_op; size_op]
-Proof
-  MATCH_ACCEPT_TAC symFrameInstOwnTheory.bump_operand_shape
-QED
-
 Theorem sym_inst_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
