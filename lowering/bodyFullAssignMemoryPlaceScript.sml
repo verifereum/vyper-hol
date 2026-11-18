@@ -103,12 +103,12 @@ Proof
      drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
   `typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv)` by
     (fs[typed_copy_effect_def,typed_copy_state_frame_def,typed_copy_frame_def,
-        venom_state_component_equality] >> metis_tac[]) >>
+        venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
   `alloca_history func t` by
     (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
        (qspec_then `cx_dead H0 cx` mp_tac) >>
-     strip_tac >> fs[stmt_state_rel_def] >>
-     metis_tac[body_full_path_alloca_history]) >>
+     strip_tac >>
+     metis_tac[body_full_path_alloca_history, stmt_state_rel_local_ptrs_alloca]) >>
   `ci_mono sa sb` by
     metis_tac[ci_mono_compile_store_memory,pairTheory.SND] >>
   `t.vs_alloca_next = s.vs_alloca_next` by
@@ -182,12 +182,12 @@ Resume body_assign_memory_place_execution[staged_finish]:
      drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
   `typed_copy_effect ctx func sn sb u t (w2n dw) (type_memory_size dtv)` by
     (fs[typed_copy_effect_def,typed_copy_state_frame_def,typed_copy_frame_def,
-        venom_state_component_equality] >> metis_tac[]) >>
+        venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
   `alloca_history func t` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ (OK t,Gf,tf)`
        (qspec_then `cx_dead H0 cx` mp_tac) >>
-     strip_tac >> fs[stmt_state_rel_def] >>
-     metis_tac[body_full_path_alloca_history]) >>
+     strip_tac >>
+     metis_tac[body_full_path_alloca_history, stmt_state_rel_local_ptrs_alloca]) >>
   `t.vs_alloca_next = u.vs_alloca_next` by
     (qpat_assum `typed_copy_state_frame _ _ _ _ _`
       (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next` o CONJUNCT1 o

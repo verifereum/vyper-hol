@@ -142,7 +142,7 @@ Resume body_assign_local_memory_rhs_frontier[read]:
   qunabbrev_tac `childQ` >> disch_then (strip_assume_tac o BETA_RULE) >> gvs[] >>
   qpat_assum `!tail. eval_expr _ _ _ = _`
     (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [APPEND_NIL])) >>
-  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
   gvs[] >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>

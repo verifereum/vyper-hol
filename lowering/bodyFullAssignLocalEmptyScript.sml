@@ -197,7 +197,7 @@ QED
 Resume body_assign_empty_scalar_suffix[history]:
   `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
-    (fs[fn_has_code_def,same_blocks_def,IS_PREFIX_APPEND] >>
+    (fs[fn_has_code_def,same_blocks_def,rich_listTheory.IS_PREFIX_APPEND] >>
      qexists_tac `l` >>
      `LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sb)) = 0` by decide_tac >>
      simp[listTheory.DROP_APPEND]) >>
