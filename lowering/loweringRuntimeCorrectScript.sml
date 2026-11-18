@@ -43,6 +43,7 @@ Ancestors
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
   fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
   acceptedContextPhi vyperLoweringCorrect
+  vyperEvalReadingErrors
 
 val _ = Parse.hide "body";
 
@@ -896,14 +897,13 @@ Proof
   Cases_on `r` >> gvs[exit_result_def, terminates_def]
 QED
 
-(* ADMISSION: statement only.  Waits for its proof by the evaluator's mutual induction. *)
 Theorem eval_stmts_missing_gas_reading_empty:
   !cx body st st'.
     eval_stmts cx body st =
       (INR (Error (RuntimeError "msg.gas: no gas reading")), st') ==>
     st'.gas_obs = []
 Proof
-  cheat
+  ACCEPT_TAC (cj 2 evaluate_missing_reading_state)
 QED
 
 Theorem gas_marked_eval_stmts_readings_available:
