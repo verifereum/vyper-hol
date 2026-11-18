@@ -10,7 +10,7 @@ Theorem classified_fallback_runtime_interval[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   FST (SND (SND (classify_functions tops))) =
-    SOME (mut,F,rr,"__default__",args,[],ret,fbody) /\
+    SOME (mut,nr,rr,"__default__",args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl ==>
   ?fb ds de sx opened entry_end ce key tr view rt.
@@ -21,7 +21,7 @@ Theorem classified_fallback_runtime_interval[local]:
     fn_has_code ds de efn /\
     ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
     new_block fb sx = (sx.cs_current_bb,opened) /\
-    compile_fallback_body ce (mut = Payable) F key tr view fbody rt opened =
+    compile_fallback_body ce (mut = Payable) nr key tr view fbody rt opened =
       ((),entry_end) /\
     cenv_static_ok ce /\ ce.ce_return_pc = NONE /\
     ~supported_stmts_expr_exists expr_shape_root fbody /\
@@ -62,7 +62,7 @@ Proof
      irule package_internal_fn_shape_ok >> gs[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
-      (SOME (mut,F,rr,"__default__",args,([] : expr list),ret,fbody))))` by
+      (SOME (mut,nr,rr,"__default__",args,([] : expr list),ret,fbody))))` by
     (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> simp[]) >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
@@ -119,7 +119,7 @@ Proof
   drule_all cs_extends_raw_entry_label >>
   disch_then (qspec_then `"__entry"` mp_tac) >> gvs[] >> strip_tac >>
   gvs[Abbr `fbpkg`, package_fallback_fn_def, set_fallback_package_target_def] >>
-  qmatch_asmsub_abbrev_tac `compile_fallback_body ce (mut = Payable) F key tr view fbody rt` >>
+  qmatch_asmsub_abbrev_tac `compile_fallback_body ce (mut = Payable) nr key tr view fbody rt` >>
   `shape_state fallback_st` by metis_tac[shape_state_new_block] >>
   `cs_extends external_st fallback_st` by metis_tac[cs_extends_new_block] >>
   `cs_extends fallback_st entry_end` by
@@ -134,11 +134,11 @@ Proof
   gvs[fallback_shape_ok_def]
 QED
 
-Theorem source_fallback_entry_check_code:
+Theorem source_fallback_entry_check_code_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   FST (SND (SND (classify_functions tops))) =
-    SOME (mut,F,rr,"__default__",args,[],ret,fbody) /\
+    SOME (mut,nr,rr,"__default__",args,[],ret,fbody) /\
   mut <> Payable /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl ==>
@@ -156,7 +156,7 @@ Proof
   strip_tac >> drule_all classified_fallback_runtime_interval >> strip_tac >>
   Cases_on `compile_entry_checks 0 F opened` >>
   rename1 `compile_entry_checks 0 F opened = (u,checked)` >> Cases_on `u` >>
-  `compile_guarded_body ce F key tr view fbody rt checked = ((),entry_end)` by
+  `compile_guarded_body ce nr key tr view fbody rt checked = ((),entry_end)` by
     (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      qpat_x_assum `compile_entry_checks _ _ _ = _` mp_tac >>
      simp[compile_fallback_body_def, compile_entry_checks_def,
@@ -179,4 +179,26 @@ Proof
   qpat_x_assum `new_block _ _ = _` mp_tac >>
   simp[new_block_def, comp_bind_def, comp_return_def] >>
   strip_tac >> gvs[block_is_terminated_def]
+QED
+
+Theorem source_fallback_entry_check_code:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  FST (SND (SND (classify_functions tops))) =
+    SOME (mut,F,rr,"__default__",args,[],ret,fbody) /\
+  mut <> Payable /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  fn_entry_label efn = SOME elbl ==>
+  ?fb ds de opened checked.
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fb ds = ((),de) /\
+    fn_has_code ds de efn /\
+    ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
+    compile_entry_checks 0 F opened = ((),checked) /\
+    fn_has_code opened checked efn /\ opened.cs_current_bb = fb /\
+    opened.cs_current_insts = [] /\ ~block_is_terminated opened
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL source_fallback_entry_check_code_nr))
 QED

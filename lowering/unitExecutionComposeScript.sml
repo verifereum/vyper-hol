@@ -81,7 +81,8 @@ Proof
   irule gas_origin_ptr_path_append >> metis_tac[]
 QED
 
-Theorem unit_execution_compose:
+(* A final action may extend the observations while preserving their horizons. *)
+Theorem unit_execution_compose_horizon:
   !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
@@ -94,7 +95,10 @@ Theorem unit_execution_compose:
     gas_outcome_full (DF, 0, E, ctx, func, []) tops cx st0 source
       (es0, s0, G0, tn0) Q R /\
     (!gobs res ee. source (es0 with gas_obs := gobs) = (res, ee) ==>
-       SND (SND (SND (CT gobs))) = ee.storage_trace) /\
+       (storage_trace_domain cx st0 (SND (SND (SND (CT gobs)))) <=>
+        storage_trace_domain cx st0 ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H (SND (SND (SND (CT gobs)))) <=>
+            valid_horizon cx st0 H ee.storage_trace)) /\
     (!gx res ee.
        (!tail. source (es0 with gas_obs := gx ++ tail) =
                (res, ee with gas_obs := tail)) ==>
@@ -159,8 +163,8 @@ Proof
           Cases_on `source (es0 with gas_obs :=
                       gas_explicit marks s0.vs_gas_readings ++ tail)` >>
           rename1 `_ = (res, ee)` >>
-          `SND (SND (SND (CT (gas_explicit marks s0.vs_gas_readings ++
-                              tail)))) = ee.storage_trace` by metis_tac[] >>
+          qpat_assum `!gobs res ee. _ ==> (_ <=> _) /\ _` drule >>
+          strip_tac >> asm_rewrite_tac[] >>
           fs[gas_bad_storage_at_def] >>
           first_x_assum (qspec_then `tail` mp_tac) >> simp[]) >>
       `valid_horizon cx st0 H es0.storage_trace` by metis_tac[] >>
@@ -173,9 +177,14 @@ Proof
            (ACCEPT_TAC o REWRITE_RULE [listTheory.APPEND_NIL]))) >>
       Cases_on `CT gx` >> rename1 `CT gx = (cr, rest)` >>
       PairCases_on `rest` >> rename1 `CT gx = (cr, am', rqs, obs)` >>
-      `obs = ee.storage_trace` by
-        (qpat_x_assum `!gobs res ee. _ ==> SND _ = _` drule >>
-         asm_simp_tac (srw_ss()) []) >>
+      `storage_trace_domain cx st0 obs /\
+       (!H. valid_horizon cx st0 H obs <=> valid_horizon cx st0 H ee.storage_trace)` by
+        (qpat_assum `!gobs res ee. _ ==> (_ <=> _) /\ _`
+           (fn transfer =>
+              qpat_assum `source (es0 with gas_obs := gx) = _`
+                (mp_tac o MATCH_MP transfer)) >>
+         qpat_assum `CT gx = (cr,am',rqs,obs)` (fn tr => simp_tac (srw_ss()) [tr]) >>
+         strip_tac >> asm_simp_tac bool_ss []) >>
       `!tail. CT (gx ++ tail) = CT gx` by metis_tac[] >>
       qexistsl_tac [`cr`, `am'`, `rqs`, `obs`] >> simp[] >> disj2_tac >>
       `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -274,4 +283,78 @@ Proof
   conj_tac >- metis_tac[] >>
   `valid_horizon cx st0 H es0.storage_trace` by metis_tac[] >>
   metis_tac[entry_focus_prefix]
+QED
+
+Theorem unit_execution_compose:
+  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX.
+    storage_trace_frame source /\
+    storage_trace_domain cx st0 es0.storage_trace /\
+    (!H. valid_horizon cx st0 H es0.storage_trace ==>
+       gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+         (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0) /\
+       ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
+        !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
+                 vs0)) /\
+    gas_outcome_full (DF, 0, E, ctx, func, []) tops cx st0 source
+      (es0, s0, G0, tn0) Q R /\
+    (!gobs res ee. source (es0 with gas_obs := gobs) = (res, ee) ==>
+       SND (SND (SND (CT gobs))) = ee.storage_trace) /\
+    (!gx res ee.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) ==>
+       !tail. CT (gx ++ tail) = CT gx) /\
+    (!gx err ee cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (INR (Error err), ee with gas_obs := tail)) /\
+       unspecified_behaviour_exempt tops err /\
+       CT gx = (cr, am', rqs, obs) ==>
+       EX (cr, am', rqs)) /\
+    (!gx res ee t.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       storage_trace_domain cx st0 ee.storage_trace /\
+       (?H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                 Q H res (ee with gas_obs := []) G tn t) ==>
+       ?r. exit_result r /\
+         !H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                  Q H res (ee with gas_obs := []) G tn t ==>
+           ?G' tn'.
+             gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+               (t, G, tn) [] (r, G', tn') /\
+             !cr am' rqs obs. CT gx = (cr, am', rqs, obs) ==>
+               REL H (cr, am', rqs) r) /\
+    (!gx res ee H gt r cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       valid_horizon cx st0 H ee.storage_trace /\
+       exit_result r /\ R H res (ee with gas_obs := []) gt r /\
+       CT gx = (cr, am', rqs, obs) ==>
+       REL H (cr, am', rqs) r) ==>
+    ?marks.
+      ((!tail. ~storage_trace_domain cx st0
+                 (SND (SND (SND
+                   (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
+       ?H leaf leaf_pg leaf_g leaf_tn finish.
+         gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+           (vs0, FEMPTY, entry_taint) marks
+           (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+      ?res am' rqs obs.
+        (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
+                (res, am', rqs, obs)) /\
+        ((EX (res, am', rqs) /\
+          ?H leaf leaf_pg leaf_g leaf_tn finish.
+            gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+              (vs0, FEMPTY, entry_taint) marks
+              (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+         (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
+            gas_origin_path T E ctx func vs0 marks r /\
+            !H. valid_horizon cx st0 H obs ==>
+              REL H (res, am', rqs) r /\
+              !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
+                       entry_taint vs0))
+Proof
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL [`DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`] unit_execution_compose_horizon) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
 QED

@@ -286,7 +286,7 @@ Definition exprs_case_def:
 End
 
 (* The positional operands of an external call, evaluated in order and
-   read only after the keyword operands (eval_expr_results): each one's
+   read only after the keyword operands: each one's
    judgments if the ones before it evaluate (bodySim's body_results_ok). *)
 Definition results_case_def:
   results_case nocalls ctx func cenv cx [] = T /\

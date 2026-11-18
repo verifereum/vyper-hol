@@ -7,6 +7,7 @@
  *
  * TOP-LEVEL:
  *   dispatched_entry_endpoint_default
+ *   fallback_entry_registration_joint
  *)
 Theory fallbackEntryEndpoint
 Ancestors
@@ -16,6 +17,13 @@ Ancestors
   defaultConcreteRegistrationCapacity defaultGetterArguments
   defaultEntrySourcePreparation defaultEntryEndpointAssembly
   argumentRegistrationOpen selectedEntryPrefixCode
+  defaultDispatchPlacement defaultDispatchRouting defaultConcreteRegistrationDefs
+  entryStateRel abiAllocationHistory
+  exprLoweringProps loweringPosts
+  vyperLoweringCorrect vyperCompiler fragExec loweringStateRelDefs bodyPtrDefs
+  compileVyper compileEnv moduleLowering loweringShapeProps loweringShapeDefs
+  entryReachBodyFmp acceptedContextPhi venomWf venomInst
+  runtimeBodyStartDefs runtimeFallbackPackageEnvironment
 
 Theorem dispatched_entry_endpoint_default:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
@@ -170,4 +178,278 @@ Proof
   >- (qexistsl [`G`,`tn`] >> gvs[])
   >- (qexistsl [`G`,`tn`] >> gvs[]) >>
   gvs[] >> qexistsl [`G`,`tn`] >> simp[]
+QED
+
+Theorem fallback_guarded_placement[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME elbl /\
+  set_fallback_package_target rpolicy.rpol_target
+    (package_fallback_fn tops T (K global_nonreentrant_slot)
+      (FST (SND (SND (classify_functions tops))))) =
+    SOME (ce,pay,nr,key,ut,view,fbody,rt) ==>
+  ?fallback label_st dispatch_st opened checks st st'.
+    runtime_fallback_body_start tops rpolicy
+      ("fn___default__",ce,[],4,pay,nr,key,ut,view,fbody,rt) st /\
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fallback label_st = ((),dispatch_st) /\
+    compile_external_fn_bodies
+      (MAP (set_external_package_target rpolicy.rpol_target o
+        package_external_fn tops T (K global_nonreentrant_slot))
+        (FST (classify_functions tops))) dispatch_st = ((),opened) /\
+    new_block fallback opened = (opened.cs_current_bb,checks) /\
+    compile_entry_checks 4 pay checks = ((),st) /\
+    compile_guarded_body ce nr key ut view fbody rt st = ((),st') /\
+    cs_extends dispatch_st checks /\ cs_extends checks st /\
+    fn_has_code label_st dispatch_st fn /\ fn_has_code checks st fn /\
+    fn_has_code st st' fn /\ ~block_is_terminated st /\
+    label_st.cs_current_bb = "__entry" /\ label_st.cs_current_bb = elbl /\
+    label_st.cs_current_insts = []
+Proof
+  strip_tac >> drule_all default_runtime_compile_layout >> strip_tac >> gvs[] >>
+  Cases_on `compile_entry_checks 4 pay checks` >>
+  rename1 `compile_entry_checks 4 pay checks = (u,st)` >> Cases_on `u` >>
+  `compile_guarded_body ce nr key ut view fbody rt st = ((),entry_end)` by
+    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `compile_entry_checks 4 pay checks = _` mp_tac >>
+     simp[compile_fallback_body_def, compile_entry_checks_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[])) >>
+  `shape_state st /\ cs_extends checks st` by
+    (mp_tac (Q.SPECL [`4`,`pay`] compile_entry_checks_shape) >>
+     simp[shape_step_def, shape_extends_def] >> disch_then drule >> simp[]) >>
+  `cs_extends st entry_end` by
+    (mp_tac (Q.SPECL [`ce`,`nr`,`key`,`ut`,`view`,`fbody`,`rt`]
+       compile_guarded_body_shape) >>
+     impl_tac >- fs[fallback_shape_ok_def] >>
+     simp[shape_step_def, shape_extends_def] >> disch_then drule >> simp[]) >>
+  `fn_has_code checks st (mk_raw_function "__entry" (all_blocks entry_end)) /\
+   fn_has_code st entry_end (mk_raw_function "__entry" (all_blocks entry_end))` by
+    metis_tac[fn_has_code_split] >>
+  `~block_is_terminated st` by
+    (irule compile_entry_checks_open >>
+     qexistsl [`4`,`pay`,`checks`,`()`] >> simp[] >>
+     drule emitHelperPropsTheory.new_block_props >> simp[block_is_terminated_def]) >>
+  qexistsl [`fallback`,`label_st`,`dispatch_st`,`external_st`,`checks`,`st`,`entry_end`] >>
+  simp[] >> rpt conj_tac
+  >- (rw[runtime_fallback_body_start_def] >>
+      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
+      rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
+      Cases_on `fb`
+      >- fs[package_fallback_fn_def, set_fallback_package_target_def] >>
+      rename1 `classify_functions tops = (exts,ints,SOME fb,ctor)` >>
+      qexistsl [`fb`,`fallback`,`label_st`,`dispatch_st`,`external_st`,`checks`] >> simp[])
+  >- metis_tac[cs_extends_trans] >>
+  qpat_x_assum `(fallback,label_st) = fresh_label _ _` (mp_tac o SYM) >>
+  simp[fresh_label_def, initial_compile_state_def]
+QED
+
+Theorem fallback_empty_environment[local]:
+  set_fallback_package_target target
+    (package_fallback_fn tops T (K global_nonreentrant_slot)
+      (SOME (mut,nr,rr,"__default__",[],([] : expr list),ret,fbody))) =
+    SOME (ce,pay,nr,key,ut,view,fbody,rt) /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx ==>
+  ce.ce_vars = FEMPTY /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\
+  ce.ce_imm_alloca = NONE /\ ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
+  immutable_section_layout ce tops /\
+  storage_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  transient_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE)
+Proof
+  strip_tac >>
+  `?lbl ce_ext pa mc pay' nr' key' ut' iv' rt'.
+    set_external_package_target target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,nr,rr,"__default__",[],([] : expr list),ret,fbody)) =
+      (lbl,ce_ext,pa,mc,pay',nr',key',ut',iv',fbody,rt')` by
+    simp[package_external_fn_def, set_external_package_target_def] >>
+  pop_assum strip_assume_tac >>
+  `ce_ext = ce` by metis_tac[same_source_fallback_package_environment] >> gvs[] >>
+  drule targeted_external_package_layout >> strip_tac >>
+  `ce.ce_vars = FEMPTY /\ ce.ce_return_pc = NONE /\
+   ce.ce_module_vars = add_immutable_locations
+     (get_struct_fields (make_struct_fields_map tops)) tops 0
+     (add_module_var_locations tops FEMPTY)` by
+    (qpat_x_assum `set_fallback_package_target _ _ = _` mp_tac >>
+     simp[package_fallback_fn_def, set_fallback_package_target_def,
+       update_cenv_nonreentrant_def] >>
+     Cases_on `ret = NoneT` >> simp[update_cenv_ret_abi_def] >>
+     strip_tac >> gvs[build_compile_env_def, allocate_args_def] >>
+     rpt (pairarg_tac >> gvs[])) >>
+  simp[] >> irule entry_storage_vars_rel_immutable >> simp[] >>
+  qexistsl [`am`,`tops`,`tx`] >>
+  simp[vyperInterpreterTheory.initial_evaluation_context_def] >>
+  metis_tac[source_typing_ok_vtype_keys_distinct, supportedProgramTheory.supported_program_def]
+QED
+
+Theorem fallback_empty_registration_state[local]:
+  initial_venom_state_rel tops am tx vs /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es) /\
+  fn_inst_ids_distinct fn /\ ce.ce_vars = FEMPTY /\
+  ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
+  immutable_section_layout ce tops /\
+  storage_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  transient_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  default_registration_resources ctx fn site 0 st s tn /\
+  default_registration_entry_frame vs s ==>
+  alloca_history fn s /\ return_buf_frame NONE ce st s /\
+  !H : (bool # bytes32 # type_value) list # num list.
+    stmt_state_rel H ctx fn ce
+      (initial_evaluation_context am.sources am.layouts tx NONE) es s /\
+    ghost_inv H NONE ce
+      (initial_evaluation_context am.sources am.layouts tx NONE) es G tn s
+Proof
+  strip_tac >>
+  `local_ptrs_rel fn ce [env] s` by simp[local_ptrs_rel_def, local_region_def] >>
+  `!H : (bool # bytes32 # type_value) list # num list.
+    state_rel H fn ce (initial_evaluation_context am.sources am.layouts tx NONE) es s` by
+    (gen_tac >> irule body_entry_state_rel_runtime >> simp[] >>
+     qexistsl [`am`,`env`,`mut`,`tops`,`vs`] >>
+     fs[default_registration_entry_frame_def,
+        vyperInterpreterTheory.initial_evaluation_context_def]) >>
+  fs[default_registration_resources_def] >>
+  simp[return_buf_frame_def, ghost_inv_def, return_buf_ptr_def, stor_taint_ok_def,
+       stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
+  rpt strip_tac >> drule_all abi_alloca_history_function_size >> simp[]
+QED
+
+(* A raw miss or short calldata runs the fallback's payable check. With no
+   arguments to register, that endpoint is the start of the guarded body. *)
+Theorem fallback_entry_registration_joint:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+    SOME (tx.function_name,tx.args) /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+   FIND (\(name,tys). abi_method_id (type_env tops) name tys =
+       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
+  ?cenv sa st' func s0 G0 tn0 rt.
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    runtime_fallback_body_start tops rpolicy
+      ("fn___default__",cenv,[],4,mut = Payable,T,global_nonreentrant_slot,
+       T,mut = View,fbody,rt) sa /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View) fbody rt sa =
+      ((),st') /\
+    fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
+    ~ctx_has_dalloca unit.cu_context /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
+    gas_path_mem unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
+      0 (OK s0) /\
+    alloca_history func s0 /\ fresh_vars_wrt sa s0 /\
+    cenv.ce_return_pc = NONE /\ return_buf_frame NONE cenv sa s0 /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    s0.vs_gas_readings = vs.vs_gas_readings /\
+    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context func [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)) /\
+    (!H : (bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H unit.cu_context func cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+      ghost_inv H NONE cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0) /\
+    !D explicit.
+      gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+         FEMPTY,entry_taint) [] (OK s0,G0,tn0)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EXISTS is_default_decl tops /\ tx.function_name = "__default__" /\ tx.args = []` by
+    (drule default_dispatch_raw_cases >>
+     disch_then (DISJ_CASES_THEN2 strip_assume_tac strip_assume_tac) >- simp[] >>
+     fs[] >> decide_tac) >>
+  `!fallback. linear_dispatch_target vs.vs_call_ctx.cc_calldata
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fallback = fallback` by metis_tac[default_raw_fallback_target] >>
+  qpat_x_assum `LENGTH _ < 4 \/ FIND _ _ = NONE` kall_tac >>
+  `vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,T,args,[],ret,fbody)` by fs[] >>
+  `args = []` by metis_tac[default_fallback_no_args] >> fs[] >>
+  drule_all default_fallback_classified >>
+  disch_then (qx_choose_then `rraw` assume_tac) >>
+  qabbrev_tac `rt = if ret = NoneT then NONE else SOME ret` >>
+  `?ce. set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot)
+        (FST (SND (SND (classify_functions tops))))) =
+      SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by
+    simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `rt`] >>
+  rename1 `set_fallback_package_target _ _ = SOME (ce,_,T,_,T,_,_,_)` >>
+  drule lower_vyper_runtime_unit_context_entry >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (qx_choose_then `fn` assume_tac))) >>
+  `?elbl. fn_entry_label fn = SOME elbl` by
+    (drule lowering_context_ok_bridge >>
+     simp[listTheory.EVERY_MEM] >> strip_tac >>
+     `fn_has_entry fn` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+     Cases_on `fn.fn_blocks` >> gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  rename1 `fn_entry_label fn = SOME elbl` >>
+  drule_all fallback_guarded_placement >>
+  disch_then (qx_choosel_then
+    [`fallback`,`label_st`,`dispatch_st`,`opened`,`checks`,`st`,`st'`] strip_assume_tac) >>
+  gvs[] >>
+  `new_block (linear_dispatch_target vs.vs_call_ctx.cc_calldata
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops)))) fallback)
+    opened = (opened.cs_current_bb,checks)` by simp[] >>
+  drule_at (Pat `compile_selector_dispatch_linear _ _ _ = _`)
+    default_entry_prefix_resources >>
+  disch_then (drule_at (Pat `new_block _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_external_fn_bodies _ _ = _`)) >>
+  disch_then (drule_at (Pat `send_call_value _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_entry_checks _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `venomInst$lookup_function _ _ = _`)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
+  simp[] >>
+  disch_then (qspec_then `ARB` (qx_choosel_then [`s0`,`G0`,`tn0`] strip_assume_tac)) >>
+  `fn_inst_ids_distinct fn` by
+    metis_tac[lowered_runtime_function_inst_ids_distinct, venomInstTheory.lookup_function_MEM] >>
+  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
+  `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb /\
+       phi_prefix_length bb.bb_instructions = 0` by
+    (`?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
+       (Cases_on `fn.fn_blocks` >>
+        gvs[fn_entry_label_def, entry_block_def, lookup_block_def, listTheory.FIND_thm]) >>
+     metis_tac[lower_vyper_runtime_unit_block_phi]) >>
+  `set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot)
+        (SOME (mut,T,rraw,"__default__",[],([] : expr list),ret,fbody))) =
+    SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by fs[] >>
+  drule_all fallback_empty_environment >> strip_tac >>
+  drule_at (Pat `default_registration_resources _ _ _ _ _ _ _`)
+    fallback_empty_registration_state >>
+  disch_then (drule_at (Pat `send_call_value _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `storage_vars_rel _ _`)) >>
+  disch_then (qspec_then `G0` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl [`ce`,`st`,`st'`,`s0`,`G0`,`tn0`] >>
+  fs[defaultConcreteRegistrationDefsTheory.default_registration_resources_def,
+     defaultConcreteRegistrationDefsTheory.default_registration_entry_frame_def,
+     local_ptrs_reserved_def, Abbr `rt`]
 QED
