@@ -5,6 +5,7 @@ Ancestors
   deployUnitExecution deployUnitExecutionBoundary compileVyper o1PassContract lowerDloadDefs e2eEntry
   asmOptimizer vyperTypeContractSoundness vyperCompiler stackPlanGen list arithmetic
   ctorDeployEntryTransport ctorDeployBodyJoint ctorDeployShape deployUnitExecutionTransport
+  deployUnitOutcomesTransport
 
 Theorem deploy_source_ok_opt_code:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es.
@@ -68,8 +69,7 @@ Proof
   fs[Abbr `n`, MAX_DEF] >> decide_tac
 QED
 
-(* ADMISSION: moves the deploy certificate to any call outcomes, for a call-free constructor.
-   Waits for its proof. *)
+(* Move the deploy certificate to any call outcomes for a call-free constructor. *)
 Theorem deploy_unit_execution_correct_with_outcomes:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
    shadow_ctx marks vs outs.
@@ -82,7 +82,8 @@ Theorem deploy_unit_execution_correct_with_outcomes:
     deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
       dunit (vs with vs_outcomes := outs)
 Proof
-  cheat
+  rpt strip_tac >> irule deploy_certificate_outcomes_transport >>
+  fs[deploy_phases_def] >> metis_tac[]
 QED
 
 (* The deploy gas link's certificate premise at the raw free-memory pointer. *)

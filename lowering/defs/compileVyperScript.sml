@@ -1571,18 +1571,17 @@ Definition create_positional_def:
     (if MEM i kws then [] else [x]) ++ create_positional kws (i + 1) xs
 End
 
-(* A create builtin's per-operand results, from the stored evaluation order
-   to source order: the operands not supplied as keywords in place, then the
-   supplied keywords in source order (kws). *)
+(* Put CREATE operands in source order from their AST layout. Keep the
+   positional operands in place and append the supplied keywords in order
+   (kws). *)
 Definition create_source_order_def:
   create_source_order kws xs =
     create_positional kws 0 xs ++ MAP (λi. EL i xs) kws
 End
 
-(* Internal callees of an expression in get_descendants(Call) order.  This is
-   int_calls_expr except for create operands, which the AST stores in
-   evaluation order.  Builtins the frontend models as IntCall (shift) name no
-   internal function, so order_internals ignores them. *)
+(* Internal callees of an expression in get_descendants(Call) order.
+   Visit CREATE operands in source order. Builtins the frontend models as
+   IntCall (shift) name no internal function, so order_internals ignores them. *)
 Definition src_calls_expr_def:
   src_calls_expr (IfExp _ c x y) =
     src_calls_expr c ++ src_calls_expr x ++ src_calls_expr y ∧

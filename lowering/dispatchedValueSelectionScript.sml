@@ -1,6 +1,6 @@
 (* Arbitrary-calldata selection, independent of argument re-encoding. *)
 Theory dispatchedValueSelection
-Ancestors sourceEntrySelection checkedSelectorTableProps loweringShapeProps
+Ancestors calldataSelectorProps sourceEntrySelection checkedSelectorTableProps loweringShapeProps
   entryDispatchProps moduleLoweringProps selectorDispatch supportedProgram supportedNames
   vyperCalldata selectorCompilerProps vyperABIEntries compileVyper publicGetterProps
 Libs BasicProvers
@@ -34,17 +34,6 @@ Proof
   asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem source_cd_selector[local]:
-  !cd. 4 <= LENGTH cd ==> cd_selector cd = w2n (calldata_method_id cd)
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE 4 cd) = 4` by simp[listTheory.LENGTH_TAKE_EQ] >>
-  drule calldata_method_id_four_bytes >>
-  simp[GSYM cd_selector_def] >> strip_tac >>
-  qspec_then `TAKE 4 cd` mp_tac calldata_method_id_append >> simp[] >>
-  disch_then (qspec_then `DROP 4 cd` mp_tac) >> simp[listTheory.TAKE_DROP]
-QED
-
 Theorem table_no_hit[local]:
   !fns cd fb. 4 <= LENGTH cd /\
     (!name tys. MEM (name,tys)
@@ -57,7 +46,7 @@ Proof
   PairCases >> rpt strip_tac >>
   simp[build_selectors_def, compute_selector_method_id,
        linear_dispatch_target_def, calldata_hits_selector_def] >>
-  drule source_cd_selector >> strip_tac >>
+  drule cd_selector_method_id >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
 
@@ -136,8 +125,8 @@ Theorem signature_hit_entry[local]:
   FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
     (abi_external_signatures tops) = SOME (name,tys) /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops))) /\
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops))) /\
   !fb. linear_dispatch_target cd
     (MAP (\(sel,lbl,z). (sel,lbl))
       (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
@@ -169,7 +158,50 @@ Proof
       simp[compute_selector_method_id, listTheory.MEM_MAP] >> strip_tac >>
       qexists_tac `(cd_selector cd,"fn_" ++ name,
         selector_has_trailing_zeroes (cd_selector cd))` >> simp[]) >>
-  drule source_cd_selector >> simp[calldata_hits_selector_def]
+  drule cd_selector_method_id >> simp[calldata_hits_selector_def]
+QED
+
+Theorem source_dispatched_linear_target_nr:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  calldata_dispatch tops cd = SOME (name,vals) /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+    !fb. linear_dispatch_target cd
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
+      "fn_" ++ name) \/
+  (name = "__default__" /\ EXISTS is_default_decl tops /\
+    (?rr. FST (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,name,args,[],ret,fbody)) /\
+    !fb. linear_dispatch_target cd
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
+Proof
+  strip_tac >>
+  `name = "__default__" /\ EXISTS is_default_decl tops ==>
+    ?rr. FST (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,name,args,[],ret,fbody)` by
+    (strip_tac >> drule default_classified_present >> strip_tac >>
+     drule_all fallback_source_lookup >> strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `LENGTH cd < 4`
+  >- (gvs[calldata_dispatch_def] >>
+      disj2_tac >> simp[linear_dispatch_target_short]) >>
+  Cases_on `FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
+    (abi_external_signatures tops)`
+  >- (gvs[calldata_dispatch_def] >> disj2_tac >> simp[] >>
+      gen_tac >> irule table_no_hit >> simp[] >>
+      `!l n ts. FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd) l = NONE /\
+        MEM (n,ts) l ==> abi_method_id (type_env tops) n ts <> cd_selector cd` by
+        (Induct >> simp[listTheory.FIND_thm] >> PairCases >>
+         Cases_on `abi_method_id (type_env tops) h0 h1 = cd_selector cd` >>
+         simp[] >> metis_tac[]) >>
+      drule source_signature_table >> strip_tac >> metis_tac[]) >>
+  PairCases_on `x` >>
+  gvs[calldata_dispatch_def, AllCaseEqs()] >>
+  disj1_tac >> `4 <= LENGTH cd` by decide_tac >>
+  drule_all signature_hit_entry >> simp[] >> metis_tac[]
 QED
 
 Theorem source_dispatched_linear_target:
@@ -190,27 +222,5 @@ Theorem source_dispatched_linear_target:
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
 Proof
-  strip_tac >>
-  `name = "__default__" /\ EXISTS is_default_decl tops ==>
-    ?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,F,rr,name,args,[],ret,fbody)` by
-    (strip_tac >> drule default_classified_present >> strip_tac >>
-     drule_all fallback_source_lookup >> strip_tac >> gvs[] >> metis_tac[]) >>
-  Cases_on `LENGTH cd < 4`
-  >- (gvs[calldata_dispatch_def] >>
-      disj2_tac >> simp[linear_dispatch_target_short]) >>
-  Cases_on `FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
-    (abi_external_signatures tops)`
-  >- (gvs[calldata_dispatch_def] >> disj2_tac >> simp[] >>
-      gen_tac >> irule table_no_hit >> simp[] >>
-      `!l n ts. FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd) l = NONE /\
-        MEM (n,ts) l ==> abi_method_id (type_env tops) n ts <> cd_selector cd` by
-        (Induct >> simp[listTheory.FIND_thm] >> PairCases >>
-         Cases_on `abi_method_id (type_env tops) h0 h1 = cd_selector cd` >>
-         simp[] >> metis_tac[]) >>
-      drule source_signature_table >> strip_tac >> metis_tac[]) >>
-  PairCases_on `x` >>
-  gvs[calldata_dispatch_def, AllCaseEqs()] >>
-  disj1_tac >> `4 <= LENGTH cd` by decide_tac >>
-  drule_all signature_hit_entry >> simp[] >> metis_tac[]
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL source_dispatched_linear_target_nr))
 QED

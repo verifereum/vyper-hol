@@ -4,7 +4,7 @@ Theory externalReturnRawJoint
 Ancestors
   rawReturnHalt rawReturnMem bodyPtrDefs fragGasOriginPtrExec
   fragGasOriginPtr fragGasPathPtr fragGasPathMem ptrSafeRun ptrDiscipline
-  loweringHalt compileEnv venomState venomExecSemantics venomInst
+  loweringHalt nonreentrantExit compileEnv venomState venomExecSemantics venomInst
   words finite_map contextCodegenRel ptrSafetyTransport
   fragGasSeqPtr fragGasSeqMem emitHelperProps
 
@@ -268,3 +268,118 @@ Resume compile_external_return_raw_joint[return_edge]:
 QED
 
 Finalise compile_external_return_raw_joint
+
+Theorem compile_external_return_raw_unlock_joint:
+  compile_external_return (SOME (Var src)) prim T ei msz nr nkey T iv st =
+    (x,st') /\
+  fn_has_code st st' func /\ not_fresh_at st src /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
+  eval_operand (Var src) s = SOME p /\
+  mload (w2n p) s = n2w (LENGTH bs) /\
+  read_memory (w2n (p + 32w)) (LENGTH bs) s = bs /\
+  LENGTH bs < dimword (:256) /\
+  w2n p + 32 + LENGTH bs <= dimword (:256) /\
+  w2n p + 32 + LENGTH bs <= s.vs_alloca_next /\
+  ptr_covers G tn src s (32 + LENGTH bs) /\
+  (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==>
+       i NOTIN tn.t_mem) ==>
+  ?ss G' tn'.
+    ss.vs_returndata = bs /\
+    ss.vs_accounts = s.vs_accounts /\
+    ss.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    ss.vs_immutables = s.vs_immutables /\
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions /\
+    !H.
+      dead_lo_ok H (DF H) lo cenv cx /\ stor_taint_ok_at (DF H) tn s ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (Halt ss,G',tn')
+Proof
+  strip_tac >>
+  drule compile_external_return_unlock >> strip_tac >>
+  `st1 =
+     if nr /\ ~iv then
+       st with <|cs_current_insts := st.cs_current_insts ++
+         [mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []];
+         cs_next_id := st.cs_next_id + 1|>
+     else st` by
+    (match_mp_tac (Q.INST [`ut` |-> `T`] (SPEC_ALL optional_unlock_code)) >>
+     asm_rewrite_tac[]) >>
+  `cs_extends st st1 /\ st1.cs_next_var = st.cs_next_var` by
+    (qpat_x_assum `st1 = _` SUBST1_TAC >>
+     Cases_on `nr /\ ~iv` >>
+     pop_assum (fn th => simp_tac (srw_ss()) [th,cs_extends_refl]) >>
+     irule cs_extends_same_block >>
+     simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends st1 st'` by
+    (qpat_assum `compile_external_return _ _ T _ _ F _ _ _ st1 = _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [] (Q.INST [`nr` |-> `F`]
+         (SPEC_ALL compile_external_return_raw_mem_parts)))) >>
+     simp[]) >>
+  `fn_has_code st st1 func /\ fn_has_code st1 st' func` by
+    (match_mp_tac (Q.SPECL [`st`,`st1`,`st'`,`func`]
+      fragExecTheory.fn_has_code_split) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  pop_assum strip_assume_tac >>
+  mp_tac (Q.INST [`st'` |-> `st1`]
+    (SPEC_ALL optional_transient_unlock_paths_joint)) >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule optional_unlock_state >> strip_tac >>
+  `u.vs_immutables = s.vs_immutables` by
+    (qpat_assum `u = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `nr /\ ~iv` >> simp[tstore_def]) >>
+  `not_fresh_at st1 src` by
+    (qpat_assum `not_fresh_at st src` mp_tac >>
+     qpat_assum `st1.cs_next_var = st.cs_next_var`
+       (fn th => REWRITE_TAC [loweringStateRelDefsTheory.not_fresh_at_def, th])) >>
+  `allocas_from lo u` by
+    (qpat_assum `allocas_from lo s` mp_tac >>
+     qpat_assum `u.vs_allocas = s.vs_allocas`
+       (fn th => REWRITE_TAC [allocas_from_def, th])) >>
+  `eval_operand (Var src) u = SOME p` by simp[] >>
+  `mload (w2n p) u = n2w (LENGTH bs) /\
+   read_memory (w2n (p + 32w)) (LENGTH bs) u = bs /\
+   w2n p + 32 + LENGTH bs <= u.vs_alloca_next` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`u.vs_alloca_next = s.vs_alloca_next`, `u.vs_memory = s.vs_memory`,
+        `mload (w2n p) s = _`, `read_memory (w2n (p + 32w)) (LENGTH bs) s = _`,
+        `w2n p + 32 + LENGTH bs <= s.vs_alloca_next`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[mload_def,read_memory_def]) >>
+  `ptr_covers G tn' src u (32 + LENGTH bs)` by
+    (qpat_assum `ptr_covers G tn src s (32 + LENGTH bs)` mp_tac >>
+     qpat_assum `!op. eval_operand op u = eval_operand op s`
+       (mp_tac o Q.SPEC `Var src`) >>
+     qpat_assum `!op. op_taint tn' op = op_taint tn op`
+       (mp_tac o Q.SPEC `Var src`) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ptr_covers_def,eval_operand_def]) >>
+  `!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn'.t_mem` by
+    (qpat_assum `tn'.t_mem = tn.t_mem` (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
+  mp_tac (Q.INST [`ut` |-> `T`, `st` |-> `st1`, `s` |-> `u`, `tn` |-> `tn'`]
+    (SPEC_ALL compile_external_return_raw_joint)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`ss`,`G1`,`tn1`] strip_assume_tac) >>
+  qexistsl_tac [`ss`,`G1`,`tn1`] >>
+  ntac 7 (conj_tac >- asm_rewrite_tac[]) >>
+  gen_tac >> strip_tac >>
+  `stor_taint_ok_at (DF H) tn' u` by
+    (irule optional_transient_unlock_stor_taint >> metis_tac[]) >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspecl_then [`DF H`,`explicit`]
+      (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  disch_then (qspecl_then [`u`,`G`,`tn'`,`[]`,`Halt ss`,`G1`,`tn1`]
+    mp_tac) >>
+  impl_tac
+  >- (conj_tac >- REFL_TAC >>
+      qpat_assum `!D. stor_taint_ok_at D tn' u ==> _`
+        (match_mp_tac o Q.SPEC `DF H`) >> first_assum ACCEPT_TAC) >>
+  REWRITE_TAC [listTheory.APPEND_NIL]
+QED

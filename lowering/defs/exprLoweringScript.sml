@@ -2682,24 +2682,41 @@ Definition compile_create_salt_def:
     od
 End
 
-(* Evaluate located values before allocating the temporary tuple, then unwrap
-   them while storing it, exactly as for external-call arguments. *)
+(* Lower the constructor arguments, freezing each one before the next is
+   lowered, as compile_ext_call_args does.
+   Mirrors Python: create.py _prepare_ctor_args *)
+Definition compile_create_ctor_args_def:
+  compile_create_ctor_args cfn cenv [] = comp_return ([] : vyper_value list) ∧
+  compile_create_ctor_args cfn cenv (e::es) =
+    do vv <- cfn cenv (expr_type e) e;
+       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv es) vv;
+       rest <- compile_create_ctor_args cfn cenv es;
+       comp_return (vv::rest)
+    od
+End
+
+(* Evaluate the constructor arguments before allocating the temporary tuple,
+   then unwrap them while storing it, exactly as for external-call arguments. *)
 Definition compile_create_ctor_tuple_def:
   compile_create_ctor_tuple cfn cenv args =
     let tys = MAP (lowered_value_type cenv) args in
-    do vals <- compile_multi_vvs cfn cenv args;
+    do vals <- compile_create_ctor_args cfn cenv args;
        tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
        compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
        return tmp.buf_operand
     od
 End
 
+(* Constructor arguments of create_from_blueprint, lowered before the keyword
+   operands later_es (value=, salt=, code_offset=). *)
 Definition compile_create_blueprint_args_def:
-  compile_create_blueprint_args cfn cenv raw_args args =
+  compile_create_blueprint_args cfn cenv raw_args later_es args =
     if raw_args then
       (case args of
          [e] =>
-           do ptr <- lower_value cfn cenv (expr_type e) e;
+           do vv <- cfn cenv (expr_type e) e;
+              vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv later_es) vv;
+              ptr <- unwrap_value cenv vv;
               len <- emit_op MLOAD [ptr];
               data <- emit_op ADD [ptr; Lit 32w];
               return (data,len)
@@ -2709,8 +2726,8 @@ Definition compile_create_blueprint_args_def:
     else
       let tuple_ty = TupleT (MAP (lowered_value_type cenv) args) in
       let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
-      do buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
-         src <- compile_create_ctor_tuple cfn cenv args;
+      do src <- compile_create_ctor_tuple cfn cenv args;
+         buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
          len <- compile_abi_encode_to_buf buf.buf_operand src enc;
          return (buf.buf_operand,len)
       od
@@ -2756,19 +2773,19 @@ Definition compile_raw_create_def:
     let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
     do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;
        bytecode <- compile_create_snapshot cenv vv bytecode_ty;
-       value <- lower_value cfn cenv (expr_type value_e) value_e;
        len <- emit_op MLOAD [bytecode];
        data <- emit_op ADD [bytecode; Lit 32w];
        (ptr,total) <-
          (if ctor_args = [] then return (data,len)
-          else do buf <- compile_alloc_buffer (maxlen + abi_size);
+          else do src <- compile_create_ctor_tuple cfn cenv ctor_args;
+                  buf <- compile_alloc_buffer (maxlen + abi_size);
                   compile_copy_memory_dynamic buf.buf_operand data len;
-                  src <- compile_create_ctor_tuple cfn cenv ctor_args;
                   dst <- emit_op ADD [buf.buf_operand; len];
                   args_len <- compile_abi_encode_to_buf dst src enc;
                   total <- emit_op ADD [len; args_len];
                   return (buf.buf_operand,total)
                od);
+       value <- lower_value cfn cenv (expr_type value_e) value_e;
        salt <- compile_create_salt cfn cenv salt_e;
        compile_create_dispatch ptr total value salt rof
     od
@@ -2786,6 +2803,24 @@ Definition compile_create_call_def:
              compile_raw_create cfn cenv target_e value_e
                (if has_salt then FRONT rest else rest)
                (if has_salt then SOME (LAST rest) else NONE) rof
+         | CreateFromBlueprint raw_args =>
+           let suffix = if has_salt then TL rest else rest in
+           let offset_e = origin_fold_value (HD suffix) in
+           do target <- lower_value cfn cenv (expr_type target_e) target_e;
+              (ptr,len) <- compile_create_blueprint_args cfn cenv raw_args
+                (value_e :: TAKE (if has_salt then 2 else 1) rest) (TL suffix);
+              value <- lower_value cfn cenv (expr_type value_e) value_e;
+              salt <- compile_create_salt cfn cenv
+                (if has_salt then SOME (HD rest) else NONE);
+              offset <-
+                (case offset_e of
+                   Literal _ (IntL i) => return (Lit (i2w i))
+                 | _ => lower_value cfn cenv (expr_type (HD suffix)) (HD suffix));
+              size <- compile_create_blueprint_check
+                (is_int_literal offset_e) target offset;
+              compile_create_blueprint_append target value salt offset
+                size ptr len rof
+           od
          | _ =>
            do target <- lower_value cfn cenv (expr_type target_e) target_e;
               value <- lower_value cfn cenv (expr_type value_e) value_e;
@@ -2801,23 +2836,7 @@ Definition compile_create_call_def:
                        (if has_salt then SOME (HD rest) else NONE);
                      compile_create_copy target value salt rof
                   od
-              | CreateFromBlueprint raw_args =>
-                  let suffix = if has_salt then TL rest else rest in
-                  let offset_e = origin_fold_value (HD suffix) in
-                  do salt <- compile_create_salt cfn cenv
-                       (if has_salt then SOME (HD rest) else NONE);
-                     offset <-
-                       (case offset_e of
-                          Literal _ (IntL i) => return (Lit (i2w i))
-                        | _ => lower_value cfn cenv
-                                 (expr_type (HD suffix)) (HD suffix));
-                     size <- compile_create_blueprint_check
-                       (is_int_literal offset_e) target offset;
-                     (ptr,len) <- compile_create_blueprint_args cfn cenv raw_args (TL suffix);
-                     compile_create_blueprint_append target value salt offset
-                       size ptr len rof
-                  od
-              | RawCreate => return (Lit 0w)
+              | _ => return (Lit 0w)
            od)
     | _ => do emit_inst INVALID [] []; return (Lit 0w) od
 End

@@ -8,7 +8,7 @@ Ancestors
   fragGasSeqPtr ghostPcTransportPtr instIdxIndep loweringHalt
   bodyFullUnwrapRun fragExecMem exprLoweringProps
   bodyPtrMakeArrayCopyStep bodyPtrMakeArrayWordStore bodyFullAllocaFresh localPtrsProps
-  intCallCallee instSeqComposePtr bodyPtrStructLitMonotoneRepresentation memoryValueEncoding
+  intCallCallee instSeqComposePtr robustCopyTransportPtr memoryValueEncoding
 
 Theorem materialize_param_ghost_bind:
   ghost_inv_at D lo d cenv cx es G tn s /\ es.scopes = [env] /\
@@ -711,13 +711,13 @@ Resume materialize_params_full[stack_pending_values]:
   `mem_bytes_at (w2n w) bsize ut.vs_memory =
    mem_bytes_at (w2n w) bsize us.vs_memory` by
     (fs[mat_frame_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `!i. i < bsize ==> (w2n w+i IN qt2.t_mem ==> w2n w+i IN qt.t_mem)` by
+  `!i. i < bsize /\ w2n w+i IN qt2.t_mem ==> w2n w+i IN qt.t_mem` by
     (rpt strip_tac >> `w2n w+i < us.vs_alloca_next` by decide_tac >>
      qpat_x_assum `!i. i < us.vs_alloca_next ==> _`
        (qspec_then `w2n w+i` mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`borrowed_entry.type`, `borrowed_entry.value`,
     `w2n (w:bytes32)`, `w2n (w:bytes32)`, `bsize`, `qt.t_mem`, `qt2.t_mem`,
-    `us.vs_memory`, `ut.vs_memory`] robust_val_in_memory_copy_transport_mono) >>
+    `us.vs_memory`, `ut.vs_memory`] robust_val_in_memory_decreasing_taint_transport) >>
   impl_tac
   >- (conj_tac >- (first_assum ACCEPT_TAC) >>
       conj_tac >- (first_assum ACCEPT_TAC) >>
