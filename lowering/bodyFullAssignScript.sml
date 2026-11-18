@@ -66,7 +66,7 @@ Ancestors
   exprSimAggregateEncoding bodyDynArraySource vyperTypeArgFits
   immutableAssignCompose immutableAssignStore immutableBytestringRuntime fragGasCopyLoop fragGasSeqAbort immutableAssignEmpty abiEncoderProps immutableDeployAssignFacts
   bodyPtrBytestringBuiltinsWindowGhost bodyFullToplevelCtorSourceLayout
-  stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte bodyFullAllocaFresh abiEncodeMaterialize allocLimits bodyPtrIfExpAllocSource bodyPtrBopRepresentationFrame logValueFramePtr revertReasonPrefixPtr immutableDeployAssignAdmissible ghostObservationPtr immutableDeployAssignBytes bodyFullAllocGeneric bodyCopyMemoryBase exprSimBufferStore bodyPtrIfExpCopyHeader bodyPtrIfExpBytesPost bytesCopyCode eventTopicValueProps reasonCopySourcePtr vfmConstants valueTypingMemoryProps
+  stmtSimDeclMem immutableRelation vyperPlaceFrames structFieldsProps byte bodyFullAllocaFresh abiEncodeMaterialize allocLimits bodyPtrIfExpAllocSource bodyPtrBopRepresentationFrame logValueFramePtr revertReasonPrefixPtr immutableDeployAssignAdmissible ghostObservationPtr immutableDeployAssignBytes bodyFullAllocGeneric bodyCopyMemoryBase exprSimBufferStore bodyPtrIfExpCopyHeader bodyPtrIfExpBytesPost bytesCopyCode eventTopicValueProps reasonCopySourcePtr vfmConstants valueTypingMemoryProps valueCopy[qualified,ignore_grammar] assignTuplePtrLocalFixedCopy reasonTupleCopyPtr fragGasSeqPtrContext
 Libs
   monadsyntax
 
@@ -5955,3 +5955,129 @@ Resume body_assign_local_memory_bytes_copy_effect[effect]:
 QED
 
 Finalise body_assign_local_memory_bytes_copy_effect
+
+Theorem body_assign_local_memory_flat_copy_effect:
+  compile_copy_memory (Var xd) (Var xs) n sa = ((),sb) /\
+  0 < n /\ n = type_memory_size dtv /\
+  val_wf dtv v /\ val_footprint dtv v <= n /\
+  (!m. mem_agree_outside tn.t_mem u.vs_memory m ==>
+       val_in_memory dtv v (w2n sw) m) /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs u = SOME sw /\ lookup_var xd u = SOME dw /\
+  ptr_covers G tn xs u n /\ ptr_covers G tn xd u n /\
+  w2n sw + n < dimword(:256) /\ w2n dw + n < dimword(:256) /\
+  w2n sw + n <= u.vs_alloca_next /\ w2n dw + n <= u.vs_alloca_next /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~u.vs_halted /\
+  u.vs_current_bb = sa.cs_current_bb /\ u.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK t,Gf,tf)) /\
+    typed_copy_effect ctx func sa sb u t (w2n dw) (type_memory_size dtv) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+       val_in_memory dtv v (w2n dw) m) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x u /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw+n) ==> (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `n < dimword(:256)` by decide_tac >>
+  `w2n (n2w n : 256 word) = n` by simp[] >>
+  `eval_operand (Var xs) u = SOME sw /\ eval_operand (Var xd) u = SOME dw /\
+   eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
+  `emit_void MCOPY [Var xd; Var xs; Lit (n2w n)] sa = ((),sb)` by
+    (Cases_on `n` >> gvs[compile_copy_memory_def]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) u` by
+    (drule_all compile_copy_memory_body_mem_ok >> simp[]) >>
+  `?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+     isPREFIX (emitted_insts sa sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
+    suspend "prefix" >>
+  qabbrev_tac `sf = mcopy (w2n dw) (w2n sw) n u` >>
+  qabbrev_tac `tnf = step_taint (mk_inst sa.cs_next_id MCOPY
+    [Var xd; Var xs; Lit (n2w n)] []) u sf tn` >>
+  qabbrev_tac `t = sf with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts sa sb)` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK t,G,tnf)` by
+    suspend "path" >>
+  `gas_marked_path F ctx func u 0 (OK t)` by suspend "marked" >>
+  `typed_copy_effect ctx func sa sb u t (w2n dw) (type_memory_size dtv)` by
+    suspend "effect" >>
+  qexistsl_tac [`t`,`G`,`tnf`] >> simp[] >>
+  conj_tac >- suspend "robust" >>
+  suspend "ghost"
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[prefix]:
+  qpat_x_assum `fn_has_code sa sb func` mp_tac >> simp[fn_has_code_def] >>
+  strip_tac >> goal_assum drule >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,DROP_LENGTH_APPEND] >> simp[]
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[path]:
+  gen_tac >>
+  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  `op_taint tn (Lit (n2w n)) = {}` by simp[op_taint_def] >>
+  `inst_seq_ptr D 0 (ctx with ctx_functions := []) func PG G tn
+     (emitted_insts sa sb) u G tnf /\ run_inst_seq (emitted_insts sa sb) u = OK sf` by
+    (mp_tac (Q.SPECL [`D`,`ctx with ctx_functions := []`,`func`,`PG`,`G`,`tn`,`u`,
+                       `sa.cs_next_id`,`xd`,`xs`,`Lit (n2w n)`,`sw`,`dw`,`n2w n`]
+       assignTuplePtrLocalFixedCopyTheory.mcopy_operand_seq_ptr) >>
+     simp[Abbr `tnf`, Abbr `sf`] >> gvs[]) >>
+  `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) u G tnf` by
+    (irule fragGasSeqPtrContextTheory.inst_seq_ptr_restore_ctx >>
+     simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
+  `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) u G tnf` by
+    ((irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+     simp[mk_inst_def] >> qexists_tac `0` >> simp[] >> (gvs[mk_inst_def, fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport]))) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by simp[mk_inst_def,is_terminator_def] >>
+  drule_all run_inst_seq_gas_origin_ptr_path >>
+  simp[Abbr `t`,mk_inst_def]
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[marked]:
+  irule gas_marked_path_from_mem >>
+  qpat_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `ARB` mp_tac) >>
+  disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+  drule gas_origin_path_erase >> simp[gas_marked_path_def]
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[effect]:
+  simp[typed_copy_effect_def] >>
+  simp[Abbr `t`,IgnAsm `Abbrev (t = _)`,
+       blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
+  `!a len. a + len <= w2n dw \/ w2n dw + n <= a ==>
+      mem_bytes_at a len sf.vs_memory = mem_bytes_at a len u.vs_memory` by
+    (rpt strip_tac >> (metis_tac[valueCopyTheory.mem_bytes_at_mcopy_disjoint])) >>
+  `LENGTH u.vs_memory <= LENGTH sf.vs_memory` by
+    simp[Abbr `sf`,placeMemoryTypedPrimitiveTheory.mcopy_memory_length] >>
+  qpat_x_assum `n = type_memory_size dtv` SUBST_ALL_TAC >>
+  gvs[] >>
+  qpat_assum `!a len. a + len <= w2n dw \/ type_memory_size dtv + w2n dw <= a ==>
+        mem_bytes_at a len sf.vs_memory = mem_bytes_at a len u.vs_memory`
+    (SUBST1_TAC o EQT_INTRO) >>
+  simp[Abbr `sf`,IgnAsm `Abbrev (sf = _)`,mcopy_def,write_memory_with_expansion_def,
+       lookup_var_def,venom_state_component_equality]
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[robust]:
+  simp[Abbr `t`,IgnAsm `Abbrev (t = _)`] >>
+  qx_gen_tac `m` >> strip_tac >>
+  irule reasonTupleCopyPtrTheory.reason_mcopy_robust_representation >>
+  (metis_tac[])
+QED
+
+Resume body_assign_local_memory_flat_copy_effect[ghost]:
+  `tnf = step_taint (mk_inst sa.cs_next_id MCOPY [Var xd; Var xs; Lit (n2w n)] [])
+     u (mcopy (w2n dw) (w2n sw) n u) tn` by simp[Abbr `tnf`,Abbr `sf`] >>
+  drule_all assignTuplePtrLocalFixedCopyTheory.mcopy_operand_taint_frames_ptr >>
+  strip_tac >>
+  simp[Abbr `t`,IgnAsm `Abbrev (t = _)`,Abbr `sf`,op_taint_def,
+       mcopy_def,write_memory_with_expansion_def,lookup_var_def]
+QED
+
+Finalise body_assign_local_memory_flat_copy_effect
