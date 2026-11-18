@@ -94,17 +94,6 @@ Proof
   rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem type_place_target_attribute_prefix[local]:
-  !attrs env tgt vt.
-    type_place_target env
-      (FOLDL (\t a. AttributeTarget t a) tgt attrs) = SOME vt ==>
-    ?base. type_place_target env tgt = SOME base
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >>
-  simp[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
-QED
-
 Theorem attribute_type_fold_none[local]:
   !xs D. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) NONE xs = NONE
 Proof

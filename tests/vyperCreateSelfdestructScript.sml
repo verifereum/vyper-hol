@@ -637,13 +637,13 @@ QED
    and both deployed accounts survive the expression error. *)
 Theorem blueprint_invalid_source_fails_after_constructor_effects:
   EVERY (\salted.
-    EVERY (\rof.
-        let e = blueprint_test_expr blueprint_test_nested_create F salted rof 0
-          [blueprint_test_nested_create] in
-        let r = blueprint_test_run e (blueprint_test_state []) in
+    EVERY (\rof. !e r final.
+        e = blueprint_test_expr blueprint_test_nested_create F salted rof 0
+          [blueprint_test_nested_create] /\
+        r = blueprint_test_run e (blueprint_test_state []) /\
+        final = SND r ==>
         eval_expr blueprint_test_context e (blueprint_test_state []) = r /\
         FST r = INR (Error (RuntimeError "create source has no deployable code")) /\
-        let final = SND r in
         (lookup_account 41w final.accounts).nonce = 4 /\
         (lookup_account 41w final.accounts).balance = 100 /\
         (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).nonce = 1 /\
@@ -744,14 +744,15 @@ QED
    left it (one byte), so the CREATE2 initcode starts with two zero bytes. *)
 Theorem blueprint_size_uses_source_after_constructor_changes_it:
   blueprint_copy_size (2 ** 256 - 1) [0w] = 2 /\
-  let e = blueprint_test_expr
-    (Literal (BaseT AddressT)
-      (BytesL (word_to_bytes (vfmContext$address_for_create 41w 2) T)))
-    F T T (2 ** 256 - 1) [blueprint_test_populate_source] in
-  let r = blueprint_test_run e (blueprint_test_state []) in
-  eval_expr blueprint_test_context e (blueprint_test_state []) = r /\
+  (!e r final.
+    e = blueprint_test_expr
+      (Literal (BaseT AddressT)
+        (BytesL (word_to_bytes (vfmContext$address_for_create 41w 2) T)))
+      F T T (2 ** 256 - 1) [blueprint_test_populate_source] /\
+    r = blueprint_test_run e (blueprint_test_state []) /\
+    final = SND r ==>
+    eval_expr blueprint_test_context e (blueprint_test_state []) = r /\
     FST r = INL (Value (AddressV blueprint_test_captured_address)) /\
-    let final = SND r in
     (lookup_account 41w final.accounts).nonce = 4 /\
     (lookup_account 41w final.accounts).balance = 100 /\
     (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).nonce = 1 /\
@@ -759,11 +760,10 @@ Theorem blueprint_size_uses_source_after_constructor_changes_it:
     (lookup_account blueprint_test_captured_address final.accounts).nonce = 1 /\
     (lookup_account blueprint_test_captured_address final.accounts).code = [] /\
     final.logs = [<|logger := 43w; topics := []; data := [99w]|>] /\
-    final.requests = [] /\ IS_NONE final.outcomes
+    final.requests = [] /\ IS_NONE final.outcomes)
 Proof
-  rewrite_tac[vyperSmallStepTheory.eval_expr_eq_cont_cps,
-       GSYM blueprint_test_run_def, LET_THM] >>
-  BETA_TAC >> rewrite_tac[blueprint_test_captured_run] >>
+  simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
+       GSYM blueprint_test_run_def, blueprint_test_captured_run] >>
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>
