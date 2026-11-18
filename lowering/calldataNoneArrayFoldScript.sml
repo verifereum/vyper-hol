@@ -6,6 +6,7 @@ Ancestors
   entrySinkExtraction abiDecoderArrayInit abiDecoderArrayLoopInit
   abiDecoderIndexInit abiDecoderContract abiDecoderReentry abiDecoderExecution
   abiDecoderDynarrayPrefix allocaFrontierBound lowerDloadPtrTaint
+  abiDecoderGuards emitHelper calldataCountGuardRejectOrigin
   compileEnv emitHelperProps venomState venomInst venomExecSemantics
   venomMemDefs bodyPtrDefs ptrSafetyTransport codegenRel contextCodegenRel
   loweringStateRelDefs words finite_map pred_set ptrDiscipline
@@ -73,7 +74,7 @@ Theorem none_array_first_header:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var (Var root) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\ ptr_covers G tn root s sz /\
   d < dimword(:256) /\ 32 <= sz /\ d+sz <= s.vs_alloca_next /\
-  w2n (abi_decode_load CALLDATALOAD sw s) <= maxn /\ maxn < dimword(:256) /\
+  w2n (abi_decode_load CALLDATALOAD sw s) <= maxn MOD dimword(:256) /\
   ((FLOOKUP s.vs_allocas hs.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
    (FLOOKUP s.vs_allocas hs.cs_next_id = SOME (p,32) /\ p < dimword(:256) /\ p+32 <= s.vs_alloca_next)) /\
   p+32 < dimword(:256) /\ (d+sz <= p \/ p+32 <= d) ==>
@@ -100,6 +101,17 @@ Theorem none_array_first_header:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
+  `abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (maxn MOD dimword(:256)) asz st = ((ip,cnt),ls) /\
+   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w)
+    (maxn MOD dimword(:256)) asz st = ((),gs)` by
+    (simp[abi_decode_array_loop_init_def,abi_decode_dynarray_position_prefix_def,
+          abi_decode_dynarray_prefix_def,abi_decode_count_guard_def,n2w_mod] >>
+     qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
+     qpat_assum `abi_decode_dynarray_prefix _ _ _ maxn _ _ = _` mp_tac >>
+     simp[NoAsms,abi_decode_array_loop_init_def,abi_decode_dynarray_position_prefix_def,
+          abi_decode_dynarray_prefix_def,abi_decode_count_guard_def,n2w_mod]) >>
+  `maxn MOD dimword(:256) < dimword(:256)` by simp[] >>
   drule_all calldata_array_loop_init_repeat_sequence >> strip_tac >>
   drule_all calldata_index_init_local_frontier_fields >> strip_tac >>
   `not_fresh_at st root /\ (!x. src = Var x ==> not_fresh_at st x)` by
@@ -233,4 +245,37 @@ Proof
        alloca_frontier_inv_def,allocaBudgetPropsTheory.remaining_alloca_budget_def,
        lookup_var_def,allocas_from_def] >>
   disch_tac >> conj_tac >- fs[allocas_from_def] >> first_assum ACCEPT_TAC
+QED
+
+(* The count failure occurs before the header store and counter allocation. *)
+Theorem none_array_count_reject[local]:
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),gs) /\
+  abi_decode_array_header (Var root) src CALLDATALOAD gs = (cnt,hs) /\
+  abi_decode_index_init hs = (ip,ls) /\ fn_has_code st ls fn /\
+  eval_operand src s = SOME sw /\ abi_decoder_operand_live st.cs_next_var src /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD sw s) /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?z H u. z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (Abort Revert_abort z,H,u)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  `?cop. abi_decode_count_guard CALLDATALOAD src maxn st = (cop,gs)` by
+    (qpat_x_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_dynarray_prefix_def,abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
+          comp_bind_def,comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `cs_extends st gs /\ cs_extends gs ls` by
+    (conj_tac >> irule cs_extends_same_block >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >>
+     metis_tac[inst_extends_trans,inst_extends_def]) >>
+  `fn_has_code st gs fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all calldata_count_guard_rejected_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`z`,`H`,`u`] >> asm_rewrite_tac[]
 QED
