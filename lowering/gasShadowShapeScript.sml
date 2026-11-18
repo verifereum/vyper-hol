@@ -5,7 +5,47 @@ Theory gasShadowShape
 Ancestors
   loweringShapeProps gasShadow gasShadowModuleDefs
   supportedStmtTraverse supportedExprTraverse supportedProgram unitShapeDefs
-  vyperAST list
+  vyperAST list rich_list
+
+Theorem gas_shadow_identity_without_msg_gas[local]:
+  (!p e. (!ty es. p (Builtin ty (Env MsgGas) es)) /\
+    ~supported_expr_exists p e ==> gas_shadow_expr e = e) /\
+  (!p t. (!ty es. p (Builtin ty (Env MsgGas) es)) /\
+    ~supported_target_exists p t ==> gas_shadow_target t = t) /\
+  (!p es. (!ty args. p (Builtin ty (Env MsgGas) args)) /\
+    ~supported_exprs_exists p es ==> MAP gas_shadow_expr es = es) /\
+  (!p opt. (!ty es. p (Builtin ty (Env MsgGas) es)) /\
+    ~supported_opt_exists p opt ==> OPTION_MAP gas_shadow_expr opt = opt) /\
+  (!p fields. (!ty es. p (Builtin ty (Env MsgGas) es)) /\
+    ~supported_fields_exists p fields ==> MAP (I ## gas_shadow_expr) fields = fields)
+Proof
+  ho_match_mp_tac supported_expr_exists_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[supported_expr_exists_def, gas_shadow_expr_def, gas_shadow_builtin_def] >>
+  TRY COND_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem supported_default_expression_gas_shadow:
+  !tops e. supported_default_expression tops e ==> gas_shadow_expr e = e
+Proof
+  simp[supported_default_expression_def] >> rpt strip_tac >>
+  irule (CONJUNCT1 gas_shadow_identity_without_msg_gas) >>
+  qexists_tac `expr_msg_gas_root` >> simp[expr_msg_gas_root_def]
+QED
+
+Theorem omitted_defaults_gas_shadow_id:
+  !tops dflts k. EVERY (supported_default_expression tops) dflts ==>
+    MAP gas_shadow_expr (DROP k dflts) = DROP k dflts
+Proof
+  rpt strip_tac >>
+  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  irule supported_default_expression_gas_shadow >>
+  qexists_tac `tops` >>
+  gvs[EVERY_MEM] >>
+  first_x_assum irule >>
+  irule (Q.SPECL [`dflts`,`k`,`EL x (DROP k dflts)`] MEM_DROP_IMP) >>
+  irule EL_MEM >> simp[]
+QED
 
 Theorem gas_shadow_expr_shape_root:
   expr_shape_root (gas_shadow_expr e) = expr_shape_root e
