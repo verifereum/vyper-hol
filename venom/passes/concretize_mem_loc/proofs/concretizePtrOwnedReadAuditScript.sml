@@ -166,7 +166,8 @@ Proof
   `post.vs_returndata = [byte] /\
    post.vs_memory = (write_memory_with_expansion 0 [byte] s).vs_memory /\
    post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp` by
-    (gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
   `source_memory_write_ranges inst s = [(0,2)]` by
     simp[source_memory_write_ranges_def] >>
   `step_writes inst s post = [(0,1)]` by simp[step_writes_def] >>

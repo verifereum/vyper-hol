@@ -16,7 +16,8 @@ Theorem dload_external_call_frame_fields:
 Proof
   namedCases_on `i.inst_outputs` ["", "out outs"]
   >- simp[exec_ext_call_def] >>
-  Cases_on `outs` >> simp[exec_ext_call_def, update_var_def] >>
+  Cases_on `outs` >> Cases_on `s.vs_outcomes = []` >>
+  simp[exec_ext_call_def, update_var_def] >>
   rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -72,7 +73,7 @@ Proof
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   pure_rewrite_tac[exec_ext_call_def] >> pure_asm_rewrite_tac[LET_THM] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >- simp[] >>
-  Cases_on `outs` >> simp[] >> strip_tac >>
+  Cases_on `outs` >> Cases_on `s.vs_outcomes = []` >> simp[] >> strip_tac >>
   qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
   gvs[update_var_def, extCallOracleTheory.computed_precompile_def]
 QED

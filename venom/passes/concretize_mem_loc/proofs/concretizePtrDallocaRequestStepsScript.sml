@@ -9,7 +9,7 @@ Ancestors
    offsets are source-local; request shell agreement is the relative-content
    boundary.  In particular neither equal pointers nor equal accounts is used. *)
 Theorem ptr_dalloca_request_execution:
-  inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\ inst.inst_outputs = [out] /\
   ((inst.inst_opcode = CALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;value;ao;az;ro;rz] /\
@@ -58,7 +58,7 @@ Theorem ptr_dalloca_request_step:
   inst.inst_outputs = [out] /\ inst.inst_opcode = it.inst_opcode /\
   step_inst fuelt CT it t = OK th /\ th.vs_requests <> t.vs_requests /\
   th.vs_requests = record_request rqt t.vs_requests /\
-  ptr_request_shell rq rqt /\
+  ptr_request_shell rq rqt /\ s.vs_outcomes <> [] /\
   ((inst.inst_opcode = CALL /\
     LIST_REL (\op w. eval_operand op s = SOME w) inst.inst_operands
       [gas;addr;value;ao;az;ro;rz] /\

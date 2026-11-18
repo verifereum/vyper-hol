@@ -127,6 +127,8 @@ Proof
   `?out. inst.inst_outputs = [out] /\ u = update_var out w r` by
     (gvs[exec_delegatecall_def, Abbr `rq1`, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
      metis_tac[]) >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
   `LENGTH s.vs_requests < LENGTH u.vs_requests` by
     (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
      simp[consume_call_outcome_eq, Abbr `rq1`, computed_precompile_def,
@@ -142,6 +144,7 @@ Proof
     (qpat_x_assum `ricf_opaque_frame_agree _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >> strip_tac >>
      drule taint_agree_shared >> simp[ricf_opaque_view_def, ld_shared_agree_def]) >>
+  `t.vs_outcomes <> []` by fs[ld_shared_agree_def] >>
   `accounts_agree_except D s.vs_accounts t.vs_accounts /\
    transient_agree_except D s.vs_transient t.vs_transient` by
     metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe] >>

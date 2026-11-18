@@ -84,9 +84,16 @@ Proof
   qabbrev_tac `rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w,r)` >>
-  `?out. inst.inst_outputs = [out] /\ u = update_var out w r` by
+  `?out. inst.inst_outputs = [out] /\ u = update_var out w r /\ s.vs_outcomes <> []` by
     (gvs[exec_ext_call_def, Abbr `rq1`, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
      metis_tac[]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def,
+        Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `((computed_precompile rq1 /\ computed_precompile rq2 /\
       rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
     request_agree_except D rq1 rq2)` by

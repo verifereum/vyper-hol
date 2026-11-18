@@ -899,6 +899,7 @@ Theorem taint_agree_exec_delegatecall:
        with t_var := set_var_taint tn.t_var [out] {}) s' (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
@@ -1016,6 +1017,7 @@ Theorem taint_agree_delegatecall_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -1046,6 +1048,8 @@ Theorem taint_agree_exec_create_request:
       s' (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >>
   simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
@@ -1218,6 +1222,7 @@ Theorem taint_agree_create_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -1287,6 +1292,8 @@ Theorem taint_agree_exec_ext_call:
 Proof
   rpt gen_tac >> disch_tac >>
   qpat_x_assum `_ /\ _` strip_assume_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >>
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
@@ -1312,6 +1319,7 @@ Theorem taint_agree_call_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>

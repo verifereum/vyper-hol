@@ -131,7 +131,8 @@ Theorem rejected_accounts_trace_domain:
   storage_trace_domain cx st
     (SND (take_request_outcome rq st)).storage_trace
 Proof
-  simp[take_request_outcome_def] >> strip_tac >>
+  strip_tac >> Cases_on `os` >- gvs[take_outcome_def] >>
+  simp[take_request_outcome_def] >>
   simp[storage_trace_domain_def, valid_horizon_def,
        storage_trace_horizon_def, storage_trace_regions_def,
        storage_trace_locks_def, regions_consistent_def,

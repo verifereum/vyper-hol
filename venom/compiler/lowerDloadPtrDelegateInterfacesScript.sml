@@ -59,6 +59,9 @@ Proof
   `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes /\
    s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[dload_equal_environment_def, venom_state_component_equality] >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
                       <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   qabbrev_tac `rr = venom_call_request t addr 0w bo az F with
