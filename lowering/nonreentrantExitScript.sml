@@ -188,7 +188,7 @@ Proof
 QED
 
 (* Explicit Return and body fallthrough share this terminal suffix. *)
-Theorem optional_transient_unlock_stop_joint:
+Theorem optional_transient_unlock_stop_joint_at:
   (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ()) st =
     ((),su) /\
   emit_inst STOP [] [] su = ((),sb) /\
@@ -204,6 +204,9 @@ Theorem optional_transient_unlock_stop_joint:
        else s.vs_transient) /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions /\
+    ss = halt_state
+      ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+        <|vs_inst_idx := LENGTH su.cs_current_insts; vs_returndata := []|>) /\
     (!H explicit.
        dead_lo_ok H (DF H) lo cenv cx /\ stor_taint_ok_at (DF H) tn s ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
@@ -230,6 +233,9 @@ Proof
   qexistsl_tac [`halt_state (u with vs_returndata := [])`, `tn'`] >>
   ntac 6 (conj_tac >- (Cases_on `nr /\ ~iv` >>
     gvs[halt_state_def, tstore_def])) >>
+  conj_tac >-
+    (qpat_assum `u = _` (fn th => rewrite_tac[th]) >>
+     Cases_on `nr /\ ~iv` >> simp[venomStateTheory.venom_state_component_equality]) >>
   rpt gen_tac >> strip_tac >>
   `stor_taint_ok_at (DF H) tn' u` by
     (irule optional_transient_unlock_stor_taint >> metis_tac[]) >>
@@ -250,6 +256,37 @@ Proof
      Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
      first_assum ACCEPT_TAC) >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
+QED
+
+Theorem optional_transient_unlock_stop_joint:
+  (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ()) st =
+    ((),su) /\
+  emit_inst STOP [] [] su = ((),sb) /\
+  fn_has_code st su func /\ fn_has_code su sb func /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ss tn'.
+    ss.vs_returndata = [] /\ ss.vs_accounts = s.vs_accounts /\
+    ss.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+    ss.vs_pending_deletions = s.vs_pending_deletions /\
+    (!H explicit.
+       dead_lo_ok H (DF H) lo cenv cx /\ stor_taint_ok_at (DF H) tn s ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+         (s,G,tn) [] (Halt ss,G,tn'))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`DF` |-> `DF`,`cenv` |-> `cenv`,`cx` |-> `cx`,
+       `G` |-> `G`,`tn` |-> `tn`,`PG` |-> `PG`]
+      (SPEC_ALL optional_transient_unlock_stop_joint_at)) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`ss`,`tn'`] strip_assume_tac) >>
+  qexistsl_tac [`ss`,`tn'`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* The compiler uses the same optional release and STOP on fallthrough. *)

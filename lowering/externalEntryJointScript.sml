@@ -258,7 +258,7 @@ Proof
 QED
 
 (* Both the compiled endpoint and its ghost are fixed before choosing H. *)
-Theorem selected_entry_after_lock[local]:
+Theorem selected_entry_after_lock:
   is_view_mut mut = (mut = View) /\
   cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
   lock_if_nr cx T (is_view_mut mut) es0 = (INL (),es_lock) /\
@@ -458,6 +458,52 @@ Proof
     drule >> simp[GSYM ghost_inv_cx_dead]
 QED
 
+(* Continue any registered runtime entry through its rejecting lock. *)
+Theorem external_entry_abort_from_registration:
+  is_view_mut mut = (mut = View) /\
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+  lock_if_nr cx T (is_view_mut mut) es0 = (INR exc,es_abort) /\
+  compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+    fbody rt sa = ((),st') /\
+  fn_has_code sa st' func /\ ~ctx_has_dalloca ctx /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  s0.vs_gas_readings = ss.vs_gas_readings /\
+  (!H : (bool # bytes32 # type_value) list # num list.
+    stmt_state_rel H ctx func cenv cx es0 s0 /\
+    ghost_inv H NONE cenv cx es0 G0 tn0 s0) /\
+  (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (ss,FEMPTY,entry_taint) [] (OK s0,G0,tn0)) ==>
+  ?a s G tn.
+    expr_exit (INR exc : unit + exception) (Abort a s) /\
+    (exc = Error (RuntimeError "nonreentrant lock") \/
+     exc = Error (RuntimeError "write in static context")) /\
+    s.vs_gas_readings = ss.vs_gas_readings /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+      (ss,FEMPTY,entry_taint) [] (Abort a s,G,tn)
+Proof
+  strip_tac >>
+  drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
+  `global_nonreentrant_slot < dimword (:256)` by
+    simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``]
+    nonreentrant_entry_abort_joint_with_view) >>
+  disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  `exc = Error (RuntimeError "nonreentrant lock") \/
+    exc = Error (RuntimeError "write in static context")` by
+    (qpat_assum `(_ /\ _ /\ exc = _) \/ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> simp[]) >>
+  qexistsl_tac [`a`,`s_abort`,`G_abort`,`tn_abort`] >>
+  simp[] >>
+  rpt gen_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
+    (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  disch_then (qspecl_then [`s0`,`G0`,`tn0`,`[]`,
+    `Abort a s_abort`,`G_abort`,`tn_abort`] mp_tac) >>
+  simp[]
+QED
+
 Theorem external_entry_lock_abort_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 exc es_abort.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -506,25 +552,14 @@ Proof
   qpat_x_assum `nkey = _` SUBST_ALL_TAC >>
   qpat_x_assum `ut' = _` SUBST_ALL_TAC >>
   qpat_x_assum `iv = _` SUBST_ALL_TAC >>
-  drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
-  `global_nonreentrant_slot < dimword (:256)` by
-    simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
-  drule_all (INST_TYPE [alpha |-> ``:256``]
-    nonreentrant_entry_abort_joint_with_view) >>
-  disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]
-    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
-  `exc = Error (RuntimeError "nonreentrant lock") \/
-    exc = Error (RuntimeError "write in static context")` by
-    (qpat_assum `(_ /\ _ /\ exc = _) \/ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> simp[]) >>
-  qexistsl_tac [`a`,`s_abort`,`G_abort`,`tn_abort`] >>
-  simp[] >>
-  rpt gen_tac >>
-  qpat_assum `!D explicit. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
-    (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
-  disch_then (qspecl_then [`s0`,`G0`,`tn0`,`[]`,
-    `Abort a s_abort`,`G_abort`,`tn_abort`] mp_tac) >>
-  simp[]
+  mp_tac (Q.INST [`fbody` |-> `pbody`, `ctx` |-> `unit.cu_context`, `cx` |->
+      `initial_evaluation_context am.sources am.layouts tx NONE`,
+      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                          vs_inst_idx := 0|>`]
+    (SPEC_ALL external_entry_abort_from_registration)) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`] strip_assume_tac) >>
+  qexistsl_tac [`func`,`a`,`s`,`G`,`tn`] >> simp[]
 QED
 
 Theorem external_entry_subst_consts_joint:
