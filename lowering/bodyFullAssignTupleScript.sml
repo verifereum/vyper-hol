@@ -2346,8 +2346,66 @@ Proof
   pop_assum SUBST1_TAC >> irule run_inst_seq_mem_ok_append >> simp[]
 QED
 
+(* The segment overwrites an emitted temporary if it was already bound.
+   Only the compiler's live names, not the entire register domain, matter. *)
+Theorem tuple_immutable_word_segment[local]:
+  compile_imm_store_word imm dst v sa = ((),sb) /\
+  copy_old_operand sa v /\ eval_operand v s = SOME value /\
+  eval_operand dst s = SOME a /\ op_taint tn dst = {} /\ op_prov G dst = NONE /\
+  w2n a + 32 <= lo /\
+  (!base. imm = SOME base ==> eval_operand base s = SOME 0w /\
+     op_taint tn base = {} /\ op_prov G base = NONE) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tf u.
+    run_inst_seq (emitted_insts sa sb) s = OK u /\ same_blocks sa sb /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
+    EVERY (\i. MEM i.inst_opcode [ADD; ISTORE]) (emitted_insts sa sb) /\
+    tf.t_mem = (tn.t_mem DIFF {j | w2n a <= j /\ j < w2n a + 32}) UNION
+      {w2n a + k | k IN op_taint tn v} /\
+    tf.t_imm = key_update tn.t_imm (w2n a) (op_taint tn v) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==> FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==>
+      ptr_covers Gf tf p u n)
+Proof
+  strip_tac >>
+  `same_blocks sa sb` by
+    (Cases_on `imm` >>
+     gvs[compile_imm_store_word_def, emitHelperTheory.emit_op_def,
+         emitHelperTheory.emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def, same_blocks_def]) >>
+  namedCases_on `imm` ["", "reg"]
+  >- (fs[compile_imm_store_word_def] >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      qspecl_then [`dst`, `v`, `a`, `value`, `D`, `fn`, `PG`] mp_tac
+        (Q.GENL [`arg`, `v`, `a`, `value`, `D`, `fn`, `PG`]
+           (Q.INST [`id` |-> `sa.cs_next_id`] ctor_istore_segment)) >>
+      (impl_tac >- simp[]) >>
+      disch_then strip_assume_tac >>
+      qexistsl_tac [`Gf`,`tnf`,`t`] >> gvs[mk_inst_def]) >>
+  drule compile_imm_store_word_result >> strip_tac >>
+  `emitted_insts sa sb =
+     [mk_inst sa.cs_next_id ADD [reg; dst] ["%" ++ toString sa.cs_next_var];
+      mk_inst (sa.cs_next_id + 1) ISTORE
+        [Var ("%" ++ toString sa.cs_next_var); v] []]` by
+    simp[emitted_insts_def, DROP_APPEND] >>
+  `!p. not_fresh_at sa p ==> p <> STRING #"%" (toString sa.cs_next_var)` by
+    simp[not_fresh_at_def] >>
+  `!x. v = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (rpt strip_tac >> gvs[copy_old_operand_def, not_fresh_at_def]) >>
+  `eval_operand reg s = SOME 0w /\ op_taint tn reg = {} /\ op_prov G reg = NONE` by fs[] >>
+  mp_tac (Q.INST [`P` |-> `not_fresh_at sa`, `id` |-> `sa.cs_next_id`,
+                 `tmp` |-> `STRING #"%" (toString sa.cs_next_var)`,
+                 `region` |-> `reg`] ctor_word_store_seq) >>
+  (impl_tac >- fs[copy_old_operand_def, not_fresh_at_def]) >> disch_then strip_assume_tac >>
+  qexistsl_tac [`Gf`,`tnf`,`t`] >> gvs[mk_inst_def]
+QED
+
 Theorem tuple_immutable_word_path[local]:
-  compile_imm_store_word imm dst v sa = ((),sb) /\ fresh_vars_wrt sa s /\
+  compile_imm_store_word imm dst v sa = ((),sb) /\
   copy_old_operand sa v /\ eval_operand v s = SOME value /\
   eval_operand dst s = SOME a /\ op_taint tn dst = {} /\ op_prov G dst = NONE /\
   w2n a + 32 <= lo /\ lo <= s.vs_alloca_next /\
@@ -2359,7 +2417,7 @@ Theorem tuple_immutable_word_path[local]:
   ?u Gf tf.
     gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tf) /\
-    immutable_execution_frame sa s sb u /\ sa.cs_next_var <= sb.cs_next_var /\
+    same_blocks sa sb /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
               vs_immutables := s.vs_immutables|>) = s /\
@@ -2377,7 +2435,7 @@ Theorem tuple_immutable_word_path[local]:
       ptr_covers Gf tf p u n)
 Proof
   strip_tac >>
-  drule_all code_ctor_store_word >>
+  drule_all tuple_immutable_word_segment >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   `!x. v = Var x ==> not_fresh_at sa x` by fs[copy_old_operand_def] >>
   `!base. imm = SOME base ==> eval_operand base s = SOME 0w` by simp[] >>
@@ -2386,9 +2444,8 @@ Proof
   rename1 `run_inst_seq (emitted_insts sa sb) s = OK u` >>
   rename1 `tf.t_stor = tn.t_stor` >>
   rename1 `inst_seq_ptr D lo ctx fn PG G tn _ _ Gf tf` >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    (`w2n a + 32 <= s.vs_alloca_next` by decide_tac >>
-     drule_all tuple_immutable_word_mem_ok >> simp[]) >>
+  `w2n a + 32 <= s.vs_alloca_next` by decide_tac >>
+  drule_all tuple_immutable_word_mem_ok >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
   drule_all fn_has_code_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -2402,7 +2459,7 @@ Proof
        (drule_then strip_assume_tac) >> simp[]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
     (first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
-  qexistsl_tac [`Gf`,`tf`] >> simp[] >>
+  qexistsl_tac [`u`,`Gf`,`tf`] >> simp[] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
@@ -2561,7 +2618,7 @@ Theorem tuple_immutable_word_head_joint[local]:
   ghost_inv_at D0 lo d ce cx st G tn s /\
   compile_store_at_loc ce.ce_imm_alloca (Lit (n2w off)) op (SOME LocCode) sa = ((),sb) /\
   FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-  fresh_vars_wrt sa s /\ copy_old_operand sa op /\
+  copy_old_operand sa op /\
   eval_operand op s = SOME (typed_val_to_w256 tv vi) /\ op_taint tn op = {} /\
   local_ptrs_reserved ce sa /\
   (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -2628,8 +2685,7 @@ Proof
     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
     strip_assume_tac) >>
   `w2n (n2w off : bytes32) = off` by simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD] >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    fs[immutable_execution_frame_def,same_blocks_def] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
   qpat_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
   `!a k. regions_disjoint a k off 32 ==>
@@ -2663,6 +2719,159 @@ QED
 
 (* Match the ordinary byte transfer and the annotated run before moving
    the instruction cursor. The same run also discharges access safety. *)
+
+(* The offset supplier already works with live old operands.  Its coverage
+   theorem handles both the unchanged root and the generated ADD output. *)
+Theorem tuple_immutable_read_segment[local]:
+  compile_lit_byte_offset (Var root) off sa = (sp,sm) /\
+  emit_op MLOAD [sp] sm = (v,sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME b /\
+  ptr_covers G tn root s capacity /\
+  off + 32 <= capacity /\ w2n b + off < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tf u.
+    run_inst_seq (emitted_insts sa sb) s = OK u /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
+    EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) (emitted_insts sa sb) /\
+    copy_old_operand sb v /\ (?value. eval_operand v u = SOME value) /\
+    op_taint tf v = mem_word_taint tn.t_mem (w2n (b + n2w off)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s /\
+       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==> ptr_covers Gf tf p u n)
+Proof
+  strip_tac >>
+  `copy_old_operand sa (Var root) /\ eval_operand (Var root) s = SOME b /\
+   op_taint tn (Var root) = {}` by
+    gvs[copy_old_operand_def,eval_operand_def,ptr_covers_def] >>
+  drule_all exprPtrCodeCopyOffsetTheory.code_copy_source_offset >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  rename1 `copy_runtime_frame sa s sm t` >>
+  `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sm) s Gf tnf` by
+    (first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+  `off < capacity` by decide_tac >>
+  drule_all (Q.INST [`n` |-> `32`] exprPtrCodeCopyOffsetTheory.code_copy_destination_coverage) >>
+  disch_then (qx_choose_then `p` (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac)) >>
+  drule_all exprSimMapKeyTheory.emit_MLOAD_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sb) t = OK u` >>
+  drule emit_op_extends >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `lookup_var p t = SOME (b + n2w off)` by fs[eval_operand_def] >>
+  `!q. not_fresh_at sm q ==> q <> STRING #"%" (toString sm.cs_next_var)` by
+    simp[not_fresh_at_def] >>
+  `run_inst_seq [mk_inst sm.cs_next_id MLOAD [Var p]
+       [STRING #"%" (toString sm.cs_next_var)]] t = OK u` by fs[] >>
+  drule_all (Q.INST [`P` |-> `not_fresh_at sm`] ctor_mload_segment) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule code_offset_insts >> strip_tac >>
+  qexistsl_tac [`Gf'`,`tnf'`,`u`] >>
+  fs[copy_runtime_frame_def,emit_op_same_blocks] >>
+  `!q. not_fresh_at sa q ==> not_fresh_at sm q` by
+    (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  rpt conj_tac
+  >- metis_tac[run_inst_seq_append]
+  >- simp[APPEND_ASSOC]
+  >- fs[same_blocks_def]
+  >- (simp[] >> irule instSeqComposePtrTheory.inst_seq_ptr_uniform_append >>
+      conj_tac >- (qexistsl [`Gf`,`t`,`tnf`] >> simp[]) >>
+      fs[EVERY_MEM,is_terminator_def])
+  >- (simp[EVERY_APPEND,mk_inst_def] >> fs[EVERY_MEM] >> metis_tac[])
+  >- simp[copy_old_operand_def,not_fresh_at_def]
+  >> metis_tac[]
+QED
+
+Theorem tuple_immutable_copy_one_segment[local]:
+  immutable_store_one imm (Var root) (Lit a) off sa = ((),sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME b /\
+  ptr_covers G tn root s capacity /\
+  off + 32 <= capacity /\ w2n b + off < dimword (:256) /\
+  w2n (a + n2w off) + 32 <= lo /\
+  (!base. imm = SOME base ==> eval_operand base s = SOME 0w /\
+    copy_old_operand sa base /\ op_taint tn base = {} /\ op_prov G base = NONE) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tf u.
+    run_inst_seq (emitted_insts sa sb) s = OK u /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_immutables := s.vs_immutables|>) = s /\
+    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) Gf tf) /\
+    EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) (emitted_insts sa sb) /\
+    (!x. x IN tf.t_mem <=>
+      if w2n (a + n2w off) <= x /\ x < w2n (a + n2w off) + 32
+      then w2n (b + n2w off) + (x - w2n (a + n2w off)) IN tn.t_mem
+      else x IN tn.t_mem) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==> ptr_covers Gf tf p u n)
+Proof
+  strip_tac >>
+  drule immutable_store_one_old_execution >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[eval_operand_def] >>
+  (impl_tac >- fs[copy_old_operand_def]) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  fs[immutable_store_one_def,immutable_comp_bind_cases] >>
+  `!c. compile_lit_byte_offset (Lit a) off c = (Lit (a + n2w off),c)` by
+    (Cases_on `off = 0` >> simp[compile_lit_byte_offset_def,comp_return_def,wordsTheory.WORD_ADD_0]) >>
+  gvs[] >>
+  rename1 `emit_op MLOAD [sp] sm = (v,sr)` >>
+  `w2n b + off < dimword (:256)` by decide_tac >>
+  drule_all tuple_immutable_read_segment >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sa sr) s = OK r` >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sr p` by
+    (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `r.vs_labels = s.vs_labels` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sr) s = OK r`
+       (mp_then (Pos hd) mp_tac stmtReasonMemoryTheory.run_inst_seq_data_section) >>
+     impl_tac >- (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >> fs[is_terminator_def]) >>
+     simp[]) >>
+  `!base. imm = SOME base ==> eval_operand base r = SOME 0w /\
+      op_taint tf base = {} /\ op_prov Gf base = NONE` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >> rpt conj_tac
+     >- metis_tac[ctorAbiActualObservationsTheory.ctor_actual_old_operand,copy_old_operand_def]
+     >- metis_tac[emittedSeqComposePtrTheory.old_operand_taint_frame,copy_old_operand_def]
+     >> metis_tac[exprPtrCtorCodeLoadTheory.old_operand_prov_frame]) >>
+  `eval_operand (Lit (a+n2w off)) r = SOME (a+n2w off) /\
+   op_taint tf (Lit (a+n2w off)) = {} /\ op_prov Gf (Lit (a+n2w off)) = NONE` by
+    simp[eval_operand_def,op_taint_def,op_prov_def] >>
+  drule_all tuple_immutable_word_segment >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sr sb) r = OK t` >>
+  `sb.cs_current_insts = sr.cs_current_insts ++ emitted_insts sr sb` by
+    (Cases_on `imm`
+     >- (fs[compile_imm_store_word_def] >> drule emit_void_extends >> simp[])
+     >> drule compile_imm_store_word_result >> strip_tac >>
+     PURE_REWRITE_TAC[emitted_insts_def] >>
+     pop_assum (fn th => PURE_REWRITE_TAC[th]) >> simp[DROP_APPEND]) >>
+  `emitted_insts sa sb = emitted_insts sa sr ++ emitted_insts sr sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `t = u` by metis_tac[run_inst_seq_append,exec_result_11] >>
+  qpat_x_assum `t = u` SUBST_ALL_TAC >>
+  `EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) (emitted_insts sr sb)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `!x. x IN tf'.t_mem <=>
+      if w2n (a + n2w off) <= x /\ x < w2n (a + n2w off) + 32
+      then w2n (b + n2w off) + (x - w2n (a + n2w off)) IN tn.t_mem
+      else x IN tn.t_mem` by
+    (ASM_REWRITE_TAC[exprPtrCtorCodeLoadTheory.store_word_taint_pointwise]) >>
+  qexistsl_tac [`Gf'`,`tf'`] >> fs[] >> rpt conj_tac
+  >- (irule instSeqComposePtrTheory.inst_seq_ptr_uniform_append >>
+      conj_tac >- (qexistsl [`Gf`,`r`,`tf`] >> simp[]) >>
+      fs[EVERY_MEM] >> rpt strip_tac >> res_tac >> fs[is_terminator_def])
+  >> metis_tac[]
+QED
 
 Theorem tuple_immutable_copy_range_path[local]:
   compile_imm_store_words imm (Var root) (Lit (n2w off)) n 0 sa = ((),sb) /\
@@ -2809,6 +3018,37 @@ Proof
   `~(32 * type_slot_size tv <= 32)` by decide_tac >> simp[]
 QED
 
+(* A typed slot below lo has the same byte window in the section prefix. *)
+Theorem tuple_immutable_prefix_interior_dead[local]:
+  off + type_memory_size tv <= lo /\ well_formed_type_value tv /\
+  value_has_type tv vi /\
+  (!m. mem_agree_outside dirty mem m ==> val_in_memory tv vi off m) /\
+  off <= i /\ i < off + type_memory_size tv /\ i IN dirty ==>
+  mem_dead_bytes (mem_bytes_at 0 lo mem) off tv i
+Proof
+  strip_tac >>
+  `mem_bytes_at off (type_memory_size tv) (mem_bytes_at 0 lo mem) =
+   mem_bytes_at off (type_memory_size tv) mem` by
+    (simp[LIST_EQ_REWRITE,valueEncodingPropsTheory.LENGTH_mem_bytes_at] >>
+     rpt strip_tac >>
+     `off + x < lo` by decide_tac >>
+     simp[valueEncodingProofsTheory.EL_mem_bytes_at,
+          valueEncodingPropsTheory.LENGTH_mem_bytes_at]) >>
+  `val_wf tv vi` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `!m. mem_agree_outside dirty (mem_bytes_at 0 lo mem) m ==>
+       val_in_memory tv vi off m` by
+    (rpt strip_tac >> irule robustCopyTransportPtrTheory.robust_val_in_memory_copy_transport >>
+     simp[] >> qexistsl_tac [`mem`,`mem_bytes_at 0 lo mem`,`type_memory_size tv`,
+                             `off`,`dirty`,`dirty`] >>
+     simp[exprSimPropsTheory.val_footprint_le]) >>
+  `!j. j < type_memory_size tv /\ off+j IN dirty ==>
+       mem_dead_bytes (mem_bytes_at 0 lo mem) off tv (off+j)` by
+    (mp_tac (Q.SPECL [`tv`,`vi`,`off`,`mem_bytes_at 0 lo mem`,`dirty`]
+       immutableRepSensitivityTheory.body_assign_immutable_rep_sensitivity) >> simp[]) >>
+  `i - off < type_memory_size tv /\ off + (i - off) = i` by decide_tac >>
+  first_x_assum (qspec_then `i - off` mp_tac) >> simp[]
+QED
+
 (* Statement transport and the copied representation use the very endpoint
    selected by the annotated fixed-size suffix, before any deadness proof. *)
 
@@ -2817,7 +3057,10 @@ Theorem tuple_immutable_fixed_stmt_path[local]:
     (type_memory_bytes ce ty) sa = ((),sb) /\
   type_memory_bytes ce ty = type_memory_size tv /\
   ~is_bytestring_type ty /\ 0 < type_slot_size tv /\
-  expr_sim_inv ce cx env st /\ local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\
+  local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
@@ -2838,6 +3081,8 @@ Theorem tuple_immutable_fixed_stmt_path[local]:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gf,tf)) /\
     (!H. stmt_state_rel H ctx fn ce cx st s /\ storage_well_formed_on cx st (FST H) ==>
       stmt_post H ctx fn cx lctx ce ce sa sb st s (INL ()) fin q) /\
+    (!H D. stmt_state_rel H ctx fn ce cx st s /\ dead_lo_ok H D lo ce cx /\
+           ghost_inv_at D lo d ce cx st G tn s ==> ghost_inv_at D lo d ce cx fin Gf tf q) /\
     (!mem. mem_agree_outside tf.t_mem q.vs_memory mem ==> val_in_memory tv vi off mem) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -2888,18 +3133,82 @@ Proof
   `immutable_value_admissible tv vi` by metis_tac[evaluated_immutable_admissible] >>
   `immutable_value_bytes_rel tv vi (mem_bytes_at off (type_memory_size tv) u.vs_memory)` by
     metis_tac[immutable_memory_bytes,evaluate_type_well_formed_type_value] >>
+  `!i. off <= i /\ i < off + type_memory_size tv /\ i IN tf.t_mem ==>
+      mem_dead_bytes (mem_bytes_at 0 lo u.vs_memory) off tv i` by
+    (`well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+     rpt strip_tac >> irule tuple_immutable_prefix_interior_dead >>
+     simp[] >> qexistsl_tac [`tf.t_mem`,`vi`] >> simp[]) >>
+  `ce.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
+  `fin.scopes = st.scopes` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >>
+     disch_then strip_assume_tac >> simp[]) >>
+  `lo <= u.vs_alloca_next` by simp[] >>
+  `!i. ~(off <= i /\ i < off + type_memory_size tv) ==>
+      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (rpt strip_tac >> first_x_assum (irule o SIMP_RULE std_ss
+      [loweringStateRelDefsTheory.regions_disjoint_def]) >> decide_tac) >>
+  `!i. ~(off <= i /\ i < off + type_memory_size tv) /\ i IN tf.t_mem ==> i IN tn.t_mem` by (simp[] >> (metis_tac[])) >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`,`Gf`,`tf`] >>
   simp[ptr_covers_def,lookup_var_def,ptrDisciplineTheory.allocas_from_def,
-       ptrDisciplineTheory.allocas_below_fmp_def] >>
+       ptrDisciplineTheory.allocas_below_fmp_def,ghostPcTransportPtrTheory.ghost_inv_at_inst_idx] >>
   conj_tac
   >- (gen_tac >> irule fragGasOriginPtrDeadTheory.gas_origin_ptr_path_from_no_dead >>
       goal_assum (drule_at Any)) >>
   conj_tac
   >- (rpt strip_tac >> irule immutable_assign_suffix_stmt_post >>
       simp[GSYM lookup_var_def,venom_state_component_equality] >>
-      qexistsl_tac [`env`,`id`,`tv`,`ty`,`off`,`vi`] >> simp[]) >>
+      qexistsl_tac [`env`,`id`,`tv`,`ty`,`off`,`vi`] >> fs[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `stmt_state_rel H ctx fn ce cx st s`
+        (mp_then Any mp_tac tuple_immutable_suffix_ghost_post) >>
+      disch_then (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+      disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
+      disch_then irule >>
+      qpat_x_assum `!x. x IN tf.t_mem <=> _` kall_tac >>
+      simp[] >> conj_tac
+      >- (qexistsl_tac [`id`,`off`,`tv`,`ty`] >> gs[] >> metis_tac[]) >>
+      qexists_tac `sa` >> simp[]) >>
   qx_gen_tac `x` >> strip_tac >>
   qpat_assum `!p. not_fresh_at sa p ==> lookup_var p u = _ /\ _`
     (drule_then (ACCEPT_TAC o CONJUNCT1) o
      REWRITE_RULE [lookup_var_def] o Q.SPEC `x`)
+QED
+
+(* Recover the compiler cursors of the non-bytes normalization, rewriting
+   only its last segment as the equal-layout immutable suffix. *)
+Theorem tuple_immutable_normalized_cursors[local]:
+  compile_assign_value ce dst LocCode src F NONE dty sty n sa = ((),sb) /\
+  dty <> sty /\ ~is_bytestring_type dty /\
+  fn_has_code sa sb fn ==>
+  ?buf sm su.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),su) /\
+    compile_assign_value ce dst LocCode buf.buf_operand F NONE dty dty n su = ((),sb) /\
+    fn_has_code sa sm fn /\ fn_has_code sm su fn /\ fn_has_code su sb fn /\
+    ci_mono sm su
+Proof
+  strip_tac >> gvs[] >>
+  drule_all immutableAssignStoreTheory.immutable_assign_normalized_compile >> simp[] >>
+  disch_then (qx_choose_then `buf` (qx_choose_then `sm` (qx_choose_then `su` strip_assume_tac))) >>
+  `compile_assign_value ce dst LocCode buf.buf_operand F NONE dty dty n su = ((),sb)` by
+    (simp[stmtLoweringTheory.compile_assign_value_def, compileEnvTheory.comp_bind_def,
+          compileEnvTheory.comp_return_def]) >>
+  `cs_extends sa sm` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `cs_extends sm su` by
+    (qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _` (fn th =>
+       mp_tac (SRULE [th] (Q.SPECL [`ce`,`buf.buf_operand`,`dty`,`src`,`sty`,`sm`]
+         (cj 1 externalEntryShapeTheory.typed_memory_family_labels)))) >> simp[]) >>
+  `cs_extends su sb` by
+    (Cases_on `n <= 32` >> fs[]
+     >- (qpat_assum `(do loaded <- _; _ od) _ = _`
+           (strip_assume_tac o REWRITE_RULE [immutable_comp_bind_cases]) >>
+         drule exprSimAccountsTheory.emit_op_extends_next_var >> strip_tac >>
+         `cs_extends st1 sb` by
+           metis_tac[externalEntryShapeTheory.compile_imm_store_word_labels,pairTheory.SND] >>
+         metis_tac[cs_extends_trans]) >>
+     metis_tac[externalEntryShapeTheory.compile_imm_store_words_labels,pairTheory.SND]) >>
+  qexistsl_tac [`buf`,`sm`,`su`] >> simp[] >>
+  metis_tac[fn_has_code_split,cs_extends_trans,cj 1 ci_mono_typed_memory_family,pairTheory.SND]
 QED
