@@ -80,10 +80,12 @@ Proof
 QED
 
 Theorem conditional_jump_endpoint_prefix[local]:
-  let b = LENGTH pre in
-  let d = ss.sym_base.as_pc in
-  let A = (d=b+1); B = (d=b+2); D = (d=b+3) in
-  let idx = \k. if A \/ D then k+1 else k in
+  !b. b = LENGTH pre ==>
+  !d. d = ss.sym_base.as_pc ==>
+  !A. A = (d=b+1) ==>
+  !B. B = (d=b+2) ==>
+  !D. D = (d=b+3) ==>
+  !idx. idx = (\k. if A \/ D then k+1 else k) ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"; AsmLabel c] ++ tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"; AsmLabel c] ++ tail /\
@@ -100,7 +102,8 @@ Theorem conditional_jump_endpoint_prefix[local]:
       (!k. (A ==> k<>0) /\ idx k < LENGTH ss.sym_stack ==>
            k < LENGTH u.sym_stack /\ EL k u.sym_stack = EL (idx k) ss.sym_stack)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+            REDEPTH_CONV BETA_CONV) >> strip_tac >>
   qabbrev_tac `b = LENGTH (pre:asm_inst list)` >>
   qabbrev_tac `d = ss.sym_base.as_pc` >>
   `p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x; AsmOp "JUMP"] ++
@@ -121,7 +124,8 @@ Proof
    b+2 < LENGTH q /\ EL b q=AsmOp "ISZERO" /\
    EL (b+1) q=AsmPushLabel x /\ EL (b+2) q=AsmOp "JUMPI"` by
     simp[Abbr `b`, EL_APPEND_EQN, INDEX_OF_APPEND, INDEX_OF_CONS] >>
-  drule_all (BETA_RULE (REWRITE_RULE [LET_THM] conditional_jump_one_stopped_prefix)) >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+                       REDEPTH_CONV BETA_CONV) conditional_jump_one_stopped_prefix) >>
   simp[IgnAsm `p = _`, IgnAsm `q = _`] >>
   qpat_x_assum `p = _` kall_tac >> qpat_x_assum `p = _` kall_tac >>
   qpat_x_assum `q = _` kall_tac >> qpat_x_assum `q = _` kall_tac >>
@@ -157,8 +161,8 @@ Finalise conditional_jump_endpoint_prefix
    then determines the concrete endpoint, but its producer translation can
    be chosen later: the producer and Shape clauses refer to the same t. *)
 Theorem conditional_jump_actual_endpoint:
-  let Shape =
-    \p cc req pc height need tag boolean (i:num#num) (t:asm_state).
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -172,20 +176,22 @@ Theorem conditional_jump_actual_endpoint:
            FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let rootJust = \u tg bl.
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !rootJust. rootJust = (\u tg bl.
     (!k l i. tg k=SOME(l,i) ==> k<LENGTH u.sym_stack /\ EL k u.sym_stack=Lab l 0) /\
     (!k. bl k ==> k<LENGTH u.sym_stack /\
-                  (EL k u.sym_stack=Val 0w \/ EL k u.sym_stack=Val 1w)) in
-  let C = \p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-                        off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d in
-  let b = LENGTH pre; d = pc e in
-  let r = splice_pc b 4 3 in
-  let A = (d=b+1); B = (d=b+2); D = (d=b+3) in
-  let src = \k. if A \/ D then k+1 else k in
-  let env0 = asm_data_env orig (assemble orig ++ data);
-      envp = asm_data_env p (assemble p ++ data);
-      envq = asm_data_env q (assemble q ++ data) in
+                  (EL k u.sym_stack=Val 0w \/ EL k u.sym_stack=Val 1w))) ==>
+  !C. C = (\p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
+                        off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d) ==>
+  !b. b = LENGTH pre ==>
+  !d. d = pc e ==>
+  !r. r = splice_pc b 4 3 ==>
+  !A. A = (d=b+1) ==>
+  !B. B = (d=b+2) ==>
+  !D. D = (d=b+3) ==>
+  !src. src = (\k. if A \/ D then k+1 else k) ==>
+  !envp. envp = asm_data_env p (assemble p ++ data) ==>
+  !envq. envq = asm_data_env q (assemble q ++ data) ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"; AsmLabel c] ++ tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"; AsmLabel c] ++ tail /\
@@ -222,15 +228,17 @@ Theorem conditional_jump_actual_endpoint:
               (EL v.sym_base.as_pc q=AsmPushLabel l \/
                EL v.sym_base.as_pc q=AsmPushOfst l 0)) /\
       !rho.
-        let T = \w k. OPTION_MAP (\(l,i). (l,rho l i)) (raw k) in
+        !T. T = (\w k. OPTION_MAP (\(l,i). (l,rho l i)) (raw k)) ==>
         (rootNeed root ==> cc.cc_static) /\
         (!k l i. T root k=SOME(l,i) ==>
            i<LENGTH q /\ (EL i q=AsmPushLabel l \/ EL i q=AsmPushOfst l 0) /\ ?v. C q l v) ==>
         Shape q cc req rootPC rootH rootNeed T bl root t /\ rootJust u (T root) (bl root)
 Proof
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) [`LET _ Shape`, `LET _ rootJust`, `LET _ C`] >>
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Shape`, `rootJust`, `C`] >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+            REDEPTH_CONV BETA_CONV) >>
   qabbrev_tac `b = LENGTH (pre:asm_inst list)` >>
   qabbrev_tac `d = (pc:(num#num)->num) e` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -242,7 +250,8 @@ Proof
     qpat_assum `asm_sym_rel p _ cut ss`
       (strip_assume_tac o cj 2 o REWRITE_RULE[asm_sym_rel_def]) >>
     drule asm_sym_rel_pc >> simp[Abbr `d`]) >>
-  drule_all (BETA_RULE (REWRITE_RULE [LET_THM] conditional_jump_endpoint_prefix)) >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+                       REDEPTH_CONV BETA_CONV) conditional_jump_endpoint_prefix) >>
   disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   qpat_x_assum `p = _` kall_tac >> qpat_x_assum `q = _` kall_tac >>
   `!l. EL 0 ss.sym_stack=Lab l 0 ==> ((d=b+1 \/ d=b+3) ==> ?i. tag e 0=SOME(l,i))` by (

@@ -8,7 +8,7 @@ Ancestors asmSymBridge[qualified,ignore_grammar] option[qualified,ignore_grammar
    via the retained label. The predecessor PC distinguishes a visit from a
    longer execution that has already left the window. *)
 Theorem conditional_jump_visit[local]:
-  let b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"] ++ AsmLabel c::tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"] ++
@@ -20,7 +20,8 @@ Theorem conditional_jump_visit[local]:
   sym_steps q env 3 u =
     SymOK (sym_with_pc (splice_pc b 4 3 v.sym_base.as_pc) v)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+            REDEPTH_CONV BETA_CONV) >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `~MEM (AsmLabel c) pre` by (
     qpat_x_assum `asm_static_wf p` mp_tac >> simp[asm_static_wf_def] >>
     disch_then (mp_tac o CONJUNCT1) >>
@@ -137,7 +138,7 @@ Proof
 QED
 
 Theorem conditional_jump_one_stopped_prefix:
-  let b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"] ++ AsmLabel c::tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"] ++
@@ -145,7 +146,7 @@ Theorem conditional_jump_one_stopped_prefix:
   asm_static_wf p /\ s.as_pc = 0 ==>
   !n ss. sym_steps p env n (sym_init s) = SymOK ss ==>
     if b < ss.sym_base.as_pc /\ ss.sym_base.as_pc < b+4 then
-      let d = ss.sym_base.as_pc - b in
+      !d. d = ss.sym_base.as_pc - b ==>
       d <= n /\ ?h j.
         sym_steps p env (n-d) (sym_init s) = SymOK h /\
         h.sym_base.as_pc = b /\ sym_steps p env d h = SymOK ss /\
@@ -154,7 +155,8 @@ Theorem conditional_jump_one_stopped_prefix:
       ?j. sym_steps q env j (sym_init s) =
           SymOK (sym_with_pc (splice_pc b 4 3 ss.sym_base.as_pc) ss)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+            REDEPTH_CONV BETA_CONV) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `b = LENGTH (pre:asm_inst list)` >>
   `b < LENGTH p /\
@@ -197,7 +199,7 @@ Resume conditional_jump_one_stopped_prefix[interior]:
     qpat_assum `!m t. sym_steps p env m _ = _ /\ _ ==> _`
       (qspecl_then [`SUC n'`, `ss`] mp_tac) >>
     (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>
-    rewrite_tac[LET_THM] >> BETA_TAC >> disch_then ACCEPT_TAC) >>
+    simp[LET_THM, NoAsms]) >>
   qabbrev_tac `d = ss.sym_base.as_pc-b` >>
   `SUC n'-d < SUC n'` by (simp[Abbr `d`] >> decide_tac) >>
   `?j. sym_steps q env j (sym_init s) = SymOK h` by (
@@ -248,7 +250,8 @@ Resume conditional_jump_one_stopped_prefix[completed]:
   `h.sym_base.as_stack = []` by metis_tac[sym_init_prefix_base_stack] >>
   `sym_steps q env 3 h = SymOK (sym_with_pc (splice_pc b 4 3 ss.sym_base.as_pc) ss)` by (
     qpat_x_assum `!m. m < SUC n' ==> _` kall_tac >>
-    metis_tac[REWRITE_RULE[LET_THM] conditional_jump_visit, Abbr `b`]) >>
+    metis_tac[CONV_RULE (HO_REWR_CONV UNWIND_FORALL_THM2)
+                conditional_jump_visit, Abbr `b`]) >>
   simp[IgnAsm `q = _`] >> qexists_tac `j+3` >>
   pure_rewrite_tac[sym_steps_add] >> simp[IgnAsm `q = _`]
 QED

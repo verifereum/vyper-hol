@@ -51,8 +51,8 @@ Proof
 QED
 
 Theorem conditional_jump_source_paths:
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -67,19 +67,20 @@ Theorem conditional_jump_source_paths:
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
          (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let Flow =
-    \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
+    ) ==>
+  !Flow. Flow =
+    (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
            ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -109,7 +110,8 @@ Theorem conditional_jump_source_paths:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-             let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             !a. a = asm_op_arity name ==>
+             !m. m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\
              ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -119,18 +121,17 @@ Theorem conditional_jump_source_paths:
                      ins t = AsmOK u ==>
                    (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
     | _ => F
-  in
-  let Open =
-    \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+    ) ==>
+  !Open. Open =
+    (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
       (tag:(num#num)->num->(string#num)option)
       (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
-    let target = \x y.
+    !S. S = Shape p cc req pc height need tag boolean ==>
+    !target. target = (\x y.
       ?l origin off. tag x 0 = SOME(l,origin) /\
         FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
         off < dimword(:256) /\
-        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-    in
+        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
       FINITE V /\ X SUBSET V /\
       (!x. x IN V ==> ?t. S x t) /\
       (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -148,40 +149,35 @@ Theorem conditional_jump_source_paths:
                       p 1 t = AsmFault u) /\ u.as_requests=req) \/
          (?y u. edge x y /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK u /\ S y u))
-  in
-  let S = Shape p cc req pc height need tag boolean;
-      b = LENGTH pre;
-      lo = SND (compute_label_offsets p);
-      o2pc = build_offset_to_pc p in
-  let D w = ((!l org. tag v 0 = SOME(l,org) ==>
-               ?off. FLOOKUP lo l = SOME off /\ w = (n2w off:bytes32)) /\
-             (boolean v 0 ==> w = 0w \/ w = 1w));
-      Tail z = (z IN V /\ rank z < rank v /\ height v = height z + 1 /\
+              p 1 t = AsmOK u /\ S y u))) ==>
+  !S. S = Shape p cc req pc height need tag boolean ==>
+  !b. b = LENGTH pre ==>
+  !lo. lo = SND (compute_label_offsets p) ==>
+  !D. D = (\w. (!l org. tag v 0 = SOME(l,org) ==>
+                    ?off. FLOOKUP lo l = SOME off /\ w = (n2w off:bytes32)) /\
+                  (boolean v 0 ==> w = 0w \/ w = 1w)) ==>
+  !Tail. Tail = (\z. z IN V /\ rank z < rank v /\ height v = height z + 1 /\
                 (!k l org. tag z k = SOME(l,org) ==> tag v (k+1) = SOME(l,org)) /\
                 (!k. boolean z k ==> boolean v (k+1)) /\
                 (!t. S v t ==> S z (t with <|as_pc := pc z;
-                                            as_stack := TL t.as_stack|>))) in
+                                            as_stack := TL t.as_stack|>))) ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"; AsmLabel c] ++ tail /\ asm_static_wf p /\
   Open p cc req V {} rank pc height need tag boolean edge /\ v IN V /\ pc v = b ==>
   0 < height v /\ (!w. D w <=> ?t stk. S v t /\ t.as_stack = w::stk) /\
   (D 0w ==> ?j h i z off. edge v j /\ pc j=b+1 /\ edge j h /\ pc h=b+2 /\
     edge h i /\ pc i=b+3 /\ tag i 0=SOME(x,b+2) /\ edge i z /\
-    FLOOKUP lo x=SOME off /\ off<dimword(:256) /\ FLOOKUP o2pc off=SOME(pc z) /\ Tail z) /\
+    FLOOKUP lo x=SOME off /\ off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME(pc z) /\ Tail z) /\
   ((?w. D w /\ w <> 0w) ==> ?j a z. edge v j /\ pc j=b+1 /\
     tag j 0=SOME(c,b) /\ edge j a /\ pc a=b+4 /\ Tail a /\
     edge a z /\ pc z=b+5 /\ Tail z)
 Proof
-  (* E0248: recursive LET_ELIM_TAC descended into the interfaces;
-     root LET_FORALL_ELIM did not expose a syntactic forall. *)
-  qmatch_goalsub_abbrev_tac `LET _ Shape` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Flow` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Open` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  simp_tac std_ss [LET_THM] >>
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o CONV_RULE (RAND_CONV
+      (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) THENC
+      REWR_CONV (GSYM markerTheory.Abbrev_def)))) [`Shape`, `Flow`, `Open`] >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  simp_tac std_ss [] >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "window") strip_assume_tac) >>
   qpat_x_assum `Open _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[NoAsms, Abbr `Open`, LET_THM, DIFF_EMPTY] >> strip_tac >>

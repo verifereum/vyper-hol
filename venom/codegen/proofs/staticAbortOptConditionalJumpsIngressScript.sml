@@ -5,8 +5,8 @@ Ancestors
   arithmetic words
 
 Theorem conditional_jump_strict_ports:
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -20,22 +20,22 @@ Theorem conditional_jump_strict_ports:
            FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let TagFlow = \tag u y hi hj src fresh.
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !TagFlow. TagFlow = (\tag u y hi hj src fresh.
     !k l origin. tag y k = SOME(l,origin) ==>
       k < hj /\ (fresh k = SOME(l,origin) \/
-      ?a. src k = SOME a /\ a < hi /\ tag u a = SOME(l,origin)) in
-  let Flow =
-    \p pc height tag boolean (u:num#num) (y:num#num).
-    let hi = height u; hj = height y; ins = EL (pc u) p in
-    let inherit =
-      \(src:num -> num option)
+      ?a. src k = SOME a /\ a < hi /\ tag u a = SOME(l,origin))) ==>
+  !Flow. Flow =
+    (\p pc height tag boolean (u:num#num) (y:num#num).
+    !hi. hi = height u ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc u) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         TagFlow tag u y hi hj src fresh /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean u a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean u a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -64,8 +64,9 @@ Theorem conditional_jump_strict_ports:
                0 < n /\ n < hi /\ hj = hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
-           | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             | NONE =>
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -74,19 +75,17 @@ Theorem conditional_jump_strict_ports:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Open =
-    \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+    | _ => F) ==>
+  !Open. Open =
+    (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
       (tag:(num#num)->num->(string#num)option)
       (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
-    let target = \u y.
+    !S. S = Shape p cc req pc height need tag boolean ==>
+    !target. target = (\u y.
       ?l origin off. tag u 0 = SOME(l,origin) /\
         FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
         off < dimword(:256) /\
-        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-    in
+        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
       FINITE V /\ X SUBSET V /\
       (!u. u IN V ==> ?t. S u t) /\
       (!u. u IN V DIFF X ==> pc u < LENGTH p) /\
@@ -104,17 +103,17 @@ Theorem conditional_jump_strict_ports:
                       p 1 t = AsmFault s) /\ s.as_requests=req) \/
          (?y s. edge u y /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK s /\ S y s))
-  in
-  let b = LENGTH pre; r = splice_pc (LENGTH pre) 4 3;
-      H = height e - 1;
-      C = \s l d. ?off. FLOOKUP (SND(compute_label_offsets s)) l = SOME off /\
+              p 1 t = AsmOK s /\ S y s))) ==>
+  !b. b = LENGTH pre ==>
+  !r. r = splice_pc b 4 3 ==>
+  !H. H = height e - 1 ==>
+  !C. C = (\s l d. ?off. FLOOKUP (SND(compute_label_offsets s)) l = SOME off /\
                          off < dimword(:256) /\
-                         FLOOKUP (build_offset_to_pc s) off = SOME d in
-  let Kept = \z. z IN V /\ (pc z < b \/ b+4 <= pc z) in
-  let Port = \shift z. Kept z /\ rank z < rank e /\ height z + shift = height e /\
+                         FLOOKUP (build_offset_to_pc s) off = SOME d) ==>
+  !Kept. Kept = (\z. z IN V /\ (pc z < b \/ b+4 <= pc z)) ==>
+  !Port. Port = (\shift z. Kept z /\ rank z < rank e /\ height z + shift = height e /\
     (!k l i. tag z k = SOME(l,i) ==> tag e (k+shift) = SOME(l,i)) /\
-    (!k. boolean z k ==> boolean e (k+shift)) in
+    (!k. boolean z k ==> boolean e (k+shift))) ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"; AsmLabel c] ++ tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"; AsmLabel c] ++ tail /\
@@ -132,34 +131,38 @@ Theorem conditional_jump_strict_ports:
     0 < H /\ ?z0 z1.
     C p x (pc z0) /\ pc z1 = b+5 /\ Port 2 z0 /\ Port 2 z1 /\
     !rho:string->num->num.
-      let raw = \k. case tag z0 k of NONE => tag z1 k | SOME u => SOME u in
-      let translate = OPTION_MAP (\(l,i). (l,rho l i)) in
-      let U = \k. translate (raw k); UB = \k. boolean z0 k \/ boolean z1 k in
-      let I = (0:num,0:num); P = (1,0); J = (2,0); L = (3,0);
-          E0 = (4,0); E1 = (5,0) in
-      let W = {I;P;J;L;E0;E1};
-          pcq = \u. if u=I then b else if u=P then b+1 else
+      !raw. raw = (\k. case tag z0 k of NONE => tag z1 k | SOME u => SOME u) ==>
+      !translate. translate = OPTION_MAP (\(l,i). (l,rho l i)) ==>
+      !U. U = (\k. translate (raw k)) ==>
+      !UB. UB = (\k. boolean z0 k \/ boolean z1 k) ==>
+      !I. I = (0:num,0:num) ==>
+      !P. P = (1:num,0:num) ==>
+      !J. J = (2:num,0:num) ==>
+      !L. L = (3:num,0:num) ==>
+      !E0. E0 = (4:num,0:num) ==>
+      !E1. E1 = (5:num,0:num) ==>
+      !W. W = {I;P;J;L;E0;E1} ==>
+      !pcq. pcq = (\u. if u=I then b else if u=P then b+1 else
             if u=J then b+2 else if u=L then b+3 else
-            if u=E0 then r (pc z0) else r (pc z1);
-          hq = \u. if u=I \/ u=P then H else if u=J then H+1 else H-1;
-          nq = \u. (u=E0 /\ need z0) \/ (u=E1 /\ need z1);
-          rq = \u. if u=I then 4*rank e+3 else if u=P then 4*rank e+2 else
+            if u=E0 then r (pc z0) else r (pc z1)) ==>
+      !hq. hq = (\u. if u=I \/ u=P then H else if u=J then H+1 else H-1) ==>
+      !rq. rq = (\u. if u=I then 4*rank e+3 else if u=P then 4*rank e+2 else
             if u=J then 4*rank e+1 else if u=L then 4*rank e else
-            if u=E0 then 4*rank z0+3 else 4*rank z1+3;
-          tq = \u k. if u=I \/ u=P then (if k=0 then NONE else U (k-1)) else
+            if u=E0 then 4*rank z0+3 else 4*rank z1+3) ==>
+      !tq. tq = (\u k. if u=I \/ u=P then (if k=0 then NONE else U (k-1)) else
             if u=J then (if k=0 then SOME(x,b+1) else
                          if k=1 then NONE else U (k-2)) else
-            if u=E0 then translate (tag z0 k) else translate (tag z1 k);
-          bq = \u k. if u=I then k<>0 /\ UB (k-1) else
+            if u=E0 then translate (tag z0 k) else translate (tag z1 k)) ==>
+      !bq. bq = (\u k. if u=I then k<>0 /\ UB (k-1) else
             if u=P then k=0 \/ UB (k-1) else
             if u=J then k=1 \/ (2<=k /\ UB (k-2)) else
-            if u=E0 then boolean z0 k else boolean z1 k;
-          edges = \u y. (u=I /\ y=P) \/ (u=P /\ y=J) \/
-            (u=J /\ y=E0) \/ (u=J /\ y=L) \/ (u=L /\ y=E1) in
+            if u=E0 then boolean z0 k else boolean z1 k) ==>
+      !edges. edges = (\u y. (u=I /\ y=P) \/ (u=P /\ y=J) \/
+            (u=J /\ y=E0) \/ (u=J /\ y=L) \/ (u=L /\ y=E1)) ==>
       (!k t s. tag z0 k=SOME t /\ tag z1 k=SOME s ==> t=s) /\
       (!k l i. raw k=SOME(l,i) ==> k<H-1 /\ tag e (k+2)=SOME(l,i)) /\
       (!k. UB k ==> k<H-1 /\ boolean e (k+2) /\ U k=NONE) /\
-      (!u. u IN W ==> (nq u ==> cc.cc_static) /\
+      (!u. u IN W ==> ((u=E0 /\ need z0 \/ u=E1 /\ need z1) ==> cc.cc_static) /\
          (!k. bq u k ==> k<hq u /\ tq u k=NONE) /\
          (!k l i. tq u k=SOME(l,i) ==> k<hq u)) /\
       (!u. u IN {I;P;J;L} ==> pcq u < LENGTH q) /\
@@ -192,23 +195,15 @@ Theorem conditional_jump_strict_ports:
           AsmOK (t with <|as_pc := if w=0w then pcq E0 else pcq L;
                            as_stack := stk|>))))
 Proof
-  qmatch_goalsub_abbrev_tac `LET _ Shape` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ TagFlow` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Flow` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Open` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ b` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  ntac 2 (CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  qmatch_goalsub_abbrev_tac `LET _ C` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Kept` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ Port` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE
+      (RAND_CONV (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) THENC
+       REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Shape`, `TagFlow`, `Flow`, `Open`, `b`] >>
+  ntac 2 (CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`C`, `Kept`, `Port`] >>
   strip_tac >>
   qpat_x_assum `p = _` (mk_asm "p_window") >>
   qpat_x_assum `q = _` (mk_asm "q_window") >>
@@ -638,8 +633,10 @@ Resume conditional_jump_strict_ports[apply_packet]:
     val packet = Q.INST [`V` |-> `V'`, `rank` |-> `rank'`, `pc` |-> `pc'`,
                         `height` |-> `height'`, `need` |-> `need'`, `tag` |-> `tag'`,
                         `boolean` |-> `bool'`, `edge` |-> `edge'`]
-      (SPEC_ALL conditional_jump_whole_visit_rows)
-    val expose = CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV)
+      conditional_jump_whole_visit_rows
+    val unwind = HO_REWR_CONV UNWIND_FORALL_THM2
+    val expose = CONV_RULE
+      (QUANT_CONV (LAND_CONV (RAND_CONV (TOP_DEPTH_CONV unwind))) THENC unwind)
     fun fold eq = PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] eq)]
   in
     qpat_assum `Abbrev (Shape = _)` (fn sh =>
@@ -657,10 +654,15 @@ Resume conditional_jump_strict_ports[apply_packet]:
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `j0` (qx_choose_then `h` (qx_choose_then `i`
      (qx_choose_then `z0` (qx_choose_then `j1` (qx_choose_then `ca`
-      (qx_choose_then `z1` strip_assume_tac)))))))) >>
+      (qx_choose_then `z1` (fn th =>
+        let val fields = CONJUNCTS th in
+          map_every assume_tac (List.take (fields, length fields - 1)) >>
+          mk_asm "relocated packet" (List.last fields)
+        end))))))))) >>
   `j <> v` by (qpat_assum `v <> j` mp_tac >> simp[Once EQ_SYM_EQ]) >>
-  `!y. edge' v y ==> y = j` by simp[Abbr `edge'`] >>
-  `!y. edge' j y ==> edge e y` by simp[Abbr `edge'`] >>
+  `!y. edge' v y ==> y = j` by simp[NoAsms, Abbr `edge'`] >>
+  `!y. edge' j y ==> edge e y` by
+    (qpat_assum `j <> v` (fn ne => simp[NoAsms, Abbr `edge'`, ne])) >>
   `j0 = j /\ j1 = j` by
     (qpat_assum `!y. edge' v y ==> y = j` (fn th =>
        qspec_then `j0` mp_tac th >> qspec_then `j1` mp_tac th) >> simp[]) >>
@@ -742,10 +744,12 @@ Resume conditional_jump_strict_ports[apply_packet]:
   qpat_assum `rank' v = rank e + 1` (fn vr =>
   qpat_assum `!k. tag' v k = _` (fn vt =>
   qpat_assum `!k. bool' v k = _` (fn vb =>
-  qpat_x_assum `!rho:string->num->num. LET _ _`
+  asm_x "relocated packet"
     (qspec_then `move_origin` (strip_assume_tac o SIMP_RULE std_ss
-      ([LET_THM,slot,vh,vr,vt,vb] @ CONJUNCTS f0 @ CONJUNCTS f1)))))))))) >>
-  SIMP_TAC std_ss [LET_THM] >>
+      ([slot,vh,vr,vt,vb] @ CONJUNCTS f0 @ CONJUNCTS f1) o
+      CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2))))))))))) >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  SIMP_TAC std_ss [] >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >-
     (rpt gen_tac >> disch_tac >> conj_tac

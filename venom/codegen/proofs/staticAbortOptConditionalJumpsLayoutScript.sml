@@ -5,10 +5,11 @@ Ancestors
   finite_map rich_list list words arithmetic
 
 Theorem conditional_jump_one_layout:
-  let b = LENGTH pre; r = splice_pc (LENGTH pre) 4 3 in
-  let C = \s l d. ?off. FLOOKUP (SND (compute_label_offsets s)) l = SOME off /\
+  !b. b = LENGTH pre ==>
+  !r. r = splice_pc b 4 3 ==>
+  !C. C = (\s l d. ?off. FLOOKUP (SND (compute_label_offsets s)) l = SOME off /\
                         off < dimword(:256) /\
-                        FLOOKUP (build_offset_to_pc s) off = SOME d in
+                        FLOOKUP (build_offset_to_pc s) off = SOME d) ==>
   p = pre ++ [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x;
               AsmOp "JUMP"; AsmLabel c] ++ tail /\
   q = pre ++ [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"; AsmLabel c] ++ tail /\
@@ -29,7 +30,8 @@ Theorem conditional_jump_one_layout:
      ((i < b \/ b+4 <= i) /\ r i < LENGTH q /\ EL (r i) q = EL i p) \/
      (i = b+2 /\ l = x /\ EL (b+1) q = AsmPushLabel x) \/ (i = b /\ l = c))
 Proof
-  rewrite_tac[LET_THM] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2) THENC
+            REDEPTH_CONV BETA_CONV) >> strip_tac >>
   qabbrev_tac `b = LENGTH (pre:asm_inst list)` >>
   qabbrev_tac `pat = [AsmPushLabel c; AsmOp "JUMPI"; AsmPushLabel x; AsmOp "JUMP"]` >>
   qabbrev_tac `repl = [AsmOp "ISZERO"; AsmPushLabel x; AsmOp "JUMPI"]` >>
