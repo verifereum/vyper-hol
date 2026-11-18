@@ -319,16 +319,12 @@ Resume abi_encode_tuple_slot_origin[copy_kept]:
         (qpat_x_assum `regions_disjoint (w2n bw+off) _ z k` mp_tac >>
          rewrite_tac[regions_disjoint_def] >> decide_tac) >>
       `j IN tn'.t_mem` by metis_tac[] >> metis_tac[]) >>
-  conj_tac
-  >- (map_every qx_gen_tac [`name`, `z`, `k`, `j`] >> strip_tac >>
-      `regions_disjoint (w2n bw+off) (type_memory_bytes ce ty) z k` by metis_tac[ADD_COMM] >>
-      `~(w2n bw+off <= j /\ j < w2n bw+off+type_memory_bytes ce ty)` by
-        (qpat_x_assum `regions_disjoint (w2n bw+off) _ z k` mp_tac >>
-         rewrite_tac[regions_disjoint_def] >> decide_tac) >>
-      `j IN tn'.t_mem` by metis_tac[] >> metis_tac[]) >>
-  qx_gen_tac `j` >> strip_tac >>
-  `~(w2n bw+off <= j /\ j < w2n bw+off+type_memory_bytes ce ty)` by decide_tac >>
-  metis_tac[]
+  map_every qx_gen_tac [`name`, `z`, `k`, `j`] >> strip_tac >>
+  `regions_disjoint (w2n bw+off) (type_memory_bytes ce ty) z k` by metis_tac[ADD_COMM] >>
+  `~(w2n bw+off <= j /\ j < w2n bw+off+type_memory_bytes ce ty)` by
+    (qpat_x_assum `regions_disjoint (w2n bw+off) _ z k` mp_tac >>
+     rewrite_tac[regions_disjoint_def] >> decide_tac) >>
+  `j IN tn'.t_mem` by metis_tac[] >> metis_tac[]
 QED
 Resume abi_encode_tuple_slot_origin[copy_fields]:
   `tf.t_imm = tn.t_imm` by
