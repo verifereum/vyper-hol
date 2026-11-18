@@ -111,52 +111,26 @@ Proof
   >- (irule gas_outcome_full_bad_nil >> simp[Once evaluate_def, raise_def]) >>
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
       es.storage_trace` by fs[storage_trace_domain_def] >>
-  `(nr /\ mut <> View ==> ~s0.vs_call_ctx.cc_static /\ allocas_from 0 s0)` by
+  `nr /\ mut <> View ==> ~s0.vs_call_ctx.cc_static` by
     (first_x_assum (drule_then strip_assume_tac) >>
-     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def, ghost_inv_at_def]) >>
-  mp_tac (Q.INST [`st` |-> `sa`, `st'` |-> `su`, `nr` |-> `nr`,
+     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+  mp_tac (Q.INST [`st` |-> `sa`, `su` |-> `su`, `sb` |-> `sb`,
     `nkey` |-> `global_nonreentrant_slot`, `iv` |-> `mut = View`,
-    `lo` |-> `0:num`, `s` |-> `s0`, `G` |-> `G0`, `tn` |-> `tn0`]
-    (SPEC_ALL optional_transient_unlock_paths_joint)) >>
-  impl_tac >- simp[] >> strip_tac >>
-  drule emit_inst_extends >> strip_tac >>
-  `?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb u.vs_inst_idx = SOME (mk_inst su.cs_next_id STOP [] [])` by
-    (qspecl_then [`su`, `sb`, `func`, `[mk_inst su.cs_next_id STOP [] []]`]
-       mp_tac fn_has_code_same_block >>
-     impl_tac >- simp[] >> strip_tac >>
-     qpat_x_assum `!i. i < _ ==> get_instruction _ _ = _`
-       (qspec_then `0` mp_tac) >>
-     simp[] >> strip_tac >> qexists_tac `bb` >> metis_tac[]) >>
+    `lo` |-> `0:num`, `s` |-> `s0`, `G` |-> `G0`, `tn` |-> `tn0`,
+    `DF` |-> `DF`, `cenv` |-> `ce`, `cx` |-> `cx`]
+    (INST_TYPE [alpha |-> ``:256``] optional_transient_unlock_stop_joint)) >>
+  impl_tac >- simp[allocas_from_def] >> strip_tac >>
   irule gas_outcome_full_intro >>
   qexistsl_tac [`G0`, `es`, `[]`,
-    `Halt (halt_state (u with vs_returndata := []))`,
+    `Halt ss`,
     `INR (ReturnException NoneV)`, `tn'`] >>
   conj_tac >- simp[Once evaluate_def, raise_def] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `H` >> strip_tac >>
   `stmt_state_rel H ctx func ce cx es s0 /\
    ghost_inv_at (DF H) 0 d ce cx es G0 tn0 s0` by metis_tac[] >>
-  `stor_taint_ok_at (DF H) tn' u` by
-    (irule optional_transient_unlock_stor_taint >>
-     fs[ghost_inv_at_def] >> metis_tac[]) >>
   conj_tac
-  >- (`gas_origin_ptr_path
-        (DF H,0,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (u,G0,tn') []
-        (Halt (halt_state (u with vs_returndata := [])),G0,tn')` by
-        (irule exit_inst_origin_ptr >> simp[exit_result_def] >>
-         qexists_tac `mk_inst su.cs_next_id STOP [] []` >>
-         simp[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
-              exit_result_def, gas_events_step_def, gas_count_step_def,
-              mem_safe_step_def, inst_mem_below_frontier_def,
-              source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-         fs[mk_inst_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-            source_memory_read_ranges_def, source_memory_write_ranges_def,
-            stor_taint_ok_at_def, step_inst_non_invoke,
-            step_inst_base_opcode_eqs, step_taint_def, ret_taint_def,
-            store_taint_def, imm_taint_def, adopt_reset_def, halt_state_def] >>
-         gvs[allocas_from_def]) >>
-      metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  >- (first_assum irule >> fs[ghost_inv_at_def]) >>
   simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def,
        halt_exit_def] >> gen_tac >>
   `state_rel H func ce cx
@@ -175,14 +149,12 @@ Proof
   mp_tac (Q.INST [`cenv` |-> `ce`,
     `es` |-> `es with <| scopes := []; gas_obs := tail |>`,
     `es'` |-> `ee'`, `s` |-> `s0`,
-    `ss` |-> `halt_state (u with vs_returndata := [])`,
+    `ss` |-> `ss`,
     `nkey` |-> `global_nonreentrant_slot`, `iv` |-> `mut = View`,
     `srcs` |-> `am.sources`, `exps` |-> `am.exports`, `layouts` |-> `am.layouts`]
     (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
       external_halt_success_unlock))) >>
-  impl_tac
-  >- (simp[halt_state_def, tstore_def] >>
-      Cases_on `nr /\ mut <> View` >> gvs[]) >>
+  impl_tac >- simp[] >>
   simp[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
        abstract_machine_from_state_def, halt_state_def] >> metis_tac[]
 QED
