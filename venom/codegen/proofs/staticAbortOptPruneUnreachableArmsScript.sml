@@ -5,21 +5,17 @@ Ancestors
   asmOptimizer asmSplice asmSymSem finite_map words list rich_list arithmetic pred_set
 
 Theorem prune_one_arm_geometry:
-  !pre t x tail (V:(num#num)->bool) e pc fall taken.
-    let p = pre ++ [t;x] ++ tail in
-    let q = pre ++ [t] ++ tail in
-    let d = LENGTH pre+1 in
-    let r = \i. if i < d then i else i-1 in
-    let Hit = \z l i.
+  !pre t x tail (V:(num#num)->bool) e pc fall taken p q d r Hit.
+    p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+    d = LENGTH pre+1 ==> r = (\i. if i < d then i else i-1) ==>
+    Hit = (\z l i.
       ?off. FLOOKUP (SND (compute_label_offsets z)) l = SOME off /\
-        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc z) off = SOME i in
-    let E = \a b. fall a b \/ ?l. taken a l b in
-    let Reach = \edge e v.
-      ?n (path:num->num#num).
-        path 0=e /\ path n=v /\ !k. k<n ==> edge (path k) (path (SUC k)) in
+        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc z) off = SOME i) ==>
     asm_terminal_op t /\ ~asm_reachable_marker x /\ asm_static_wf p /\
     e IN V /\ pc e <> d /\
-    (!v. v IN V ==> pc v < LENGTH p /\ Reach E e v) /\
+    (!v. v IN V ==> pc v < LENGTH p /\
+      ?n (path:num->num#num). path 0=e /\ path n=v /\
+        !k. k<n ==> fall (path k) (path (SUC k)) \/ ?l. taken (path k) l (path (SUC k))) /\
     (!a b. fall a b ==> a IN V /\ b IN V /\
       ~asm_terminal_op (EL (pc a) p) /\ pc b=pc a+1) /\
     (!a l b. taken a l b ==> a IN V /\ b IN V /\ Hit p l (pc b)) ==>
@@ -29,19 +25,13 @@ Theorem prune_one_arm_geometry:
     (!a l b. taken a l b ==> Hit q l (r (pc b)))
 Proof
   rpt gen_tac >>
-  map_every (fn a =>
-    qmatch_goalsub_abbrev_tac `LET _ ^a` >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [``p:asm_inst list``, ``q:asm_inst list``, ``d:num``, ``r:num->num``,
-     ``Hit:asm_inst list->string->num->bool``,
-     ``E:(num#num)->(num#num)->bool``,
-     ``Reach:((num#num)->(num#num)->bool)->(num#num)->(num#num)->bool``] >>
+  ntac 5 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
   strip_tac >>
   `!a l b. taken a l b ==> pc b <> d /\ Hit q l (r (pc b))` by
     (rpt gen_tac >> strip_tac >>
      qpat_assum `!a l b. taken a l b ==> _` drule >>
      simp[Abbr `Hit`] >> strip_tac >>
-     qspecl_then [`pre`, `t`, `x`, `tail`] mp_tac prune_one_canonical_layout >>
+     qspecl_then [`pre`, `t`, `x`, `tail`] mp_tac (SIMP_RULE bool_ss [] prune_one_canonical_layout) >>
      simp[Abbr `p`, Abbr `q`, Abbr `d`, Abbr `r`] >>
      disch_then (drule_all o CONJUNCT1) >> metis_tac[]) >>
   `!a b. fall a b ==> pc b <> d` by
@@ -56,11 +46,12 @@ Proof
     (gen_tac >> strip_tac >>
      qpat_x_assum `!v. v IN V ==> _` drule >>
      disch_then (mp_tac o CONJUNCT2) >>
-     simp[Abbr `Reach`] >> strip_tac >> Cases_on `n` >- metis_tac[] >>
+     strip_tac >> Cases_on `n` >- metis_tac[] >>
      rename1 `path (SUC j) = v` >>
-     `E (path j) (path (SUC j))` by
-       (qpat_assum `!k. k < SUC j ==> _` (qspec_then `j` mp_tac) >> simp[]) >>
-     fs[Abbr `E`] >> metis_tac[]) >>
+     qpat_assum `!k. k < SUC j ==> _`
+       (qspec_then `j` (strip_assume_tac o REWRITE_RULE [prim_recTheory.LESS_SUC_REFL]))
+     >- (qpat_assum `!a b. fall a b ==> pc b <> d` drule >> simp[]) >>
+     qpat_assum `!a l b. taken a l b ==> pc b <> d /\ _` drule >> simp[]) >>
   conj_tac
   >- (gen_tac >> strip_tac >>
       `pc v < LENGTH p /\ pc v <> d` by metis_tac[] >>
