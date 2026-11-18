@@ -132,7 +132,7 @@ Proof
   qpat_x_assum `!nm. OPTREL _ _ _` kall_tac >>
   qexists_tac `m` >>
   Cases_on `step_inst m D i s` >>
-  gvs[terminates_def, step_result_rel_def, frame_result_rel_def] >>
+  FIRST [gvs[terminates_def, step_result_rel_def, frame_result_rel_def]] >>
   ntac 2 (once_rewrite_tac[gas_events_block_def, exec_block_def] >> simp[]) >>
   metis_tac[APPEND_ASSOC]
 QED
