@@ -17,10 +17,12 @@ fun frame_tac g =
    rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac
      >- (simp[] >> frame_tac) >> gen_tac >> BETA_TAC) >> simp[]) g;
 
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_deploy]
     (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
-      (Q.GEN `R` theorem)))
+      (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
 
 Theorem deploy_blocks_frame_compile_clamp[simp]:
   deploy_blocks_frame (compile_clamp v ty)
@@ -181,7 +183,8 @@ QED
 Theorem deploy_blocks_frame_return_value_decode:
   (!c x y. deploy_blocks_frame (compile_select c x y)) ==>
   deploy_blocks_frame (compile_return_value_decode lo hi)
-Proof strip_tac >> simp[compile_return_value_decode_def] >> frame_tac
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_return_value_decode >> simp[]
 QED
 
 Theorem deploy_blocks_frame_unwrap_value:
@@ -190,14 +193,14 @@ Theorem deploy_blocks_frame_unwrap_value:
     deploy_blocks_frame (compile_ensure_in_memory p loc bytes words ctor imm)) ==>
   deploy_blocks_frame (unwrap_value cenv vv)
 Proof
-  strip_tac >> Cases_on `vv` >> simp[unwrap_value_def] >>
-  IF_CASES_TAC >> simp[] >> Cases_on `p.ptr_location` >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_unwrap_value >> simp[]
 QED
 
 Theorem deploy_blocks_frame_multi_vvs:
   !es. (!e. MEM e es ==> deploy_blocks_frame (cfn cenv (expr_type e) e)) ==>
   deploy_blocks_frame (compile_multi_vvs cfn cenv es)
-Proof Induct >> simp[compile_multi_vvs_def] >> strip_tac >> frame_tac
+Proof
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_multi_vvs)
 QED
 
 Theorem deploy_blocks_frame_extcall_store_values:
@@ -235,15 +238,15 @@ Theorem deploy_blocks_frame_dynarray_append:
   (!src slot ty trans. deploy_blocks_frame (compile_store_slots cenv src slot ty trans)) ==>
   deploy_blocks_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim loc)
 Proof
-  strip_tac >> simp[compile_dynarray_append_def] >>
-  frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  strip_tac >> apply_symbolic_frame symbolic_frame_dynarray_append >> simp[]
 QED
 
 Theorem deploy_blocks_frame_dynarray_pop:
   (!ctor imm loc off. deploy_blocks_frame (compile_ptr_load ctor imm loc off)) /\
   (!ctor imm loc off v. deploy_blocks_frame (compile_ptr_store ctor imm loc off v)) ==>
   deploy_blocks_frame (compile_dynarray_pop arr ws sz ctor imm loc)
-Proof strip_tac >> simp[compile_dynarray_pop_def] >> frame_tac
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_dynarray_pop >> simp[]
 QED
 
 Theorem deploy_blocks_frame_stage_intcall_args:
@@ -259,85 +262,82 @@ QED
 
 Theorem deploy_blocks_frame_store_multi_results[simp]:
   !vs buf off. deploy_blocks_frame (store_multi_results buf vs off)
-Proof Induct >> simp[store_multi_results_def] >> rpt gen_tac >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_store_multi_results >> simp[]
 QED
 
 Theorem deploy_blocks_frame_array_subscript:
   (!p. deploy_blocks_frame (loader p)) ==>
   deploy_blocks_frame (compile_array_subscript arr idx dyn cnt ws sz sg loader)
 Proof
-  strip_tac >> Cases_on `dyn` >> Cases_on `sg` >>
-  simp[compile_array_subscript_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_array_subscript >> simp[]
 QED
 
 Theorem deploy_blocks_frame_tuple_subscript[simp]:
   deploy_blocks_frame (compile_tuple_subscript arr off)
-Proof simp[compile_tuple_subscript_def]
+Proof
+  apply_symbolic_frame symbolic_frame_tuple_subscript >> simp[]
 QED
 
 Theorem deploy_blocks_frame_store_byte_chunks[simp]:
   !p bs off. deploy_blocks_frame (compile_store_byte_chunks p bs off)
 Proof
-  recInduct compile_store_byte_chunks_ind >> rpt strip_tac >>
-  simp[Once compile_store_byte_chunks_def] >> frame_tac >> gvs[]
+  apply_symbolic_frame symbolic_frame_store_byte_chunks >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytelike_literal[simp]:
   deploy_blocks_frame (compile_bytelike_literal bs maxlen)
-Proof simp[compile_bytelike_literal_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_bytelike_literal >> simp[]
 QED
 
 Theorem deploy_blocks_frame_literal_vv[simp]:
   deploy_blocks_frame (compile_literal_vv ty lit)
 Proof
-  Cases_on `lit` >> simp[compile_literal_vv_def] >>
-  TRY (rename1 `BoolL b` >> Cases_on `b` >> simp[compile_literal_vv_def]) >>
-  Cases_on `ty` >> simp[compile_literal_vv_def] >>
-  TRY (rename1 `BaseT b` >> Cases_on `b` >> simp[compile_literal_vv_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[compile_literal_vv_def]) >> frame_tac
+  apply_symbolic_frame symbolic_frame_literal_vv >> simp[]
 QED
 
 Theorem deploy_blocks_frame_name_vv[simp]:
   deploy_blocks_frame (compile_name_vv cenv ty id)
 Proof
-  simp[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  rename1 `FLOOKUP cenv.ce_vars id = SOME loc` >> Cases_on `loc` >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_name_vv >> simp[]
 QED
 
 Theorem deploy_blocks_frame_env_var[simp]:
   deploy_blocks_frame (compile_env_var item)
-Proof Cases_on `item` >> simp[compile_env_var_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_env_var >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_bytestring_as_word[simp]:
   deploy_blocks_frame (load_bytestring_as_word v opc)
-Proof Cases_on `opc = SAR` >> simp[load_bytestring_as_word_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_load_bytestring_as_word >> simp[]
 QED
 
 Theorem deploy_blocks_frame_int_clamp[simp]:
   deploy_blocks_frame (compile_int_clamp sg bits v)
-Proof Cases_on `sg` >> simp[compile_int_clamp_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_int_clamp >> simp[]
 QED
 
 Theorem deploy_blocks_frame_type_convert[simp]:
   deploy_blocks_frame (compile_type_convert v conv)
 Proof
-  Cases_on `conv` >> simp[compile_type_convert_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac >>
-  rpt (IF_CASES_TAC >> simp[] >> frame_tac) >>
-  pairarg_tac >> simp[] >> frame_tac >>
-  rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  apply_symbolic_frame symbolic_frame_type_convert >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytestring_widen_copy:
   (!dst src sz. deploy_blocks_frame (compile_copy_memory dst src sz)) ==>
   deploy_blocks_frame (compile_bytestring_widen_copy dstsz v srcsz)
-Proof strip_tac >> simp[compile_bytestring_widen_copy_def] >> frame_tac
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_bytestring_widen_copy >> simp[]
 QED
 
 Theorem deploy_blocks_frame_neg[simp]:
   deploy_blocks_frame (compile_neg v ty)
-Proof simp[compile_neg_def] >> pairarg_tac >> simp[] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_neg >> simp[]
 QED
 
 Theorem deploy_blocks_frame_lower_value:
@@ -352,25 +352,22 @@ Theorem deploy_blocks_frame_lower_value_with_loc:
   deploy_blocks_frame (cfn cenv ty e) /\
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) ==>
   deploy_blocks_frame (lower_value_with_loc cfn cenv ty e)
-Proof simp[lower_value_with_loc_def]
+Proof
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_lower_value_with_loc)
 QED
 
 Theorem deploy_blocks_frame_as_stack_val:
   deploy_blocks_frame m ==>
   deploy_blocks_frame (\st. as_stack_val ty (m st))
 Proof
-  rw[deploy_blocks_frame_def] >> Cases_on `m st` >>
-  gvs[as_stack_val_def] >>
-  first_x_assum drule >> disch_then (qspec_then `B` mp_tac) >> simp[as_stack_val_def, as_ptr_val_def]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_as_stack_val)
 QED
 
 Theorem deploy_blocks_frame_as_ptr_val:
   deploy_blocks_frame m ==>
   deploy_blocks_frame (\st. as_ptr_val ty loc (m st))
 Proof
-  rw[deploy_blocks_frame_def] >> Cases_on `m st` >>
-  gvs[as_ptr_val_def] >>
-  first_x_assum drule >> disch_then (qspec_then `B` mp_tac) >> simp[as_stack_val_def, as_ptr_val_def]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_as_ptr_val)
 QED
 
 Theorem deploy_blocks_frame_multi_exprs:
@@ -503,12 +500,13 @@ QED
 Theorem deploy_blocks_frame_store_words[simp]:
   !vs buf off. deploy_blocks_frame (compile_store_words buf vs off)
 Proof
-  Induct >> rpt gen_tac >> Cases_on `off = 0` >> simp[compile_store_words_def]
+  apply_symbolic_frame symbolic_frame_store_words >> simp[]
 QED
 
 Theorem deploy_blocks_frame_invert[simp]:
   deploy_blocks_frame (compile_invert v ty cenv)
-Proof Cases_on `ty` >> simp[compile_invert_def]
+Proof
+  apply_symbolic_frame symbolic_frame_invert >> simp[]
 QED
 
 Theorem deploy_blocks_frame_attribute:
@@ -543,14 +541,7 @@ Theorem deploy_blocks_frame_acc:
   deploy_blocks_frame (cfn cenv (BaseT AddressT) e) ==>
   deploy_blocks_frame (compile_acc cfn cenv e acc)
 Proof
-  strip_tac >>
-  `deploy_blocks_frame (lower_value cfn cenv (BaseT AddressT) e)` by
-    simp[deploy_blocks_frame_lower_value] >>
-  Cases_on `acc` >>
-  simp[deploy_blocks_frame_def, compile_acc_def] >> rpt strip_tac >>
-  simp[deploy_blocks_frame_equation,
-       deploy_blocks_frame_emit_op, deploy_blocks_frame_emit_inst] >>
-  rpt (pairarg_tac >> gvs[])
+  strip_tac >> apply_symbolic_frame symbolic_frame_acc >> simp[]
 QED
 
 Theorem deploy_blocks_frame_addmod_names:
@@ -719,26 +710,7 @@ Theorem deploy_blocks_frame_call_external:
       sc v g sk hd d rt dt ei di)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty (ExtCall sc sk sig opts) args dr)
 Proof
-  strip_tac >> PairCases_on `sig` >> Cases_on `args`
-  >- (simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-      simp[deploy_blocks_frame_equation] >> rpt (pairarg_tac >> gvs[])) >>
-  `deploy_blocks_frame (lower_value cfn cenv (BaseT AddressT) h)` by
-    (irule deploy_blocks_frame_lower_value >> simp[]) >>
-  `deploy_blocks_frame (compile_ext_call_args cfn cenv
-      (DROP (LENGTH sig1) t)
-      (MAP (lowered_value_type cenv) (TAKE (LENGTH sig1) t))
-      (TAKE (LENGTH sig1) t))` by
-    (irule deploy_blocks_frame_ext_call_args >> simp[] >>
-     metis_tac[rich_listTheory.MEM_TAKE, listTheory.MEM]) >>
-  `deploy_blocks_frame (compile_ext_call_kwargs cfn cenv sig2 opts (DROP (LENGTH sig1) t))` by
-    (first_x_assum irule >> metis_tac[rich_listTheory.MEM_DROP_IMP, listTheory.MEM]) >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  simp[deploy_blocks_frame_equation] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >> Cases_on `default_opt` >>
-  gvs[deploy_blocks_frame_equation] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation]) >>
-  IF_CASES_TAC >> gvs[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_external >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_send:
@@ -746,12 +718,7 @@ Theorem deploy_blocks_frame_call_send:
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty (Send gas) args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  rpt (CASE_TAC >> gvs[]) >>
-  gvs[deploy_blocks_frame_equation, deploy_blocks_frame_lower_value] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-                          deploy_blocks_frame_lower_value])
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_send >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_raw_revert:
@@ -760,12 +727,7 @@ Theorem deploy_blocks_frame_call_raw_revert:
   (!v. deploy_blocks_frame (compile_raw_revert v)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty RawRevert args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  rpt (CASE_TAC >> gvs[]) >>
-  gvs[deploy_blocks_frame_equation, deploy_blocks_frame_lower_value] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-                          deploy_blocks_frame_lower_value])
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw_revert >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_selfdestruct:
@@ -774,12 +736,7 @@ Theorem deploy_blocks_frame_call_selfdestruct:
   (!v. deploy_blocks_frame (compile_selfdestruct v)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty SelfDestructTarget args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  rpt (CASE_TAC >> gvs[]) >>
-  gvs[deploy_blocks_frame_equation, deploy_blocks_frame_lower_value] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-                          deploy_blocks_frame_lower_value])
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_selfdestruct >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_raw:
@@ -792,22 +749,7 @@ Theorem deploy_blocks_frame_call_raw:
     deploy_blocks_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty (RawCallTarget rcf) args dr)
 Proof
-  strip_tac >> Cases_on `args`
-  >- (simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-      simp[deploy_blocks_frame_equation] >> rpt (pairarg_tac >> gvs[])) >>
-  Cases_on `t`
-  >- (simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-      simp[deploy_blocks_frame_equation] >> rpt (pairarg_tac >> gvs[])) >>
-  `deploy_blocks_frame (compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws t')` by
-    (first_x_assum irule >> simp[]) >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  simp[deploy_blocks_frame_equation, deploy_blocks_frame_lower_value] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-                          deploy_blocks_frame_lower_value]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >>
-  gvs[deploy_blocks_frame_equation] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation]) >>
-  IF_CASES_TAC >> gvs[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_raw_calldata:
@@ -821,19 +763,7 @@ Theorem deploy_blocks_frame_call_raw_calldata:
     deploy_blocks_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty (RawCallCalldataTarget rcf) args dr)
 Proof
-  strip_tac >> Cases_on `args`
-  >- (simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-      simp[deploy_blocks_frame_equation] >> rpt (pairarg_tac >> gvs[])) >>
-  `deploy_blocks_frame (compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws t)` by
-    (first_x_assum irule >> simp[]) >>
-  simp[deploy_blocks_frame_def, compile_call_def] >> rpt strip_tac >>
-  simp[deploy_blocks_frame_equation, deploy_blocks_frame_lower_value] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-                          deploy_blocks_frame_lower_value]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >>
-  gvs[deploy_blocks_frame_equation] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation]) >>
-  IF_CASES_TAC >> gvs[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw_calldata >> simp[]
 QED
 
 Theorem deploy_blocks_frame_call_raw_log_pair:

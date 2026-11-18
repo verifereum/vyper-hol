@@ -5,7 +5,7 @@ Ancestors
   runtimeSymSrcFunctionLists runtimeSymSrcModuleDispatch
   runtimeSymSrcGeneratorContracts runtimeSymSrcBlockEmission vyperCompiler compileVyper
   list loweringShapeDefs compileEnv venomInst
-  runtimeSymSrcOrdinaryPackages runtimeSymSrcGroupedPackages loweringShapeProps
+  runtimeSymSrcOrdinaryPackages loweringShapeProps
   runtimeSymSrcInterfaces loweringPackageInsts
 
 
@@ -19,21 +19,6 @@ Theorem runtime_sym_run_lowering:
 Proof
   simp[run_lowering_def] >> rpt strip_tac >>
   pairarg_tac >> gvs[AllCaseEqs(), lowering_policy_ok_def] >>
-  `EVERY runtime_sym_inst (state_insts st1)` by
-    (metis_tac[every_state_insts_initial]) >>
-  drule_all extract_context_with_internals_every >> simp[EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem runtime_sym_run_grouped_lowering:
-  (!s u s'. EVERY runtime_sym_inst (state_insts s) /\
-    compile_generate_grouped_runtime groups ints fb s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')) /\
-  run_grouped_lowering groups ints fb rp entry = SOME unit ==>
-  !fn. MEM fn unit.cu_context.ctx_functions ==>
-    EVERY runtime_sym_inst (fn_insts fn)
-Proof
-  simp[run_grouped_lowering_def] >> rpt strip_tac >>
-  pairarg_tac >> gvs[AllCaseEqs()] >>
   `EVERY runtime_sym_inst (state_insts st1)` by
     (metis_tac[every_state_insts_initial]) >>
   drule_all extract_context_with_internals_every >> simp[EVERY_MEM] >> metis_tac[]

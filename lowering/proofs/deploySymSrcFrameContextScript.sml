@@ -22,55 +22,62 @@ val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
 
 Theorem deploy_blocks_frame_fresh_vars[simp]:
   !n. deploy_blocks_frame (fresh_vars n)
-Proof Induct >> simp[fresh_vars_def]
+Proof
+  apply_symbolic_frame symbolic_frame_fresh_vars >> simp[]
 QED
 
 Theorem deploy_blocks_frame_emit_multi_op[simp]:
   deploy_blocks_frame (emit_multi_op opc ops n)
-Proof simp[emit_multi_op_def]
+Proof
+  apply_symbolic_frame symbolic_frame_emit_multi_op >> simp[]
 QED
 
 Theorem deploy_blocks_frame_imm_load[simp]:
   deploy_blocks_frame (compile_imm_load_word ctor imm off)
-Proof Cases_on `imm` >> simp[compile_imm_load_word_def]
+Proof
+  apply_symbolic_frame symbolic_frame_imm_load >> simp[]
 QED
 
 Theorem deploy_blocks_frame_ptr_load[simp]:
   deploy_blocks_frame (compile_ptr_load ctor imm loc off)
-Proof Cases_on `loc` >> simp[compile_ptr_load_def]
+Proof
+  apply_symbolic_frame symbolic_frame_ptr_load >> simp[]
 QED
 
 Theorem deploy_blocks_frame_imm_store[simp]:
   deploy_blocks_frame (compile_imm_store_word imm off v)
-Proof Cases_on `imm` >> simp[compile_imm_store_word_def]
+Proof
+  apply_symbolic_frame symbolic_frame_imm_store >> simp[]
 QED
 
 Theorem deploy_blocks_frame_ptr_store[simp]:
   deploy_blocks_frame (compile_ptr_store ctor imm loc off v)
-Proof Cases_on `loc` >> simp[compile_ptr_store_def]
+Proof
+  apply_symbolic_frame symbolic_frame_ptr_store >> simp[]
 QED
 
 Theorem deploy_blocks_frame_word_copy_base[simp]:
   deploy_blocks_frame (compile_word_copy_loop_base src dst n l s ctor imm)
 Proof
-  simp[compile_word_copy_loop_base_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_word_copy_base >> simp[]
 QED
 
 Theorem deploy_blocks_frame_alloc_dynamic[simp]:
   deploy_blocks_frame (compile_alloc_dynamic n)
-Proof simp[compile_alloc_dynamic_def]
+Proof
+  apply_symbolic_frame symbolic_frame_alloc_dynamic >> simp[]
 QED
 
 Theorem deploy_blocks_frame_word_copy[simp]:
   deploy_blocks_frame (compile_word_copy_loop src dst n l s ctor)
-Proof simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def]
+Proof
+  apply_symbolic_frame symbolic_frame_word_copy >> simp[]
 QED
 
 Theorem deploy_blocks_frame_copy_memory[simp]:
   deploy_blocks_frame (compile_copy_memory dst src n)
-Proof Cases_on `n` >> simp[compile_copy_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_copy_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_zero_loop[simp]:
@@ -87,40 +94,44 @@ QED
 
 Theorem deploy_blocks_frame_lit_offset[simp]:
   deploy_blocks_frame (compile_lit_byte_offset p n)
-Proof Cases_on `p` >> simp[compile_lit_byte_offset_def]
+Proof
+  apply_symbolic_frame symbolic_frame_lit_offset >> simp[]
 QED
 
 Theorem deploy_blocks_frame_imm_copy[simp]:
   !n off. deploy_blocks_frame (compile_imm_copy_to_memory ctor imm src dst n off)
-Proof Induct >> simp[compile_imm_copy_to_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_imm_copy >> simp[]
 QED
 
 Theorem deploy_blocks_frame_imm_words[simp]:
   !n off. deploy_blocks_frame (compile_imm_store_words imm src dst n off)
-Proof Induct >> simp[compile_imm_store_words_def]
+Proof
+  apply_symbolic_frame symbolic_frame_imm_words >> simp[]
 QED
 
 Theorem deploy_blocks_frame_byte_offset[simp]:
   deploy_blocks_frame (compile_with_byte_offset p n)
-Proof simp[compile_with_byte_offset_def]
+Proof
+  apply_symbolic_frame symbolic_frame_byte_offset >> simp[]
 QED
 
 Theorem deploy_blocks_frame_copy_dynamic[simp]:
   deploy_blocks_frame (compile_copy_memory_dynamic dst src n)
-Proof simp[compile_copy_memory_dynamic_def]
+Proof
+  apply_symbolic_frame symbolic_frame_copy_dynamic >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytestring_len[simp]:
   deploy_blocks_frame (compile_bytestring_copy_len p)
 Proof
-  simp[compile_bytestring_copy_len_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_bytestring_len >> simp[]
 QED
 
 Theorem deploy_blocks_frame_store_bytestring[simp]:
   deploy_blocks_frame (compile_store_bytestring src dst)
-Proof simp[compile_store_bytestring_def]
+Proof
+  apply_symbolic_frame symbolic_frame_store_bytestring >> simp[]
 QED
 
 Theorem deploy_blocks_frame_typed_copy_mutual:
@@ -163,7 +174,8 @@ QED
 
 Theorem deploy_blocks_frame_store_memory[simp]:
   deploy_blocks_frame (compile_store_memory cenv src dst dt st)
-Proof simp[compile_store_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_store_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_storage_copy[simp]:
@@ -172,8 +184,7 @@ Theorem deploy_blocks_frame_storage_copy[simp]:
   deploy_blocks_frame (compile_transient_to_memory src dst n) /\
   deploy_blocks_frame (compile_memory_to_transient src dst n)
 Proof
-  simp[compile_storage_to_memory_def, compile_memory_to_storage_def,
-       compile_transient_to_memory_def, compile_memory_to_transient_def]
+  apply_symbolic_frame symbolic_frame_storage_copy >> simp[]
 QED
 
 Theorem deploy_blocks_frame_ensure_memory[simp]:
@@ -208,7 +219,8 @@ QED
 
 Theorem deploy_blocks_frame_code_to_memory[simp]:
   deploy_blocks_frame (compile_code_to_memory off dst wc)
-Proof simp[compile_code_to_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_code_to_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_load_immutable[simp]:
@@ -219,49 +231,56 @@ QED
 
 Theorem deploy_blocks_frame_fixed_region[simp]:
   deploy_blocks_frame (compile_fixed_region_with_id n)
-Proof simp[compile_fixed_region_with_id_def]
+Proof
+  apply_symbolic_frame symbolic_frame_fixed_region >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytes_word_count[simp]:
   deploy_blocks_frame (compile_bytestring_word_count src)
-Proof simp[compile_bytestring_word_count_def]
+Proof
+  apply_symbolic_frame symbolic_frame_bytes_word_count >> simp[]
 QED
 
 Theorem deploy_blocks_frame_store_immutable_bytes[simp]:
   deploy_blocks_frame (compile_store_immutable_bytestring imm src dst)
-Proof simp[compile_store_immutable_bytestring_def]
+Proof
+  apply_symbolic_frame symbolic_frame_store_immutable_bytes >> simp[]
 QED
 
 Theorem deploy_blocks_frame_nonreentrant_lock[simp]:
   deploy_blocks_frame (compile_nonreentrant_lock key trans view)
 Proof
-  simp[compile_nonreentrant_lock_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_nonreentrant_lock >> simp[]
 QED
 
 Theorem deploy_blocks_frame_nonreentrant_unlock[simp]:
   deploy_blocks_frame (compile_nonreentrant_unlock key trans view)
-Proof simp[compile_nonreentrant_unlock_def]
+Proof
+  apply_symbolic_frame symbolic_frame_nonreentrant_unlock >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytes_data_ptr[simp]:
   deploy_blocks_frame (compile_bytes_data_ptr p loc)
-Proof simp[compile_bytes_data_ptr_def]
+Proof
+  apply_symbolic_frame symbolic_frame_bytes_data_ptr >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytestring_length[simp]:
   deploy_blocks_frame (compile_bytestring_length ctor imm p loc)
-Proof simp[compile_bytestring_length_def]
+Proof
+  apply_symbolic_frame symbolic_frame_bytestring_length >> simp[]
 QED
 
 Theorem deploy_blocks_frame_slot_to_memory[simp]:
   deploy_blocks_frame (compile_slot_to_memory src dst n loc)
-Proof simp[compile_slot_to_memory_def]
+Proof
+  apply_symbolic_frame symbolic_frame_slot_to_memory >> simp[]
 QED
 
 Theorem deploy_blocks_frame_store_immutable[simp]:
   deploy_blocks_frame (compile_store_immutable imm src dst n)
-Proof simp[compile_store_immutable_def]
+Proof
+  apply_symbolic_frame symbolic_frame_store_immutable >> simp[]
 QED
 
 Theorem deploy_blocks_frame_store_slots[simp]:
@@ -295,5 +314,6 @@ QED
 
 Theorem deploy_blocks_frame_encode_log_topic[simp]:
   deploy_blocks_frame (compile_encode_log_topic v b)
-Proof simp[compile_encode_log_topic_def]
+Proof
+  apply_symbolic_frame symbolic_frame_encode_log_topic >> simp[]
 QED

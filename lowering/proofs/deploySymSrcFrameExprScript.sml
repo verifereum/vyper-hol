@@ -6,6 +6,10 @@ Ancestors
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
 
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks` (Q.GEN `R` theorem));
+
 Theorem deploy_blocks_frame_type_builtin_dispatch_body:
   (!ty e. deploy_blocks_frame (lower_value cfn cenv ty e)) /\
   (!ty e. deploy_blocks_frame (cfn cenv ty e)) /\
@@ -149,9 +153,7 @@ QED
 Theorem deploy_blocks_frame_invalid_expr_call[simp]:
   deploy_blocks_frame (invalid_expr_call ty)
 Proof
-  simp[deploy_blocks_frame_def, invalid_expr_call_def] >>
-  rpt strip_tac >> simp[deploy_blocks_frame_equation] >>
-  rpt (pairarg_tac >> gvs[])
+  match_mp_tac (specialize_frame symbolic_frame_invalid_expr_call) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_expr_child_callback_bounded:

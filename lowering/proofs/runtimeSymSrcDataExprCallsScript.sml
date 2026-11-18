@@ -1,19 +1,24 @@
 Theory runtimeSymSrcDataExprCalls
 Ancestors
+  symbolicSourceCompilerCallFrame
   runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks runtimeSymSrcDataExtCallArgs
   exprLowering compileEnv
+
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_store_words:
   !vs buf off. runtime_data_frame (compile_store_words buf vs off)
 Proof
-  Induct >> rpt gen_tac >> Cases_on `off = 0` >>
-  simp[compile_store_words_def]
+  apply_symbolic_frame symbolic_frame_store_words >> simp[]
 QED
 
 Theorem runtime_data_frame_invert:
   runtime_data_frame (compile_invert v ty cenv)
 Proof
-  Cases_on `ty` >> simp[compile_invert_def]
+  apply_symbolic_frame symbolic_frame_invert >> simp[]
 QED
 
 Theorem runtime_data_frame_acc:
@@ -21,14 +26,7 @@ Theorem runtime_data_frame_acc:
   runtime_data_frame (cfn cenv (BaseT AddressT) e) ==>
   runtime_data_frame (compile_acc cfn cenv e acc)
 Proof
-  strip_tac >>
-  `runtime_data_frame (lower_value cfn cenv (BaseT AddressT) e)` by
-    simp[runtime_data_frame_lower_value] >>
-  Cases_on `acc` >> rw[runtime_data_frame_def, compile_acc_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  fs[runtime_data_frame_def] >>
-  metis_tac[runtime_data_frame_emit_op, runtime_data_frame_emit_inst,
-            runtime_data_frame_def, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_acc >> simp[]
 QED
 
 Theorem runtime_data_frame_call_internal:
@@ -109,26 +107,7 @@ Theorem runtime_data_frame_call_external:
       sc v g sk hd d rt dt ei di)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty (ExtCall sc sk sig opts) args dr)
 Proof
-  strip_tac >> PairCases_on `sig` >> Cases_on `args`
-  >- (rw[runtime_data_frame_def, compile_call_def] >>
-      rpt (pairarg_tac >> gvs[]) >>
-      metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]) >>
-  `runtime_data_frame (lower_value cfn cenv (BaseT AddressT) h)` by
-    (irule runtime_data_frame_lower_value >> simp[]) >>
-  `runtime_data_frame (compile_ext_call_args cfn cenv
-      (DROP (LENGTH sig1) t)
-      (MAP (lowered_value_type cenv) (TAKE (LENGTH sig1) t))
-      (TAKE (LENGTH sig1) t))` by
-    (irule runtime_data_frame_ext_call_args >> simp[] >>
-     metis_tac[rich_listTheory.MEM_TAKE, listTheory.MEM]) >>
-  `runtime_data_frame (compile_ext_call_kwargs cfn cenv sig2 opts (DROP (LENGTH sig1) t))` by
-    (first_x_assum irule >> metis_tac[rich_listTheory.MEM_DROP_IMP, listTheory.MEM]) >>
-  rw[runtime_data_frame_def, compile_call_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >> Cases_on `default_opt` >>
-  gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  IF_CASES_TAC >> simp[] >> fs[runtime_data_frame_def] >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_op, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_external >> simp[]
 QED
 
 Theorem runtime_data_frame_call_send:
@@ -136,13 +115,7 @@ Theorem runtime_data_frame_call_send:
   (!vv. runtime_data_frame (unwrap_value cenv vv)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty (Send gas) args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  rw[runtime_data_frame_def, compile_call_def] >>
-  rpt (CASE_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]) >>
-  fs[runtime_data_frame_def, lower_value_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_op,
-    runtime_data_frame_emit_void, runtime_data_frame_emit_inst, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_send >> simp[]
 QED
 
 Theorem runtime_data_frame_call_raw_revert:
@@ -151,12 +124,7 @@ Theorem runtime_data_frame_call_raw_revert:
   (!v. runtime_data_frame (compile_raw_revert v)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty RawRevert args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  rw[runtime_data_frame_def, compile_call_def] >>
-  rpt (CASE_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]) >>
-  fs[runtime_data_frame_def, lower_value_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw_revert >> simp[]
 QED
 
 Theorem runtime_data_frame_call_selfdestruct:
@@ -165,12 +133,7 @@ Theorem runtime_data_frame_call_selfdestruct:
   (!v. runtime_data_frame (compile_selfdestruct v)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty SelfDestructTarget args dr)
 Proof
-  strip_tac >> Cases_on `args` >>
-  rw[runtime_data_frame_def, compile_call_def] >>
-  rpt (CASE_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]) >>
-  fs[runtime_data_frame_def, lower_value_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_selfdestruct >> simp[]
 QED
 
 Theorem runtime_data_frame_call_raw:
@@ -183,21 +146,7 @@ Theorem runtime_data_frame_call_raw:
     runtime_data_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty (RawCallTarget rcf) args dr)
 Proof
-  strip_tac >> Cases_on `args`
-  >- (rw[runtime_data_frame_def, compile_call_def] >> rpt (pairarg_tac >> gvs[]) >>
-      metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]) >>
-  Cases_on `t`
-  >- (rw[runtime_data_frame_def, compile_call_def] >> rpt (pairarg_tac >> gvs[]) >>
-      metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]) >>
-  `runtime_data_frame (compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws t')` by
-    (first_x_assum irule >> simp[]) >>
-  rw[runtime_data_frame_def, compile_call_def] >> rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >> IF_CASES_TAC >> simp[] >>
-  fs[runtime_data_frame_def, lower_value_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_op,
-    runtime_data_frame_emit_inst, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw >> simp[]
 QED
 
 Theorem runtime_data_frame_call_raw_calldata:
@@ -211,18 +160,7 @@ Theorem runtime_data_frame_call_raw_calldata:
     runtime_data_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty (RawCallCalldataTarget rcf) args dr)
 Proof
-  strip_tac >> Cases_on `args`
-  >- (rw[runtime_data_frame_def, compile_call_def] >> rpt (pairarg_tac >> gvs[]) >>
-      metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]) >>
-  `runtime_data_frame (compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws t)` by
-    (first_x_assum irule >> simp[]) >>
-  rw[runtime_data_frame_def, compile_call_def] >> rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `gas_opt` >> Cases_on `value_opt` >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >> IF_CASES_TAC >> simp[] >>
-  fs[runtime_data_frame_def, lower_value_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[runtime_data_frame_def, runtime_data_frame_emit_op,
-    runtime_data_frame_emit_void, runtime_data_frame_emit_inst, pairTheory.SND]
+  strip_tac >> apply_symbolic_frame symbolic_frame_call_raw_calldata >> simp[]
 QED
 
 Theorem runtime_data_frame_call_raw_log_pair:

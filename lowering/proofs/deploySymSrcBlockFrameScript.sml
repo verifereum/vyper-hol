@@ -23,41 +23,42 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks` (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
+
 Theorem deploy_blocks_frame_return[simp]:
   deploy_blocks_frame (comp_return x)
 Proof
-  simp[deploy_blocks_frame_def, comp_return_def]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_return)
 QED
 
 Theorem deploy_blocks_frame_bind:
   deploy_blocks_frame m /\ (!x. deploy_blocks_frame (k x)) ==>
   deploy_blocks_frame (comp_bind m k)
 Proof
-  simp[deploy_blocks_frame_def, comp_bind_def] >>
-  rpt strip_tac >> Cases_on `m s` >> gvs[] >>
-  qpat_x_assum `!s B x t. m s = _ ==> _` drule >>
-  disch_then (qspec_then `B` assume_tac) >> simp[] >>
-  first_x_assum irule >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_bind)
 QED
 
 Theorem deploy_blocks_frame_ignore_bind:
   deploy_blocks_frame m /\ deploy_blocks_frame n ==>
   deploy_blocks_frame (comp_ignore_bind m n)
 Proof
-  strip_tac >> simp[comp_ignore_bind_def] >>
-  irule deploy_blocks_frame_bind >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_ignore_bind)
 QED
 
 Theorem deploy_blocks_frame_emit[simp]:
   deploy_blocks_frame (emit i)
 Proof
-  simp[deploy_blocks_frame_def, emit_def]
+  apply_symbolic_frame symbolic_frame_emit >> simp[]
 QED
 
 Theorem deploy_blocks_frame_new_block[simp]:
   deploy_blocks_frame (new_block l)
 Proof
-  simp[deploy_blocks_frame_def, new_block_def]
+  apply_symbolic_frame symbolic_frame_new_block >> simp[]
 QED
 
 Theorem deploy_blocks_terminated[simp]:
@@ -69,45 +70,43 @@ QED
 Theorem deploy_blocks_frame_fresh_var[simp]:
   deploy_blocks_frame fresh_var
 Proof
-  simp[deploy_blocks_frame_def, fresh_var_def]
+  apply_symbolic_frame symbolic_frame_fresh_var >> simp[]
 QED
 
 Theorem deploy_blocks_frame_fresh_id[simp]:
   deploy_blocks_frame fresh_id
 Proof
-  simp[deploy_blocks_frame_def, fresh_id_def]
+  apply_symbolic_frame symbolic_frame_fresh_id >> simp[]
 QED
 
 Theorem deploy_blocks_frame_fresh_label[simp]:
   deploy_blocks_frame (fresh_label suffix)
 Proof
-  simp[deploy_blocks_frame_def, fresh_label_def]
+  apply_symbolic_frame symbolic_frame_fresh_label >> simp[]
 QED
 
 Theorem deploy_blocks_frame_emit_inst[simp]:
   deploy_blocks_frame (emit_inst opc ops outs)
 Proof
-  simp[emit_inst_def] >> irule deploy_blocks_frame_bind >> simp[]
+  apply_symbolic_frame symbolic_frame_emit_inst >> simp[]
 QED
 
 Theorem deploy_blocks_frame_emit_op[simp]:
   deploy_blocks_frame (emit_op opc ops)
 Proof
-  simp[emit_op_def] >> irule deploy_blocks_frame_bind >> simp[] >>
-  gen_tac >> irule deploy_blocks_frame_bind >> simp[] >>
-  gen_tac >> irule deploy_blocks_frame_ignore_bind >> simp[]
+  apply_symbolic_frame symbolic_frame_emit_op >> simp[]
 QED
 
 Theorem deploy_blocks_frame_emit_void[simp]:
   deploy_blocks_frame (emit_void opc ops)
 Proof
-  simp[emit_void_def] >> irule deploy_blocks_frame_bind >> simp[]
+  apply_symbolic_frame symbolic_frame_emit_void >> simp[]
 QED
 
 Theorem deploy_blocks_frame_alloc_buffer[simp]:
   deploy_blocks_frame (compile_alloc_buffer n)
 Proof
-  simp[compile_alloc_buffer_def] >> irule deploy_blocks_frame_bind >> simp[]
+  apply_symbolic_frame symbolic_frame_alloc_buffer >> simp[]
 QED
 
 Theorem deploy_blocks_frame_transfer:
@@ -129,9 +128,5 @@ QED
 Theorem deploy_blocks_frame_jmp_if_not_terminated[simp]:
   deploy_blocks_frame (emit_jmp_if_not_terminated l)
 Proof
-  simp[deploy_blocks_frame_def, emit_jmp_if_not_terminated_def,
-       comp_bind_def, comp_get_def] >>
-  rpt strip_tac >> Cases_on `block_is_terminated s` >>
-  gvs[comp_return_def] >>
-  metis_tac[deploy_blocks_frame_def, deploy_blocks_frame_emit_inst]
+  apply_symbolic_frame symbolic_frame_jmp_if_not_terminated >> simp[]
 QED

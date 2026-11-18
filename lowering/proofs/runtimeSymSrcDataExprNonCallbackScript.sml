@@ -10,10 +10,12 @@ val _ = temp_delsimps ["runtime_data_frame_cond"];
 fun frame_tac g = (simp[comp_ignore_bind_def] >> rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
   >- (simp[] >> frame_tac) >> gen_tac >> BETA_TAC) >> simp[]) g;
 
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_runtime]
     (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
-      (Q.GEN `R` theorem)))
+      (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
 
 Theorem runtime_data_frame_compile_clamp[simp]:
   runtime_data_frame (compile_clamp v ty)
@@ -178,7 +180,8 @@ QED
 Theorem runtime_data_frame_return_value_decode:
   (!c x y. runtime_data_frame (compile_select c x y)) ==>
   runtime_data_frame (compile_return_value_decode lo hi)
-Proof strip_tac >> simp[compile_return_value_decode_def] >> frame_tac
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_return_value_decode >> simp[]
 QED
 
 Theorem runtime_data_frame_unwrap_value:
@@ -187,14 +190,14 @@ Theorem runtime_data_frame_unwrap_value:
     runtime_data_frame (compile_ensure_in_memory p loc bytes words ctor imm)) ==>
   runtime_data_frame (unwrap_value cenv vv)
 Proof
-  strip_tac >> Cases_on `vv` >> simp[unwrap_value_def] >>
-  IF_CASES_TAC >> simp[] >> Cases_on `p.ptr_location` >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_unwrap_value >> simp[]
 QED
 
 Theorem runtime_data_frame_multi_vvs:
   !es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_multi_vvs cfn cenv es)
-Proof Induct >> simp[compile_multi_vvs_def] >> strip_tac >> frame_tac
+Proof
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_multi_vvs)
 QED
 
 Theorem runtime_data_frame_extcall_store_values:
@@ -233,8 +236,7 @@ Theorem runtime_data_frame_dynarray_append:
   (!src slot ty trans. runtime_data_frame (compile_store_slots cenv src slot ty trans)) ==>
   runtime_data_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim loc)
 Proof
-  strip_tac >> simp[compile_dynarray_append_def] >>
-  frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  strip_tac >> apply_symbolic_frame symbolic_frame_dynarray_append >> simp[]
 QED
 
 Theorem runtime_data_frame_dynarray_pop:
@@ -242,7 +244,7 @@ Theorem runtime_data_frame_dynarray_pop:
   (!ctor imm loc off v. runtime_data_frame (compile_ptr_store ctor imm loc off v)) ==>
   runtime_data_frame (compile_dynarray_pop arr ws sz ctor imm loc)
 Proof
-  strip_tac >> simp[compile_dynarray_pop_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_dynarray_pop >> simp[]
 QED
 
 Theorem runtime_data_frame_stage_intcall_args:
@@ -260,82 +262,70 @@ QED
 Theorem runtime_data_frame_store_multi_results[simp]:
   !vs buf off. runtime_data_frame (store_multi_results buf vs off)
 Proof
-  Induct >> simp[store_multi_results_def] >> rpt gen_tac >> frame_tac
+  apply_symbolic_frame symbolic_frame_store_multi_results >> simp[]
 QED
 
 Theorem runtime_data_frame_array_subscript:
   (!p. runtime_data_frame (loader p)) ==>
   runtime_data_frame (compile_array_subscript arr idx dyn cnt ws sz sg loader)
 Proof
-  strip_tac >> Cases_on `dyn` >> Cases_on `sg` >>
-  simp[compile_array_subscript_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_array_subscript >> simp[]
 QED
 
 Theorem runtime_data_frame_tuple_subscript[simp]:
   runtime_data_frame (compile_tuple_subscript arr off)
 Proof
-  simp[compile_tuple_subscript_def]
+  apply_symbolic_frame symbolic_frame_tuple_subscript >> simp[]
 QED
 
 Theorem runtime_data_frame_store_byte_chunks[simp]:
   !p bs off. runtime_data_frame (compile_store_byte_chunks p bs off)
 Proof
-  recInduct compile_store_byte_chunks_ind >> rpt strip_tac >>
-  simp[Once compile_store_byte_chunks_def] >> frame_tac >>
-  gvs[]
+  apply_symbolic_frame symbolic_frame_store_byte_chunks >> simp[]
 QED
 
 Theorem runtime_data_frame_bytelike_literal:
   (!n. runtime_data_frame (compile_alloc_buffer n)) ==>
   runtime_data_frame (compile_bytelike_literal bs maxlen)
 Proof
-  strip_tac >> simp[compile_bytelike_literal_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_bytelike_literal >> simp[]
 QED
 
 Theorem runtime_data_frame_literal_vv:
   (!bs n. runtime_data_frame (compile_bytelike_literal bs n)) ==>
   runtime_data_frame (compile_literal_vv ty lit)
 Proof
-  strip_tac >> Cases_on `lit` >> simp[compile_literal_vv_def] >>
-  TRY (rename1 `BoolL b` >> Cases_on `b` >> simp[compile_literal_vv_def]) >>
-  Cases_on `ty` >> simp[compile_literal_vv_def] >>
-  TRY (rename1 `BaseT b` >> Cases_on `b` >> simp[compile_literal_vv_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[compile_literal_vv_def]) >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_literal_vv >> simp[]
 QED
 
 Theorem runtime_data_frame_name_vv[simp]:
   runtime_data_frame (compile_name_vv cenv ty id)
 Proof
-  simp[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  rename1 `FLOOKUP cenv.ce_vars id = SOME loc` >> Cases_on `loc` >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_name_vv >> simp[]
 QED
 
 Theorem runtime_data_frame_env_var[simp]:
   runtime_data_frame (compile_env_var item)
 Proof
-  Cases_on `item` >> simp[compile_env_var_def] >> frame_tac
+  apply_symbolic_frame symbolic_frame_env_var >> simp[]
 QED
 
 Theorem runtime_data_frame_load_bytestring_as_word[simp]:
   runtime_data_frame (load_bytestring_as_word v opc)
 Proof
-  Cases_on `opc = SAR` >> simp[load_bytestring_as_word_def] >> frame_tac
+  apply_symbolic_frame symbolic_frame_load_bytestring_as_word >> simp[]
 QED
 
 Theorem runtime_data_frame_int_clamp[simp]:
   runtime_data_frame (compile_int_clamp sg bits v)
 Proof
-  Cases_on `sg` >> simp[compile_int_clamp_def] >> frame_tac
+  apply_symbolic_frame symbolic_frame_int_clamp >> simp[]
 QED
 
 Theorem runtime_data_frame_type_convert[simp]:
   runtime_data_frame (compile_type_convert v conv)
 Proof
-  Cases_on `conv` >> simp[compile_type_convert_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac >>
-  rpt (IF_CASES_TAC >> simp[] >> frame_tac) >>
-  pairarg_tac >> simp[] >> frame_tac >>
-  rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  apply_symbolic_frame symbolic_frame_type_convert >> simp[]
 QED
 
 Theorem runtime_data_frame_bytestring_widen_copy:
@@ -343,11 +333,11 @@ Theorem runtime_data_frame_bytestring_widen_copy:
   (!dst src sz. runtime_data_frame (compile_copy_memory dst src sz)) ==>
   runtime_data_frame (compile_bytestring_widen_copy dstsz v srcsz)
 Proof
-  strip_tac >> simp[compile_bytestring_widen_copy_def] >> frame_tac
+  strip_tac >> apply_symbolic_frame symbolic_frame_bytestring_widen_copy >> simp[]
 QED
 
 Theorem runtime_data_frame_neg[simp]:
   runtime_data_frame (compile_neg v ty)
 Proof
-  simp[compile_neg_def] >> pairarg_tac >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_neg >> simp[]
 QED

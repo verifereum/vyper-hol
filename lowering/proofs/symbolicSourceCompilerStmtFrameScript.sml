@@ -1,5 +1,10 @@
 Theory symbolicSourceCompilerStmtFrame
-Ancestors symbolicSourceCompilerFrame stmtLowering compileEnv
+Ancestors
+  moduleLowering
+  symbolicSourceCompilerFrame stmtLowering compileEnv
+Libs symbolicSourceCompilerFrameLib
+
+open symbolicSourceCompilerFrameLib
 
 Theorem symbolic_frame_log_save_arg:
   (!c t v. symbolic_frame R (compile_materialize_vv c t v)) ==>
@@ -301,4 +306,125 @@ Proof
   rename1 `Literal t l` >> Cases_on `t` >> simp[compile_reason_message_def] >>
   rename1 `BaseT b` >> Cases_on `b` >> simp[compile_reason_message_def] >>
   Cases_on `l` >> simp[compile_reason_message_def]
+QED
+
+Theorem symbolic_frame_internal_param_decls:
+  (!opc args. symbolic_frame R (emit_op opc args)) ==>
+  !params idx. symbolic_frame R (compile_internal_param_decls params idx)
+Proof
+  strip_tac >> Induct >> simp[compile_internal_param_decls_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  simp[compile_internal_param_decls_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- frame_tac >>
+       gen_tac >> BETA_TAC) >> frame_tac
+QED
+
+Theorem symbolic_frame_materialize_internal_params:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) ==>
+  !params cenv. symbolic_frame R (materialize_internal_params cenv params)
+Proof
+  strip_tac >> Induct >> simp[materialize_internal_params_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  Cases_on `h1` >> simp[materialize_internal_params_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
+  Cases_on `x` >> simp[comp_ignore_bind_def] >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- frame_tac >>
+       gen_tac >> BETA_TAC) >> frame_tac
+QED
+
+Theorem symbolic_frame_emit_local_alloca:
+  (!opc args outs. symbolic_frame R (emit_inst opc args outs)) ==>
+  symbolic_frame R (emit_local_alloca cenv id)
+Proof
+  strip_tac >> simp[emit_local_alloca_def] >> rpt BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem symbolic_frame_range_bound_checks:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) ==>
+  symbolic_frame R (compile_range_bound_checks a b c d s)
+Proof
+  strip_tac >> Cases_on `s` >> simp[compile_range_bound_checks_def, comp_ignore_bind_def] >>
+  rpt gen_tac >>
+  rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+QED
+
+Theorem symbolic_frame_return_unlock:
+  (!k t v. symbolic_frame R (compile_nonreentrant_unlock k t v)) ==>
+  symbolic_frame R (compile_return_unlock cenv)
+Proof
+  strip_tac >> simp[compile_return_unlock_def] >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem symbolic_frame_store_at_loc:
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!imm dst v. symbolic_frame R (compile_imm_store_word imm dst v)) ==>
+  symbolic_frame R (compile_store_at_loc imm dst v loc)
+Proof
+  strip_tac >> Cases_on `loc` >> simp[compile_store_at_loc_def] >>
+  rename1 `SOME l` >> Cases_on `l` >> simp[compile_store_at_loc_def]
+QED
+
+Theorem symbolic_frame_load_tuple_elements[simp]:
+  (!opc args. symbolic_frame R (emit_op opc args)) ==>
+  !tys cenv op off.
+  symbolic_frame R (compile_load_tuple_elements cenv op tys off)
+Proof
+  strip_tac >> Induct >> simp[compile_load_tuple_elements_def]
+QED
+
+Theorem symbolic_frame_internal_return:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!opc args outs. symbolic_frame R (emit_inst opc args outs)) /\
+  (!c v b t s. symbolic_frame R (compile_store_memory c v b t s)) ==>
+  symbolic_frame R (compile_internal_return cenv rv rpc n ty sty tys rb)
+Proof
+  strip_tac >> Cases_on `tys` >> simp[compile_internal_return_def, comp_ignore_bind_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[]),
+    irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
+    BasicProvers.TOP_CASE_TAC])
+QED
+
+Theorem symbolic_frame_tuple_store_all:
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!c bt. symbolic_frame R (compile_get_target_ptr compile_expr c bt)) /\
+  (!i b v. symbolic_frame R (compile_imm_store_word i b v)) /\
+  (!c b l v p sl t s n.
+    symbolic_frame R (compile_assign_value c b l v p sl t s n)) ==>
+  !tys targets vals cenv.
+    symbolic_frame R (compile_tuple_store_all cenv tys targets vals)
+Proof
+  strip_tac >> Induct >> Cases_on `targets` >> Cases_on `vals` >>
+  simp[compile_tuple_store_all_def, comp_ignore_bind_def] >> rpt gen_tac >>
+  rename1 `compile_tuple_store_all env (src::srctys) (tgt::tgts) (value::values)` >>
+  Cases_on `tgt` >> simp[compile_tuple_store_all_def, comp_ignore_bind_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[symbolic_frame_store_at_loc]),
+    irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
+    BasicProvers.TOP_CASE_TAC])
+QED
+
+Theorem symbolic_frame_iter_elem_copy:
+  (!opc args. symbolic_frame R (emit_op opc args)) /\
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!v b n l. symbolic_frame R (compile_slot_to_memory v b n l)) /\
+  (!ctor i l v. symbolic_frame R (compile_ptr_load ctor i l v)) /\
+  (!ctor i v b n k. symbolic_frame R (compile_imm_copy_to_memory ctor i v b n k)) /\
+  (!a b n. symbolic_frame R (compile_copy_memory a b n)) /\
+  (!c v b t s. symbolic_frame R (compile_store_memory c v b t s)) ==>
+  symbolic_frame R (compile_iter_elem_copy cenv a b n loc slot ty sty)
+Proof
+  strip_tac >> simp[compile_iter_elem_copy_def, comp_ignore_bind_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[]),
+    irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
+    BasicProvers.TOP_CASE_TAC])
+QED
+
+Theorem symbolic_frame_declare_local:
+  (symbolic_frame R fresh_var) ==>
+  symbolic_frame R (declare_local cenv id ty)
+Proof
+  strip_tac >> simp[declare_local_def] >> IF_CASES_TAC >> simp[]
 QED

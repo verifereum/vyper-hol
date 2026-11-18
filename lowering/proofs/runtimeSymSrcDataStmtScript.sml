@@ -40,27 +40,25 @@ Theorem runtime_data_frame_compile_load_tuple_elements[simp]:
   !tys cenv op off.
   runtime_data_frame (compile_load_tuple_elements cenv op tys off)
 Proof
-  Induct >> simp[compile_load_tuple_elements_def]
+  match_mp_tac (specialize_frame symbolic_frame_load_tuple_elements) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_range_bound_checks[simp]:
   runtime_data_frame (compile_range_bound_checks a b c d s)
 Proof
-  Cases_on `s` >> simp[compile_range_bound_checks_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_range_bound_checks) >> simp[]
 QED
 
 Theorem runtime_data_frame_declare_local[simp]:
   runtime_data_frame (declare_local cenv id ty)
 Proof
-  simp[declare_local_def] >> IF_CASES_TAC >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_declare_local) >> simp[]
 QED
 
 Theorem runtime_data_frame_emit_local_alloca[simp]:
   runtime_data_frame (emit_local_alloca cenv id)
 Proof
-  simp[emit_local_alloca_def] >> rpt BasicProvers.TOP_CASE_TAC >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_emit_local_alloca) >> simp[]
 QED
 
 Theorem runtime_data_frame_declare_stmt_local[simp]:
@@ -79,18 +77,14 @@ Theorem runtime_data_frame_compile_return_unlock:
   (!k t v. runtime_data_frame (compile_nonreentrant_unlock k t v)) ==>
   runtime_data_frame (compile_return_unlock cenv)
 Proof
-  strip_tac >> simp[compile_return_unlock_def] >>
-  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_return_unlock) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_internal_return:
   (!c v b t s. runtime_data_frame (compile_store_memory c v b t s)) ==>
   runtime_data_frame (compile_internal_return cenv rv rpc n ty sty tys rb)
 Proof
-  strip_tac >> simp[compile_internal_return_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[]),
-    irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_internal_return) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_external_return:
@@ -193,8 +187,7 @@ Theorem runtime_data_frame_compile_store_at_loc:
   (!imm dst v. runtime_data_frame (compile_imm_store_word imm dst v)) ==>
   runtime_data_frame (compile_store_at_loc imm dst v loc)
 Proof
-  strip_tac >> Cases_on `loc` >> simp[compile_store_at_loc_def] >>
-  rename1 `SOME l` >> Cases_on `l` >> simp[compile_store_at_loc_def]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_store_at_loc) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_assign_value:
@@ -224,13 +217,7 @@ Theorem runtime_data_frame_compile_tuple_store_all:
   !tys targets vals cenv.
     runtime_data_frame (compile_tuple_store_all cenv tys targets vals)
 Proof
-  strip_tac >> Induct >> Cases_on `targets` >> Cases_on `vals` >>
-  simp[compile_tuple_store_all_def, comp_ignore_bind_def] >> rpt gen_tac >>
-  rename1 `compile_tuple_store_all env (src::srctys) (tgt::tgts) (value::values)` >>
-  Cases_on `tgt` >> simp[compile_tuple_store_all_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[runtime_data_frame_compile_store_at_loc]),
-    irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_tuple_store_all) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_tuple_unpack:
@@ -253,10 +240,7 @@ Theorem runtime_data_frame_compile_iter_elem_copy:
   (!c v b t s. runtime_data_frame (compile_store_memory c v b t s)) ==>
   runtime_data_frame (compile_iter_elem_copy cenv a b n loc slot ty sty)
 Proof
-  strip_tac >> simp[compile_iter_elem_copy_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[]),
-    irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_iter_elem_copy) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_stmt_conditional:

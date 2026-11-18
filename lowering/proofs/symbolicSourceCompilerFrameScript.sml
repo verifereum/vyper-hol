@@ -1,7 +1,7 @@
 Theory symbolicSourceCompilerFrame
 Ancestors
   abiEncoder exprLowering
-  exprCallBounds compileEnv emitHelper list
+  exprCallBounds compileEnv context emitHelper list
 
 (* The ghost index retains the original data sections or block suffix while
    the compiler state changes. Equal results select the same bind continuation. *)
@@ -213,3 +213,119 @@ Resume symbolic_frame_expr[type_builtin]:
 QED
 
 Finalise symbolic_frame_expr
+
+Theorem symbolic_frame_emit_inst:
+  (symbolic_frame R fresh_id) /\
+  (!ins. symbolic_frame R (emit ins)) ==>
+  symbolic_frame R (emit_inst opc ops outs)
+Proof
+  strip_tac >> simp[emit_inst_def, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_emit_op:
+  (symbolic_frame R fresh_id) /\
+  (symbolic_frame R fresh_var) /\
+  (!ins. symbolic_frame R (emit ins)) ==>
+  symbolic_frame R (emit_op opc ops)
+Proof
+  strip_tac >> simp[emit_op_def, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_emit_void:
+  (symbolic_frame R fresh_id) /\
+  (!ins. symbolic_frame R (emit ins)) ==>
+  symbolic_frame R (emit_void opc ops)
+Proof
+  strip_tac >> simp[emit_void_def, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_alloc_buffer:
+  (!opc args. symbolic_frame R (emit_op opc args)) ==>
+  symbolic_frame R (compile_alloc_buffer n)
+Proof
+  strip_tac >> simp[compile_alloc_buffer_def, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_fresh_vars:
+  (symbolic_frame R fresh_var) ==>
+  !n. symbolic_frame R (fresh_vars n)
+Proof
+  strip_tac >> Induct >> simp[fresh_vars_def, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_emit_multi_op:
+  (symbolic_frame R fresh_var) /\
+  (!opc args outs. symbolic_frame R (emit_inst opc args outs)) ==>
+  symbolic_frame R (emit_multi_op opc ops n)
+Proof
+  strip_tac >> simp[emit_multi_op_def, symbolic_frame_fresh_vars, symbolic_frame_bind, symbolic_frame_ignore_bind]
+QED
+
+Theorem symbolic_frame_invalid_expr_call:
+  (!opc args outs. symbolic_frame R (emit_inst opc args outs)) ==>
+  symbolic_frame R (invalid_expr_call ty)
+Proof
+  simp[symbolic_frame_def, invalid_expr_call_def, pairTheory.ELIM_UNCURRY]
+QED
+
+Theorem symbolic_frame_fresh_id:
+  (!g s t. R g s t ==> s.cs_next_id = t.cs_next_id /\
+    R g (s with cs_next_id := s.cs_next_id + 1)
+        (t with cs_next_id := t.cs_next_id + 1)) ==>
+  symbolic_frame R fresh_id
+Proof
+  simp[symbolic_frame_def, fresh_id_def] >> metis_tac[]
+QED
+
+Theorem symbolic_frame_fresh_var:
+  (!g s t. R g s t ==> s.cs_next_var = t.cs_next_var /\
+    R g (s with cs_next_var := s.cs_next_var + 1)
+        (t with cs_next_var := t.cs_next_var + 1)) ==>
+  symbolic_frame R fresh_var
+Proof
+  simp[symbolic_frame_def, fresh_var_def] >> metis_tac[]
+QED
+
+Theorem symbolic_frame_fresh_label:
+  (!g s t. R g s t ==> s.cs_next_label = t.cs_next_label /\
+    R g (s with cs_next_label := s.cs_next_label + 1)
+        (t with cs_next_label := t.cs_next_label + 1)) ==>
+  symbolic_frame R (fresh_label suffix)
+Proof
+  simp[symbolic_frame_def, fresh_label_def] >> metis_tac[]
+QED
+
+Theorem symbolic_frame_emit:
+  (!g s t. R g s t ==>
+    R g (s with cs_current_insts := s.cs_current_insts ++ [i])
+        (t with cs_current_insts := t.cs_current_insts ++ [i])) ==>
+  symbolic_frame R (emit i)
+Proof
+  simp[symbolic_frame_def, emit_def]
+QED
+
+Theorem symbolic_frame_new_block:
+  (!g s t. R g s t ==> s.cs_current_bb = t.cs_current_bb /\
+    R g (s with
+      <| cs_blocks := <| bb_label := s.cs_current_bb;
+                          bb_instructions := s.cs_current_insts |> :: s.cs_blocks;
+         cs_current_bb := l; cs_current_insts := [] |>)
+      (t with
+      <| cs_blocks := <| bb_label := t.cs_current_bb;
+                          bb_instructions := t.cs_current_insts |> :: t.cs_blocks;
+         cs_current_bb := l; cs_current_insts := [] |>)) ==>
+  symbolic_frame R (new_block l)
+Proof
+  simp[symbolic_frame_def, new_block_def] >> metis_tac[]
+QED
+
+Theorem symbolic_frame_jmp_if_not_terminated:
+  (!g s t. R g s t ==> block_is_terminated s = block_is_terminated t) /\
+  symbolic_frame R (emit_inst JMP [Label l] []) ==>
+  symbolic_frame R (emit_jmp_if_not_terminated l)
+Proof
+  rw[symbolic_frame_def, emit_jmp_if_not_terminated_def, comp_bind_def, comp_get_def] >>
+  `block_is_terminated s = block_is_terminated t` by metis_tac[] >>
+  Cases_on `block_is_terminated t` >> gvs[comp_return_def] >>
+  first_x_assum drule >> simp[]
+QED

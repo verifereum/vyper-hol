@@ -5,10 +5,12 @@ Ancestors
   symbolicSourceCompilerExprFrame
   runtimeSymSrcDataFrame exprLowering compileEnv
 
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_runtime]
     (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
-      (Q.GEN `R` theorem)))
+      (Q.GEN `R` theorem))
+
+fun apply_symbolic_frame theorem = match_mp_tac (specialize_frame theorem)
 
 Theorem runtime_data_frame_lower_value:
   runtime_data_frame (cfn cenv ty e) /\
@@ -23,23 +25,21 @@ Theorem runtime_data_frame_lower_value_with_loc:
   (!vv. runtime_data_frame (unwrap_value cenv vv)) ==>
   runtime_data_frame (lower_value_with_loc cfn cenv ty e)
 Proof
-  simp[lower_value_with_loc_def]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_lower_value_with_loc)
 QED
 
 Theorem runtime_data_frame_as_stack_val:
   runtime_data_frame m ==>
   runtime_data_frame (\st. as_stack_val ty (m st))
 Proof
-  rw[runtime_data_frame_def] >> Cases_on `m st` >>
-  gvs[as_stack_val_def] >> metis_tac[pairTheory.SND]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_as_stack_val)
 QED
 
 Theorem runtime_data_frame_as_ptr_val:
   runtime_data_frame m ==>
   runtime_data_frame (\st. as_ptr_val ty loc (m st))
 Proof
-  rw[runtime_data_frame_def] >> Cases_on `m st` >>
-  gvs[as_ptr_val_def] >> metis_tac[pairTheory.SND]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_as_ptr_val)
 QED
 
 Theorem runtime_data_frame_multi_exprs:
@@ -87,10 +87,6 @@ Theorem runtime_data_frame_concat:
 Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_concat >> simp[]
 QED
-
-fun apply_symbolic_frame theorem =
-  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
-    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_store_abi_tuple:
   (!dst src n. runtime_data_frame (compile_copy_memory dst src n)) ==>

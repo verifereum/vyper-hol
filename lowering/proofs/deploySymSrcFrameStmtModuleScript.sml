@@ -36,23 +36,13 @@ QED
 Theorem deploy_blocks_frame_internal_param_decls[simp]:
   !params idx. deploy_blocks_frame (compile_internal_param_decls params idx)
 Proof
-  Induct >> simp[compile_internal_param_decls_def] >>
-  gen_tac >> PairCases_on `h` >> gen_tac >>
-  simp[compile_internal_param_decls_def] >>
-  rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >>
-       gen_tac >> BETA_TAC) >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_internal_param_decls) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_materialize_internal_params[simp]:
   !params cenv. deploy_blocks_frame (materialize_internal_params cenv params)
 Proof
-  Induct >> simp[materialize_internal_params_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  Cases_on `h1` >> simp[materialize_internal_params_def] >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `x` >> simp[comp_ignore_bind_def] >>
-  rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >>
-       gen_tac >> BETA_TAC) >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_materialize_internal_params) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_internal_function_cond:
@@ -77,28 +67,26 @@ Theorem deploy_blocks_frame_load_tuple_elements:
   (!v b. deploy_blocks_frame (compile_load_memory v b)) ==>
   !tys cenv op off. deploy_blocks_frame (compile_load_tuple_elements cenv op tys off)
 Proof
-  strip_tac >> Induct >> simp[compile_load_tuple_elements_def]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_load_tuple_elements) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_range_bound_checks[simp]:
   deploy_blocks_frame (compile_range_bound_checks a b c d s)
 Proof
-  Cases_on `s` >> simp[compile_range_bound_checks_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_range_bound_checks) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_declare_local:
   (!n. deploy_blocks_frame (compile_fixed_region_with_id n)) ==>
   deploy_blocks_frame (declare_local cenv id ty)
 Proof
-  strip_tac >> simp[declare_local_def] >> IF_CASES_TAC >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_declare_local) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_emit_local_alloca[simp]:
   deploy_blocks_frame (emit_local_alloca cenv id)
 Proof
-  simp[emit_local_alloca_def] >> rpt BasicProvers.TOP_CASE_TAC >> simp[]
+  match_mp_tac (specialize_frame symbolic_frame_emit_local_alloca) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_declare_stmt_local:
@@ -118,8 +106,7 @@ Theorem deploy_blocks_frame_return_unlock:
   (!k t v. deploy_blocks_frame (compile_nonreentrant_unlock k t v)) ==>
   deploy_blocks_frame (compile_return_unlock cenv)
 Proof
-  strip_tac >> simp[compile_return_unlock_def] >>
-  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_return_unlock) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_internal_return:
@@ -127,11 +114,7 @@ Theorem deploy_blocks_frame_internal_return:
   (!v b. deploy_blocks_frame (compile_load_memory v b)) ==>
   deploy_blocks_frame (compile_internal_return cenv rv rpc n ty sty tys rb)
 Proof
-  strip_tac >> simp[compile_internal_return_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[]),
-    match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC]) >>
-  disj2_tac >> simp[deploy_blocks_frame_load_tuple_elements]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_internal_return) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_external_return:
@@ -231,8 +214,7 @@ Theorem deploy_blocks_frame_store_at_loc:
   (!imm dst v. deploy_blocks_frame (compile_imm_store_word imm dst v)) ==>
   deploy_blocks_frame (compile_store_at_loc imm dst v loc)
 Proof
-  strip_tac >> Cases_on `loc` >> simp[compile_store_at_loc_def] >>
-  rename1 `SOME l` >> Cases_on `l` >> simp[compile_store_at_loc_def]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_store_at_loc) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_assign_value:
@@ -261,13 +243,7 @@ Theorem deploy_blocks_frame_tuple_store_all:
   !tys targets vals cenv.
     deploy_blocks_frame (compile_tuple_store_all cenv tys targets vals)
 Proof
-  strip_tac >> Induct >> Cases_on `targets` >> Cases_on `vals` >>
-  simp[compile_tuple_store_all_def, comp_ignore_bind_def] >> rpt gen_tac >>
-  rename1 `compile_tuple_store_all env (src::srctys) (tgt::tgts) (value::values)` >>
-  Cases_on `tgt` >> simp[compile_tuple_store_all_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[deploy_blocks_frame_store_at_loc]),
-    match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_tuple_store_all) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_tuple_unpack:
@@ -289,10 +265,7 @@ Theorem deploy_blocks_frame_iter_elem_copy:
   (!c v b t s. deploy_blocks_frame (compile_store_memory c v b t s)) ==>
   deploy_blocks_frame (compile_iter_elem_copy cenv a b n loc slot ty sty)
 Proof
-  strip_tac >> simp[compile_iter_elem_copy_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[]),
-    match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_iter_elem_copy) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_custom_error_store_args:

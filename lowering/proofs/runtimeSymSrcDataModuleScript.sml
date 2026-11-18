@@ -1,5 +1,6 @@
 Theory runtimeSymSrcDataModule
 Ancestors
+  symbolicSourceCompilerStmtFrame
   runtimeSymSrcDataFrame moduleLowering compileEnv
 
 val frame_rules = [runtime_data_frame_bind, runtime_data_frame_ignore_bind,
@@ -8,6 +9,10 @@ val frame_rules = [runtime_data_frame_bind, runtime_data_frame_ignore_bind,
   runtime_data_frame_fresh_label, runtime_data_frame_new_block,
   runtime_data_frame_get, compile_abi_arg_ptr_guard_def, comp_ignore_bind_def];
 val frame_tac = fs frame_rules;
+
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem));
 
 Theorem runtime_data_frame_selector_checks[simp]:
   !sels mid. runtime_data_frame (compile_selector_checks mid sels)
@@ -53,23 +58,13 @@ QED
 Theorem runtime_data_frame_internal_param_decls[simp]:
   !params idx. runtime_data_frame (compile_internal_param_decls params idx)
 Proof
-  Induct >> simp[compile_internal_param_decls_def] >>
-  gen_tac >> PairCases_on `h` >> gen_tac >>
-  simp[compile_internal_param_decls_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- frame_tac >>
-       gen_tac >> BETA_TAC) >> frame_tac
+  match_mp_tac (specialize_frame symbolic_frame_internal_param_decls) >> simp[]
 QED
 
 Theorem runtime_data_frame_materialize_internal_params[simp]:
   !params cenv. runtime_data_frame (materialize_internal_params cenv params)
 Proof
-  Induct >> simp[materialize_internal_params_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  Cases_on `h1` >> simp[materialize_internal_params_def] >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `x` >> simp[comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- frame_tac >>
-       gen_tac >> BETA_TAC) >> frame_tac
+  match_mp_tac (specialize_frame symbolic_frame_materialize_internal_params) >> simp[]
 QED
 
 Theorem runtime_data_frame_register_positional_args:
