@@ -64,7 +64,7 @@ Proof
   strip_tac >>
   drule call_state_rel_parsed >> strip_tac >>
   drule call_state_rel_code_length >> strip_tac >>
-  fs[call_state_rel_def] >>
+  fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def] >>
   qpat_x_assum `es.contexts = _` (fn th => gvs[th])
 QED
 
@@ -82,7 +82,8 @@ Theorem boundary_pending_deletions:
   call_state_rel tops code am tx es ==>
   es.rollback.toDelete = am.pending_deletions
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  simp[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+       world_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
