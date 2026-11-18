@@ -7,6 +7,7 @@ Ancestors
   sourceCallCountWitness
   sourceCallCountWitnessTest
   vyperFiniteStoragePreservation
+  vyperImmutableAccessFrame
   vyperLogPreservation
   vyperEvalPureExpr
   vyperTypeSoundness
