@@ -9,6 +9,9 @@ Ancestors
   fmpStageControl fmpLowerReclaimPlan fmpStepReclaim fmpReclaimDefs
   fmpAnalysisDefs venomWf gasFocusFmpStagePin fmpLedgerProps fmpStepStack
   fmpStepAnalysis venomFnInstsProofs venomInstProofs1
+  gasFocusFmpGasPair fmpStageOpFrame lowerDloadPtrScalar decoderGhostFramePtr
+  ptrDiscipline o1LowerDloadRelocationKernel o1LowerDloadShared
+  livenessProofs venomExecSemantics rich_list codegenRel pred_set
 
 Theorem cut_ordinary_not_reclaim[local]:
   ~is_terminator inst.inst_opcode /\
@@ -49,7 +52,8 @@ Theorem cut_ordinary_control_suc[local]:
   ~is_terminator inst.inst_opcode /\
   ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM] /\
   fmp_stage_lowered infos ctx runner fn fn' /\
-  (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) ==>
+  (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+     (fn_is_context_entry ctx fn ==> entry_fn_no_params fn)) ==>
   (lbl,idx) NOTIN FDOM (fmp_stage_plan infos ctx fn) /\
   (!rp. fmp_stage_root infos ctx fn = SOME (lbl,rp) ==> rp <> SUC idx) /\
   fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
@@ -268,4 +272,95 @@ Proof
   qpat_assum `raw0 = _` SUBST1_TAC >>
   qpat_assum `s1 = update_var _ _ _` SUBST1_TAC >>
   simp[NoAsms]
+QED
+
+Theorem cut_gas_ghost_updates[local]:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  s1 = update_var out x (s with vs_gas_readings := rs) ==>
+  step_prov PG G inst s1 = DRESTRICT G (COMPL {out}) /\
+  step_taint inst s s1 tn = tn with t_var := tn.t_var |+ (out,{})
+Proof
+  strip_tac >>
+  `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
+    simp[out_taint_opcode_exclusion, written_taint_opcode_exclusion] >>
+  simp[step_prov_def, out_prov_def, set_prov_def, step_taint_def,
+       set_var_taint_def, mem_taint_def, adopt_reset_def, store_taint_def,
+       imm_taint_def, new_site_bytes_def, step_writes_def, range_bytes_def,
+       source_memory_write_ranges_def, update_var_def, FLOOKUP_DEF,
+       taint_component_equality, EXTENSION] >> simp[SF CONJ_ss]
+QED
+
+Theorem cut_gas_env_suc[local]:
+  fmp_env_rel sm fn live G tv s t /\
+  (!v. MEM v live' /\ v <> out ==> MEM v live) ==>
+  fmp_env_rel sm fn live' (DRESTRICT G (COMPL {out})) (tv |+ (out,{}))
+    ((update_var out x (s with vs_gas_readings := rs)) with vs_inst_idx := i)
+    ((update_var out x (t with vs_gas_readings := rs)) with vs_inst_idx := j)
+Proof
+  strip_tac >> simp[fmp_env_rel_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt gen_tac >> Cases_on `v = out`
+  >- simp[FLOOKUP_DRESTRICT, fmp_value_rel_def, ld_value_agree_def,
+          op_taint_def, FLOOKUP_UPDATE, word_agree_except_def] >>
+  fs[fmp_env_rel_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem cut_gas_frame_suc[local]:
+  wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  (!infos ctx runner rl rp.
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+    (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\ runner <> out) /\
+  fmp_frame_rel sm fmp0 raw0 eb elo lo F fn fn' PG G tv s t ==>
+  fmp_frame_rel sm fmp0 raw0 eb elo lo F fn fn' PG
+    (DRESTRICT G (COMPL {out})) (tv |+ (out,{}))
+    ((update_var out x (s with vs_gas_readings := rs)) with vs_inst_idx := SUC s.vs_inst_idx)
+    ((update_var out x (t with vs_gas_readings := rs)) with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> fs[fmp_frame_rel_def] >>
+  qexistsl [`infos`, `ctx`, `runner`] >>
+  `~is_terminator inst.inst_opcode /\
+   ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM] /\
+   ~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP]` by simp[is_terminator_def] >>
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+     (fn_is_context_entry ctx fn ==> entry_fn_no_params fn)` by metis_tac[] >>
+  drule_all cut_ordinary_control_suc >> strip_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx)) /\
+       v <> out ==> MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)` by
+    (rpt strip_tac >> drule live_vars_at_propagate >> simp[inst_defs_def] >>
+     disch_then irule >> qexists `bb` >> simp[]) >>
+  `fmp_env_rel sm fn (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+    (DRESTRICT G (COMPL {out})) (tv |+ (out,{}))
+    ((update_var out x (s with vs_gas_readings := rs)) with vs_inst_idx := SUC s.vs_inst_idx)
+    ((update_var out x (t with vs_gas_readings := rs)) with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule cut_gas_env_suc >> metis_tac[]) >>
+  simp[NoAsms, update_var_def, fmp_params_rel_def] >>
+  qpat_x_assum `s.vs_current_bb = t.vs_current_bb` (SUBST_ALL_TAC o SYM) >>
+  fs[fmp_params_rel_def, update_var_def] >>
+  qpat_assum `t.vs_inst_idx = _` SUBST_ALL_TAC >> gs[] >>
+  conj_tac >-
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!b z c id. FLOOKUP sm (b,z) = _ ==> _`
+       (qspecl_then [`b`, `z`, `c`, `id`] mp_tac) >> simp[]) >>
+  Cases_on `fmp_stage_root infos ctx fn` >- fs[] >>
+  PairCases_on `x'` >> fs[] >>
+  rename1 `fmp_stage_root infos ctx fn = SOME (rl,rp)` >>
+  `s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by metis_tac[] >>
+  `~MEM runner inst.inst_outputs` by (simp[] >> metis_tac[]) >>
+  qabbrev_tac `s1 = update_var out x (s with vs_gas_readings := rs)` >>
+  qabbrev_tac `t1 = update_var out x (t with vs_gas_readings := rs)` >>
+  `s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
+    (!v. ~MEM v inst.inst_outputs ==> lookup_var v t1 = lookup_var v t)` by
+    simp[Abbr `s1`, Abbr `t1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP] /\ ~is_terminator inst.inst_opcode` by simp[] >>
+  drule_all cut_ordinary_root_suc >>
+  disch_then (qspec_then `SUC (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+    (SOME (rl,rp)) s.vs_current_bb bb.bb_instructions s.vs_inst_idx)` mp_tac) >>
+  simp[Abbr `t1`, update_var_def] >> strip_tac >>
+  qexists `st'` >> simp[] >>
+  fs[fmp_frame_covers_def, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
