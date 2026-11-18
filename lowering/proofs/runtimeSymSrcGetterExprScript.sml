@@ -29,15 +29,22 @@ Theorem runtime_sym_getter_subscript_raw:
   compile_subscript cfn ce rt ty be key s = (v,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  strip_tac >> match_mp_tac runtime_sym_subscript_step >>
-  qexists_tac `tops` >> asm_rewrite_tac[] >>
-  rpt conj_tac
-  >- (rpt strip_tac >> irule runtime_sym_getter_lower_value_raw >>
-      qexists_tac `tops` >> simp[])
-  >- metis_tac[runtime_sym_keccak256_key]
-  >- metis_tac[runtime_sym_mapping_subscript]
-  >- metis_tac[runtime_sym_tuple_subscript]
-  >> metis_tac[runtime_sym_array_subscript]
+  strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `cfn` |-> `cfn`, `ce` |-> `ce`,
+    `rt` |-> `rt`, `ty` |-> `ty`, `be` |-> `be`, `key` |-> `key`,
+    `s` |-> `s`, `v` |-> `v`, `s'` |-> `s'`] runtime_sym_subscript_step) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (rpt gen_tac >> strip_tac >> first_x_assum drule_all >> simp_tac bool_ss [])
+      >- (map_every qx_gen_tac [`kt`,`st`,`op`,`next`] >> strip_tac >>
+          mp_tac (Q.INST [`tops` |-> `tops`, `cfn` |-> `cfn`, `ce` |-> `ce`,
+            `ty` |-> `kt`, `e` |-> `key`, `s` |-> `st`, `op` |-> `op`,
+            `s'` |-> `next`] runtime_sym_getter_lower_value_raw) >> asm_rewrite_tac[])
+      >- metis_tac[runtime_sym_keccak256_key]
+      >- metis_tac[runtime_sym_mapping_subscript]
+      >- metis_tac[runtime_sym_tuple_subscript]
+      >> ACCEPT_TAC runtime_sym_array_subscript) >>
+  disch_then match_mp_tac >> asm_rewrite_tac[]
 QED
 
 Theorem runtime_sym_getter_name_raw:

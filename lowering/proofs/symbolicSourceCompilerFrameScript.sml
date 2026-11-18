@@ -111,26 +111,38 @@ Theorem symbolic_frame_expr:
   (!ce rt ty bi args. symbolic_frame R (compile_builtin_dispatch ce rt ty bi args)) /\
   (!ce vt ty tb rt args. symbolic_frame R (compile_type_builtin_dispatch ce vt ty tb rt args))
 Proof
-  let
-    fun callbacks (asl, w) =
-      (rpt conj_tac >> rpt gen_tac >>
-       rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
-                   type_child_callback_def] >> BETA_TAC >>
-       TRY IF_CASES_TAC >>
-       asm "invalid" (fn th => asm_simp_tac bool_ss
-         [REWRITE_RULE [symbolic_frame_def] th])) (asl, w)
-  in
-    disch_then (CONJUNCTS_THEN2 (mk_asm "invalid") (CONJUNCTS_THEN2
-      (mk_asm "expr") (CONJUNCTS_THEN2 (mk_asm "builtin") (mk_asm "type_builtin")))) >>
-    rewrite_tac[symbolic_frame_def] >>
-    ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
-    rpt gen_tac >> strip_tac >>
-    once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC >>
-    rpt gen_tac >> strip_tac
-    >~ [`compile_expr_body`]
-    >- (asm "expr" (irule o REWRITE_RULE [symbolic_frame_def]) >> callbacks)
-    >~ [`compile_builtin_dispatch_body`]
-    >- (asm "builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >> callbacks)
-    >> asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >> callbacks
-  end
+  disch_then (CONJUNCTS_THEN2 (mk_asm "invalid") (CONJUNCTS_THEN2
+    (mk_asm "expr") (CONJUNCTS_THEN2 (mk_asm "builtin") (mk_asm "type_builtin")))) >>
+  rewrite_tac[symbolic_frame_def] >>
+  ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC >>
+  rewrite_tac[COND_CLAUSES] >> rpt gen_tac >> strip_tac
+  >~ [`compile_expr_body`] >- suspend "expr"
+  >~ [`compile_builtin_dispatch_body`] >- suspend "builtin"
+  >> suspend "type_builtin"
 QED
+
+Resume symbolic_frame_expr[expr]:
+  asm "expr" (irule o REWRITE_RULE [symbolic_frame_def]) >>
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
+              type_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+QED
+
+Resume symbolic_frame_expr[builtin]:
+  asm "builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+QED
+
+Resume symbolic_frame_expr[type_builtin]:
+  asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
+  rpt conj_tac >> rpt gen_tac >>
+  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+QED
+
+Finalise symbolic_frame_expr

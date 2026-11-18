@@ -328,9 +328,9 @@ Proof
   >- (rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
       map_every qx_gen_tac [`st`,`v`,`st_next`] >> strip_tac >>
       qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _`
-        (qspecl_then [`st`,`v`,`st_next`] irule o
+        (qspecl_then [`st`,`v`,`st_next`] mp_tac o
          REWRITE_RULE [runtime_sym_expr_contract_def]) >>
-      qexists_tac `st` >> asm_rewrite_tac[]) >>
-  disch_then (qspecl_then [`s`,`()`,`s'`] match_mp_tac) >>
+      asm_rewrite_tac[]) >>
+  disch_then (qspecl_then [`s`,`()`,`s'`] mp_tac) >>
   asm_rewrite_tac[]
 QED
