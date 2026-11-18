@@ -10,10 +10,11 @@ Ancestors
   exprLoweringProps loweringStateRelDefs compileEnv fragExec
   loweringCallBudgetHistory loweringCallBudgetBounds
   loweringRuntimeCorrect loweringMemCorrect loweringPtrCorrect
+  loweringCalldataCorrect sourceUnitExecution vyperCalldata
   vyperLoweringCorrect compileVyper vyperCompiler vyperInterpreter e2eDefs
   o1PassContract unitMemInv memSafeRun ptrSafeRun
   contextRawReachable contextCodegenRel
-  ptrDiscipline lowerDloadDefs stackPlanGen
+  ptrDiscipline lowerDloadDefs
   venomExecSemantics venomInst venomState
   arithmetic list rich_list pair words finite_map
 
@@ -30,48 +31,53 @@ val _ = Parse.hide "tops";
  *   - Any EVM memory expansion reaching an endpoint >= 2 ** 64 has
  *     c.msgParams.gasLimit < memory_cost endpoint and exceeds remaining frame
  *     gas c.msgParams.gasLimit - c.gasUsed, forcing EVM out-of-gas.
- *   - When the active Venom memory is below 2 ** 254, the msg.data DALLOCA of
- *     ceil32 (LENGTH s.vs_call_ctx.cc_calldata) does not wrap in either the
- *     raw frontier s.vs_fmp or the lowered runner lo, preserves
+ *   - Under the cumulative completed-allocation bound w2n s.vs_fmp <=
+ *     w2n fmp + 2 ** 64 * 2 ** 64 (or direct DALLOCA no-wrap), the msg.data
+ *     DALLOCA of ceil32 (LENGTH s.vs_call_ctx.cc_calldata) does not wrap in
+ *     either the raw frontier s.vs_fmp or the lowered runner lo, preserves
  *     fmp_frontier_rel across the pending allocation, and restores fmp_room
  *     after CALLDATACOPY (covering both zero-length and positive-length
- *     msg.data writes without circularly assuming no-wrap).
+ *     msg.data writes).
  *)
 val raw_call_msg_data_peak_memory_oog_bridge_quote : term = “
   !ctx func (cp_fmp:num) (fmp:bytes32) (lo:num) (endpoint:num)
    (es:execution_state) (c:context) rb rest (s:venom_state).
-    wf_state es /\ calldata_bounded es /\
-    es.contexts = (c, rb) :: rest /\
-    s.vs_call_ctx.cc_calldata = vfmBuffer$buffer_to_list c.msgParams.data /\
-    s.vs_initial_fmp = fmp /\
-    fmp_room ctx func s /\
-    fmp_frontier_rel cp_fmp (w2n fmp) lo s.vs_fmp ==>
-    LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64 /\
-    c.msgParams.gasLimit < 2 ** 64 /\
-    buffer_length c.memory < 2 ** 64 /\
-    (2 ** 64 <= endpoint ==>
-     c.msgParams.gasLimit < memory_cost endpoint /\
-     c.msgParams.gasLimit - c.gasUsed <
-       memory_expansion_cost (buffer_length c.memory)
-         (word_size endpoint * 32)) /\
-    ((ctx_has_dalloca ctx \/
+    (wf_state es /\ calldata_bounded es /\
+     es.contexts = (c, rb) :: rest /\
+     s.vs_call_ctx.cc_calldata = vfmBuffer$buffer_to_list c.msgParams.data ==>
+     LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64 /\
+     c.msgParams.gasLimit < 2 ** 64 /\
+     buffer_length c.memory < 2 ** 64 /\
+     (2 ** 64 <= endpoint ==>
+      c.msgParams.gasLimit < memory_cost endpoint /\
+      c.msgParams.gasLimit - c.gasUsed <
+        memory_expansion_cost (buffer_length c.memory)
+          (word_size endpoint * 32))) /\
+    (LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64 /\
+     s.vs_initial_fmp = fmp /\
+     fmp_room ctx func s /\
+     (ctx_has_dalloca ctx \/
       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) /\
-     LENGTH s.vs_memory < 2 ** 254 ==>
+     (w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64 \/
+      w2n s.vs_fmp +
+        venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
+        dimword (:256)) ==>
      w2n s.vs_fmp +
        venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
        dimword (:256) /\
-     lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
-       dimword (:256) /\
-     fmp_frontier_rel cp_fmp (w2n fmp)
-       (lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
-       (s.vs_fmp +
-        n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))) /\
      fmp_room ctx func
        ((write_memory_with_expansion (w2n s.vs_fmp)
            s.vs_call_ctx.cc_calldata s) with
         vs_fmp :=
           s.vs_fmp +
-          n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))))
+          n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))) /\
+     (fmp_frontier_rel cp_fmp (w2n fmp) lo s.vs_fmp ==>
+      lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
+        dimword (:256) /\
+      fmp_frontier_rel cp_fmp (w2n fmp)
+        (lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
+        (s.vs_fmp +
+         n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata)))))
 ”;
 
 (*
@@ -81,23 +87,22 @@ val raw_call_msg_data_peak_memory_oog_bridge_quote : term = “
  * CALLDATACOPY sequence emitted by non-delegate raw_call forwarding msg.data).
  * Consumes raw_call_msg_data_peak_memory_oog_bridge to discharge the DALLOCA
  * no-wrap, lowered runner no-wrap, fmp_frontier_rel, and stmt_state_rel
- * obligations from the EVM frame invariant calldata_bounded es and the
- * statement-level state relation stmt_state_rel H ctx func cenv cx vy s.
+ * obligations from stmt_state_rel H ctx func cenv cx vy s and either the
+ * cumulative allocation bound or expr_sim_full's dalloca_no_wrap premise.
  *)
 val compile_msg_data_to_memory_peak_memory_consumer_quote : term = “
-  !H ctx func cenv cx vy (cp_fmp:num) (lo:num)
-   (es:execution_state) (c:context) rb rest
+  !H ctx func cenv cx vy
    (sa:compile_state) (ptr:operand) (len:operand) (sb:compile_state)
    (s:venom_state).
     compile_msg_data_to_memory sa = ((ptr, len), sb) /\
     fn_has_code sa sb func /\
     stmt_state_rel H ctx func cenv cx vy s /\
     local_ptrs_reserved cenv sa /\
-    wf_state es /\ calldata_bounded es /\
-    es.contexts = (c, rb) :: rest /\
-    s.vs_call_ctx.cc_calldata = vfmBuffer$buffer_to_list c.msgParams.data /\
-    fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp) lo s.vs_fmp /\
-    LENGTH s.vs_memory < 2 ** 254 ==>
+    LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64 /\
+    (w2n s.vs_fmp <= w2n s.vs_initial_fmp + 2 ** 64 * 2 ** 64 \/
+     w2n s.vs_fmp +
+       venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
+       dimword (:256)) ==>
     ?t.
       run_inst_seq (emitted_insts sa sb) s = OK t /\
       stmt_state_rel H ctx func cenv cx vy t /\
@@ -106,18 +111,20 @@ val compile_msg_data_to_memory_peak_memory_consumer_quote : term = “
       w2n s.vs_fmp +
         venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
         dimword (:256) /\
-      lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
-        dimword (:256) /\
-      fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp)
-        (lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
-        t.vs_fmp /\
       t.vs_fmp =
         s.vs_fmp +
         n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata)) /\
       t.vs_memory =
         (write_memory_with_expansion (w2n s.vs_fmp)
           s.vs_call_ctx.cc_calldata s).vs_memory /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!(cp_fmp:num) (lo:num).
+         fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp) lo s.vs_fmp ==>
+         lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
+           dimword (:256) /\
+         fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp)
+           (lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
+           t.vs_fmp)
 ”;
 
 (*
@@ -130,7 +137,7 @@ val compile_msg_data_to_memory_peak_memory_consumer_quote : term = “
  * w2n pre.vs_initial_fmp).
  *)
 val create_copy_of_peak_memory_step_quote : term = “
-  !ctx func (cp_fmp:num) (lo:num)
+  !ctx func
    target sa code a1 a2 shifted a3 preamble a4 size a5
    alloc_ptr a6 a7 code_dst a8 a9 buf a10 len sc
    (s0:venom_state) (addr:bytes32) (pre:venom_state) (t:venom_state).
@@ -152,8 +159,9 @@ val create_copy_of_peak_memory_step_quote : term = “
     (ctx_has_dalloca ctx \/
      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) /\
     fmp_room ctx func pre /\
-    fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp) lo pre.vs_fmp /\
-    LENGTH pre.vs_memory < 2 ** 254 ==>
+    (w2n pre.vs_fmp <= w2n pre.vs_initial_fmp + 2 ** 64 * 2 ** 64 \/
+     (!sz. eval_operand size pre = SOME sz ==>
+           w2n pre.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))) ==>
     ?sz create_len.
       eval_operand size pre = SOME sz /\
       eval_operand buf t = SOME (pre.vs_fmp + 21w) /\
@@ -161,28 +169,37 @@ val create_copy_of_peak_memory_step_quote : term = “
       sz = create_len + 21w /\
       w2n sz <= 24608 /\
       w2n pre.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
-      lo + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
-      fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp)
-        (lo + venomLayout$ceil32 (w2n sz)) t.vs_fmp /\
       fmp_room ctx func t /\
-      t.vs_fmp = pre.vs_fmp + n2w (venomLayout$ceil32 (w2n sz))
+      t.vs_fmp = pre.vs_fmp + n2w (venomLayout$ceil32 (w2n sz)) /\
+      (!(cp_fmp:num) (lo:num).
+         fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp) lo pre.vs_fmp ==>
+         lo + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
+         fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp)
+           (lo + venomLayout$ceil32 (w2n sz)) t.vs_fmp)
 ”;
 
 (*
  * 4. Dynamic peak-memory site statement for create_from_blueprint
  *    (third compile_alloc_dynamic form: compile_create_blueprint).
  *
- * Connects the signed blueprint check prefix, constructor-argument length
- * staging, total-extent ADD + DALLOCA, EXTCODECOPY, and optional dynamic
- * argument copy with fmp_room and fmp_frontier_rel.
+ * Connects the blueprint check prefix (both literal and runtime offset modes),
+ * constructor-argument length staging (with variable freshness across cb..sa),
+ * total-extent ADD + DALLOCA, EXTCODECOPY, and optional dynamic argument copy
+ * with fmp_room and fmp_frontier_rel.
  *)
 val create_from_blueprint_peak_memory_step_quote : term = “
-  !ctx func (cp_fmp:num) (lo:num)
-   target offset ca code_op cb (s0:venom_state) (s1:venom_state)
-   (s2:venom_state) args_len (args:bytes32) sa size sm alloc_ptr sn
-   se sc args_ptr (pre:venom_state) (t:venom_state).
-    compile_create_blueprint_check T target offset ca = (code_op, cb) /\
+  !ctx func (is_lit:bool)
+   target offset ca code_op cb (s0:venom_state) (addr:bytes32)
+   (s1:venom_state) (s2:venom_state) args_len (args:bytes32)
+   sa size sm alloc_ptr sn se sc args_ptr (pre:venom_state) (t:venom_state).
+    compile_create_blueprint_check is_lit target offset ca = (code_op, cb) /\
+    (~is_lit ==>
+     (!x. offset = Var x ==> not_fresh_at ca x) /\
+     eval_operand target s0 = SOME addr /\
+     LENGTH (lookup_account (w2w addr) s0.vs_accounts).code <= 24576) /\
     run_inst_seq (emitted_insts ca cb) s0 = OK s1 /\
+    cb.cs_next_var <= sa.cs_next_var /\
+    (!x. args_len = Var x ==> not_fresh_at sa x) /\
     eval_operand code_op s2 = eval_operand code_op s1 /\
     eval_operand args_len s2 = SOME args /\ w2n args < 2 ** 64 /\
     emit_op ADD [code_op; args_len] sa = (size, sm) /\
@@ -198,19 +215,22 @@ val create_from_blueprint_peak_memory_step_quote : term = “
     (ctx_has_dalloca ctx \/
      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) /\
     fmp_room ctx func pre /\
-    fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp) lo pre.vs_fmp /\
-    LENGTH pre.vs_memory < 2 ** 254 ==>
+    (w2n pre.vs_fmp <= w2n pre.vs_initial_fmp + 2 ** 64 * 2 ** 64 \/
+     (!sz. eval_operand size pre = SOME sz ==>
+           w2n pre.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))) ==>
     ?sz.
       eval_operand size pre = SOME sz /\
       eval_operand size t = SOME sz /\
       eval_operand alloc_ptr t = SOME pre.vs_fmp /\
       venomLayout$ceil32 (w2n sz) <= 2 ** 255 + 2 ** 64 /\
       w2n pre.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
-      lo + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
-      fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp)
-        (lo + venomLayout$ceil32 (w2n sz)) t.vs_fmp /\
       fmp_room ctx func t /\
-      t.vs_fmp = pre.vs_fmp + n2w (venomLayout$ceil32 (w2n sz))
+      t.vs_fmp = pre.vs_fmp + n2w (venomLayout$ceil32 (w2n sz)) /\
+      (!(cp_fmp:num) (lo:num).
+         fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp) lo pre.vs_fmp ==>
+         lo + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
+         fmp_frontier_rel cp_fmp (w2n pre.vs_initial_fmp)
+           (lo + venomLayout$ceil32 (w2n sz)) t.vs_fmp)
 ”;
 
 (*
@@ -219,43 +239,46 @@ val create_from_blueprint_peak_memory_step_quote : term = “
  *    create_from_blueprint), replacing the rejected 2026-11-17 static
  *    allocation-budget entry interface (ac0e363f9).
  *
- * Uses separate optimized (cp.cp_initial_fmp on vs) and raw (fmp on vs0 via
- * raw_variant fmp vs vs0) entry floors, tracks fmp_frontier_rel from
- * cp.cp_initial_fmp and w2n fmp, and carries the storage-correspondence and
- * non-exemption premises required by lower_vyper_runtime_unit_allocation_history.
+ * Uses separate optimized (cp_fmp on vs) and raw (fmp on vs0 via
+ * raw_variant fmp vs0 vs) entry floors, tracks fmp_frontier_rel from
+ * cp_fmp and w2n fmp, and covers both non-dispatching reverts
+ * (calldata_dispatch = NONE) and dispatched/valid calls at the selected
+ * (marks, tail) where call_storage_ok and ~source_exempt hold.
  *)
 val lower_vyper_runtime_unit_dynamic_peak_memory_bound_quote : term = “
-  !tops rpolicy (unit:compilation_unit) cp am tx ret (fmp:bytes32) vs vs0.
+  !tops rpolicy (unit:compilation_unit) (cp_fmp:num) am tx ret
+   (fmp:bytes32) vs vs0 marks tail.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    generate_context_plan unit.cu_context = SOME cp /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret /\
+    (calldata_dispatch tops vs0.vs_call_ctx.cc_calldata = NONE \/
+     ((valid_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret \/
+       dispatched_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret) /\
+      source_unit_execution_correct_at marks tops ret am tx unit vs0 /\
+      call_storage_ok am tx vs0.vs_outcomes
+        (gas_explicit marks vs0.vs_gas_readings ++ tail) /\
+      ~source_exempt tops
+        (call_external (SOME vs0.vs_outcomes)
+          (gas_explicit marks vs0.vs_gas_readings ++ tail) am tx))) /\
     initial_venom_state_rel tops am tx vs /\
-    vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_fmp = n2w cp.cp_initial_fmp /\
-    cp.cp_initial_fmp <= w2n fmp /\
+    vs.vs_initial_fmp = n2w cp_fmp /\
+    vs.vs_fmp = n2w cp_fmp /\
+    cp_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
     unit_alloca_budget unit.cu_context +
       32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-    raw_variant fmp vs vs0 /\
+    raw_variant fmp vs0 vs /\
     LENGTH vs0.vs_outcomes < 2 ** 64 /\
-    (!marks.
-       call_storage_ok am tx vs0.vs_outcomes
-         (gas_explicit marks vs0.vs_gas_readings)) /\
-    (!marks.
-       ~source_exempt tops
-         (call_external (SOME vs0.vs_outcomes)
-           (gas_explicit marks vs0.vs_gas_readings) am tx)) /\
     outcomes_accounts_typed (SOME vs0.vs_outcomes) /\
     LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 ==>
     !fn i s.
       raw_reachable vs0 unit.cu_context fn i s ==>
       s.vs_initial_fmp = fmp /\
       w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
-      fmp_frontier_rel cp.cp_initial_fmp (w2n fmp)
-        (cp.cp_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      fmp_frontier_rel cp_fmp (w2n fmp)
+        (cp_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
       (i.inst_opcode = DALLOCA ==>
+       w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64 /\
        !sz_op sz.
          i.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
          w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))
@@ -271,7 +294,7 @@ val lower_vyper_runtime_unit_memory_ptr_dynamic_companion_quote : term = “
   !tops rpolicy (unit:compilation_unit) am tx (fmp:bytes32) vs vs0 fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
-    raw_variant fmp vs vs0 /\
+    raw_variant fmp vs0 vs /\
     (!f i s.
        raw_reachable vs0 unit.cu_context f i s ==>
        w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
@@ -338,7 +361,7 @@ val expected_constant_owners =
    ("fmpLowerSequenceExec", ["fmp_frontier_rel"]),
    ("venomLayout", ["ceil32"]),
    ("venomState", ["write_memory_with_expansion", "eval_operand",
-                   "lookup_var", "Lit"]),
+                   "lookup_var", "Lit", "Var"]),
    ("venomExecSemantics", ["OK"]),
    ("builtinSystem", ["compile_msg_data_to_memory"]),
    ("fragExec", ["fn_has_code"]),
@@ -347,7 +370,9 @@ val expected_constant_owners =
    ("context", ["compile_alloc_dynamic", "compile_copy_memory_dynamic"]),
    ("builtinCreate", ["compile_create_blueprint_check"]),
    ("compileVyper", ["lower_vyper_runtime_unit"]),
-   ("stackPlanGen", ["generate_context_plan"]),
+   ("vyperCalldata", ["calldata_dispatch"]),
+   ("loweringCalldataCorrect", ["dispatched_vyper_call"]),
+   ("sourceUnitExecution", ["source_unit_execution_correct_at"]),
    ("e2eDefs", ["source_typing_ok", "source_deployment_rel", "valid_vyper_call",
                 "call_storage_ok", "source_exempt"]),
    ("vyperLoweringCorrect", ["initial_venom_state_rel"]),
