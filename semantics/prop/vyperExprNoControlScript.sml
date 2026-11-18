@@ -527,7 +527,7 @@ val canonical_no_control_ind = evaluate_ind
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
-Theorem canonical_eval_no_control_with_results:
+Theorem canonical_eval_no_control:
   (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
@@ -562,15 +562,6 @@ Proof
   >- NC_EVAL_CASE
   >> NC_EVAL_CASE
 QED
-Theorem canonical_eval_no_control:
-  (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
-Proof
-  metis_tac[canonical_eval_no_control_with_results]
-QED
-
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
     eval_expr cx e s = (INR exc, st') ⇒

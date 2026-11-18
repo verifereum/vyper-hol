@@ -4991,7 +4991,7 @@ Theorem const_sha256_exhausted[local]:
 Proof
   strip_tac >>
   `outcome_suffix st.outcomes (SND (eval_exprs cx es st)).outcomes` by
-    metis_tac[cj 6 eval_outcomes_suffix_with_results, outcomes_suffix_def] >>
+    metis_tac[cj 6 eval_outcomes_suffix_mutual, outcomes_suffix_def] >>
   Cases_on `eval_exprs cx es st` >>
   gvs[outcome_suffix_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
@@ -5021,7 +5021,7 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
-  metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results]
+  metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual]
 QED
 
 Theorem constant_expr_exhausted_no_sha256[local]:
@@ -5055,7 +5055,7 @@ Proof
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
-      metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results])
+      metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual])
   >~ [`bi = Sha256`]
   >- metis_tac[const_sha256_exhausted]
   >~ [`eval_expr cx (Builtin ty bi es) st = _`]
