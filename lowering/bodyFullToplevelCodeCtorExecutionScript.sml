@@ -94,6 +94,13 @@ Resume toplevel_code_ctor_execution_full[copy]:
      asm_rewrite_tac[] >> strip_tac >> simp[]) >>
   `compile_imm_copy_to_memory T imm src (Var root) n 0 mid = ((),sb)` by
     (qpat_x_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (mp_tac (Q.INST [`out` |-> `root`] unwrap_alloc_below_fmp) >>
+     impl_tac >- simp[] >> strip_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (qpat_x_assum `a = _` SUBST1_TAC >>
+     qpat_x_assum `u = _` SUBST_ALL_TAC >>
+     fs[allocas_below_fmp_def, update_var_def] >> strip_tac >> fs[]) >>
   `w2n p+0+32*n <= lo /\ 0+32*n <= nb /\
    w2n p+0+32*n <= a.vs_alloca_next /\ w2n d+0+32*n <= a.vs_alloca_next /\
    (ctx_has_dalloca ctx ==> allocas_below_fmp a)` by gvs[] >>

@@ -29,7 +29,7 @@ Theorem emit_scalar_builtin_run:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
-  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  local_ptrs_reserved cenv sa /\
   ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
@@ -58,7 +58,11 @@ Proof
   strip_tac >>
   `~not_fresh_at sa (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all emit_scalar_builtin_counted_suffix >>
   disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
   drule_all scalar_builtin_update_ghosts >>
@@ -89,7 +93,7 @@ Theorem emit_scalar_builtin_run_horizons:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
-  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  local_ptrs_reserved cenv sa /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     ghost_inv H d cenv cx es G tn s /\
     stmt_state_rel H ctx fn cenv cx es s) /\
@@ -131,7 +135,11 @@ Proof
    stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
   `~not_fresh_at sa (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all emit_scalar_builtin_counted_suffix >>
   disch_then (qspecl_then [`PG`, `G`, `D H`] assume_tac) >>
   drule_all scalar_builtin_update_ghosts >>
@@ -159,7 +167,7 @@ Theorem env_builtin_counted_run:
   item <> PrevHash /\ item <> MsgGas /\
   compile_env_var item sa = (op, sb) /\ fn_has_code sa sb fn /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
-  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  local_ptrs_reserved cenv sa /\
   (?H. valid_horizon cx st0 H es.storage_trace) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     ghost_inv H d cenv cx es G tn s /\
@@ -216,7 +224,7 @@ Theorem env_builtin_counted_post:
   lower_value compile_expr cenv ty (Builtin (env_item_type item) (Env item) []) sa = (op, sb) /\
   fn_has_code sa sb fn /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
-  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  local_ptrs_reserved cenv sa /\
   (?H. valid_horizon cx st0 H es.storage_trace) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     ghost_inv H d cenv cx es G tn s /\
@@ -311,7 +319,7 @@ QED
 
 Theorem calldata_counted_post:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\
   (?H. valid_horizon cx st0 H es.storage_trace) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     ghost_inv H d cenv cx es G tn s /\

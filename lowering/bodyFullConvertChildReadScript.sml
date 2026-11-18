@@ -57,7 +57,7 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   irule gas_outcome_full_post_mono >>
   goal_assum (drule_at Any) >> simp[] >>

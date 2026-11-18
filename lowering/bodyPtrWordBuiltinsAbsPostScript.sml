@@ -3,7 +3,7 @@ Theory bodyPtrWordBuiltinsAbsPost
 Ancestors bodyPtrWordBuiltinsAbsSequence bodyPtrWordBuiltinsAbsSuffix
   bodyPtrWordBuiltinsScalarSequence bodyPtrWordBuiltinsIntervalGhost
   exprLoweringProps builtinSimple compileEnv loweringStateRelDefs venomInst list pred_set
-  bodyPtrDefs ptrDiscipline ptrSafeRun finite_map codegenRel fragGasSeqPtr
+  bodyPtrDefs ptrDiscipline ptrSafeRun finite_map codegenRel fragGasSeqPtr fragGasSeqPtrContext
 
 Theorem word_abs_emitted_shape:
   compile_builtin_abs v sa = (op,sb) ==>
@@ -82,15 +82,13 @@ Proof
     qexistsl_tac [`i`, `u`] >> simp[MEM] >> metis_tac[]) >>
   conj_tac
   >- (strip_tac >>
-      Cases_on `i.inst_opcode = ASSERT`
-      >- (`?arg. i.inst_operands = [arg] /\ i.inst_outputs = []` by metis_tac[] >>
-          drule_all word_abs_assert_normal >> simp[]) >>
-      `MEM i.inst_opcode [SUB; SLT; EQ; AND; ISZERO; XOR; MUL]` by
-        (qpat_assum `!j. MEM j xs ==> _ /\ _`
-           (qspec_then `i` mp_tac) >> simp[] >> tautLib.TAUT_TAC) >>
-      `?x. i.inst_outputs = [x]` by metis_tac[] >>
-      drule_all word_abs_arithmetic_normal >> strip_tac >>
-      gvs[allocas_below_fmp_def, venomStateTheory.update_var_def] >> metis_tac[]) >>
+      irule run_inst_seq_allocas_below_fmp >>
+      qexistsl [`[i]`, `u`] >>
+      simp[run_inst_seq_def] >>
+      `MEM i.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL]` by
+        metis_tac[MEM] >>
+      Cases_on `i.inst_opcode` >>
+      fs[MEM, venomInstTheory.is_alloca_op_def, venomInstTheory.is_terminator_def]) >>
   conj_tac >- (irule word_abs_step_ghost_inv >> simp[MEM] >> metis_tac[]) >>
   irule word_abs_step_ghost_kept >> simp[MEM] >> metis_tac[])) >>
   metis_tac[]
