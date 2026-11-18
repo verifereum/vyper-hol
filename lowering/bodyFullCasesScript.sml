@@ -15,6 +15,7 @@ Ancestors
   bodyFullStructLit bodyFullPop
   bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullBuiltinEnv
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -237,7 +238,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
+(* Joint environment builtins, excluding Env MsgGas. *)
 Theorem env_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
@@ -252,7 +253,11 @@ Theorem env_builtin_expr_full_ok:
        body_expr_full_ok cx (HD es)) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule env_builtin_sim_full >>
+      gvs[type_check_def, assert_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
