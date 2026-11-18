@@ -140,9 +140,12 @@ Theorem o1_pre_walk_prune_static_abort[local]:
   ctx_sim_fuel I D unit.cu_context pre.cu_context vs vs /\
   ctx_abort_rq D unit.cu_context pre.cu_context vs vs /\
   o1_walk_src_inv D pre.cu_context vs ==>
-  let C0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context in
-    ctx_sim_fuel I D unit.cu_context C0 vs vs /\
-    ctx_abort_rq D unit.cu_context C0 vs vs /\ o1_walk_src_inv D C0 vs
+    ctx_sim_fuel I D unit.cu_context
+      (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs /\
+    ctx_abort_rq D unit.cu_context
+      (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs /\
+    o1_walk_src_inv D
+      (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs
 Proof
   strip_tac >> simp[LET_THM] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =
@@ -184,14 +187,22 @@ Theorem o1_pipeline_pre_dft_source_facts_static_abort_fixed:
        EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   dead_wf D /\ o1_initial_state_ok vs_out /\
   vs_out.vs_fmp = vs_out.vs_initial_fmp /\ code_layout_valid vs_out ==>
-  let v7 = vs_out with vs_gas_readings := rds in
-  let vs_in = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> in
-    o1_pre_walk_inv D unit.cu_context vs_in /\
+    o1_pre_walk_inv D unit.cu_context
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
     fmp_variant_room (SOME fmp) out.po_unit.cu_context vs_out ==>
-    ctx_sim_fuel I D unit.cu_context (stage 7) vs_in v7 /\
-    ctx_abort_rq D unit.cu_context (stage 7) vs_in v7 /\
-    o1_inv D 0 (stage 0) vs_in /\
-    o1_inv D 7 (stage 7) v7
+    ctx_sim_fuel I D unit.cu_context (stage 7)
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>)
+      (vs_out with vs_gas_readings := rds) /\
+    ctx_abort_rq D unit.cu_context (stage 7)
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>)
+      (vs_out with vs_gas_readings := rds) /\
+    o1_inv D 0 (stage 0)
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    o1_inv D 7 (stage 7) (vs_out with vs_gas_readings := rds)
 Proof
   strip_tac >> simp[LET_THM] >>
   qabbrev_tac `vs_in = vs_out with
@@ -255,17 +266,22 @@ Theorem o1_pipeline_pre_dft_sim_static_abort_fixed:
        EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   dead_wf D /\ o1_initial_state_ok vs_out /\
   vs_out.vs_fmp = vs_out.vs_initial_fmp /\ code_layout_valid vs_out ==>
-  let v7 = vs_out with vs_gas_readings := rds in
-  let vs_in = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> in
-    o1_pre_walk_inv D unit.cu_context vs_in /\
+    o1_pre_walk_inv D unit.cu_context
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
     fmp_variant_room (SOME fmp) out.po_unit.cu_context vs_out ==>
-    ctx_sim_fuel I D unit.cu_context (stage 7) vs_in v7 /\
-    ctx_abort_rq D unit.cu_context (stage 7) vs_in v7 /\
-    o1_inv D 7 (stage 7) v7
+    ctx_sim_fuel I D unit.cu_context (stage 7)
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>)
+      (vs_out with vs_gas_readings := rds) /\
+    ctx_abort_rq D unit.cu_context (stage 7)
+      ((vs_out with vs_gas_readings := rds) with
+        <|vs_fmp := fmp; vs_initial_fmp := fmp|>)
+      (vs_out with vs_gas_readings := rds) /\
+    o1_inv D 7 (stage 7) (vs_out with vs_gas_readings := rds)
 Proof
-  strip_tac >> simp[LET_THM] >> strip_tac >>
-  drule_all o1_pipeline_pre_dft_source_facts_static_abort_fixed >>
-  simp[LET_THM] >> metis_tac[]
+  ntac 2 strip_tac >>
+  drule_all o1_pipeline_pre_dft_source_facts_static_abort_fixed >> simp[]
 QED
 
 Theorem o1_pipeline_stage_facts_static_abort[local]:
