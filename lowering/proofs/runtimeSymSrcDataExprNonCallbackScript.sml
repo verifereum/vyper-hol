@@ -263,7 +263,8 @@ Proof
   strip_tac >> Induct >> simp[compile_stage_intcall_args_def] >>
   rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
   simp[compile_stage_intcall_args_def] >>
-  TRY (Cases_on `h'` >> simp[compile_stage_intcall_args_def]) >>
+  TRY (rename1 `compile_stage_intcall_args _ _ (_ :: _) (by_value :: _) (_ :: _)` >>
+       Cases_on `by_value` >> simp[compile_stage_intcall_args_def]) >>
   strip_tac >> frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
 QED
 
@@ -317,7 +318,7 @@ Theorem runtime_data_frame_name_vv[simp]:
   runtime_data_frame (compile_name_vv cenv ty id)
 Proof
   simp[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  Cases_on `x` >> simp[] >> frame_tac
+  rename1 `FLOOKUP cenv.ce_vars id = SOME loc` >> Cases_on `loc` >> simp[] >> frame_tac
 QED
 
 Theorem runtime_data_frame_env_var[simp]:

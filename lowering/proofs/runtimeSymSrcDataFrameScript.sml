@@ -125,13 +125,3 @@ Proof
   simp[runtime_data_frame_def, invalid_expr_call_def,
        emit_inst_def, comp_bind_def, fresh_id_def, emit_def]
 QED
-
-(* Callback probe: the premise is uniform in states and all child inputs. *)
-Theorem runtime_data_frame_expr_child_callback:
-  (!cenv ty e. runtime_data_frame (cfn cenv ty e)) ==>
-  runtime_data_frame (expr_child_callback bound cfn cenv ty e)
-Proof
-  rw[runtime_data_frame_def, expr_child_callback_def] >>
-  IF_CASES_TAC >> simp[] >>
-  metis_tac[runtime_data_frame_invalid_expr_call, runtime_data_frame_def]
-QED

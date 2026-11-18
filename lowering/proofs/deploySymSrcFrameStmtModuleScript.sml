@@ -1,5 +1,6 @@
 Theory deploySymSrcFrameStmtModule
 Ancestors
+  symbolicSourceCompilerStmtFrame
   deploySymSrcBlockFrame deploySymSrcFrameExprHelpers
   stmtLowering moduleLowering compileEnv
 
@@ -175,7 +176,11 @@ Theorem deploy_blocks_frame_log_save_arg:
   (!c t v. deploy_blocks_frame (compile_materialize_vv c t v)) ==>
   deploy_blocks_frame (compile_log_save_arg cenv ty op es)
 Proof
-  strip_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_log_save_arg))) >>
+  simp[]
 QED
 
 Theorem deploy_blocks_frame_log_eval_all:
@@ -183,37 +188,44 @@ Theorem deploy_blocks_frame_log_eval_all:
   (!c t v. deploy_blocks_frame (compile_materialize_vv c t v)) ==>
   !es cenv. deploy_blocks_frame (compile_log_eval_all cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_log_eval_all_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac
-       >- simp[deploy_blocks_frame_log_save_arg] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_log_eval_all))) >>
+  simp[]
 QED
 
 Theorem deploy_blocks_frame_log_topic_ops:
   (!op b. deploy_blocks_frame (compile_encode_log_topic op b)) ==>
   !ops. deploy_blocks_frame (compile_log_topic_ops ops)
 Proof
-  strip_tac >> Induct >> simp[compile_log_topic_ops_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_log_topic_ops))) >>
+  simp[]
 QED
 
 Theorem deploy_blocks_frame_log_store_data:
   (!c v b t s. deploy_blocks_frame (compile_store_memory c v b t s)) ==>
   !ops tys cenv buf off. deploy_blocks_frame (compile_log_store_data cenv ops tys buf off)
 Proof
-  strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_log_store_data_def, comp_ignore_bind_def] >> rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_log_store_data))) >>
+  simp[]
 QED
 
 Theorem deploy_blocks_frame_tuple_load_all:
   (!op b. deploy_blocks_frame (compile_load_memory op b)) ==>
   !tys cenv op off. deploy_blocks_frame (compile_tuple_load_all cenv op tys off)
 Proof
-  strip_tac >> Induct >> simp[compile_tuple_load_all_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_tuple_load_all))) >>
+  simp[]
 QED
 
 Theorem deploy_blocks_frame_store_at_loc:

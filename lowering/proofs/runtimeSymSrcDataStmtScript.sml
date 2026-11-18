@@ -1,5 +1,6 @@
 Theory runtimeSymSrcDataStmt
 Ancestors runtimeSymSrcDataCustomError runtimeSymSrcDataContext
+  symbolicSourceCompilerStmtFrame
   runtimeSymSrcDataFrame stmtLowering compileEnv
 
 (* Distribute the projection frame through control selection, keeping branch
@@ -136,7 +137,11 @@ Theorem runtime_data_frame_compile_log_save_arg:
   (!c t v. runtime_data_frame (compile_materialize_vv c t v)) ==>
   runtime_data_frame (compile_log_save_arg cenv ty op es)
 Proof
-  strip_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_log_save_arg))) >>
+  simp[]
 QED
 
 Theorem runtime_data_frame_compile_log_eval_all:
@@ -144,19 +149,22 @@ Theorem runtime_data_frame_compile_log_eval_all:
   (!c t v. runtime_data_frame (compile_materialize_vv c t v)) ==>
   !es cenv. runtime_data_frame (compile_log_eval_all cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_log_eval_all_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac
-       >- simp[runtime_data_frame_compile_log_save_arg] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_log_eval_all))) >>
+  simp[]
 QED
 
 Theorem runtime_data_frame_compile_log_topic_ops:
   (!op b. runtime_data_frame (compile_encode_log_topic op b)) ==>
   !ops. runtime_data_frame (compile_log_topic_ops ops)
 Proof
-  strip_tac >> Induct >> simp[compile_log_topic_ops_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_log_topic_ops))) >>
+  simp[]
 QED
 
 Theorem runtime_data_frame_compile_log_store_data:
@@ -164,19 +172,22 @@ Theorem runtime_data_frame_compile_log_store_data:
   !ops tys cenv buf off.
     runtime_data_frame (compile_log_store_data cenv ops tys buf off)
 Proof
-  strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_log_store_data_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_log_store_data))) >>
+  simp[]
 QED
 
 Theorem runtime_data_frame_compile_tuple_load_all:
   (!op b. runtime_data_frame (compile_load_memory op b)) ==>
   !tys cenv op off. runtime_data_frame (compile_tuple_load_all cenv op tys off)
 Proof
-  strip_tac >> Induct >> simp[compile_tuple_load_all_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_tuple_load_all))) >>
+  simp[]
 QED
 
 Theorem runtime_data_frame_compile_store_at_loc:

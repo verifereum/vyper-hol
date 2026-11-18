@@ -260,7 +260,8 @@ Proof
   strip_tac >> Induct >> simp[compile_stage_intcall_args_def] >>
   rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
   simp[compile_stage_intcall_args_def] >>
-  TRY (Cases_on `h'` >> simp[compile_stage_intcall_args_def]) >>
+  TRY (rename1 `compile_stage_intcall_args _ _ (_ :: _) (by_value :: _) (_ :: _)` >>
+       Cases_on `by_value` >> simp[compile_stage_intcall_args_def]) >>
   strip_tac >> frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
 QED
 
@@ -308,7 +309,7 @@ Theorem deploy_blocks_frame_name_vv[simp]:
   deploy_blocks_frame (compile_name_vv cenv ty id)
 Proof
   simp[compile_name_vv_def] >> Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  Cases_on `x` >> simp[] >> frame_tac
+  rename1 `FLOOKUP cenv.ce_vars id = SOME loc` >> Cases_on `loc` >> simp[] >> frame_tac
 QED
 
 Theorem deploy_blocks_frame_env_var[simp]:
@@ -430,8 +431,10 @@ Theorem deploy_blocks_frame_concat:
     deploy_blocks_frame (compile_concat cfn cenv es dp infos off)
 Proof
   strip_tac >> Induct >> simp[compile_concat_def] >> rpt gen_tac >>
-  Cases_on `infos` >> simp[compile_concat_def] >> Cases_on `h'` >>
-  strip_tac >> Cases_on `q` >> simp[compile_concat_def, comp_ignore_bind_def] >>
+  Cases_on `infos` >> simp[compile_concat_def] >>
+  rename1 `compile_concat _ _ (_ :: _) _ (info :: _) _` >> PairCases_on `info` >>
+  rename1 `compile_concat _ _ (_ :: _) _ ((is_bytes,_) :: _) _` >>
+  strip_tac >> Cases_on `is_bytes` >> simp[compile_concat_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac
        >- simp[deploy_blocks_frame_lower_value] >> gen_tac >> BETA_TAC) >> simp[]
 QED

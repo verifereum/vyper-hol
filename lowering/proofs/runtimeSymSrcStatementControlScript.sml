@@ -26,30 +26,26 @@ Proof
   simp[runtime_sym_stmt_contract_def, compile_stmt_def, comp_return_def]
 QED
 
-Theorem runtime_sym_stmt_break:
-  runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty Break
-Proof
-  Cases_on `lc` >>
+fun loop_exit_tac goal =
+ (Cases_on `lc` >>
   simp[runtime_sym_stmt_contract_def, compile_stmt_def, runtime_sym_loop_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >> rpt strip_tac
   >- (pairarg_tac >> gvs[] >>
       drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
       disch_then irule >>
       simp[runtime_sym_ordinary_inst]) >>
-  drule_all runtime_sym_jump >> simp[]
+  drule_all runtime_sym_jump >> simp[]) goal
+
+Theorem runtime_sym_stmt_break:
+  runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty Break
+Proof
+  loop_exit_tac
 QED
 
 Theorem runtime_sym_stmt_continue:
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty Continue
 Proof
-  Cases_on `lc` >>
-  simp[runtime_sym_stmt_contract_def, compile_stmt_def, runtime_sym_loop_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >> rpt strip_tac
-  >- (pairarg_tac >> gvs[] >>
-      drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
-      disch_then irule >>
-      simp[runtime_sym_ordinary_inst]) >>
-  drule_all runtime_sym_jump >> simp[]
+  loop_exit_tac
 QED
 
 Theorem runtime_sym_stmt_expr:
