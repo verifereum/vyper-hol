@@ -1407,12 +1407,6 @@ Proof
     mp_tac o1_pipeline_context_obligations_lowered_abort >>
   impl_tac >- (gvs[] >> metis_tac[]) >> strip_tac >>
   drule_all abort_context_obligations_raw >> strip_tac >>
-  `code_end_offset_ok
-     (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-                      ~in_static_abort_prefix fn s)
-     out.po_unit.cu_context` by
-    (qpat_x_assum `code_end_offset_ok (raw_reachable vs0) _` mp_tac >>
-     PURE_REWRITE_TAC[code_end_offset_ok_def] >> BETA_TAC >> metis_tac[]) >>
   `!n a u. run_context n out.po_unit.cu_context vs0 = Abort a u ==>
      ?r' es''. run_call es = SOME (r',es'') /\
        (frame_resource_starved es r' es'' \/
