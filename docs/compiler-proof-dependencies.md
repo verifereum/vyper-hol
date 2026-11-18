@@ -146,7 +146,7 @@ presumed or proved.
 
 Success relates `tx_return_bytes`, accounts after EVM pending deletions,
 transient storage modulo dead target storage, logs and the full request
-list (computed precompiles included) via `request_agree`. Requests are success-only; leftover outcomes are not final
+list (computed precompiles included) via `request_agree`. A source halt relates the same effects (`effects_agree`) with empty output. Requests and these effects are compared only on success or halt, never on failure; leftover outcomes are not final
 observations. Non-exempt source failure requires target failure, without
 revert-data/reason/general-kind equality. The sole exemption is exact
 `RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function

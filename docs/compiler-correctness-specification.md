@@ -283,8 +283,11 @@ them to EVM readings. The old
   bytes for raw-return functions, otherwise `return_bytes`), account agreement
   after EVM pending deletions and transient-storage agreement modulo dead target
   storage, ordered concrete logs and `LIST_REL (request_agree cx)` against
-  `call_requests es`. Requests are compared only
-  on success; terminal leftover outcome lists are not related observations.
+  `call_requests es`. A source halt (`HaltException`) requires a successful
+  frame outcome with empty output and the same account, transient-storage and
+  request agreement (`effects_agree`). Requests and these effects are compared
+  only on success or halt; `exception_outcome_rel` compares none of them on
+  failure. Terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
   Non-exempt source Error requires a failed frame. Lowering requires a
   terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
