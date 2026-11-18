@@ -5856,3 +5856,102 @@ Resume body_assign_local_memory_rhs_frontier[unwrap]:
 QED
 
 Finalise body_assign_local_memory_rhs_frontier
+
+Theorem body_assign_local_memory_bytes_copy_effect:
+  compile_store_bytestring (Var xs) (Var xd) sa = ((),sb) /\
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ val_wf stv v /\
+  value_has_type dtv v /\ val_wf dtv v /\
+  ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+   (?str. v = StringV str /\ len = LENGTH str)) /\
+  (!m. mem_agree_outside tn.t_mem u.vs_memory m ==>
+     val_in_memory stv v (w2n sw) m) /\
+  n = 32 + 32 * ((len+31) DIV 32) /\
+  len+31 < dimword(:256) /\ n < dimword(:256) /\ n <= type_memory_size dtv /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs u = SOME sw /\ lookup_var xd u = SOME dw /\
+  ptr_covers G tn xs u n /\ ptr_covers G tn xd u n /\
+  w2n sw + n <= u.vs_alloca_next /\ w2n dw + n <= u.vs_alloca_next /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  fn_has_code sa sb func /\ ~u.vs_halted /\
+  u.vs_current_bb = sa.cs_current_bb /\ u.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK t,Gf,tf)) /\
+    typed_copy_effect ctx func sa sb u t (w2n dw) (type_memory_size dtv) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+       val_in_memory dtv v (w2n dw) m) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x u /\
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw+n) ==> (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all robust_bytestring_header >> strip_tac >>
+  `eval_operand (Var xs) u = SOME sw /\ eval_operand (Var xd) u = SOME dw /\
+   (!x. Var xs = Var x \/ Var xd = Var x ==> not_fresh_at sa x)` by
+    (simp[eval_operand_def] >> rpt strip_tac >> gvs[]) >>
+  `n = 32 + 32 * word_size len` by simp[word_size_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) u` by suspend "safe" >>
+  drule bytesCopyCodeTheory.compile_store_bytestring_code >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
+  `?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+     isPREFIX (emitted_insts sa sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
+    suspend "prefix" >>
+  drule_all compile_store_bytestring_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `(sf with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u` by
+    suspend "run_frame" >>
+  drule_all bytestring_copy_effects >> strip_tac >>
+  `!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+    val_in_memory dtv v (w2n dw) m` by
+    (rpt strip_tac >> irule bytestring_copy_robust_destination >> metis_tac[]) >>
+  qabbrev_tac `t = sf with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts sa sb)` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK t,Gf,tnf)` by
+    simp[Abbr `t`] >>
+  `gas_marked_path F ctx func u 0 (OK t)` by suspend "marked" >>
+  `typed_copy_effect ctx func sa sb u t (w2n dw) n` by suspend "effect" >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  simp[Abbr `t`,blockPrefixEquivTheory.lookup_var_set_inst_idx,
+       IgnAsm `Abbrev (t = _)`] >>
+  irule typed_copy_effect_enlarge >> qexistsl_tac [`w2n dw`,`n`] >> gvs[]
+QED
+
+Resume body_assign_local_memory_bytes_copy_effect[safe]:
+  `32 + 32 * word_size len < dimword(:256) /\
+   w2n sw + (32 + 32 * word_size len) <= u.vs_alloca_next /\
+   w2n dw + (32 + 32 * word_size len) <= u.vs_alloca_next` by metis_tac[] >>
+  drule_all compile_store_bytestring_body_mem_ok >> simp[]
+QED
+
+Resume body_assign_local_memory_bytes_copy_effect[prefix]:
+  qpat_x_assum `fn_has_code sa sb func` mp_tac >> simp[fn_has_code_def] >>
+  strip_tac >> goal_assum drule >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,DROP_LENGTH_APPEND] >> simp[]
+QED
+
+Resume body_assign_local_memory_bytes_copy_effect[run_frame]:
+  `32 + 32 * word_size len < dimword(:256)` by metis_tac[] >>
+  drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]
+QED
+
+Resume body_assign_local_memory_bytes_copy_effect[marked]:
+  irule gas_marked_path_from_mem >>
+  qpat_assum `!D. gas_origin_ptr_path _ _ _ (OK t,_,_)` (qspec_then `ARB` mp_tac) >>
+  disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+  drule gas_origin_path_erase >> simp[gas_marked_path_def]
+QED
+
+Resume body_assign_local_memory_bytes_copy_effect[effect]:
+  simp[typed_copy_effect_def] >>
+  qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _|>) = u` mp_tac >>
+  simp[Abbr `t`,venom_state_component_equality,
+       blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> irule valueCopyTheory.mem_bytes_at_mcopy_disjoint >> simp[]) >>
+  simp[placeMemoryTypedPrimitiveTheory.mcopy_memory_length]
+QED
+
+Finalise body_assign_local_memory_bytes_copy_effect
