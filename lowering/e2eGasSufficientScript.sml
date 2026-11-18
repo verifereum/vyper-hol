@@ -1,8 +1,8 @@
 (* Sufficient gas for the identity finalizer: the cases from which the
- * sufficient-gas companions of vyper_call_correct and e2e_deploy_correctness
+ * sufficient-gas companions of vyper_call_correct_guarded and e2e_deploy_correctness
  * are joined.  The companions themselves are stated separately.
  *
- * vyper_call_correct holds for any gas, so it lets the frame run out of gas.
+ * vyper_call_correct_guarded holds for any gas, so it lets the frame run out of gas.
  * Here: some amount of gas is enough.  With at least that much more gas,
  * our frame runs out of gas only once it has run a RETURNDATACOPY.  That
  * exemption is needed: when a call fails, the compiled code copies the
@@ -263,7 +263,7 @@ Proof
   impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]
 QED
 
-(* vyper_call_correct's hypotheses.  The two that range over the call
+(* vyper_call_correct_guarded's hypotheses.  The two that range over the call
    trace, and so over what the callees do with the gas they get, are
    stated at the new gas.  ~gas_source_exempt is S3's ~source_exempt (on
    the exempt inputs, malformed data to a dynamic abi_decode, the compiled

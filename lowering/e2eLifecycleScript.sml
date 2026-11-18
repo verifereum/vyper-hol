@@ -1,6 +1,6 @@
 (*
  * Milestone 7 lifecycle producers: the environmental premises of
- * vyper_call_correct that depend only on the source machine and the
+ * vyper_call_correct_guarded that depend only on the source machine and the
  * contract's address hold across deployment and call handoffs.
  *
  * call_ready: those premises, for every later transaction to the address.
@@ -26,7 +26,7 @@ Ancestors
 
 (* ===== The premises a later call needs from the machine ===== *)
 
-(* Every premise of vyper_call_correct that depends only on the source
+(* Every premise of vyper_call_correct_guarded that depends only on the source
    machine am and the contract's address a, for any later transaction to a:
    the machine's own transaction-boundary fields, the installed code, and the
    source typing and deployment relations. The EVM-entry conjuncts of

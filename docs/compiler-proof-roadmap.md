@@ -20,14 +20,17 @@ Related documents:
 
 ## Where we are
 
-**Current statement infrastructure, not a fully verified compiler:**
+The call headline is documented in the
+[fixed-storage call specification](compiler-correctness-specification.md#fixed-storage-regions).
+
+**Milestone 1 statement infrastructure (2026-10-09):**
 
 - The target is actual O1 `compile_vyper (K SOME)`, using
   `run_venom_pipeline (K T) (K T) (K T) ... o1_pipeline_spec`, not a legacy
   mandatory-pass surrogate. Successful compilation is a boundary input;
   identity finalization yields `runtime_bc = assemble prog` via L1.
 - `e2eCorrectness.vyper_call_correct` has the exact
-  [public call schema](compiler-correctness-specification.md#calls-and-nested-contexts).
+  [Milestone 1 call schema](compiler-correctness-specification.md#milestone-1-runtime-contract-2026-10-09).
   Its composition proof inherits **exactly seven ADMITTED stage leaves**, not
   one. The old configured `e2e_vyper_to_evm_O1` export is retired.
 - `e2eCorrectness.e2e_vyper_to_evm` is **proved generic composition** with
