@@ -9,7 +9,7 @@ Proof
   simp[active_inst_def]
 QED
 
-Theorem operand_outcomes_update[local]:
+Theorem operand_outcomes_update:
   eval_operand op (s with vs_outcomes := os) = eval_operand op s
 Proof
   mp_tac (eval_operand_oracle_updates |> SPEC_ALL |> Q.INST [`rqs` |-> `s.vs_requests`]) >>
@@ -23,7 +23,7 @@ Proof
   simp[Excl "eval_operands_oracle_updates"]
 QED
 
-Theorem one_phi_outcomes_update[local]:
+Theorem one_phi_outcomes_update:
   eval_one_phi (s with vs_outcomes := os) i = eval_one_phi s i
 Proof
   simp[eval_one_phi_def, operand_outcomes_update]
