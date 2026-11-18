@@ -262,6 +262,7 @@ Proof
         with vs_gas_readings := rs) = eval_operand q t` by
     (rpt strip_tac >> simp[]) >>
   qpat_x_assum `emitted_insts sm sb = _` SUBST1_TAC >>
+  Cases_on `s.vs_outcomes = []` >>
   Cases_on `s.vs_gas_readings` >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
        step_inst_base_opcode_eqs, mk_inst_def, bind_outputs_def,

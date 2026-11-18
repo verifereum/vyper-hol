@@ -145,10 +145,18 @@ Theorem ptr_focus_delegate_execution[local]:
       ptr_mixed_vars births positions (step_prov P TG inst u)
         (step_taint inst s u tn) f g u z
 Proof
-  strip_tac >> dxrule delegate_success_envelope >> strip_tac >>
+  strip_tac >>
+  `t.vs_outcomes <> []` by
+    (strip_tac >> gvs[exec_delegatecall_def]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (drule ptr_history_content_control >>
+     simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def]) >>
+  dxrule delegate_success_envelope >> strip_tac >>
   gvs[Excl "consume_call_outcome_eq"] >>
-  qabbrev_tac `qt = venom_call_request t addr 0w y n F with cr_kind := DelegateMessageCall` >>
-  qabbrev_tac `rq = venom_call_request s addr 0w x n F with cr_kind := DelegateMessageCall` >>
+  qabbrev_tac `qt = venom_call_request t addr 0w y n F with
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
+  qabbrev_tac `rq = venom_call_request s addr 0w x n F with
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   `ptr_request_shell rq qt /\ rq.cr_kind = DelegateMessageCall /\
    qt.cr_kind = DelegateMessageCall /\ rq.cr_static = qt.cr_static` by
     (drule ptr_history_content_call_ctx >> strip_tac >>

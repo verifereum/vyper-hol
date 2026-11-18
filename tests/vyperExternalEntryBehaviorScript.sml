@@ -3,6 +3,7 @@
    behavior that the source and emitted entries must share. *)
 Theory vyperExternalEntryBehavior
 Ancestors
+  vyperInterpreterCV
   vyperInterpreter vyperContext vyperState vfmExecution vfmState
 Libs
   evalCompilerBytecodeLib cv_transLib wordsLib

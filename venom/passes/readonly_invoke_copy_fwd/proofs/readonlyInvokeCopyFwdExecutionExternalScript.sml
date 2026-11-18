@@ -75,9 +75,7 @@ QED
 
 Theorem ricf_opaque_frame_consume_call:
   ricf_opaque_frame_agree fn D X sites PG G tn s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -104,32 +102,21 @@ QED
 Theorem ricf_opaque_call_request_compatible:
   ricf_opaque_frame_agree fn D X sites PG G tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static) \/
-   (accounts_agree_except D s.vs_accounts t.vs_accounts /\
-    transient_agree_except D s.vs_transient t.vs_transient)) ==>
-  ((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient ==>
+  request_agree_except D (venom_call_request s addr value ao az static)
+    (venom_call_request t addr value ao' az static)
 Proof
   strip_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
      drule taint_agree_call_ctx >> simp[ricf_opaque_view_def]) >>
-  fs[Excl "consume_call_outcome_eq"]
-  >- (disj1_tac >> gvs[computed_precompile_def, venom_call_request_def]) >>
-  disj2_tac >> irule ld_venom_call_request_masked >> simp[]
+  irule ld_venom_call_request_masked >> simp[]
 QED
 
 Theorem ricf_opaque_live_stack_consume_call[local]:
   ricf_opaque_live_stack_agree D ids tn maps stk targets s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -157,9 +144,7 @@ QED
 
 Theorem ricf_opaque_frame_consume_call_zero:
   ricf_opaque_frame_agree fn D X sites PG G tn s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro1 0 s = (w,r) /\
@@ -182,9 +167,7 @@ QED
 
 Theorem ricf_opaque_live_stack_consume_call_zero[local]:
   ricf_opaque_live_stack_agree D ids tn maps stk targets s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro1 0 s = (w,r) /\
@@ -218,9 +201,7 @@ Theorem ricf_execution_consume_call_next:
     step_inst fuel Ct inst t = OK (update_var out z v)) /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   consume_call_outcome rq1 (ro) (rs) s = (w,r) /\
   (rs = 0 \/ ro = ro') /\
   step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
@@ -370,13 +351,12 @@ Theorem ricf_execution_ext_call_next:
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\
   step_inst fuel C inst s = exec_ext_call inst s gas addr value ao az ro rs static /\
   step_inst fuel Ct inst t = exec_ext_call inst t gas addr value ao' az ro' rs static /\
-  rq1 = venom_call_request s addr value ao az static /\
-  rq2 = venom_call_request t addr value ao' az static /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  rq1 = venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas) /\
+  rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas) /\
+  request_agree_except D rq1 rq2 /\
   consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w,r) /\
   (w2n rs = 0 \/ ro = ro') /\
   step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
@@ -403,10 +383,17 @@ Theorem ricf_execution_ext_call_next:
       ledger E sites maps targets (step_taint inst s (update_var out w r) tn)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+        ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `step_inst fuel C inst s = OK (update_var out w r)` by
     (qpat_assum `step_inst fuel C inst s = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq1 = venom_call_request _ _ _ _ _ _`
+     qpat_assum `rq1 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      qpat_assum `consume_call_outcome rq1 _ _ s = _` (fn th => pure_rewrite_tac[th]) >>
      simp[Excl "consume_call_outcome_eq"]) >>
@@ -415,14 +402,14 @@ Proof
     (rpt gen_tac >> strip_tac >>
      qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _`
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      qpat_assum `consume_call_outcome rq2 _ _ t = _` (fn th => pure_rewrite_tac[th]) >>
      simp[Excl "consume_call_outcome_eq"]) >>
   `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
    rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
-    (qpat_assum `rq1 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+    (qpat_assum `rq1 = venom_call_request _ _ _ _ _ _ with cr_gas := _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _` (fn th => rewrite_tac[th]) >>
      simp[venom_call_request_def]) >>
   qabbrev_tac `source_off = w2n ro` >>
   qabbrev_tac `target_off = w2n ro'` >>

@@ -500,6 +500,37 @@ Proof
        immutable_alloca_sep_def]
 QED
 
+Theorem stmt_state_rel_record_request:
+  stmt_state_rel H ctx func cenv cx es s /\
+  request_agree H cx.txn.target rq rq' ==>
+  stmt_state_rel H ctx func cenv cx
+    (es with <|outcomes := SOME os; requests := es.requests ++ [rq];
+               storage_trace := observations|>)
+    (s with <|vs_outcomes := os; vs_requests := s.vs_requests ++ [rq']|>)
+Proof
+  `fmp_room ctx func
+     (s with <|vs_outcomes := os; vs_requests := s.vs_requests ++ [rq']|>) <=>
+   fmp_room ctx func s` by
+    simp[fmp_room_def, pending_alloca_size_def] >>
+  strip_tac >>
+  gvs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+      immutable_base_zero_alt, immutable_alloca_sep_def,
+      loweringStateRelDefsTheory.local_ptrs_rel_def,
+      loweringStateRelDefsTheory.local_region_def,
+      loweringStateRelDefsTheory.local_backed_def,
+      lookup_var_def, loweringStateRelDefsTheory.storage_rel_def,
+      loweringStateRelDefsTheory.transient_rel_def,
+      loweringStateRelDefsTheory.immutables_rel_def,
+      loweringStateRelDefsTheory.logs_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def,
+      contract_storage_def, contract_transient_def,
+      venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.allocas_non_overlapping_def,
+      venomMemDefsTheory.alloca_next_valid_def,
+      alloca_room_def, pending_alloca_size_def, listTheory.LIST_REL_APPEND] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem stmt_state_rel_erasure:
   !H.
   erase_storage_trace es1 = erase_storage_trace es2 ==>
@@ -4050,22 +4081,41 @@ Proof
   simp[compile_create_salt_def] >> ci_mono_create_tac []
 QED
 
+Theorem ci_mono_compile_create_ctor_args:
+  ∀cfn cenv args sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_ctor_args cfn cenv args sa))
+Proof
+  Induct_on `args` >> rpt strip_tac
+  >- simp[compile_create_ctor_args_def, ci_mono_comp_return] >>
+  simp[Once compile_create_ctor_args_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_snapshot_vv] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_create_ctor_tuple:
   ∀cfn cenv args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_ctor_tuple cfn cenv args sa))
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_create_ctor_tuple_def] >>
-  ci_mono_create_tac []
+  ci_mono_create_tac [ci_mono_compile_create_ctor_args]
 QED
 
 Theorem ci_mono_compile_create_blueprint_args:
-  ∀cfn cenv raw args sa.
+  ∀cfn cenv raw later_es args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
-    ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw args sa))
+    ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw later_es args sa))
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_create_blueprint_args_def] >>
-  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple]
+  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple,
+    ci_mono_compile_snapshot_vv, ci_mono_unwrap_value]
 QED
 
 Theorem ci_mono_compile_create_snapshot:

@@ -114,7 +114,9 @@ Theorem log_bytestring_arg_view_ptr:
     ptr_covers G tn src s (32 + LENGTH bs) /\
     (!i. b <= i /\ i < b + 32 + LENGTH bs ==> i NOTIN tn.t_mem)
 Proof
-  strip_tac >> drule_all log_bytestring_arg_view >> strip_tac >>
+  strip_tac >>
+  `supported_event_leaf_type ty` by simp[supported_event_leaf_type_def] >>
+  drule_all log_bytestring_arg_view >> strip_tac >>
   `w2n (n2w b : bytes32) = b` by simp[] >>
   `mem_word_at (w2n (n2w b : bytes32)) s.vs_memory = n2w (LENGTH bs)` by simp[] >>
   drule_all ptr_val_ok_log_bytestring_window >> simp[] >> strip_tac >>

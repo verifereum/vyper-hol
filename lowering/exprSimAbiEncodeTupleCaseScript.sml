@@ -19,7 +19,7 @@ Proof
   gvs[] >> res_tac >> simp[]
 QED
 
-Theorem abi_encode_tuple_lowering_shape[local]:
+Theorem abi_encode_tuple_lowering_shape:
   ~(LENGTH args = 1 /\ ~ensure) ==>
   compile_expr ce cty (TypeBuiltin ann (AbiEncode ensure mid) target args) sa =
     let (ops,st) = compile_abi_encode_args compile_expr ce args sa in
@@ -67,7 +67,7 @@ Proof
   rpt strip_tac >> first_x_assum irule
 QED
 
-Theorem eval_expr_abi_encode_tuple_action[local]:
+Theorem eval_expr_abi_encode_tuple_action:
   1 <= LENGTH args ==>
   eval_expr cx (TypeBuiltin ann (AbiEncode ensure mid) target args) =
   bind (eval_exprs cx args)

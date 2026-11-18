@@ -699,11 +699,13 @@ Theorem storage_trace_frame_take_request:
 Proof
   pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem storage_trace_frame_take_call:
-  storage_trace_frame (take_call_outcome target calldata value_opt)
+  storage_trace_frame (take_call_outcome gas_cap target calldata value_opt)
 Proof
   simp[storage_trace_frame_def, take_call_outcome_def, call_outcome_request_def] >>
   metis_tac[storage_trace_frame_def, storage_trace_frame_take_request]
@@ -714,6 +716,8 @@ Theorem storage_trace_frame_take_create:
 Proof
   pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
   Cases_on `st.outcomes` >>
+  simp[take_create_outcome_def, create_outcome_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   simp[take_create_outcome_def, create_outcome_request_def] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
 QED
@@ -768,7 +772,7 @@ Proof
 QED
 
 Theorem storage_trace_frame_take_delegate:
-  storage_trace_frame (take_delegate_outcome target calldata value_opt)
+  storage_trace_frame (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   simp[storage_trace_frame_def, take_delegate_outcome_def,
        delegate_outcome_request_def, call_outcome_request_def] >>
@@ -900,7 +904,7 @@ Proof
 QED
 
 Theorem storage_trace_frame_check_create_blueprint:
-  !has_salt vs. storage_trace_frame (check_create_blueprint has_salt vs)
+  !has_salt literal_offset vs. storage_trace_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   rpt gen_tac >> pure_rewrite_tac[check_create_blueprint_def] >>
   irule storage_trace_frame_bind_all >>
@@ -955,6 +959,15 @@ Proof
   simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 
+Theorem storage_trace_frame_create_operands:
+  storage_trace_frame
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, storage_trace_frame_create,
+       storage_trace_frame_bind_all, storage_trace_frame_check_create_blueprint]
+QED
+
 Theorem storage_trace_frame_prefix:
   storage_trace_frame f /\ f st = (res,st') ==>
   ?observations. st'.storage_trace = st.storage_trace ++ observations
@@ -978,10 +991,16 @@ Proof
 QED
 
 Theorem storage_trace_frame_precompile_call_success:
-  storage_trace_frame (precompile_call_success bt)
+  storage_trace_frame (precompile_call_success bt vs)
 Proof
-  rw[storage_trace_frame_def, precompile_call_success_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >> gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()]
+  pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
+  Cases_on `precompile_builtin bt` >> simp[precompile_call_success_def, return_def] >>
+  Cases_on `st.outcomes` >> simp[return_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[check_def, assert_def, bind_def, take_call_outcome_def,
+       take_request_outcome_def, call_outcome_request_def] >>
+  pairarg_tac >> simp[bind_def, check_def, assert_def, AllCaseEqs()] >>
+  Cases_on `outcome.co_success` >> simp[]
 QED
 
 Theorem storage_trace_frame_array_iterator_results:
@@ -1017,7 +1036,8 @@ val trace_frame_atoms = List.concat (map (CONJUNCTS o SPEC_ALL)
    storage_trace_frame_append_place,
    storage_trace_frame_pop_place, storage_trace_frame_raw_call,
    storage_trace_frame_ext_call, storage_trace_frame_send,
-   storage_trace_frame_create, storage_trace_frame_conditional_result,
+   storage_trace_frame_create, storage_trace_frame_create_operands,
+   storage_trace_frame_conditional_result,
    storage_trace_frame_check_create_blueprint,
    storage_trace_frame_precompile_call_success]);
 
@@ -1052,12 +1072,11 @@ Theorem evaluate_storage_trace_frame:
   (!cx t. storage_trace_frame (eval_base_place cx t)) /\
   (!cx t. storage_trace_frame (eval_target_place cx t)) /\
   (!cx t v. storage_trace_frame (assign_tuple_targets cx t v)) /\
-  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs)) /\
-  (!cx es. storage_trace_frame (eval_expr_results cx es))
+  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs))
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
-    (List.tabulate (62, fn n => n + 1)) >> suspend "c63"
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
 QED
 
 Resume evaluate_storage_trace_frame[c24]:
@@ -1251,12 +1270,6 @@ Resume evaluate_storage_trace_frame[c60]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 Resume evaluate_storage_trace_frame[c61]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c62]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c63]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 

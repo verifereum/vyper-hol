@@ -16,9 +16,11 @@ Theorem ld_consume_call_outcome_shared_effects:
     s1 t1 /\
   ld_shared_agree D A
     (tn with <|t_stor := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                     s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                     s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) s1 t1
 Proof

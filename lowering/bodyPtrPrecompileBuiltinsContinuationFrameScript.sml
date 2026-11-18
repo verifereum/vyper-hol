@@ -46,13 +46,19 @@ Theorem computed_load_suffix_ordinary_frame:
        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
      regions_disjoint (w2n wo) 32 off (type_memory_size tv)) ==>
   stmt_state_rel H ctx fn cenv cx
-    (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-  wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t
+    (SND (take_call_outcome NONE (w2w target)
+       (read_memory (w2n wi) (w2n insz) s) NONE es)) t /\
+  wb_frame cenv es
+    (SND (take_call_outcome NONE (w2w target)
+       (read_memory (w2n wi) (w2n insz) s) NONE es)) sf s t
 Proof
   strip_tac >>
   `stmt_state_rel H ctx fn cenv cx
-     (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
-     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q` by
+     (SND (take_call_outcome NONE (w2w target)
+        (read_memory (w2n wi) (w2n insz) s) NONE es)) q /\
+     wb_frame cenv es
+       (SND (take_call_outcome NONE (w2w target)
+          (read_memory (w2n wi) (w2n insz) s) NONE es)) sf s q` by
     (qpat_assum `_ sm = (Var dst,sl)`
        (mp_then Any mp_tac computed_suffix_preserves) >>
      disch_then (drule_all o SRULE [wordsTheory.dimword_def]) >> simp[]) >>

@@ -77,9 +77,7 @@ Theorem eval_no_mutation_scopes[local]:
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx es. !ce st res st'. ~exprs_can_mutate ce es /\
-    eval_expr_results cx es st = (res,st') ==> st'.scopes = st.scopes)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[expr_can_mutate_def, call_can_mutate_def]
   >- (rpt strip_tac >>
@@ -125,9 +123,6 @@ Proof
   >- (rpt strip_tac >>
       gvs[expr_can_mutate_def, Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
       imp_res_tac read_result_state >> gvs[] >> metis_tac[])
-  >- simp[Once evaluate_def, return_def]
-  >> rpt strip_tac >>
-  gvs[expr_can_mutate_def, Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
 QED
 
 Resume eval_no_mutation_scopes[ExtCall]:
@@ -313,13 +308,6 @@ QED
 Theorem eval_exprs_no_mutation_scopes:
   !ce cx es st res st'. ~exprs_can_mutate ce es /\
     eval_exprs cx es st = (res,st') ==> st'.scopes = st.scopes
-Proof
-  metis_tac[eval_no_mutation_scopes]
-QED
-
-Theorem eval_expr_results_no_mutation_scopes:
-  !ce cx es st res st'. ~exprs_can_mutate ce es /\
-    eval_expr_results cx es st = (res,st') ==> st'.scopes = st.scopes
 Proof
   metis_tac[eval_no_mutation_scopes]
 QED

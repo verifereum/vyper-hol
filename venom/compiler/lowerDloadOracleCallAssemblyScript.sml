@@ -310,7 +310,8 @@ Theorem ld_exec_ext_call_frame:
   ss.vs_params = s.vs_params /\ ss.vs_fmp = s.vs_fmp
 Proof
   strip_tac >>
-  gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def, FLOOKUP_UPDATE]
+  gvs[exec_ext_call_def, AllCaseEqs(), consume_call_outcome_eq,
+      update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem ld_oracle_call_taint:
@@ -324,9 +325,11 @@ Theorem ld_oracle_call_taint:
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
     t_stor := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
     t_trans := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>
 Proof
   strip_tac >>
@@ -392,10 +395,9 @@ Proof
 QED
 
 
-(* exec_ext_call ignores gas and converts ret offsets/sizes with w2n.
-   Fix the independent type parameters at the bytes32 operand interface. *)
+(* Fix gas and return-buffer word widths at the bytes32 operand interface. *)
 val call_effect = INST_TYPE [
-  ``:'a`` |-> ``:256 word``, ``:'e`` |-> ``:256 word``,
+  ``:'a`` |-> ``:256``, ``:'e`` |-> ``:256``,
   ``:'b`` |-> ``:256``, ``:'c`` |-> ``:256``, ``:'d`` |-> ``:256``]
   ld_exec_ext_call_effect;
 

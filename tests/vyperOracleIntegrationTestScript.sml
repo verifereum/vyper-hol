@@ -5,6 +5,7 @@
    execute concrete NONE. *)
 Theory vyperOracleIntegrationTest
 Ancestors
+  vyperSmallStepCV
   vyperOracleEntryTest vyperSendCpsCVTest vyperExtCallCpsCVTest
   vyperInterpreter vyperSmallStep vyperCall vyperState vyperContext vyperAST
   vyperValue extCallOracle vfmState vfmExecution finite_map list option pair
@@ -88,8 +89,7 @@ QED
 
 Theorem public_call_exhaustion_and_guard_failure_requests:
   integration_call_observe F (SOME [])
-    (INR (Error (RuntimeError "send failed"))) 3 2w 4w cpscv_initial_logs
-    [(9w,7,[],F,3,2w,4w)] /\
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 2w 4w cpscv_initial_logs [] /\
   integration_call_observe F (SOME [send_outcome T [] (2 ** 256)])
     (INR (Error (RuntimeError "call outcome accounts"))) 3 2w 4w cpscv_initial_logs
     [(9w,7,[],F,3,2w,4w)] /\
@@ -118,7 +118,7 @@ Definition integration_load_observe_def:
     let loaded = load_contract
       (SOME [send_outcome T [] 17; send_outcome T [] 23]) [] integration_machine tx mods [] in
       failed = INR (Error (RuntimeError "send failed")) /\
-      exhausted = INR (Error (RuntimeError "send failed")) /\
+      exhausted = INR (Error (RuntimeError "take_call_outcome")) /\
       (case loaded of INR _ => F | INL (am,rqs) =>
         integration_machine_snapshot 23 9w 8w
           (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
@@ -181,15 +181,15 @@ Definition integration_raw_call_requests_def:
 End
 val () = cv_auto_trans integration_raw_call_requests_def;
 
-(* With the oracle, a non-delegate raw_call consumes the next source outcome
-   and records its request, as extcall does: a missing or failed outcome
-   reverts under revert_on_failure and is returned as BoolV F otherwise, and
-   returndata is cut to max_outsize. Address20 is empty. *)
+(* A non-delegate raw_call consumes an available source outcome and
+   records its request. A failed outcome reverts under revert_on_failure
+   and returns BoolV F otherwise. Exhaustion errors before recording a
+   request. Returndata is cut to max_outsize. Address20 is empty. *)
 Theorem RawCall_takes_source_oracle:
   integration_raw_call_observe F T 0 20w NONE (INL (Value NoneV))
     NONE send_initial_requests /\
   integration_raw_call_observe F T 0 20w (SOME [])
-    (INR (Error (RevertData []))) (SOME 0) (integration_raw_call_requests 20w) /\
+    (INR (Error (RuntimeError "take_call_outcome"))) (SOME 0) send_initial_requests /\
   integration_raw_call_observe F T 0 20w
     (SOME [send_outcome F [7w] (2 ** 256)])
     (INR (Error (RevertData [7w]))) (SOME 0)
@@ -229,7 +229,7 @@ Definition integration_raw_call_adopt_observe_def:
       FST r = expected /\
       send_snapshot balance nonce code persistent transient logs rqs rest (SND r) /\
       (MEM DelegateMessageCall (MAP (λrq. rq.cr_kind) (SND r).requests) <=>
-       delegate)
+       case os of SOME (_::_) => delegate | _ => F)
 End
 val () = cv_auto_trans integration_raw_call_adopt_observe_def;
 
@@ -248,8 +248,8 @@ QED
 
 (* With the oracle, a delegate raw_call takes the next outcome too, under a
    request with no value and the frame's static flag, and adopts it as a CALL
-   does: its accounts carry the effects on self's storage.  A failed or
-   missing outcome changes nothing but the request and outcome lists. *)
+   does: its accounts carry the effects on self's storage. A failed
+   outcome updates the request and outcome lists. Exhaustion preserves both. *)
 Theorem RawCall_delegate_adopts_source_oracle:
   integration_raw_call_adopt_observe T T 1 20w
     (SOME [send_outcome T [5w; 6w] 17; cpscv_tail])
@@ -260,8 +260,8 @@ Theorem RawCall_delegate_adopts_source_oracle:
     (INL (Value (BoolV F))) 3 0 [] 2w 4w cpscv_initial_logs
     (send_requests 20w 0) cpscv_tail_snapshot /\
   integration_raw_call_adopt_observe T T 0 20w (SOME [])
-    (INR (Error (RevertData []))) 3 0 [] 2w 4w cpscv_initial_logs
-    (send_requests 20w 0) (SOME [])
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests (SOME [])
 Proof
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>
@@ -299,15 +299,13 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed precompile (here SHA-256 at Address2) takes its success bit
-   from the head outcome and records no request.  A delegate raw_call to the
-   same address is no computed precompile: it records its request and takes
-   the head outcome as is. *)
+(* Both calls record their request. The static SHA-256 call uses the oracle
+   head for its success bit. The delegate call takes the head outcome as is. *)
 Theorem RawCall_precompile_takes_outcome:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
-    (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV F))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
-    (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV T))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe T F 0 2w (SOME [send_outcome T [] 0])
     (INL (Value (BoolV T))) (SOME 0) (send_requests 2w 0)
 Proof
@@ -334,6 +332,28 @@ Theorem Sha256_builtin_takes_outcome:
     (INR (Error (RuntimeError "precompile failed")), SOME 0) /\
   SND (integration_sha256_observe (SOME [])) =
     (INR (Error (RuntimeError "precompile failed")), SOME 0)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The sha256 builtin records a static value-zero request to address 2
+   carrying its input bytes, kept when the outcome reports failure; with no
+   outcome left it records none. *)
+Definition integration_sha256_requests_observe_def:
+  integration_sha256_requests_observe os =
+    send_request_fields (SND (cpscv_run
+      (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+        [Literal (BaseT (BytesT (Dynamic 3))) (BytesL [1w; 2w; 3w])])
+      (send_state with outcomes := os)))
+End
+val () = cv_auto_trans integration_sha256_requests_observe_def;
+
+Theorem Sha256_builtin_records_request:
+  integration_sha256_requests_observe (SOME [send_outcome T [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME [send_outcome F [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME []) = send_initial_requests
 Proof
   CONV_TAC cv_eval
 QED

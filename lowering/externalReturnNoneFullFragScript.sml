@@ -111,7 +111,7 @@ Proof
   simp[abstract_machine_from_state_def, finalize_pending_deletions_def] >>
   fs[stmt_state_rel_def, state_rel_def] >>
   drule_all source_typing_none_return_plain >> strip_tac >>
-  `accounts_agree H cx
+  `accounts_agree H cx.txn.target
     (process_deletions s0.vs_pending_deletions es.accounts)
     (process_deletions s0.vs_pending_deletions s0.vs_accounts)` by
     (irule accounts_agree_process_deletions >> fs[accounts_rel_def]) >>
@@ -125,8 +125,8 @@ Proof
    log_entry_equiv ce tx.target` by
     simp[FUN_EQ_THM, log_entry_corresponds_def, log_entry_equiv_def] >>
   `request_agree H
-    (initial_evaluation_context am.sources am.layouts tx NONE) =
-   request_agree H cx` by
+    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target =
+   request_agree H cx.txn.target` by
     simp[FUN_EQ_THM, request_agree_def, accounts_agree_def,
          transient_agree_def, initial_evaluation_context_def] >>
   fs[initial_evaluation_context_def]

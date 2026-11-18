@@ -11,6 +11,7 @@ Ancestors
   vyperTypeExprResult vyperValue vyperTypeEnv
   vyperTypeInvariants vyperTypeAssignContext vyperTypeBuiltins
   vyperTypeEvalSoundness vyperTypeValues
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 Libs monadsyntax
 
 Theorem eval_expr_oracle_storage_mutual:
@@ -45,13 +46,7 @@ Theorem eval_expr_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_target_place cx tgt st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tgt v. assign_tuple_targets cx tgt v = assign_tuple_targets cx tgt v) /\
-  (!cx tgts vs. assign_tuple_target_list cx tgts vs = assign_tuple_target_list cx tgts vs) /\
-  (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
-    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
-    int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
-    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-    eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
+  (!cx tgts vs. assign_tuple_target_list cx tgts vs = assign_tuple_target_list cx tgts vs)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt gen_tac >> strip_tac >>
@@ -62,7 +57,7 @@ Proof
       val premises = if is_imp body then strip_conj (fst (dest_imp body)) else asms
       fun evaluator t = is_eq t andalso
         List.exists (fn n => head (lhs t) = n)
-          ["eval_expr", "eval_exprs", "eval_expr_results",
+          ["eval_expr", "eval_exprs",
            "eval_base_place", "eval_target_place"]
       val call = lhs (valOf (List.find evaluator premises))
       val (h,args) = strip_comb call
@@ -75,7 +70,7 @@ Proof
           else "Expr_" ^ head arg
         else if name = "eval_base_place" then "Base_" ^ head arg
         else if name = "eval_target_place" then "Target"
-        else (if name = "eval_exprs" then "Exprs_" else "Results_") ^
+        else "Exprs_" ^
           (if listSyntax.is_nil arg then "nil" else "cons")
     in suspend label g end)
 QED
@@ -132,10 +127,6 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_CreateTarget]:
 QED
 
 Resume eval_expr_oracle_storage_mutual[Exprs_nil]:
-  gvs[Once evaluate_def, return_def, runtime_storage_consistent_def]
-QED
-
-Resume eval_expr_oracle_storage_mutual[Results_nil]:
   gvs[Once evaluate_def, return_def, runtime_storage_consistent_def]
 QED
 
@@ -229,31 +220,6 @@ Resume eval_expr_oracle_storage_mutual[Expr_Pop]:
         metis_tac[runtime_storage_consistent_layout] >>
       drule_all pop_place_preserves_contract_storage >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
-QED
-
-Resume eval_expr_oracle_storage_mutual[Results_cons]:
-  rpt gen_tac >> strip_tac >>
-  gvs[int_calls_expr_def, supported_expr_exists_def] >>
-  qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (head_res,head_st)` >>
-  first_x_assum drule_all >> strip_tac >>
-  `contract_storage_well_formed cx head_st` by metis_tac[] >>
-  `call_evaluation_safe cx (int_calls_expr e)` by simp[] >>
-  `runtime_consistent env cx head_st` by
-    metis_tac[eval_expr_preserves_runtime_consistent, runtime_storage_consistent_runtime] >>
-  `runtime_storage_consistent env cx head_st` by
-    metis_tac[runtime_storage_consistent_intro, runtime_storage_consistent_layout] >>
-  `IS_SOME head_st.outcomes /\ oracle_storage_ok cx head_st` by
-    (irule oracle_storage_entry_suffix >> qexists_tac `st` >> simp[] >>
-     drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
-  Cases_on `head_res` >> gvs[] >> rpt strip_tac >> gvs[] >>
-  Cases_on `eval_expr_results cx es head_st` >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `q` >> gvs[bind_def] >> rpt strip_tac >> gvs[]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Exprs_cons]:
@@ -481,9 +447,9 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
     get_accounts_def, lift_sum_def]
   >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
       gvs[return_def, raise_def] >>
-      Cases_on `precompile_call_success bt args_st` >>
+      Cases_on `precompile_call_success bt x args_st` >>
       imp_res_tac precompile_call_success_state >> gvs[] >>
-      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      rename1 `precompile_call_success bt x args_st = (pres,_)` >>
       Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
       gvs[] >> irule contract_storage_well_formed_storage_frame >>
       qexists_tac `args_st` >> simp[] >>
@@ -535,7 +501,37 @@ QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
   rpt gen_tac >> strip_tac >>
-  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def]
+  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `well_typed_expr env (Call _ SelfDestructTarget _ _)` mp_tac >>
+      rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+        type_check_def, assert_def, return_def, raise_def,
+        lift_option_type_def, get_accounts_def] >>
+      simp[] >>
+      Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `args_res` >> gvs[]
+      >- (Cases_on `LENGTH x = 1` >>
+          gvs[type_check_def, assert_def, return_def, raise_def]
+          >- (Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def]
+              >- (rpt strip_tac >> gvs[]) >>
+              (* A static frame fails check_not_static before any effect. *)
+              Cases_on `cx.txn.is_static` >> simp[]
+              >- (rpt strip_tac >> gvs[]) >>
+              rpt strip_tac >>
+              qpat_assum `_ = (res,st')`
+                (assume_tac o SRULE [bind_def, ignore_bind_def, return_def,
+                                     raise_def]) >>
+              drule_all (selfdestruct_tail_preserves_contract_storage |>
+                SRULE [bind_def, ignore_bind_def, return_def, raise_def]) >>
+              simp[]) >>
+          rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Subscript]:
