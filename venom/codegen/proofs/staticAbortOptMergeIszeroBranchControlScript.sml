@@ -9,33 +9,28 @@ Ancestors
 Theorem merge_iszero_branch_control:
   !(V:(num#num)->bool) e (rank:(num#num)->num) pc (height:(num#num)->num)
     tag boolean edge next v.
-  let b = LENGTH pre in
-  let c = ss.sym_base.as_pc in
-  let keep = \i. i < b \/ b+2 <= i in
-  let f = \i. if i < b then i else i-2 in
-  let fresh = (c=b+3) in
-  let Vq = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {}) in
-  let pcq = \x. if x=v then b else f (pc x) in
-  let rq = \x. if x=v then SUC (rank e) else rank x in
-  let M = OPTION_MAP (\(nm,org). (nm,f org)) in
-  let tq = \x k.
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
+  !keep. keep = (\i. i < b \/ b+2 <= i) ==>
+  !f. f = (\i. if i < b then i else i-2) ==>
+  !fresh. fresh = (c=b+3) ==>
+  !Vq. Vq = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {}) ==>
+  !pcq. pcq = (\x. if x=v then b else f (pc x)) ==>
+  !rq. rq = (\x. if x=v then SUC (rank e) else rank x) ==>
+  !M. M = OPTION_MAP (\(nm,org). (nm,f org)) ==>
+  !tq. tq = (\x k.
     if x=v then (if k=0 then NONE else M (tag e (k+1)))
     else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
-    else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k)
-  in
-  let eqr = \x y. (x=v /\ fresh /\ y=e) \/
-              (x IN V /\ keep (pc x) /\ ?z. edge x z /\ y=next z) in
-  let Target = \prog pcs tags (x:num#num) (y:num#num).
+    else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k)) ==>
+  !Target. Target = (\prog pcs tags (x:num#num) (y:num#num).
     ?nm org off. tags x 0 = SOME(nm,org) /\
       FLOOKUP (SND (compute_label_offsets prog)) nm = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME (pcs y)
-  in
-  let Control = \prog pcs tags x y.
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME (pcs y)) ==>
+  !Control. Control = (\prog pcs tags x y.
     if EL (pcs x) prog = AsmOp "JUMP" then Target prog pcs tags x y
     else if EL (pcs x) prog = AsmOp "JUMPI" then
       pcs y = pcs x+1 \/ Target prog pcs tags x y
-    else pcs y = pcs x+1
-  in
+    else pcs y = pcs x+1) ==>
   p = pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"] ++ tail /\
   q = pre ++ [AsmPushLabel l; AsmOp "JUMPI"] ++ tail /\
   asm_static_wf p /\ e IN V /\ pc e=c /\ v NOTIN V /\
@@ -60,15 +55,15 @@ Theorem merge_iszero_branch_control:
      ((EL (pc x) p=AsmOp "JUMP" \/ EL (pc x) p=AsmOp "JUMPI") /\
         Target p pc tag x z ==> Target q pcq tq x (next z)) /\
      (pc (next z)=b+3 ==> next z=z /\ pc x=b+2)) /\
-  (!x y. eqr x y ==> x IN Vq /\ y IN Vq /\ rq y<rq x /\ Control q pcq tq x y)
+  (!x y. ((x=v /\ fresh /\ y=e) \/
+          (x IN V /\ keep (pc x) /\ ?z. edge x z /\ y=next z)) ==>
+         x IN Vq /\ y IN Vq /\ rq y<rq x /\ Control q pcq tq x y)
 Proof
-  rpt gen_tac >>
+  ntac 10 gen_tac >>
   map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      TOP_DEPTH_CONV (FIRST_CONV [BETA_CONV, REWR_CONV combinTheory.S_DEF,
-                        REWR_CONV combinTheory.o_THM, REWR_CONV combinTheory.C_DEF])) >>
-    qx_gen_tac name >> disch_tac)
-    [`b`,`c`,`keep`,`f`,`fresh`,`Vq`,`pcq`,`rq`,`M`,`tq`,`eqr`,`Target`,`Control`] >>
+    qx_gen_tac name >> disch_then (assume_tac o
+      CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`b`,`c`,`keep`,`f`,`fresh`,`Vq`,`pcq`,`rq`,`M`,`tq`,`Target`,`Control`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EL (b+2) p = AsmPushLabel l /\ EL (b+3) p = AsmOp "JUMPI" /\
    EL b q = AsmPushLabel l` by
@@ -81,7 +76,8 @@ Proof
    (!i. keep i /\ i < LENGTH p ==> EL (f i) q = EL i p)` by (
      mp_tac (Q.INST [`pat` |-> `[AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"]`,
                      `repl` |-> `[AsmPushLabel l; AsmOp "JUMPI"]`]
-       (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_canonical_layout))) >>
+       (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2))
+         merge_iszero_one_canonical_layout))) >>
      (impl_tac >- (simp[] >> metis_tac[])) >>
      disch_then (fn th =>
        let val packet = BETA_RULE (PURE_REWRITE_RULE
@@ -132,9 +128,7 @@ Proof
      (pc (next z)=b+3 ==> next z=z /\ pc x=b+2)` by suspend "arms" >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_assum `Abbrev (eqr = _)`
-    (pure_rewrite_tac o single o REWRITE_RULE[markerTheory.Abbrev_def]) >>
-  BETA_TAC >> rpt gen_tac >>
+  rpt gen_tac >>
   disch_then (DISJ_CASES_THEN (map_every assume_tac o CONJUNCTS))
   >- suspend "fresh_edge" >>
   suspend "kept_edge"
